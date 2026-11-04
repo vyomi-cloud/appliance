@@ -33,6 +33,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from core.object_store import ObjectStore
+from core import gcp_storageinsights_core as _si   # inventory reports + Anywhere Cache
 
 
 @dataclass
@@ -1157,7 +1158,19 @@ def _dispatch(store: ObjectStore, method: str, path: str,
             p = p[len(pre):]
             break
     p = p.split("?", 1)[0].rstrip("/")
+    if p.startswith("/v1/projects/") and re.search(r"/locations/[^/]+/(reportConfigs|reportDetails)", p):
+        p = p[3:]     # storageinsights.googleapis.com/v1
     segs = [s for s in p.split("/") if s != ""]
+
+    # storageinsights.googleapis.com/v1: projects/{p}/locations/{l}/reportConfigs|reportDetails (inventory reports)
+    if (len(segs) >= 5 and segs[0] == "projects" and segs[2] == "locations" and segs[4].split(":")[0] in ("reportConfigs", "reportDetails")
+            ):
+        try:
+            req = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            return _err(400, "parseError", "Parse Error")
+        st_, out_ = _si.dispatch_insights(store, method, [unquote(x) for x in segs], query, req)
+        return _json(st_, out_)
 
     # /batchOperations[/{id}] and /insightsDatasets[/{id}] — Storage Intelligence
     # sub-resources (see _run_batch_job / _insights_datasets above), checked before the
@@ -1322,6 +1335,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                 return _err(404, "notFound", f"The specified bucket does not exist.")
             if store.bucket_objects(bucket):
                 return _err(409, "conflict", "The bucket you tried to delete is not empty.")
+            _si.delete_bucket_state(store, bucket)
             store.buckets.pop(bucket, None)
             store.objects.pop(bucket, None)
             store.persist()
@@ -1347,6 +1361,15 @@ def _dispatch(store: ObjectStore, method: str, path: str,
             store.persist()
             return _json(200, _bucket_view(store, bucket))
         return _err(400, "invalid", f"Unsupported method {method} on bucket")
+
+    # ---- Anywhere (Rapid) Cache: /b/{bucket}/anywhereCaches[/{zone}[/pause|/resume|/disable]] ----
+    if len(segs) >= 3 and segs[2] == "anywhereCaches":
+        try:
+            req = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            return _err(400, "parseError", "Parse Error")
+        st_, out_ = _si.dispatch_caches(store, method, bucket, [unquote(x) for x in segs[3:]], req)
+        return _json(st_, out_)
 
     # ---- bucket long-running operations: /b/{bucket}/operations[/{id}] ----
     if len(segs) >= 3 and segs[2] == "operations":

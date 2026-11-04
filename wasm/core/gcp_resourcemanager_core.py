@@ -107,6 +107,7 @@ class ResourceManagerStore:
         self.pab_policies: dict = {}       # PAB policy name -> PrincipalAccessBoundaryPolicy
         self.pab_bindings: dict = {}       # PolicyBinding name -> PolicyBinding
         self.workforce_providers: dict = {}   # full workforce provider name -> WorkforcePoolProvider
+        self.folders: dict = {}        # "folders/{id}" -> Folder (resource hierarchy)
         self.org_policy_simulations: dict = {}   # "projects/{p}/simulations/{id}" -> constraint simulation report (history)
 
 
@@ -209,11 +210,16 @@ def _create_project(store, body) -> RmResponse:
                           "hyphens, starting with a letter and not ending with a hyphen.", "INVALID_ARGUMENT")
     if project_id in store.projects:
         return _err(409, f"Project {project_id} already exists.", "ALREADY_EXISTS")
+    parent = None
+    if body.get("parent"):
+        parent, perr = _norm_parent(store, body["parent"])
+        if perr:
+            return perr
     p = _get_or_create_project(store, project_id)
     if body.get("displayName"):
         p["displayName"] = body["displayName"]
-    if body.get("parent"):
-        p["parent"] = body["parent"]
+    if parent:
+        p["parent"] = parent
     return _json(200, dict(p))
 
 
@@ -232,6 +238,258 @@ def _delete_project(store, project_id) -> RmResponse:
         return _err(404, f"Project {project_id} not found.", "NOT_FOUND")
     del store.projects[project_id]
     return _json(200, {})
+
+
+# ── folders (resource hierarchy: organization > folder* > project) ───────────────
+_FOLDER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _-]{1,28}[A-Za-z0-9]$")
+MAX_FOLDER_DEPTH = 10
+
+
+def _parent_str(parent) -> str:
+    """Parent as the v3 string ("organizations/N" | "folders/N"); accepts the stored {type,id} form too."""
+    if isinstance(parent, dict):
+        t, i = parent.get("type"), parent.get("id")
+        return f"{'organizations' if t == 'organization' else 'folders'}/{i}"
+    return str(parent or "")
+
+
+def _parent_dict(parent: str) -> dict:
+    kind, _, i = parent.partition("/")
+    return {"type": "organization" if kind == "organizations" else "folder", "id": i}
+
+
+def _norm_parent(store, parent):
+    """Validate a parent reference. -> (stored {type,id} dict | None, error RmResponse | None)."""
+    ps = _parent_str(parent)
+    if ps.startswith("organizations/"):
+        get_or_create_default_org(store)
+        if ps not in store.organizations:
+            return None, _err(404, f"Organization {ps} not found.", "NOT_FOUND")
+    elif ps.startswith("folders/"):
+        f = store.folders.get(ps)
+        if f is None:
+            return None, _err(404, f"Folder {ps} not found.", "NOT_FOUND")
+        if f["state"] != "ACTIVE":
+            return None, _err(400, f"Folder {ps} is not in the ACTIVE state.", "FAILED_PRECONDITION")
+    else:
+        return None, _err(400, "Parent must be of the form organizations/{id} or folders/{id}.", "INVALID_ARGUMENT")
+    return _parent_dict(ps), None
+
+
+def _folder_depth(store, parent: str) -> int:
+    d = 0
+    while parent.startswith("folders/"):
+        d += 1
+        parent = _parent_str(store.folders[parent]["parent"]) if parent in store.folders else ""
+    return d
+
+
+def _is_descendant(store, folder_name: str, candidate: str) -> bool:
+    """True if `candidate` is `folder_name` or inside it."""
+    cur = candidate
+    while cur.startswith("folders/"):
+        if cur == folder_name:
+            return True
+        cur = _parent_str(store.folders[cur]["parent"]) if cur in store.folders else ""
+    return False
+
+
+def _children(store, parent: str, include_deleted=False):
+    fs = [f for f in store.folders.values() if _parent_str(f["parent"]) == parent and (include_deleted or f["state"] == "ACTIVE")]
+    ps = [p for p in store.projects.values() if _parent_str(p.get("parent")) == parent and p.get("state", "ACTIVE") == "ACTIVE"]
+    return fs, ps
+
+
+def _name_taken(store, parent: str, display: str, ignore: str = "") -> bool:
+    return any(f["name"] != ignore and f["state"] == "ACTIVE" and _parent_str(f["parent"]) == parent
+               and f["displayName"].lower() == display.lower() for f in store.folders.values())
+
+
+def _op(response: dict) -> RmResponse:
+    return _json(200, {"name": "operations/" + uuid.uuid4().hex[:16], "done": True,
+                       "metadata": {"@type": "type.googleapis.com/google.cloud.resourcemanager.v3.FolderOperation"},
+                       "response": {"@type": "type.googleapis.com/google.cloud.resourcemanager.v3.Folder", **response}})
+
+
+def _now() -> str:
+    import datetime
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _check_folder_display(display: str):
+    if not _FOLDER_NAME_RE.match(display or ""):
+        return _err(400, "Folder displayName must be 3-30 characters: letters, digits, spaces, hyphens and underscores, "
+                         "starting and ending with a letter or digit.", "INVALID_ARGUMENT")
+    return None
+
+
+def _create_folder(store, body) -> RmResponse:
+    display = str(body.get("displayName") or "").strip()
+    bad = _check_folder_display(display)
+    if bad:
+        return bad
+    parent_d, perr = _norm_parent(store, body.get("parent"))
+    if perr:
+        return perr
+    parent = _parent_str(parent_d)
+    if _folder_depth(store, parent) >= MAX_FOLDER_DEPTH:
+        return _err(400, f"Folder nesting is limited to {MAX_FOLDER_DEPTH} levels.", "FAILED_PRECONDITION")
+    if _name_taken(store, parent, display):
+        return _err(409, f"A folder named '{display}' already exists under {parent}.", "ALREADY_EXISTS")
+    fid = str(int(uuid.uuid4().hex[:12], 16) % (10 ** 12)).zfill(12)
+    now = _now()
+    f = {"name": f"folders/{fid}", "parent": parent, "displayName": display, "state": "ACTIVE",
+         "createTime": now, "updateTime": now, "etag": base64.b64encode(uuid.uuid4().bytes[:8]).decode()}
+    store.folders[f["name"]] = f
+    return _op(dict(f))
+
+
+def _get_folder(store, name) -> RmResponse:
+    f = store.folders.get(name)
+    if f is None:
+        return _err(404, f"Folder {name} not found.", "NOT_FOUND")
+    return _json(200, dict(f))
+
+
+def _list_folders(store, query) -> RmResponse:
+    parent = str(query.get("parent", "")).strip()
+    if not parent.startswith(("organizations/", "folders/")):
+        return _err(400, "parent is required and must be organizations/{id} or folders/{id}.", "INVALID_ARGUMENT")
+    show_deleted = str(query.get("showDeleted", "")).lower() == "true"
+    out = sorted((dict(f) for f in store.folders.values() if _parent_str(f["parent"]) == parent
+                  and (show_deleted or f["state"] == "ACTIVE")), key=lambda f: f["displayName"].lower())
+    return _json(200, {"folders": out})
+
+
+def _search_folders(store, query) -> RmResponse:
+    q = str(query.get("query", "")).strip()
+    out = []
+    for f in store.folders.values():
+        if f["state"] != "ACTIVE":
+            continue
+        ok = True
+        for term in [t for t in re.split(r"\s+(?:AND\s+)?", q) if t]:
+            k, _, v = term.partition(":") if ":" in term else term.partition("=")
+            v = v.strip('"').lower()
+            if k == "displayName" or not v:
+                ok = ok and (v in f["displayName"].lower() if v else term.lower() in f["displayName"].lower())
+            elif k == "parent":
+                ok = ok and _parent_str(f["parent"]).lower() == v
+            elif k == "state":
+                ok = ok and f["state"].lower() == v
+            else:
+                ok = ok and term.lower() in f["displayName"].lower()
+        if ok:
+            out.append(dict(f))
+    return _json(200, {"folders": sorted(out, key=lambda f: f["displayName"].lower())})
+
+
+def _patch_folder(store, name, body, query) -> RmResponse:
+    f = store.folders.get(name)
+    if f is None:
+        return _err(404, f"Folder {name} not found.", "NOT_FOUND")
+    if f["state"] != "ACTIVE":
+        return _err(400, f"Folder {name} is not ACTIVE.", "FAILED_PRECONDITION")
+    if "displayName" in body:
+        display = str(body["displayName"]).strip()
+        bad = _check_folder_display(display)
+        if bad:
+            return bad
+        if _name_taken(store, _parent_str(f["parent"]), display, ignore=name):
+            return _err(409, f"A folder named '{display}' already exists under {_parent_str(f['parent'])}.", "ALREADY_EXISTS")
+        f["displayName"] = display
+    f["updateTime"] = _now()
+    f["etag"] = base64.b64encode(uuid.uuid4().bytes[:8]).decode()
+    return _op(dict(f))
+
+
+def _move_folder(store, name, body) -> RmResponse:
+    f = store.folders.get(name)
+    if f is None:
+        return _err(404, f"Folder {name} not found.", "NOT_FOUND")
+    if f["state"] != "ACTIVE":
+        return _err(400, f"Folder {name} is not ACTIVE.", "FAILED_PRECONDITION")
+    dest_d, perr = _norm_parent(store, body.get("destinationParent"))
+    if perr:
+        return perr
+    dest = _parent_str(dest_d)
+    if _is_descendant(store, name, dest):
+        return _err(400, "A folder cannot be moved into itself or one of its own descendants.", "FAILED_PRECONDITION")
+    if dest == _parent_str(f["parent"]):
+        return _err(400, "The destination parent is the folder's current parent.", "FAILED_PRECONDITION")
+    if _name_taken(store, dest, f["displayName"], ignore=name):
+        return _err(409, f"A folder named '{f['displayName']}' already exists under {dest}.", "ALREADY_EXISTS")
+    # depth of the deepest descendant chain + destination depth must stay within the limit
+    def height(n):
+        kids = [c["name"] for c in store.folders.values() if _parent_str(c["parent"]) == n and c["state"] == "ACTIVE"]
+        return 1 + max([height(k) for k in kids] or [0])
+    if _folder_depth(store, dest) + height(name) > MAX_FOLDER_DEPTH:
+        return _err(400, f"Folder nesting is limited to {MAX_FOLDER_DEPTH} levels.", "FAILED_PRECONDITION")
+    f["parent"] = dest
+    f["updateTime"] = _now()
+    return _op(dict(f))
+
+
+def _delete_folder(store, name) -> RmResponse:
+    f = store.folders.get(name)
+    if f is None:
+        return _err(404, f"Folder {name} not found.", "NOT_FOUND")
+    if f["state"] != "ACTIVE":
+        return _err(400, f"Folder {name} is already scheduled for deletion.", "FAILED_PRECONDITION")
+    fs, ps = _children(store, name)
+    if fs or ps:
+        return _err(400, f"Folder {name} is not empty: it still contains {len(ps)} active project(s) and {len(fs)} active folder(s). "
+                         "Delete or move them first.", "FAILED_PRECONDITION")
+    f["state"] = "DELETE_REQUESTED"
+    f["deleteTime"] = f["updateTime"] = _now()
+    return _op(dict(f))
+
+
+def _undelete_folder(store, name) -> RmResponse:
+    f = store.folders.get(name)
+    if f is None:
+        return _err(404, f"Folder {name} not found.", "NOT_FOUND")
+    if f["state"] != "DELETE_REQUESTED":
+        return _err(400, f"Folder {name} is not in the DELETE_REQUESTED state.", "FAILED_PRECONDITION")
+    parent = _parent_str(f["parent"])
+    if parent.startswith("folders/") and (parent not in store.folders or store.folders[parent]["state"] != "ACTIVE"):
+        return _err(400, "The parent folder is not ACTIVE; undelete it first.", "FAILED_PRECONDITION")
+    if _name_taken(store, parent, f["displayName"]):
+        return _err(409, f"A folder named '{f['displayName']}' already exists under {parent}.", "ALREADY_EXISTS")
+    f["state"] = "ACTIVE"
+    f.pop("deleteTime", None)
+    f["updateTime"] = _now()
+    return _op(dict(f))
+
+
+def _move_project(store, project_id, body) -> RmResponse:
+    p = store.projects.get(project_id)
+    if p is None:
+        return _err(404, f"Project {project_id} not found.", "NOT_FOUND")
+    dest_d, perr = _norm_parent(store, body.get("destinationParent"))
+    if perr:
+        return perr
+    if _parent_str(p.get("parent")) == _parent_str(dest_d):
+        return _err(400, "The destination parent is the project's current parent.", "FAILED_PRECONDITION")
+    p["parent"] = dest_d
+    p["etag"] = base64.b64encode(uuid.uuid4().bytes[:8]).decode()
+    return _json(200, {"name": "operations/" + uuid.uuid4().hex[:16], "done": True,
+                       "metadata": {"@type": "type.googleapis.com/google.cloud.resourcemanager.v3.MoveProjectMetadata"},
+                       "response": {"@type": "type.googleapis.com/google.cloud.resourcemanager.v3.Project", **p}})
+
+
+def _resolve_ancestry(store, project_id) -> RmResponse:
+    p = store.projects.get(project_id)
+    if p is None:
+        return _err(404, f"Project {project_id} not found.", "NOT_FOUND")
+    chain = [{"resourceId": {"type": "project", "id": project_id}}]
+    cur = _parent_str(p.get("parent"))
+    while cur.startswith("folders/") and cur in store.folders:
+        chain.append({"resourceId": {"type": "folder", "id": cur.split("/", 1)[1]}})
+        cur = _parent_str(store.folders[cur]["parent"])
+    if cur.startswith("organizations/"):
+        chain.append({"resourceId": {"type": "organization", "id": cur.split("/", 1)[1]}})
+    return _json(200, {"ancestor": chain})
 
 
 # ── tag keys ──────────────────────────────────────────────────────────────────
@@ -817,6 +1075,8 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
         return _err(400, f"Unsupported method {method} on policy", "INVALID_ARGUMENT")
 
     # ---- organizations: organizations[/{id}|:search] ----
+    if segs == ["organizations:search"] and method == "GET":
+        return _search_organizations(store)
     if segs and segs[0] == "organizations":
         if len(segs) == 1 and method == "GET":
             return _search_organizations(store)
@@ -903,6 +1163,41 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
         if method == "DELETE":
             return _delete_workforce_pool(store, name)
         return _err(400, f"Unsupported method {method} on workforcePool", "INVALID_ARGUMENT")
+
+    # ---- folders: folders[/{id}[:move|:undelete]], folders:search ----
+    if segs and (segs[0] == "folders" or segs[0].startswith("folders:")):
+        if segs[0] == "folders:search" and method == "GET":
+            return _search_folders(store, query)
+        if segs == ["folders"]:
+            if method == "POST":
+                return _create_folder(store, _body())
+            if method == "GET":
+                return _list_folders(store, query)
+            return _err(400, f"Unsupported method {method} on folders", "INVALID_ARGUMENT")
+        if len(segs) == 2 and segs[0] == "folders":
+            fid, _, verb = segs[1].partition(":")
+            name = f"folders/{fid}"
+            if verb == "move" and method == "POST":
+                return _move_folder(store, name, _body())
+            if verb == "undelete" and method == "POST":
+                return _undelete_folder(store, name)
+            if not verb:
+                if method == "GET":
+                    return _get_folder(store, name)
+                if method == "PATCH":
+                    return _patch_folder(store, name, _body(), query)
+                if method == "DELETE":
+                    return _delete_folder(store, name)
+        return _err(404, f"Unknown folders path: {path}", "NOT_FOUND")
+
+    # ---- project verbs: projects/{id}:move, projects/{id}:getAncestry ----
+    if len(segs) == 2 and segs[0] == "projects" and ":" in segs[1]:
+        pid, verb = segs[1].split(":", 1)
+        if verb == "move" and method == "POST":
+            return _move_project(store, pid, _body())
+        if verb == "getAncestry" and method == "POST":
+            return _resolve_ancestry(store, pid)
+        return _err(400, f"Unsupported project verb '{verb}'", "INVALID_ARGUMENT")
 
     # ---- projects collection: POST creates, GET "projects:search" lists ----
     if segs == ["projects"] and method == "POST":

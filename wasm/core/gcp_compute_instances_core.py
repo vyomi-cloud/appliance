@@ -318,6 +318,10 @@ def insert_instance(store, project, zone, payload):
             ip = d.get("initializeParams") or {}
             dname = ip.get("diskName") or "%s" % name
             dfull = "projects/%s/zones/%s/disks/%s" % (project, zone, dname)
+            _si_ = ip.get("sourceImage") or ""
+            _m = re.match(r"^(?:https://[^/]+/compute/[^/]+/)?(?:projects/%s/)?global/images/([^/]+)$" % re.escape(project), _si_)
+            if _m and "projects/%s/global/images/%s" % (project, _m.group(1)) not in store.images:
+                raise _E(404, "NOT_FOUND", "The resource 'projects/%s/global/images/%s' was not found" % (project, _m.group(1)))
             if dfull not in store.disks:
                 _insert_disk_record(store, project, zone, dname, {
                     "sizeGb": str(ip.get("diskSizeGb") or DEFAULT_DISK_GB),
@@ -624,6 +628,13 @@ def insert_image(store, project, payload):
     src_disk = payload.get("sourceDisk")
     src_image = payload.get("sourceImage")
     disk_size = 10
+    raw = payload.get("rawDisk")
+    raw_bytes = 0
+    if raw is not None:
+        if src_disk or src_image:
+            raise _E(400, "INVALID_ARGUMENT", "rawDisk cannot be combined with sourceDisk or sourceImage.")
+        raw_bytes = _check_raw_source(store, raw.get("source"), project, name)
+        disk_size = max(10, -(-raw_bytes // (1024 ** 3)))
     if src_disk:
         d = store.disks.get("projects/%s/zones/%s/disks/%s" % (project, _last(payload.get("sourceDiskZone") or ""), _last(src_disk))
                              if payload.get("sourceDiskZone") else None)
@@ -643,8 +654,89 @@ def insert_image(store, project, payload):
         "creationTimestamp": now, "labels": payload.get("labels") or {},
         "selfLink": _selflink(full), "storageLocations": [ZONE_REGION.get(DEFAULT_ZONE, "us")],
     }
+    if raw is not None:
+        img["rawDisk"] = {"source": raw.get("source"), "containerType": raw.get("containerType", "TAR")}
+        img["sourceType"] = "RAW"
+        img["archiveSizeBytes"] = str(raw_bytes)
+        _record_image_job(store, project, "import", name, raw.get("source"), "DONE", None)
     store.images[full] = img
     return _operation(store, project, None, "insert", name, _selflink(full))
+
+
+# ── image import / export history ────────────────────────────────────────────
+# Import is the native images.insert with rawDisk.source (a .tar.gz in Cloud Storage, checked against the
+# simulator's real GCS objects). Real `gcloud compute images import|export` run Cloud Build workflows; Vyomi
+# keeps their history as a listable Vyomi collection (global/imageJobs) and exposes export as a custom method.
+EXPORT_FORMATS = ("raw", "vmdk", "vpc", "vhdx", "vdi", "qcow2")
+
+
+def _gs_split(uri):
+    m = re.match(r"^(?:gs://|https://storage\.googleapis\.com/)([^/]+)/(.+)$", str(uri or ""))
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def _check_raw_source(store, src, project, name):
+    bucket, obj = _gs_split(src)
+    if not bucket:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.rawDisk.source': '%s'. Must be a Cloud Storage URL (gs://bucket/object.tar.gz or https://storage.googleapis.com/bucket/object.tar.gz)." % src)
+    if not obj.endswith((".tar.gz", ".tgz")):
+        _record_image_job(store, project, "import", name, src, "FAILED", "rawDisk.source must be a gzipped tar archive containing disk.raw (.tar.gz).")
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.rawDisk.source': '%s'. The source must be a .tar.gz archive containing a file named disk.raw." % src)
+    g = _CTX["gcs"]
+    if g is not None:
+        if not g.bucket_exists(bucket):
+            _record_image_job(store, project, "import", name, src, "FAILED", "Bucket '%s' does not exist." % bucket)
+            raise _E(404, "NOT_FOUND", "The resource 'gs://%s' was not found: bucket does not exist." % bucket)
+        entry = g.bucket_objects(bucket).get(obj)
+        if entry is None:
+            _record_image_job(store, project, "import", name, src, "FAILED", "Object does not exist.")
+            raise _E(404, "NOT_FOUND", "The resource '%s' was not found: object does not exist in bucket '%s'." % (src, bucket))
+        return int(entry.get("size") or 0)
+    return 0
+
+
+def _record_image_job(store, project, kind, image, uri, status, error):
+    jobs = store.ext.setdefault("image_jobs", [])
+    store.seq["id"] += 1
+    jobs.append({"id": str(store.seq["id"]), "project": project, "kind": kind, "image": image, "uri": uri, "status": status,
+                 "error": error, "startTime": _ts(), "endTime": _ts()})
+
+
+def list_image_jobs(store, project, kind=None):
+    jobs = [j for j in store.ext.get("image_jobs", []) if j["project"] == project and (not kind or j["kind"] == kind)]
+    return sorted(jobs, key=lambda j: j["startTime"], reverse=True)
+
+
+def export_image(store, project, name, payload):
+    full = "projects/%s/global/images/%s" % (project, name)
+    img = _get(store, store.images, full, "image")
+    dest = payload.get("destinationUri") or ""
+    fmt = (payload.get("format") or "raw").lower()
+    if fmt not in EXPORT_FORMATS:
+        raise _E(400, "INVALID_ARGUMENT", "format must be one of: %s." % ", ".join(EXPORT_FORMATS))
+    bucket, obj = _gs_split(dest)
+    if not bucket:
+        raise _E(400, "INVALID_ARGUMENT", "destinationUri must be a Cloud Storage URI such as gs://bucket/image.tar.gz.")
+    g = _CTX["gcs"]
+    if g is None or not g.bucket_exists(bucket):
+        _record_image_job(store, project, "export", name, dest, "FAILED", "Destination bucket '%s' does not exist." % bucket)
+        raise _E(404, "NOT_FOUND", "The destination bucket '%s' does not exist." % bucket)
+    from core import gcp_storage_core as gs
+    import io, tarfile
+    meta = json.dumps({"image": name, "project": project, "format": fmt, "diskSizeGb": img.get("diskSizeGb"),
+                       "note": "Vyomi image archive: image metadata only - the simulator does not model disk contents."}).encode()
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        ti = tarfile.TarInfo("image.json")
+        ti.size = len(meta)
+        tf.addfile(ti, io.BytesIO(meta))
+    data = buf.getvalue()
+    objs = g.bucket_objects(bucket)
+    objs[obj] = gs._new_entry(objs, obj, data, "application/gzip", {"vyomi-image": name, "vyomi-format": fmt})
+    g.mirror_put(bucket, obj, data, "application/gzip", {"vyomi-image": name, "vyomi-format": fmt})
+    g.persist()
+    _record_image_job(store, project, "export", name, dest, "DONE", None)
+    return _operation(store, project, None, "export", name, _selflink(full))
 
 
 def image_view(store, full):
@@ -1140,12 +1232,18 @@ def set_common_instance_metadata(store, project, payload):
 
 
 # ── dispatch ───────────────────────────────────────────────────────────────
-def dispatch(store, method, path, query=None, headers=None, body=b""):
+_CTX = {"gcs": None}   # the simulator's Cloud Storage store for the duration of one dispatch (image import / export)
+
+
+def dispatch(store, method, path, query=None, headers=None, body=b"", gcs_store=None):
     query, headers = query or {}, headers or {}
+    _CTX["gcs"] = gcs_store
     try:
         r = _dispatch(store, method.upper(), path, query, headers, body)
     except _E as e:
         return _err(e.status, e.gcp_status, e.message)
+    finally:
+        _CTX["gcs"] = None
     if method.upper() != "GET" and r.status < 300 and hasattr(store, "persist"):
         store.persist()          # durable substrates save here (the in-memory store has no persist)
     return r
@@ -1230,7 +1328,11 @@ def _global(store, method, project, rest, verb, payload):
     if not rest:
         return _err(404, "NOT_FOUND", "Unknown path.")
     coll, rest2 = rest[0], rest[1:]
+    if coll == "imageJobs" and method == "GET" and not rest2:
+        return _json(200, {"kind": "vyomi#imageJobList", "items": list_image_jobs(store, project)})
     if coll == "images":
+        if len(rest2) == 1 and verb == "export" and method == "POST":
+            return _json(200, export_image(store, project, rest2[0], payload))
         if not rest2:
             if method == "POST":
                 return _json(200, insert_image(store, project, payload))
