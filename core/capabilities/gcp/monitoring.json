@@ -207,7 +207,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Spans are stored and queried for real: Cloud Trace v2 spans.batchWrite/createSpan and v1 patchTraces/traces.list/get (filter span:/root:/label:/latency:, view, orderBy, paging) with real validation. Vyomi does not auto-instrument workloads: no span appears unless your app (OpenTelemetry/Cloud Trace SDK) or a script writes it, and the Trace explorer charts (heatmap/latency percentiles) and Log-trace correlation are not modeled."
+   "Spans are stored and queried for real: Cloud Trace v2 spans.batchWrite/createSpan and v1 patchTraces/traces.list/get (filter span:/root:/label:/latency:, view, orderBy, paging) with real validation. Vyomi does not auto-instrument workloads: no span appears unless your app (OpenTelemetry/Cloud Trace SDK) or a script writes it, and Log-trace correlation is not modeled. The Trace explorer shows measured root-span latency percentiles (p50/p90/p95/p99) and a time x latency heatmap computed from the stored spans."
   ],
   "api": [
    "spans.batchWrite",

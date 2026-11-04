@@ -12,6 +12,7 @@ import { ErrorBar, InfoBar, Loading } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { listResourceGroups, locationLabel, LOCATIONS } from "../../kit/arm.js";
+import GrafanaPanel from "./GrafanaPanel.jsx";
 import { deleteGrafana, deleteMonitorAccount, listActivityLog, listGrafana, listMonitorAccounts, putGrafana, putMonitorAccount } from "./api.js";
 
 const Row = ({ label, children }) => <div className="vy-form-row"><label>{label}</label><div>{children}</div></div>;
@@ -69,6 +70,7 @@ export function ManagedGrafana() {
   const list = useAsync(listGrafana, []);
   const accounts = useAsync(() => listMonitorAccounts().catch(() => []), []);
   const [form, setForm] = useState(null);
+  const [selected, setSelected] = useState(null);
   const set = (p) => setForm((f) => ({ ...f, ...p }));
   const create = async () => {
     try {
@@ -104,7 +106,13 @@ export function ManagedGrafana() {
               { key: "int", label: "Azure Monitor workspaces", value: (r) => (r.properties.grafanaIntegrations?.azureMonitorWorkspaceIntegrations || []).map((i) => i.azureMonitorWorkspaceResourceId.split("/").pop()).join(", ") || "--" },
             ]} />
         )}
-        <InfoBar>The Grafana workspace is a real ARM resource (endpoint, version, identity, Azure Monitor workspace integrations validated). Vyomi does not run a Grafana server, so the endpoint is not a live web app; see Dashboards with Grafana for a dashboard of Vyomi's real metrics.</InfoBar>
+        {!form && (list.data || []).length > 0 && (
+          <div className="vy-cmdbar" role="toolbar" aria-label="Open workspace">
+            {(list.data || []).map((w) => <Button key={w.id} onClick={() => setSelected(w)} aria-label={`Open ${w.name}`}>Open {w.name}</Button>)}
+          </div>
+        )}
+        {!form && selected && <GrafanaPanel workspace={selected} />}
+        <InfoBar>The Grafana workspace is a real ARM resource (endpoint, version, identity, Azure Monitor workspace integrations validated). Vyomi does not run a Grafana server, so the endpoint is not a live web app; open a workspace to get the Prometheus-compatible data source URL (/_obs/prom, point a real Grafana at it) and a built-in dashboard of PromQL queries over the requests Vyomi measured.</InfoBar>
       </CapabilityContainer>
     </MonitorShell>
   );

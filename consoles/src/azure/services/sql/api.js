@@ -185,3 +185,7 @@ export function computeStorageBody(f) {
     },
   };
 }
+
+// ── Measured query telemetry (core/azure_sql_core.query_insights) ──────────────────────
+export const queryInsights = (server, db, windowSeconds = "86400") =>
+  sqlWire("GET", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/queryinsights`, { query: { window: windowSeconds } });

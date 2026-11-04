@@ -68,7 +68,8 @@ st, ts = call("GET", f"/v3/projects/{P}/timeSeries", None, {"filter": 'metric.ty
 roles = sorted((s["metric"]["labels"]["role"], s["points"][0]["value"]["int64Value"]) for s in ts.get("timeSeries", []))
 check("primary=1 replica=0", roles == [("primary", "1"), ("replica", "0")], roles)
 st, md = call("GET", f"/v3/projects/{P}/metricDescriptors", None, {"filter": 'metric.type = starts_with("redis.googleapis.com")'})
-check("redis metric descriptors listed", st == 200 and len(md.get("metricDescriptors", [])) == 3, md)
+_rt = {d["type"] for d in md.get("metricDescriptors", [])}
+check("redis metric descriptors listed (instance-state trio + Valkey INFO series)", st == 200 and {"redis.googleapis.com/stats/memory/maxmemory", "redis.googleapis.com/server/uptime", "redis.googleapis.com/replication/role", "redis.googleapis.com/clients/connected", "redis.googleapis.com/stats/memory/usage"} <= _rt, md)
 st, ts = call("GET", f"/v3/projects/{P}/timeSeries", None, {"filter": 'metric.type="redis.googleapis.com/clients/connected"',
                                                           "interval.endTime": "2099-01-01T00:00:00Z", "interval.startTime": "2000-01-01T00:00:00Z"})
 check("no fabricated client/usage series", ts.get("timeSeries", []) == [])

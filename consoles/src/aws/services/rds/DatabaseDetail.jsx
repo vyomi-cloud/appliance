@@ -19,6 +19,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { href, follow } from "../../../common/router.js";
 import { ErrorAlert, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { DeleteDatabaseModal, ModifyModal, SnapshotModal } from "./DatabaseActions.jsx";
 import { statusOf } from "./Databases.jsx";
 import { IamRolesPanel, AlarmsPanel } from "./RdsExtras.jsx";
@@ -34,6 +35,40 @@ const MONITORING_FIELDS = [
   { key: "CPUUtilization" }, { key: "DatabaseConnections", stat: "Maximum" }, { key: "FreeStorageSpace" },
   { key: "FreeableMemory" }, { key: "ReadIOPS", stat: "Sum" }, { key: "WriteIOPS", stat: "Sum" },
 ];
+
+const RDS_GRAPHS = (id) => { const dims = [{ Name: "DBInstanceIdentifier", Value: id }]; return [
+  { title: "CPU utilization (%)", namespace: "AWS/RDS", name: "CPUUtilization", dimensions: dims, stat: "Average", unit: "Percent" },
+  { title: "DB connections (count)", namespace: "AWS/RDS", name: "DatabaseConnections", dimensions: dims, stat: "Maximum", unit: "Count" },
+  { title: "Freeable memory (bytes)", namespace: "AWS/RDS", name: "FreeableMemory", dimensions: dims, stat: "Average", unit: "Bytes" },
+  { title: "Free storage space (bytes)", namespace: "AWS/RDS", name: "FreeStorageSpace", dimensions: dims, stat: "Average", unit: "Bytes" },
+  { title: "Read IOPS", namespace: "AWS/RDS", name: "ReadIOPS", dimensions: dims, stat: "Sum", unit: "Count/Second" },
+  { title: "Write IOPS", namespace: "AWS/RDS", name: "WriteIOPS", dimensions: dims, stat: "Sum", unit: "Count/Second" },
+  { title: "Network receive (bytes)", namespace: "AWS/RDS", name: "NetworkReceiveThroughput", dimensions: dims, stat: "Sum", unit: "Bytes" },
+  { title: "Network transmit (bytes)", namespace: "AWS/RDS", name: "NetworkTransmitThroughput", dimensions: dims, stat: "Sum", unit: "Bytes" },
+]; };
+const INSIGHTS_GRAPHS = (id) => { const dims = [{ Name: "DBInstanceIdentifier", Value: id }]; return [
+  { title: "DB load (average active sessions)", namespace: "AWS/RDS", name: "DBLoad", dimensions: dims, stat: "Average", unit: "sessions" },
+  { title: "DB load - CPU", namespace: "AWS/RDS", name: "DBLoadCPU", dimensions: dims, stat: "Average", unit: "sessions" },
+  { title: "Buffer cache hit ratio (%)", namespace: "AWS/RDS", name: "BufferCacheHitRatio", dimensions: dims, stat: "Average", unit: "Percent" },
+  { title: "Transaction commits", namespace: "AWS/RDS", name: "TransactionCommits", dimensions: dims, stat: "Maximum", unit: "Count" },
+  { title: "Transaction rollbacks", namespace: "AWS/RDS", name: "TransactionRollbacks", dimensions: dims, stat: "Maximum", unit: "Count" },
+  { title: "Deadlocks", namespace: "AWS/RDS", name: "Deadlocks", dimensions: dims, stat: "Maximum", unit: "Count" },
+]; };
+
+function DatabaseInsightsTab({ d }) {
+  return (
+    <CapabilityContainer id="rds.database_insights" title="Database Insights">
+      <SpaceBetween size="l">
+        <MetricGraphs bare columns={2} graphs={INSIGHTS_GRAPHS(d.DBInstanceIdentifier)} />
+        <Box color="text-body-secondary" fontSize="body-s">
+          DB load is the average number of active sessions from pg_stat_activity and the other series from pg_stat_database, read from a Postgres engine by the
+          collector (offline Postgres; Nano PGlite). Top SQL / wait events are not available (no Performance Schema equivalent). Engines that cannot answer pg_stat
+          leave these graphs empty. On a shared Postgres the pg_stat counters are database-wide, so instances sharing that server show the same figures.
+        </Box>
+      </SpaceBetween>
+    </CapabilityContainer>
+  );
+}
 
 function MonitoringTab({ d }) {
   const [minutes, setMinutes] = useState(60);
@@ -62,8 +97,11 @@ function MonitoringTab({ d }) {
             </div>
           ))}
         </ColumnLayout>
-        <NotSimulated feature="CPUUtilization, FreeStorageSpace, FreeableMemory"
-          note="Vyomi has no virtualized compute, disk or memory allocation behind a DB instance to measure, so these are shown as unavailable rather than invented. DatabaseConnections, ReadIOPS and WriteIOPS above are real — pushed to CloudWatch as the activity actually happens." />
+        <MetricGraphs bare columns={2} graphs={RDS_GRAPHS(d.DBInstanceIdentifier)} />
+        <Box color="text-body-secondary" fontSize="body-s">
+          Every graph is a real GetMetricData read of AWS/RDS. CPU, memory and network come from the container hosting the engine (`docker stats`) and
+          connections/IOPS from the requests Vyomi served; engines without a measurable runtime (in-memory sqlite, Nano) leave those graphs empty - never synthesized.
+        </Box>
       </SpaceBetween>
     </CapabilityContainer>
   );
@@ -416,6 +454,9 @@ export default function DatabaseDetail({ params, query }) {
           },
           {
             id: "monitoring", label: "Monitoring", content: <MonitoringTab d={d} />,
+          },
+          {
+            id: "database-insights", label: "Database Insights", content: <DatabaseInsightsTab d={d} />,
           },
           {
             id: "logs", label: "Logs & events", content: (

@@ -316,5 +316,6 @@
     "limitations": [
       "The catalog and enrollment are managed by Google per project and gate real backend rollouts; Vyomi has a single fixed feature set."
     ]
-  }
+  },
+ "gcp.compute.opsagent_metrics": {"title": "Instance Observability: Ops Agent host metrics", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["agent.googleapis.com cpu (cpu_state=used only), network and disk series measured inside the instance (cgroup + /proc counters) and pushed to /_obs/gce-counters by a runtime; there is no built-in sampler for GCE instances on this branch, so a VM with no pushes shows 'No samples'. Memory, process and filesystem metrics are not produced."], "tests": ["tests/conformance/test_obs_collectors.py"]}
 }

@@ -57,8 +57,8 @@ export default function FunctionDetail({ params }) {
       {tab === "code" && body}
       {tab === "integration" && data && <Integration fn={data} rg={rg} name={name} fnName={fn} reload={reload} />}
       {tab === "invocations" && <Invocations rg={rg} name={name} fnName={fn} />}
-      {tab === "logs" && <NotSimulatedContainer feature="Live log streaming for a single function (Logs)" />}
-      {tab === "metrics" && <NotSimulatedContainer feature="Per-function metrics charts (Metrics)" />}
+      {tab === "logs" && <FunctionLogStream rg={rg} name={name} fnName={fn} />}
+      {tab === "metrics" && <FunctionMetrics rg={rg} name={name} fnName={fn} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="function" names={[fn]}
         onConfirm={async () => { await api.deleteFunction(rg, name, fn); notify.success(`Function '${fn}' was deleted.`, "Delete succeeded"); navigate("functionapp", rg, name); }} />
@@ -203,6 +203,82 @@ function Invocations({ rg, name, fnName }) {
         <table className="vy-table" aria-label="Invocations"><thead><tr><th>Date (UTC)</th><th>Success</th><th>Status</th><th>Duration (ms)</th><th>Error</th></tr></thead>
           <tbody>{data.map((r, i) => <tr key={i}><td>{r.timestamp}</td><td>{r.ok ? "Success" : "Failed"}</td><td>{r.status}</td><td>{r.durationMs}</td><td>{r.error || ""}</td></tr>)}
             {!data.length && <tr><td colSpan={5}>No invocations yet. Run the function from Code + Test.</td></tr>}</tbody></table>)}
+    </CapabilityContainer>
+  );
+}
+
+
+// ── Per-function telemetry: the REAL invocation ring buffer (core/azure_webapp_core._invoke_function appends one row per
+// attempt with a measured duration) filtered to this function. Idle function = empty chart, never invented points. ──
+const fnRows = (rows, fnName) => (rows || []).filter((r) => r.function === fnName);
+
+export function FunctionLogStream({ rg, name, fnName }) {
+  const { data, loading, error, reload } = useAsync(() => api.listInvocationLogs(rg, name), [rg, name]);
+  const [live, setLive] = useState(true);
+  useEffect(() => {
+    if (!live) return undefined;
+    const id = setInterval(reload, 3000);
+    return () => clearInterval(id);
+  }, [live, reload]);
+  const rows = fnRows(data, fnName).slice().reverse();   // API returns newest first -> oldest first, tail at the bottom
+  return (
+    <CapabilityContainer id="azure.functionapp.telemetry" title="Log stream"
+      actions={<div className="vy-cmdbar" role="toolbar" aria-label="Function log stream commands">
+        <ToolbarButton onClick={() => setLive((v) => !v)}>{live ? "Pause" : "Resume"}</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>}>
+      <ErrorBar error={error} />
+      <p style={{ fontSize: 12 }} data-testid="fn-logstream-state">{live ? "Streaming (polling every 3 s)" : "Paused"} - {rows.length} invocation(s) of {fnName}.</p>
+      <pre className="vy-mono" data-testid="fn-logstream" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>
+        {loading && !data ? "Connecting..." : rows.length
+          ? rows.map((r) => `${r.timestamp}  [${r.ok ? "Information" : "Error"}] Executed 'Functions.${r.function}' (${r.ok ? "Succeeded" : "Failed"}, status ${r.status}, ${r.durationMs} ms)${r.error ? "\n    " + r.error : ""}`).join("\n")
+          : "No invocations recorded yet. Run the function from Code + Test."}
+      </pre>
+    </CapabilityContainer>
+  );
+}
+
+export function FunctionMetrics({ rg, name, fnName }) {
+  const { data, loading, error, reload } = useAsync(() => api.listInvocationLogs(rg, name), [rg, name]);
+  const rows = fnRows(data, fnName);
+  const ok = rows.filter((r) => r.ok), bad = rows.filter((r) => !r.ok);
+  const lat = rows.map((r) => r.durationMs || 0).sort((a, b) => a - b);
+  const q = (p) => (lat.length ? lat[Math.min(lat.length - 1, Math.floor(p * lat.length))] : 0);
+  const avg = lat.length ? (lat.reduce((s, v) => s + v, 0) / lat.length).toFixed(2) : "0";
+  // per-minute execution buckets over the recorded window
+  const buckets = {};
+  rows.forEach((r) => { const m = Math.floor(new Date(r.timestamp).getTime() / 60000); buckets[m] = buckets[m] || { ok: 0, bad: 0 }; buckets[m][r.ok ? "ok" : "bad"] += 1; });
+  const keys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+  const max = Math.max(1, ...keys.map((k) => buckets[k].ok + buckets[k].bad));
+  const w = 640, h = 160, bw = keys.length ? Math.min(40, (w - 40) / keys.length) : 0;
+  return (
+    <CapabilityContainer id="azure.functionapp.telemetry" title="Function metrics"
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <ErrorBar error={error} />
+      {loading && !data ? <Loading /> : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: "8px 0" }} data-testid="fn-metric-tiles">
+            <div className="vy-section"><h3>Execution Count</h3><div style={{ fontSize: 26, fontWeight: 600 }} data-testid="fn-m-count">{rows.length}</div></div>
+            <div className="vy-section"><h3>Succeeded</h3><div style={{ fontSize: 26, fontWeight: 600 }}>{ok.length}</div></div>
+            <div className="vy-section"><h3>Failed</h3><div style={{ fontSize: 26, fontWeight: 600 }}>{bad.length}</div></div>
+            <div className="vy-section"><h3>Avg / p95 / p99 (ms)</h3><div style={{ fontSize: 20, fontWeight: 600 }}>{avg} / {q(0.95)} / {q(0.99)}</div></div>
+          </div>
+          <svg width={w} height={h} role="img" aria-label={`${fnName} executions per minute`} style={{ maxWidth: "100%" }}>
+            <line x1={30} y1={h - 24} x2={w - 4} y2={h - 24} stroke="#ccc" />
+            <text x={2} y={12} fontSize="10" fill="#666">{max}</text>
+            {keys.map((k, i) => {
+              const b = buckets[k], th = (n) => (n / max) * (h - 44);
+              return (
+                <g key={k}>
+                  <rect x={34 + i * bw} y={h - 24 - th(b.ok)} width={Math.max(2, bw - 3)} height={th(b.ok)} fill="#107c10" />
+                  <rect x={34 + i * bw} y={h - 24 - th(b.ok) - th(b.bad)} width={Math.max(2, bw - 3)} height={th(b.bad)} fill="#d13438" />
+                </g>
+              );
+            })}
+          </svg>
+          <p style={{ fontSize: 12 }} data-testid="fn-metric-note">{rows.length ? "Executions per minute from this function's recorded invocations (green = succeeded, red = failed)." : "No invocations recorded for this function yet - nothing to chart."}</p>
+        </>
+      )}
     </CapabilityContainer>
   );
 }

@@ -17,6 +17,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 import { RecommendationsTable } from "./Ext.jsx";
+import OpsAgentMetrics from "./OpsAgentMetrics.jsx";
 
 const TABS = ["Details", "Observability", "Serial port output", "OS info", "Screenshot"];
 
@@ -53,6 +54,7 @@ function ObservabilityPanel({ zone, name, inst }) {
           </Box>
         )}
       </Box>
+      <OpsAgentMetrics inst={inst} />
       <Box>
         <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Recommendations</Typography>
         <RecommendationsTable filter={(r) => (inst.disks || []).some((d) => (r.targetResources?.[0] || "").endsWith(`/disks/${String(d.source || "").split("/").pop()}`))} />

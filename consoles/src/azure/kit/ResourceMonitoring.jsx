@@ -92,8 +92,10 @@ export function ResourceMetrics({ id, name, title }) {
             <p style={{ fontSize: 12 }} data-testid="metric-summary">{points.length} data points, sum {total}, last 24 hours.</p>
             <InfoBar>
               {metric === "ActivityOperations"
-                ? `Real count of ${name}'s own Activity log operations. Vyomi has no CPU, request or latency telemetry for this resource type, so no other metrics are offered.`
-                : "Real current value from this resource's own data (single point, no history)."}
+                ? `Real count of ${name}'s own Activity log operations.`
+                : def?.displayDescription || (["Availability", "SuccessE2ELatency", "Errors", "Requests"].includes(metric) || (defs.data || []).length > 1
+                  ? "Measured from the requests Vyomi served for this resource; a window with no traffic has no data points."
+                  : "Real current value from this resource's own data (single point, no history).")}
             </InfoBar>
           </>
         )}

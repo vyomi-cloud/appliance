@@ -34,6 +34,7 @@ import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import AppInsights from "../../kit/AppInsights.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -111,6 +112,7 @@ export default function WebAppBlade({ params, query }) {
       changeplan: () => <ChangePlan a={a} rg={rg} name={name} reload={reload} />,
       locks: () => <Locks rg={rg} name={name} />,
       appservicelogs: () => <AppServiceLogs rg={rg} name={name} />,
+      appinsights: () => <AppInsights site={a} capId="azure.appservices.applicationinsights" getSettings={() => api.getAppSettings(rg, name)} putSettings={(v) => api.updateAppSettings(rg, name, v)} />,
       logstream: () => <LogStream name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,

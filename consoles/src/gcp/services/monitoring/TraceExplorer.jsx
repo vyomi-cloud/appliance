@@ -7,6 +7,40 @@ import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { restJson } from "../../../common/wire.js";
+
+/** Latency percentiles + time x latency heatmap from the trace store (core/observability_core.trace_latency_stats). */
+function LatencyOverview() {
+  const { data, loading } = useAsync(() => restJson("GET", "/_obs/trace-stats", {}), []);
+  const hm = data?.heatmap || { cells: [], latencyBucketsMs: [], timeBuckets: [] };
+  const max = Math.max(1, ...hm.cells.flat());
+  const cw = 28, ch = 14;
+  return (
+    <Box sx={{ mb: 2 }} data-testid="trace-latency">
+      <Typography variant="subtitle2">Latency (root spans)</Typography>
+      {loading && !data ? <Typography variant="body2">Loading...</Typography> : (
+        <>
+          <Stack direction="row" spacing={3} sx={{ my: 1 }} data-testid="trace-percentiles">
+            {[["Spans", data.count], ["p50 (ms)", data.p50_ms], ["p90 (ms)", data.p90_ms], ["p95 (ms)", data.p95_ms], ["p99 (ms)", data.p99_ms]].map(([k, v]) => (
+              <Box key={k}><Typography variant="caption" color="text.secondary">{k}</Typography><Typography variant="h6" data-testid={"trace-" + k.split(" ")[0].toLowerCase()}>{v}</Typography></Box>
+            ))}
+          </Stack>
+          {hm.cells.length ? (
+            <svg width={hm.cells.length * cw + 60} height={(hm.cells[0]?.length || 1) * ch + 24} role="img" aria-label="Latency heatmap" data-testid="trace-heatmap">
+              {hm.cells.map((col, x) => col.map((n, y, arr) => (
+                <rect key={`${x}-${y}`} x={50 + x * cw} y={(arr.length - 1 - y) * ch} width={cw - 1} height={ch - 1} fill="#1a73e8" fillOpacity={n ? 0.15 + 0.85 * (n / max) : 0.04}>
+                  <title>{n} span(s), {hm.latencyBucketsMs[y]}-{hm.latencyBucketsMs[y + 1] ?? "max"} ms</title>
+                </rect>
+              )))}
+              <text x={0} y={12} fontSize="10" fill="#666">{hm.latencyBucketsMs[hm.latencyBucketsMs.length - 1]} ms</text>
+              <text x={0} y={(hm.cells[0].length) * ch} fontSize="10" fill="#666">0</text>
+            </svg>
+          ) : <Typography variant="body2" color="text.secondary" data-testid="trace-heatmap-empty">No spans recorded - nothing to plot.</Typography>}
+        </>
+      )}
+    </Box>
+  );
+}
 
 const ms = (a, b) => Math.max(0, new Date(b) - new Date(a));
 
@@ -41,6 +75,7 @@ export default function TraceExplorer() {
     <>
       <PageHeader title="Trace explorer" />
       <CapabilityContainer id="gcp.monitoring.trace-explorer" title="Distributed tracing">
+        <LatencyOverview />
         <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
           <TextField size="small" fullWidth label="Filter (span:name, +root:name, label:k:v, latency:100ms)" value={filter} onChange={(e) => setFilter(e.target.value)} inputProps={{ "aria-label": "Trace filter" }} />
           <Button variant="contained" onClick={() => setApplied(filter)}>Apply</Button>
