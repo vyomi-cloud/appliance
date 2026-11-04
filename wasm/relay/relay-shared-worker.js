@@ -26,7 +26,7 @@ const pyodideIndex = () => fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD"
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
-  "llm_core.py", "ai_models_core.py", "dms_core.py",
+  "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -51,14 +51,14 @@ const CORES = [
   "azure_sqlbackup_core.py",
   "ce_core.py",
   "vpc_encryption_core.py", "savingsplans_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",
-  "azure_files_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
+  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
 
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 const bc = new BroadcastChannel("nano-relay");
 // Defaults; the page (footer) may override any of these via the `start` message

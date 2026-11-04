@@ -414,13 +414,15 @@
  "dynamodb.account.zero-etl": {
   "title": "Zero-ETL integrations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Zero-ETL integrations replicate tables into Amazon Redshift / SageMaker lakehouse, services Vyomi does not implement."
+   "The integration really replicates: DynamoDB table items / RDS table rows are copied into an in-process 'Redshift-lite' warehouse (sqlite) on every touch/query ('sync on read'), and the Redshift Data API (ExecuteStatement/GetStatementResult, CREATE DATABASE ... FROM INTEGRATION) queries it. The SQL dialect is SQLite's, not Redshift's; replication is poll-on-touch, not a continuous stream; no data filters, encryption or cross-account semantics; the warehouse is in memory and rebuilt from the sources on boot. A real Redshift/SageMaker lakehouse is not run."
   ],
-  "api": []
+  "tests": [
+   "tests/conformance/test_zeroetl_core.py"
+  ]
  },
  "dynamodb.account.reserved-capacity": {
   "title": "Reserved capacity",

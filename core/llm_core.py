@@ -40,7 +40,51 @@ class LlmUnavailable(Exception):
     """No local model is reachable (container not started / WebLLM not loaded)."""
 
 
-_state = {"fn": None, "embed_fn": None, "endpoint": None, "model": None}
+_state = {"fn": None, "embed_fn": None, "endpoint": None, "model": None, "afn": None, "acache": {}, "in_arun": False}
+
+
+class NeedAsync(BaseException):
+    """Raised by chat() on a substrate whose only backend is async (Nano's WebLLM bridge): the async front door
+    (``arun``) awaits the engine, caches the answer and replays the request. BaseException so no ``except Exception``
+    in a core can swallow it."""
+
+    def __init__(self, key, args):
+        super().__init__(key)
+        self.key, self.args_ = key, args
+
+
+def set_async_backend(afn=None, model: str | None = None) -> None:
+    """Register an awaitable backend ``afn(messages, system, max_tokens, temperature, stop) -> dict|str`` (Nano: WebLLM in
+    the page). Used only through ``arun`` (the async router path); the synchronous router path reports it unavailable."""
+    _state["afn"], _state["acache"] = afn, {}
+    if model:
+        _state["model"] = model
+
+
+async def arun(handler, max_rounds: int = 8):
+    """Run the synchronous ``handler()`` (a whole wire request); every chat() it makes is answered by the async backend
+    (awaited here, cached, request replayed) so cores stay synchronous. Without an async backend this is just handler()."""
+    if not _state["afn"]:
+        return handler()
+    for _ in range(max_rounds):
+        try:
+            _state["in_arun"] = True
+            return handler()
+        except NeedAsync as n:
+            msgs, system, max_tokens, temperature, stop = n.args_
+            try:
+                r = await _state["afn"](msgs, system, max_tokens, temperature, stop)
+            except Exception as e:
+                _state["acache"][n.key] = e
+            else:
+                _state["acache"][n.key] = r if isinstance(r, dict) else {"text": str(r)}
+        finally:
+            _state["in_arun"] = False
+    return handler()
+
+
+def _akey(args) -> str:
+    return hashlib.md5(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def set_backend(fn=None, embed_fn=None, model: str | None = None, endpoint: str | None = None) -> None:
@@ -93,6 +137,9 @@ def status(probe: bool = True) -> dict:
     if _state["fn"]:
         st.update(available=True, backend="registered", endpoint="in-process")
         return st
+    if _state["afn"]:
+        st.update(available=True, backend="webllm", endpoint="in-page")
+        return st
     ep = _endpoint()
     st["endpoint"] = ep
     if ep:
@@ -133,6 +180,20 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
         return {"text": text, "input_tokens": info.get("input_tokens") or estimate_tokens(prompt_text),
                 "output_tokens": info.get("output_tokens") or estimate_tokens(text),
                 "finish_reason": info.get("finish_reason") or "stop", "backend": "registered", "model": model_name()}
+    if _state["afn"]:
+        args = (msgs, system, max_tokens, temperature, list(stop) if stop else None)
+        key = _akey(args)
+        hit = _state["acache"].pop(key, None)
+        if hit is None:
+            if not _state["in_arun"]:
+                raise LlmUnavailable("The in-browser model is only reachable through the async request path.")
+            raise NeedAsync(key, args)
+        if isinstance(hit, Exception):
+            raise LlmUnavailable(f"In-browser model failed ({type(hit).__name__}: {hit}).") from hit
+        text = hit.get("text", "")
+        return {"text": text, "input_tokens": hit.get("input_tokens") or estimate_tokens(prompt_text),
+                "output_tokens": hit.get("output_tokens") or estimate_tokens(text),
+                "finish_reason": hit.get("finish_reason") or "stop", "backend": "webllm", "model": model_name()}
     body = {"model": model or model_name(), "messages": msgs, "max_tokens": max_tokens, "temperature": float(temperature),
             "stream": False}
     if stop:
@@ -167,7 +228,7 @@ def embed(texts, dimensions: int | None = None) -> dict:
     try:
         if _state["embed_fn"]:
             vecs, backend = _state["embed_fn"](texts), "registered"
-        elif not _state["fn"] and _endpoint():
+        elif not _state["fn"] and not _state["afn"] and _endpoint():
             r = _http("/v1/embeddings", {"model": model_name(), "input": texts}, timeout=30.0)
             vecs, backend = [d["embedding"] for d in r["data"]], "llama.cpp"
     except (LlmUnavailable, KeyError, TypeError):

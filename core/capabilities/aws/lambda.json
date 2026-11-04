@@ -283,15 +283,17 @@
   ]
  },
  "lambda.dashboard.agent-onboarding": {
-  "title": "AI coding-agent onboarding (MCP server + agent prompt)",
+  "title": "AI coding-agent onboarding (MCP gateway + agent prompt)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The onboarding card connects a hosted AI coding agent to Lambda. That needs the Bedrock/agent product family, which Vyomi does not implement."
+   "Real: checks the local model, creates an AgentCore MCP gateway that exposes Lambda functions as tools, and generates the endpoint configuration prompt. There is no hosted coding agent; the agent that uses the prompt is your own."
   ],
-  "api": []
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
  },
  "lambda.application.cicd-pipeline": {
   "title": "Lambda application CI/CD pipelines",

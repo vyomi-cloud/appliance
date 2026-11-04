@@ -87,7 +87,7 @@ const MODULES = [
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
-  "llm_core.py", "ai_models_core.py", "dms_core.py",
+  "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -118,7 +118,7 @@ const CORES = [
   "azure_cfgext_core.py",
   "azure_backup_core.py",
   "azure_sqlbackup_core.py",
-  "azure_files_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
+  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_osconfig_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_scc_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
@@ -152,7 +152,7 @@ const CORES = [
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
@@ -258,6 +258,52 @@ async def _adisp(payload_json):
 import builtins; builtins._disp = _disp; builtins._adisp = _adisp
 `);
   st.ok();
+  // ── Local-LLM bridge (WebLLM) ───────────────────────────────────────
+  // Bedrock / Vertex AI / Azure OpenAI answer from core/llm_core. On Nano the only possible model is one the BROWSER runs, so
+  // a page that has one registers it here: vyomiRegisterLLM({model, chat(reqJson) -> Promise<json string>}) or, when the browser
+  // has WebGPU, vyomiEnableWebLLM() loads @mlc-ai/web-llm and registers a small instruct model. With neither, llm_core reports
+  // no backend and every model call returns the honest ModelNotReady error (never a canned answer).
+  py.runPython(`
+import json, builtins
+async def _llm_bridge_chat(msgs, system, max_tokens, temperature, stop):
+    import js
+    eng = getattr(js.globalThis, "__vyomiLlm", None)
+    if eng is None:
+        raise RuntimeError("no in-browser model is registered")
+    r = await eng.chat(json.dumps({"messages": msgs, "max_tokens": max_tokens, "temperature": temperature, "stop": stop}))
+    return json.loads(str(r))
+def _llm_bridge_set(model):
+    from core import llm_core
+    llm_core.set_async_backend(_llm_bridge_chat if model else None, model=model or None)
+def _llm_bridge_status():
+    from core import llm_core
+    return json.dumps(llm_core.status(probe=False))
+builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_bridge_status
+`);
+  globalThis.vyomiRegisterLLM = (engine) => {
+    globalThis.__vyomiLlm = engine || null;
+    py.runPython(`_llm_bridge_set(${JSON.stringify(engine ? String(engine.model || "webllm") : "")})`);
+  };
+  globalThis.vyomiLlmStatus = () => JSON.parse(py.runPython("_llm_bridge_status()"));
+  globalThis.vyomiEnableWebLLM = async (modelId, onProgress) => {
+    if (!("gpu" in navigator)) throw new Error("WebGPU is not available in this browser, so WebLLM cannot run here.");
+    const webllm = globalThis.webllm || await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm");
+    const list = (webllm.prebuiltAppConfig && webllm.prebuiltAppConfig.model_list) || [];
+    const id = modelId || (list.find((m) => /SmolLM2-360M-Instruct/i.test(m.model_id)) || list.find((m) => /Qwen2\.5-0\.5B-Instruct/i.test(m.model_id)) || {}).model_id;
+    if (!id) throw new Error("No small WebLLM model is listed by this WebLLM build.");
+    const engine = await webllm.CreateMLCEngine(id, { initProgressCallback: (p) => onProgress && onProgress(p) });
+    vyomiRegisterLLM({
+      model: id,
+      chat: async (reqJson) => {
+        const q = JSON.parse(reqJson);
+        const r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false });
+        const c = r.choices[0];
+        return JSON.stringify({ text: c.message.content || "", input_tokens: r.usage && r.usage.prompt_tokens, output_tokens: r.usage && r.usage.completion_tokens, finish_reason: c.finish_reason === "length" ? "length" : "stop" });
+      },
+    });
+    return id;
+  };
+
   // ── Live engine status (Dashboard > Service status) ─────────────────
   // This runtime checks every registry store (built + state reads back) and
   // records the result; the SW's /api/runtime/readiness builds the cards from

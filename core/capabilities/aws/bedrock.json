@@ -1,0 +1,70 @@
+{
+ "$doc": "Vyomi capability registry — Amazon Bedrock (runtime playground, knowledge bases, agents, AgentCore). Proven by tests/conformance/test_capabilities.py.",
+ "bedrock.runtime": {
+  "title": "Bedrock Runtime playground (InvokeModel / Converse, streaming)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Tool use, images, guardrails and prompt caching are rejected with a validation error rather than ignored. Streaming is real event framing over a response generated whole.",
+   "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
+  ],
+  "tests": [
+   "tests/conformance/test_local_llm_seam.py",
+   "tests/conformance/test_llm_async_bridge.py"
+  ]
+ },
+ "bedrock.knowledge-bases": {
+  "title": "Knowledge bases (S3 data sources, ingestion, Retrieve, RetrieveAndGenerate)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Ingestion really reads the S3 data source, chunks (fixed size / none) and embeds with the local embedding seam; Retrieve is exact cosine kNN with metadata filters. Only text documents (.txt/.md/.csv/.json/.html/.xml/.log) are ingested - PDF/Office files are reported as failed. The vector store type named at creation is recorded but the index always lives in the account (no OpenSearch/Pinecone/etc). Without an embedding model on the backend, vyomi-hash-embed (a deterministic bag-of-words embedding) is used, so retrieval is lexical-ish, not semantic. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.agents": {
+  "title": "Agents (create, prepare, aliases, knowledge bases, InvokeAgent)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Agent versions/aliases snapshot the prepared agent; InvokeAgent prompts the local model with the instruction, session history and retrieved knowledge-base passages and returns citations. Action groups are stored but never invoked (a <1 GB model does not emit reliable tool calls); no orchestration trace, guardrails, memory or multi-agent collaboration. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.agentcore.gateway": {
+  "title": "AgentCore gateways and targets (MCP)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Gateways expose a real MCP JSON-RPC endpoint (initialize, tools/list, tools/call) at POST /gateways/{id}/mcp on the Vyomi wire, not at the *.gateway.bedrock-agentcore hostname. Lambda targets are really invoked. openApiSchema/smithyModel/mcpServer targets are registered but their tools are not callable; CUSTOM_JWT tokens are not validated (only presence of an Authorization header is checked); no semantic tool search or credential-provider (OAuth/API key) flows."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.agentcore.runtime": {
+  "title": "AgentCore runtime (hosted agents)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Runtimes are control-plane records (create/get/list/update/delete with versions and CREATING->READY). The simulator does not run runtime containers, so InvokeAgentRuntime returns a RuntimeClientError. Memory, identity and observability sub-services are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ }
+}

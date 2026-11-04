@@ -1113,6 +1113,10 @@ def _aws_query_target_service(request: Request) -> str:
         return "dms"
     if target.startswith(("com.amazonaws.codeconnections.", "com.amazonaws.codestar.connections.")):
         return "codeconnections"
+    if target.startswith("AWSGlue."):
+        return "glue"
+    if target.startswith("RedshiftData."):
+        return "redshift-data"
     if target.startswith("NetworkFirewall_20201112."):
         return "network-firewall"
     if target.startswith("com.amazonaws.cloudtrail."):
@@ -1129,6 +1133,8 @@ def _aws_query_target_service(request: Request) -> str:
 # Query ones on POST / and the REST ones whose paths would otherwise fall into the S3 catch-all.
 _ROUTER_QUERY_SERVICES = ("ecr", "fsx", "dax", "ram", "dms", "cloudformation", "network-firewall", "route53resolver", "cloudtrail", "codeconnections", "codestar-connections")
 _ROUTER_REST_SERVICES = ("inspector2", "dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup", "bedrock", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
+_ROUTER_QUERY_SERVICES = ("fsx", "dax", "ram", "dms", "glue", "redshift-data", "cloudformation", "network-firewall", "route53resolver", "cloudtrail")
+_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup", "bedrock", "bedrock-agentcore", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
 
 
 def _signed_service(request: Request) -> str:
