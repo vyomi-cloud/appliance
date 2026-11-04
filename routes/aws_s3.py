@@ -1099,6 +1099,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "logs"
     if target.startswith("AmazonSSM."):
         return "ssm"
+    if target.startswith("AWSEC2InstanceConnectService."):
+        return "ec2-instance-connect"
     if target.startswith("AWSStepFunctions."):
         return "states"
     if target.startswith("AmazonSQS."):
@@ -1361,6 +1363,12 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_iam_query(request)
         if service == "sts":
             return await _srv().api_sts_query(request)
+        if service == "ec2-instance-connect":
+            try:
+                _ic_payload = json.loads(await request.body() or b"{}")
+            except Exception:
+                _ic_payload = {}
+            return _srv().ec2_instance_connect_wire(request.headers.get("x-amz-target", ""), _ic_payload)
         if service == "ssm":
             # Systems Manager: in-process engine (core/ssm_core.py), same store as the console REST.
             from core import ssm_core as _ssm_core
