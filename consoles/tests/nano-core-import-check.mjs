@@ -23,7 +23,7 @@ console.log(`cores: ${Object.entries(loaders).map(([k, v]) => `${k}=${v.length}`
 
 const { loadPyodide } = await import(pathToFileURL(join(W, "vendor/pyodide/pyodide.mjs")).href);
 const py = await loadPyodide({ indexURL: join(W, "vendor/pyodide") + "/" });
-try { await py.loadPackage(join(W, "vendor/pyodide/sqlite3-1.0.0.zip")); } catch (e) { console.log("sqlite3 package skipped:", String(e).slice(0, 100)); }
+try { await py.loadPackage("sqlite3"); } catch (e) { console.log("sqlite3 package skipped:", String(e).slice(0, 100)); }
 const put = (p, src) => { const d = dirname(p); py.FS.mkdirTree(d); py.FS.writeFile(p, src); };
 py.FS.mkdirTree("/core"); py.FS.writeFile("/core/__init__.py", "");
 for (const c of all) put("/core/" + c, readFileSync(join(W, "core", c), "utf8"));
