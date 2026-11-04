@@ -1,4 +1,5 @@
 {
+ "$doc": "Vyomi capability registry — Amazon Bedrock (runtime playground, knowledge bases, agents, AgentCore). Proven by tests/conformance/test_capabilities.py.",
  "bedrock.runtime": {
   "title": "Bedrock Runtime playground (InvokeModel / Converse, streaming)",
   "level": {

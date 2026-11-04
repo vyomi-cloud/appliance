@@ -20,9 +20,10 @@ import ArtifactIcon from "@mui/icons-material/esm/ViewInArOutlined.js";
 import ChartIcon from "@mui/icons-material/esm/BarChartOutlined.js";
 import LogIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import MemorystoreIcon from "@mui/icons-material/esm/CachedOutlined.js";
+import AiIcon from "@mui/icons-material/esm/AutoAwesomeOutlined.js";
 import { classicUrl } from "../../common/classic.js";
 
-export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability"];
+export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability", "AI and Machine Learning"];
 
 export const PRODUCTS = [
   { id: "storage", title: "Cloud Storage", description: "Object storage for companies of all sizes", category: "Storage", icon: BucketIcon, load: () => import("./storage/index.jsx") },
@@ -41,6 +42,7 @@ export const PRODUCTS = [
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },
   { id: "resource-manager", title: "Manage resources", description: "Create, organize and administer projects", category: "Management", icon: ResourceManagerIcon, load: () => import("./resource-manager/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
+  { id: "vertex-ai", title: "Vertex AI", description: "Gemini models and generative AI studio", category: "AI and Machine Learning", icon: AiIcon, load: () => import("./vertex-ai/index.jsx") },
   { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, load: () => import("./monitoring/index.jsx") },
   { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, load: () => import("./logs/index.jsx") },
 ];
