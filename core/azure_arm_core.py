@@ -3477,7 +3477,8 @@ class AzureArm:
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
         if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
             return self._deployment_action(action, resource_name, parent_rid, sub, rg)
-        if action in ("reconcile", "vyomipush") and "/providers/microsoft.kubernetesconfiguration/fluxconfigurations/" in (parent_rid or "").lower():
+        if action in ("reconcile", "vyomipush", "run") and any(m in (parent_rid or "").lower() for m in (
+                "/providers/microsoft.kubernetesconfiguration/fluxconfigurations/", "/vyomiautomateddeployments/")):
             rec = self.state.get(parent_rid.lower())
             if not rec:
                 return _err(404, "ResourceNotFound", f"Flux configuration '{resource_name}' not found.")
@@ -3485,6 +3486,8 @@ class AzureArm:
                 from core import azure_flux_core as _flux
             except ImportError:
                 import azure_flux_core as _flux  # type: ignore
+            if getattr(self, "acr_store", None) is not None:
+                _flux.ACR_STORE = self.acr_store
             return _flux.action(self.state, rec, action, payload)
         if ns == "microsoft.containerregistry" and typ == "registries" and len(type_chain) == 3 and action == "schedulerun":
             rec = self.state.get(parent_rid.lower()) if parent_rid else None

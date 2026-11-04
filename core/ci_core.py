@@ -419,6 +419,16 @@ def set_fetcher(f):
     _fetcher = f
 
 
+def set_http(fn):
+    """fn(method, url, headers, body_bytes|None) -> (status, bytes). Outbound HTTPS for WRITES to the user's own GitHub
+    (committing a workflow file). None on Nano -> a clear 'unavailable' error."""
+    global _http
+    _http = fn
+
+
+_http = None
+
+
 def backends() -> dict:
     return {"git": _git.name, "builder": _builder.name, "containers": bool(getattr(_builder, "runs_containers", False)),
             "externalFetch": _fetcher is not None}
@@ -599,6 +609,36 @@ def import_external(db, repo, url, ref, branch=None, message=None, ctx=None):
         old = _git.tree(db, repo, branch or "main") or {}
         files.update({p: None for p in old if p not in files})
     return commit_files(db, repo, branch or "main", files, message or f"Import {m.group(1)}/{m.group(2)}@{ref}", "github-import", ctx)
+
+
+def github_commit_file(db, url, branch, path, text, message):
+    """Commit ONE file to the user's own GitHub repo through the Contents API with the connected PAT (create or update).
+    Returns {"commit": sha, "path": path, "url": html_url}. Never fabricates: no PAT / no outbound HTTP / API error -> CiError."""
+    m = _GH.match(url or "")
+    if not m:
+        raise CiError("UnsupportedSource", "Only https://github.com/{owner}/{repo} repositories can be written to.")
+    if _http is None:
+        raise CiError("FetchUnavailable", "This substrate cannot make outbound HTTPS requests, so the file cannot be committed to GitHub.", 502)
+    tok = (db["connections"].get("github") or {}).get("token")
+    if not tok:
+        raise CiError("NoToken", "Committing to GitHub needs a connected personal access token with repo/workflow scope.", 401)
+    hdr = {"Accept": "application/vnd.github+json", "User-Agent": "vyomi-ci", "Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
+    api = f"https://api.github.com/repos/{m.group(1)}/{m.group(2)}/contents/{path}"
+    st, raw = _http("GET", f"{api}?ref={branch}", hdr, None)
+    body = {"message": message, "branch": branch, "content": base64.b64encode(_b(text)).decode()}
+    if st == 200:
+        body["sha"] = json.loads(raw).get("sha")
+    elif st not in (404,):
+        raise CiError("GitHubError", f"GitHub returned HTTP {st} reading {path}.", 403 if st in (401, 403) else 502)
+    st, raw = _http("PUT", api, hdr, json.dumps(body).encode())
+    if st not in (200, 201):
+        try:
+            msg = json.loads(raw).get("message", "")
+        except Exception:
+            msg = ""
+        raise CiError("GitHubError", f"GitHub returned HTTP {st} writing {path}: {msg}".strip(), 403 if st in (401, 403) else 502)
+    j = json.loads(raw)
+    return {"commit": (j.get("commit") or {}).get("sha"), "path": path, "url": (j.get("content") or {}).get("html_url")}
 
 
 # ── build jobs ───────────────────────────────────────────────────────────────────────────────

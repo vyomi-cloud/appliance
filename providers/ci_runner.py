@@ -123,6 +123,7 @@ def install(run=docker_run):
         return ci.backends()
     _done = True
     ci.set_fetcher(fetcher)
+    ci.set_http(http)
     try:
         if docker_available(run):
             ci.set_builder(ci.BuildKitBuilder(run))
