@@ -1109,11 +1109,6 @@
     body.side-collapsed .side-collapse .material-icons { transform: rotate(180deg); }
     body.side-collapsed .side-collapse { left: calc(68px - 13px); padding: 0; }
     .side-nav { flex: 1; overflow: hidden; }
-    /* Collapse/expand control is the LAST item of the side menu (was a floating chevron on the edge). */
-    .side-expand { margin-top: auto; }
-    .side-expand .side-ic svg { transition: transform .16s; }
-    body.side-collapsed .side-expand .side-ic svg { transform: rotate(180deg); }
-    body.side-collapsed .side-expand .side-label { display: none; }
     .side-item .side-ic { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: #6b7488; }
     .side-item:hover .side-ic { color: #e8ecf5; }
     .side-item.active .side-ic { color: #818cf8; }
@@ -1181,7 +1176,6 @@
       <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="side-label">Knowledge Center</span></button>
       <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span><span class="side-label">SDK &amp; CLI usage</span></button>
       <button class="side-item" type="button" data-view="api" onclick="showAppView('api')" title="API reference — interactive Swagger for every REST endpoint"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span><span class="side-label">API (Swagger)</span></button>
-      <button class="side-item side-expand" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand menu"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span><span class="side-label">Collapse</span></button>
     </nav>
     <div class="side-foot" id="nanoSideFoot" hidden>
       <div class="side-user-menu" id="nanoUsrMenu">
@@ -1197,6 +1191,9 @@
       </div>
     </div>
   </aside>
+  <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand">
+    <span class="material-icons">chevron_left</span>
+  </button>
   <div id="app-main">
 
   <div id="view-workspace" hidden>
