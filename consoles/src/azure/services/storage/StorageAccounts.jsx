@@ -10,6 +10,7 @@ import { Glyph, NotSimulated } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { RestoreDeletedStorage } from "../../kit/BackupPages.jsx";
 
 export default function StorageAccounts() {
   const notify = useNotify();
@@ -58,7 +59,8 @@ export default function StorageAccounts() {
           emptyAction={<Link href="#/storage/create">Create storage account</Link>}
         />
       </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+      <RestoreDeletedStorage open={gap === "Restore"} onClose={() => setGap(null)} onRestored={reload} />
+      <Dialog open={!!gap && gap !== "Restore"} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>

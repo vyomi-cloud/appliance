@@ -50,6 +50,19 @@ check("dismiss -> 204 and status changes", arm.handle("POST", base + "/dismiss",
 arm.handle("POST", base + "/activate", {"api-version": "2022-01-01"})
 check("activate restores", [x for x in alerts() if x["name"] == al["name"]][0]["properties"]["status"] == "Active")
 check("GET one", arm.handle("GET", base, {"api-version": "2022-01-01"})["body"]["name"] == al["name"])
+ip = arm.handle("POST", base + "/inprogress", {"api-version": "2022-01-01"})
+cur = [x for x in alerts() if x["name"] == al["name"]][0]
+check("inprogress sets InProgress and records history", ip["status"] == 204 and cur["properties"]["status"] == "InProgress"
+      and [h["action"] for h in json.loads(cur["properties"]["extendedProperties"]["statusHistory"])][-3:] == ["dismiss", "activate", "inprogress"])
+rm = arm.handle("POST", base + "/remediate", {"api-version": "2022-01-01"})
+cur = [x for x in alerts() if x["name"] == al["name"]][0]
+check("remediate closes public access on the account and resolves", rm["status"] == 204 and cur["properties"]["status"] == "Resolved"
+      and arm.state[st.lower()]["properties"]["allowBlobPublicAccess"] is False and "allowBlobPublicAccess" in cur["properties"]["extendedProperties"]["remediation"])
+nal = [x for x in alerts() if x["properties"]["alertType"] == "VYOMI_ARM_MANAGEMENT_PORT_EXPOSED"][0]
+check("remediate NSG rule -> Deny", arm.handle("POST", nal["id"] + "/remediate", {})["status"] == 204)
+pal = [x for x in alerts() if x["properties"]["alertType"] == "VYOMI_ARM_PRIVILEGED_ROLE_ASSIGNED"][0]
+check("remediate role assignment deletes it", arm.handle("POST", pal["id"] + "/remediate", {})["status"] == 204 and ra.lower() not in arm.state)
+check("remediate again on a gone resource -> 409", arm.handle("POST", pal["id"] + "/remediate", {})["status"] == 409)
 check("unknown action 404", arm.handle("POST", base + "/explode", {})["status"] == 404)
 json.dumps(arm.state)
 check("state stays JSON-safe", True)

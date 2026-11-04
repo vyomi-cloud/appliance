@@ -7,6 +7,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { Glyph, NotSimulated } from "../../kit/common.jsx";
+import { CosmosRestoreDialog } from "../../kit/BackupPages.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -16,6 +17,7 @@ export default function CosmosAccounts() {
   const sub = useSubscription();
   const { data, loading, error, reload } = useAsync(() => api.listAccounts(), [sub.id]);
   const subName = sub.displayName || sub.id;
+  const [restore, setRestore] = useState(false);
   const [gap, setGap] = useState(null); // "Restore" | "Open query" | "Assign tags"
 
   return (
@@ -36,7 +38,7 @@ export default function CosmosAccounts() {
             reload();
           }}
           extraCommands={<>
-            <ToolbarButton onClick={() => setGap("Restore")}>Restore</ToolbarButton>
+            <ToolbarButton onClick={() => setRestore(true)}>Restore</ToolbarButton>
           </>}
           subscriptionLabel={subName}
           csvName="cosmos-db-accounts.csv"
@@ -56,11 +58,12 @@ export default function CosmosAccounts() {
           emptyAction={<Link href="#/cosmos/create">Create Azure Cosmos DB account</Link>}
         />
       </div>
+      <CosmosRestoreDialog open={restore} onClose={() => setRestore(false)} onRestored={reload} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Open query" ? "Querying across accounts with Azure Resource Graph" : gap === "Restore" ? "Restoring a deleted/backed-up account" : "Bulk tag assignment from the browse grid"} /></DialogContent>
+            <DialogContent><NotSimulated feature={gap === "Open query" ? "Querying across accounts with Azure Resource Graph" : "Bulk tag assignment from the browse grid"} /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>

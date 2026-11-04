@@ -62,9 +62,11 @@
   "title": "Backup & Restore policy",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "properties.backupPolicy is ENFORCED at the ARM contract level (backupPolicy.type, the Periodic interval/retention/redundancy ranges, the Continuous tier enum, and Azure's one-way Continuous-to-Periodic migration block all match the real API), but Vyomi never actually takes or restores a backup."
+   "properties.backupPolicy is ENFORCED at the ARM contract level (backupPolicy.type, the Periodic interval/retention/redundancy ranges, the Continuous tier enum, and Azure's one-way Continuous-to-Periodic migration block all match the real API).",
+   "Continuous-mode accounts (live AND deleted) are listed under locations/{loc}/restorableDatabaseAccounts with the oldest restorable time from the 7/30-day tier, restorableSqlDatabases/Containers/Resources come from a real create/delete timeline, and an account PUT with createMode Restore + restoreParameters (timestamp validated against the window, selective databasesToRestore) recreates the databases, containers and throughput that existed at that instant in a NEW account (tests/conformance/test_azure_dpbackup_core.py).",
+   "NOT modelled on either substrate: document-level restore. The Cosmos data plane is one shared store with no per-account partition or write-ahead log, so a restored account gets its databases/containers (partition keys, indexing, throughput) but no documents; Periodic-mode accounts take no snapshots, so there is nothing to restore from them."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_dpbackup_core.py"]
  },
  "azure.cosmos.tags": {
   "title": "Tags",

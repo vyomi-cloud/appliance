@@ -3,6 +3,7 @@
  * Locks, Access control (IAM) and Export template are backed by native ARM / the native Cosmos
  * DB REST (SQL/Core API) data plane; everything else in the menu is an honest NotSimulated panel
  * (the spec captures them as blade menu items with no further content — "title only"). */
+import { CosmosPitr } from "../../kit/BackupPages.jsx";
 import { CosmosNetworking } from "../../kit/NetworkRules.jsx";
 import { CosmosCors, CosmosDedicatedGateway, CosmosDataEncryption } from "../../kit/ConfigPages.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
@@ -87,7 +88,6 @@ const NS_NOTES = {
   defender: "Microsoft Defender for Cloud",
   identity: "Managed identity assignment",
   dataencryption: "Customer-managed key rotation (Data Encryption blade)",
-  browse: "The Browse blade (select a container from Data Explorer instead)",
   scale: "The Scale blade (select a container from Data Explorer instead)",
   powerbi: "Power BI integration",
   addsearch: "Azure Cognitive Search integration",
@@ -127,6 +127,7 @@ export default function CosmosAccountBlade({ params }) {
       dedicatedgateway: () => <CosmosDedicatedGateway a={a} />,
       dataencryption: () => <CosmosDataEncryption a={a} reload={reload} />,
       scale: () => <CosmosScale a={a} />,
+      browse: () => <ContainerBrowse a={a} self={self} />,
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,
@@ -172,7 +173,7 @@ function Overview({ a, reload, self }) {
   const [tab, setTab] = useState("getstarted");
   const [del, setDel] = useState(false);
   const [gap, setGap] = useState(null);
-  const containers = useAsync(() => api.listAllContainers(), []);
+  const containers = useAsync(() => api.listAllContainers(a.resourceGroup, a.name), [a.id]);
   const rows = containers.data || [];
   return (
     <>
@@ -231,7 +232,7 @@ function Overview({ a, reload, self }) {
                 <TableCell>{c.database}</TableCell>
                 <TableCell><Link href={`${self}/dataexplorer`}>{c.id}</Link></TableCell>
                 <TableCell>{(c.partitionKey?.paths || []).join(", ")}</TableCell>
-                <TableCell>--</TableCell>
+                <TableCell>{c.throughput || "--"}</TableCell>
               </TableRow>
             )) : <TableRow><TableCell colSpan={4} className="vy-muted">No containers to display</TableCell></TableRow>}
           </TableBody>
@@ -546,6 +547,27 @@ function Consistency({ a, reload }) {
 // ── Backup & Restore ────────────────────────────────────────────────────────────────────
 const REDUNDANCY_LABEL = { Geo: "Geo-redundant backup storage", Zone: "Zone-redundant backup storage", Local: "Locally-redundant backup storage" };
 
+function ContainerBrowse({ a, self }) {
+  const d = useAsync(() => api.listAllContainers(a.resourceGroup, a.name), [a.id]);
+  return (
+    <>
+      <div className="vy-panel-title">Browse</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Browse commands">
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={d.reload}>Refresh</ToolbarButton>
+      </div>
+      <BrowseGrid resourceName="container" rowKey={(r) => `${r.database}/${r.id}`} items={d.data || []} loading={d.loading} error={d.error} onRefresh={d.reload}
+        csvName="cosmos-containers.csv" filterPlaceholder="Filter containers"
+        columns={[
+          { key: "database", label: "Database" },
+          { key: "id", label: "Container", render: (r) => <Link href={`${self}/dataexplorer`}>{r.id}</Link> },
+          { key: "pk", label: "Partition key", value: (r) => (r.partitionKey?.paths || []).join(", ") },
+          { key: "tp", label: "Throughput", value: (r) => r.throughput || "--" },
+          { key: "ttl", label: "Default TTL", value: (r) => (r.defaultTtl == null ? "Off" : r.defaultTtl === -1 ? "On (no default)" : `${r.defaultTtl}s`) },
+        ]} />
+    </>
+  );
+}
+
 function Backup({ a, reload }) {
   const notify = useNotify();
   const current = a.properties?.backupPolicy || { type: "Periodic", periodicModeProperties: { backupIntervalInMinutes: 240, backupRetentionIntervalInHours: 8, backupStorageRedundancy: "Geo" } };
@@ -608,6 +630,7 @@ function Backup({ a, reload }) {
           </div>
         )}
       </CapabilityContainer>
+      <CosmosPitr a={a} />
     </>
   );
 }

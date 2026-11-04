@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import time
 import uuid
 
 try:
@@ -751,6 +752,11 @@ def _alerts(state, method, sub, rg, chain, ctx):
     views = {}
     for t in threats(state, sub):
         v = sc.azure_alert_view(t, sub, states.get(t["id"], "Active"))
+        hist = (rec.get("history") or {}).get(t["id"]) if rec else None
+        if hist:
+            v["properties"]["extendedProperties"]["statusHistory"] = json.dumps(hist)
+        if t["id"] in ((rec.get("remediated") or {}) if rec else {}):
+            v["properties"]["extendedProperties"]["remediation"] = json.dumps(rec["remediated"][t["id"]])
         views[v["name"]] = (t, v)
     # .../alerts            (subscription / resource group)         .../locations/{loc}/alerts[/{name}[/{action}]]
     if low[0] == "locations":
@@ -772,15 +778,60 @@ def _alerts(state, method, sub, rg, chain, ctx):
     if len(rest) == 1:
         return _ok(v) if method == "GET" else _err(405, "MethodNotAllowed", "Use GET, or POST dismiss / activate / resolve.")
     action = rest[1].lower()
-    new = {"dismiss": "Dismissed", "activate": "Active", "resolve": "Resolved"}.get(action)
+    new = {"dismiss": "Dismissed", "activate": "Active", "resolve": "Resolved", "inprogress": "InProgress", "remediate": "Resolved"}.get(action)
     if new is None or method != "POST":
-        return _err(404, "NotFound", f"Alert action '{rest[1]}' is not supported (dismiss, activate, resolve).")
+        return _err(404, "NotFound", f"Alert action '{rest[1]}' is not supported (dismiss, activate, resolve, inprogress, remediate).")
     fr = state.get(_feed_key(sub))
     if fr is None:
         audit_feed(state, sub)
         fr = state[_feed_key(sub)]
+    if action == "remediate":
+        done = _remediate(state, t)
+        if isinstance(done, dict) and "status" in done:
+            return done
+        fr.setdefault("remediated", {})[t["id"]] = done
     fr.setdefault("alerts", {})[t["id"]] = new
+    fr.setdefault("history", {}).setdefault(t["id"], []).append(
+        {"status": new, "action": action, "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
     return {"status": 204, "headers": {}, "body": None}
+
+
+def _remediate(state, t):
+    """Vyomi remediation: revert the offending change on the affected resource's state. Returns a summary dict, or an error response."""
+    rule, key = t["rule"], str(t["resource"]).lower()
+    rec = state.get(key)
+    if rule in ("storage-public", "block-public-access-disabled"):
+        if rec is None:
+            return _err(409, "ResourceGone", "The affected resource no longer exists; resolve the alert instead.")
+        props = rec.get("properties") if isinstance(rec.get("properties"), dict) else rec
+        if "/containers/" in key:
+            props["publicAccess"] = "None"
+            return {"action": "set publicAccess=None", "resource": t["resource"]}
+        props["allowBlobPublicAccess"] = False
+        return {"action": "set allowBlobPublicAccess=false", "resource": t["resource"]}
+    if rule == "network-exposed":
+        if rec is None:
+            return _err(409, "ResourceGone", "The affected resource no longer exists; resolve the alert instead.")
+        props = rec.get("properties") if isinstance(rec.get("properties"), dict) else rec
+        n = 0
+        rules = props.get("securityRules")
+
+        def bad(r):
+            rp = r.get("properties", r)
+            return rp.get("direction") == "Inbound" and rp.get("access") == "Allow" and str(rp.get("sourceAddressPrefix", "")) in ("*", "Internet", "0.0.0.0/0")
+        if isinstance(rules, list):
+            keep = [r for r in rules if not bad(r)]
+            n = len(rules) - len(keep)
+            props["securityRules"] = keep
+        elif bad(rec):
+            props["access"] = "Deny"
+            n = 1
+        return {"action": f"closed {n} internet-open inbound rule(s)", "resource": t["resource"]}
+    if rule == "priv-escalation" and "/roleassignments/" in key:
+        if state.pop(key, None) is None:
+            return _err(409, "ResourceGone", "The role assignment no longer exists; resolve the alert instead.")
+        return {"action": "deleted the privileged role assignment", "resource": t["resource"]}
+    return _err(400, "RemediationNotAvailable", f"No automated remediation exists for '{rule}' alerts; follow the remediation steps and resolve manually.")
 
 
 def _dfs_key(rid):

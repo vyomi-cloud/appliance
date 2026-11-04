@@ -215,24 +215,27 @@ check("the principalId is stable across unrelated updates", r2["body"]["identity
 r3 = call(st4, "PATCH", ["sites", "scaleapp"], {"identity": {"type": "None"}})
 check("disabling identity clears the principalId", r3["body"]["identity"]["type"] == "None" and r3["body"]["identity"]["principalId"] is None)
 
-# ── backups (modelled as snapshots) ────────────────────────────────────────────
+# ── backups (real archive when the host injects a Blob store; see test_azure_dpbackup_core for the zip + restore round trip) ──
+st4["/subscriptions/sub1/resourcegroups/rg1/providers/microsoft.storage/storageaccounts/xstore"] = {"name": "xstore", "_type": "microsoft.storage/storageaccounts", "id": "/s/x"}
+call(st4, "PATCH", ["serverfarms", "scaleplan2"], {"sku": {"name": "S1"}})   # backups need Standard+
+SAS_URL = "https://xstore.blob.core.windows.net/backups?sv=1&sig=abc"
 r = call(st4, "GET", ["sites", "scaleapp", "config", "backup"])
 check("default backup config is disabled, no storage account", r["body"]["properties"]["enabled"] is False)
 r = call(st4, "PUT", ["sites", "scaleapp", "config", "backup"], {"properties": {
-    "enabled": True, "storageAccountUrl": "https://x.blob.core.windows.net/backups", "backupSchedule": {"frequencyInterval": 2}}})
+    "enabled": True, "storageAccountUrl": SAS_URL, "backupSchedule": {"frequencyInterval": 2}}})
 check("backup config PUT merges (schedule frequency changes, other schedule fields keep defaults)",
       r["body"]["properties"]["enabled"] is True and r["body"]["properties"]["backupSchedule"]["frequencyInterval"] == 2
       and r["body"]["properties"]["backupSchedule"]["frequencyUnit"] == "Day")
 b1 = call(st4, "POST", ["sites", "scaleapp", "backups"])["body"]
 check("backup now creates a Succeeded snapshot carrying the configured storage URL",
-      b1["properties"]["status"] == "Succeeded" and b1["properties"]["storageAccountUrl"] == "https://x.blob.core.windows.net/backups"
+      b1["properties"]["status"] == "Succeeded" and b1["properties"]["storageAccountUrl"] == "https://xstore.blob.core.windows.net/backups"
       and b1["properties"]["sizeInBytes"] > 0)
 b2 = call(st4, "POST", ["sites", "scaleapp", "backups"])["body"]
 check("each backup now gets a distinct id", b1["properties"]["id"] != b2["properties"]["id"])
 listed = call(st4, "GET", ["sites", "scaleapp", "backups"])["body"]["value"]
 check("backups list shows both, newest first", [x["properties"]["id"] for x in listed] == [b2["properties"]["id"], b1["properties"]["id"]])
-check("get a single backup by id", call(st4, "GET", ["sites", "scaleapp", "backups", b1["properties"]["id"]])["body"]["name"] == b1["name"])
-check("restoring a backup acknowledges Succeeded", call(st4, "POST", ["sites", "scaleapp", "backups", b1["properties"]["id"], "restore"])["body"]["status"] == "Succeeded")
+check("get a single backup by id", call(st4, "GET", ["sites", "scaleapp", "backups", str(b1["properties"]["id"])])["body"]["name"] == b1["name"])
+check("restoring requires overwrite=true and a reachable container (no silent acknowledgement)", call(st4, "POST", ["sites", "scaleapp", "backups", str(b1["properties"]["id"]), "restore"])["body"]["error"]["code"] == "BadRequest")
 check("restoring an unknown backup 404s", call(st4, "POST", ["sites", "scaleapp", "backups", "nope", "restore"])["body"]["error"]["code"] == "NotFound")
 
 print(f"\n{PASS} passed, {FAIL} failed")

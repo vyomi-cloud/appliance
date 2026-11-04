@@ -264,7 +264,7 @@
   },
   "limitations": [
    "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.",
-   "Backups: modelled as snapshots \u2014 backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.",
+   "Backups are real archives: config/backup validates the schedule and needs a Standard+ plan and a reachable blob container SAS URL; a backup writes a .zip (site config, app settings, connection strings, slots, function code) into that container and Restore re-applies it to the same site, a deployment slot or another site (overwrite required). Scheduled backups are validated and stored but not run on a wall clock, and the archive has no file-system image or databases (Vyomi sites have no content share).",
    "Authentication providers, Application Insights linkage, TLS/SSL certificates, private endpoints, WebJobs and Service Connector are not modelled."
   ],
   "api": [
@@ -274,7 +274,8 @@
    "sites/backups/{id}/restore Action"
   ],
   "tests": [
-   "tests/conformance/test_azure_webapp_core.py"
+   "tests/conformance/test_azure_webapp_core.py",
+   "tests/conformance/test_azure_dpbackup_core.py"
   ]
  },
  "azure.appservices.webapp.scale": {

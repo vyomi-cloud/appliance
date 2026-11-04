@@ -121,6 +121,7 @@ const CORES = [
   "azure_cfgext_core.py",
   "azure_backup_core.py",
   "azure_sqlbackup_core.py",
+  "azure_dpbackup_core.py",
   "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "gcp_eventarc_core.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",

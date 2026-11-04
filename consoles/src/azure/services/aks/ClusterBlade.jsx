@@ -38,6 +38,7 @@ import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { AksKeda, AksNetworkingSettings, AksExtensions } from "../../kit/ConfigPages.jsx";
 import { AksGitOps, AksAutomatedDeployments } from "../../kit/GitOpsPages.jsx";
+import { AksBackup } from "../../kit/BackupPages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -73,7 +74,6 @@ const NS_NOTES = {
   applicationscaling: "KEDA-based application scaling",
   networking: "Cluster networking settings (configured at create time; see the create wizard's Networking tab)",
   extensionsapplications: "Cluster extensions and applications",
-  backup: "Azure Backup for AKS",
   policies: "Azure Policy assignments",
   insights: "Container insights",
   alerts: "Alert rules",
@@ -117,6 +117,7 @@ export default function ClusterBlade({ params, query }) {
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
       applicationscaling: () => <AksKeda a={a} reload={reload} />,
       extensionsapplications: () => <AksExtensions a={a} />,
+      backup: () => <AksBackup a={a} />,
       gitops: () => <AksGitOps a={a} />,
       automateddeployments: () => <AksAutomatedDeployments a={a} />,
       policies: () => <PolicyPanel rg={a.resourceGroup || String(a.id).split('/')[4]} resourceId={a.id} title={`${a.name} | Policies`} />,

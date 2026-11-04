@@ -90,10 +90,29 @@ export const deleteContainer = (db, id) => cosmos("DELETE", `/dbs/${encodeURICom
 
 /** Every container across every database — the Overview blade's containers table (flattened,
  *  since Cosmos has no "list all containers in an account" call of its own). */
-export async function listAllContainers() {
+export async function listAllContainers(rg, acct) {
   const dbs = await listDatabases();
   const lists = await Promise.all(dbs.map(async (d) => (await listContainers(d.id)).map((c) => ({ database: d.id, ...c }))));
-  return lists.flat();
+  let all = lists.flat();
+  if (!rg || !acct) return all;
+  // The data plane is one keyspace shared by every account; the account's own databases/containers are its ARM resources.
+  // Show the union (ARM-defined containers have no data-plane twin until a client writes to them).
+  try {
+    const armDbs = (await restJson("GET", `${ARM.path(rg, acct)}/sqlDatabases`, { query: { "api-version": "2024-05-15" } })).value || [];
+    for (const d of armDbs) {
+      const db = d.name;
+      const cs = (await restJson("GET", `${ARM.path(rg, acct)}/sqlDatabases/${encodeURIComponent(db)}/containers`, { query: { "api-version": "2024-05-15" } })).value || [];
+      for (const c of cs) {
+        const r = c.properties?.resource || {};
+        if (!all.some((x) => x.database === db && x.id === c.name)) all.push({ database: db, id: c.name, partitionKey: r.partitionKey, defaultTtl: r.defaultTtl });
+      }
+    }
+  } catch { /* ARM list unavailable: fall back to the data plane alone */ }
+  // Throughput is an ARM resource (container offer, else the database's shared offer) - not on the data plane.
+  return Promise.all(all.map(async (c) => {
+    const o = (await getOffer(rg, acct, c.database, c.id)) || (await getOffer(rg, acct, c.database));
+    return { ...c, throughput: o ? (o.autoscaleSettings ? `Autoscale max ${o.autoscaleSettings.maxThroughput}` : `${o.throughput} RU/s`) : "Serverless / none", sharedThroughput: !!o };
+  }));
 }
 
 export const listDocuments = async (db, coll) => (await cosmos("GET", `/dbs/${encodeURIComponent(db)}/colls/${encodeURIComponent(coll)}/docs`)).Documents || [];

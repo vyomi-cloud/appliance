@@ -101,14 +101,15 @@
    "offline": "limited"
   },
   "limitations": [
-   "Alerts come from Vyomi's own deterministic rule engine over the control-plane calls this simulator served (storage opened to anonymous access, Owner/User Access Administrator assigned, NSG management port exposed to the internet, diagnostic setting deleted, Key Vault purged, repeated authorization failures). They are not Microsoft's machine-learning alerts: no process/network telemetry of running workloads exists, no attacker is simulated, and vendorName is 'Vyomi'. Each alert needs its Defender plan to be Standard (Storage, Resource Manager, Key Vaults), as in Azure. Dismiss / activate / resolve are real; no incidents, workflow automation or email notifications."
+   "Alerts come from Vyomi's own deterministic rule engine over the control-plane calls this simulator served (storage opened to anonymous access, Owner/User Access Administrator assigned, NSG management port exposed to the internet, diagnostic setting deleted, Key Vault purged, repeated authorization failures). They are not Microsoft's machine-learning alerts: no process/network telemetry of running workloads exists, no attacker is simulated, and vendorName is 'Vyomi'. Each alert needs its Defender plan to be Standard (Storage, Resource Manager, Key Vaults), as in Azure. Dismiss / activate / resolve / in-progress are real, with a status history; the alert detail page and a Vyomi 'remediate' action (reverts the change on the resource state: closes public blob access, removes internet-open NSG rules, deletes the privileged role assignment; other alert types have no automated remediation) are Vyomi extensions, not an Azure API. No incidents, workflow automation or email notifications."
   ],
   "api": [
    "Alerts_List",
    "Alerts_Get",
    "Alerts_Dismiss",
    "Alerts_Activate",
-   "Alerts_Resolve"
+   "Alerts_Resolve",
+   "Alerts_UpdateSubscriptionLevelStateToInProgress"
   ],
   "tests": [
    "tests/conformance/test_azure_defender_alerts.py"

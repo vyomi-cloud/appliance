@@ -1,5 +1,5 @@
 {
- "$doc": "Vyomi capability registry — Azure Kubernetes Service (AKS). See aws/s3.json for the contract.",
+ "$doc": "Vyomi capability registry \u2014 Azure Kubernetes Service (AKS). See aws/s3.json for the contract.",
  "azure.aks.cluster.crud": {
   "title": "Managed clusters (create, get, list, delete) over ARM",
   "level": {
@@ -29,7 +29,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Start/Stop update the cluster's logical powerState — there are no real node VMs in-browser to deallocate or boot, so no compute cost changes are simulated, but the API server downtime a Stopped cluster causes IS enforced: runCommand and node-pool writes/deletes are rejected with a 409 until the cluster is started again."
+   "Start/Stop update the cluster's logical powerState \u2014 there are no real node VMs in-browser to deallocate or boot, so no compute cost changes are simulated, but the API server downtime a Stopped cluster causes IS enforced: runCommand and node-pool writes/deletes are rejected with a 409 until the cluster is started again."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"
@@ -42,7 +42,7 @@
    "offline": "full"
   },
   "limitations": [
-   "Scaling, image updates and the autoscaler only change the pool's recorded properties (count, nodeImageVersion, min/max count) — no node VMs are actually provisioned, so the \"Nodes\" tab is a deterministic rollup of those properties rather than live kubelet-reported node objects. Real Azure's requirement that the cluster be Running before a node pool can be added, scaled or deleted IS enforced (409 ClusterNotRunning while the cluster is Stopped)."
+   "Scaling, image updates and the autoscaler only change the pool's recorded properties (count, nodeImageVersion, min/max count) \u2014 no node VMs are actually provisioned, so the \"Nodes\" tab is a deterministic rollup of those properties rather than live kubelet-reported node objects. Real Azure's requirement that the cluster be Running before a node pool can be added, scaled or deleted IS enforced (409 ClusterNotRunning while the cluster is Stopped)."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"
@@ -62,13 +62,13 @@
   ]
  },
  "azure.aks.run_command": {
-  "title": "Run command (az aks command invoke) — kubectl against the cluster's Kubernetes objects",
+  "title": "Run command (az aks command invoke) \u2014 kubectl against the cluster's Kubernetes objects",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi runs no API server, kubelet or containers: kubectl apply / create / get / describe / delete / scale / version / api-resources work against the objects the cluster stores (manifests from a heredoc, a `cat <<EOF |` pipe or the --file context zip); commands that need running containers or a live API server (logs, exec, port-forward, rollout, top, …) and non-kubectl tools fail with an explanation and a non-zero exit code.",
+   "Vyomi runs no API server, kubelet or containers: kubectl apply / create / get / describe / delete / scale / version / api-resources work against the objects the cluster stores (manifests from a heredoc, a `cat <<EOF |` pipe or the --file context zip); commands that need running containers or a live API server (logs, exec, port-forward, rollout, top, \u2026) and non-kubectl tools fail with an explanation and a non-zero exit code.",
    "It IS rejected (409 ClusterNotRunning) while the cluster's powerState is Stopped, matching the real requirement for a running API server."
   ],
   "tests": [
@@ -96,7 +96,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Namespaces are modelled as a stateful list on the cluster resource (seeded with the real default/kube-system/kube-public/kube-node-lease set a fresh cluster ships with) — nothing is scheduled into a namespace because there is no live Kubernetes API server behind it. Two things ARE enforced rather than merely stored: the four system namespaces can never be deleted (409 ProtectedNamespace, matching the real 'Managed namespaces' preview), and creating or deleting a namespace is rejected with 409 ClusterNotRunning while the cluster is Stopped, the same API-server-down requirement node pools and runCommand already enforce."
+   "Namespaces are modelled as a stateful list on the cluster resource (seeded with the real default/kube-system/kube-public/kube-node-lease set a fresh cluster ships with) \u2014 nothing is scheduled into a namespace because there is no live Kubernetes API server behind it. Two things ARE enforced rather than merely stored: the four system namespaces can never be deleted (409 ProtectedNamespace, matching the real 'Managed namespaces' preview), and creating or deleting a namespace is rejected with 409 ClusterNotRunning while the cluster is Stopped, the same API-server-down requirement node pools and runCommand already enforce."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"
@@ -109,7 +109,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "The objects are real and stored per cluster (applied with kubectl through Run command, or the Apply a YAML dialog, which uses it), listed and deleted for real — but nothing is scheduled: Vyomi doesn't run containers, so controllers create no Pods, workloads report 0 ready replicas, Pods stay Pending (PodScheduled=False) and LoadBalancer Services / Ingresses get no external address.",
+   "The objects are real and stored per cluster (applied with kubectl through Run command, or the Apply a YAML dialog, which uses it), listed and deleted for real \u2014 but nothing is scheduled: Vyomi doesn't run containers, so controllers create no Pods, workloads report 0 ready replicas, Pods stay Pending (PodScheduled=False) and LoadBalancer Services / Ingresses get no external address.",
    "Roles, ClusterRoles, bindings, ServiceAccounts, NetworkPolicies and Namespaces are stored too (and scanned by Defender for Cloud's Kubescape posture check) but have no dedicated blade; NetworkPolicies are not enforced."
   ],
   "tests": [
@@ -123,9 +123,9 @@
    "offline": "limited"
   },
   "limitations": [
-   "StorageClasses, PersistentVolumes and PersistentVolumeClaims are real, stored kinds: the disk/file CSI driver add-ons seed the usual default StorageClasses on every new cluster, and a PVC is bound for real — statically to a PV named by spec.volumeName, or dynamically provisioned from its resolved StorageClass — with its reclaim policy enforced on delete (Delete cascades the PV, Retain releases it). No actual disks back a PV: capacity and access modes are bookkeeping, not an enforced quota.",
-   "CustomResourceDefinitions are stored objects too: once applied, the CRD's Kind is registered for the cluster and its custom resource instances apply/get/describe/delete like any built-in kind — but there is no validation webhook, conversion webhook, defaulting or OpenAPI schema enforcement, so any instance matching the registered apiVersion/kind is accepted.",
-   "Events are real objects emitted when Vyomi's \"controllers\" act on a real mutation (a Pod goes unschedulable, a LoadBalancer Service or Ingress can't get an address, a PVC is provisioned) — not a live kubelet/controller-manager feed, so there is no event for everything a real cluster would report (node conditions, image pulls, liveness probes, …) and events are never aggregated (count/lastTimestamp stay 1/first)."
+   "StorageClasses, PersistentVolumes and PersistentVolumeClaims are real, stored kinds: the disk/file CSI driver add-ons seed the usual default StorageClasses on every new cluster, and a PVC is bound for real \u2014 statically to a PV named by spec.volumeName, or dynamically provisioned from its resolved StorageClass \u2014 with its reclaim policy enforced on delete (Delete cascades the PV, Retain releases it). No actual disks back a PV: capacity and access modes are bookkeeping, not an enforced quota.",
+   "CustomResourceDefinitions are stored objects too: once applied, the CRD's Kind is registered for the cluster and its custom resource instances apply/get/describe/delete like any built-in kind \u2014 but there is no validation webhook, conversion webhook, defaulting or OpenAPI schema enforcement, so any instance matching the registered apiVersion/kind is accepted.",
+   "Events are real objects emitted when Vyomi's \"controllers\" act on a real mutation (a Pod goes unschedulable, a LoadBalancer Service or Ingress can't get an address, a PVC is provisioned) \u2014 not a live kubelet/controller-manager feed, so there is no event for everything a real cluster would report (node conditions, image pulls, liveness probes, \u2026) and events are never aggregated (count/lastTimestamp stay 1/first)."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_k8s_core.py"
@@ -167,7 +167,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Shows this cluster's live Defender for Cloud recommendations: Kubescape findings over the Kubernetes objects it stores, while the Containers plan is on — see azure.defender.kubernetes for what each substrate evaluates."
+   "Shows this cluster's live Defender for Cloud recommendations: Kubescape findings over the Kubernetes objects it stores, while the Containers plan is on \u2014 see azure.defender.kubernetes for what each substrate evaluates."
   ],
   "tests": [
    "tests/conformance/test_azure_security_core.py",
@@ -176,22 +176,119 @@
  },
  "azure.aks.iam": {
   "title": "Access control (IAM)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "Check access, Role assignments and Deny assignments are REAL and scoped to this AKS cluster's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
   ],
-  "tests": ["tests/conformance/test_azure_rbac_core.py"]
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
  },
  "azure.aks.networking": {
   "title": "Cluster networking (networkProfile)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["networkProfile is validated like ARM: plugin (azure/kubenet/none), overlay mode, network policy / Cilium dataplane compatibility, service/pod CIDR overlap and size, dnsServiceIP inside the service CIDR, outbound type (UDR / NAT gateway need a custom subnet), node/pod subnets must exist, authorized IP ranges, plugin immutability. Defaults (serviceCidr, dnsServiceIP, podCidr) are filled in. No CNI runs: pod networking, network policy and egress are not enforced."],
-  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "networkProfile is validated like ARM: plugin (azure/kubenet/none), overlay mode, network policy / Cilium dataplane compatibility, service/pod CIDR overlap and size, dnsServiceIP inside the service CIDR, outbound type (UDR / NAT gateway need a custom subnet), node/pod subnets must exist, authorized IP ranges, plugin immutability. Defaults (serviceCidr, dnsServiceIP, podCidr) are filled in. No CNI runs: pod networking, network policy and egress are not enforced."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netcfg_core.py"
+  ]
  },
- "azure.aks.keda": {"title": "KEDA-based application scaling (workloadAutoScalerProfile.keda)", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["The KEDA flag is validated (Kubernetes 1.23 or later) and stored on the managed cluster. Vyomi runs no KEDA operator or scalers: ScaledObjects are stored objects and nothing scales on events."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
- "azure.aks.networking_settings": {"title": "Cluster networking settings + API server authorized IP ranges", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["networkProfile is shown as set at create time; authorizedIPRanges are validated (CIDR syntax, at most 200, not on private clusters) and stored but not enforced - the API server is reached by the console, not through a network path."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
- "azure.aks.extensions": {"title": "Cluster extensions (Microsoft.KubernetesConfiguration/extensions)", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["Extensions are real ARM child resources validated against the known extension types (single instance per cluster, version XOR auto-upgrade, release train, scope) and cascade-delete with the cluster. Nothing is installed on a node: no Flux, Dapr, Defender or Monitor agent runs."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
- "azure.aks.gitops": {"title": "GitOps (Flux configurations: Microsoft.KubernetesConfiguration/fluxConfigurations)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A fluxConfiguration is a REAL reconcile (core/azure_flux_core.py): the GitRepository source (https://github.com/o/r, fetched with the user's own PAT, or a vyomi:// repository / Gitea) is rendered per kustomization path (plain YAML or kustomization.yaml: resources, namespace, namePrefix/Suffix, commonLabels/Annotations, images), validated and applied into the cluster's Kubernetes object store with dependsOn ordering, prune and suspend; status (complianceState, per-object conditions, sourceSyncedCommitId) is derived from the run. Reconcile runs on PUT, on every push to the source branch and on demand (no timer loop: syncIntervalInSeconds is stored only). Helm charts/HelmRelease and kustomize patches/generators are reported Non-Compliant, never faked; Bucket/AzureBlob sources are rejected; nothing is scheduled to a node. Nano cannot reach GitHub (no outbound HTTP): use vyomi:// repositories there."], "tests": ["tests/conformance/test_azure_flux.py"]},
- "azure.aks.automateddeployments": {"title": "Automated deployments (GitHub Actions to AKS)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Creating an automated deployment generates the real build-push-deploy GitHub Actions workflow (az acr build + azure/k8s-deploy) and commits it to the repository with the user's own PAT (https://github.com/o/r) or to a vyomi:// repository. The workflow itself runs on GitHub, not in Vyomi; Vyomi's equivalent run (POST .../run, or any push to a vyomi:// repo) fetches the source, builds the Dockerfile with BuildKit, PUSHES the image into the simulated ACR and applies the manifests with that image to the AKS object store (nothing is scheduled to a node). Pushes to GitHub do not call back into Vyomi, so re-run on demand. Helm deployments are rejected. Offline appliance only for builds: Nano has no container builder, so its runs are recorded Failed with that reason; Nano also cannot reach GitHub."], "tests": ["tests/conformance/test_azure_autodeploy.py"]},
- "azure.aks.tasks": {"title": "Tasks (Logic App-backed task templates)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."], "tests": ["tests/conformance/test_azure_tasks_core.py"]}
+ "azure.aks.keda": {
+  "title": "KEDA-based application scaling (workloadAutoScalerProfile.keda)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "The KEDA flag is validated (Kubernetes 1.23 or later) and stored on the managed cluster. Vyomi runs no KEDA operator or scalers: ScaledObjects are stored objects and nothing scales on events."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_cfgext_core.py"
+  ]
+ },
+ "azure.aks.networking_settings": {
+  "title": "Cluster networking settings + API server authorized IP ranges",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "networkProfile is shown as set at create time; authorizedIPRanges are validated (CIDR syntax, at most 200, not on private clusters) and stored but not enforced - the API server is reached by the console, not through a network path."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_cfgext_core.py"
+  ]
+ },
+ "azure.aks.extensions": {
+  "title": "Cluster extensions (Microsoft.KubernetesConfiguration/extensions)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Extensions are real ARM child resources validated against the known extension types (single instance per cluster, version XOR auto-upgrade, release train, scope) and cascade-delete with the cluster. Nothing is installed on a node: no Flux, Dapr, Defender or Monitor agent runs."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_cfgext_core.py"
+  ]
+ },
+ "azure.aks.gitops": {
+  "title": "GitOps (Flux configurations: Microsoft.KubernetesConfiguration/fluxConfigurations)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A fluxConfiguration is a REAL reconcile (core/azure_flux_core.py): the GitRepository source (https://github.com/o/r, fetched with the user's own PAT, or a vyomi:// repository / Gitea) is rendered per kustomization path (plain YAML or kustomization.yaml: resources, namespace, namePrefix/Suffix, commonLabels/Annotations, images), validated and applied into the cluster's Kubernetes object store with dependsOn ordering, prune and suspend; status (complianceState, per-object conditions, sourceSyncedCommitId) is derived from the run. Reconcile runs on PUT, on every push to the source branch and on demand (no timer loop: syncIntervalInSeconds is stored only). Helm charts/HelmRelease and kustomize patches/generators are reported Non-Compliant, never faked; Bucket/AzureBlob sources are rejected; nothing is scheduled to a node. Nano cannot reach GitHub (no outbound HTTP): use vyomi:// repositories there."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_flux.py"
+  ]
+ },
+ "azure.aks.automateddeployments": {
+  "title": "Automated deployments (GitHub Actions to AKS)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Creating an automated deployment generates the real build-push-deploy GitHub Actions workflow (az acr build + azure/k8s-deploy) and commits it to the repository with the user's own PAT (https://github.com/o/r) or to a vyomi:// repository. The workflow itself runs on GitHub, not in Vyomi; Vyomi's equivalent run (POST .../run, or any push to a vyomi:// repo) fetches the source, builds the Dockerfile with BuildKit, PUSHES the image into the simulated ACR and applies the manifests with that image to the AKS object store (nothing is scheduled to a node). Pushes to GitHub do not call back into Vyomi, so re-run on demand. Helm deployments are rejected. Offline appliance only for builds: Nano has no container builder, so its runs are recorded Failed with that reason; Nano also cannot reach GitHub."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_autodeploy.py"
+  ]
+ },
+ "azure.aks.tasks": {
+  "title": "Tasks (Logic App-backed task templates)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_tasks_core.py"
+  ]
+ },
+ "azure.aks.backup": {
+  "title": "Azure Backup for AKS (Microsoft.DataProtection backup vaults, policies, backup instances, restore)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A backup vault, AKS backup policy (4/6/8/12/24 h schedule, Default retention rule, 1-360 day operational tier) and backup instance are real ARM resources validated like the RP (same-region cluster, backup extension microsoft.dataprotection.kubernetes installed, existing/non-overlapping namespaces, one vault per cluster). An on-demand backup snapshots the cluster's Kubernetes object store (namespace/kind/label filtered, Events never captured) into a JSON artifact in the Blob store; restore re-applies it to the same or another cluster with namespace mapping and Skip|Patch conflict policy, plus validateForRestore, suspend/resume/stop and backup jobs. Persistent volumes are recorded as metadata only (Vyomi PVs hold no block bytes), schedules are validated but never fire on a wall clock, and the trusted-access role binding / snapshot resource group are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_dpbackup_core.py"
+  ]
+ }
 }

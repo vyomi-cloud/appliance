@@ -56,7 +56,7 @@ export const updateBackupConfig = (rg, name, props) => restJson("PUT", cfgPath(r
 
 const backupsPath = (rg, name) => `${SITES.path(rg, name)}/backups`;
 export const listBackups = async (rg, name) => (await restJson("GET", backupsPath(rg, name), { query: q })).value || [];
-export const backupNow = (rg, name) => restJson("POST", backupsPath(rg, name), { query: q });
+export const backupNow = (rg, name, storageAccountUrl) => restJson("POST", `${backupsPath(rg, name).replace(/\/backups$/, "")}/backup`, { query: q, body: { properties: { storageAccountUrl } } });
 export const restoreBackup = (rg, name, backupId) => restJson("POST", `${backupsPath(rg, name)}/${encodeURIComponent(backupId)}/restore`, { query: q });
 
 const slotsPath = (rg, name) => `${SITES.path(rg, name)}/slots`;

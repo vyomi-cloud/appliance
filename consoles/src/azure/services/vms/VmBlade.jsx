@@ -10,6 +10,7 @@
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
 import { VmDisasterRecovery, VmVaultBackup } from "./RecoveryPanels.jsx";
+import { BootDiagnostics, SerialConsole, BastionConnect } from "../../kit/VmGuestPages.jsx";
 import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -125,7 +126,9 @@ export default function VmBlade({ params }) {
       identity: () => <Identity a={a} reload={reload} />,
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
-      ...(isNano() ? { serialconsole: () => <NanoShell a={a} /> } : {}),
+      bootdiagnostics: () => <BootDiagnostics a={a} />,
+      serialconsole: () => (isNano() ? <NanoShell a={a} /> : <SerialConsole a={a} />),
+      bastion: () => <BastionConnect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
       loadbalancing: () => <CapabilityContainer id="azure.vms.loadbalancing" title={`${a.name} | Load balancing`}><VmLoadBalancing a={a} /></CapabilityContainer>,
       asgs: () => <CapabilityContainer id="azure.vms.asgs" title={`${a.name} | Application security groups`}><VmAsgs a={a} /></CapabilityContainer>,
@@ -849,7 +852,7 @@ function Connect({ a }) {
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>
               {gap === "Connect via Bastion" ? (
-                <NotSimulated feature="Azure Bastion" note="This lens does not model a Bastion resource." />
+                <>Use the Bastion blade (left menu) to open a browser session through a Bastion host in this VM's virtual network.</>
               ) : (
                 <>
                   <p style={{ fontFamily: "monospace", background: "var(--colorNeutralBackground3)", padding: 8, borderRadius: 4 }}>{cmd}</p>

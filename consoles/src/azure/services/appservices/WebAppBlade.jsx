@@ -3,6 +3,7 @@
  * domains, Locks, App Service logs, Diagnostic settings, Access control (IAM), Export
  * template, Identity, Backups and Scale up/out/Change App Service plan are backed by native
  * ARM calls; everything else in the menu is an honest NotSimulated panel. */
+import { AppRestoreDialog } from "../../kit/BackupPages.jsx";
 import { ResourceMetrics, ResourceLogs, ResourceNotifications, ResourceAlerts } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import Networking from "./Networking.jsx";
@@ -979,9 +980,8 @@ function Identity({ a, rg, name, reload }) {
 }
 
 // ── Backups ───────────────────────────────────────────────────────────────────────────────
-// Modelled as snapshots (core/azure_webapp_core.py's _backup_ops): "Backup Now" creates a
-// timestamped, sized record over the configured storage destination; Restore acknowledges —
-// there is no real site content to archive or replay.
+// Real archives (core/azure_dpbackup_core.py): "Backup Now" writes a .zip (config, app settings, slots, function code) into
+// the container behind the SAS URL; Restore re-applies it to this app, a slot or another app.
 function Backups({ rg, name }) {
   const notify = useNotify();
   const list = useAsync(() => api.listBackups(rg, name), [rg, name]);
@@ -991,14 +991,14 @@ function Backups({ rg, name }) {
   useEffect(() => { if (cfg.data) setF({ enabled: cfg.data.properties.enabled, storageAccountUrl: cfg.data.properties.storageAccountUrl, retentionPeriodInDays: cfg.data.properties.backupSchedule.retentionPeriodInDays }); }, [cfg.data]);
   const backupNow = async () => {
     setBusy(true);
-    try { await api.backupNow(rg, name); notify.success(`Backup of '${name}' was created.`, "Backup succeeded"); list.reload(); }
+    try { await api.backupNow(rg, name, f?.storageAccountUrl); notify.success(`Backup of '${name}' was created.`, "Backup succeeded"); list.reload(); }
     catch (e) { notify.error(e, "Backup failed"); }
     finally { setBusy(false); }
   };
-  const restore = async (row) => {
-    try { await api.restoreBackup(rg, name, row.properties.id); notify.success(`Restored '${name}' from backup '${row.name}'.`, "Restore succeeded"); }
-    catch (e) { notify.error(e, "Restore failed"); }
-  };
+  const [rdlg, setRdlg] = useState(null);
+  const sites = useAsync(async () => (await api.listSites()).filter((x) => x.resourceGroup === rg).map((x) => x.name), [rg]);
+  const slotList = useAsync(async () => (await api.listSlots(rg, name)).map((x) => String(x.name).split("/").pop()), [rg, name]);
+  const restore = (row) => setRdlg(row);
   const saveConfig = async () => {
     setBusy(true);
     try {
@@ -1033,10 +1033,11 @@ function Backups({ rg, name }) {
           </tbody>
         </table>
       )}
+      {rdlg && <AppRestoreDialog open backup={rdlg} rg={rg} name={name} sas={f?.storageAccountUrl || ""} apps={sites.data} slots={slotList.data} onClose={() => setRdlg(null)} onDone={list.reload} />}
       {f && (
         <section className="vy-section" style={{ marginTop: 16 }}><h3>Backup configuration</h3>
           <Field label="Scheduled backup"><RadioGroup value={f.enabled ? "On" : "Off"} onChange={(_, d) => setF((x) => ({ ...x, enabled: d.value === "On" }))} aria-label="Scheduled backup"><Radio value="On" label="On" /><Radio value="Off" label="Off" /></RadioGroup></Field>
-          <Field label="Storage account container URL"><Input style={{ width: 420 }} value={f.storageAccountUrl} onChange={(_, d) => setF((x) => ({ ...x, storageAccountUrl: d.value }))} placeholder="https://account.blob.core.windows.net/backups" /></Field>
+          <Field label="Storage account container URL"><Input style={{ width: 420 }} value={f.storageAccountUrl} onChange={(_, d) => setF((x) => ({ ...x, storageAccountUrl: d.value }))} placeholder="https://account.blob.core.windows.net/container?sv=...&sig=..." /></Field>
           <Field label="Retention (days)"><Input type="number" style={{ width: 120 }} value={String(f.retentionPeriodInDays)} onChange={(_, d) => setF((x) => ({ ...x, retentionPeriodInDays: d.value }))} /></Field>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={saveConfig}>{busy ? "Saving..." : "Save"}</Button>
