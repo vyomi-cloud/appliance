@@ -135,8 +135,8 @@ export async function describeResourceDrifts(name) {
 }
 
 // ── stack sets / refactors ────────────────────────────────────────────────────
-export async function createStackSet({ name, templateBody, description, permissionModel }) {
-  const r = result(await call("CreateStackSet", { StackSetName: name, TemplateBody: templateBody, ...(description ? { Description: description } : {}), ...(permissionModel ? { PermissionModel: permissionModel } : {}) }), "CreateStackSet");
+export async function createStackSet({ name, templateBody, description, permissionModel, autoDeployment }) {
+  const r = result(await call("CreateStackSet", { StackSetName: name, TemplateBody: templateBody, ...(description ? { Description: description } : {}), ...(permissionModel ? { PermissionModel: permissionModel } : {}), ...(autoDeployment ? { "AutoDeployment.Enabled": "true", "AutoDeployment.RetainStacksOnAccountRemoval": "false" } : permissionModel === "SERVICE_MANAGED" ? { "AutoDeployment.Enabled": "false" } : {}) }), "CreateStackSet");
   return r.StackSetId;
 }
 export async function listStackSets() {
@@ -275,4 +275,37 @@ export const deleteHook = (typeName) => call("DeregisterType", { Type: "HOOK", T
 export async function listHookResults(targetId) {
   const r = result(await call("ListHookResults", targetId ? { TargetId: targetId } : {}), "ListHookResults");
   return asList(r.HookResultSummaries?.member);
+}
+
+// ── StackSets + AWS Organizations trusted access, stack instances (sweep AWS-13) ──
+export const orgsAccessStatus = async () => result(await call("DescribeOrganizationsAccess"), "DescribeOrganizationsAccess").Status;
+export const activateOrgsAccess = () => call("ActivateOrganizationsAccess");
+export const deactivateOrgsAccess = () => call("DeactivateOrganizationsAccess");
+export async function listStackInstances(name) {
+  return asList(result(await call("ListStackInstances", { StackSetName: name }), "ListStackInstances").Summaries?.member);
+}
+export async function listStackSetOperations(name) {
+  return asList(result(await call("ListStackSetOperations", { StackSetName: name }), "ListStackSetOperations").Summaries?.member);
+}
+export async function createStackInstances({ name, regions, ouIds, accounts }) {
+  const p = { StackSetName: name, ...listParams(regions, "Regions") };
+  if (ouIds?.length) Object.assign(p, listParams(ouIds, "DeploymentTargets.OrganizationalUnitIds"));
+  if (accounts?.length) Object.assign(p, listParams(accounts, ouIds?.length ? "DeploymentTargets.Accounts" : "Accounts"), ouIds?.length ? { "DeploymentTargets.AccountFilterType": "UNION" } : {});
+  return result(await call("CreateStackInstances", p), "CreateStackInstances").OperationId;
+}
+export async function deleteStackInstances({ name, regions, ouIds, accounts }) {
+  const p = { StackSetName: name, RetainStacks: "false", ...listParams(regions, "Regions") };
+  if (ouIds?.length) Object.assign(p, listParams(ouIds, "DeploymentTargets.OrganizationalUnitIds"));
+  if (accounts?.length) Object.assign(p, listParams(accounts, ouIds?.length ? "DeploymentTargets.Accounts" : "Accounts"), ouIds?.length ? { "DeploymentTargets.AccountFilterType": "UNION" } : {});
+  return result(await call("DeleteStackInstances", p), "DeleteStackInstances").OperationId;
+}
+export async function listOrgUnits() {
+  const roots = (await awsJson("organizations", "AWSOrganizationsV20161128.ListRoots", {}, { version: "1.1" })).Roots || [];
+  const out = roots.map((r) => ({ id: r.Id, name: `${r.Name} (root)` }));
+  const walk = async (pid, prefix) => {
+    const r = await awsJson("organizations", "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent", { ParentId: pid }, { version: "1.1" });
+    for (const u of r.OrganizationalUnits || []) { out.push({ id: u.Id, name: prefix + u.Name }); await walk(u.Id, prefix + u.Name + "/"); }
+  };
+  for (const r of roots) await walk(r.Id, "");
+  return out;
 }

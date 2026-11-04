@@ -1979,7 +1979,7 @@ def _list_stack_sets(store, params, stores):
 def _delete_stack_set(store, params, stores):
     name = _p(params, "StackSetName")
     if store.stack_set_instances.get(name):
-        raise CfnError("OperationInProgressException", f"StackSet {name} still has stack instances", 400)
+        raise CfnError("StackSetNotEmptyException", f"StackSet {name} still has stack instances; delete them first", 400)
     if store.stack_sets.pop(name, None) is None:
         raise CfnError("StackSetNotFoundException", f"StackSet {name} not found", 400)
     store.persist()
@@ -2580,6 +2580,14 @@ _ACTIONS = {
     "GetGeneratedTemplate": _get_generated_template, "ListGeneratedTemplates": _list_generated_templates,
     "DeleteGeneratedTemplate": _delete_generated_template,
 }
+
+
+def _install_stacksets():
+    from core import cloudformation_stacksets_core as _ss
+    _ss.install(_ACTIONS)
+
+
+_install_stacksets()
 
 
 def dispatch(store: CloudFormationStore, params: dict | None = None,

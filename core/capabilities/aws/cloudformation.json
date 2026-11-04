@@ -99,16 +99,16 @@
   "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.stacksets": {
-  "title": "StackSets (create, describe, list, delete)",
+  "title": "StackSets (self-managed + service-managed with AWS Organizations trusted access, stack instances, operations)",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Control plane only — a StackSet's own template/parameters are stored, but Vyomi does not deploy stack instances across accounts or Regions (ListStackInstances always returns empty)."
+   "Trusted access is real Organizations service access and SERVICE_MANAGED stack sets resolve OUs to member accounts, but Vyomi is one account: a stack instance is recorded (CURRENT, with the stack id AWS would assign) and no stack is created in the target account or Region. Drift detection, UpdateStackSet / UpdateStackInstances, override parameters and automatic deployment on account moves are not modeled."
   ],
-  "api": ["CreateStackSet", "DescribeStackSet", "ListStackSets", "DeleteStackSet", "ListStackInstances"],
-  "tests": ["tests/conformance/test_cloudformation_core.py"]
+  "api": ["CreateStackSet", "DescribeStackSet", "ListStackSets", "DeleteStackSet", "ActivateOrganizationsAccess", "DeactivateOrganizationsAccess", "DescribeOrganizationsAccess", "CreateStackInstances", "DeleteStackInstances", "ListStackInstances", "DescribeStackInstance", "ListStackSetOperations", "DescribeStackSetOperation"],
+  "tests": ["tests/conformance/test_cloudformation_core.py", "tests/conformance/test_cloudformation_stacksets_orgs.py"]
  },
  "aws.cloudformation.stack-refactors": {
   "title": "Stack refactors",
