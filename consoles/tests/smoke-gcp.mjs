@@ -169,6 +169,9 @@ try {
   // CMEK: setting a Cloud KMS key via the UI validates the shape and really stamps every
   // object created afterward with it (gcp.storage.encryption — see core/gcp_storage_core.py).
   const KMS_KEY = "projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys/smoke-key";
+  // the key has to exist (real GCS validates a CMEK key against Cloud KMS wherever the router wires that check, e.g. Nano)
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings?keyRingId=smoke-ring`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys?cryptoKeyId=smoke-key`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose: "ENCRYPT_DECRYPT" }) });
   await page.getByRole("button", { name: "Use a Cloud KMS key" }).click();
   await page.getByRole("dialog").getByLabel("Cloud KMS key").fill(KMS_KEY);
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();

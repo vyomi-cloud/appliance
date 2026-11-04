@@ -242,7 +242,7 @@ try {
   }
   check("Access keys panel shows listKeys result", await page.goto(UI + `#/storage/${RG}/${SA}/accesskeys`).then(() => page.getByRole("heading", { name: "key1" }).waitFor({ timeout: 5000 })).then(() => true, () => false));
   await openPanel("Activity log");
-  check("unbacked panel is an honest NotSimulated", await page.locator("[data-vyomi-not-simulated]").first().isVisible());
+  check("Activity log is a real feed now (command bar, no Not-simulated panel)", await page.getByRole("toolbar", { name: "Activity log commands" }).isVisible() && (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
   await shot("12-activity-log-not-simulated");
   // Configuration → ARM PATCH round-trip
   await openPanel("Configuration");
