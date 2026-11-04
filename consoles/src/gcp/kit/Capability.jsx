@@ -13,6 +13,9 @@ import { Box, Chip, Popover, Stack, Typography } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/esm/InfoOutlined.js";
 import { NotSimulatedContainer, Section } from "./common.jsx";
 import cap_artifacts from "../../../../core/capabilities/gcp/artifacts.json";
+import cap_clouddeploy from "../../../../core/capabilities/gcp/clouddeploy.json";
+import cap_cloudbuild from "../../../../core/capabilities/gcp/cloudbuild.json";
+import cap_securitycenter from "../../../../core/capabilities/gcp/securitycenter.json";
 import cap_cloudscheduler from "../../../../core/capabilities/gcp/cloudscheduler.json";
 import cap_compute from "../../../../core/capabilities/gcp/compute.json";
 import cap_eventarc from "../../../../core/capabilities/gcp/eventarc.json";
@@ -33,7 +36,7 @@ import cap_sql from "../../../../core/capabilities/gcp/sql.json";
 import cap_vertex_ai from "../../../../core/capabilities/gcp/vertex-ai.json";
 import cap_storage from "../../../../core/capabilities/gcp/storage.json";
 
-const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kms, ...cap_kubernetes, ...cap_logs, ...cap_memorystore, ...cap_monitoring, ...cap_networking, ...cap_pubsub, ...cap_resource_manager, ...cap_run, ...cap_secret_manager, ...cap_sql, ...cap_storage, ...cap_vertex_ai, ...cap_eventarc };
+const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kms, ...cap_kubernetes, ...cap_logs, ...cap_memorystore, ...cap_monitoring, ...cap_networking, ...cap_pubsub, ...cap_resource_manager, ...cap_run, ...cap_secret_manager, ...cap_sql, ...cap_storage, ...cap_vertex_ai, ...cap_eventarc, ...cap_clouddeploy, ...cap_cloudbuild, ...cap_securitycenter };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
