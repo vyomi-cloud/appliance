@@ -37,10 +37,16 @@ export default function Applications() {
           { id: "name", header: "Name", isRowHeader: true, sortingField: "Name", cell: (a) => <Link href={href("lambda", "applications")} onFollow={follow}>{a.Name}</Link> },
           { id: "desc", header: "Description", cell: (a) => a.Description || "-" },
           { id: "status", header: "Status", cell: (a) => <StatusIndicator type={a.Status === "CREATE_COMPLETE" ? "success" : "info"}>{a.Status}</StatusIndicator> },
+          { id: "pipeline", header: "Pipeline", cell: (a) => a.Pipeline ? (
+            <StatusIndicator type={a.Pipeline.LastExecution?.Status === "Succeeded" ? "success" : a.Pipeline.LastExecution?.Status === "Failed" ? "error" : "pending"}>
+              {a.Pipeline.Repository}@{a.Pipeline.Branch}: {a.Pipeline.LastExecution?.Status || "no runs"}{a.Pipeline.LastExecution?.FunctionVersion ? ` (v${a.Pipeline.LastExecution.FunctionVersion})` : ""}
+            </StatusIndicator>) : "-" },
           { id: "modified", header: "Last modified", cell: (a) => fmtDate(a.LastModified) },
         ]}
         actions={
           <>
+            <Button disabled={sel.length !== 1 || !sel[0]?.Pipeline} onClick={async () => { try { await api.runPipeline(sel[0].Name); notify.success(`Pipeline of "${sel[0].Name}" ran.`); t.reload(); } catch (e) { notify.error(e, "Pipeline run failed"); } }}>Release change</Button>
+            {" "}
             <Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
             {" "}
             <Button variant="primary" href={href("lambda", "create", "application")} onFollow={follow}>Create application</Button>
