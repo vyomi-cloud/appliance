@@ -1232,18 +1232,20 @@ def set_common_instance_metadata(store, project, payload):
 
 
 # ── dispatch ───────────────────────────────────────────────────────────────
-_CTX = {"gcs": None}   # the simulator's Cloud Storage store for the duration of one dispatch (image import / export)
+_CTX = {"gcs": None, "vpc": None}   # the simulator's Cloud Storage store for the duration of one dispatch (image import / export)
 
 
-def dispatch(store, method, path, query=None, headers=None, body=b"", gcs_store=None):
+def dispatch(store, method, path, query=None, headers=None, body=b"", gcs_store=None, vpc_store=None):
     query, headers = query or {}, headers or {}
     _CTX["gcs"] = gcs_store
+    _CTX["vpc"] = vpc_store
     try:
         r = _dispatch(store, method.upper(), path, query, headers, body)
     except _E as e:
         return _err(e.status, e.gcp_status, e.message)
     finally:
         _CTX["gcs"] = None
+        _CTX["vpc"] = None
     if method.upper() != "GET" and r.status < 300 and hasattr(store, "persist"):
         store.persist()          # durable substrates save here (the in-memory store has no persist)
     return r
@@ -1277,6 +1279,13 @@ def _dispatch(store, method, path, query, headers, body):
     project = segs[1]
     rest = segs[2:]
     payload = _body(body)
+    from core import gcp_hybrid_core as _hyb, gcp_osconfig_core as _osc
+    hyb = _hyb.handle(store, method, project, rest, verb, payload, query, vpc_store=_CTX.get("vpc"))
+    if hyb is not None:
+        return hyb
+    vx = _osc.compute_handle(store, method, project, rest, payload, query)
+    if vx is not None:
+        return _json(vx[0], vx[1])
     ext_resp = _ext.handle(store, method, project, rest, verb, payload, query)
     if ext_resp is not None:
         return ext_resp
