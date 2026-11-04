@@ -268,7 +268,11 @@ def _scc(router, now, tk, log):
     return n
 
 
-PROVIDERS = [("scc", _scc), ("aws-backup", _aws_backup), ("azure-backup", _azure_backup), ("dlm", _dlm), ("cloudsql", _cloudsql), ("ecr", _ecr)]
+def _azure_tasks(router, now, tk, log):
+    return _mod("azure_tasks_core").tick(router.az_arm, now, tk, log)
+
+
+PROVIDERS = [("azure-tasks", _azure_tasks), ("scc", _scc), ("aws-backup", _aws_backup), ("azure-backup", _azure_backup), ("dlm", _dlm), ("cloudsql", _cloudsql), ("ecr", _ecr)]
 
 
 def tick(router, now: float | None = None) -> dict:

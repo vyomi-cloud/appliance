@@ -1382,6 +1382,14 @@ class AzureArm:
             lk = ext_engine.lock_conflict(self.state, ext_engine.target_id(sub, rg, after), method)
             if lk:
                 return {"status": lk["status"], "headers": {}, "body": lk["body"]}
+        if after[0].lower() == "microsoft.logic":   # Tasks blades: Microsoft.Logic/workflows task engine (core/azure_tasks_core.py)
+            try:
+                from core import azure_tasks_core as _tasks
+            except ImportError:
+                import azure_tasks_core as _tasks  # type: ignore
+            x = _tasks.route(self, method, sub, rg, after, payload, query)
+            if x is not None:
+                return {"status": x["status"], "headers": dict(x.get("headers") or {}), "body": x["body"]}
         _v4_runcmd = (len(after) == 4 and after[0].lower() == "microsoft.compute" and after[1].lower() == "virtualmachines"
                       and after[3].lower() == "runcommand")   # POST .../runCommand is v4's _vm_run_command
         x = None if _v4_runcmd else ext_engine.route(self.state, method, sub, rg, after, payload, query, executor=None,
