@@ -1035,7 +1035,7 @@ class AwsWireRouter:
         from core import observability_core as _obsc
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
-            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode())
+            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
             return {"status": r.status, "headers": dict(r.headers), "body": r.body}
         lh = _lower_headers(headers)
         bb = body if isinstance(body, (bytes, bytearray)) else (body or b"")

@@ -891,7 +891,7 @@ def pg_stats_from_row(row) -> dict:
 
 
 def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, headers: dict | None = None, body: bytes = b"",
-             cw_store=None) -> Resp:
+             cw_store=None, mon_store=None) -> Resp:
     """Serve one /_obs/... request. `path` may include the /_obs prefix."""
     query = dict(query or {})
     h = {str(k).lower(): v for k, v in (headers or {}).items()}
@@ -934,6 +934,16 @@ def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, h
         if p == "/appinsights/query" and m == "GET":
             names = [x for x in (query.get("names") or "").split(",") if x]
             return Resp(200, appinsights_query(obs, names, query.get("ikey", ""), query.get("window") and float(query["window"]) or 3600.0))
+        if p == "/redis-info" and m == "POST":   # a runtime pushes Valkey INFO text for an instance
+            return Resp(501, {"error": "no Cloud Monitoring store is attached to this endpoint"}) if mon_store is None else _redis_push(mon_store, body)
+        if p == "/gce-counters" and m == "POST":   # a runtime pushes READ_COUNTERS_CMD output for a GCE instance (Ops Agent metrics)
+            if mon_store is None:
+                return Resp(501, {"error": "no Cloud Monitoring store is attached to this endpoint"})
+            d = json.loads(body or b"{}")
+            if not d.get("project") or not d.get("instance") or not isinstance(d.get("counters"), str):
+                return Resp(400, {"error": "project, instance and counters (text) are required"})
+            return Resp(200, {"published": publish_ops_agent(mon_store, d["project"], d["instance"], d.get("zone", ""), d["counters"],
+                                                             now=d.get("ts"), vcpus=int(d.get("vcpus", 1)))})
         if p == "/trace-stats" and m == "GET":
             return Resp(200, trace_latency_stats(obs, query.get("service", "")))
         if p == "/rollup" and m == "GET":
@@ -943,6 +953,13 @@ def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, h
         return Resp(404, {"error": "unknown observability path %s" % p})
     except PromError as e:
         return _prom_err(e)
+
+
+def _redis_push(mon_store, body: bytes) -> Resp:
+    d = json.loads(body or b"{}")
+    if not d.get("project") or not d.get("instance") or not isinstance(d.get("info"), str):
+        return Resp(400, {"error": "project, instance and info (INFO text) are required"})
+    return Resp(200, {"published": publish_redis_info(mon_store, d["project"], d["instance"], d.get("region", "us-central1"), parse_redis_info(d["info"]))})
 
 
 def _prom_api(obs: ObsStore, m: str, rest: str, q: dict) -> Resp:
@@ -1128,7 +1145,6 @@ def publish_gcp(obs: ObsStore, mon_store, project: str, now: float | None = None
     out = []
     types = {"gcp-gcs": ("storage.googleapis.com/api/request_count", "gcs_bucket", "bucket_name"),
              "gcs": ("storage.googleapis.com/api/request_count", "gcs_bucket", "bucket_name"),
-             "gcp-redis": ("redis.googleapis.com/commands/calls", "redis_instance", "instance_id"),
              "gcp-run": ("run.googleapis.com/request_count", "cloud_run_revision", "service_name"),
              "gcp-cloudsql": ("cloudsql.googleapis.com/database/network/connections", "cloudsql_database", "database_id")}
     for (svc, res, b), rs in groups.items():
@@ -1338,3 +1354,126 @@ def appinsights_query(obs: ObsStore, names: list, ikey: str = "", window_s: floa
                         "exceptions": len(exc), "events": len(evs), "traces": len(traces),
                         "avgDurationMs": round(sum(lat) / len(lat), 3) if lat else 0, "p95DurationMs": lat[min(len(lat) - 1, int(.95 * len(lat)))] if lat else 0},
             "requests": reqs[:200], "dependencies": deps[:200], "exceptions": exc[:200], "events": evs[:200], "traces": traces[:200]}
+
+
+# ───────────────────────────── RDS runtime collector (offline Postgres / Nano PGlite) ─────────────────────────────
+def collect_rds_stats(sql_store, cw_store, docker_line: str = "", now: float | None = None) -> dict:
+    """SYNC collector: for every RDS instance whose engine answers Postgres' pg_stat views, run PG_STATS_SQL and publish the
+    measured counters (plus an optional `docker stats` JSON line for the container hosting the engine). Engines that cannot
+    answer (sqlite in the in-memory default) publish nothing - never invented. Returns {db_id: [metrics published]}.
+    NOTE: pg_stat_database is database-wide, so instances sharing one Postgres (schema-per-instance) share those counters."""
+    out = {}
+    dstats = parse_docker_stats(docker_line) if docker_line else {}
+    for db_id in list(getattr(sql_store, "db_instances", {}) or {}):
+        stats = dict(dstats)
+        try:
+            res = sql_store.execute_sql(db_id, PG_STATS_SQL)
+            rows = res.get("rows") or []
+            if rows:
+                stats.update(pg_stats_from_row(rows[0]))
+        except Exception:
+            pass
+        if stats:
+            out[db_id] = publish_rds_stats(cw_store, db_id, stats, ts=now)
+    return out
+
+
+async def acollect_rds_stats(sql_store, cw_store, now: float | None = None) -> dict:
+    """ASYNC twin for engines whose execute is a coroutine (Nano PGlite)."""
+    out = {}
+    for db_id in list(getattr(sql_store, "db_instances", {}) or {}):
+        try:
+            res = await sql_store.aexecute_sql(db_id, PG_STATS_SQL)
+            rows = res.get("rows") or []
+            if rows:
+                out[db_id] = publish_rds_stats(cw_store, db_id, pg_stats_from_row(rows[0]), ts=now)
+        except Exception:
+            pass
+    return out
+
+
+# ───────────────────────────── Memorystore INFO -> Cloud Monitoring ─────────────────────────────
+def parse_redis_info(text: str) -> dict:
+    """`INFO` (Redis/Valkey) -> flat dict of the fields we publish; unreadable text -> {}."""
+    kv = {}
+    for line in (text or "").splitlines():
+        if ":" in line and not line.startswith("#"):
+            k, _, v = line.strip().partition(":")
+            kv[k] = v
+    out = {}
+    for k, dst in (("used_memory", "memory_used"), ("connected_clients", "clients"), ("total_commands_processed", "commands_total"),
+                   ("total_connections_received", "connections_total"), ("keyspace_hits", "hits"), ("keyspace_misses", "misses"),
+                   ("evicted_keys", "evicted"), ("expired_keys", "expired"), ("instantaneous_ops_per_sec", "ops_per_sec")):
+        try:
+            if k in kv:
+                out[dst] = float(kv[k])
+        except ValueError:
+            pass
+    return out
+
+
+def publish_redis_info(mon_store, project: str, instance_id: str, region: str, info: dict, now: float | None = None) -> list:
+    """Write measured Valkey INFO values as redis.googleapis.com series on node-0 of the instance."""
+    from datetime import datetime, timezone
+    try:
+        from core import gcp_monitoring_core as gm
+    except ImportError:
+        import gcp_monitoring_core as gm  # type: ignore
+    now = now if now is not None else time.time()
+    end_iso = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    res = {"type": "redis_instance", "labels": {"project_id": project, "region": region, "instance_id": instance_id, "node_id": "node-0"}}
+    spec = [("redis.googleapis.com/stats/memory/usage", "memory_used", "By"), ("redis.googleapis.com/clients/connected", "clients", "1"),
+            ("redis.googleapis.com/commands/calls", "commands_total", "1"), ("redis.googleapis.com/stats/connections/total", "connections_total", "1"),
+            ("redis.googleapis.com/stats/cache_hit_ratio", None, "1"), ("redis.googleapis.com/stats/evicted_keys", "evicted", "1")]
+    out = []
+    for mtype, key, unit in spec:
+        if key is None:
+            h, m = info.get("hits"), info.get("misses")
+            if h is None or m is None or (h + m) <= 0:
+                continue
+            val = h / (h + m)
+        else:
+            if key not in info:
+                continue
+            val = info[key]
+        gm.record_system_point(mon_store, project, mtype, res, val, end_iso, unit=unit)
+        out.append(mtype)
+    return out
+
+
+# ───────────────────────────── Ops Agent (GCE) host metrics from instance counters ─────────────────────────────
+_OPS_PREV: dict = {}
+
+
+def publish_ops_agent(mon_store, project: str, instance_id: str, zone: str, counters_text: str, now: float | None = None, vcpus: int = 1) -> list:
+    """`counters_text` is the output of core.ec2_metrics_core.READ_COUNTERS_CMD run inside the instance (cgroup + /proc). The first
+    reading only sets the baseline; later readings publish deltas as agent.googleapis.com series. Unreadable -> nothing."""
+    from datetime import datetime, timezone
+    try:
+        from core import ec2_metrics_core as em, gcp_monitoring_core as gm
+    except ImportError:
+        import ec2_metrics_core as em, gcp_monitoring_core as gm  # type: ignore
+    now = now if now is not None else time.time()
+    c = em.parse_counters(counters_text)
+    if c is None:
+        return []
+    prev = _OPS_PREV.setdefault((project, instance_id), {})
+    last, last_ts = prev.get("counters"), prev.get("ts")
+    prev["counters"], prev["ts"] = dict(c), now
+    if not last or last_ts is None or now <= last_ts:
+        return []
+    dt = now - last_ts
+    d = lambda k: max(0, (c.get(k) or 0) - (last.get(k) or 0))
+    end_iso = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    res = {"type": "gce_instance", "labels": {"project_id": project, "instance_id": instance_id, "zone": zone}}
+    out = []
+    if c.get("cpu_usec") is not None and last.get("cpu_usec") is not None:
+        gm.record_system_point(mon_store, project, "agent.googleapis.com/cpu/utilization", res,
+                               round(min(100.0, 100.0 * max(0, c["cpu_usec"] - last["cpu_usec"]) / (dt * 1e6 * max(1, vcpus))), 4), end_iso,
+                               unit="10^2.%", metric_labels={"cpu_state": "used"})
+        out.append("agent.googleapis.com/cpu/utilization")
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/interface/traffic", res, d("rx_bytes"), end_iso, unit="By", metric_labels={"direction": "received"})
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/interface/traffic", res, d("tx_bytes"), end_iso, unit="By", metric_labels={"direction": "sent"})
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/disk/read_bytes_count", res, d("rbytes"), end_iso, unit="By")
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/disk/write_bytes_count", res, d("wbytes"), end_iso, unit="By")
+    return out + ["agent.googleapis.com/interface/traffic", "agent.googleapis.com/disk/read_bytes_count", "agent.googleapis.com/disk/write_bytes_count"]

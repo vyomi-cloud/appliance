@@ -68,9 +68,9 @@
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
       "Only metrics derivable from real instance state are emitted into Cloud Monitoring (redis.googleapis.com/stats/memory/maxmemory from memorySizeGb, server/uptime from createTime, replication/role per node), queryable through timeSeries.list like any metric.",
-      "Vyomi runs no Redis process, so memory usage, connected clients, commands/sec, hit ratio and CPU are not emitted at all; the tab shows them as 'no data' instead of invented values."
+      "Memory usage, connected clients, commands/sec, hit ratio and evictions come from the Valkey data plane's own INFO (read every 30 s by the offline appliance, or pushed to /_obs/redis-info) and are published for every READY instance on that SINGLE shared Valkey server - counters are shared across instances, not per-instance. Nano and Free tier have no Valkey, so those columns say 'no data' (never invented). CPU is not emitted."
     ],
     "api": ["timeSeries.list", "metricDescriptors.list"],
-    "tests": ["tests/conformance/test_gcp_apphub_redis_metrics.py"]
+    "tests": ["tests/conformance/test_gcp_apphub_redis_metrics.py", "tests/conformance/test_obs_collectors.py"]
   }
 }
