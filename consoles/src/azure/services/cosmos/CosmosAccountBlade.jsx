@@ -3,6 +3,7 @@
  * Locks, Access control (IAM) and Export template are backed by native ARM / the native Cosmos
  * DB REST (SQL/Core API) data plane; everything else in the menu is an honest NotSimulated panel
  * (the spec captures them as blade menu items with no further content — "title only"). */
+import { CosmosPitr } from "../../kit/BackupPages.jsx";
 import { CosmosNetworking } from "../../kit/NetworkRules.jsx";
 import { CosmosCors, CosmosDedicatedGateway, CosmosDataEncryption } from "../../kit/ConfigPages.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
@@ -608,6 +609,7 @@ function Backup({ a, reload }) {
           </div>
         )}
       </CapabilityContainer>
+      <CosmosPitr a={a} />
     </>
   );
 }

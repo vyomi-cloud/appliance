@@ -47,6 +47,7 @@ EXT_TYPE = "microsoft.dataprotection.kubernetes"
 COSMOS_T = "microsoft.documentdb/databaseaccounts"
 SITE_T = "microsoft.web/sites"
 STORAGE_T = "microsoft.storage/storageaccounts"
+BLOB_CONTAINER_T = "microsoft.storage/storageaccounts/blobservices/containers"
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9\-]{1,49}$")
 STORAGE_TYPES = ("LocallyRedundant", "GeoRedundant", "ZoneRedundant")
 AKS_INTERVAL_HOURS = (4, 6, 8, 12, 24)
@@ -1048,7 +1049,11 @@ def _check_container(state, url):
         return None, _err(400, "BadRequest", f"The storage account '{acct}' referenced by storageAccountUrl does not exist.")
     bs = BLOB["store"]
     if bs is not None and not bs.container_exists(f"{acct}/{cont}"):
-        return None, _err(400, "BadRequest", f"The container '{cont}' does not exist in storage account '{acct}'.")
+        arm_cont = any(isinstance(r, dict) and str(r.get("_type", "")).lower() == BLOB_CONTAINER_T and f"/storageaccounts/{acct}/" in k and k.endswith("/containers/" + cont)
+                       for k, r in state.items())
+        if not arm_cont:
+            return None, _err(400, "BadRequest", f"The container '{cont}' does not exist in storage account '{acct}'.")
+        bs.create_container(f"{acct}/{cont}")      # created through ARM: materialise it in the data plane on first use
     return (acct, cont), None
 
 
