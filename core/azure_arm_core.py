@@ -1793,6 +1793,7 @@ class AzureArm:
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.billing" and chain and low[0] in ("transferrequests", "freeservices", "costsaved", "invoices"):
             if low[0] == "transferrequests":
+                self.billing_properties.setdefault("accountAdmin", DEFAULT_PRINCIPAL)
                 r = billing_ext.transfers_dispatch(self.state, method, sub, chain[1:], payload, self.billing_properties)
             elif method != "GET":
                 return _err(405, "MethodNotAllowed", f"{chain[0]} supports GET only.")
@@ -1812,7 +1813,7 @@ class AzureArm:
             rows = [billing_ext._view(x) for x in self.state.values() if isinstance(x, dict)
                     and str(x.get("_type", "")).lower() == "microsoft.quota/quotarequests" and x.get("_sub") == sub]
             return _ok({"value": list(reversed(rows))})
-        if ns in ("microsoft.compute", "microsoft.network") and len(chain) >= 6 and low[0] == "locations" \
+        if ns in ("microsoft.compute", "microsoft.network") and len(chain) >= 5 and low[0] == "locations" \
                 and low[2] == "providers" and low[3] == "microsoft.quota":
             loc = chain[1].lower()
             usage = {u["name"]["value"]: u["currentValue"] for u in self._usages(sub, namespace, loc)["body"]["value"]}
