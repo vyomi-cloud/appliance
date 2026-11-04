@@ -683,5 +683,40 @@
   "tests": [
    "tests/conformance/test_ec2_metrics_core.py"
   ]
+ },
+ "ec2.dashboard.service-health": {
+  "title": "Service health (dashboard)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "DescribeAvailabilityZones",
+   "DescribeInstanceStatus"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_cost_table.py"
+  ]
+ },
+ "ec2.dashboard.cost": {
+  "title": "EC2 cost (dashboard)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An estimate, not a bill: the widget prices this environment's current inventory (running instances by type, EBS volumes by type and size, snapshots at full volume size as an upper bound, public IPv4 addresses, NAT gateways' hourly charge) at us-east-1 on-demand list prices taken from core/cost_model.py, shows what the same resources would cost on AWS since launch and per month, and what Vyomi charged ($0.00; the difference is presented as the saving). NOT included: data transfer, NAT/IO request charges, Savings Plans / reservations / Spot discounts, free tier, taxes, time spent stopped (running instances are priced from their launch time), and prices for instance types missing from the table fall back to a default rate. There is no Cost Explorer API behind it."
+  ],
+  "api": [
+   "DescribeInstances",
+   "DescribeVolumes",
+   "DescribeSnapshots",
+   "DescribeAddresses",
+   "DescribeNatGateways"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_cost_table.py"
+  ]
  }
 }
