@@ -11,6 +11,7 @@ from core.azure_arm_core import AzureArm
 from core.netsim.evaluate import reach
 from core.netsim.from_azure import from_azure
 
+AzureArm.STRICT_SUBSCRIPTION = False   # engine test: ad-hoc subscription id
 SUB, RG = "s1", "rg"
 NET = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Network"
 INET = "198.51.100.7"
