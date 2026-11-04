@@ -93,6 +93,10 @@ try:                                              # Private endpoints / Bastion 
     from core import azure_netsvc_core as netsvc
 except ImportError:
     import azure_netsvc_core as netsvc             # type: ignore
+try:                                              # v4 AZ-02..05: KEDA / AKS extensions, Cosmos CORS+gateway+CMK, Service Bus CMK+network rules, App Config CMK, subnet delegation
+    from core import azure_cfgext_core as cfgext
+except ImportError:
+    import azure_cfgext_core as cfgext             # type: ignore
 try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
     from core import azure_files_core as files_engine, azure_search_core as search_engine
     from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
@@ -1625,6 +1629,10 @@ class AzureArm:
                 blocked = netsvc.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
                     return blocked
+            if cfgext.handles(full_type):
+                blocked = cfgext.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -1644,6 +1652,9 @@ class AzureArm:
                 return resp
             if netsvc.handles(full_type) and key in self.state:
                 netsvc.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
+            if cfgext.handles(full_type) and key in self.state:
+                cfgext.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
             deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
