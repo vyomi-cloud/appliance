@@ -14,7 +14,7 @@ Proves, over the native ARM wire:
     subAssessments per failed Kubernetes object (kind/namespace/name + fix paths);
   - resource-scoped assessments (.../{resource}/providers/Microsoft.Security/assessments);
   - secure score + controls follow Azure's formula and move when a recommendation is fixed;
-  - assessment status-change dates are tracked; alerts are an honest 501;
+  - assessment status-change dates are tracked; alerts are real (tests/conformance/test_azure_defender_alerts.py);
   - Defender bookkeeping never appears in resource listings, and the state stays JSON-safe.
 
 The Kubescape result is injected with a test scanner that parses the RECORDED CLI report
@@ -209,7 +209,7 @@ def run() -> int:
     rg_scoped = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Security/assessments", Q)["body"]["value"]
     _check("resource-group-scoped list", rg_scoped and all(f"/resourcegroups/{RG}/" in v["id"].lower() for v in rg_scoped))
     meta = arm.handle("GET", SEC + "/assessmentMetadata", Q)["body"]["value"]
-    _check("assessmentMetadata lists native rules + Kubescape controls", len(meta) == 12 + 61)
+    _check("assessmentMetadata lists native rules + image-vulnerability rule + Kubescape controls", len(meta) == 12 + 1 + 61)
     r = arm.handle("POST", aks + "/runCommand", {"api-version": "2024-09-02-preview"}, {"command": "kubectl delete deploy priv-app -n shop"})
     _check("an object change rescans the cluster (plan on)", scanner.calls == 2)
 
@@ -238,7 +238,7 @@ def run() -> int:
 
     # ── honesty + hygiene ──────────────────────────────────────────────────────────────
     r = arm.handle("GET", SEC + "/alerts", {"api-version": "2022-01-01"})
-    _check("alerts are an honest 501 NotImplemented", r["status"] == 501 and r["body"]["error"]["code"] == "NotImplemented")
+    _check("alerts list is a real (empty until something happens) collection", r["status"] == 200 and r["body"]["value"] == [])
     res = arm.handle("GET", f"/subscriptions/{SUB}/resources", {})["body"]["value"]
     _check("Defender bookkeeping never shows up in resource listings", not any("microsoft.security" in x["id"].lower() for x in res))
     _check("ARM state stays JSON-safe", json.loads(json.dumps(arm.state)) == arm.state)

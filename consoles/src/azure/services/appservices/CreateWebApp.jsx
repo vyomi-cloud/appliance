@@ -16,6 +16,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { setPricing } from "../defender/api.js";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
@@ -219,7 +220,15 @@ export default function CreateWebApp() {
       </FormSection>
       <NotSimulatedContainer title="Application Insights" feature="Application Insights" note="Creating/linking an Application Insights resource (and its Region) is not modelled." />
       <FormSection title="Microsoft Defender for App Service">
-        <NotSimulatedContainer feature="Enable Microsoft Defender for App Service" />
+        <CapabilityContainer id="azure.defender.plans" title="Defender for App Service">
+          <FormRow label="Enable Microsoft Defender for App Service">
+            <RadioGroup layout="horizontal" value={f.defender ? "Yes" : "No"} onChange={(_, d) => setF((x) => ({ ...x, defender: d.value === "Yes" }))} aria-label="Enable Microsoft Defender for App Service">
+              <Radio value="Yes" label="Enable" />
+              <Radio value="No" label="Not now" />
+            </RadioGroup>
+          </FormRow>
+          <InfoBar title="Subscription-wide plan">Like Azure, this turns the Defender for App Service plan on for the whole subscription when the app is created (Defender for Cloud > Environment settings).</InfoBar>
+        </CapabilityContainer>
       </FormSection>
     </>
   );
@@ -276,6 +285,7 @@ export default function CreateWebApp() {
         await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, gitHubActionConfiguration: {
           codeConfiguration: { runtimeStack: (f.runtimeStack || "").split("|")[0].toLowerCase() || "python", runtimeVersion: (f.runtimeStack || "").split("|")[1] }, isLinux: f.os === "Linux" } });
       }
+      if (f.defender) await setPricing("AppServices", "Standard");
       notify.success(`Deployment of app service '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("appservices", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

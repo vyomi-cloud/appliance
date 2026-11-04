@@ -11,6 +11,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { fmtDate, fmtDuration, PageHeader } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
+import { restJson } from "../../../common/wire.js";
 import * as api from "./api.js";
 
 export default function Buckets() {
@@ -21,7 +22,14 @@ export default function Buckets() {
   const { data = [], loading, error, reload } = useAsync(async () => {
     const bs = await api.listBuckets();
     const pols = await Promise.all(bs.map((b) => api.getIamPolicy(b.name).catch(() => null)));
-    return bs.map((b, i) => ({ ...b, _policy: pols[i] }));
+    // Security insights column: the bucket posture + threat findings (core/gcp_posture_core.py) for each bucket.
+    const sec = await restJson("GET", `/v1/projects/${encodeURIComponent(project)}/securityPosture/all`).catch(() => ({ findings: [] }));
+    const byBucket = {};
+    for (const f of sec.findings || []) {
+      const m = /\/\/storage\.googleapis\.com\/(.+)$/.exec(f.resourceName || "");
+      if (m) (byBucket[m[1]] = byBucket[m[1]] || []).push(f);
+    }
+    return bs.map((b, i) => ({ ...b, _policy: pols[i], _findings: byBucket[b.name] || [] }));
   }, [project]);
 
   const labels = (b) => {
@@ -62,7 +70,13 @@ export default function Buckets() {
           { id: "lifecycle", header: "Lifecycle rules", cell: (b) => api.lifecycleSummary(b) },
           { id: "tags", header: "Tags", cell: () => "—" },
           { id: "encryption", header: "Encryption", cell: () => "Google-managed key" },
-          { id: "security", header: "Security insights", cell: () => "—" },
+          { id: "security", header: "Security insights", sortValue: (b) => (b._findings || []).length,
+            cell: (b) => {
+              const fs = b._findings || [];
+              if (!fs.length) return "No issues";
+              const top = ["CRITICAL", "HIGH", "MEDIUM", "LOW"].find((s) => fs.some((f) => f.severity === s));
+              return <Tooltip title={fs.map((f) => f.category).join(", ")}><Chip size="small" color={top === "CRITICAL" || top === "HIGH" ? "error" : top === "MEDIUM" ? "warning" : "default"} label={`${fs.length} (${top})`} /></Tooltip>;
+            } },
           { id: "labels", header: "Labels", cell: labels },
         ]}
         empty={

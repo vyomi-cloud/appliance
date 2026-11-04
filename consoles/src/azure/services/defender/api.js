@@ -11,7 +11,7 @@ import { restJson } from "../../../common/wire.js";
 import { getSubscription, parseId } from "../../kit/arm.js";
 
 const SEC = () => `/subscriptions/${getSubscription()}/providers/Microsoft.Security`;
-export const API = { pricings: "2024-01-01", assessments: "2021-06-01", sub: "2019-01-01-preview", scores: "2020-01-01" };
+export const API = { alerts: "2022-01-01", pricings: "2024-01-01", assessments: "2021-06-01", sub: "2019-01-01-preview", scores: "2020-01-01" };
 
 export const listPricings = async () =>
   (await restJson("GET", `${SEC()}/pricings`, { query: { "api-version": API.pricings } })).value || [];
@@ -90,3 +90,9 @@ export const PLAN_LABEL = {
   OpenSourceRelationalDatabases: "Open-source relational databases", CosmosDbs: "Azure Cosmos DB", Containers: "Containers",
   CloudPosture: "Defender CSPM", Api: "APIs", AI: "AI services",
 };
+
+/** Security alerts (Vyomi deterministic detector over the ARM audit feed). */
+export const listAlerts = async () =>
+  (await restJson("GET", `${SEC()}/alerts`, { query: { "api-version": API.alerts } })).value || [];
+export const alertAction = (alertId, action) =>
+  restJson("POST", `${alertId}/${action}`, { query: { "api-version": API.alerts } });
