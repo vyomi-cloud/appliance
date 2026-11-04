@@ -35,6 +35,15 @@ check("seed lambda", lf.status === 201 || lf.status === 200, lf.status);
 
 // overview + model check
 await page.getByRole("button", { name: "Check local model" }).click();
+if (process.env.NANO === "1") {
+  // Nano has no model until the page registers WebLLM (WebGPU + CDN download): the honest result is a not-ready message, never a canned answer.
+  await page.waitForTimeout(3000);
+  const t = await body();
+  check("Nano: no in-browser model -> honest not-ready state (no crash, no canned answer)", !/Model answered/.test(t) && (/not ready|ModelNotReady|WebLLM|no (local )?model|not available/i.test(t)), t.slice(0, 80));
+  check("no page errors", errs.length === 0, errs[0]);
+  await browser.close();
+  process.exit(results.every(Boolean) ? 0 : 1);
+}
 await page.getByText(/Model answered/).waitFor({ timeout: 15000 });
 check("overview: local model answered", true);
 
