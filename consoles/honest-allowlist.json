@@ -50,9 +50,6 @@
     "ec2": [
       "events"
     ],
-    "cloudformation": [
-      "public-extensions"
-    ],
     "vpc": [
       "privatelink-getting-started",
       "endpoints",
