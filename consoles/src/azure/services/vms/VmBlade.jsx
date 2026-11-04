@@ -647,14 +647,42 @@ function Disks({ a, reload }) {
           <Radio value="Enabled" label="Enabled" /><Radio value="Disabled" label="Disabled" /></RadioGroup></Field>
       </section>
       <AddDiskDialog open={add} onClose={() => setAdd(false)} nextLun={dataDisks.length} onCreate={addDisk} />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
-        <DialogSurface aria-label="Attach existing disks">
-          <DialogBody><DialogTitle>Attach existing disks</DialogTitle>
-            <DialogContent><NotSimulated feature="Picking an existing standalone managed disk to attach" note="This lens does not build a standalone Disks console to pick an existing disk from — data disks are created and attached in one step instead." /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
+      <AttachExistingDisks open={!!gap} onClose={() => setGap(false)} a={a} nextLun={dataDisks.length} onAttach={addDisk} />
     </CapabilityContainer>
+  );
+}
+
+/* Attach existing disks: unattached standalone managed disks (Microsoft.Compute/disks) in the VM's region, plus a quick-create. */
+function AttachExistingDisks({ open, onClose, a, nextLun, onAttach }) {
+  const notify = useNotify();
+  const disks = useAsync(() => (open ? api.listDisks() : Promise.resolve([])), [open]);
+  const [nm, setNm] = useState(""), [gb, setGb] = useState("32"), [sku, setSku] = useState("StandardSSD_LRS");
+  const region = (a.location || "").replace(/\s/g, "").toLowerCase();
+  const free = (disks.data || []).filter((d) => (d.location || "").replace(/\s/g, "").toLowerCase() === region && d.properties?.diskState !== "Attached");
+  const create = async () => {
+    try { await api.putDisk(a.resourceGroup, nm, { location: a.location, sku: { name: sku }, properties: { diskSizeGB: Number(gb), creationData: { createOption: "Empty" } } }); setNm(""); disks.reload(); }
+    catch (e) { notify.error(e, "Creating the disk failed"); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Attach existing disks">
+        <DialogBody><DialogTitle>Attach existing disks</DialogTitle>
+          <DialogContent>
+            <ErrorBar error={disks.error} />
+            <table className="vy-grid" aria-label="Unattached disks"><thead><tr><th>Disk</th><th>SKU</th><th>Size (GiB)</th><th /></tr></thead>
+              <tbody>{free.map((d) => (<tr key={d.id}><td>{d.name}</td><td>{d.sku?.name}</td><td>{d.properties?.diskSizeGB}</td>
+                <td><Button size="small" aria-label={`Attach ${d.name}`} onClick={async () => { await onAttach({ lun: nextLun, name: d.name, createOption: "Attach", diskSizeGB: d.properties?.diskSizeGB, managedDisk: { id: d.id, storageAccountType: d.sku?.name } }); onClose(); }}>Attach</Button></td></tr>))}
+                {!free.length && <tr><td colSpan={4} className="vy-muted" data-testid="no-free-disks">No unattached disks in {locationLabel(region)}.</td></tr>}</tbody></table>
+            <div style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8, flexWrap: "wrap" }}>
+              <Field label="New disk name"><Input value={nm} onChange={(_, d) => setNm(d.value)} aria-label="New disk name" /></Field>
+              <Field label="Size (GiB)"><Input type="number" value={gb} onChange={(_, d) => setGb(d.value)} aria-label="New disk size" /></Field>
+              <Field label="SKU"><select value={sku} onChange={(e) => setSku(e.target.value)} aria-label="New disk SKU"><option>Standard_LRS</option><option>StandardSSD_LRS</option><option>Premium_LRS</option></select></Field>
+              <Button disabled={!nm} onClick={create} aria-label="Create standalone disk">Create disk</Button>
+            </div>
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions></DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 

@@ -35,6 +35,16 @@ check("joining the pool lists the NIC as a backend ip configuration", (lb2.body?
 check("state text is honest (probe not executed)", /probe not executed/.test(await pg.getByTestId("lb-state").first().innerText()));
 const del = await arm("DELETE", `${N}/loadBalancers/lb1`);
 check("LB with members cannot be deleted", del.status === 400);
+// Standalone disk -> attach existing
+await pg.goto(`${UI}#/vms/${RG}/${VM}/disks`); await pg.waitForTimeout(1500);
+await pg.getByRole("button", { name: "Attach existing disks" }).click().catch(async () => { await pg.getByText("Attach existing disks").first().click(); });
+await pg.waitForTimeout(800);
+check("attach-existing dialog is real (no Not-simulated)", (await pg.locator("[data-vyomi-not-simulated]").count()) === 0 && (await pg.getByTestId("no-free-disks").count()) === 1);
+await pg.getByLabel("New disk name").fill("data1"); await pg.getByLabel("Create standalone disk").click(); await pg.waitForTimeout(1200);
+await pg.getByLabel("Attach data1").click(); await pg.waitForTimeout(1500);
+const dk = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Compute/disks/data1`, null, "2023-04-02");
+check("disk is Attached to the VM", dk.body?.properties?.diskState === "Attached" && /virtualmachines/i.test(dk.body?.managedBy || ""), JSON.stringify(dk.body).slice(0, 160));
+check("attached disk cannot be deleted", (await arm("DELETE", `/resourceGroups/${RG}/providers/Microsoft.Compute/disks/data1`, null, "2023-04-02")).status === 409);
 // Cosmos RU/s offer -> 429
 await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
 await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${ACC}`, { location: "eastus", kind: "GlobalDocumentDB", properties: { databaseAccountOfferType: "Standard", locations: [{ locationName: "East US", failoverPriority: 0 }] } }, "2024-05-15");

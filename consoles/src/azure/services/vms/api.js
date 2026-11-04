@@ -266,3 +266,9 @@ const LB_ARM = armType("Microsoft.Network", "loadBalancers", "2023-11-01");
 export const listLoadBalancers = async () => (await LB_ARM.list()).map((l) => ({ ...l, resourceGroup: parseId(l.id).resourceGroup }));
 export const putLoadBalancer = (rg, name, body) => LB_ARM.put(rg, name, body);
 export const deleteLoadBalancer = (rg, name) => LB_ARM.remove(rg, name);
+
+// ── Standalone managed disks (Microsoft.Compute/disks, core/azure_disks_core.py) ────────────────
+const DISK_ARM = armType("Microsoft.Compute", "disks", "2023-04-02");
+export const listDisks = async () => (await DISK_ARM.list()).map((d) => ({ ...d, resourceGroup: parseId(d.id).resourceGroup }));
+export const putDisk = (rg, name, body) => DISK_ARM.put(rg, name, body);
+export const deleteDisk = (rg, name) => DISK_ARM.remove(rg, name);
