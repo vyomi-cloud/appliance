@@ -109,13 +109,17 @@
     "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
   },
   "azure.loganalytics.workspace.monitoring": {
-    "title": "Alerts, Metrics, Diagnostic settings and Workbooks on a workspace",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing and Workbooks are not modeled."]
+   "title": "Workbooks on a workspace",
+   "level": { "nano": "not_simulated", "offline": "not_simulated" },
+   "limitations": [
+    "The workspace's Workbooks tab is not modeled. Alerts, Metrics and Diagnostic settings on a workspace are real through the shared panels (azure.common.resource_monitoring, azure.common.diagnostic_settings)."
+   ]
   },
   "azure.loganalytics.workspace.tools": {
-    "title": "Diagnose and solve problems, Computer groups (classic), Data export, Linked storage accounts, Resource health, and Support + Troubleshooting",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["These portal troubleshooting, agent-based computer grouping, continuous data export and linked-storage-account features are not modeled."]
+   "title": "Diagnose and solve problems, Computer groups (classic), Data export, Linked storage accounts",
+   "level": { "nano": "not_simulated", "offline": "not_simulated" },
+   "limitations": [
+    "These portal troubleshooting, agent-based computer grouping, continuous data export and linked-storage-account features are not modeled. Resource health (azure.common.resource_health) and Support + Troubleshooting (azure.common.support) are the shared panels and are not part of this gap."
+   ]
   }
 }

@@ -210,10 +210,10 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.tools": {
-  "title": "Diagnose and solve problems, Events, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems, Events, Tasks",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, and Support + Troubleshooting opens a real Azure support ticket against Microsoft — all infrastructure outside any local simulator, consistent with every other Vyomi service (Storage, Service Bus, AKS, ACR, App Service, VMs, …)."
+   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, which no local simulator has. Support + Troubleshooting is the shared support-request panel (azure.common.support), filed with Vyomi."
   ]
  },
  "azure.apim.exporttemplate": {

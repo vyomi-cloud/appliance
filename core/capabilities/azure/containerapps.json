@@ -90,9 +90,11 @@
   "api": []
  },
  "azure.containerapps.app.tools": {
-  "title": "Diagnose and solve problems, Events, Resource health, New support request",
+  "title": "Diagnose and solve problems, Events",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No diagnostics engine, Event Grid wiring, resource-health telemetry or support-ticket flow."],
+  "limitations": [
+   "No diagnostics engine or Event Grid wiring for Container Apps. Resource health (azure.common.resource_health) and New support request (azure.common.support) are the shared panels and are not part of this gap."
+  ],
   "api": []
  },
  "azure.containerapps.job.crud": {

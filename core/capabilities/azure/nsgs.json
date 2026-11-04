@@ -61,9 +61,9 @@
  },
  "azure.nsgs.tools": {
   "title": "Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Support + Troubleshooting opens a real Microsoft support ticket (Microsoft.Support/supportTickets) against Microsoft's own support organization — a genuine third party Vyomi cannot simulate. Every other 'Diagnose and solve problems' tile (IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics — azure.nsgs.network_watcher) and Tasks (azure.nsgs.tasks) are built on real backends."
+   "Support + Troubleshooting is the shared support-request panel (azure.common.support): requests are filed with Vyomi, not Microsoft. The 'Diagnose and solve problems' tiles (IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics — azure.nsgs.network_watcher) and Tasks (azure.nsgs.tasks) are built on real backends."
   ]
  },
  "azure.nsgs.effective_rules": {

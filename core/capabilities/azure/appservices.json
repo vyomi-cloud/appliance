@@ -148,9 +148,11 @@
   "tests": ["tests/conformance/test_azure_security_core.py"]
  },
  "azure.appservices.webapp.support": {
-  "title": "Diagnose and solve problems, Events (preview), Resource visualizer, Resource health, New support request",
+  "title": "Diagnose and solve problems, Events (preview)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No diagnostics engine, Event Grid wiring, resource visualizer, resource-health telemetry or support-ticket flow."],
+  "limitations": [
+   "No diagnostics engine or Event Grid wiring for Web Apps. Resource health (azure.common.resource_health), Resource visualizer (azure.common.resource_visualizer) and New support request (azure.common.support) are the shared panels and are not part of this gap."
+  ],
   "api": []
  },
  "azure.appservices.webapp.siteconfigpanels": {

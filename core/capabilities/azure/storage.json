@@ -273,8 +273,10 @@
  },
  "azure.storage.support": {
   "title": "Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Opens a real Microsoft support ticket workflow — outside what a local simulator can run."],
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Support + Troubleshooting is the shared support-request panel (azure.common.support): tickets are filed with Vyomi, not Microsoft."
+  ],
   "tests": []
  },
  "azure.storage.fileservice": {
