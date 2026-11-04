@@ -209,7 +209,8 @@
     },
     "limitations": [
       "Microsoft.Monitor/accounts is a real ARM resource: name rules, query endpoint, and the managed data collection endpoint and rule Azure creates alongside it (removed again on delete; deleting a workspace still integrated with a Grafana workspace is refused).",
-      "The workspace's data is served by Vyomi's own Prometheus-compatible API (/_obs/prom/api/v1: query, query_range, labels, series, PromQL-lite selectors, rate/increase, sum/avg/min/max/count by, histogram_quantile) over series MEASURED from real requests (vyomi_requests_total, vyomi_request_duration_ms_*) and OTLP/HTTP-ingested metrics; the ARM query endpoint string itself is still a generated name. It is not a full PromQL engine, there is no remote-write/remote-read protobuf, and Prometheus rule groups and AKS add-on onboarding are not modelled."
+      "The workspace's data is served by Vyomi's own Prometheus-compatible API (/_obs/prom/api/v1: query, query_range, labels, series, PromQL-lite selectors, rate/increase, sum/avg/min/max/count by, histogram_quantile) over series MEASURED from real requests (vyomi_requests_total, vyomi_request_duration_ms_*) and OTLP/HTTP-ingested metrics; the ARM query endpoint string itself is still a generated name. It is not a full PromQL engine, there is no remote-write/remote-read protobuf, and Prometheus rule groups and AKS add-on onboarding are not modelled.",
+      "On Nano the telemetry recorder (OTLP spans, request counters, logs) lives in the open console page's memory: it is kept while the console stays open and starts empty after a page reload, whereas the offline appliance keeps it for the life of the appliance process."
     ],
     "tests": [
       "tests/conformance/test_azure_monitorproducts.py"

@@ -17,7 +17,12 @@ const call = (m, url, body, ver) => pg.evaluate(async ([m, url, body]) => {
 }, [m, url, body]);
 const arm = (m, path, body, v = "2023-08-01") => call(m, `${WIRE}/subscriptions/${SUB}${path}?api-version=${v}`, body);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+const ready = async () => { if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 }); };
+/* Re-open the current page. Nano keeps request telemetry (OTLP spans, request counters) in the in-page recorder only - it does
+ * not survive a document reload - so on Nano re-navigate inside the SPA instead of reloading. */
+const refresh = async () => { if (process.env.NANO) { const u = pg.url(); await pg.goto(UI + "#/"); await pg.waitForTimeout(300); await pg.goto(u); } else await refresh(); };
+await ready();
 await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
 await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}`, { location: "eastus", properties: { administratorLogin: "a", administratorLoginPassword: "Passw0rd!x1" } });
 await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`, { location: "eastus", sku: { name: "Basic" } });
@@ -29,7 +34,7 @@ await call("PUT", `${WIRE}/azure-sql/servers/${SRV}`, {}); await call("PUT", `${
 await q("CREATE TABLE t(id INTEGER, v TEXT)");
 for (let i = 0; i < 4; i++) await q(`INSERT INTO t VALUES (${i}, 'a${i}')`);
 await q("SELECT * FROM t WHERE id = 2");
-await go("queryperfinsight"); await pg.reload(); await pg.waitForTimeout(1500);
+await go("queryperfinsight"); await refresh(); await pg.waitForTimeout(1500);
 const rc = await pg.getByTestId("qpi-row").count(), tx = await pg.locator("table[aria-label=\"Top queries\"]").innerText();
 ok("QPI lists grouped queries (4 inserts = one row)", rc === 3 && tx.includes("INSERT INTO t VALUES (?, ?)"), rc + " " + tx.slice(0, 400));
 ok("QPI not a not-simulated panel", (await pg.locator("[data-vyomi-not-simulated]").count()) === 0);

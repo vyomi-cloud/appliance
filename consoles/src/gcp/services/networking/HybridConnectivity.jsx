@@ -158,7 +158,7 @@ export function Interconnects() {
         { key: "noc", label: "NOC contact email", default: "noc@example.com" },
         { key: "en", label: "Admin state", options: [["true", "Enabled"], ["false", "Disabled"]], default: "true" },
       ], submit: (v) => api.insertInterconnect({ name: v.name, interconnectType: v.type, linkType: v.link, requestedLinkCount: Number(v.n), customerName: v.cust,
-        nocContactEmail: v.noc, adminEnabled: v.en === "true", location: `projects/${project}/global/interconnectLocations/${v.loc}` }), done: (v) => `Ordered Interconnect "${v.name}"` }}
+        nocContactEmail: v.noc, adminEnabled: v.en === "true", location: `projects/${project}/global/interconnectLocations/${v.loc || locs[0]?.name || ""}` }), done: (v) => `Ordered Interconnect "${v.name}"` }}
       columns={[
         { id: "n", header: "Name", sortField: "name", cell: (i) => i.name },
         { id: "t", header: "Type", cell: (i) => i.interconnectType },

@@ -172,7 +172,8 @@ def _validate_restrictions(state, rules, key):
         if r.get("action") not in ("Allow", "Deny"):
             return _err(400, "InvalidRestrictionAction", f"{key} rule {name}: action must be Allow or Deny.")
         pr = r.get("priority")
-        if not isinstance(pr, int) or pr < 1 or pr > 2147483646:
+        default_rule = pr == 2147483647 and str(r.get("name") or "").lower() in ("allow all", "deny all")   # the implicit catch-all that GET returns and a full-config PUT (clone, ARM template) sends back
+        if not isinstance(pr, int) or pr < 1 or (pr > 2147483646 and not default_rule):
             return _err(400, "InvalidRestrictionPriority", f"{key} rule {name}: priority must be an integer between 1 and 2147483646.")
         if pr in seen:
             return _err(400, "DuplicateRestrictionPriority", f"{key}: priority {pr} is used by more than one rule.")

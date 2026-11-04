@@ -65,7 +65,7 @@ export default function TopicBlade({ params, query }) {
       accesskeys: () => <AccessKeys t={t} />,
       properties: () => <Properties t={t} />,
       activitylog: () => <SharedActivityLog scope={t.id} name={t.name} />,
-      accesscontrol: () => <Iam name={name} />,
+      accesscontrol: () => <Iam name={name} a={t} />,
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <Diagnose t={t} rg={rg} name={name} />,
       tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`} />,
@@ -397,7 +397,7 @@ const ACTIVITY_LOG_COLUMNS = [
 // ── Access control (IAM): real ARM resources (Microsoft.Authorization/roleAssignments,
 // roleDefinitions), subscription-wide rather than scoped to this one topic — same honest
 // shape as the Cosmos DB account blade (core/capabilities/azure/eventgrid.json) ───────────
-function Iam({ name }) {
+function Iam({ name, a }) {
   const sub = useSubscription();
   const [tab, setTab] = useState("checkaccess");
   const [gap, setGap] = useState(null);
@@ -415,7 +415,7 @@ function Iam({ name }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <MyAccess a={t} />
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
         </div>
       )}

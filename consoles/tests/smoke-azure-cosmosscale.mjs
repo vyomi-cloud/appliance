@@ -17,7 +17,12 @@ const call = (m, url, body, headers = {}) => pg.evaluate(async ([m, url, body, h
 }, [m, url, body, headers]);
 const arm = (m, path, body, v = "2024-05-15") => call(m, `${WIRE}/subscriptions/${SUB}${path}?api-version=${v}`, body);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+const ready = async () => { if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 }); };
+/* Re-open the current page. Nano keeps request telemetry (OTLP spans, request counters) in the in-page recorder only - it does
+ * not survive a document reload - so on Nano re-navigate inside the SPA instead of reloading. */
+const refresh = async () => { if (process.env.NANO) { const u = pg.url(); await pg.goto(UI + "#/"); await pg.waitForTimeout(300); await pg.goto(u); } else await refresh(); };
+await ready();
 await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
 await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${ACC}`, { location: "eastus", kind: "GlobalDocumentDB", properties: { databaseAccountOfferType: "Standard", locations: [{ locationName: "East US", failoverPriority: 0 }] } });
 await pg.goto(`${UI}#/cosmos/${RG}/${ACC}/scale`); await pg.waitForTimeout(1500);
@@ -26,7 +31,7 @@ ok("idle account: honest empty state", (await pg.getByTestId("scale-empty").coun
 const dp = (m, path, body, extra = {}) => call(m, `${WIRE}${path}`, body, { "x-ms-version": "2018-12-31", "x-ms-documentdb-partitionkey": '["a"]', ...extra });
 await dp("POST", "/dbs", { id: "d1" }); await dp("POST", "/dbs/d1/colls", { id: "c1", partitionKey: { paths: ["/pk"], kind: "Hash" } });
 for (let i = 0; i < 3; i++) await dp("POST", "/dbs/d1/colls/c1/docs", { id: "doc" + i, pk: "a" });
-await pg.reload(); await pg.waitForTimeout(2000);
+await refresh(); await pg.waitForTimeout(2000);
 const req = Number((await pg.getByTestId("scale-requests").innerText()).trim());
 ok("requests counted from the measured wire", req >= 3, String(req));
 ok("modelled RUs > 0", Number((await pg.getByTestId("scale-ru").innerText()).trim()) > 0);
