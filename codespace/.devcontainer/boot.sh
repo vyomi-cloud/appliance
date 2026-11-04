@@ -36,8 +36,13 @@ fi
 
 log() { echo "[vyomi-sandbox] $*"; }
 
-post() {  # post <path> <json>   (fail-soft)
-  curl -fsS -m 10 -X POST "$PORTAL$1" -H 'Content-Type: application/json' -d "$2" >/dev/null 2>&1 || true
+post() {  # post <path> <json>   (fail-soft; logs "webhook <path> → HTTP <code>")
+  local code
+  code="$(curl -sS -m 10 -o /dev/null -w '%{http_code}' -X POST "$PORTAL$1" \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${VYOMI_SANDBOX_TOKEN:-}" \
+    -d "$2" 2>/dev/null)" || code="000"
+  log "webhook $1 → HTTP ${code:-000}"
 }
 
 # Optional per-sandbox secret for the readiness webhook (portal verifies it iff
@@ -128,10 +133,17 @@ start_stack() {
 provision() {
   local ttl_s; ttl_s="$(ttl_seconds "$TTL")"
   log "registering sandbox with the cost meter (org=${ORG:-personal} billing=$BILLING profile=$PROFILE)…"
-  post /api/sandbox/provision "$(cat <<JSON
-{"codespace_id":"$CODESPACE","org":"$ORG","owner_email":"${GH_USER:+$GH_USER@users.noreply.github.com}","github_login":"$GH_USER","profile_id":"$PROFILE","compute_profile":"S","billing":"$BILLING","ttl_seconds":$ttl_s,"install_id":"$CODESPACE"}
-JSON
-)"
+  # Omit org/owner_email/github_login entirely when unset, rather than sending
+  # them as "" — an empty string is a value (and not the same as "no org" to a
+  # consumer checking truthiness-vs-presence), Optional fields on the portal
+  # side expect a missing key for "none".
+  local fields="\"codespace_id\":\"$CODESPACE\""
+  [ -n "$ORG" ] && fields="$fields,\"org\":\"$ORG\""
+  if [ -n "$GH_USER" ]; then
+    fields="$fields,\"owner_email\":\"${GH_USER}@users.noreply.github.com\",\"github_login\":\"$GH_USER\""
+  fi
+  fields="$fields,\"profile_id\":\"$PROFILE\",\"compute_profile\":\"S\",\"billing\":\"$BILLING\",\"ttl_seconds\":$ttl_s,\"install_id\":\"$CODESPACE\""
+  post /api/sandbox/provision "{$fields}"
 }
 
 start_heartbeat() {
