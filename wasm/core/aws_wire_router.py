@@ -75,6 +75,8 @@ from core import gcp_compute_instances_core as gcp_compute_vm
 from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
+from core import gcp_trace_core as gcp_trace
+from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
 # (the job-trigger binding the Cloud Run console's Triggers tab shows and creates).
@@ -93,6 +95,12 @@ def _gcp_service(path):
         return "gcp-run"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1", "/storage/website/")):
         return "gcp-gcs"
+    if re.match(r"^/v[12]/projects/[^/]+/traces([/:]|$)", path) or re.match(r"^/v2/projects/[^/]+/traces/", path) \
+            or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
+            or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
+        return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
+        return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
     if re.match(r"^/v2/projects/[^/]+/(sinks|metrics|logs)([/:]|$)", path):
@@ -1112,6 +1120,10 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "gcp-posture":
+            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path)
+            return {"status": r.status, "headers": {"content-type": r.media_type}, "body": r.body}
+
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             _gcp_core = {
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
@@ -1120,6 +1132,7 @@ class AwsWireRouter:
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
+                "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),

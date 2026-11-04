@@ -56,6 +56,9 @@ class MonitoringStore:
         self.services: dict = {}                # full name -> Service
         self.slos: dict = {}                    # full name -> ServiceLevelObjective (nested under a service)
         self.incidents: dict = {}               # full name -> Incident (see evaluate_incidents)
+        self.traces: dict = {}                  # "project/traceId" -> {spanId: v2 Span} (core/gcp_trace_core)
+        self.trace_scopes: dict = {}            # full name -> TraceScope
+        self.log_scopes: dict = {}              # full name -> LogScope
         self.metrics_scopes: dict = {}          # scoping project id -> {"createTime", "monitoredProjects": [project_id,...]}
 
 
