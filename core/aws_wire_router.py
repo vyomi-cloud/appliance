@@ -125,7 +125,7 @@ def _gcp_service(path):
         # anything with a sub-resource after the project id is Cloud Monitoring
         # (alertPolicies, metricDescriptors, timeSeries, …).
         return "gcp-monitoring" if m.group(1) else "gcp-resourcemanager"
-    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings")):
+    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings", "/v3/folders")):
         return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
