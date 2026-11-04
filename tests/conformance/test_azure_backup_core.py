@@ -174,3 +174,27 @@ def run():
 
 if __name__ == "__main__":
     run()
+
+
+def storage_geo():
+    a = AzureArm()
+    h = lambda m, p, b=None, q=None: a.handle(m, p, dict({"api-version": "2023-01-01"}, **(q or {})), b)
+    R = f"/subscriptions/{S}/resourceGroups/g"
+    h("PUT", R, {"location": "eastus"}, {"api-version": "2021-04-01"})
+    sa = f"{R}/providers/Microsoft.Storage/storageAccounts/geo1"
+    r = h("PUT", sa, {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_RAGRS"}})
+    p = r["body"]["properties"]
+    _check("GRS account gets paired secondary + stats", p["secondaryLocation"] == "westus" and p["geoReplicationStats"]["status"] == "Live" and "blob" in p["secondaryEndpoints"])
+    lrs = f"{R}/providers/Microsoft.Storage/storageAccounts/lrs1"
+    h("PUT", lrs, {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}})
+    _check("LRS cannot fail over", h("POST", f"{lrs}/failover")["body"]["error"]["code"] == "AccountFailoverNotSupported")
+    _check("bad failoverType", h("POST", f"{sa}/failover", None, {"failoverType": "X"})["status"] == 400)
+    _check("failover ok", h("POST", f"{sa}/failover")["status"] == 200)
+    g = h("GET", sa)["body"]
+    _check("failover swaps primary and converts to LRS", g["location"] == "westus" and g["sku"]["name"] == "Standard_LRS" and "secondaryLocation" not in g["properties"])
+    _check("cannot fail over twice", h("POST", f"{sa}/failover")["status"] == 400)
+    print("storage geo-replication: ok")
+
+
+if __name__ == "__main__":
+    storage_geo()

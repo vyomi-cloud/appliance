@@ -1706,6 +1706,9 @@ class AzureArm:
             if cfgext.handles(full_type) and key in self.state:
                 cfgext.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
+            if full_type.lower() == "microsoft.storage/storageaccounts" and key in self.state:
+                backup_engine.storage_after_put(self.state, self.state[key])
+                resp["body"] = _view(self.state[key])
             if sqlbk.handles(full_type) and key in self.state:
                 blocked = sqlbk.after_put(self.state, self.state[key], payload, _net_prev, self.sql_store, self.blob_store)
                 if blocked:
@@ -1884,6 +1887,12 @@ class AzureArm:
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
             r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.storage" and rg is not None and len(chain) == 3 and chain[0].lower() == "storageaccounts" and chain[2].lower() == "failover" and method == "POST":
+            rec = self.state.get(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{chain[1]}".lower())
+            if rec is None:
+                return _err(404, "ResourceNotFound", f"The Resource 'Microsoft.Storage/storageAccounts/{chain[1]}' under resource group '{rg}' was not found.")
+            r = backup_engine.storage_failover(self.state, rec, query or {})
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.sql" and chain and sqlbk.owns(chain) and (rg is not None or chain[0].lower() == "locations"):
             r = sqlbk.dispatch(self.state, method, sub, rg, chain, payload, query, sql_store=self.sql_store, blob_store=self.blob_store)

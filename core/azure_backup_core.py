@@ -1080,3 +1080,49 @@ def dispatch(state, method, sub, rg, chain, payload, query, blob_store=None, arm
     if k.startswith("replication"):
         return _repl(state, method, sub, vault, rest, payload, arm_put)
     return _vault_views(state, method, sub, vault, rest, payload, query)
+
+
+# ── Storage account geo-replication + customer-initiated failover ──────────────────────
+PAIRS = {"eastus": "westus", "westus": "eastus", "eastus2": "centralus", "centralus": "eastus2", "westus2": "westcentralus",
+         "westcentralus": "westus2", "northcentralus": "southcentralus", "southcentralus": "northcentralus", "westeurope": "northeurope",
+         "northeurope": "westeurope", "uksouth": "ukwest", "ukwest": "uksouth", "southeastasia": "eastasia", "eastasia": "southeastasia",
+         "centralindia": "southindia", "southindia": "centralindia", "japaneast": "japanwest", "japanwest": "japaneast",
+         "australiaeast": "australiasoutheast", "australiasoutheast": "australiaeast", "canadacentral": "canadaeast", "canadaeast": "canadacentral"}
+GEO_SKUS = ("Standard_GRS", "Standard_RAGRS", "Standard_GZRS", "Standard_RAGZRS")
+
+
+def storage_after_put(state, rec):
+    """Derive the secondary region + geo-replication stats from the account SKU (the real RP does this server-side)."""
+    sku = (rec.get("sku") or {}).get("name", "")
+    p = rec.setdefault("properties", {})
+    loc = str(rec.get("location", "")).lower().replace(" ", "")
+    if sku in GEO_SKUS and loc in PAIRS:
+        p["secondaryLocation"] = PAIRS[loc]
+        p["statusOfPrimary"], p["statusOfSecondary"] = "available", "available"
+        p["geoReplicationStats"] = {"status": "Live", "lastSyncTime": _now(), "canFailover": True, "canPlannedFailover": True}
+        if sku.startswith("Standard_RA"):
+            acct = rec["name"]
+            p["secondaryEndpoints"] = {"blob": f"https://{acct}-secondary.blob.core.windows.net/", "queue": f"https://{acct}-secondary.queue.core.windows.net/",
+                                       "table": f"https://{acct}-secondary.table.core.windows.net/", "file": f"https://{acct}-secondary.file.core.windows.net/"}
+        else:
+            p.pop("secondaryEndpoints", None)
+    else:
+        for k in ("secondaryLocation", "statusOfSecondary", "geoReplicationStats", "secondaryEndpoints"):
+            p.pop(k, None)
+
+
+def storage_failover(state, rec, query):
+    sku = (rec.get("sku") or {}).get("name", "")
+    p = rec.get("properties") or {}
+    if sku not in GEO_SKUS or not p.get("secondaryLocation"):
+        return _err(400, "AccountFailoverNotSupported", f"The storage account '{rec['name']}' ({sku or 'no sku'}) is not geo-redundant (GRS/RA-GRS/GZRS/RA-GZRS); customer-initiated failover is not available.")
+    if (query or {}).get("failoverType", "Unplanned") not in ("Planned", "Unplanned"):
+        return _err(400, "InvalidQueryParameterValue", "failoverType must be Planned or Unplanned.")
+    old = rec["location"]
+    rec["location"] = p["secondaryLocation"]
+    p["primaryLocation"] = rec["location"]
+    rec["sku"] = dict(rec["sku"], name="Standard_LRS")      # the real RP converts the account to LRS in the new primary
+    storage_after_put(state, rec)
+    p["lastGeoFailoverTime"] = _now()
+    rec["_failover_from"] = old
+    return _ok(None, 200)
