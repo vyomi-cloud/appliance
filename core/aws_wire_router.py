@@ -1106,6 +1106,15 @@ class AwsWireRouter:
     def secscan_serve(self, svc, method, path, body: bytes) -> dict:
         from core import secscan_core as _sc
         bag = self.secscan_bag()
+        if svc == "guardduty" and path.split("?", 1)[0].startswith("/malware-protection-plan"):   # GuardDuty Malware Protection for S3 (core/malware_scan_core)
+            from core import malware_scan_core as _mw
+            r = _mw.gd_dispatch(self.s3, method, path, body)
+            if method != "GET":
+                try:
+                    self.s3.persist()
+                except Exception:
+                    pass
+            return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
         if svc == "securityhub":
             rows = self.secscan_posture() if _sc._state(bag)["hub"]["enabled"] else []
             r = _sc.hub_dispatch(bag, method, path, body, rows, self.secscan_threats())

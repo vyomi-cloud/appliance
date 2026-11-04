@@ -376,6 +376,9 @@ def _pricing_view(sub, name, entry):
         props["enablementTime"] = (entry or {}).get("enablementTime")
         if (entry or {}).get("subPlan"):
             props["subPlan"] = entry["subPlan"]
+    if (entry or {}).get("extensions") is not None:   # Defender for Storage: OnUploadMalwareScanning / SensitiveDataDiscovery (core/malware_scan_core)
+        props["extensions"] = [{"name": n, "isEnabled": "True" if e.get("isEnabled") else "False", "additionalExtensionProperties": e.get("additionalExtensionProperties") or {},
+                                "operationStatus": {"code": "OK", "message": "The operation completed successfully."}} for n, e in sorted(entry["extensions"].items())]
     return {"id": f"/subscriptions/{sub}/providers/{NS}/pricings/{name}", "name": name,
             "type": f"{NS}/pricings", "properties": props}
 
@@ -642,6 +645,8 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
     head = low[0]
     if head == "pricings":
         return _pricings(state, method, sub, chain[1:], payload)
+    if head == "defenderforstoragesettings":
+        return _dfs_settings(state, method, sub, chain[1:], payload, scope_rid)
     if head in ("alerts", "locations"):
         return _alerts(state, method, sub, rg, chain, ctx)
     if method != "GET":
@@ -727,7 +732,7 @@ def record_call(state: dict, sub: str, method: str, path: str, body, status: int
         pass
 
 
-_ALERT_PLAN = {"storage-public": "StorageAccounts", "block-public-access-disabled": "StorageAccounts", "key-destruction": "KeyVaults"}
+_ALERT_PLAN = {"malware-upload": "StorageAccounts", "storage-public": "StorageAccounts", "block-public-access-disabled": "StorageAccounts", "key-destruction": "KeyVaults"}
 
 
 def threats(state: dict, sub: str) -> list:
@@ -778,6 +783,67 @@ def _alerts(state, method, sub, rg, chain, ctx):
     return {"status": 204, "headers": {}, "body": None}
 
 
+def _dfs_key(rid):
+    return rid.lower() + "/providers/microsoft.security/defenderforstoragesettings/current"
+
+
+def dfs_settings(state, rid):
+    return state.get(_dfs_key(rid))
+
+
+def _dfs_view(rid, rec):
+    r = rec or {}
+    return {"id": f"{rid}/providers/{NS}/DefenderForStorageSettings/current", "name": "current", "type": f"{NS}/DefenderForStorageSettings",
+            "properties": {"isEnabled": bool(r.get("isEnabled", False)),
+                           "malwareScanning": {"onUpload": {"isEnabled": bool(r.get("onUpload", False)), "capGBPerMonth": r.get("capGBPerMonth", 5000)},
+                                               "scanResultsEventGridTopicResourceId": r.get("topic", ""), "operationStatus": {"code": "OK"}},
+                           "sensitiveDataDiscovery": {"isEnabled": bool(r.get("sdd", False)), "operationStatus": {"code": "OK"}},
+                           "overrideSubscriptionLevelSettings": bool(r.get("override", False))}}
+
+
+def _dfs_settings(state, method, sub, rest, payload, scope_rid):
+    if not scope_rid or "microsoft.storage/storageaccounts" not in scope_rid.lower():
+        return _err(400, "InvalidResourceType", "DefenderForStorageSettings is a child of a storage account.")
+    if rest and rest[0].lower() != "current":
+        return _err(404, "NotFound", "The only DefenderForStorageSettings name is 'current'.")
+    k = _dfs_key(scope_rid)
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Use GET/PUT .../DefenderForStorageSettings/current.")
+        return _ok({"value": [_dfs_view(scope_rid, state.get(k))]})
+    if method == "GET":
+        return _ok(_dfs_view(scope_rid, state.get(k)))
+    if method == "DELETE":
+        state.pop(k, None)
+        return {"status": 204, "headers": {}, "body": None}
+    if method in ("PUT", "PATCH"):
+        p = (payload or {}).get("properties") or {}
+        cur = dict(state.get(k) or {})
+        ou = ((p.get("malwareScanning") or {}).get("onUpload") or {})
+        cap = ou.get("capGBPerMonth")
+        if cap is not None and (not isinstance(cap, int) or cap < -1):
+            return _err(400, "InvalidInputJson", "malwareScanning.onUpload.capGBPerMonth must be an integer >= -1.")
+        if "isEnabled" in p:
+            cur["isEnabled"] = bool(p["isEnabled"])
+        if "isEnabled" in ou:
+            cur["onUpload"] = bool(ou["isEnabled"])
+        if cap is not None:
+            cur["capGBPerMonth"] = cap
+        topic = (p.get("malwareScanning") or {}).get("scanResultsEventGridTopicResourceId")
+        if topic is not None:
+            cur["topic"] = topic
+        if "isEnabled" in (p.get("sensitiveDataDiscovery") or {}):
+            cur["sdd"] = bool(p["sensitiveDataDiscovery"]["isEnabled"])
+        if "overrideSubscriptionLevelSettings" in p:
+            cur["override"] = bool(p["overrideSubscriptionLevelSettings"])
+        if cur.get("onUpload") and not cur.get("isEnabled"):
+            return _err(400, "InvalidInputJson", "malwareScanning.onUpload can only be enabled while isEnabled is true.")
+        cur["_type"] = "microsoft.security/defenderforstoragesettings"
+        state[k] = cur
+        return _ok(_dfs_view(scope_rid, cur))
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 def _pricings(state, method, sub, rest, payload):
     cur = plans(state, sub)
     if not rest:
@@ -803,7 +869,23 @@ def _pricings(state, method, sub, rest, payload):
             entry["enablementTime"] = _now()
         entry["pricingTier"] = tier
         if props.get("subPlan"):
+            if name == "StorageAccounts" and props["subPlan"] not in ("DefenderForStorageV2", "PerTransaction"):
+                return _err(400, "InvalidInputJson", "properties.subPlan for StorageAccounts must be DefenderForStorageV2 or PerTransaction.")
             entry["subPlan"] = props["subPlan"]
+        if name == "StorageAccounts" and props.get("extensions") is not None:
+            exts = dict(entry.get("extensions") or {})
+            for e in props["extensions"] or []:
+                if e.get("name") not in ("OnUploadMalwareScanning", "SensitiveDataDiscovery"):
+                    return _err(400, "InvalidInputJson", f"Extension '{e.get('name')}' is not supported on StorageAccounts (OnUploadMalwareScanning, SensitiveDataDiscovery).")
+                en = str(e.get("isEnabled")).lower() in ("true", "1")
+                extra = dict(e.get("additionalExtensionProperties") or {})
+                cap = extra.get("CapGBPerMonthPerStorageAccount")
+                if cap is not None and (not str(cap).lstrip("-").isdigit() or int(cap) < -1):
+                    return _err(400, "InvalidInputJson", "CapGBPerMonthPerStorageAccount must be an integer >= -1 (-1 = uncapped).")
+                exts[e["name"]] = {"isEnabled": en, "additionalExtensionProperties": extra}
+            if tier != "Standard" and any(v["isEnabled"] for v in exts.values()):
+                return _err(400, "InvalidInputJson", "Extensions can only be enabled while pricingTier is Standard.")
+            entry["extensions"] = exts
         rec["plans"][name] = json.loads(json.dumps(entry))
         return _ok(_pricing_view(sub, name, entry))
     return _err(405, "MethodNotAllowed", f"{method} not allowed on pricings.")

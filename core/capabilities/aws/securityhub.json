@@ -40,7 +40,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "There is no real attacker, VPC flow, DNS or CloudTrail-event stream: findings come from a DETERMINISTIC rule engine over the control-plane calls the simulator served (CloudTrail stopped, bucket opened to anonymous access, administrator policy attached, credentials minted in a burst, repeated denials, enumeration bursts). Finding types reuse GuardDuty names where an equivalent exists; every finding carries detector=vyomi-rules. No machine-learning anomaly detection, malware protection, runtime monitoring, S3/EKS/RDS protection plans or multi-account administration. CreateSampleFindings creates clearly labelled [SAMPLE] findings. Only calls served through the simulator's own wire are observed (EC2 security-group changes on the offline appliance are covered by the posture rules instead)."
+   "There is no real attacker, VPC flow, DNS or CloudTrail-event stream: findings come from a DETERMINISTIC rule engine over the control-plane calls the simulator served (CloudTrail stopped, bucket opened to anonymous access, administrator policy attached, credentials minted in a burst, repeated denials, enumeration bursts). Finding types reuse GuardDuty names where an equivalent exists; every finding carries detector=vyomi-rules. No machine-learning anomaly detection, EBS/EC2 malware scanning, runtime monitoring, S3/EKS/RDS protection plans or multi-account administration. CreateSampleFindings creates clearly labelled [SAMPLE] findings. Only calls served through the simulator's own wire are observed (EC2 security-group changes on the offline appliance are covered by the posture rules instead)."
   ],
   "api": [
    "CreateDetector",

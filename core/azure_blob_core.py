@@ -125,6 +125,8 @@ from urllib.parse import unquote
 from core import azure_netaccess as _netaccess
 from xml.sax.saxutils import escape
 
+_DEFAULT_SUB = "00000000-0000-0000-0000-cloudlearn01"   # the single simulated subscription (core/azure_arm_core.DEFAULT_SUBSCRIPTION)
+
 X_MS_VERSION = "2021-12-02"
 
 
@@ -799,6 +801,25 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         store.persist()
         return Response(status=200, headers=_base_headers(), body=b"", media_type=None)
 
+    if comp == "tags" and method in ("GET", "PUT"):       # blob index tags (also where Defender for Storage writes its scan result)
+        if not store.container_exists(container):
+            return _err(404, "ContainerNotFound", "The specified container does not exist.")
+        ent = store.container_blobs(container).get(blob)
+        if ent is None:
+            return _err(404, "BlobNotFound", "The specified blob does not exist.")
+        from core import malware_scan_core as _mw
+        if method == "GET":
+            return Response(status=200, headers=_base_headers(), body=_mw.tags_xml(ent.get("index_tags") or {}).encode(), media_type="application/xml")
+        try:
+            new = _mw.parse_tags_xml(body)
+        except Exception:
+            return _err(400, "InvalidXmlDocument", "XML specified is not syntactically valid.")
+        if len(new) > 10 or any(not k or len(k) > 128 or len(v) > 256 for k, v in new.items()):
+            return _err(400, "InvalidTag", "Blob index tags: at most 10 tags, key 1-128 and value 0-256 characters.")
+        ent["index_tags"] = new
+        store.persist()
+        return Response(status=204, headers=_base_headers(), body=b"", media_type=None)
+
     if method == "PUT":                               # put block blob
         if not store.container_exists(container):
             return _err(404, "ContainerNotFound",
@@ -836,9 +857,15 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             "metadata": {k[len("x-ms-meta-"):]: v for k, v in headers.items()
                          if k.startswith("x-ms-meta-")},
         }
+        if headers.get("x-ms-tags"):
+            from core import malware_scan_core as _mw
+            entry["index_tags"] = _mw.parse_tags_header(headers["x-ms-tags"])
         if prev and _versioning_enabled(arm_state, acct):     # v4 WAVE 5b — keep the overwritten body as a real version
             versions = store.blob_versions.setdefault(container, {}).setdefault(blob, [])
             versions.append({**prev, "_version_id": prev["etag"]})
+        if arm_state is not None:    # Defender for Storage: malware scanning on upload (core/malware_scan_core)
+            from core import malware_scan_core as _mw
+            _mw.azure_after_put(arm_state, store, _DEFAULT_SUB, acct, container, blob, entry)
         store.container_blobs(container)[blob] = entry
         store.persist()
         store.mirror_put(container, blob, entry)

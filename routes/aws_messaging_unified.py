@@ -583,7 +583,7 @@ def _register_secscan(app) -> None:
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
     for p in ("/accounts", "/findings", "/findings/{rest:path}", "/standards/{rest:path}"):
         app.add_route(p, _make("securityhub"), methods=methods)
-    for p in ("/detector", "/detector/{rest:path}"):
+    for p in ("/detector", "/detector/{rest:path}", "/malware-protection-plan", "/malware-protection-plan/{rest:path}"):
         app.add_route(p, _make("guardduty"), methods=methods)
 
 

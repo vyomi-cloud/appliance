@@ -136,7 +136,7 @@ CORES = [
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
     "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
-    "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "schedule_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
+    "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
     "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)
     "azure_security_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)

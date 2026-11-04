@@ -216,9 +216,11 @@ RULES = {
                            "Repeated authorization failures", "One identity was denied repeatedly, consistent with permission probing."),
     "recon-burst": ("LOW", {"aws": "Discovery:IAMUser/AnomalousBehavior", "azure": "VYOMI_ARM_DISCOVERY_BURST", "gcp": "DISCOVERY_BURST"},
                     "Burst of enumeration calls", "One identity listed/described many resources across several services within two minutes."),
+    "malware-upload": ("HIGH", {"aws": "Object:S3/MaliciousFile", "azure": "Storage.Blob_AM.MalwareFound", "gcp": "MALWARE_UPLOADED"},
+                       "Malicious file uploaded to storage", "An uploaded object matched a malware signature (core/malware_scan_core: signature/hash scanner)."),
 }
 WINDOWS = {"auth-failure-burst": (5, 300), "recon-burst": (15, 120), "credential-persistence": (2, 600)}
-PLAN_OF_RULE = {"storage-public": "StorageAccounts", "block-public-access-disabled": "StorageAccounts", "key-destruction": "KeyVaults"}   # Azure default: Arm
+PLAN_OF_RULE = {"malware-upload": "StorageAccounts", "storage-public": "StorageAccounts", "block-public-access-disabled": "StorageAccounts", "key-destruction": "KeyVaults"}   # Azure default: Arm
 
 
 def detect(cloud: str, events: list) -> list:

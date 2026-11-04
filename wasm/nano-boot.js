@@ -109,7 +109,7 @@ const CORES = [
   "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
   "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
   "azure_aks_k8s_core.py",   // AKS Kubernetes object store + kubectl (runCommand) — loaded before azure_arm_core
-  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "schedule_core.py",   // image vulnerability scan + security detection engines (azure_security_core imports them)
+  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",   // image vulnerability scan + security detection engines (azure_security_core imports them)
   "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
   "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
   "azure_security_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
