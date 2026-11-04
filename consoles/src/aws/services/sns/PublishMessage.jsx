@@ -31,6 +31,7 @@ export default function PublishMessage({ params }) {
   const [structure, setStructure] = useState("identical");
   const [body, setBody] = useState("");
   const [attrs, setAttrs] = useState([]);
+  const [ttl, setTtl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   if (t.loading) return <Box padding="xxl" textAlign="center">Loading…</Box>;
@@ -45,7 +46,7 @@ export default function PublishMessage({ params }) {
         topicArn: t.data.arn, message: body, subject: subject || undefined,
         messageStructure: structure === "custom" ? "json" : undefined,
         messageGroupId: fifo ? groupId : undefined, messageDeduplicationId: fifo && dedupId ? dedupId : undefined,
-        attributes: attrs.filter((a) => a.name),
+        attributes: [...attrs.filter((a) => a.name), ...(ttl.trim() ? ["FCM", "APNS"].map((p) => ({ name: `AWS.SNS.MOBILE.${p}.TTL`, type: "Number", value: ttl.trim() })) : [])],
       });
       notify.success(`Successfully published message to "${name}".`);
       navigate("sns", "topics", name);
@@ -73,7 +74,12 @@ export default function PublishMessage({ params }) {
               </SpaceBetween>
             </Container>
 
-            <CapabilityContainer id="sns.publish.ttl" title="Time to Live (TTL) - optional" />
+            <CapabilityContainer id="sns.publish.ttl" title="Time to Live (TTL) - optional">
+              <FormField label="Time to Live (TTL) - optional" description="Seconds (0-2419200) the delivery may take, retries included; after that the message is dropped (and sent to the subscription's dead-letter queue). Sent as the AWS.SNS.MOBILE.<platform>.TTL message attributes."
+                errorText={ttl && !(/^\d+$/.test(ttl) && Number(ttl) <= 2419200) ? "Enter a whole number of seconds between 0 and 2419200." : null}>
+                <Input value={ttl} inputMode="numeric" placeholder="3600" onChange={({ detail }) => setTtl(detail.value)} ariaLabel="Time to Live" />
+              </FormField>
+            </CapabilityContainer>
 
             <Container header={<Header variant="h2">Message body</Header>}>
               <SpaceBetween size="l">

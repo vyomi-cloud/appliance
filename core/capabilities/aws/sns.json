@@ -264,26 +264,28 @@
   ]
  },
  "sns.topic.max-message-size": {
-  "title": "Maximum message size",
+  "title": "Maximum message size (per-topic payload cap)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Amazon SNS does not let you configure a topic's maximum message size; it is fixed, so there is no setting to store."
+   "Real Amazon SNS has no per-topic size setting - its payload limit is fixed (256 KiB here). Vyomi adds the topic attribute VyomiMaximumMessageSize (1-262144 bytes, SetTopicAttributes / the console field) as an extension: Publish and PublishBatch of a larger message (body + attribute names/types/values) fail with InvalidParameter 'Message too long'. SQS subscriptions additionally honour the destination queue's own MaximumMessageSize. Real SDKs/CLIs that never set the extension are unaffected."
   ],
-  "api": []
+  "api": ["SetTopicAttributes", "GetTopicAttributes", "Publish", "PublishBatch"],
+  "tests": ["tests/conformance/test_sns_size_ttl_core.py"]
  },
  "sns.publish.ttl": {
   "title": "Message time to live",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The native SNS Publish API has no message TTL parameter for topic deliveries (TTL exists only as a mobile-push message attribute)."
+   "The real TTL is the push message attribute AWS.SNS.MOBILE.<PLATFORM>.TTL (0-2419200 seconds, validated on Publish exactly so). Vyomi has no mobile push service, so the TTL is applied to the deliveries it does retry (HTTP/S, Lambda, email workers on the offline appliance; the synchronous healthyRetryPolicy simulation on Nano): once the TTL elapses no further retry is made and the message is dropped to the subscription's dead-letter queue. SQS deliveries are immediate, so TTL has no effect on them."
   ],
-  "api": []
+  "api": ["Publish"],
+  "tests": ["tests/conformance/test_sns_size_ttl_core.py"]
  },
  "sns.topic.integrations": {
   "title": "Topic Integrations tab (EventBridge rules, CloudWatch alarms and Lambda/SQS/Firehose subscriptions wired to the topic)",
