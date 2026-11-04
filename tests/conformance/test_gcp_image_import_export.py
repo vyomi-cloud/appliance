@@ -59,6 +59,8 @@ check("export to a missing bucket -> 404", call("POST", C + "/global/images/impo
 check("export unknown format -> 400", call("POST", C + "/global/images/imported-1:export", {"destinationUri": "gs://vm-export-dst/x.tar.gz", "format": "iso"})[0] == 400)
 check("export of a missing image -> 404", call("POST", C + "/global/images/zzz:export", {"destinationUri": "gs://vm-export-dst/x.tar.gz"})[0] == 404)
 
+check("instance from a missing custom image -> 404", call("POST", C + "/zones/us-central1-a/instances", {"name": "vm-x", "machineType": "e2-medium", "disks": [{"boot": True, "initializeParams": {"sourceImage": "global/images/ghost"}}]})[0] == 404)
+check("instance from the imported image", call("POST", C + "/zones/us-central1-a/instances", {"name": "vm-y", "machineType": "e2-medium", "disks": [{"boot": True, "initializeParams": {"sourceImage": "global/images/imported-1"}}]})[0] == 200)
 s, jobs = call("GET", C + "/global/imageJobs")
 items = jobs.get("items", [])
 kinds = [(j["kind"], j["status"]) for j in items]
