@@ -32,7 +32,7 @@
   "title": "Disks (OS disk, data disks)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["Standalone managed disks (Microsoft.Compute/disks, core/azure_disks_core.py) are real ARM resources: SKU / createOption (Empty needs a size, Copy/Restore need an existing source) / size 1..32767 validated, grow-only, derived diskState + managedBy + SKU-tier IOPS/MBps. Attach existing disks lists unattached disks in the VM region; attaching validates existence, region, unique LUN and that the disk is not attached to another VM (409 DiskAlreadyAttached); an attached disk cannot be deleted or have its SKU changed, growing it needs the VM deallocated, and deleting a VM detaches (keeps) its disks. Disk contents are never exposed to a guest; encryption sets, shared disks and snapshots-as-resources are not modelled. ",
-   "OS disk and data disks are modelled as an embedded field on the virtual machine resource (properties.storageProfile), the same shape the create wizard writes, rather than standalone Microsoft.Compute/disks resources — so 'Attach existing disk' (which would need a standalone Disks console to pick from) is an honest gap. 'Create and attach a new disk' and detaching a data disk are real."
+   "The OS disk and 'Create and attach a new disk' data disks are embedded on the virtual machine (properties.storageProfile), the shape the create wizard writes; only disks attached from the standalone resources below are linked to a Microsoft.Compute/disks record. Detaching a data disk is real."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_disks_core.py"]
  },
