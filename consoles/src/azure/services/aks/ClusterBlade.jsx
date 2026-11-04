@@ -112,6 +112,7 @@ export default function ClusterBlade({ params, query }) {
       nodepools: () => <NodePools a={a} />,
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
       policies: () => <PolicyPanel rg={a.resourceGroup || String(a.id).split('/')[4]} resourceId={a.id} title={`${a.name} | Policies`} />,
+      networking: () => <ClusterNetworking a={a} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
@@ -857,6 +858,32 @@ function Properties({ a }) {
         <KV label="Node resource group" value={p.nodeResourceGroup} />
         <KV label="Provisioning state" value={p.provisioningState} />
       </div>
+    </>
+  );
+}
+
+// ── Networking (networkProfile is fixed at create time; shown read-only) ─────────────────
+function ClusterNetworking({ a }) {
+  const np = a.properties?.networkProfile || {};
+  const srv = a.properties?.apiServerAccessProfile || {};
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Networking</div>
+      <CapabilityContainer id="azure.aks.networking" title="Cluster networking">
+        <div className="vy-props">
+          <KV label="Network plugin" value={np.networkPlugin ? `${np.networkPlugin}${np.networkPluginMode ? ` (${np.networkPluginMode})` : ""}` : "--"} />
+          <KV label="Network policy" value={np.networkPolicy || "none"} />
+          <KV label="Network dataplane" value={np.networkDataplane || "azure"} />
+          <KV label="Service CIDR" value={np.serviceCidr} />
+          <KV label="DNS service IP" value={np.dnsServiceIP} />
+          <KV label="Pod CIDR" value={np.podCidr || "--"} />
+          <KV label="Outbound type" value={np.outboundType} />
+          <KV label="Load balancer SKU" value={np.loadBalancerSku} />
+          <KV label="Private cluster" value={srv.enablePrivateCluster ? "Enabled" : "Disabled"} />
+          <KV label="Authorized IP ranges" value={(srv.authorizedIPRanges || []).join(", ") || "--"} />
+        </div>
+        <p style={{ fontSize: 12 }}>Cluster networking is configured when the cluster is created and cannot be changed afterwards.</p>
+      </CapabilityContainer>
     </>
   );
 }

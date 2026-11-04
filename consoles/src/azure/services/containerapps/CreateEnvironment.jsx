@@ -1,13 +1,15 @@
 /* Create a Container Apps Environment: Basics, Monitoring, Networking, Tags, Review + create
  * -> one native ARM PUT (core/azure_app_core.py's managedEnvironments branch). */
 import { useState } from "react";
-import { Input, Link, Select } from "@fluentui/react-components";
+import { Checkbox, Input, Link, Select } from "@fluentui/react-components";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
-import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
+import { Glyph } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 
@@ -20,7 +22,7 @@ export default function CreateEnvironment() {
   const existing = useAsync(() => api.listEnvironments(), [sub.id]);
   const workspaces = useAsync(() => api.listWorkspaces(), [sub.id]);
   const [newRg, setNewRg] = useState(null);
-  const [f, setF] = useState({ resourceGroup: DEFAULT_RG, name: "", location: "eastus", workspace: "", zoneRedundant: false, tags: [{ name: "", value: "" }] });
+  const [f, setF] = useState({ resourceGroup: DEFAULT_RG, name: "", location: "eastus", workspace: "", zoneRedundant: false, useVnet: false, subnet: "", internal: false, tags: [{ name: "", value: "" }] });
   const set = (k) => (_, d) => setF((x) => ({ ...x, [k]: d.value ?? d.checked }));
   const rg = newRg ?? f.resourceGroup;
 
@@ -80,11 +82,27 @@ export default function CreateEnvironment() {
     </FormSection>
   );
 
+  const subnets = useAsync(listAllSubnets, []);
+  const subnetId = f.subnet || subnets.data?.[0]?.id || "";
   const networking = (
-    <FormSection title="Virtual network">
-      <NotSimulatedContainer title="Custom virtual network" feature="Custom virtual network integration"
-        note="Vyomi always provisions the environment's own virtual network; bringing an existing VNet/subnet is not simulated." />
-    </FormSection>
+    <CapabilityContainer id="azure.containerapps.app.networking" title="Virtual network">
+      <FormSection title="Virtual network" description="Use your own virtual network. The infrastructure subnet needs at least a /23 and cannot be changed after the environment is created.">
+        <FormRow label="Use your own virtual network">
+          <Checkbox checked={f.useVnet} onChange={(_, d) => setF((x) => ({ ...x, useVnet: !!d.checked }))} aria-label="Use your own virtual network" />
+        </FormRow>
+        {f.useVnet && <>
+          <FormRow label="Infrastructure subnet" htmlFor="cae-subnet">
+            <Select id="cae-subnet" value={subnetId} onChange={(_, d) => setF((x) => ({ ...x, subnet: d.value }))} aria-label="Infrastructure subnet">
+              {(subnets.data || []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </Select>
+            {!(subnets.data || []).length && <div style={{ fontSize: 12 }}>No virtual network subnets exist yet - create a virtual network first.</div>}
+          </FormRow>
+          <FormRow label="Internal load balancer">
+            <Checkbox checked={f.internal} onChange={(_, d) => setF((x) => ({ ...x, internal: !!d.checked }))} aria-label="Internal virtual IP" />
+          </FormRow>
+        </>}
+      </FormSection>
+    </CapabilityContainer>
   );
 
   const tags = (
@@ -107,7 +125,7 @@ export default function CreateEnvironment() {
   const body = () => ({
     location: f.location,
     tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
-    properties: { zoneRedundant: f.zoneRedundant, ...(f.workspace ? { appLogsConfiguration: { destination: "log-analytics", logAnalyticsConfiguration: { customerId: f.workspace } } } : {}) },
+    properties: { zoneRedundant: f.zoneRedundant, ...(f.useVnet && subnetId ? { vnetConfiguration: { infrastructureSubnetId: subnetId, internal: f.internal } } : {}), ...(f.workspace ? { appLogsConfiguration: { destination: "log-analytics", logAnalyticsConfiguration: { customerId: f.workspace } } } : {}) },
   });
 
   const review = () => {
