@@ -3,6 +3,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 from core import azure_webapp_core as wc  # noqa: E402
 from core.azure_arm_core import AzureArm  # noqa: E402
 

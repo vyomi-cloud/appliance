@@ -26,6 +26,10 @@ Run:  PYTHONPATH=. python3 tests/conformance/test_azure_security_core.py
 import json
 from pathlib import Path
 
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 from core.azure_arm_core import AzureArm, DEFAULT_SUBSCRIPTION
 from core import kubescape_core as ks
 

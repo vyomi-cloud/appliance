@@ -132,6 +132,15 @@ DEFAULT_LOCATION = "eastus"
 TENANT_ID = "00000000-0000-0000-0000-000000000000"
 
 
+def iam_builtin_roles(sub):
+    """GUID-named built-in role definitions (core/azure_iam_core) incl. the data-plane roles."""
+    try:
+        from core import azure_iam_core as _iam
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_iam_core as _iam  # type: ignore
+    return _iam.builtin_role_definitions(sub)
+
+
 # ── One subscription per space ─────────────────────────────────────────────
 # A space is one Azure subscription, as an account is in real Azure: `az login`
 # discovers it from GET /subscriptions, the console uses it (catalog), and any
@@ -1203,17 +1212,24 @@ class AzureArm:
                     "data": {"columns": [{"name": c, "type": "string"} for c in columns], "rows": out_rows},
                     "facets": [], "resultTruncated": "false"})
 
+    # One subscription per space is the product behaviour (offline + Nano). Engine conformance
+    # scripts that address ad-hoc subscription ids set this False on the class.
+    STRICT_SUBSCRIPTION = True
+
     # ── ARM dispatcher (port of handle_arm) ───────────────────────────────
     def _arm(self, method, rest, query, payload):
         base = self._base
         segs = [s for s in rest.split("/") if s != ""]
         if not segs:
             return _err(400, "BadRequest", "Missing subscription id.")
-        if not is_space_subscription(segs[0]):
-            code, err = subscription_not_found(segs[0])
-            return {"status": code, "headers": {}, "body": err}
-        adopt_foreign_subscriptions(self.state)
-        sub = DEFAULT_SUBSCRIPTION
+        if is_space_subscription(segs[0]) or self.STRICT_SUBSCRIPTION:
+            if not is_space_subscription(segs[0]):
+                code, err = subscription_not_found(segs[0])
+                return {"status": code, "headers": {}, "body": err}
+            adopt_foreign_subscriptions(self.state)
+            sub = DEFAULT_SUBSCRIPTION
+        else:
+            sub = segs[0]   # lax (engine unit tests only): any subscription id addresses its own store
         rest_segs = segs[1:]
 
         if not rest_segs:
@@ -1311,8 +1327,10 @@ class AzureArm:
             lk = ext_engine.lock_conflict(self.state, ext_engine.target_id(sub, rg, after), method)
             if lk:
                 return {"status": lk["status"], "headers": {}, "body": lk["body"]}
-        x = ext_engine.route(self.state, method, sub, rg, after, payload, query, executor=None,
-                             blob=getattr(self, "blob_hook", None))
+        _v4_runcmd = (len(after) == 4 and after[0].lower() == "microsoft.compute" and after[1].lower() == "virtualmachines"
+                      and after[3].lower() == "runcommand")   # POST .../runCommand is v4's _vm_run_command
+        x = None if _v4_runcmd else ext_engine.route(self.state, method, sub, rg, after, payload, query, executor=None,
+                                                     blob=getattr(self, "blob_hook", None))
         if x is not None:
             if method != "GET" and x["status"] < 300 and x.get("scope"):
                 self._event(method, x["scope"], x["type"], x["name"])
@@ -1517,6 +1535,11 @@ class AzureArm:
         # catalog records, so the generic engine's own store never carries them) merged with
         # any custom role definitions created via PUT (which DO live in the generic catalog).
         if (namespace.lower() == "microsoft.authorization" and chain
+                and chain[0].lower() == "roledefinitions" and len(chain) == 2 and method == "GET"):
+            _hit = next((b for b in iam_builtin_roles(sub) if b["name"].lower() == chain[1].lower()), None)
+            if _hit is not None:
+                return _ok(_hit)
+        if (namespace.lower() == "microsoft.authorization" and chain
                 and chain[0].lower() == "roledefinitions" and len(chain) == 1):
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
@@ -1695,7 +1718,18 @@ class AzureArm:
         # Microsoft.Insights eventtypes feed in the monitor engine reads back); this class's flat
         # store is its resource map (so it persists with the rest of ARM).
         if namespace.lower() == "microsoft.web":
-            return self._web(method, sub, rg, chain, payload, query)
+            if method in ("PUT", "PATCH"):   # the ext core's contract checks (minTlsVersion, ftpsState, ...) also guard the engine
+                _bad = ext_engine.validate_write(self.state, "/subscriptions/%s%s/providers/%s/%s" % (sub, "/resourceGroups/" + rg if rg else "", namespace, "/".join(chain)), "/".join([namespace] + chain[0::2]), payload)
+                if _bad:
+                    return {"status": _bad["status"], "headers": {}, "body": _bad["body"]}
+            if len(chain) in (3, 4) and chain[0].lower() == "sites" and chain[2].lower() == "deployments":
+                return self._web_deployments(method, sub, rg, chain, payload)
+            r = self._web(method, sub, rg, chain, payload, query)
+            if method in ("PUT", "PATCH") and r["status"] < 300 and len(chain) == 4 and chain[2].lower() == "config":
+                _site = self.state.get(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{chain[1]}".lower())
+                if _site is not None:
+                    ext_engine.site_log(_site, f"Configuration '{chain[3]}' updated.")
+            return r
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -1868,7 +1902,7 @@ class AzureArm:
         if method == "DELETE":
             if "/networksecuritygroups/" in key and key.rsplit("/", 2)[-2] == "networksecuritygroups" and self.state.get(key) is not None:
                 ref = key + '"'   # a subnet or NIC referencing it by id
-                if any(k != key and ref in json.dumps(r).lower() for k, r in self.state.items() if isinstance(r, dict)):
+                if any(k != key and "/__event__/" not in k and ref in json.dumps(r).lower() for k, r in self.state.items() if isinstance(r, dict)):
                     return _err(400, "InUseNetworkSecurityGroupCannotBeDeleted",
                                 f"Network security group {key.rsplit('/', 1)[-1]} cannot be deleted because it is in use.")
             blocked = self._lock_block(rid, full_type, for_delete=True)
@@ -1919,6 +1953,8 @@ class AzureArm:
         whose activity log it belongs to (Nano wires ``on_event`` to core/nano_events
         through the registry; a no-op standalone)."""
         self._evented = True
+        if str(typ).lower() == "microsoft.authorization/locks":   # v4's per-resource Activity log feed
+            _record_activity(scope.rstrip("/").rsplit("/", 1)[-1], {"PUT": "Create lock", "PATCH": "Update lock", "DELETE": "Delete lock"}.get(method, "Update lock"), name)
         cb = getattr(self, "on_event", None)
         if cb:
             try:
@@ -2390,7 +2426,10 @@ class AzureArm:
                 return _err(400, "BadRequest", "properties.partnerNamespace must reference an existing Service Bus namespace.")
             if partner_id.lower() == ns_rid.lower():
                 return _err(400, "BadRequest", "A namespace cannot be paired with itself.")
-            if (ns_rec.get("sku") or {}).get("tier") != "Premium" or (partner_rec.get("sku") or {}).get("tier") != "Premium":
+            def _prem(r):
+                sk = r.get("sku") or {}
+                return "Premium" in (sk.get("tier"), sk.get("name"))
+            if not (_prem(ns_rec) and _prem(partner_rec)):
                 return _err(400, "BadRequest", "Geo-disaster recovery pairing requires both namespaces to be Premium tier.")
             if own_records() or mirrored_records():
                 return _err(400, "BadRequest", f"Namespace '{ns_name}' is already part of a disaster recovery pairing.")
@@ -2672,6 +2711,10 @@ class AzureArm:
         props = _merge(existing_props, payload_props) if payload_props else existing_props
 
         cp = props.get("consistencyPolicy")
+        _pcp = payload_props.get("consistencyPolicy")
+        if (isinstance(_pcp, dict) and _pcp.get("defaultConsistencyLevel") == "BoundedStaleness"
+                and (existing_props.get("consistencyPolicy") or {}).get("defaultConsistencyLevel") != "BoundedStaleness"):
+            cp = _pcp   # switching TO BoundedStaleness: the caller must supply the staleness fields (no defaulted merge)
         if isinstance(cp, dict):
             level = cp.get("defaultConsistencyLevel", "Session")
             if level not in ("Strong", "BoundedStaleness", "Session", "ConsistentPrefix", "Eventual"):
@@ -2808,10 +2851,13 @@ class AzureArm:
             },
             "assignmentCount": counts.get(name, 0),
         } for name, info in roles.items()]
+        have = {v["properties"]["roleName"] for v in value}
+        value += [dict(b, assignmentCount=0) for b in iam_builtin_roles(sub) if b["properties"]["roleName"] not in have]   # data-plane built-ins (GUID-named)
         return _ok({"value": value})
 
     def _check_access(self, sub, scope_rid, payload):
         payload = payload or {}
+        scope_rid = (payload.get("resource") or {}).get("id") or scope_rid   # checkAccess targets the body's resource when given
         subject = payload.get("subject") or {}
         principal_id = payload.get("principalId") or subject.get("principalId") or ""
         actions = payload.get("actions")
@@ -2820,10 +2866,11 @@ class AzureArm:
             actions = [{"id": single}] if single else []
         roles = self._role_catalog(sub)
         assignments = self._role_assignments(sub)
+        builtin_by_guid = {b["name"].lower(): b for b in iam_builtin_roles(sub)}
         results = []
         for a in actions:
             act = a.get("id") if isinstance(a, dict) else str(a)
-            allowed, denied, granting = False, False, []
+            allowed, denied, granting, is_data = False, False, [], False
             for rec in assignments:
                 props = rec.get("properties") or {}
                 if props.get("principalId") != principal_id:
@@ -2836,13 +2883,23 @@ class AzureArm:
                     continue
                 role_name = props.get("roleName") or (props.get("roleDefinitionId") or "").rsplit("/", 1)[-1]
                 role = roles.get(role_name)
-                if not role:
+                gb = builtin_by_guid.get(role_name.lower())          # roleDefinitionId carried a built-in GUID
+                if gb is not None:
+                    role_name = gb["properties"]["roleName"]
+                    role = roles.get(role_name)
+                if not role and gb is None:
                     continue
-                if iam_engine._matches_any(role["actions"], act) and not iam_engine._matches_any(role["notActions"], act):
+                perms = (gb or {}).get("properties", {}).get("permissions") or []
+                data_actions = [d for pm in perms for d in (pm.get("dataActions") or [])]
+                if role and iam_engine._matches_any(role["actions"], act) and not iam_engine._matches_any(role["notActions"], act):
                     allowed = True
                     granting.append(role_name)
+                elif data_actions and iam_engine._matches_any(data_actions, act):
+                    allowed = True
+                    is_data = True
+                    granting.append(role_name)
             results.append({"actionId": act, "accessDecision": "Allowed" if (allowed and not denied) else "NotAllowed",
-                            "roles": granting})
+                            "isDataAction": is_data, "roles": granting})
         return _ok({"value": results})
 
     # ── deployments (Microsoft.Resources/deployments): a bounded real template evaluator ────
@@ -3073,6 +3130,37 @@ class AzureArm:
         r = cost_engine.dispatch_capacity(self.state, method, sub, chain, payload, query, base=self._base)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
+    def _web_deployments(self, method, sub, rg, chain, payload):
+        """Kudu push deployments under a site (Microsoft.Web/sites/{s}/deployments[/{id}]): the
+        latest deployment is the active one; the site's log stream records each."""
+        site_id = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{chain[1]}"
+        site = self.state.get(site_id.lower())
+        if site is None:
+            return _err(404, "ResourceNotFound", f"Site '{chain[1]}' not found.")
+        dtype = "Microsoft.Web/sites/deployments"
+        if len(chain) == 3:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            return _ok({"value": [_view(r) for r in self.state.values()
+                                  if r.get("_type") == dtype and r["id"].lower().startswith(site_id.lower() + "/")]})
+        rid = f"{site_id}/deployments/{chain[3]}"
+        rec = self.state.get(rid.lower())
+        if method == "GET":
+            return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Deployment '{chain[3]}' not found.")
+        if method == "DELETE":
+            self.state.pop(rid.lower(), None)
+            return _ok(None, 200 if rec else 204)
+        if method not in ("PUT", "PATCH"):
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        created = rec is None
+        if created:
+            rec = {"id": rid, "name": chain[3], "type": dtype, "_type": dtype, "_sub": sub, "_rg": rg,
+                   "properties": {}, "_created": _now()}
+        rec["properties"].update(((payload or {}).get("properties")) or {})
+        self.state[rid.lower()] = rec
+        ext_engine.after_upsert(self.state, rec, payload or {})
+        return _ok(_view(rec), 201 if created else 200)
+
     def _web(self, method, sub, rg, chain, payload, query):
         r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
@@ -3137,7 +3225,8 @@ class AzureArm:
                 rec["identity"] = _vm_identity_view(rid, rec["identity"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
-        ext_engine.apply_identity(rec, payload)
+        if full_type.lower() == ext_engine.VM_T:   # VMs keep the ext-core identity shape; every other type uses _apply_identity above
+            ext_engine.apply_identity(rec, payload)
         ext_engine.mark_changed(rec)
 
         rec.setdefault("properties", {})
@@ -3542,6 +3631,9 @@ class AzureArm:
                 return _err(404, "ResourceNotFound", f"Virtual machine '{resource_name}' not found.")
             if rec.get("properties", {}).get("powerState", "PowerState/running") != "PowerState/running":
                 return _err(409, "OperationNotAllowed", "The VM must be in the running state to run commands.")
+            _sc = (payload or {}).get("script")
+            if not (_sc if isinstance(_sc, str) else " ".join(map(str, _sc or []))).strip():
+                return _err(400, "InvalidParameter", "commandId and script are required.")
             result = self._vm_run_command(rec, payload or {}, sub or DEFAULT_SUBSCRIPTION)
             self._record_activity(parent_rid, "Microsoft.Compute/virtualMachines/runCommand/action", sub or DEFAULT_SUBSCRIPTION)
             return _ok(result)
@@ -3837,12 +3929,13 @@ class AzureArm:
         if not isinstance(policies, list) or not policies:
             return _err(400, "BadRequest", "failoverPolicies is required.")
         locations = rec.get("properties", {}).get("locations") or []
-        by_name = {l.get("locationName"): dict(l) for l in locations}
+        _norm = lambda n: str(n or "").replace(" ", "").lower()   # "East US" (ext-core display name) == "eastus"
+        by_name = {_norm(l.get("locationName")): dict(l) for l in locations}
         if not by_name:
             return _err(400, "BadRequest", "This account has no configured regions to fail over between.")
         seen = set()
         for p in policies:
-            name, prio = p.get("locationName"), p.get("failoverPriority")
+            name, prio = _norm(p.get("locationName")), p.get("failoverPriority")
             if name not in by_name:
                 return _err(400, "BadRequest", f"Location '{name}' is not configured on this account.")
             if not isinstance(prio, int) or prio < 0:
@@ -3858,7 +3951,7 @@ class AzureArm:
         new_locations = sorted(by_name.values(), key=lambda l: l["failoverPriority"])
         rec["properties"]["locations"] = new_locations
         primary = new_locations[0]["locationName"]
-        rec["location"] = primary
+        rec["location"] = _norm(primary)
         rec["properties"]["writeLocations"] = [{"locationName": primary, "failoverPriority": 0}]
         rec["properties"]["readLocations"] = [{"locationName": l["locationName"], "failoverPriority": l["failoverPriority"]} for l in new_locations]
         _record_activity(account_name, "Failover", f"Microsoft.DocumentDB/databaseAccounts '{account_name}' promoted '{primary}' to the write region")

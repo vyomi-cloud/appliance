@@ -645,6 +645,13 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
             raise _not_found(name, rg)
         head = rest[0].lower()
         if head in ("api", "query", "datacollectionrules"):
+            _lr = [x.lower() for x in rest]
+            if _lr == ["api", "query"]:
+                # The ARM pass-through (.../workspaces/{ws}/api/query) is POST-only, and AzureActivity is the
+                # real Microsoft.Insights/eventtypes feed (the Activity log) — that table needs the ARM state map.
+                _tbl = str((payload or {}).get("query") or "").split("|")[0].strip().lower()
+                if (method != "POST" and not (query or {}).get("query")) or _tbl == "azureactivity":
+                    return _run_query(state, sub, rec, method, payload)
             return _data_plane(rec, rest, method, payload, query)
         if head in ("savedsearches", "tables", "datasources"):
             if len(rest) > 2:

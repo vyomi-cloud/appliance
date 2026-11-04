@@ -1,3 +1,7 @@
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 """Event Grid subscriptions scoped to a resource / resource group; real ResourceWriteSuccess events from ARM writes."""
 try:
     from core.azure_arm_core import AzureArm, DEFAULT_SUBSCRIPTION as S

@@ -1,3 +1,7 @@
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 """Azure Blob Storage WAVE 5b gap-sweep conformance — redundancy's RA secondary endpoint,
 soft delete (blobs + containers), versioning, change feed and request telemetry, all
 ENFORCED by core/azure_blob_core.py (see its module docstring, "v4 WAVE 5b" section).

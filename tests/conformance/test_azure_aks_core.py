@@ -1,3 +1,7 @@
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 """Azure AKS (Microsoft.ContainerService/managedClusters) conformance.
 
 AKS rides the SAME generic ARM catalog CRUD every other control-plane-only Azure resource

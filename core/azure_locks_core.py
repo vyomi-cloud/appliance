@@ -68,10 +68,14 @@ def upsert(state: dict, scope_rid: str, name: str, payload: dict) -> dict:
     rec = state.get(key) if existed else {
         "id": rid, "name": name, "type": "Microsoft.Authorization/locks",
         "_lock_scope": scope_rid.lower(), "_created": _now(),
+        "_scope": scope_rid, "_type": "Microsoft.Authorization/locks",   # the ext ARM core's lock enforcement reads these
     }
     level = props.get("level") or (rec.get("properties") or {}).get("level") or "CanNotDelete"
+    if level not in LEVELS:
+        return {"status": 400, "body": {"error": {"code": "InvalidLockLevel",
+                "message": f"The lock level '{level}' is not valid. Valid levels are: {', '.join(LEVELS)}."}}}
     rec["properties"] = {
-        "level": level if level in LEVELS else "CanNotDelete",
+        "level": level,
         "notes": props.get("notes", (rec.get("properties") or {}).get("notes", "")),
     }
     state[key] = rec

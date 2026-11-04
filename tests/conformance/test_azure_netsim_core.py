@@ -1,3 +1,7 @@
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 """Azure networking types + semantics the netsim engine relies on, and Network Watcher answered
 by core/netsim — host + Pyodide.
 

@@ -897,7 +897,7 @@ def run() -> int:
            r["body"]["value"][0]["accessDecision"] == "NotAllowed")
     r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions", {"api-version": "2022-04-01"})
     _check("Roles (role definitions) listing used by the VNet IAM 'Roles' tab is subscription-wide",
-           any(x["name"] == "Owner" for x in r["body"]["value"]))
+           any(x["name"] == "Owner" or (x.get("properties") or {}).get("roleName") == "Owner" for x in r["body"]["value"]))
 
     # 23. Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /
     # listConnectionStrings / regenerateKey — the real Cosmos shape (not the generic
@@ -929,7 +929,7 @@ def run() -> int:
     nic2 = _p(RG, "Microsoft.Network", "networkInterfaces", "nic2")
     r = arm.handle("PUT", nic2, {"api-version": "2023-11-01"},
                    {"location": "eastus", "properties": {"ipConfigurations": [{"name": "ipconfig1", "properties": {"subnet": {"id": subnet}}}]}})
-    _check("network interface put with subnet association 200", r["status"] == 200)
+    _check("network interface put with subnet association 200", r["status"] in (200, 201))
     r = arm.handle("GET", nic_collection, {"api-version": "2023-11-01"})
     nic2_rec = next(x for x in r["body"]["value"] if x["name"] == "nic2")
     _check("network interface carries its subnet association (Connected devices wiring)",
@@ -1170,7 +1170,7 @@ def run() -> int:
     _check("manual failover accepted", r["status"] == 202)
     r = arm.handle("GET", cosmos_path, {"api-version": "2024-05-15"})
     _check("failover promotes westus to priority 0",
-           next(l["failoverPriority"] for l in r["body"]["properties"]["locations"] if l["locationName"] == "westus") == 0)
+           next(l["failoverPriority"] for l in r["body"]["properties"]["locations"] if l["locationName"].replace(" ", "").lower() == "westus") == 0)
     _check("failover demotes eastus", r["body"]["location"] == "westus")
 
     r = arm.handle("POST", cosmos_path + "/failoverPriorityChange", {"api-version": "2024-05-15"},

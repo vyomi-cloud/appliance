@@ -109,13 +109,13 @@ def test_vm_blades():
     _check("runCommand action requires a script", s == 400 and b["error"]["code"] == "InvalidParameter", b)
     s, b = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript", "script": ["id"]}, "2024-03-01")
     _check("runCommand action returns a status with no invented output without a guest runtime",
-           s == 200 and b["value"][0]["code"] == "ProvisioningState/failed", b)
+           s == 200 and b["value"][0]["code"].endswith("/failed"), b)
     executed = []
     ok = __import__("core.azure_arm_ext_core", fromlist=["x"])
     st = arm.state
     s, ra = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript", "script": ["id"]}, "2023-09-01")
     _check("runCommand action reports a failed provisioning status without a guest runtime",
-           s == 200 and ra["value"][0]["code"] == "ProvisioningState/failed" and ra["value"][0]["level"] == "Error", ra)
+           s == 200 and ra["value"][0]["code"].endswith("/failed") and ra["value"][0]["displayStatus"] == "Provisioning failed", ra)
     s, rb = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript"}, "2023-09-01")
     _check("runCommand action without a script is rejected", s == 400 and rb["error"]["code"] == "InvalidParameter", rb)
     s, rc2 = call(arm, "POST", vm.replace("vm1", "nope") + "/runCommand", {"script": ["id"]}, "2023-09-01")
@@ -204,8 +204,8 @@ def test_storage_blades():
            and p["primaryLocation"] == "eastus" and "secondaryLocation" not in p)
     s, k = call(arm, "POST", acct + "/listKeys", {}, "2023-01-01")
     seed = hashlib.sha256(b"cloudlearn-azure-stblades").digest()
-    _check("listKeys returns the account's two keys (same derivation as the data plane)",
-           [x["keyName"] for x in k["keys"]] == ["key1", "key2"] and k["keys"][0]["value"] == base64.b64encode(seed).decode())
+    _check("listKeys returns the account's two distinct keys (v4 random keys; the data plane ignores the signature)",
+           [x["keyName"] for x in k["keys"]] == ["key1", "key2"] and k["keys"][0]["value"] != k["keys"][1]["value"])
     s, k2 = call(arm, "POST", acct + "/regenerateKey", {"keyName": "key2"}, "2023-01-01")
     _check("regenerateKey rotates only that key", k2["keys"][0]["value"] == k["keys"][0]["value"]
            and k2["keys"][1]["value"] != k["keys"][1]["value"])

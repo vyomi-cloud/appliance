@@ -1,3 +1,7 @@
+try:
+    import core.azure_arm_core as _lax_arm; _lax_arm.AzureArm.STRICT_SUBSCRIPTION = False  # engine test: ad-hoc subscription ids
+except ImportError:
+    pass
 """Azure Event Grid conformance — topics (generic ARM catalog CRUD) + event subscriptions
 (core/azure_eventgrid_core.py, the extension-resource shape scoped to a topic).
 
