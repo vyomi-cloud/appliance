@@ -2663,7 +2663,14 @@ class AzureArm:
                 from core import vuln_scan_core
             except ImportError:
                 import vuln_scan_core  # type: ignore
-            return vuln_scan_core.scan_acr_store(store)
+            reports = None
+            try:   # offline appliance only: upgrade images to a real Trivy report when the container is available
+                from providers import trivy_runner
+                trivy_runner.request_scan(store)
+                reports = trivy_runner.cached_reports()
+            except Exception:
+                pass
+            return vuln_scan_core.scan_acr_store(store, reports)
         except Exception:
             return []
 
