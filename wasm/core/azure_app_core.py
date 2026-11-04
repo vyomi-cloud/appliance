@@ -355,7 +355,8 @@ def _sync_runtime(app):
                 handles[name] = h
                 if h.get("port"):                     # real published loopback endpoint (honest, works from the host)
                     app["properties"]["vyomiEndpoint"] = f"http://{h.get('host', '127.0.0.1')}:{h['port']}"
-                    app["properties"]["vyomiRuntime"] = {"backend": "docker", "container": h.get("id"), "network": h.get("network")}
+                    app["properties"]["vyomiRuntime"] = {"backend": "docker", "container": h.get("id"),
+                                                        **({"network": h["network"]} if h.get("network") else {})}
         elif not want and name in handles and stp:
             try:
                 stp(handles.pop(name))

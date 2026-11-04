@@ -116,6 +116,16 @@ check("AzureArm (Nano) serves Microsoft.App with LRO headers and public state",
 j = arm.handle("POST", base + "/jobs/none/start", {}, {})
 check("AzureArm: unknown job → 404", j["status"] == 404)
 
+# a Docker runtime handle without a network must not leave a null in the app (the console Properties tab
+# prints it as "null")
+ac.configure_runtime(start=lambda *a, **k: {"id": "c1", "host": "127.0.0.1", "port": 8080, "network": None},
+                     stop=lambda h: None)
+st_rt = {}
+r = call(st_rt, "PUT", ["containerApps", "rt"], APP)
+check("runtime handle without a network leaves no null in properties", "null" not in __import__("json").dumps(
+    call(st_rt, "GET", ["containerApps", "rt"])["body"]["properties"].get("vyomiRuntime")), r["body"])
+ac.configure_runtime(start=None, stop=None)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 
 
