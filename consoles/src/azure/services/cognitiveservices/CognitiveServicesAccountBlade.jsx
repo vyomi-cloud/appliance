@@ -27,6 +27,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { restJson } from "../../../common/wire.js";
 import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
@@ -70,6 +71,7 @@ export default function CognitiveServicesAccountBlade({ params }) {
   else {
     const a = acct.data, reload = acct.reload;
     const P = {
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,

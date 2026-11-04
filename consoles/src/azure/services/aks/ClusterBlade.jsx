@@ -34,6 +34,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { AksKeda, AksNetworkingSettings, AksExtensions } from "../../kit/ConfigPages.jsx";
 import { AksGitOps, AksAutomatedDeployments } from "../../kit/GitOpsPages.jsx";
@@ -98,6 +99,7 @@ export default function ClusterBlade({ params, query }) {
   else {
     const a = cluster.data, reload = cluster.reload;
     const P = {
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
       supporttroubleshooting: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="aks" />,

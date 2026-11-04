@@ -151,5 +151,21 @@
   "tests": [
    "tests/conformance/test_azure_resource_monitoring.py"
   ]
+ },
+ "azure.common.diagnose": {
+  "title": "Diagnose and solve problems (AKS, API Management, App Configuration, Cognitive Services, App Service)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Detectors (core/azure_diagnose_core.py) are computed from the resource's live record, its child resources and its own Activity log: provisioning/power state, capacity, version support, network exposure, authentication and recent failed operations. There is no platform telemetry behind a simulator (no real node health, gateway traffic or model latency), so no detector reads invented metrics, and there are no auto-run remediation actions or AI troubleshooter."
+  ],
+  "api": [
+   "{resource}/providers/Microsoft.Vyomi/diagnostics (Vyomi extension)"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
  }
 }

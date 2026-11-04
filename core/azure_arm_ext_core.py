@@ -2278,6 +2278,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _health(parent, scope, rest) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
         if nsl == "microsoft.managedidentity" and t0 == "identities":
             return _identity_default(parent, scope) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+        if nsl == "microsoft.vyomi":
+            return None   # Vyomi diagnostics extension (azure_diagnose_core): v4's engine
         if nsl == "microsoft.security":
             return None   # Defender for Cloud assessments / sub-assessments: v4's security engine
         if nsl in ("microsoft.kubernetesconfiguration", "microsoft.network"):

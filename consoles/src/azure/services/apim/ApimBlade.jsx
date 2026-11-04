@@ -46,6 +46,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import TasksPanel from "../../kit/TasksPanel.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
@@ -104,6 +105,7 @@ export default function ApimBlade({ params, query }) {
   else {
     const a = svc.data, reload = svc.reload;
     const P = {
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defenderforcloud: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
