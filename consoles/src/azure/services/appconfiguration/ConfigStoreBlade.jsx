@@ -100,7 +100,7 @@ export default function ConfigStoreBlade({ params, query }) {
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
-      identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
+      identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} capabilityId="azure.appconfiguration.identity" onChanged={reload} />,
       events: () => <ResourceEvents scopeId={a.id} kind="appconfiguration" title={`${a.name} | Events`} />,
       encryption: () => <AppConfigEncryption a={a} reload={reload} />,
       explorer: () => <ConfigExplorer self={self} query={query} />,

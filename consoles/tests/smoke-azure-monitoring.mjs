@@ -15,6 +15,8 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
 const arm = (method, path, body, av = "2023-01-01") => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${av}`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+// Wait (not sleep) until a test-id element's text matches: panels render "sum 0" / empty tiles first, then fill in.
+const textWhen = async (id, re, ms = 20000) => { await page.waitForFunction(([i, src]) => new RegExp(src).test(document.querySelector(`[data-testid="${i}"]`)?.textContent || ""), [id, re.source], { timeout: ms }).catch(() => {}); return page.getByTestId(id).textContent({ timeout: 5000 }).catch(() => ""); };
 const json = (r) => { try { return JSON.parse(r.text); } catch { return {}; } };
 const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -32,7 +34,7 @@ try {
   // Metrics
   await page.goto(UI + `#/keyvaults/${RG}/${KV}/metrics`);
   await page.getByLabel("Metric", { exact: true }).waitFor({ timeout: 20000 });
-  const summary = await page.getByTestId("metric-summary").textContent({ timeout: 20000 });
+  const summary = await textWhen("metric-summary", /sum [1-9]/);
   const sum = Number(/sum (\d+)/.exec(summary)?.[1]);
   check("metrics panel shows the real ActivityOperations count (>=1 from the vault create)", sum >= 1, summary);
 
@@ -62,21 +64,19 @@ try {
 
   // Insights
   await page.goto(UI + `#/keyvaults/${RG}/${KV}/insights`);
-  await page.waitForFunction(() => /\d\s*Alert rules/.test(document.querySelector('[data-testid="insights-tiles"]')?.textContent || ""), null, { timeout: 10000 }).catch(() => {});
-  const tiles = await page.getByTestId("insights-tiles").textContent({ timeout: 10000 });
+  const tiles = await textWhen("insights-tiles", /[1-9]\s*Alert rules/, 15000);
   check("insights rolls up alert rules and operations", /1\s*Alert rules/.test(tiles), tiles);
 
   // App Service + Service Bus use the same shared panels
   await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/vymonapp${n}`, { location: "eastus", kind: "app", properties: {} }, "2023-12-01");
   await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/vymonsb${n}`, { location: "eastus", sku: { name: "Standard", tier: "Standard" } }, "2022-10-01-preview");
   await page.goto(UI + `#/appservices/${RG}/vymonapp${n}/metrics`);
-  const wsum = await page.getByTestId("metric-summary").textContent({ timeout: 20000 }).catch(() => "");
+  const wsum = await textWhen("metric-summary", /sum [1-9]/);
   check("web app metrics panel shows its Activity-log count", /sum [1-9]/.test(wsum), wsum);
   await page.goto(UI + `#/appservices/${RG}/vymonapp${n}/alerts`);
   check("web app alerts panel is the shared rule grid", await page.getByRole("button", { name: "Create" }).first().waitFor({ timeout: 10000 }).then(() => true, () => false));
   await page.goto(UI + `#/servicebus/${RG}/vymonsb${n}/insights`);
-  await page.waitForFunction(() => /\d\s*Operations recorded/.test(document.querySelector('[data-testid="insights-tiles"]')?.textContent || ""), null, { timeout: 15000 }).catch(() => {});
-  check("service bus insights rolls up its operations", /[1-9]\s*Operations recorded/.test(await page.getByTestId("insights-tiles").textContent({ timeout: 5000 }).catch(() => "")));
+  check("service bus insights rolls up its operations", /[1-9]\s*Operations recorded/.test(await textWhen("insights-tiles", /[1-9]\s*Operations recorded/, 15000)));
 
   // Managed Prometheus + Managed Grafana + dashboard
   await page.goto(UI + "#/monitor/managedprometheus");
@@ -97,13 +97,13 @@ try {
   const delOld = await arm("DELETE", `/resourceGroups/cloudlearn-rg/providers/Microsoft.Monitor/accounts/vymonprom${n}`, null, "2023-04-03");
   check("deleting the integrated Monitor workspace is refused (409)", delOld.status === 409, delOld.text.slice(0, 120));
   await page.goto(UI + "#/monitor/grafanadashboards");
-  const tot = await page.getByTestId("dash-total").textContent({ timeout: 15000 }).catch(() => "");
+  const tot = await textWhen("dash-total", /[1-9]\d* operations recorded/, 15000);
   check("dashboard shows the real operation count", /[1-9]\d* operations recorded/.test(tot), tot);
 
   // Other blades render the shared panels (not the Not-simulated panel)
   for (const [path, label] of [[`#/resourcegroups/${RG}/alerts`, "rg alerts"], [`#/resourcegroups/${RG}/metrics`, "rg metrics"]]) {
     await page.goto(UI + path);
-    await page.waitForTimeout(1500);
+    await page.getByRole("button", { name: /Create|Run|Refresh/ }).first().waitFor({ timeout: 15000 }).catch(() => {});   // the shared panel has rendered
     check(`${label} is not a Not-simulated panel`, await page.getByText("Not simulated", { exact: false }).count() === 0);
   }
   await page.goto(UI + `#/keyvaults/${RG}/${KV}`);

@@ -90,8 +90,10 @@
  },
  "azure.storage.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this storage account",
-  "level": { "nano": "full", "offline": "full" },
-  "limitations": ["Locks are only simulated at the resource scope (this account); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."],
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this storage account only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a storage account is stored and listed only: it does not block writes or deletes of the storage account itself."
+  ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.storage.activitylog": {
@@ -127,9 +129,11 @@
  },
  "azure.storage.events": {
   "title": "Events (Event Grid subscriptions on storage events)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["NOT impossible, just not yet built this wave: core/azure_blob_core.py now derives real BlobCreated/BlobDeleted events (see azure.storage.dataprotection's change feed) that a storage-account-scoped Event Grid system topic could plausibly deliver, but core/azure_eventgrid_core.py's event subscriptions are currently modelled as a child of an Event Grid topic resource only, not a generic extension on any resource (the same shape azure_arm_core.py's locks/diagnosticSettings/metrics use) — wiring that generic scope and a real delivery target (e.g. a Vyomi queue) is a reasonable next step, deliberately deferred rather than rushed in this pass."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The Events tab is the shared Event Grid resource-events panel (azure.eventgrid.resourceevents); see that entry for what is delivered. Subscriptions are modelled through the Event Grid resource, not as a separate storage-scoped system topic."
+  ],
+  "tests": ["tests/conformance/test_azure_eventgrid_scoped_core.py"]
  },
  "azure.storage.storagebrowser": {
   "title": "Storage browser",
@@ -217,9 +221,11 @@
  },
  "azure.storage.advisor": {
   "title": "Advisor recommendations",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Genuinely unmodellable: real Advisor recommendations (e.g. 'use reserved capacity', 'this account's redundancy is costlier than its access pattern needs') are trained on cost and usage PATTERNS aggregated across Microsoft's entire fleet of real customers over time — a single local simulator instance, even one that now emits real per-account metrics (see azure.storage.metrics), has no comparable fleet-wide population to analyse against."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The Advisor tab is the shared Advisor panel (azure.common.advisor): a small fixed rule set over the account's stored configuration, Security category only. Cost, Reliability and Performance recommendations need fleet-wide usage telemetry Vyomi does not have."
+  ],
+  "tests": ["tests/conformance/test_azure_health_core.py"]
  },
  "azure.storage.insights": {
   "title": "Insights (storage account metrics dashboards)",
@@ -271,9 +277,11 @@
  },
  "azure.storage.support": {
   "title": "Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Opens a real Microsoft support ticket workflow — outside what a local simulator can run."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Support + Troubleshooting is the shared support-request panel (azure.common.support): tickets are filed with Vyomi, not Microsoft."
+  ],
+  "tests": ["tests/conformance/test_azure_support_core.py"]
  },
  "azure.storage.fileservice": {
   "title": "File service settings (share soft delete, SMB settings, CORS)",

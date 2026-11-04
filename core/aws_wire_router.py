@@ -1057,8 +1057,15 @@ class AwsWireRouter:
                 tok = _ctx.REQUEST_PROVIDER.set("gcp")   # offline GCP stores are provider-scoped
             except Exception:   # Nano: plain stores
                 _ctx, tok = None, None
+            key = args[0]
+            _m = re.match(r"projects/([^/]+)/(.*)$", key)
+            if _m:   # the project part may be the number or (Nano) the `vyomi-project` alias of the one project
+                _proj = self.gcp_project() if callable(self.gcp_project) else self.gcp_project
+                _pid = gcp_proj.resolve(_m.group(1), _proj)
+                if _pid:
+                    key = f"projects/{_pid}/{_m.group(2)}"
             try:
-                return gcp_kms.dispatch(self.gcp_kms, "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+                return gcp_kms.dispatch(self.gcp_kms, "GET", "/v1/" + key, {}, {}, b"").status == 200
             finally:
                 if tok is not None:
                     _ctx.REQUEST_PROVIDER.reset(tok)

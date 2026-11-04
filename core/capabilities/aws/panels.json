@@ -1,0 +1,32 @@
+{
+  "ec2.application-migration": {
+    "title": "AWS Application Migration Service",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "AWS Application Migration Service is a separate AWS product that Vyomi does not implement; the EC2 console shows an honest Not simulated panel."
+    ]
+  },
+  "ec2.image-builder": {
+    "title": "EC2 Image Builder pipelines",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "EC2 Image Builder is a separate AWS product that Vyomi does not implement; the EC2 console shows an honest Not simulated panel."
+    ]
+  },
+  "aws.vpc.network-manager": {
+    "title": "AWS Network Manager",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Network Manager is a separate, external AWS console (global networks, Transit Gateway registrations); it is not part of the VPC simulation."
+    ]
+  }
+}

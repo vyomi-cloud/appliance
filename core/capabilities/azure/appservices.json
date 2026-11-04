@@ -263,7 +263,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.",
+   "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are real too (references to Microsoft.ManagedIdentity/userAssignedIdentities are resolved, unknown ones rejected).",
    "Backups are real archives: config/backup validates the schedule and needs a Standard+ plan and a reachable blob container SAS URL; a backup writes a .zip (site config, app settings, connection strings, slots, function code) into that container and Restore re-applies it to the same site, a deployment slot or another site (overwrite required). Scheduled backups are validated and stored but not run on a wall clock, and the archive has no file-system image or databases (Vyomi sites have no content share).",
    "Authentication providers, Application Insights linkage, TLS/SSL certificates, private endpoints, WebJobs and Service Connector are not modelled."
   ],
@@ -325,13 +325,13 @@
   ]
  },
  "azure.appservices.webapp.support": {
-  "title": "Diagnose and solve problems, Events (preview), Resource visualizer, Resource health, New support request",
+  "title": "Diagnose and solve problems, Events (preview)",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "No diagnostics engine, Event Grid wiring, resource visualizer, resource-health telemetry or support-ticket flow."
+   "No diagnostics engine or Event Grid wiring for Web Apps. Resource health (azure.common.resource_health), Resource visualizer (azure.common.resource_visualizer) and New support request (azure.common.support) are the shared panels and are not part of this gap."
   ],
   "api": []
  },

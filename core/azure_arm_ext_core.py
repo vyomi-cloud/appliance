@@ -41,6 +41,7 @@ read the same data):
 whose activity log the operation belongs to).
 """
 from __future__ import annotations
+import re
 
 import base64
 import datetime
@@ -148,6 +149,14 @@ def lock_conflict(state, rid: str, method: str):
     if m not in ("PUT", "PATCH", "DELETE", "POST"):
         return None
     if "/providers/microsoft.authorization/locks" in rid.lower():
+        return None
+    # Real ARM exempts Microsoft.Authorization operations (role assignments/definitions, deployment
+    # credentials, ...) from management locks: a lock cannot lock you out of fixing access.
+    if "/providers/microsoft.authorization/" in rid.lower():
+        return None
+    # The Microsoft.Web engine also serves lock management in the short form sites/{n}/locks/{lock};
+    # lock management is never blocked by the lock it manages (else a ReadOnly lock could not be removed).
+    if re.search(r"/providers/microsoft\.web/sites/[^/]+/locks(/[^/]+)?$", rid.lower()):
         return None
     blocking = []
     _t = str((state.get(rid.lower()) or {}).get("_type", "")).lower()

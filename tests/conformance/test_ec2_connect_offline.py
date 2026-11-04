@@ -27,7 +27,8 @@ def _check(name, cond):
 class FakeDocker:
     def __init__(self):
         self.calls = []
-        self.cpu = 1_000_000
+        self.cpu = {}      # per-instance counters: stale instances restored from local state share this stub
+        self.n = {}
 
     def ssh_info(self, inst):
         return {"user": "ubuntu", "container_ip": "172.17.0.9", "routable_ip": None, "published_port": 43999}
@@ -41,9 +42,11 @@ class FakeDocker:
     def exec(self, inst, cmd, stdin=None):
         self.calls.append(cmd)
         if cmd == em.READ_COUNTERS_CMD:
-            self.cpu += 6_000_000
-            out = (f"Inter-|\n face |\n  eth0: {1000 * len(self.calls)} 10 0 0 0 0 0 0 {500 * len(self.calls)} 5 0 0 0 0 0 0\n{em.SECTION_CPU}\nusage_usec {self.cpu}\n"
-                   f"{em.SECTION_IO}\n254:0 rbytes=0 wbytes={4096 * len(self.calls)} rios=0 wios={len(self.calls)}\n")
+            key = inst.instance_id
+            self.cpu[key] = self.cpu.get(key, 1_000_000) + 6_000_000
+            self.n[key] = n = self.n.get(key, 0) + 1
+            out = (f"Inter-|\n face |\n  eth0: {1000 * n} 10 0 0 0 0 0 0 {500 * n} 5 0 0 0 0 0 0\n{em.SECTION_CPU}\nusage_usec {self.cpu[key]}\n"
+                   f"{em.SECTION_IO}\n254:0 rbytes=0 wbytes={4096 * n} rios=0 wios={n}\n")
             return subprocess.CompletedProcess(cmd, 0, out.encode(), b"")
         return subprocess.CompletedProcess(cmd, 0, b"hello-from-container\n__VYOMI_CWD__/root\n", b"")
 

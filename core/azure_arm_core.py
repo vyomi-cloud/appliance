@@ -1173,9 +1173,12 @@ class AzureArm:
                 base.update(op.get("result") or {})
             return _ok(base)
         bare = path.split("?", 1)[0].rstrip("/")
-        if bare.endswith("/tenants") and method == "GET":
+        # Only the TOP-LEVEL account listings: a child collection named "subscriptions" (API Management
+        # service/{n}/subscriptions) or "tenants" under a resource must reach its own engine.
+        _top = "/providers/" not in bare.lower() and "/resourcegroups/" not in bare.lower()
+        if _top and bare.endswith("/tenants") and method == "GET":
             return _ok(tenants_doc())
-        if bare.endswith("/subscriptions") and method == "GET":
+        if _top and bare.endswith("/subscriptions") and method == "GET":
             return _ok({"value": [subscription_doc()]})
         # Microsoft.ResourceGraph/resources ("Open query" on any browse list's command bar):
         # real Azure Resource Graph is TENANT-scoped (no /subscriptions/{sub}/ prefix — the

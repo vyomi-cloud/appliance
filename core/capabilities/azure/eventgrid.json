@@ -143,11 +143,11 @@
     "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.topic.tools": {
-    "title": "Tasks, and Support + Troubleshooting",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": [
-      "Tasks (Azure DevOps/Boards work-item integration) and Support + Troubleshooting (opening a real Microsoft support ticket against a support plan) each depend on a real external product/account this simulator has no counterpart for — genuinely impossible to simulate locally, not a scope shortcut. Diagnose and solve problems is real; see azure.eventgrid.topic.diagnose."
-    ]
+   "title": "Tasks",
+   "level": { "nano": "not_simulated", "offline": "not_simulated" },
+   "limitations": [
+    "Tasks (Azure DevOps/Boards work-item integration) depends on a real external product/account this simulator has no counterpart for. Diagnose and solve problems is real (azure.eventgrid.topic.diagnose) and Support + Troubleshooting is the shared support-request panel (azure.common.support)."
+   ]
   },
   "azure.eventgrid.topic.exporttemplate": {
     "title": "Export template (ARM template / Bicep / Terraform)",

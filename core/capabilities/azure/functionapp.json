@@ -109,22 +109,12 @@
  },
  "azure.functionapp.locks": {
   "title": "Resource locks",
-  "level": {
-   "nano": "full",
-   "offline": "full"
-  },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Enforcement is scoped to the exact locked resource (the function app itself) — a lock does not cascade to block writes/deletes the way a resource-group- or subscription-scoped lock would in real ARM.",
-   "Locks are only simulated at the resource scope (this function app); the Locks blade's Subscription/Resource group scope buttons are an honest 'Not simulated' gap."
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM; this blade manages the locks scoped to this function app only (no scope switch). A lock on the app, or on its resource group or subscription, really blocks writes/deletes with 409 ScopeLocked (a CanNotDelete lock blocks deletes only)."
   ],
-  "api": [
-   "ManagementLocks_CreateOrUpdateAtResourceLevel",
-   "ManagementLocks_ListAtResourceLevel",
-   "ManagementLocks_DeleteAtResourceLevel"
-  ],
-  "tests": [
-   "tests/conformance/test_azure_functionapp_core.py"
-  ]
+  "api": ["ManagementLocks_CreateOrUpdateAtResourceLevel", "ManagementLocks_ListAtResourceLevel", "ManagementLocks_DeleteAtResourceLevel"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
  },
  "azure.functionapp.publishprofile": {
   "title": "Download / reset publish profile",
@@ -187,7 +177,7 @@
   "title": "Identity (system-assigned managed identity)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "User-assigned identities are stored by resource id but not resolved — Vyomi has no Managed Identity resource of its own to attach."
+   "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources, an unknown reference is rejected with 400 ResourceNotFound and the attached identity's principalId/clientId are resolved from that resource."
   ],
   "api": ["Sites_CreateOrUpdate (identity)", "Sites_Get"],
   "tests": ["tests/conformance/test_azure_functionapp_core.py"]

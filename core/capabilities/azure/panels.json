@@ -1,0 +1,222 @@
+{
+  "azure.aks.backup": {
+    "title": "Azure Backup for AKS",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Azure Backup for AKS (backup vault, backup extension, backup instances for a cluster) is not modelled; the Backup page shows an honest Not simulated panel."
+    ]
+  },
+  "azure.aks.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+    ]
+  },
+  "azure.apim.capacity": {
+    "title": "Capacity gauge",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "The capacity gauge is not modelled: Vyomi has no gateway load to measure."
+    ]
+  },
+  "azure.apim.create_monitoring": {
+    "title": "Wiring a new service to Log Analytics, Application Insights or Defender for APIs at create time",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "These create-wizard checkboxes provision separate monitoring and security resources in real Azure; Vyomi does not model that provisioning (create the Log Analytics workspace / Application Insights component separately and link it from the service)."
+    ]
+  },
+  "azure.appconfiguration.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+    ]
+  },
+  "azure.appservices.webapp.create_options": {
+    "title": "Create wizard: linked database and secure unique default hostname",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Provisioning a linked database from the Web App wizard is not modelled (create the database in its own service). 'Secure unique default hostname' has no effect: Vyomi always uses the exact name you choose, there is no name-collision suffix."
+    ]
+  },
+  "azure.cognitiveservices.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+    ]
+  },
+  "azure.cosmos.tools": {
+    "title": "Diagnose and solve problems, Tasks, Support + Troubleshooting",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both. Support + Troubleshooting (the shared support-request panel, azure.common.support) is not wired into the Cosmos DB blade."
+    ]
+  },
+  "azure.cosmos.integrations": {
+    "title": "Azure Function, Power BI and Data Migration tool integrations",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "These integration pages (Azure Function trigger wizard, Power BI, Azure Data Migration Service) need separate Azure products that Vyomi does not run; the blade shows an honest Not simulated panel for each. Use Data Explorer and the native Cosmos SDK instead."
+    ]
+  },
+  "azure.cosmos.container_blades": {
+    "title": "Browse and Scale blades for a single container",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "The standalone Browse and Scale blades are not modelled: select the container in Data Explorer (azure.cosmos.data_explorer) and use account-level throughput (azure.cosmos.scale_ru) instead."
+    ]
+  },
+  "azure.entra.bitlocker_keys": {
+    "title": "BitLocker keys",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "BitLocker recovery key escrow needs real disk encryption on real hardware, which Vyomi's software simulation does not have."
+    ]
+  },
+  "azure.entra.toolbar_actions": {
+    "title": "Entra grid toolbar actions (bulk operations, per-user MFA, columns, export settings, preview features, troubleshoot, feedback)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Toolbar actions on the Entra user, group, application, role and device grids that are not modelled: inline bulk edit, CSV bulk operations, per-user MFA, Export Data Settings, Troubleshoot / Diagnose and solve problems, Columns, Download (Export), Preview features and info, and Got feedback. Delete custom role is available from the grid's Delete command."
+    ]
+  },
+  "azure.keyvaults.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+    ]
+  },
+  "azure.keyvaults.deleted_objects": {
+    "title": "Manage deleted keys and secrets (recover / purge)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "The Manage deleted keys / Manage deleted secrets pages (soft-delete recover and purge) are not modelled; backup and restore of a key or secret (azure.keyvaults.backup_restore) are real."
+    ]
+  },
+  "azure.keyvaults.resource_access_flags": {
+    "title": "Enable access for VMs, ARM template deployment and disk encryption",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Enabling Key Vault access for virtual machines, ARM template deployment and disk encryption is not modelled: Vyomi does not run those services' Key Vault integrations, so the three access-configuration flags are not honoured."
+    ]
+  },
+  "azure.sql.integrations": {
+    "title": "Integrations (Stream Analytics, Data Sync, Fabric mirroring, Power Apps, Power Automate, Power BI)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "These integration pages need separate Azure products (Stream Analytics, SQL Data Sync, Microsoft Fabric, the Power Platform) that Vyomi does not run; the blade shows an honest Not simulated panel for each."
+    ]
+  },
+  "azure.sql.database_watcher": {
+    "title": "Database watcher",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Database watcher (Microsoft.DatabaseWatcher: continuous collection of database telemetry into Data Explorer) is not modelled."
+    ]
+  },
+  "azure.sql.tools": {
+    "title": "Diagnose and solve problems, Tasks, external SQL client",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both. Launching an external SQL client (SSMS, Azure Data Studio) from the portal is not modelled; connect to the database with any client directly or use the Query editor."
+    ]
+  },
+  "azure.sql.always_encrypted": {
+    "title": "Always Encrypted",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Always Encrypted (column master keys and client-side column encryption) is not modelled; Transparent data encryption is a separate, real-as-config page (azure.sql.transparent_data_encryption)."
+    ]
+  },
+  "azure.storage.private_endpoints": {
+    "title": "Private endpoint connections",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Private endpoint connections on the storage account are not modelled in the Networking page (the Private Endpoint resource itself is a Network service object)."
+    ]
+  },
+  "azure.resourcegroups.tools": {
+    "title": "Force delete, Resource group insights, Tasks",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Force delete of VMs and scale sets inside a group, Resource group insights and Tasks (Azure Automation / Logic Apps) are not modelled; plain delete of the group and of its resources is real (azure.resourcegroups.rg.crud)."
+    ]
+  },
+  "azure.acr.support_troubleshooting": {
+    "title": "Container Registry support and troubleshooting pages",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Diagnose and solve problems, Tasks-style automation and the other support pages of the registry blade have no backend: Vyomi collects none of the telemetry Microsoft's fleet-wide diagnostics run against. The console shows an honest Not simulated panel."
+    ]
+  }
+}
