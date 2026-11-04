@@ -100,12 +100,12 @@ def _cfg(key: str, default: str) -> str:
 
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
-                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,schemas,"
+                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,schemas,securityhub,guardduty,"
                      "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos,iam,"
                      "azure_table,rds,gcp_iam")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
-                   "sqs", "sns", "events", "scheduler", "schemas",
+                   "sqs", "sns", "events", "scheduler", "schemas", "securityhub", "guardduty",
                    "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
                    "azure_graph", "azure_cosmos", "iam", "azure_table", "rds", "gcp_iam")
 
@@ -279,6 +279,19 @@ def _project_of(path: str) -> str:
 def dispatch_service(service: str, method: str, path: str, query: dict, headers: dict,
                      body: bytes, router: AwsWireRouter | None = None, account: str | None = None,
                      on_publish=None) -> dict:
+    out = _dispatch_service(service, method, path, query, headers, body, router, account, on_publish)
+    if service not in ("securityhub", "guardduty") and not service.startswith("azure"):
+        try:   # security audit feed (core/secscan_core.py): classify the served call; never affects the response
+            (router or appliance_router()).secscan_audit("gcp" if service.startswith("gcp") else "aws", method, path, query, headers, body,
+                                                         out.get("status", 200), svc=service)
+        except Exception:
+            pass
+    return out
+
+
+def _dispatch_service(service: str, method: str, path: str, query: dict, headers: dict,
+                      body: bytes, router: AwsWireRouter | None = None, account: str | None = None,
+                      on_publish=None) -> dict:
     """Serve one request of a KNOWN service (the route already identified it) with
     that service's core over the router's store. Skips the router's header/path
     sniffing on purpose: an S3 key like `a/restapis/b` or an upload carrying
@@ -389,6 +402,8 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service in ("securityhub", "guardduty"):   # Security Hub / GuardDuty REST over the appliance stores (core/secscan_core.py)
+        return r.secscan_serve(service, method, path, body or b"")
     if service == "schemas":           # EventBridge Schemas REST, over the EventBridge store
         from core import appliance_stores as _aps, eventbridge_schemas_core
         _aps.set_request_base(headers)

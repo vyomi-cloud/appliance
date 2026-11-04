@@ -372,6 +372,7 @@ _SIGNING = {
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
+    "securityhub": "securityhub", "guardduty": "guardduty",   # Security Hub + GuardDuty (rest-json) -> core/secscan_core over the S3 store's persisted account bag
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
     "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
@@ -1021,7 +1022,78 @@ class AwsWireRouter:
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
         return self.handle(method, path, query, headers, body)
 
+    # ── security scanning (core/secscan_core.py): audit feed + Security Hub / GuardDuty inputs ──
+    def secscan_bag(self) -> dict:
+        return self.s3.account.setdefault("secscan_root", {})
+
+    def secscan_audit(self, cloud, method, path, query, headers, body, status, svc="", actor=None):
+        """Best-effort: record the served call into the control-plane audit feed (never raises)."""
+        try:
+            from core import secscan_core as sc
+            lh = _lower_headers(headers)
+            if actor is None:
+                m = _AKID_RE.search(lh.get("authorization", "") or "")
+                key = self.iam.access_keys.get(m.group(1)) if m else None
+                actor = key["user_name"] if key else "console"
+            action = self._action_name(svc, lh, query, body) if cloud == "aws" else ""
+            ev = sc.classify(cloud, method, path, query, headers, body, int(status), svc=svc, action=action or "", actor=actor)
+            if ev:
+                sc.append(sc._state(self.secscan_bag())["audit"], ev)
+        except Exception:
+            pass
+
+    def secscan_inventory(self) -> dict:
+        from core import secscan_core as sc
+        try:
+            from core import vpc_core
+            vm = vpc_core._model(self.vpc)
+        except Exception:
+            vm = None
+        trails = 0
+        try:
+            trails = sum(1 for t in self.s3.account.get("s3ext", {}).get("trails", {}).values() if t.get("_logging", True) and not t.get("_stopped"))
+        except Exception:
+            pass
+        return sc.aws_collect(s3=self.s3, vpc_model=vm, rds=self.rds, iam=self.iam, trails=trails, lam=self.lam)
+
+    def secscan_threats(self, cloud="aws") -> list:
+        from core import secscan_core as sc
+        return sc.detect(cloud, sc._state(self.secscan_bag())["audit"])
+
+    def secscan_serve(self, svc, method, path, body: bytes) -> dict:
+        from core import secscan_core as _sc
+        bag = self.secscan_bag()
+        if svc == "securityhub":
+            rows = self.secscan_posture() if _sc._state(bag)["hub"]["enabled"] else []
+            r = _sc.hub_dispatch(bag, method, path, body, rows, self.secscan_threats())
+        else:
+            r = _sc.gd_dispatch(bag, method, path, body, self.secscan_threats())
+        if method != "GET":
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+        return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
+
+    def secscan_posture(self) -> list:
+        from core import secscan_core as sc
+        return sc.aws_posture_findings(self.secscan_inventory(), [])
+
     def handle(self, method, path, query, headers, body):
+        """Route ONE native-wire request, then record it in the security audit feed."""
+        r = self._handle_raw(method, path, query, headers, body)
+        try:
+            lh = _lower_headers(headers)
+            svc = self.service_of(method, path, lh, body if isinstance(body, (bytes, bytearray)) else (body or b""), query)
+            if svc and not svc.startswith(("gcp-", "az-", "azure")):
+                self.secscan_audit("aws", method, path, query, headers, body, r.get("status", 200), svc=svc)
+            elif svc and svc.startswith("gcp-"):
+                self.secscan_audit("gcp", method, path, query, headers, body, r.get("status", 200), svc=svc)
+        except Exception:
+            pass
+        return r
+
+    def _handle_raw(self, method, path, query, headers, body):
         """Route ONE native-wire request. Returns {status, headers, body(bytes)}.
         SYNC services only — the RDS Data API goes through ahandle()."""
         lheaders = _lower_headers(headers)
@@ -1052,6 +1124,8 @@ class AwsWireRouter:
             from core import ec2_ops_core
             r = ec2_ops_core.rbin_dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
             return r
+        if svc in ("securityhub", "guardduty"):
+            return self.secscan_serve(svc, method, path, bytes(body))
         if svc == "schemas":
             from core import eventbridge_schemas_core as _schemas
             r = _schemas.dispatch(self.msg, method, path, query or {}, headers or {}, bytes(body))
