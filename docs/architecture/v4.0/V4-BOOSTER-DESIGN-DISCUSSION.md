@@ -165,6 +165,17 @@ because the two sides only share a neutral link, exactly as real AWS<->GCP VPN w
 - **Honest limits:** WireGuard, not IPsec (no real router can connect; downloadable customer-gateway config must say so); only booster-homed spaces
   (labelled); both ends need the portal for the introduction.
 
+### 15. Private management interface (control API isolation)
+- The booster's control API binds **only to loopback and a private management interface (`wg-mgmt`)**, never to the LAN or public internet.
+  `wg-mgmt` is firewalled to our control plane; other boosters cannot connect. It is part of the locked-down runtime (§8): invisible to
+  and not editable by users, and **not** exposed as a simulated-cloud VPN service (user-created VPNs in §14 are separate).
+- Reaching it from a tab: unchanged order — local HTTPS hostname -> Cloudflare relay -> unreachable (block). A portal-hosted WireGuard
+  hub-and-spoke relay was considered and rejected: it duplicates Cloudflare, adds cost/privacy burden to us, and UDP is blocked on some networks.
+- The portal's `<id>.local.vyomi.cloud` record may resolve to the booster's stable management address for devices that have a client.
+- **Optional, later (power users):** a WireGuard/Tailscale-style client on a user's device lets any browser (incl. Safari) reach the booster
+  by its private address with no relay. A browser tab cannot join WireGuard by itself, and an HTTPS page still needs the trusted hostname/cert
+  on that address (no plain-HTTP private IP).
+
 ### Still open
 Public-exposure details (tier limits for TTL/endpoints/bandwidth, hostname scheme, bandwidth cost, terms, first release vs separate track);
 free-tier gating list review; borrowable idle share in the 50/50 split; vyomi.cloud DNS host; current CA rate limits; GCP/Azure VPN core state check.
