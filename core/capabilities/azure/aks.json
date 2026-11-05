@@ -234,6 +234,19 @@
    "tests/conformance/test_azure_cfgext_core.py"
   ]
  },
+ "azure.aks.monitoring": {
+  "title": "Container Insights / Managed Prometheus / Managed Grafana",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Toggling Container Insights (addonProfiles.omsagent), Managed Prometheus (azureMonitorProfile.metrics) and Grafana really creates/links the Data Collection Rules, rule associations, Azure Monitor workspace and Grafana integration (validated against existing workspaces); disabling or deleting the cluster removes them. The ama-logs / ama-metrics agents do not run: no container logs or Prometheus metrics are collected, and Grafana is not a running server."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aksmon_core.py"
+  ]
+ },
  "azure.aks.gitops": {
   "title": "GitOps (Flux configurations: Microsoft.KubernetesConfiguration/fluxConfigurations)",
   "level": {

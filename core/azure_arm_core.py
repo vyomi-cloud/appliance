@@ -40,6 +40,11 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # AKS Container Insights / Managed Prometheus / Grafana toggles -> DCR + Monitor workspace + Grafana
+    from core import azure_aksmon_core as aksmon_engine
+except ImportError:
+    import azure_aksmon_core as aksmon_engine      # type: ignore
+
 try:                                              # Azure Monitor workspaces + Managed Grafana (Microsoft.Monitor, Microsoft.Dashboard)
     from core import azure_monitorproducts_core as monprod_engine
 except ImportError:
@@ -2124,6 +2129,8 @@ class AzureArm:
                     if blocked:
                         return blocked
             rec = self.state.pop(key, None)
+            if rec is not None and aksmon_engine.handles(rec):
+                aksmon_engine.cleanup(self.state, rec)
             if rec is not None:
                 dpb.cosmos_before_delete(self.state, rec)
                 dpb.storage_before_delete(self.state, rec)
@@ -3579,6 +3586,7 @@ class AzureArm:
 
     def _upsert(self, rid, key, full_type, name, catalog, payload, base, patch=False):
         existed = key in self.state
+        _aks_old = self.state.get(key)
         is_top = full_type.lower() == (catalog["namespace"] + "/" + catalog["type"]).lower()
         defaults = _expand_tokens(catalog.get("defaults", {}), name, base) if is_top else {"properties": {"provisioningState": "Succeeded"}}
         endpoints = catalog.get("endpoints", {}) if is_top else {}
@@ -3653,6 +3661,15 @@ class AzureArm:
             # cluster, from the moment it comes up — same seeding convention as the default
             # namespaces above (properties.namespaces, via the catalog defaults).
             k8s_engine.seed_storage_classes(rec)
+        if full_type.lower() == "microsoft.containerservice/managedclusters":
+            self.state[key] = rec
+            bad = aksmon_engine.reconcile(self.state, rec)
+            if bad is not None:
+                if existed:
+                    self.state[key] = _aks_old
+                else:
+                    self.state.pop(key, None)
+                return bad
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 
