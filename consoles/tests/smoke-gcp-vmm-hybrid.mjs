@@ -128,7 +128,9 @@ try {
   await page.getByText(`ic-${N}`).first().waitFor();
   check("Interconnect ACTIVE on the wire", (await wj(`/compute/v1/projects/${P}/global/interconnects/ic-${N}`)).state === "ACTIVE");
   await page.getByRole("tab", { name: "VLAN attachments" }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();   // reloads the Interconnect choices too
   await page.getByRole("button", { name: "Create VLAN attachment" }).click();
+  await dlg().getByText(`ic-${N}`).first().waitFor({ timeout: 30000 });   // the select defaults to the freshly ordered Interconnect
   await dlg().getByLabel("Name", { exact: true }).fill(`vlan-${N}`);
   await dlg().getByLabel("Cloud Router name (same region)").fill(`rtr-${N}`);
   await submit("Create");

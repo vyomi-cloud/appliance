@@ -97,11 +97,11 @@ export function Byoip() {
 export function VlanAttachments({ title = "VPC connectivity" }) {
   const notify = useNotify();
   const project = useProject();
-  const { data: ics = [] } = useAsync(api.listInterconnects, [project]);
+  const { data: ics = [], reload: reloadIcs } = useAsync(api.listInterconnects, [project]);
   const [region, setRegion] = useState("us-central1");
   const { data: routers = [] } = useAsync(() => api.listRoutersIn(region), [project, region]);
   return (
-    <ListPage title={title} capId="gcp.networking.hybrid-connectivity" sectionTitle="VLAN attachments" resourceName="VLAN attachments" load={api.listVlanAttachments}
+    <ListPage title={title} capId="gcp.networking.hybrid-connectivity" sectionTitle="VLAN attachments" resourceName="VLAN attachments" load={() => { reloadIcs?.(); return api.listVlanAttachments(); }}
       rowKey={(a) => `${a._region}/${a.name}`} deleteTitle={(s) => `Delete ${s.length} VLAN attachment(s)?`} deleteFn={(a) => api.deleteVlanAttachment(a._region, a.name)}
       emptyText="No VLAN attachments."
       extraActions={({ sel, data, reload }) => {

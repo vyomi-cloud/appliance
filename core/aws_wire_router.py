@@ -1899,14 +1899,16 @@ class AwsWireRouter:
             _crm = svc == "gcp-resourcemanager" and self.STRICT_GCP_PROJECT and gcp_proj.CRM_PATH_RE.match(path)   # the project's own describe/list; folders, org policy, asset search stay v4's
             if err is not None or _crm:
                 st, obj = err if err is not None else gcp_proj.crm_dispatch(method, path, query, proj)
-                if st == 200 and path.startswith("/v3/projects/") and isinstance(obj, dict) and obj.get("projectId") and "parent" not in obj:
-                    # the project's real backing organization (Resource Manager store), as a v3 Project carries it
-                    try:
-                        par = gcp_rm._get_or_create_project(self.gcp_rm, obj["projectId"]).get("parent")
-                        if isinstance(par, dict) and par.get("id"):
-                            obj["parent"] = dict(par)   # same shape the Resource Manager core serves
-                    except Exception:
-                        pass
+                if st == 200 and path.startswith("/v3/projects") and isinstance(obj, dict):
+                    # v3 Projects carry their real backing organization (Resource Manager store) as `parent`
+                    for _pj in ([obj] if obj.get("projectId") else obj.get("projects") or []):
+                        if isinstance(_pj, dict) and _pj.get("projectId") and "parent" not in _pj:
+                            try:
+                                par = gcp_rm._get_or_create_project(self.gcp_rm, _pj["projectId"]).get("parent")
+                                if isinstance(par, dict) and par.get("id"):
+                                    _pj["parent"] = dict(par)   # same shape the Resource Manager core serves
+                            except Exception:
+                                pass
                 return {"status": st, "headers": {"content-type": "application/json"},
                         "body": json.dumps(obj).encode()}
             if svc == "gcp-backupdr":
