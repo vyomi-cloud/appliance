@@ -1,5 +1,6 @@
 /* AWS lens shell: top bar (services menu, search, region, preferences), app layout with the
  * service's side navigation, breadcrumbs, notifications and the help panel. */
+import { isNano } from "../common/NanoVmPanel.jsx";
 import { Suspense, useEffect, useState } from "react";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import { iconDataUri } from "../common/icons/ServiceIcon.jsx";
@@ -92,7 +93,7 @@ export default function App() {
       </div>
       <AppLayout
         headerSelector="#vyomi-top"
-        footerSelector="#vyomi-footer"
+        footerSelector={isNano() ? undefined : "#vyomi-footer"}
         navigationHide={!nav}
         navigationOpen={navOpen}
         onNavigationChange={({ detail }) => setNavOpen(detail.open)}
@@ -113,12 +114,12 @@ export default function App() {
         onToolsChange={({ detail }) => setToolsOpen(detail.open)}
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}
       />
-      <footer id="vyomi-footer" style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 32, zIndex: 1001, display: "flex", alignItems: "center", gap: 20, padding: "0 16px", background: "#0f141a", color: "#d1d5db", fontSize: 12, fontFamily: '"Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif' }}>
+      {!isNano() && <footer id="vyomi-footer" style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 32, zIndex: 1001, display: "flex", alignItems: "center", gap: 20, padding: "0 16px", background: "#0f141a", color: "#d1d5db", fontSize: 12, fontFamily: '"Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif' }}>
         <a href="#/" style={{ color: "inherit", textDecoration: "none" }}>Console Home</a>
         <a href={classicHref("")} style={{ color: "inherit", textDecoration: "none" }}>Classic console</a>
         <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>Feedback</a>
         <span style={{ marginLeft: "auto" }}>Vyomi — local cloud simulator · not affiliated with Amazon Web Services</span>
-      </footer>
+      </footer>}
     </>
   );
 }
