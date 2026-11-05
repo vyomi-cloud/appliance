@@ -20,7 +20,7 @@ const ready = async () => { if (process.env.NANO) await pg.waitForFunction(() =>
  * not survive a document reload - so on Nano re-navigate inside the SPA instead of reloading. */
 const refresh = async () => { if (process.env.NANO) { const u = pg.url(); await pg.goto(UI + "#/"); await pg.waitForTimeout(300); await pg.goto(u); } else await refresh(); };
 await ready();
-const project = await pg.evaluate(() => (window.__vyomiProject || localStorage.getItem("vyomi.gcp.project") || (process.env.NANO === "1" ? "nano-project" : "vyomi-project")));
+const project = await pg.evaluate((nano) => (window.__vyomiProject || localStorage.getItem("vyomi.gcp.project") || (nano ? "nano-project" : "vyomi-project")), process.env.NANO === "1");
 // ── Trace explorer
 await pg.goto(`${UI}#/monitoring/trace-explorer`); await pg.waitForTimeout(1500);
 ok("idle: percentiles 0 and honest empty heatmap", (await pg.getByTestId("trace-heatmap-empty").count()) === 1);

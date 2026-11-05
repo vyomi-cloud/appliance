@@ -30,7 +30,7 @@ const nsPanel = async () => (await page.locator("[data-vyomi-not-simulated]").co
 await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
 if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
-const project = await page.evaluate(() => { try { return localStorage.getItem("vyomi.v4.gcp.project") || (process.env.NANO === "1" ? "nano-project" : "vyomi-project"); } catch { return "vyomi-project"; } });
+const project = await page.evaluate((nano) => { try { return localStorage.getItem("vyomi.v4.gcp.project") || (nano ? "nano-project" : "vyomi-project"); } catch { return nano ? "nano-project" : "vyomi-project"; } }, process.env.NANO === "1");
 const go = async (hash, heading) => { await page.goto(UI + hash); await page.getByRole("heading", { name: heading }).first().waitFor({ timeout: 60000 }); };
 
 // ── folders ──────────────────────────────────────────────────────────────
