@@ -64,6 +64,7 @@ export default function CreateKubernetesCluster() {
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listClusters(), [sub.id]);
+  const laws = useAsync(() => api.listLogWorkspaces(), [sub.id]);
   const [newRg, setNewRg] = useState(null);
   const [f, setF] = useState({
     resourceGroup: DEFAULT_RG, name: "", preset: "Production Standard", location: "eastus",
@@ -260,12 +261,21 @@ export default function CreateKubernetesCluster() {
     <>
       <FormSection title="Container Insights">
         <FormRow label="Enable Container Insights"><Checkbox checked={f.containerInsights} onChange={chk("containerInsights")} aria-label="Enable Container Insights" /></FormRow>
+        {f.containerInsights && (
+          <FormRow label="Log Analytics workspace" htmlFor="aks-law">
+            <Select id="aks-law" aria-label="Log Analytics workspace" value={f.lawId || ""} onChange={set("lawId")}>
+              <option value="">(New) DefaultWorkspace-{f.location}</option>
+              {(laws.data || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </Select>
+          </FormRow>
+        )}
       </FormSection>
       <FormSection title="Managed Prometheus">
         <FormRow label="Enable Prometheus metrics"><Checkbox checked={f.prometheus} onChange={chk("prometheus")} aria-label="Enable Prometheus metrics" /></FormRow>
       </FormSection>
       <FormSection title="Managed Grafana">
-        <FormRow label="Enable Grafana"><Checkbox checked={f.grafana} onChange={chk("grafana")} aria-label="Enable Grafana" /></FormRow>
+        <FormRow label="Enable Grafana"><Checkbox checked={f.grafana} disabled={!f.prometheus} onChange={chk("grafana")} aria-label="Enable Grafana" /></FormRow>
+        {f.prometheus && <p style={{ fontSize: 13 }}>Creates the Azure Monitor workspace DefaultAzureMonitorWorkspace-{f.location}, its data collection rule and association{f.grafana ? ", and an Azure Managed Grafana workspace linked to it" : ""}.</p>}
       </FormSection>
       <FormSection title="Alerts">
         <FormRow label="Enable recommended alert rules"><Checkbox checked={f.alertRules} onChange={chk("alertRules")} aria-label="Enable recommended alert rules" /></FormRow>
@@ -321,7 +331,7 @@ export default function CreateKubernetesCluster() {
         <h3>Integrations</h3>
         {dl([["Azure Policy", yes(f.azurePolicy)], ["Istio", yes(f.istio)]])}
         <h3>Monitoring</h3>
-        {dl([["Container Insights", yes(f.containerInsights)], ["Managed Prometheus", yes(f.prometheus)]])}
+        {dl([["Container Insights", yes(f.containerInsights)], ["Managed Prometheus", yes(f.prometheus)], ["Managed Grafana", yes(f.prometheus && f.grafana)]])}
         <h3>Security</h3>
         {dl([["Microsoft Defender", yes(f.defender)], ["Workload identity", yes(f.workloadIdentity)]])}
         <h3>Advanced</h3>
@@ -333,6 +343,10 @@ export default function CreateKubernetesCluster() {
   const onCreate = async () => {
     try {
       const b = body();
+      if (f.containerInsights) {
+        const lawId = await api.ensureWorkspace(rg, f.location, f.lawId);
+        b.properties.addonProfiles.omsagent.config = { logAnalyticsWorkspaceResourceID: lawId };
+      }
       await api.createCluster(rg, f.name, b);
       if (f.defender) await setPricing("Containers", "Standard");   // Defender for Containers is a subscription-wide plan
       for (const pool of f.nodePools) {

@@ -30,6 +30,7 @@ import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import TasksPanel from "../../kit/TasksPanel.jsx";
+import MonitorSettings from "./MonitorSettings.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
@@ -61,7 +62,7 @@ export const MENU = [
     { id: "policies", label: "Policies" }, { id: "properties", label: "Properties" }, { id: "locks", label: "Locks" },
   ] },
   { group: "Monitoring", items: [
-    { id: "insights", label: "Insights" }, { id: "alerts", label: "Alerts" }, { id: "metrics", label: "Metrics" },
+    { id: "monitorsettings", label: "Monitor settings" }, { id: "insights", label: "Insights" }, { id: "alerts", label: "Alerts" }, { id: "metrics", label: "Metrics" },
     { id: "diagnosticsettings", label: "Diagnostic settings" }, { id: "advisorrecommendations", label: "Advisor recommendations" },
     { id: "logs", label: "Logs" }, { id: "workbooks", label: "Workbooks" },
   ] },
@@ -132,6 +133,7 @@ export default function ClusterBlade({ params, query }) {
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
       logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      monitorsettings: () => <MonitorSettings a={a} reload={reload} />,
       insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
       workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
     }[panel];
