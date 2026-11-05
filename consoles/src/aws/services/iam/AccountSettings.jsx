@@ -1,5 +1,5 @@
 /* Account settings — Password policy, STS and Centralized root access (real Organizations/IAM APIs)
- * are real; the Role manager section is a registered gap (iam.organizations.role-manager). */
+ * are real; Role manager is a real inventory/delete-unused page (iam.organizations.role-manager). */
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ContentLayout from "@cloudscape-design/components/content-layout";
@@ -10,6 +10,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import RoleManager from "./RoleManager.jsx";
 import ServerCertificates from "./ServerCertificates.jsx";
 import { CentralizedRootAccessPanel } from "./OrgPages.jsx";
 import * as api from "./api.js";
@@ -54,7 +55,7 @@ export default function AccountSettings() {
           ["Password strength", pol ? "Custom" : "IAM default"],
           ["Other requirements", describeOther(pol)],
         ]} />
-        <CapabilityContainer id="iam.organizations.role-manager" title="Role manager" />
+        <RoleManager />
         <CentralizedRootAccessPanel />
         <StsPanel />
         <ServerCertificates />

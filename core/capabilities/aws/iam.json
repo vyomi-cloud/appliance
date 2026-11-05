@@ -240,10 +240,12 @@
  },
  "iam.organizations.role-manager": {
   "title": "Role manager (IAM account setting)",
-  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "level": {"nano": "limited", "offline": "limited"},
   "limitations": [
-   "The IAM Role manager account setting has no public API and no Vyomi backing; it is not simulated."
-  ]
+   "Real on both substrates: a role inventory (Vyomi-only IAM actions ListRoleInventory / DeleteUnusedRoles over the real role store) with last-used / unused detection, trust principals, policy counts, and a delete-unused flow that detaches policies and deletes only roles that are unused and have no dependents (instance profiles, Lambda execution roles, EC2 instances using the role's profile); service-linked roles are refused. Policy attach/detach and trust-policy edits use the stock IAM actions on the role detail page. GetRole now returns RoleLastUsed.",
+   "Last-used is the simulator's own recorded evidence only (a Lambda invocation under the execution role); Vyomi has no STS AssumeRole, so role sessions from outside the simulator and other services' use of a role are not observed. The AWS console Role manager itself has no public API, so this is a Vyomi-shaped equivalent."
+  ],
+  "tests": ["tests/conformance/test_iam_role_manager.py"]
  },
  "iam.organizations.service-access-report": {
   "title": "Service access report for an SCP",

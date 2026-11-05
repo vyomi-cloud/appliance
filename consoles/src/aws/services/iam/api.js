@@ -336,3 +336,18 @@ export async function organizationsAccessReport(EntityPath, OrganizationsPolicyI
   const r = (await call("GetOrganizationsAccessReport", { JobId })).GetOrganizationsAccessReportResponse.GetOrganizationsAccessReportResult;
   return { ...r, AccessDetails: asList(r.AccessDetails?.member) };
 }
+
+// ── Role manager (Vyomi-only IAM actions; see core/iam_core.py ListRoleInventory / DeleteUnusedRoles) ──
+export const listRoleInventory = async (unusedDays = 90) => {
+  const r = (await call("ListRoleInventory", { UnusedDays: unusedDays })).ListRoleInventoryResponse.ListRoleInventoryResult;
+  return asList(r.Roles?.member).map((x) => ({
+    ...x, TrustedPrincipals: asList(x.TrustedPrincipals?.member), DeleteBlockers: asList(x.DeleteBlockers?.member),
+    ReferencedBy: asList(x.ReferencedBy?.member),
+  }));
+};
+export const deleteUnusedRoles = async (names, unusedDays = 90) => {
+  const p = { UnusedDays: unusedDays };
+  names.forEach((n, i) => { p[`RoleNames.member.${i + 1}`] = n; });
+  const r = (await call("DeleteUnusedRoles", p)).DeleteUnusedRolesResponse.DeleteUnusedRolesResult;
+  return asList(r.Results?.member);
+};

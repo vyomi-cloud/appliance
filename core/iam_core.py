@@ -162,6 +162,8 @@ def _role_xml(store, r: dict) -> str:
             + _el("Description", r.get("description", "")) + _el("MaxSessionDuration", r.get("max_session_duration", 3600))
             + (f"<AssumeRolePolicyDocument>{trust}</AssumeRolePolicyDocument>" if trust else "")
             + (_el("PermissionsBoundary", r["permissions_boundary"]) if r.get("permissions_boundary") else "")
+            + (("<RoleLastUsed>" + _el("LastUsedDate", r["role_last_used"]["time"]) + _el("Region", r["role_last_used"].get("region", "us-east-1"))
+                + "</RoleLastUsed>") if r.get("role_last_used") else "<RoleLastUsed/>")
             + "</Role>")
 
 
@@ -3130,6 +3132,140 @@ _OPS.update({"CreateInstanceProfile": _create_instance_profile, "GetInstanceProf
              "ListInstanceProfiles": _list_instance_profiles, "ListInstanceProfilesForRole": _list_instance_profiles_for_role,
              "DeleteInstanceProfile": _delete_instance_profile, "AddRoleToInstanceProfile": _add_role_to_instance_profile,
              "RemoveRoleFromInstanceProfile": _remove_role_from_instance_profile})
+
+
+# ── Role manager (Vyomi-only IAM actions over the real role store) ────────────────
+# ListRoleInventory / DeleteUnusedRoles back the console "Role manager": a role inventory with last-used /
+# unused detection, trust principals, policy counts and the resources that still depend on each role, plus a
+# delete-unused flow that refuses roles that are in use or referenced. "Last used" is the simulator's OWN recorded
+# evidence only: record_role_use() is called when a Lambda function with that execution role is invoked
+# (aws_wire_router hooks lambda_core) and by anything else that calls it; there is no STS AssumeRole here, so
+# role sessions from outside the simulator are not observed. Dependency evidence comes from `store.role_usage_probe`
+# (installed by the router: Lambda execution roles, EC2 instance profiles) plus IAM's own instance-profile links.
+_UNUSED_DAYS_DEFAULT = 90
+
+
+def record_role_use(store, role: str, service: str, action: str | None = None, region: str | None = None) -> bool:
+    name = role.rsplit("/", 1)[-1] if role else ""
+    r = store.get_role(name) if name else None
+    if not r:
+        return False
+    r["role_last_used"] = {"time": _now(), "service": _namespace(service), "region": region or "us-east-1"}
+    store.activity.append({"principal_arn": r["arn"], "service": service, "action": action, "time": _now()})
+    if len(store.activity) > _ACTIVITY_CAP:
+        del store.activity[: len(store.activity) - _ACTIVITY_CAP]
+    store.persist()
+    return True
+
+
+def _role_refs(store, r: dict) -> list[dict]:
+    refs = [{"Type": "InstanceProfile", "Id": n} for n, ip in sorted(_ip_all(store).items()) if r["role_name"] in ip["roles"]]
+    probe = getattr(store, "role_usage_probe", None)
+    if probe:
+        try:
+            refs += [x for x in probe(r) if isinstance(x, dict)]
+        except Exception:
+            pass
+    return refs
+
+
+def _trust_principals(doc: dict) -> list[str]:
+    out = []
+    stmts = (doc or {}).get("Statement", [])
+    for st in stmts if isinstance(stmts, list) else [stmts]:
+        pr = st.get("Principal") if isinstance(st, dict) else None
+        if pr == "*":
+            out.append("*")
+        elif isinstance(pr, dict):
+            for k, v in pr.items():
+                out += [f"{k}:{x}" for x in (v if isinstance(v, list) else [v])]
+    return out
+
+
+def _parse_ts(t: str):
+    return datetime.strptime(t[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def _role_status(r: dict, days: int):
+    now = datetime.now(timezone.utc)
+    lu = (r.get("role_last_used") or {}).get("time")
+    if lu:
+        idle = (now - _parse_ts(lu)).days
+        return ("Active" if idle < days else "Unused"), idle
+    age = (now - _parse_ts(r["created"])).days
+    return ("NeverUsed" if age >= days else "New"), age
+
+
+def _unused_days(params) -> int:
+    try:
+        d = int(params.get("UnusedDays") or _UNUSED_DAYS_DEFAULT)
+    except ValueError:
+        raise IamError("ValidationError", "UnusedDays must be an integer.", 400)
+    if not 1 <= d <= 3650:
+        raise IamError("ValidationError", "UnusedDays must be between 1 and 3650.", 400)
+    return d
+
+
+def _role_blockers(store, r: dict, days: int) -> list[str]:
+    out = []
+    if r.get("path", "/").startswith("/aws-service-role/"):
+        out.append("service-linked role (managed by its AWS service)")
+    st, _ = _role_status(r, days)
+    if st in ("Active", "New"):
+        out.append("role is " + ("recently used" if st == "Active" else "newer than the unused-days window"))
+    for ref in _role_refs(store, r):
+        out.append(f"referenced by {ref['Type']} {ref['Id']}")
+    return out
+
+
+def _list_role_inventory(store, params):
+    days = _unused_days(params)
+    items = []
+    for n in sorted(store.roles):
+        r = store.roles[n]
+        st, idle = _role_status(r, days)
+        refs = _role_refs(store, r)
+        blockers = _role_blockers(store, r, days)
+        lu = r.get("role_last_used") or {}
+        items.append("<member>" + _el("RoleName", n) + _el("Arn", r["arn"]) + _el("Path", r.get("path", "/"))
+                     + _el("CreateDate", r["created"]) + _el("Status", st) + _el("IdleDays", idle)
+                     + _el("LastUsedDate", lu.get("time", "")) + _el("LastUsedService", lu.get("service", ""))
+                     + _el("AttachedPolicyCount", len(r["attached_policies"])) + _el("InlinePolicyCount", len(r["inline_policies"]))
+                     + "<TrustedPrincipals>" + "".join(_el("member", t) for t in _trust_principals(r.get("assume_role_policy_document"))) + "</TrustedPrincipals>"
+                     + "<ReferencedBy>" + "".join("<member>" + _el("Type", x["Type"]) + _el("Id", x["Id"]) + "</member>" for x in refs) + "</ReferencedBy>"
+                     + _el("Deletable", "false" if blockers else "true")
+                     + "<DeleteBlockers>" + "".join(_el("member", b) for b in blockers) + "</DeleteBlockers></member>")
+    return _envelope("ListRoleInventory", f"<UnusedDays>{days}</UnusedDays><Roles>{''.join(items)}</Roles>")
+
+
+def _delete_unused_roles(store, params):
+    days = _unused_days(params)
+    names = _members(params, "RoleNames")
+    if not names:
+        raise IamError("ValidationError", "RoleNames is required.", 400)
+    if len(names) > 50:
+        raise IamError("ValidationError", "At most 50 roles per call.", 400)
+    out = []
+    for n in names:
+        r = store.get_role(n)
+        if not r:
+            out.append(("NotFound", n, "role does not exist"))
+            continue
+        blockers = _role_blockers(store, r, days)
+        if blockers:
+            out.append(("Skipped", n, "; ".join(blockers)))
+            continue
+        for arn in list(r["attached_policies"]):
+            _detach_role_policy(store, {"RoleName": n, "PolicyArn": arn})
+        r["inline_policies"].clear()
+        del store.roles[n]
+        out.append(("Deleted", n, "detached policies and deleted"))
+    store.persist()
+    xml = "".join("<member>" + _el("Result", a) + _el("RoleName", b) + _el("Reason", c) + "</member>" for a, b, c in out)
+    return _envelope("DeleteUnusedRoles", f"<Results>{xml}</Results>")
+
+
+_OPS.update({"ListRoleInventory": _list_role_inventory, "DeleteUnusedRoles": _delete_unused_roles})
 
 
 def dispatch(store: IamStore, params: dict | None = None, s3_store=None) -> IamResponse:
