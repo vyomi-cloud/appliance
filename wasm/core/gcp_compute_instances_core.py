@@ -375,7 +375,22 @@ def insert_instance(store, project, zone, payload):
         "canIpForward": bool(payload.get("canIpForward", False)),
         "selfLink": _selflink(full), "_zone": zone, "_internalIp": internal_ip, "_externalIp": external_ip,
     }
-    store.instances[full] = inst
+    from core import gcp_capacity_core as _cap
+    if payload.get("reservationAffinity"):   # needed by the capacity check (reservation-backed VMs do not draw from the pool)
+        inst["reservationAffinity"] = payload["reservationAffinity"]
+    with _cap.LOCK:                          # simulated zonal capacity pool: draw, or stock out and roll back the insert
+        store.instances[full] = inst
+        try:
+            _cap.check_after_commit(store, zone, inst["machineType"], project)
+        except _E:
+            del store.instances[full]
+            for d in disks_out:
+                dd = store.disks.get("projects/%s/zones/%s/disks/%s" % (project, zone, _last(d["source"])))
+                if dd:
+                    dd["users"] = [u for u in dd.get("users", []) if _last(u) != name]
+                    if not dd["users"] and (d.get("autoDelete", True)):
+                        store.disks.pop("projects/%s/zones/%s/disks/%s" % (project, zone, _last(d["source"])), None)
+            raise
     _ext.finish_instance_insert(store, project, zone, name, payload)
     return _operation(store, project, zone, "insert", name, _selflink(full))
 
@@ -418,6 +433,16 @@ def set_instance_status(store, project, zone, name, action):
     }
     allowed, new_status = table[action]
     _require_state(inst, allowed, action)
+    if action in ("start", "resume"):
+        from core import gcp_capacity_core as _cap
+        with _cap.LOCK:                      # simulated zonal capacity pool: draw, or stock out and roll back
+            prev = inst["status"]
+            inst["status"] = new_status
+            try:
+                _cap.check_after_commit(store, inst["_zone"], inst["machineType"], project)
+            except _E:
+                inst["status"] = prev
+                raise
     inst["status"] = new_status
     if action == "start" or action == "resume":
         inst["lastStartTimestamp"] = _ts()
@@ -1365,6 +1390,11 @@ def _dispatch(store, method, path, query, headers, body):
     vx = _osc.compute_handle(store, method, project, rest, payload, query)
     if vx is not None:
         return _json(vx[0], vx[1])
+    from core import gcp_capacity_core as _cap, gcp_commit_core as _cmt
+    for _h in (_cap.handle, _cmt.compute_handle):
+        _r = _h(store, method, project, rest, verb, payload, query)
+        if _r is not None:
+            return _r
     ext_resp = _ext.handle(store, method, project, rest, verb, payload, query)
     if ext_resp is not None:
         return ext_resp

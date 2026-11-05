@@ -286,10 +286,12 @@ def _settle(store, rec, now=None):
         elif rec["dryRun"]:
             d["state"] = "SUCCEEDED"
         else:
-            reboot = (rec.get("patchConfig") or {}).get("rebootConfig")
             d["state"] = "SUCCEEDED"
-            if reboot == "NEVER":
-                d["state"] = "SUCCEEDED"
+            res = _guest_patch(d["_key"], i, rec.get("patchConfig") or {})
+            if res is not None:                       # offline: really ran the package manager in the instance container
+                d["guestApplied"], d["guestOutput"] = True, res[1]
+                if res[0] != 0:
+                    d["state"], d["failureReason"] = "FAILED", "Package manager exited %d: %s" % (res[0], res[1][-200:])
         d.setdefault("attemptCount", 1)
     rec["instanceDetailsSummary"] = _summary(details)
     rec["percentComplete"] = 100.0
@@ -881,6 +883,123 @@ def _err(e):
     return Resp(e.status, {"error": {"code": e.status, "message": e.message, "status": e.gcp_status}})
 
 
+# ── guest hook (offline only) ─────────────────────────────────────────────────
+# The offline server sets GUEST_RUN = fn(instance_key, shell) -> (rc, stdout) that executes in the instance's
+# container (docker exec). On Nano it stays None: there is no guest to reach, so patching stays record-only.
+GUEST_RUN = None
+INVENTORY_CMD = ("(. /etc/os-release 2>/dev/null; echo \"OS|$PRETTY_NAME|$ID|$VERSION_ID\"); echo \"KERNEL|$(uname -r)|$(uname -m)|$(hostname)\"; "
+                 "if command -v dpkg-query >/dev/null 2>&1; then dpkg-query -W -f='PKG|${Package}|${Version}|${Architecture}\\n'; "
+                 "elif command -v rpm >/dev/null 2>&1; then rpm -qa --qf 'PKG|%{NAME}|%{VERSION}-%{RELEASE}|%{ARCH}\\n'; "
+                 "elif command -v apk >/dev/null 2>&1; then apk info -v | sed 's/^\\(.*\\)-\\([^-]*-r[0-9]*\\)$/PKG|\\1|\\2|noarch/'; fi")
+
+
+def _patch_cmd(cfg):
+    if cfg.get("apt"):
+        return "export DEBIAN_FRONTEND=noninteractive; timeout 300 sh -c 'apt-get update -qq && apt-get -y -qq %s'" % (
+            "dist-upgrade" if (cfg["apt"] or {}).get("type") == "DIST" else "upgrade")
+    if cfg.get("yum"):
+        return "timeout 300 yum -y %s" % ("update-minimal --security" if (cfg["yum"] or {}).get("security") else "update")
+    return ("export DEBIAN_FRONTEND=noninteractive; if command -v apt-get >/dev/null; then timeout 300 sh -c 'apt-get update -qq && apt-get -y -qq upgrade'; "
+            "elif command -v dnf >/dev/null; then timeout 300 dnf -y upgrade; elif command -v yum >/dev/null; then timeout 300 yum -y update; "
+            "elif command -v apk >/dev/null; then timeout 300 apk upgrade; else echo 'no supported package manager'; exit 3; fi")
+
+
+def _guest_patch(key, inst, cfg):
+    if GUEST_RUN is None or inst.get("status") != "RUNNING":
+        return None
+    try:
+        rc, out = GUEST_RUN(key, _patch_cmd(cfg))
+    except Exception as e:                                # noqa: BLE001
+        return (1, "guest exec failed: %s" % e)
+    return (rc, (out or "").strip()[-2000:])
+
+
+def _image_of(store, key):
+    inst = store.instances[key]
+    project, zone = key.split("/")[1], inst.get("_zone")
+    for d in inst.get("disks", []):
+        if d.get("boot"):
+            disk = (getattr(store, "disks", None) or {}).get("projects/%s/zones/%s/disks/%s" % (project, zone, str(d.get("source", "")).rsplit("/", 1)[-1])) or {}
+            return str(disk.get("sourceImage") or "")
+    return ""
+
+
+_BASE_OS = {"debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12", "6.1.0-18-cloud-amd64"), "debian-11": ("Debian GNU/Linux 11 (bullseye)", "debian", "11", "5.10.0-28-cloud-amd64"),
+            "ubuntu-2404": ("Ubuntu 24.04 LTS", "ubuntu", "24.04", "6.8.0-1015-gcp"), "ubuntu-2204": ("Ubuntu 22.04 LTS", "ubuntu", "22.04", "6.5.0-1020-gcp"),
+            "rocky-linux-9": ("Rocky Linux 9", "rocky", "9", "5.14.0-362.el9.x86_64")}
+
+
+def instance_inventory(store, project, zone, name, view="BASIC"):
+    """OS Config Inventory for one instance. Offline + running: read from the live container (dpkg/rpm/apk).
+    Otherwise (Nano, stopped VM): only the OS identity declared by the boot image, vyomiSource=IMAGE_DECLARED, no packages."""
+    key = "projects/%s/zones/%s/instances/%s" % (project, zone, name)
+    inst = (getattr(store, "instances", None) or {}).get(key)
+    if inst is None:
+        raise _E(404, "NOT_FOUND", "Instance %s was not found." % key)
+    out = {"name": "projects/%s/locations/%s/instances/%s/inventory" % (project, zone, name), "updateTime": _iso(_now()),
+           "vyomiSource": "IMAGE_DECLARED", "agentEnabled": _agent_enabled(inst), "status": inst.get("status")}
+    img = _image_of(store, key)
+    base = next((v for k, v in _BASE_OS.items() if k in img), None)
+    info = {"hostname": "%s.%s.c.%s.internal" % (name, zone, project), "architecture": "x86_64", "osconfigAgentVersion": "not running (Vyomi)"}
+    if base:
+        info.update({"longName": base[0], "shortName": base[1], "version": base[2], "kernelVersion": base[3] + " (declared)"})
+    pkgs = []
+    if GUEST_RUN is not None and inst.get("status") == "RUNNING":
+        try:
+            rc, txt = GUEST_RUN(key, INVENTORY_CMD)
+        except Exception:                                  # noqa: BLE001
+            rc, txt = 1, ""
+        if rc == 0 and txt.strip():
+            out["vyomiSource"] = "GUEST"
+            for ln in txt.splitlines():
+                f = ln.split("|")
+                if f[0] == "OS" and len(f) >= 4:
+                    info.update({"longName": f[1], "shortName": f[2], "version": f[3]})
+                elif f[0] == "KERNEL" and len(f) >= 4:
+                    info.update({"kernelRelease": f[1], "kernelVersion": f[1], "architecture": f[2], "hostname": f[3]})
+                elif f[0] == "PKG" and len(f) >= 4:
+                    pkgs.append({"name": f[1], "version": f[2], "architecture": f[3]})
+    out["osInfo"] = info
+    out["packageCount"] = len(pkgs)
+    if view == "FULL":
+        out["items"] = {"pkg-%s" % p["name"]: {"id": "pkg-%s" % p["name"], "type": "INSTALLED_PACKAGE", "installedPackage": {"aptPackage": p}} for p in pkgs}
+    out["note"] = ("Read from the running guest container." if out["vyomiSource"] == "GUEST" else
+                   "No live guest (Nano, or the VM is not running): only the OS identity declared by the boot image; package inventory needs an instance container.")
+    return out
+
+
+def list_inventories(store, project, zone, query):
+    pre = "projects/%s/zones/" % project
+    rows = []
+    for k in sorted((getattr(store, "instances", None) or {})):
+        if not k.startswith(pre):
+            continue
+        z = k.split("/")[3]
+        if zone not in ("-", z):
+            continue
+        rows.append(instance_inventory(store, project, z, k.rsplit("/", 1)[-1], (query or {}).get("view", "BASIC")))
+    return _page(rows, query or {}, "inventories")
+
+
+def patch_report(store, project):
+    """Fleet roll-up: agent coverage and the latest patch result per VM (from real stored patch jobs)."""
+    last = {}
+    for rec in sorted(_x(store, "osc_patch_jobs").values(), key=lambda r: r["createTime"]):
+        if not rec["name"].startswith("projects/%s/" % project):
+            continue
+        _settle(store, rec)
+        for d in rec["_details"]:
+            last[d["_key"]] = {"job": rec["name"], "state": d["state"], "time": rec["updateTime"]}
+    rows = []
+    for k, i in _instances(store, project):
+        rows.append({"instance": k.rsplit("/", 1)[-1], "zone": k.split("/")[3], "status": i.get("status"), "agentEnabled": _agent_enabled(i),
+                     "lastPatch": last.get(k), "image": _image_of(store, k).rsplit("/", 1)[-1]})
+    return {"project": project, "instances": rows, "total": len(rows), "withAgent": sum(1 for r in rows if r["agentEnabled"]),
+            "patched": sum(1 for r in rows if r["lastPatch"] and r["lastPatch"]["state"] == "SUCCEEDED"),
+            "policyAssignments": sum(1 for k in _x(store, "osc_policy_assignments") if k.startswith("projects/%s/" % project)),
+            "note": "Record-level: with a guest hook (offline) patch results reflect the real package-manager exit status; per-VM OS policy compliance is not evaluated."}
+
+
 def dispatch(store, method, path, query=None, headers=None, body=b""):
     """osconfig.googleapis.com v1 REST."""
     query, method = query or {}, method.upper()
@@ -902,6 +1021,12 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
             out = patch_jobs(store, method, project, rest[1:], verb, payload, query)
         elif rest[:1] == ["patchDeployments"]:
             out = patch_deployments(store, method, project, rest[1:], verb, payload, query)
+        elif method == "GET" and len(rest) == 5 and rest[0] == "locations" and rest[2] == "instances" and rest[4] == "inventory":
+            out = instance_inventory(store, project, rest[1], rest[3], query.get("view", "BASIC"))
+        elif method == "GET" and len(rest) == 5 and rest[0] == "locations" and rest[2] == "instances" and rest[4] == "inventories":
+            out = list_inventories(store, project, rest[1], query)
+        elif method == "GET" and rest == ["patchReport"]:
+            out = patch_report(store, project)
         elif rest[:1] == ["locations"] and len(rest) >= 3 and rest[2] == "osPolicyAssignments":
             out = os_policy_assignments(store, method, project, rest[1], rest[3:], verb, payload, query)
         else:
