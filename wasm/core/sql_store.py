@@ -596,8 +596,32 @@ def _dump_steps(dialect: str, ph: str):
     return tables
 
 
+def is_mysql_family(engine) -> bool:
+    e = str(engine or "").lower()
+    return e.startswith("mysql") or "maria" in e or e.startswith("aurora-mysql")
+
+
+def engine_store_for(store: "SqlStore", db_id: str) -> "SqlStore":
+    """The SqlStore that actually holds `db_id`'s data. There is no MySQL/MariaDB WebAssembly build, so a MySQL-family instance
+    runs on sqlite in the browser EVEN when the RDS store is PGlite (real Postgres): it gets a private sqlite companion store
+    and the MySQL SQL is translated onto it (core/mysql_dialect). Everything else uses `store` itself."""
+    try:
+        if store.param_placeholder(1) == "?":
+            return store
+        if is_mysql_family((store.get_instance(db_id) or {}).get("engine")):
+            comp = getattr(store, "_mysql_companion", None)
+            if comp is None:
+                comp = InMemorySqlStore()
+                store._mysql_companion = comp
+            return comp
+    except Exception:
+        pass
+    return store
+
+
 def dump_tables(store: "SqlStore", db_id: str) -> list:
     """Every user table of one database (sync engines: sqlite3 / real Postgres)."""
+    store = engine_store_for(store, db_id)
     gen = _dump_steps(engine_dialect(store), store.param_placeholder(1))
     try:
         step = next(gen)
@@ -609,6 +633,7 @@ def dump_tables(store: "SqlStore", db_id: str) -> list:
 
 async def adump_tables(store: "SqlStore", db_id: str) -> list:
     """Async twin of dump_tables (PGlite awaits its engine)."""
+    store = engine_store_for(store, db_id)
     gen = _dump_steps(engine_dialect(store), store.param_placeholder(1))
     try:
         step = next(gen)

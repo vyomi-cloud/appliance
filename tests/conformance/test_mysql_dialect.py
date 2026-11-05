@@ -83,5 +83,27 @@ if True:
     chk("rds mysql show tables", rds_core.execute_sql(st, "my1", "SHOW TABLES").get("rows"), [["t"]])
     chk("rds mysql error code", "1146" in rds_core.execute_sql(st, "my1", "SELECT * FROM nope").get("message", ""), True)
     chk("rds mysql async", asyncio.run(rds_core.aexecute_sql(st, "my1", "SELECT COUNT(*) FROM t"))["rows"], [[2]])
+
+# ── PGlite-mode: the RDS store speaks Postgres ($n placeholders, async-only), yet a MySQL-family instance must still run on sqlite ──
+class _PgLike(InMemorySqlStore):
+    def param_placeholder(self, index): return "$%d" % index
+    async def aexecute_sql(self, db_id, sql, params=None): raise AssertionError("MySQL instance must NOT hit the Postgres engine")
+pg = _PgLike()
+rds_core.dispatch(pg, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "my2", "DBInstanceClass": "db.t3.micro", "Engine": "mysql",
+                       "MasterUsername": "admin", "MasterUserPassword": "S3cure-Passw0rd!", "AllocatedStorage": "20"})
+pg.get_instance("my2")["db_instance_status"] = "available"
+chk("pglite-mode mysql create", asyncio.run(rds_core.aexecute_sql(pg, "my2", "CREATE TABLE `t` (`id` INT AUTO_INCREMENT PRIMARY KEY, `n` TEXT)")).get("ok"), True)
+chk("pglite-mode mysql insert", asyncio.run(rds_core.aexecute_sql(pg, "my2", "INSERT INTO t (n) VALUES ('x')")).get("ok"), True)
+from core import rds_data_core
+r = asyncio.run(rds_data_core.dispatch(pg, "/Execute", {"resourceArn": "arn:aws:rds:us-east-1:123456789012:db:my2", "secretArn": "x",
+                "sql": "SELECT n FROM t WHERE id = :i", "parameters": [{"name": "i", "value": {"longValue": 1}}]}))
+chk("pglite-mode Data API named params", r.body.get("records"), [[{"stringValue": "x"}]])
+tx = asyncio.run(rds_core.abegin_transaction(pg, "my2"))
+chk("pglite-mode mysql tx begin", tx.get("ok"), True)
+chk("pglite-mode mysql tx insert", asyncio.run(rds_core.aexecute_in_transaction(pg, tx["transactionId"], "INSERT INTO t (n) VALUES ('y')")).get("ok"), True)
+chk("pglite-mode mysql tx rollback", asyncio.run(rds_core.arollback_transaction(pg, tx["transactionId"])).get("ok"), True)
+chk("pglite-mode rollback honoured", asyncio.run(rds_core.aexecute_sql(pg, "my2", "SELECT COUNT(*) FROM t"))["rows"], [[1]])
+from core import sql_store as _sq
+chk("dump_tables follows the sqlite companion", [t.get("name") for t in _sq.dump_tables(pg, "my2")], ["t"])
 print("FAILS", fails)
 sys.exit(1 if fails else 0)

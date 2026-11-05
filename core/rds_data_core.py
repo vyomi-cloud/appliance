@@ -112,8 +112,13 @@ def _db_id(body: dict) -> str:
     return body.get("database") or ""
 
 
-def _rewrite(store, sql: str, params_list) -> tuple[str, list]:
+def _rewrite(store, sql: str, params_list, db_id: str = "") -> tuple[str, list]:
     """Rewrite `:name` placeholders to the engine's native style and order values."""
+    if db_id:
+        try:
+            store = rds.engine_store_for(store, db_id)     # a MySQL-family instance on a PGlite store runs on sqlite ('?')
+        except Exception:
+            pass
     values = {p.get("name"): _field_to_py(p.get("value"))
               for p in (params_list or []) if isinstance(p, dict)}
     ordered: list = []
@@ -155,7 +160,7 @@ async def _run_statement(store, db_id: str, transaction_id: str | None, sql: str
 
 
 async def _execute_statement(store, body: dict) -> RdsDataResponse:
-    new_sql, params = _rewrite(store, body.get("sql") or "", body.get("parameters"))
+    new_sql, params = _rewrite(store, body.get("sql") or "", body.get("parameters"), _db_id(body))
     res = await _run_statement(store, _db_id(body), body.get("transactionId"), new_sql, params)
     if not res.get("ok"):
         return _data_error(res)
@@ -168,7 +173,7 @@ async def _batch_execute(store, body: dict) -> RdsDataResponse:
     sql = body.get("sql") or ""
     results = []
     for pset in (body.get("parameterSets") or [[]]):
-        new_sql, params = _rewrite(store, sql, pset)
+        new_sql, params = _rewrite(store, sql, pset, _db_id(body))
         res = await _run_statement(store, db_id, tx_id, new_sql, params)
         if not res.get("ok"):
             return _data_error(res)

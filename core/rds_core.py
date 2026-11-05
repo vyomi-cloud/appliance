@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
-from core.sql_store import SqlStore, TransactionError, TransactionLimitError
+from core.sql_store import SqlStore, TransactionError, TransactionLimitError, engine_store_for
 from core import cloudwatch_core as _cw_core
 
 RDS_NS = "http://rds.amazonaws.com/doc/2014-10-31/"
@@ -2117,13 +2117,15 @@ def _md():
 
 
 def _mysql_on_sqlite(store: SqlStore, db_id: str):
-    """MySQL/MariaDB-family instance whose data plane is sqlite (Nano; real MySQL has no WebAssembly build): the MySQL SQL the
-    application sends is translated (core/mysql_dialect). Returns the module, or None to run the SQL as-is."""
+    """MySQL/MariaDB-family instance (no MySQL WebAssembly build -> sqlite, even when the RDS store is PGlite): the MySQL SQL the
+    application sends is translated (core/mysql_dialect). Returns (dialect module, sqlite store holding the data), or None."""
     try:
         db = store.get_instance(db_id) or {}
         md = _md()
-        if md.is_mysql_engine(db.get("engine")) and store.param_placeholder(1) == "?":
-            return md
+        if md.is_mysql_engine(db.get("engine")):
+            es = engine_store_for(store, db_id)
+            if es.param_placeholder(1) == "?":
+                return md, es
     except Exception:
         pass
     return None
@@ -2217,9 +2219,10 @@ def execute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
     if err:
         return err
     try:
-        md = _mysql_on_sqlite(store, db_instance_identifier)
-        if md:
-            result = md.run(sql, params, lambda q, p: store.execute_sql(db_instance_identifier, q, p),
+        my = _mysql_on_sqlite(store, db_instance_identifier)
+        if my:
+            md, es = my
+            result = md.run(sql, params, lambda q, p: es.execute_sql(db_instance_identifier, q, p),
                             _mysql_name(store, db_instance_identifier), _mysql_ver(store, db_instance_identifier))
         else:
             result = store.execute_sql(db_instance_identifier, sql, params)
@@ -2241,9 +2244,10 @@ async def aexecute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
     if err:
         return err
     try:
-        md = _mysql_on_sqlite(store, db_instance_identifier)
-        if md:
-            result = await md.arun(sql, params, lambda q, p: store.aexecute_sql(db_instance_identifier, q, p),
+        my = _mysql_on_sqlite(store, db_instance_identifier)
+        if my:
+            md, es = my
+            result = await md.arun(sql, params, lambda q, p: es.aexecute_sql(db_instance_identifier, q, p),
                                    _mysql_name(store, db_instance_identifier), _mysql_ver(store, db_instance_identifier))
         else:
             result = await store.aexecute_sql(db_instance_identifier, sql, params)
@@ -2284,7 +2288,13 @@ async def abegin_transaction(store: SqlStore, db_instance_identifier: str) -> di
     db = store.get_instance(db_instance_identifier)
     limit = _max_connections_for(store, db)
     try:
-        tx_id = await store.abegin_transaction(db_instance_identifier, limit=limit)
+        my = _mysql_on_sqlite(store, db_instance_identifier)
+        es = my[1] if my else store
+        tx_id = await es.abegin_transaction(db_instance_identifier, limit=limit)
+        if es is not store:
+            if not hasattr(store, "_tx_owner"):
+                store._tx_owner = {}
+            store._tx_owner[tx_id] = es          # the sqlite companion owns this MySQL-instance transaction
         _push_activity_metrics(store, db_instance_identifier)
         return {"ok": True, "transactionId": tx_id}
     except TransactionLimitError as e:
@@ -2293,14 +2303,16 @@ async def abegin_transaction(store: SqlStore, db_instance_identifier: str) -> di
 
 async def aexecute_in_transaction(store: SqlStore, transaction_id: str, sql: str,
                                   params: list | None = None) -> dict:
-    db_id = store.transaction_db_id(transaction_id)
+    es = getattr(store, "_tx_owner", {}).get(transaction_id, store)
+    db_id = es.transaction_db_id(transaction_id)
     try:
-        md = _mysql_on_sqlite(store, db_id) if db_id is not None else None
-        if md:
-            result = await md.arun(sql, params, lambda q, p: store.aexecute_in_transaction(transaction_id, q, p),
+        my = _mysql_on_sqlite(store, db_id) if db_id is not None else None
+        if my:
+            md = my[0]
+            result = await md.arun(sql, params, lambda q, p: es.aexecute_in_transaction(transaction_id, q, p),
                                    _mysql_name(store, db_id), _mysql_ver(store, db_id))
         else:
-            result = await store.aexecute_in_transaction(transaction_id, sql, params)
+            result = await es.aexecute_in_transaction(transaction_id, sql, params)
         if db_id is not None:
             _push_activity_metrics(store, db_id, sql)
         return {"ok": True, **result}
@@ -2313,8 +2325,9 @@ async def aexecute_in_transaction(store: SqlStore, transaction_id: str, sql: str
 
 
 async def acommit_transaction(store: SqlStore, transaction_id: str) -> dict:
-    db_id = store.transaction_db_id(transaction_id)
-    ok = await store.acommit_transaction(transaction_id)
+    es = getattr(store, "_tx_owner", {}).pop(transaction_id, store)
+    db_id = es.transaction_db_id(transaction_id)
+    ok = await es.acommit_transaction(transaction_id)
     if not ok:
         return {"ok": False, "code": "TransactionNotFoundException",
                 "message": f"Transaction {transaction_id} is not found or has expired."}
@@ -2324,8 +2337,9 @@ async def acommit_transaction(store: SqlStore, transaction_id: str) -> dict:
 
 
 async def arollback_transaction(store: SqlStore, transaction_id: str) -> dict:
-    db_id = store.transaction_db_id(transaction_id)
-    ok = await store.arollback_transaction(transaction_id)
+    es = getattr(store, "_tx_owner", {}).pop(transaction_id, store)
+    db_id = es.transaction_db_id(transaction_id)
+    ok = await es.arollback_transaction(transaction_id)
     if not ok:
         return {"ok": False, "code": "TransactionNotFoundException",
                 "message": f"Transaction {transaction_id} is not found or has expired."}
