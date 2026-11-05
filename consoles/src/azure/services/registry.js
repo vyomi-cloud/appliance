@@ -34,6 +34,7 @@ export const SERVICES = [
   { id: "cost", title: "Cost Management", type: "Microsoft.CostManagement", category: "Management and governance", icon: "cost", load: () => import("./cost/index.jsx") },
   { id: "cognitiveservices", title: "Azure AI services", type: "Microsoft.CognitiveServices/accounts", category: "AI + machine learning", icon: "cognitiveservices", load: () => import("./cognitiveservices/index.jsx") },
   { id: "appconfiguration", title: "App Configuration", type: "Microsoft.AppConfiguration/configurationStores", category: "Integration", icon: "appconfiguration", load: () => import("./appconfiguration/index.jsx") },
+  { id: "streamanalytics", title: "Stream Analytics jobs", type: "Microsoft.StreamAnalytics/streamingjobs", category: "Integration", icon: "eventgrid", load: () => import("./streamanalytics/index.jsx") },
   { id: "containerapps", title: "Container Apps", type: "Microsoft.App/containerApps", category: "Containers", icon: "containerapps", load: () => import("./containerapps/index.jsx") },
 ];
 

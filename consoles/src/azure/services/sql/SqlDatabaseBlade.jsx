@@ -125,6 +125,12 @@ export default function SqlDatabaseBlade({ params }) {
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
       logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      streamanalytics: () => (
+        <CapabilityContainer id="azure.streamanalytics.jobs" title={`${a.name} | Stream analytics (preview)`}>
+          <p data-testid="sql-sa-panel">Azure Stream Analytics jobs process Blob input and write Blob output in Vyomi. A SQL database is not a supported streaming source or sink here, so a job cannot read from or write to <b>{a.name}</b>.</p>
+          <p><Link href="#/streamanalytics">Open Stream Analytics jobs</Link></p>
+        </CapabilityContainer>
+      ),
       addazuresearch: () => <AiSearchIntegration source={{ kind: "sql", capId: "azure.sql.addazuresearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "dbo.Table1",
         connectionString: `Server=tcp:${a.server}.database.windows.net;Database=${a.name}` }} />,
     }[panel];
