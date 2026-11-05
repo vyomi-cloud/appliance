@@ -1,3 +1,4 @@
+import MigrateAServer from "./MigrateAServer.jsx";
 import { useEffect } from "react";
 import { navigate } from "../../../common/router.js";
 import Dashboard from "./Dashboard.jsx";
@@ -137,7 +138,7 @@ export default {
     { pattern: "/ec2/create-auto-scaling-group", component: CreateAutoScalingGroup, crumbs: () => [crumb("EC2", ""), crumb("Auto Scaling groups", "auto-scaling-groups"), crumb("Create Auto Scaling group", "create-auto-scaling-group")] },
     { pattern: "/ec2/settings", component: Settings, crumbs: () => [crumb("EC2", ""), crumb("Settings", "settings")] },
 
-    { pattern: "/ec2/migrate-a-server", component: Honest.MigrateAServer, crumbs: () => [crumb("EC2", ""), crumb("Migrate a server", "migrate-a-server")] },
+    { pattern: "/ec2/migrate-a-server", component: MigrateAServer, crumbs: () => [crumb("EC2", ""), crumb("Migrate a server", "migrate-a-server")] },
     { pattern: "/ec2/recycle-bin", component: Ops.RecycleBin, crumbs: () => [crumb("EC2", ""), crumb("Recycle Bin", "recycle-bin")] },
     { pattern: "/ec2/image-builder", component: ImageBuilderRedirect, crumbs: () => [crumb("EC2", ""), crumb("EC2 Image Builder", "image-builder")] },
     { pattern: "/ec2/instance-type-finder", component: Ops.InstanceTypeFinder, crumbs: () => [crumb("EC2", ""), crumb("Instance type finder", "instance-type-finder")] },

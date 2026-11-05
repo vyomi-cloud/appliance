@@ -673,6 +673,15 @@
    "tests/conformance/test_savingsplans.py"
   ]
  },
+ "ec2.migration.application-migration-service": {
+  "title": "Migrate a server (AWS Application Migration Service)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real on both substrates: the mgn rest-json API (replication configuration templates, source servers, per-server replication and launch configuration, StartTest / StartCutover / ChangeServerLifeCycleState / FinalizeCutover / TerminateTargetInstances / MarkAsArchived / DisconnectFromService / DeleteSourceServer, jobs and job logs) with AWS's lifecycle state machine and ConflictException / ValidationException errors, and cross-resource checks of subnets, security groups and instance types against the EC2 model. Test and cutover launch a REAL EC2 instance (right-sized, STARTED or STOPPED, tagged with the MGN source server) from an image registered out of the source server's synthetic replicated disks; TerminateTargetInstances really terminates it.",
+   "Replication is records only: no agent runs on a source machine (servers are registered with the Vyomi-only RegisterSourceServer action, the stand-in for installing the agent) and no disk data is copied, so dataReplicationState advances with elapsed time, not transferred bytes, and the launched instance boots the synthetic image, not the source OS. Post-launch actions, applications/waves and conversion servers are not modelled."
+  ],
+  "tests": ["tests/conformance/test_mgn_core.py"]
+ },
  "ec2.purchasing.ultraservers": {
   "title": "UltraServers",
   "level": {

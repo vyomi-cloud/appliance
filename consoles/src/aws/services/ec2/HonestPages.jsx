@@ -15,4 +15,3 @@ const capability = (title, id) => page(title, <CapabilityContainer id={id} title
 
 export const UltraServers = capability("UltraServers", "ec2.purchasing.ultraservers");
 
-export const MigrateAServer = honest("Migrate a server", "AWS Application Migration Service");
