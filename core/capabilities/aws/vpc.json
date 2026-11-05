@@ -210,6 +210,9 @@
   },
   "limitations": [
    "Shows this VPC's real transit gateway attachments and whether each gateway is registered in a Network Manager global network (core/networkmanager_core.py, Home Region us-west-2). Third-party partner integrations (Aviatrix, Kentik and similar) are external services and are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_networkmanager_core.py"
   ]
  },
  "aws.networkmanager": {
@@ -220,6 +223,9 @@
   },
   "limitations": [
    "Inventory and registration control plane only: transit gateways are validated against the account's real EC2 model. No topology telemetry, events, route analysis, Connect or Direct Connect associations are collected."
+  ],
+  "tests": [
+   "tests/conformance/test_networkmanager_core.py"
   ]
  },
  "aws.vpc.create-vpc-and-more": {
