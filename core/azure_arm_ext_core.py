@@ -2293,6 +2293,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return None   # Defender for Cloud assessments / sub-assessments: v4's security engine
         if nsl in ("microsoft.kubernetesconfiguration", "microsoft.network"):
             return None   # AKS GitOps/extensions and network extension resources (netcfg/netsvc): v4's engines
+        if nsl == "microsoft.servicelinker":
+            return None   # Service Connector linkers on a web app: v4's Microsoft.Web engine (injects the app settings)
         if nsl == "microsoft.eventgrid":
             return None   # scoped event subscriptions: v4's Event Grid engine
         if nsl == "microsoft.insights":

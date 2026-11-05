@@ -728,12 +728,19 @@ try {
     await page.goto(UI + `#/apigateway/apis/${createdApi.id}/stages`);
     await page.getByText("prod", { exact: true }).first().click();
     await page.getByRole("tab", { name: "Canary" }).click();
-    await page.getByTestId("canary-percent").waitFor({ timeout: 10000 });
+    await page.getByTestId("canary-percent").waitFor({ timeout: 60000 });
     const txt = await page.getByTestId("canary-percent").innerText();
     check("API Gateway stage canary (wire) -> Canary tab shows 25% traffic", txt.includes("25%") && !!d1.id, txt);
     await page.getByRole("button", { name: "Delete canary" }).click();
-    await page.getByRole("tab", { name: "Canary" }).click();
-    await page.getByRole("button", { name: "Create canary" }).waitFor({ timeout: 10000 });
+    // The stage reload after a delete resets the tab strip; wait for the delete to land, then
+    // (re)open the Canary tab until the empty state shows (slow on Nano).
+    for (let i = 0; i < 60; i++) { const cur = await gj("GET", `/restapis/${createdApi.id}/stages/prod`); if (!cur.canarySettings) break; await page.waitForTimeout(500); }
+    for (let i = 0; i < 20; i++) {
+      await page.waitForTimeout(1000);
+      await page.getByRole("tab", { name: "Canary" }).click().catch(() => {});
+      if (await page.getByRole("button", { name: "Create canary" }).isVisible().catch(() => false)) break;
+    }
+    await page.getByRole("button", { name: "Create canary" }).waitFor({ timeout: 30000 });
     const st = await gj("GET", `/restapis/${createdApi.id}/stages/prod`);
     check("API Gateway delete canary (UI) -> removed on the wire", !st.canarySettings, JSON.stringify(st.canarySettings));
   }

@@ -17,7 +17,8 @@ const call = (m, url, body, headers = {}) => pg.evaluate(async ([m, url, body, h
 }, [m, url, body, headers]);
 const arm = (m, path, body, v = "2023-11-01") => call(m, `${WIRE}/subscriptions/${SUB}${path}?api-version=${v}`, body);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 const N = `/resourceGroups/${RG}/providers/Microsoft.Network`;
 await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
 await arm("PUT", `${N}/virtualNetworks/v1`, { location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.0.0.0/16"] }, subnets: [{ name: "s1", properties: { addressPrefix: "10.0.1.0/24" } }] } });
@@ -55,6 +56,9 @@ check("offer editor present", (await pg.getByTestId("offer-editor").count()) ===
 await pg.getByLabel("Scope").selectOption("d1/c1"); await pg.getByLabel("RU/s").fill("400"); await pg.getByRole("button", { name: "Save" }).click(); await pg.waitForTimeout(1200);
 check("offer saved and shown", /Manual, 400 RU\/s/.test(await pg.getByTestId("offer-current").innerText()));
 let codes = [];
-for (let i = 0; i < 150; i++) codes.push((await dp("POST", "/dbs/d1/colls/c1/docs", { id: "x" + i, pk: "a" })).status);
+// ~40 KB documents (~200 RU each) so a 400 RU/s offer is exceeded within the window even when the
+// substrate (Nano, Pyodide) is slow: the RU window is wall-clock, a fast burst of tiny writes proves nothing there.
+const pad = "x".repeat(40 * 1024);
+for (let i = 0; i < 30; i++) codes.push((await dp("POST", "/dbs/d1/colls/c1/docs", { id: "x" + i, pk: "a", pad })).status);
 check("data plane throttled with 429 beyond the offer", codes.includes(429) && codes[0] === 201, codes.slice(0, 5).join(","));
 console.log(fails ? `${fails} FAILED` : "all passed"); await b.close(); process.exit(fails ? 1 : 0);

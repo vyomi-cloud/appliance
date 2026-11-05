@@ -392,10 +392,20 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
       _lastStores = captureStores();
     } catch (_) {}
   }
+  // A restore reads the snapshot (async) and applies it later. If a save marked keys as synced in
+  // between, the stale blob would look like "someone deleted those keys" and drop a resource that
+  // was created a moment ago (an AKS cluster PUT → 200, then GET → 404 while the console polled).
+  // So a blob read before a save started is discarded.
+  let _saveGen = 0;
+  async function restoreShared() {
+    const g = _saveGen;
+    const blob = await nbMetaGet(STORE_KEY);
+    if (g === _saveGen) restoreStores(blob);
+  }
   async function writeStores(notify) {
     try {
       const j = captureStores(); if (!j || j === _lastStores) return;   // unchanged: nothing to publish
-      _lastStores = j;
+      _lastStores = j; _saveGen++;
       py.runPython("from core import nano_persist; nano_persist.mark_saved_registry()");
       await nbMetaPut(STORE_KEY, j);
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
@@ -415,7 +425,7 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
   if (_bc) _bc.onmessage = async (e) => {
     if (!e.data || e.data.k !== STORE_KEY || _restoring) return;
     _restoring = true;
-    try { restoreStores(await nbMetaGet(STORE_KEY)); } finally { _restoring = false; }
+    try { await restoreShared(); } finally { _restoring = false; }
   };
   // Boot: rehydrate the persisted dataset into the shared registry BEFORE releasing
   // /api/* requests, so the console opens with its previous resources intact.
@@ -444,7 +454,7 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
       if (_storeTimer && !_restoring) { clearTimeout(_storeTimer); _storeTimer = null; await writeStores(true); }
       if (!_restoring) {
         _restoring = true;
-        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+        try { await restoreShared(); } catch (_) {} finally { _restoring = false; }
       }
       const [prov, svc, op, params] = ev.data.tuple;
       // In-browser VM compute (wasm/vm): connect-info / key / exec are answered by
@@ -476,7 +486,7 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
     listDesired: async () => {
       if (!_restoring && !_storeTimer) {
         _restoring = true;
-        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+        try { await restoreShared(); } catch (_) {} finally { _restoring = false; }
       }
       const r = dispatch("aws", "_vms", "List", {});
       return r && r.ok ? r.items : null;
