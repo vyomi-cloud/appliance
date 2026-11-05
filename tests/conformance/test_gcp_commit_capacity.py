@@ -91,11 +91,38 @@ check("third a2 VM stocks out with ZONE_RESOURCE_POOL_EXHAUSTED", st == 503 and 
       and "does not have enough resources available" in e["error"]["message"], e)
 st, _ = call("GET", f"{CB}/zones/us-east4-a/instances/gpu3")
 check("failed insert leaves no instance behind", st == 404)
-st, adv = call("POST", f"/compute/beta/projects/{P}/regions/us-east4/advice/capacity", {"instanceProperties": {"machineType": "a2-highgpu-1g"}, "size": 1})
+ADV = f"/compute/beta/projects/{P}/regions/us-east4/advice/capacity"
+a2 = {"instanceProperties": {"machineType": "a2-highgpu-1g"}, "size": 1, "simulationTime": 1000}
+st, adv = call("POST", ADV, a2)
 recs = adv.get("recommendations", [])
-check("advisor: stocked-out zone UNAVAILABLE, another zone AVAILABLE first", recs and recs[0]["obtainability"] == "AVAILABLE" and
-      any(r["zone"] == "us-east4-a" and r["obtainability"] == "UNAVAILABLE" for r in recs) and adv["basis"] == "SIMULATED_POOLS", adv)
-check("advisor suggests alternative shapes", len(adv["alternativeShapes"]) >= 0 and "no Google fleet data" in adv["note"])
+check("advisor: stocked-out zone ZONE_RESOURCE_POOL_EXHAUSTED, another zone HIGH_PROBABILITY first", recs and recs[0]["state"] == "HIGH_PROBABILITY" and
+      any(r["zone"] == "us-east4-a" and r["state"] == "ZONE_RESOURCE_POOL_EXHAUSTED" for r in recs) and adv["basis"] == "SIMULATED_FLEET", adv)
+check("advisor says simulated fleet, no Google data", "no Google fleet data" in adv["note"])
+call("POST", f"{CB}/zones/us-east4-a/instances/gpu3/stop")
+before = call("GET", f"{CB}/vyomi/capacity", query={"zone": "us-east4-b"})[1]
+for _ in range(5):
+    call("POST", ADV, a2)
+check("dry run leaves pools unchanged", call("GET", f"{CB}/vyomi/capacity", query={"zone": "us-east4-b"})[1] == before)
+st, a1 = call("POST", ADV, dict(a2, simulationTime=0)); st, a1b = call("POST", ADV, dict(a2, simulationTime=0)); st, a3 = call("POST", ADV, dict(a2, simulationTime=150))
+bgz = lambda r: [x["backgroundUtilisationPercent"] for x in r["recommendations"] if "backgroundUtilisationPercent" in x]
+check("fixed seed: same time -> same answer; background fluctuates over time", bgz(a1) == bgz(a1b) and bgz(a1) != bgz(a3), (bgz(a1), bgz(a3)))
+check("default shapes are HIGH_PROBABILITY (no chaos)", call("POST", ADV, {"instanceProperties": {"machineType": "e2-standard-4"}, "size": 3, "simulationTime": 77})[1]["state"] == "HIGH_PROBABILITY")
+# tier 1 quota
+call("POST", f"{CB}/vyomi/quotas", {"region": "us-east4", "metric": "A2_CPUS", "limit": 30})
+st, q = call("POST", ADV, a2)
+check("tier 1: quota exceeded -> FAILED / QUOTA_EXCEEDED", q["state"] == "FAILED" and q["reason"] == "QUOTA_EXCEEDED" and q["tier"] == "QUOTA", q)
+call("POST", f"{CB}/vyomi/quotas", {"region": "us-east4", "metric": "A2_CPUS", "limit": 96})
+# tier 2 reservation
+st, e = call("POST", f"{CB}/zones/us-east4-b/reservations", {"name": "gres", "specificReservation": {"count": "2", "instanceProperties": {"machineType": "a2-highgpu-1g"}}})
+st, r2 = call("POST", ADV, a2)
+check("tier 2: unutilised matching reservation -> GUARANTEED", r2["state"] == "GUARANTEED" and r2["tier"] == "RESERVATION" and r2["recommendations"][0]["zone"] == "us-east4-b", r2)
+call("DELETE", f"{CB}/zones/us-east4-b/reservations/gres")
+# chaos scenario (off by default)
+check("chaos off by default", call("GET", f"{CB}/vyomi/capacityScenario")[1]["backgroundLoadPercent"] == 0)
+call("POST", f"{CB}/vyomi/capacityScenario", {"backgroundLoadPercent": 80})
+st, ch = call("POST", ADV, {"instanceProperties": {"machineType": "e2-standard-4"}, "size": 1, "simulationTime": 5})
+check("chaos scenario congests the fleet -> LOW_PROBABILITY", ch["state"] == "LOW_PROBABILITY", ch)
+call("POST", f"{CB}/vyomi/capacityScenario", {"backgroundLoadPercent": 0})
 call("POST", f"{CB}/zones/us-east4-a/instances/gpu0/stop")
 st, e = call("POST", f"{CB}/zones/us-east4-a/instances/gpu0/start")
 check("stop returns capacity, start draws it again", st == 200)

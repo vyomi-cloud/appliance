@@ -103,15 +103,47 @@
   "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.vm-manager": {
-  "title": "VM Manager (Patch, OS policies, VM extension policies)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "title": "VM Manager (Patch, OS policies, OS inventory, reports, VM extension policies)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "The OS Config control plane is real: patch jobs (instance filters over the real Compute instances, patchConfig/rollout/duration validation, cancel, per-instance details), patch deployments (one-time and recurring schedules with real next-run computation, pause/resume, due runs create real patch jobs), OS policy assignments (resource validation, revisions, matched VMs) and VM extension policies (Compute operations, selector blast radius).",
-   "No guest agent runs inside a Vyomi VM, so no package is ever installed, updated or removed and no OS policy is evaluated for compliance. A running VM with metadata enable-osconfig=TRUE reports patch SUCCEEDED having changed nothing; a running VM without it is NO_AGENT_DETECTED; a stopped VM is INACTIVE. OS policy assignments report rolloutState SUCCEEDED but there are no per-VM compliance reports, and VM extension policies are not installed onto VMs.",
-   "Patch jobs settle on a short wall-clock timer (about 2 seconds) rather than running for the real duration; pre/post patch steps are validated but never executed."
+   "The OS Config control plane is real: patch jobs (instance filters over the real Compute instances, validation, cancel, per-instance details), patch deployments (schedules, pause/resume, due runs create real patch jobs), OS policy assignments, VM extension policies, OS inventory (instances.inventories) and a fleet patch report.",
+   "Offline, a patch job on a running VM with metadata enable-osconfig=TRUE really runs the package manager (apt-get/yum/dnf/apk) inside the instance container via docker exec and reports its exit status; OS inventory is read from the live container (os-release, uname, dpkg/rpm/apk). On Nano there is no guest: patch jobs report SUCCEEDED having changed nothing and inventory is only the OS declared by the boot image (vyomiSource IMAGE_DECLARED, no packages).",
+   "A running VM without enable-osconfig=TRUE is NO_AGENT_DETECTED; a stopped VM is INACTIVE. OS policy assignments are recorded and report rolloutState SUCCEEDED but are never enforced and there is no per-VM compliance; VM extension policies are not installed. Patch jobs settle on a short wall-clock timer; pre/post patch steps are validated, never executed."
   ],
-  "api": ["patchJobs.execute", "patchJobs.get", "patchJobs.list", "patchJobs.cancel", "patchJobs.instanceDetails.list", "patchDeployments.create", "patchDeployments.get", "patchDeployments.list", "patchDeployments.patch", "patchDeployments.delete", "patchDeployments.pause", "patchDeployments.resume", "osPolicyAssignments.create", "osPolicyAssignments.get", "osPolicyAssignments.list", "osPolicyAssignments.patch", "osPolicyAssignments.delete", "osPolicyAssignments.listRevisions", "vmExtensionPolicies.insert", "vmExtensionPolicies.get", "vmExtensionPolicies.list", "vmExtensionPolicies.delete"],
-  "tests": ["tests/conformance/test_gcp_vmmanager_hybrid.py"]
+  "api": [
+   "patchJobs.execute",
+   "patchJobs.get",
+   "patchJobs.list",
+   "patchJobs.cancel",
+   "patchJobs.instanceDetails.list",
+   "patchDeployments.create",
+   "patchDeployments.get",
+   "patchDeployments.list",
+   "patchDeployments.patch",
+   "patchDeployments.delete",
+   "patchDeployments.pause",
+   "patchDeployments.resume",
+   "osPolicyAssignments.create",
+   "osPolicyAssignments.get",
+   "osPolicyAssignments.list",
+   "osPolicyAssignments.patch",
+   "osPolicyAssignments.delete",
+   "osPolicyAssignments.listRevisions",
+   "vmExtensionPolicies.insert",
+   "vmExtensionPolicies.get",
+   "vmExtensionPolicies.list",
+   "vmExtensionPolicies.delete",
+   "instances.inventories.get",
+   "instances.inventories.list",
+   "(Vyomi) GET patchReport"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vmmanager_hybrid.py",
+   "tests/conformance/test_gcp_commit_capacity.py"
+  ]
  },
  "gcp.compute.observability": {
   "title": "Observability, recommendations and VM Manager",
@@ -256,15 +288,35 @@
     "tests": ["tests/conformance/test_gcp_posture.py", "tests/conformance/test_gcp_secscan.py"]
   },
   "gcp.compute.migrate-to-vms": {
-    "title": "Migrate to Virtual Machines (source connectors, replication, cut-over)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Migrate to Virtual Machines replicates running VMware / AWS / Azure machines through a source connector appliance and delta-syncs their disks before cut-over; Vyomi has no source hypervisors to connect to and no replication engine. To bring a disk archive in, use Import VM (a .tar.gz in Cloud Storage -> image -> instance), which is simulated."
-    ]
+  "title": "Migrate to Virtual Machines (sources, connectors, migrating VMs, replication cycles, clone/cutover jobs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
+  "limitations": [
+   "The vmmigration v1 control plane is real: sources (VMware/AWS/Azure with validation, credentials never echoed), datacenter connectors, migrating VMs with the READY -> FIRST_SYNC -> ACTIVE -> PAUSED/CUTOVER -> FINALIZED state machine, replication cycles, clone jobs and cutover jobs (preconditions enforced), long-running operations. Clone and cutover create a REAL Compute Engine instance (visible in VM instances, offline as a Compute-store record).",
+   "Replication is record-only: no disk bytes are copied and there are no source hypervisors, so the VM inventory is declared by you (vyomiInventory on the source). The created Compute Engine instance boots a stock image, not the source VM's disks. Replication cycles are generated from the wall clock (first sync about 2 s, then one cycle per 30 s)."
+  ],
+  "api": [
+   "sources.create",
+   "sources.get",
+   "sources.list",
+   "sources.delete",
+   "sources.fetchInventory",
+   "datacenterConnectors.create",
+   "migratingVms.create",
+   "migratingVms.startMigration",
+   "migratingVms.pauseMigration",
+   "migratingVms.resumeMigration",
+   "migratingVms.finalizeMigration",
+   "replicationCycles.list",
+   "cloneJobs.create",
+   "cutoverJobs.create"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_commit_capacity.py"
+  ]
+ },
   "gcp.compute.incidents": {
     "title": "Google Cloud incidents (service health feed)",
     "level": {
@@ -276,15 +328,29 @@
     ]
   },
   "gcp.compute.tpus": {
-    "title": "TPUs (Cloud TPU nodes / queued resources)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "TPUs are Google-proprietary accelerator hardware with no software equivalent that could run XLA workloads in the simulator."
-    ]
+  "title": "TPUs (Cloud TPU v2 nodes)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
+  "limitations": [
+   "Record-level Cloud TPU v2 API: nodes create/get/list/patch/delete/start/stop with a CREATING -> READY state machine, accelerator-type and runtime-version catalogues that are zone-aware, and a per-zone, per-generation quota check (RESOURCE_EXHAUSTED). There is no accelerator: nothing can run on a TPU node. Queued resources and TPU pods' networking are not simulated."
+  ],
+  "api": [
+   "nodes.create",
+   "nodes.get",
+   "nodes.list",
+   "nodes.patch",
+   "nodes.delete",
+   "nodes.start",
+   "nodes.stop",
+   "acceleratorTypes.list",
+   "runtimeVersions.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_commit_capacity.py"
+  ]
+ },
   "gcp.compute.bms": {
     "title": "Bare Metal Solution (servers, networks, VRFs, volumes, NFS shares, procurements, maintenance events)",
     "level": {
@@ -296,25 +362,45 @@
     ]
   },
   "gcp.compute.committed-use-discounts": {
-    "title": "Committed use discounts (purchase)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "A commitment is a billing contract with Google (1 or 3 year term, charged to a billing account); Vyomi bills nothing real, so purchasing one would only create a record with no effect. The cost meter prices on-demand usage only."
-    ]
+  "title": "Committed use discounts (resource-based and spend-based commitments)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
+  "limitations": [
+   "Commitments are real records: regionCommitments insert/get/list/aggregatedList with validation (plan, series, vCPU/memory ratio), 1-year/3-year terms, list discounts (37%/55% resource-based, 28%/46% spend-based) and ACTIVE/EXPIRED status from the term. Utilisation and net savings are real arithmetic over the RUNNING instances in the Compute store priced with the cost meter's GCP list prices (core/cost_model.py).",
+   "Nothing is billed and no Google billing account is involved. As on GCP a commitment cannot be cancelled (DELETE returns FAILED_PRECONDITION). Spend-based commitments use a Vyomi field vyomiSpend.hourlyCommitmentUsd (the real purchase is a Cloud Billing action). LICENSE commitments, reservations attached to commitments and auto-renewal behaviour are not simulated."
+  ],
+  "api": [
+   "regionCommitments.insert",
+   "regionCommitments.get",
+   "regionCommitments.list",
+   "commitments.aggregatedList",
+   "(Vyomi) GET projects/{p}/vyomi/commitmentSavings"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_commit_capacity.py"
+  ]
+ },
   "gcp.compute.capacity-advisor": {
-    "title": "Capacity advisor (zonal capacity and obtainability forecasts)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Forecasts are derived from Google's live fleet-wide capacity telemetry, which a simulator does not have; Vyomi can create resources in any zone without capacity limits."
-    ]
+  "title": "Capacity advisor (quota, reservations, simulated fleet)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
+  "limitations": [
+   "SIMULATED FLEET, NO GOOGLE FLEET DATA. Three tiers: (1) project quota per region for CPUS and the machine family (FAILED / QUOTA_EXCEEDED); (2) an active, unutilised matching reservation (GUARANTEED); (3) a dry-run allocation on a simulated fleet - zone = datacenter, 128-core/512 GB hosts, requested shape = VM, a deterministic per-zone background load that fluctuates over time (HIGH_PROBABILITY, LOW_PROBABILITY or ZONE_RESOURCE_POOL_EXHAUSTED). The probe allocates then deallocates and never consumes capacity. The same pure-Python model runs on Nano and offline (the cloudsim-backbone JVM bridge is not used), so answers are identical for the same state and time.",
+   "Real instance inserts/starts/resumes draw from per-zone, per-machine-family vCPU pools (reservations hold capacity; stop/delete returns it) and fail with ZONE_RESOURCE_POOL_EXHAUSTED when a pool is full. Default pools are large, so normal flows never stock out; shrink a pool (Vyomi verb POST vyomi/capacityPools) or raise the background load (POST vyomi/capacityScenario, off by default) to rehearse stockouts. Quota is advisory only (not enforced on insert).",
+   "Pool sizes, host shape and background load are Vyomi's own numbers, not Google's."
+  ],
+  "api": [
+   "(Vyomi) POST regions/{r}/advice/capacity",
+   "(Vyomi) GET/POST projects/{p}/vyomi/capacity|capacityPools|capacityScenario|quotas"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_commit_capacity.py"
+  ]
+ },
   "gcp.compute.preview-features": {
     "title": "Preview features (opt-in to pre-GA Compute Engine features)",
     "level": {
