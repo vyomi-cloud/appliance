@@ -1,7 +1,7 @@
 """Offline-substrate lifecycle of the local-LLM container the shared seam (core/llm_core) talks to. NOT loaded on Nano.
 
 A single llama.cpp ``llama-server`` container (name ``vyomi-llm``) serving an OpenAI-compatible API on 8080 with a SMALL GGUF
-model (default SmolLM2-360M-Instruct Q8_0, ~380 MB, downloaded on first start by llama-server's ``-hf`` into the named volume
+model (default HuggingFaceTB SmolLM2-360M-Instruct Q8_0, ~380 MB, downloaded on first start by llama-server's ``-hf`` into the named volume
 ``vyomi-llm-models``; override with VYOMI_LLM_IMAGE / VYOMI_LLM_HF_MODEL). The image is a ~100-200 MB CPU build. Nothing is pulled
 or started until ``start()`` is called explicitly (CLI/console action), and ``start`` refuses when free disk is below the guard.
 
@@ -17,7 +17,7 @@ import subprocess
 NAME = "vyomi-llm"
 VOLUME = "vyomi-llm-models"
 IMAGE = os.environ.get("VYOMI_LLM_IMAGE", "ghcr.io/ggml-org/llama.cpp:server")
-HF_MODEL = os.environ.get("VYOMI_LLM_HF_MODEL", "ggml-org/SmolLM2-360M-Instruct-Q8_0-GGUF")
+HF_MODEL = os.environ.get("VYOMI_LLM_HF_MODEL", "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF:Q8_0")   # official repo; the old ggml-org mirror was removed (HF 401)
 MIN_FREE_GB = float(os.environ.get("VYOMI_LLM_MIN_FREE_GB", "20"))
 
 
