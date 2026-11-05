@@ -1,25 +1,15 @@
 {
- "at": "2026-11-05T17:07:42+00:00",
+ "at": "2026-11-05T18:07:44+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "API Gateway",
-   "kind": "lifecycle",
-   "key": "feed:gcp:8e52bfcca79d",
-   "title": "API Gateway: Announcement (November 04, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_04_2026",
-   "detail": "Negative backend deadlines are no longer deprecated The deprecation of negative backend deadline values announced on October 23, 2026 is withdrawn. In an OpenAPI 2.0 x-google-backend extension or a gRPC BackendRule , a negative deadline continues to use the default deadline, the same as 0 , and won't be rejected. OpenAPI 3.x backends still reject a negative deadline. For more information, see OpenAPI 2.0 extensions and OpenAPI 3.x extensions .",
-   "actionable": true
-  },
-  {
-   "cloud": "gcp",
-   "service": "Compute Engine",
+   "cloud": "aws",
+   "service": "Identity and Access Management",
    "kind": "announcement",
-   "key": "feed:gcp:c41232a3a5dc",
-   "title": "Compute Engine: Feature (November 02, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_02_2026",
-   "detail": "Generally available : You can now create C4 sole-tenant nodes on Intel Granite Rapids with the following node types: c4-node-288-576 c4-node-288-1080 c4-node-288-1080-lssd c4-node-288-2232 c4-node-288-2232-lssd For more information, see Sole-tenancy overview .",
+   "key": "feed:aws:2151a3fbf6d5",
+   "title": "IAM Roles Anywhere now supports automatic certificate revocation checking",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-roles-anywhere-cdp/",
+   "detail": "AWS Identity and Access Management (IAM) Roles Anywhere now supports automatic revocation checking using certificate revocation list (CRL) distribution points (CDPs). This helps keep revocation checks in sync with your certificate authority (CA) and can help improve your security posture. When you enable this capability on a trust anchor, IAM Roles Anywhere reads the CDP URLs embedded in authenticating certificates, downloads the corresponding CRLs, and denies credential requests that use revoked certificates. Previously, to check revocation status, you had to import CRLs into IAM Roles Anywhe",
    "actionable": false
   }
  ],
