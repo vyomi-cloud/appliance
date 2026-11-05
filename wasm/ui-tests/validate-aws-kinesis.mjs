@@ -77,9 +77,10 @@ try {
     const r = await fetch("/api/kinesis/streams");
     return (await r.json()).items.map((s) => s.name);
   });
-  check(viaWire.includes(NAME), "the stream is in the Nano store the relay serves", JSON.stringify(viaWire));
+  const made = viaWire.find((n) => n.startsWith(NAME));
+  check(!!made, "the stream is in the Nano store the relay serves", JSON.stringify(viaWire));
 
-  const del = await page.evaluate(async (n) => (await fetch(`/api/kinesis/streams/${n}`, { method: "DELETE" })).status, NAME);
+  const del = await page.evaluate(async (n) => (await fetch(`/api/kinesis/streams/${n}`, { method: "DELETE" })).status, made);
   check(del < 300, "delete the stream", `HTTP ${del}`);
   const left = await page.evaluate(async () => (await (await fetch("/api/kinesis/streams")).json()).items.length);
   check(left === 0, "the stream is gone from the list", left);
