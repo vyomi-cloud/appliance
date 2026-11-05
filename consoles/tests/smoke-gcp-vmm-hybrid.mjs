@@ -130,7 +130,9 @@ try {
   await page.getByRole("tab", { name: "VLAN attachments" }).click();
   await page.getByRole("button", { name: "Refresh", exact: true }).click();   // reloads the Interconnect choices too
   await page.getByRole("button", { name: "Create VLAN attachment" }).click();
-  await dlg().getByText(`ic-${N}`).first().waitFor({ timeout: 30000 });   // the select defaults to the freshly ordered Interconnect
+  // choose the freshly ordered Interconnect explicitly (the form default is captured before the list reloads)
+  await dlg().getByLabel("Interconnect", { exact: true }).click();
+  await page.getByRole("option", { name: `ic-${N}`, exact: true }).click({ timeout: 30000 });
   await dlg().getByLabel("Name", { exact: true }).fill(`vlan-${N}`);
   await dlg().getByLabel("Cloud Router name (same region)").fill(`rtr-${N}`);
   await submit("Create");

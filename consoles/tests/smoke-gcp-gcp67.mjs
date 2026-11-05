@@ -54,7 +54,8 @@ await page.getByRole("link", { name: fname }).waitFor();
 const pj = await wj(`/v3/projects/${project}`);
 check("project moved under the folder (wire parent)", pj.parent && pj.parent.type === "folder" && fid.endsWith(pj.parent.id), JSON.stringify(pj.parent));
 await page.getByRole("link", { name: fname }).click();
-await page.getByRole("link", { name: project }).waitFor();
+const pjLabel = pj.displayName || project;   // the row link shows the display name, not the id
+await page.getByRole("link", { name: pjLabel, exact: true }).waitFor();
 check("drilling into the folder lists the moved project", true);
 await shot("01-folders");
 await wj(`/v3/projects/${project}:move`, "POST", { destinationParent: (await wj("/v3/organizations:search")).organizations[0].name });
@@ -123,8 +124,8 @@ const bootDisk = await wj(`/compute/v1/projects/${project}/zones/us-central1-a/d
 check("Import VM created an instance booting from the imported image", inst.name === `smk-vm-${N}` && String(bootDisk.sourceImage || "").endsWith(`smk-vm-${N}-imported`), JSON.stringify(bootDisk).slice(0, 160));
 await shot("04-import-vm");
 
-// ── registered unbuildable gaps still honest ─────────────────────────────
-for (const [hash, h] of [["#/compute/tpus", "TPUs"], ["#/compute/migrate-to-vms", "Migrate to Virtual Machines"], ["#/compute/bms/servers", "Servers"]]) {
+// ── registered unbuildable gaps still honest (TPUs + Migrate to Virtual Machines are real, limited pages now) ─────────────────────────────
+for (const [hash, h] of [["#/compute/bms/servers", "Servers"]]) {
   await go(hash, h);
   check(`${h} is an honest, registered Not-simulated panel`, await nsPanel());
 }
