@@ -39,7 +39,7 @@ export async function listOperations(location = "-") {
 /* Backup for GKE (gkebackup.googleapis.com shape) — real create/list/get/delete over the
  * native REST API; see core/gcp_container_core.py's "Backup for GKE" section. */
 export async function listBackupPlans(location = "-") {
-  const r = await restJson("GET", `${base(location)}/backupPlans`);
+  const r = await restJson("GET", `${base(location)}/backupPlans`, { headers: { "x-vyomi-service": "gkebackup" } });
   return r.backupPlans || [];
 }
 export const getBackupPlan = (location, id) => restJson("GET", `${base(location)}/backupPlans/${e(id)}`);

@@ -1761,8 +1761,13 @@ try {
   await page.getByLabel("Resource type selector").fill("compute.googleapis.com/Disk");
   await page.keyboard.press("Escape");   // close the Autocomplete dropdown so it doesn't cover the Save button
   await page.getByRole("button", { name: "Save" }).click();
-  await page.getByText("compute.googleapis.com/Disk").first().waitFor({ timeout: 10000 });
-  const akHandles = await wjson(`/v1/projects/${PROJ}/locations/-/keyHandles`);
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 60000 });   // the typed selector text is visible in the dialog itself: wait for the create to finish
+  let akHandles = {};
+  for (let i = 0; i < 60; i++) {   // slower substrates (Nano/Pyodide, busy machine) provision the key a beat later
+    akHandles = await wjson(`/v1/projects/${PROJ}/locations/-/keyHandles`);
+    if ((akHandles.keyHandles || []).some((h) => h.kmsKey?.startsWith(`projects/${AK_PROJECT}/locations/`))) break;
+    await page.waitForTimeout(500);
+  }
   const akHandle = (akHandles.keyHandles || []).find((h) => h.kmsKey?.startsWith(`projects/${AK_PROJECT}/locations/`));
   check("create key handle via UI → listKeyHandles shows it with a provisioned kmsKey",
     akHandle?.resourceTypeSelector === "compute.googleapis.com/Disk");

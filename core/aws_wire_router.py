@@ -1864,8 +1864,36 @@ class AwsWireRouter:
             _crm = svc == "gcp-resourcemanager" and self.STRICT_GCP_PROJECT and gcp_proj.CRM_PATH_RE.match(path)   # the project's own describe/list; folders, org policy, asset search stay v4's
             if err is not None or _crm:
                 st, obj = err if err is not None else gcp_proj.crm_dispatch(method, path, query, proj)
+                if st == 200 and path.startswith("/v3/projects/") and isinstance(obj, dict) and obj.get("projectId") and "parent" not in obj:
+                    # the project's real backing organization (Resource Manager store), as a v3 Project carries it
+                    try:
+                        par = gcp_rm._get_or_create_project(self.gcp_rm, obj["projectId"]).get("parent")
+                        if isinstance(par, dict) and par.get("id"):
+                            obj["parent"] = dict(par)   # same shape the Resource Manager core serves
+                    except Exception:
+                        pass
                 return {"status": st, "headers": {"content-type": "application/json"},
                         "body": json.dumps(obj).encode()}
+            if svc == "gcp-backupdr":
+                # Backup and DR (backupdr.googleapis.com) and Backup for GKE (gkebackup.googleapis.com) both serve
+                # .../locations/{l}/backupPlans: tell them apart by what the call names (same hosts differ on real GCP)
+                mb = re.match(r"^/v1/projects/([^/]+)/locations/([^/]+)/backupPlans(?:/([^/:?]+))?(/backups.*)?$", path)
+                if mb:
+                    _bd = {}
+                    try:
+                        _bd = json.loads(body) if body[:1] == b"{" else {}
+                    except Exception:
+                        _bd = {}
+                    if mb.group(3):
+                        _full = "projects/%s/locations/%s/backupPlans/%s" % (mb.group(1), mb.group(2), mb.group(3))
+                        _gke = bool(mb.group(4)) or _full in self.gcp_gke.backup_plans
+                    elif method == "POST":
+                        _gke = "cluster" in _bd or "backupConfig" in _bd or "resourceType" not in _bd
+                    else:
+                        _h = {str(k).lower(): v for k, v in (headers or {}).items()}
+                        _gke = mb.group(2) != "-" or "gkebackup" in str(_h.get("x-vyomi-service", "")).lower()   # "-" lists belong to Backup and DR unless the caller says gkebackup
+                    if _gke:
+                        svc = "gcp-container"
             if self.STRICT_GCP_PROJECT and svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
                 body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
