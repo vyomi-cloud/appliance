@@ -38,9 +38,10 @@ try {
   await wj(`${B}/targets?targetId=prod-${N}`, "POST", { run: { location: `projects/${P}/locations/${L}` }, requireApproval: true });
   await wj(`${B}/deliveryPipelines?deliveryPipelineId=${pl}`, "POST", { serialPipeline: { stages: [{ targetId: `dev-${N}` }, { targetId: `prod-${N}` }] }, deployParameters: { service: `svc-${N}` } });
   await go("#/clouddeploy", "Delivery pipelines");
-  check("Cloud Deploy lists the pipeline", await page.getByRole("link", { name: pl }).isVisible());
+  check("Cloud Deploy lists the pipeline", await page.getByRole("link", { name: pl }).waitFor({ timeout: 20000 }).then(() => true, () => false));   // Nano loads the list after the heading
   await page.getByRole("link", { name: pl }).click();
   await page.getByRole("heading", { name: pl }).first().waitFor();
+  await page.getByTestId("stage-flow").getByText(`prod-${N}`).first().waitFor({ timeout: 20000 }).catch(() => {});
   check("stage flow shows both targets", (await page.getByTestId("stage-flow").innerText()).includes(`prod-${N}`));
   await page.getByRole("button", { name: "Create release" }).click();
   await dlg().getByLabel("Release name").fill("rel-1");
