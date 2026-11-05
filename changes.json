@@ -1,6 +1,16 @@
 {
- "at": "2026-11-05T15:07:33+00:00",
+ "at": "2026-11-05T16:07:32+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "compute",
+   "kind": "spec-commit",
+   "key": "azure:compute:002fe105e2",
+   "title": "Azure compute: Compute: update gallery artifact name pattern (#47750)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/002fe105e27f4b3d2983a7cb1445058b5ee074b0",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
