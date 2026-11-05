@@ -2,7 +2,7 @@
  "$doc": "Vyomi capability registry — Cloud Build (cloudbuild.googleapis.com v1). See eventarc.json for the contract. Core: core/gcp_cloudbuild_core.py over the shared CI seam (core/ci_core.py).",
  "gcp.cloudbuild.builds": {
   "title": "Builds (create, get, list, retry, cancel) running docker build/push steps and pushing images into Artifact Registry",
-  "level": { "nano": "not_simulated", "offline": "limited" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "Offline: docker build steps really run on the BuildKit builder (shared CI seam) and docker push / the top-level images: field push the built image into the simulated Artifact Registry (a missing repo fails the step like the registry). Substitutions are applied and validated, sources come from the CI repos (Gitea/vyomi://), a GitHub repo (user's own PAT) or a GCS tar/zip. Only docker build/push steps run: other builder containers (gcloud, npm, bash...) FAIL with that reason instead of being faked; no worker pools, approvals or Cloud Logging streaming (logs are on the build as vyomiLogs). Builds run synchronously, so :cancel only ever sees finished builds.",
    "Nano has no container builder, so a build with a docker build step FAILS with that reason (the API, validation, substitutions and push-to-registry error paths still run)."
