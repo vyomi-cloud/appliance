@@ -32,7 +32,7 @@ export default function MigrateAServer() {
   const [dlg, setDlg] = useState(null);
   const [f, setF] = useState({});
   const set = (k) => ({ detail }) => setF((x) => ({ ...x, [k]: detail.value }));
-  const one = sel[0];
+  const one = sel[0] ? (servers.data || []).find((x) => x.sourceServerID === sel[0].sourceServerID) || sel[0] : undefined;   // fresh row after each action
   const reload = () => { servers.reload(); tpls.reload(); };
   const run = async (fn, ok) => { try { await fn(); if (ok) notify.success(ok); setDlg(null); reload(); } catch (e) { notify.error(e); } };
   const subnetOpts = (subnets.data || []).map((s) => ({ value: s.subnetId, label: `${s.subnetId} (${s.cidrBlock || ""})` }));
