@@ -41,10 +41,11 @@ First inventory taken this run; new features are reported from the next run.
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
-15 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+16 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
 
 | Issue | Cloud | Kind | Change | Opened |
 |---|---|---|---|---|
+| #519 | GCP | lifecycle | API Gateway: Announcement (November 04, 2026) | 2026-11-05 |
 | #516 | Azure | lifecycle | Retirement: Transition to Entra ID (formerly known as Azure AD) to query data from Azure Monitor application insights by March 31, 2027 | 2026-11-04 |
 | #515 | AWS | operation-added | AWS dynamodb: new operation StartBulkPutItems | 2026-11-04 |
 | #514 | AWS | operation-added | AWS dynamodb: new operation ListBulkOperations | 2026-11-04 |
@@ -89,9 +90,9 @@ None: both targets expose the same services, tabs and operations.
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
+|  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 | 2026-11-04T21:28:55+00:00 | 284/286 | 6003 | 401 | 0 | 57.8% |  |
 | 2026-11-04T19:20:25+00:00 | 283/286 | 5990 | 405 | 4 | 57.8% |  |
-|  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
