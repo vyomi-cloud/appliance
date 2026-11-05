@@ -73,6 +73,7 @@ None: both targets expose the same services, tabs and operations.
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
+|  | 0/0 | 0 | 0 | 0 | 0.0% |  |
 | 2026-11-04T21:28:55+00:00 | 284/286 | 6003 | 401 | 0 | 57.8% |  |
 | 2026-11-04T19:20:25+00:00 | 283/286 | 5990 | 405 | 4 | 57.8% |  |
 |  | 0/0 | 0 | 0 | 0 | 0.0% |  |
@@ -95,6 +96,5 @@ None: both targets expose the same services, tabs and operations.
 | 2026-11-03T11:13:26+00:00 | 283/285 | 6006 | 402 | 2 | 57.8% |  |
 | 2026-11-03T09:25:17+00:00 | 282/284 | 5999 | 402 | 2 | 57.8% |  |
 | 2026-11-03T07:33:01+00:00 | 281/283 | 5994 | 402 | 2 | 56.7% |  |
-| 2026-11-03T05:41:26+00:00 | 280/282 | 5978 | 402 | 2 | 55.4% |  |
 
 Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`.
