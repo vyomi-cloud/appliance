@@ -1,19 +1,8 @@
 {
- "at": "2026-11-05T22:07:45+00:00",
+ "at": "2026-11-05T23:07:55+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Amazon RDS, Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:644745bd09be",
-   "title": "Amazon RDS for Oracle now supports Kerberos authentication with self-managed Active Directory",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-kerberos-self-managed-ad/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle ( Amazon Relational Database Service (Amazon RDS) for Oracle ) now allows customers to join their RDS for Oracle DB instances directly to their self-managed Microsoft Active Directory (AD) domain. Your self-managed AD can run on premises, on Amazon EC2, or with another cloud provider. Users in your AD domain can authenticate to RDS for Oracle DB instances using Kerberos. Previously, in order to use Kerberos authentication with self-managed AD for their RDS for Oracle instances, customers were required to deploy AWS Managed Microsoft AD",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": [
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
  ]
 }
