@@ -17,7 +17,8 @@ const call = (m, url, body, headers = {}) => pg.evaluate(async ([m, url, body, h
 }, [m, url, body, headers]);
 const arm = (m, path, body, v = "2023-11-01") => call(m, `${WIRE}/subscriptions/${SUB}${path}?api-version=${v}`, body);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 const N = `/resourceGroups/${RG}/providers/Microsoft.Network`;
 await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
 await arm("PUT", `${N}/virtualNetworks/v1`, { location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.0.0.0/16"] }, subnets: [{ name: "s1", properties: { addressPrefix: "10.0.1.0/24" } }] } });
