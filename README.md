@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-05 16:51 UTC · refreshes after every pipeline run_
+_Updated 2026-11-05 17:09 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-05 16:51 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
 - **Hourly tests:** 0 of 0 suites passing
-- **Upstream watch:** 15 open changes from the real clouds to adopt
+- **Upstream watch:** 16 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -86,7 +86,7 @@ _Updated 2026-11-05 16:51 UTC · refreshes after every pipeline run_
 | DynamoDB | — | not audited | — | – · – | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+dynamodb) | before gate |
 | SQS | — | not audited | — | – · – | ✅ watched | before gate |
 | Lambda | — | not audited | — | – · – | ✅ watched | before gate |
-| API Gateway | caddy · Lite | not audited | — | – · – | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | — | – · – | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+apigateway) | before gate |
 | VPC | — | not audited | — | – · – | ✅ watched | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | — | – · – | ✅ watched | before gate |
 | Secrets Manager | — | not audited | — | – · – | ✅ watched | before gate |
@@ -109,7 +109,7 @@ _Updated 2026-11-05 16:51 UTC · refreshes after every pipeline run_
 | Pub/Sub | — | not audited | — | – · – | ✅ watched | before gate |
 | Firestore | — | not audited | — | – · – | ✅ watched | before gate |
 | Cloud Functions | — | not audited | — | – · – | ✅ watched | before gate |
-| API Gateway | caddy · Lite | not audited | — | – · – | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | — | – · – | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+apigateway/v1) | before gate |
 | VPC Network | — | not audited | — | – · – | ✅ watched | before gate |
 | IAM & Admin | — | not audited | — | – · – | ✅ watched | before gate |
 | Eventarc | — | not audited | — | – · – | ✅ watched | before gate |
