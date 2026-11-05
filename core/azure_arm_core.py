@@ -40,6 +40,11 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # Stream Analytics jobs/inputs/outputs/transformation + Blob query runner
+    from core import azure_streamanalytics_core as sa_engine
+except ImportError:
+    import azure_streamanalytics_core as sa_engine     # type: ignore
+
 try:                                              # AKS Container Insights / Managed Prometheus / Grafana toggles -> DCR + Monitor workspace + Grafana
     from core import azure_aksmon_core as aksmon_engine
 except ImportError:
@@ -1865,6 +1870,8 @@ class AzureArm:
 
         if monprod_engine.handles(namespace, chain):
             return self._monprod(method, sub, rg, namespace, chain, payload, query)
+        if sa_engine.handles(namespace, chain):
+            return self._streamanalytics(method, sub, rg, namespace, chain, payload, query)
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -3504,6 +3511,16 @@ class AzureArm:
         self.state[rid.lower()] = rec
         ext_engine.after_upsert(self.state, rec, payload or {})
         return _ok(_view(rec), 201 if created else 200)
+
+    def _streamanalytics(self, method, sub, rg, namespace, chain, payload, query):
+        try:
+            from core import azure_blob_core as _bm
+        except ImportError:
+            import azure_blob_core as _bm              # type: ignore
+        r = sa_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query, blob_store=self.blob_store, blob_mod=_bm)
+        if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE") and len(chain) == 2 and rg:
+            self._record_activity(sa_engine._rid(sub, rg, chain[1]), f"Microsoft.StreamAnalytics/streamingjobs/{'delete' if method == 'DELETE' else 'write'}", sub)
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
 
     def _monprod(self, method, sub, rg, namespace, chain, payload, query):
         r = monprod_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)
