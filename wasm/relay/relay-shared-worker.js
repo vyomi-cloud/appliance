@@ -144,12 +144,19 @@ from core import nano_registry as _reg, nano_persist as _persist
 _STORES = _reg.get()
 if _USE_PGLITE:
     from core.sql_store import PGliteSqlStore
-    _STORES["rds"] = PGliteSqlStore()                     # RDS = real Postgres (shared seam)
+    _STORES["rds"] = PGliteSqlStore(ns="rds")             # RDS = real Postgres (shared seam)
+    _STORES["gcp_sql"] = PGliteSqlStore(ns="gcp_sql")     # Cloud SQL = real Postgres too (MySQL instances keep their dialect fallback)
 _ROUTER = AwsWireRouter(stores=_STORES)
 def _capture(): return json.dumps(_persist.capture_registry())
 def _restore(blob_json):
     try: _persist.restore_registry(json.loads(blob_json or "{}"))
     except Exception: pass
+    # Databases the console created in its own context: open + publish them here, where PGlite and the tunnel live.
+    for _k in ("rds", "gcp_sql"):
+        _s = _STORES.get(_k)
+        if hasattr(_s, "ensure_bridges"):
+            try: _s.ensure_bridges()
+            except Exception: pass
 async def _handle(req_json):
     r = json.loads(req_json)
     body = base64.b64decode(r.get("body") or "")
@@ -205,6 +212,8 @@ builtins._capture = _capture; builtins._restore = _restore
     async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     saveNow = () => saveStores(true);
+    // PGlite publishes a host port after the console created the database: save + broadcast so the console shows it.
+    globalThis.__nano_stores_dirty = () => { try { scheduleStoresSave(); } catch (_) {} };
     refreshStores = async () => { if (_restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } catch (_) {} finally { _restoring = false; } };
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving

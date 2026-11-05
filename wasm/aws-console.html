@@ -584,6 +584,17 @@ function el(tag, attrs={}, ...kids){
   return e;
 }
 function icon(name){ return el("span",{class:"material-symbols-outlined"}, name); }
+function uniqDefault(f, dv){
+  // Identity fields (name/id) get a unique suffix so repeated creates never collide on the same default.
+  try {
+    if (typeof dv !== "string" || !dv || dv === "default" || dv.length > 40) return dv;
+    if (f.type && f.type !== "text") return dv;
+    if (!/(^|[._])name$/i.test(f.name || "")) return dv;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(dv)) return dv;
+    const r = Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    return dv + "-" + r;
+  } catch(e){ return dv; }
+}
 function uuid(){ return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)); }
 function toast(msg, kind="ok"){
   const t = el("div",{class:"toast "+kind}, msg);
@@ -1882,7 +1893,7 @@ async function renderCrudStub(main, svc, fullKey, schema){
   const r = await api("GET", "/api/aws/extras/"+fullKey);
   if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"},
     "Failed to load: HTTP "+r.status)); return; }
-  const items = (r.json && r.json.items) || [];
+  const items = (r.json && (r.json.items || r.json.value)) || [];   // offline returns {items}, Nano returns {value}
   const isDerived = !!(r.json && r.json.derived);
   if (isDerived) createBtn.setAttribute("disabled","");  // can't create derived items
 
@@ -1948,7 +1959,7 @@ function openStubCreate(svc, fullKey, schema){
   const body = el("div",{style:"padding:18px"});
   const values = {};
   (schema.create_fields || []).forEach(f => {
-    if (f.default !== undefined) values[f.name] = f.default;
+    if (f.default !== undefined) values[f.name] = uniqDefault(f, f.default);
     const w = el("div",{class:"field"});
     const labelKids = [document.createTextNode(f.label || f.name)];
     if (f.required) labelKids.push(el("span",{class:"req"}, "*"));
@@ -2005,7 +2016,7 @@ async function renderAnalyticsStub(main, svc, fullKey, schema){
   // Table of items (derived or seeded)
   if (schema.columns && schema.columns.length) {
     const r = await api("GET", "/api/aws/extras/"+fullKey);
-    const items = (r.json && r.json.items) || [];
+    const items = (r.json && (r.json.items || r.json.value)) || [];
     const tableWrap = el("div",{class:"table-wrap",style:"margin-top:14px"});
     const tableHolder = el("div",{});
     tableWrap.append(tableHolder);
@@ -2309,7 +2320,7 @@ function renderCollapsibleForm(svc, main){
   // Seed defaults from every field
   tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
     if (f.type === "help" || f.type === "info") return;
-    let dv = f.default; if (dv === "__UUID__") dv = uuid();
+    let dv = f.default; if (dv === "__UUID__") dv = uuid(); else dv = uniqDefault(f, dv);
     if (dv !== undefined) cState.values[f.name] = dv;
   })));
 
@@ -2562,7 +2573,7 @@ function renderSteppedWizard(svc, main){
   tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
     if (f.type === "help" || f.type === "info") return;
     let dv = f.default;
-    if (dv === "__UUID__") dv = uuid();
+    if (dv === "__UUID__") dv = uuid(); else dv = uniqDefault(f, dv);
     if (dv !== undefined) wState.values[f.name] = dv;
   })));
 

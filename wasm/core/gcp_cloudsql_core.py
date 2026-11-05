@@ -102,8 +102,11 @@ def _instance_view(rec: dict) -> dict:
             "pricingPlan": settings.get("pricingPlan", "PER_USE"),
             "settingsVersion": str(settings.get("settingsVersion", "1")),
         },
-        "ipAddresses": rec.get("ipAddresses", [
-            {"type": "PRIMARY", "ipAddress": "10.0.0.2"}]),
+        "ipAddresses": ([{"type": "PRIMARY", "ipAddress": rec["endpoint_address"]}] if rec.get("endpoint_port")
+                        else rec.get("ipAddresses", [{"type": "PRIMARY", "ipAddress": "10.0.0.2"}])),
+        # Nano: the in-browser Postgres is published on a host port by the local tunnel (psql / app drivers connect here)
+        **({"connection": {"host": rec["endpoint_address"], "port": rec["endpoint_port"],
+                           "engine": "POSTGRES", "via": "vyomi-tunnel"}} if rec.get("endpoint_port") else {}),
         "createTime": rec.get("createTime", ""),
         "etag": rec.get("etag", ""),
         "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
@@ -184,8 +187,10 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         _op(master, "CREATE_REPLICA", name)
     _op(rec, "CREATE")
     store.put_instance(_key(project, name), rec)
+    if hasattr(store, "mirror_create_instance") and not rec.get("masterInstanceName"):
+        store.mirror_create_instance(_key(project, name), rec)   # PGlite store: publish a host port via the tunnel
     store.persist()
-    return _json(200, _instance_view(rec))
+    return _json(200, _instance_view(store.get_instance(_key(project, name)) or rec))
 
 
 def _get_instance_resp(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
@@ -216,6 +221,8 @@ def _delete_instance(store: SqlStore, project: str, instance: str) -> CloudSqlRe
         _op(master, "DELETE_REPLICA", instance)
         store.put_instance(_key(project, master["name"]), master)
     store.drop_instance(_key(project, instance))
+    if hasattr(store, "mirror_delete_instance"):
+        store.mirror_delete_instance(_key(project, instance))
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "DELETE",
                        "status": "DONE", "name": str(uuid.uuid4()),

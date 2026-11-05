@@ -665,6 +665,17 @@ let STATE = {view: "home", service: null, item: null, detailTab: 0};
 const NOTIFS = [];
 
 // ========== DOM helpers (same pattern as Azure/AWS consoles) =================
+function uniqDefault(f, dv){
+  // Identity fields (name/id) get a unique suffix so repeated creates never collide on the same default.
+  try {
+    if (typeof dv !== "string" || !dv || dv === "default" || dv.length > 40) return dv;
+    if (f.type && f.type !== "text") return dv;
+    if (!/(^|[._])name$/i.test(f.name || "")) return dv;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(dv)) return dv;
+    const r = Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    return dv + "-" + r;
+  } catch(e){ return dv; }
+}
 function el(tag, attrs={}, ...kids){
   const e = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
@@ -3260,7 +3271,10 @@ GT.sqlconnectivity = async function(host, svc, item){
       ["IP addresses", (it.ipAddresses || []).map(a => a.type + " " + a.ipAddress).join(", ") || "None assigned"],
       ["Private IP network", ip.privateNetwork || "Not configured"],
       ["SSL mode", ip.sslMode || (ip.requireSsl ? "ENCRYPTED_ONLY" : "ALLOW_UNENCRYPTED_AND_ENCRYPTED")],
-      ...(conn ? [["Engine endpoint", conn.host + ":" + conn.port]] : [])]));
+      ...(conn ? [["Engine endpoint", conn.host + ":" + conn.port],
+                  ["Connect from this machine", "psql \"host=" + conn.host + " port=" + conn.port + " user=postgres dbname=postgres\""],
+                  ["Connection URL", "postgresql://postgres@" + conn.host + ":" + conn.port + "/postgres"]]
+                : /POSTGRES/i.test(String(it.databaseVersion || "")) ? [["Connect from this machine", "Start the local tunnel (vyomi-tunnel) and keep this tab open: the database is then published on a localhost port."]] : [])]));
     if (!editing) wrap.append(el("button",{class:"btn", style:"margin-bottom:14px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit connections"));
     else wrap.append(inlineForm([{name: "ipv4Enabled", label: "Public IP", type: "checkbox", value: ip.ipv4Enabled !== false},
       {name: "privateNetwork", label: "Private IP network", value: ip.privateNetwork || "", placeholder: "projects/" + PROJECT + "/global/networks/default", width: 280},
@@ -4143,7 +4157,7 @@ function renderCollapsibleWizard(host, svc){
   // Seed defaults
   tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
     if (f.type === "help" || f.type === "info") return;
-    if (f.default !== undefined) wState.values[f.name] = f.default;
+    if (f.default !== undefined) wState.values[f.name] = uniqDefault(f, f.default);
   })));
 
   function isVisible(f){
