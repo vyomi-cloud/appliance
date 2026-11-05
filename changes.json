@@ -1,13 +1,54 @@
 {
- "at": "2026-11-05T19:07:38+00:00",
+ "at": "2026-11-05T20:07:41+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "azure",
+   "service": "compute",
+   "kind": "spec-commit",
+   "key": "azure:compute:3f0d3c288e",
+   "title": "Azure compute: Fix example with correct expected values for PlacementPreference in PlacementScore response (#47873)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/3f0d3c288ec31fa03c2a20c8395f897811d08fa5",
+   "actionable": false
+  },
+  {
    "cloud": "sdk",
-   "service": "pypi:google-cloud-secret-manager",
+   "service": "pypi:awscli",
    "kind": "release",
-   "key": "ver:pypi:google-cloud-secret-manager:2.32.0",
-   "title": "pypi:google-cloud-secret-manager: 2.31.0 \u2192 2.32.0",
+   "key": "ver:pypi:awscli:1.46.3",
+   "title": "pypi:awscli: 1.46.2 \u2192 1.46.3",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.114.8",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.7 \u2192 v1.114.8",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.73.1",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.73.0 \u2192 v1.73.1",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.52.10",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.9 \u2192 v1.52.10",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.39.5",
+   "title": "cli:aws: 2.39.4 \u2192 2.39.5",
    "actionable": false
   }
  ],
