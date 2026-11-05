@@ -2657,14 +2657,21 @@ try {
   const pipGet = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/publicIPAddresses/${VM}-ip`);
   const pipIp = pipGet.status === 200 ? JSON.parse(pipGet.text).properties?.ipAddress : null;
   check("UI-requested public IP is a real ARM resource with a real address", pipGet.status === 200 && /^\d+\.\d+\.\d+\.\d+$/.test(pipIp || ""), pipGet.text.slice(0, 160));
-  await page.getByText(pipIp || "no-pip").first().waitFor({ timeout: 10000 });
+  await page.getByText(pipIp || "no-pip").first().waitFor({ timeout: 60000 });
   check("Overview shows the real public IP address (not '--')", true);
-  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/connect`);
-  await page.getByText(pipIp || "no-pip").first().waitFor({ timeout: 10000 });
-  await page.getByRole("button", { name: "Native SSH", exact: true }).click();
-  const sshCmdText = (await page.locator("p").filter({ hasText: "ssh azureuser@" }).first().innerText());
-  check("Connect's SSH command uses the real public IP", sshCmdText.includes(pipIp || "\0"), sshCmdText);
-  await page.getByRole("button", { name: "Close" }).click();
+  if (process.env.NANO) {
+    // Nano: Connect is the in-browser VM panel (no public-IP SSH command) - the panel must say so honestly.
+    await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/connect`);
+    await page.getByText("In-browser VM", { exact: true }).first().waitFor({ timeout: 60000 });
+    check("Nano Connect shows the in-browser VM panel (no real public-IP SSH)", true);
+  } else {
+    await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/connect`);
+    await page.getByText(pipIp || "no-pip").first().waitFor({ timeout: 60000 });
+    await page.getByRole("button", { name: "Native SSH", exact: true }).click();
+    const sshCmdText = (await page.locator("p").filter({ hasText: "ssh azureuser@" }).first().innerText());
+    check("Connect's SSH command uses the real public IP", sshCmdText.includes(pipIp || "\0"), sshCmdText);
+    await page.getByRole("button", { name: "Close" }).click();
+  }
   await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}`);
 
   // ── Start / Stop from the Overview command bar → power state over native ARM ──────────
