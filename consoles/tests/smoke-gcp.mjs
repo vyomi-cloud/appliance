@@ -1742,7 +1742,7 @@ try {
   // Autokey (v4 GAP SWEEP wave 5b): set up via the UI → AutokeyConfig is enforced over the
   // native wire (KeyHandle creation refused before this), then create a key handle via the
   // UI → it really provisions a key ring + key in the configured key project.
-  const AK_PROJECT = `v4-gcp-autokey-keys-${Date.now() % 100000}`;
+  const AK_PROJECT = PROJ;   // one project per space: the key project is the space's own project
   // Reset first: an earlier run (e.g. ui-conformance.mjs against the same dev_server) may
   // have already left Autokey ACTIVE for this project.
   await wjson(`/v1/projects/${PROJ}/autokeyConfig?updateMask=state`, {
@@ -2321,6 +2321,11 @@ try {
   // confirm it over the native Resource Manager v3 wire (projects.search), rename it via the
   // list's row menu, then prove the reverse direction (a project created over the wire shows
   // up in the UI list) before deleting it and confirming it drops out of projects.search.
+  // Main's one-project-per-space rule: creating a second project is refused (405) on every substrate, so the
+  // create/rename/move/bulk-delete UI flow only runs where the wire accepts a project create.
+  const RM_CREATE = (await wire("/v3/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: `v4-gcp-rm-probe-${Date.now() % 100000}` }) })).status !== 405;
+  if (!RM_CREATE) check("Resource Manager project create refused (one project per space) - create flow skipped", true);
+  if (RM_CREATE) {
   const RP = `v4-gcp-rm-smoke-${Date.now() % 100000}`;
   await page.goto(UI + "#/resource-manager/create");
   await page.getByLabel("Project name").fill("v4 gcp rm smoke");
@@ -2366,6 +2371,7 @@ try {
   check("bulk delete via UI → gone over native wire (projects.search)",
     !(rpAfter.projects || []).some((p) => p.projectId === RP || p.projectId === RP2), JSON.stringify(rpAfter));
   await shot("28-resource-manager-deleted");
+  }
 
   // Dark mode
   await page.goto(UI + "#/storage/browser");
