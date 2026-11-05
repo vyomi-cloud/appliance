@@ -12,6 +12,7 @@ import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
+import { VmManagerPanel } from "./VmManager.jsx";
 import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDuration, SECTION_TABLE_BLEED } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
@@ -60,8 +61,7 @@ function ObservabilityPanel({ zone, name, inst }) {
         <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Recommendations</Typography>
         <RecommendationsTable filter={(r) => (inst.disks || []).some((d) => (r.targetResources?.[0] || "").endsWith(`/disks/${String(d.source || "").split("/").pop()}`))} />
       </Box>
-      <NotSimulated compact feature="VM Manager"
-        note="VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent, which Vyomi doesn't run." />
+      <VmManagerPanel />
     </Stack>
   );
 }
