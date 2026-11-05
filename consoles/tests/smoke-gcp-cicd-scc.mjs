@@ -23,7 +23,7 @@ page.on("console", (m) => m.type() === "error" && !/status of (40[0-9]|409|412)/
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
 const wj = async (path, method = "GET", b) => { const r = await wire(path, { method, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); try { return JSON.parse(r.text || "{}"); } catch { return {}; } };
-const P = "vyomi-project", L = "us-central1";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project", L = "us-central1";
 const B = `/v1/projects/${P}/locations/${L}`;
 
 try {
@@ -38,9 +38,10 @@ try {
   await wj(`${B}/targets?targetId=prod-${N}`, "POST", { run: { location: `projects/${P}/locations/${L}` }, requireApproval: true });
   await wj(`${B}/deliveryPipelines?deliveryPipelineId=${pl}`, "POST", { serialPipeline: { stages: [{ targetId: `dev-${N}` }, { targetId: `prod-${N}` }] }, deployParameters: { service: `svc-${N}` } });
   await go("#/clouddeploy", "Delivery pipelines");
-  check("Cloud Deploy lists the pipeline", await page.getByRole("link", { name: pl }).isVisible());
+  check("Cloud Deploy lists the pipeline", await page.getByRole("link", { name: pl }).waitFor({ timeout: 20000 }).then(() => true, () => false));   // Nano loads the list after the heading
   await page.getByRole("link", { name: pl }).click();
   await page.getByRole("heading", { name: pl }).first().waitFor();
+  await page.getByTestId("stage-flow").getByText(`prod-${N}`).first().waitFor({ timeout: 20000 }).catch(() => {});
   check("stage flow shows both targets", (await page.getByTestId("stage-flow").innerText()).includes(`prod-${N}`));
   await page.getByRole("button", { name: "Create release" }).click();
   await dlg().getByLabel("Release name").fill("rel-1");

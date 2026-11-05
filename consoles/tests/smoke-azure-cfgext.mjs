@@ -60,6 +60,7 @@ try {
   // ── Key Vault for CMKs
   const KV = `cxkv${n}`;
   await arm("PUT", P("KeyVault", "vaults", KV), { location: "eastus", properties: { tenantId: "00000000-0000-0000-0000-000000000000", sku: { family: "A", name: "standard" } } }, "2023-07-01");
+  await wire("/keys/k1/create?api-version=7.4", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kty: "RSA", key_size: 2048 }) });   // Nano binds the CMK check to the Key Vault keys store: the key must exist
 
   // ── Cosmos
   const C = `cxcosmos${n}`;

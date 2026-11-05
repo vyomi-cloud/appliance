@@ -22,6 +22,7 @@ await page.getByRole("heading", { name: "Vyomi SaaS partners" }).waitFor({ timeo
 await page.getByRole("button", { name: "Set up source" }).first().click();
 await page.getByText(SRC).first().waitFor({ timeout: 10000 });
 let l = await J("AWSEvents.ListEventSources", {});
+for (let i = 0; i < 20 && !(l.json.EventSources || []).some((s) => s.Name === SRC); i++) { await page.waitForTimeout(500); l = await J("AWSEvents.ListEventSources", {}); }  // Nano: row can render before the wire write lands
 check("set up source -> PENDING on the wire", (l.json.EventSources || []).some((s) => s.Name === SRC && s.State === "PENDING"));
 await page.locator("tr", { hasText: SRC }).first().getByRole("radio").check();
 await page.getByRole("button", { name: "Associate with event bus" }).click();

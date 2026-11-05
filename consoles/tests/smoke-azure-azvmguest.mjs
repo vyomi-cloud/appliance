@@ -43,6 +43,13 @@ check("serial log shows the guest dmesg and the screenshot is labelled a placeho
 
 // Serial console
 await page.goto(UI + `#/vms/${RG}/${VM}/serialconsole`);
+if (process.env.NANO === "1") {
+  // Nano has no guest container to exec into: the honest result is the "not available here" notice, never a fake shell.
+  await page.getByText(/In-browser VMs? (are off|is)|not available here/i).first().waitFor({ timeout: 20000 }).then(() => check("Nano: serial console shows the honest in-browser-VM panel (no fake terminal)", true), () => check("Nano: serial console shows the honest in-browser-VM panel (no fake terminal)", false));
+  check("Nano: no terminal input is offered", (await page.getByRole("textbox", { name: "Terminal command" }).count()) === 0);
+  await browser.close();
+  process.exit(bad ? 1 : 0);
+}
 const input = page.getByRole("textbox", { name: "Terminal command" });
 await input.waitFor({ timeout: 20000 });
 await input.fill("uname -a");

@@ -25,7 +25,7 @@ const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true })
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
 const wj = async (path, method = "GET", b) => { const r = await wire(path, { method, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); try { return JSON.parse(r.text || "{}"); } catch { return {}; } };
 const gaps = () => page.locator("[data-vyomi-not-simulated]").count();
-const P = "vyomi-project";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 
 try {
   await page.goto(UI, { waitUntil: "networkidle" });

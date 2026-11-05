@@ -24,7 +24,7 @@ page.on("console", (m) => m.type() === "error" && !/status of (40[034]|412)/.tes
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
 const wj = async (path, init) => { const r = await wire(path, init); try { return JSON.parse(r.text || "{}"); } catch { return { raw: r.text }; } };
 const J = { "content-type": "application/json" };
-const P = "vyomi-project";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 const ns = () => page.locator("[data-vyomi-not-simulated]").evaluateAll((els) => els.map((e) => e.getAttribute("data-vyomi-not-simulated")));
 try {
   await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });

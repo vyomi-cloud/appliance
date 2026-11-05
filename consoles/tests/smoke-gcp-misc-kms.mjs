@@ -19,7 +19,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 const J = { "content-type": "application/json" };
 const wj = (path, init) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); const t = await r.text(); try { return { status: r.status, ...JSON.parse(t || "{}") }; } catch { return { status: r.status, raw: t }; } }, [WIRE + path, init]);
-const P = "vyomi-project";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 const ns = () => page.locator("[data-vyomi-not-simulated]").count();
 try {
   await page.goto(UI, { waitUntil: "networkidle" });

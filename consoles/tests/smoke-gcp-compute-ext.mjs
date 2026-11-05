@@ -32,7 +32,7 @@ const wj = async (path, method = "GET", b) => { const r = await wire(path, { met
 await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
 if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
-const project = await page.evaluate(() => { try { return localStorage.getItem("vyomi.v4.gcp.project") || "vyomi-project"; } catch { return "vyomi-project"; } });
+const project = await page.evaluate(() => { try { return localStorage.getItem("vyomi.v4.gcp.project") || (process.env.NANO === "1" ? "nano-project" : "vyomi-project"); } catch { return "vyomi-project"; } });
 const C = (p) => `/compute/v1/projects/${project}${p}`;
 const go = async (hash, heading) => { await page.goto(UI + hash); await page.getByRole("heading", { name: heading }).first().waitFor({ timeout: 60000 }); };
 const pick = async (label, option) => { await page.getByRole("combobox", { name: label }).click(); await page.getByRole("option", { name: option, exact: false }).first().click(); };
