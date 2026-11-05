@@ -27,6 +27,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import * as ops from "./AppOps.jsx";
+import { EntraAuthentication, AzureOpenAIConnection } from "../../kit/WebAuthPanels.jsx";
 import * as dev from "./DevTools.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -55,7 +56,7 @@ export const MENU = [
   { group: "Deployment", items: [{ id: "slots", label: "Deployment slots" }, { id: "deploymentcenter", label: "Deployment Center" }] },
   { group: "Settings", items: [
     { id: "envvars", label: "Environment variables" }, { id: "configuration", label: "Configuration" },
-    { id: "authentication", label: "Authentication" }, { id: "appinsights", label: "Application Insights" },
+    { id: "authentication", label: "Authentication" }, { id: "azureopenai", label: "Azure OpenAI" }, { id: "appinsights", label: "Application Insights" },
     { id: "identity", label: "Identity" }, { id: "backups", label: "Backups" },
     { id: "customdomains", label: "Custom domains" }, { id: "certificates", label: "Certificates" },
     { id: "networking", label: "Networking" }, { id: "scaleup", label: "Scale up (App Service plan)" },
@@ -143,7 +144,8 @@ export default function WebAppBlade({ params, query }) {
       apimanagement: () => <ops.ApiManagement a={a} rg={rg} name={name} reload={reload} />,
       appserviceplan: () => <ops.PlanPage a={a} name={name} />,
       quotas: () => <ops.Quotas a={a} rg={rg} name={name} />,
-      authentication: () => <ops.Authentication a={a} rg={rg} name={name} />,
+      authentication: () => <EntraAuthentication rg={rg} name={name} capId="azure.appservices.webapp.authentication" isFunctionApp={false} />,
+      azureopenai: () => <AzureOpenAIConnection rg={rg} name={name} capId="azure.appservices.webapp.authentication" />,
       certificates: () => <ops.Certificates a={a} rg={rg} name={name} />,
       cloneapp: () => <ops.CloneApp a={a} rg={rg} name={name} />,
       webjobs: () => <ops.WebJobs a={a} rg={rg} name={name} />,
