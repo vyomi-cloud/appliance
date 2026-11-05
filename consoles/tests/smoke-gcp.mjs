@@ -30,12 +30,17 @@ await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
+let allow405 = false;   // set only around the deliberate second-project create (a 405 by design)
 page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s / 403s / 412s are legitimate API answers (e.g. a retention-protected delete,
 // an org-policy-denied create), not page errors.
 // Expected native answers (400 validation, 403 denied, 404 gone, 412 precondition failed) are
 // not page errors. ONE handler: two handlers with different allow-lists record each other's codes.
-page.on("console", (m) => m.type() === "error" && !/status of (40[034]|412)/.test(m.text()) && errors.push(m.text()));
+page.on("console", (m) => m.type() === "error" && !/status of (40[034]|412)/.test(m.text()) && !/status of 409/.test(m.text()) && !(allow405 && /status of 405/.test(m.text())) && errors.push(m.text()));
+// 409 = a legitimate CONFLICT answer the smoke itself provokes (e.g. connect-info on a VM that is not RUNNING yet);
+// Chrome's console line carries no URL, so any 409 is recorded here with its URL and only counted as an error
+// when it is NOT one of those known conflicts.
+page.on("response", (r) => { if (r.status() === 409 && !/\/connect-info(\?|$)/.test(r.url())) errors.push(`unexpected 409 ${r.request().method()} ${r.url()}`); });
 // Native 400/403/404s are legitimate API answers (e.g. a retention-protected delete, a
 // public-access-prevention rejection), not page errors.
 
@@ -1753,7 +1758,8 @@ try {
   await page.getByLabel("Key project").fill(AK_PROJECT);
   await page.getByRole("button", { name: "Enable" }).click();
   await page.getByText(AK_PROJECT).waitFor({ timeout: 10000 });
-  const akCfg = await wjson(`/v1/projects/${PROJ}/autokeyConfig`);
+  // the key-project text is also on screen before the PATCH lands (project picker, dialog): poll the wire
+  const akCfg = await settle(() => wjson(`/v1/projects/${PROJ}/autokeyConfig`), (c) => c.state === "ACTIVE");
   check("set up Autokey via UI → autokeyConfig.get shows ACTIVE + keyProject",
     akCfg.state === "ACTIVE" && akCfg.keyProject === AK_PROJECT);
 
@@ -1829,21 +1835,26 @@ try {
   await page.getByLabel("Name").fill(SM2);
   await page.getByRole("button", { name: "Create secret", exact: true }).click();
   await page.getByRole("heading", { name: SM2 }).waitFor({ timeout: 10000 });
-  await wire(`/v1/projects/${PROJ}/secrets/${SM2}:addVersion`, {
+  // The detail page opens optimistically: addVersion before the create has settled on the wire is a 404 that
+  // would leave the secret without a version (so `latest:access` 404s later). Wait for the secret, then add.
+  await settle(() => wire(`/v1/projects/${PROJ}/secrets/${SM2}`), (r) => r.status === 200);
+  const firstVer = await settle(() => wire(`/v1/projects/${PROJ}/secrets/${SM2}:addVersion`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: { data: Buffer.from("smoke-value").toString("base64") } }),
-  });
+  }), (r) => r.status === 200);
+  check("secret v1 added over native wire", firstVer.status === 200, `${firstVer.status} ${firstVer.text.slice(0, 120)}`);
   await page.getByRole("tab", { name: "Permissions" }).click();
   await page.getByRole("button", { name: "Grant access" }).click();
   await page.getByLabel("New principals").fill("user:sm-smoke@example.com");
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText("user:sm-smoke@example.com").first().waitFor({ timeout: 10000 });
-  const deniedResp = await wire(`/v1/projects/${PROJ}/secrets/${SM2}/versions/latest:access`,
-    { headers: { "X-Cloudlearn-Principal": "someone-else@example.com" } });
-  const allowedResp = await wire(`/v1/projects/${PROJ}/secrets/${SM2}/versions/latest:access`,
-    { headers: { "X-Cloudlearn-Principal": "sm-smoke@example.com" } });
-  check("grant access via UI → native wire denies an ungranted principal", deniedResp.status === 403);
-  check("grant access via UI → native wire allows the granted principal", allowedResp.status === 200);
+  // The UI shows the new principal optimistically, a moment before the policy write has settled
+  // (esp. on Nano, under load): poll the native wire rather than read it once.
+  const accessAs = (who) => wire(`/v1/projects/${PROJ}/secrets/${SM2}/versions/latest:access`, { headers: { "X-Cloudlearn-Principal": who } });
+  const deniedResp = await settle(() => accessAs("someone-else@example.com"), (r) => r.status === 403);
+  const allowedResp = await settle(() => accessAs("sm-smoke@example.com"), (r) => r.status === 200);
+  check("grant access via UI → native wire denies an ungranted principal", deniedResp.status === 403, `${deniedResp.status} ${deniedResp.text.slice(0, 160)}`);
+  check("grant access via UI → native wire allows the granted principal", allowedResp.status === 200, `${allowedResp.status} ${allowedResp.text.slice(0, 160)}`);
   await shot("14-secret-permissions");
 
   await wire(`/v1/projects/${PROJ}/secrets/${SM2}:addVersion`, {
@@ -1852,8 +1863,10 @@ try {
   });
   await page.getByRole("tab", { name: "Logs" }).click();
   await page.getByText("Version added").first().waitFor({ timeout: 10000 });
-  check("version added over native wire → shown as a real log entry in the Logs tab",
-    (await page.getByText("Version added").count()) === 2);
+  // two addVersion calls on this secret → two entries; the Logs tab may load its second page of entries a beat later
+  let nLogs = 0;
+  for (const t0 = Date.now(); Date.now() - t0 < 15000;) { nLogs = await page.getByText("Version added").count(); if (nLogs >= 2) break; await page.waitForTimeout(500); }
+  check("version added over native wire → shown as a real log entry in the Logs tab", nLogs === 2, `entries shown: ${nLogs}`);
   await shot("15-secret-logs");
 
   // Secret Manager DEPTH: Regional secrets — a distinct resource (projects/{p}/locations/
@@ -2323,6 +2336,7 @@ try {
   // up in the UI list) before deleting it and confirming it drops out of projects.search.
   // Main's one-project-per-space rule: creating a second project is refused (405) on every substrate, so the
   // create/rename/move/bulk-delete UI flow only runs where the wire accepts a project create.
+  allow405 = true;
   const RM_CREATE = (await wire("/v3/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: `v4-gcp-rm-probe-${Date.now() % 100000}` }) })).status !== 405;
   if (!RM_CREATE) check("Resource Manager project create refused (one project per space) - create flow skipped", true);
   if (RM_CREATE) {
