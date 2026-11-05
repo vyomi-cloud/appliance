@@ -42,6 +42,16 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # Stream Analytics jobs/inputs/outputs/transformation + Blob query runner
+    from core import azure_streamanalytics_core as sa_engine
+except ImportError:
+    import azure_streamanalytics_core as sa_engine     # type: ignore
+
+try:                                              # AKS Container Insights / Managed Prometheus / Grafana toggles -> DCR + Monitor workspace + Grafana
+    from core import azure_aksmon_core as aksmon_engine
+except ImportError:
+    import azure_aksmon_core as aksmon_engine      # type: ignore
+
 try:                                              # Azure Monitor workspaces + Managed Grafana (Microsoft.Monitor, Microsoft.Dashboard)
     from core import azure_monitorproducts_core as monprod_engine
 except ImportError:
@@ -1862,6 +1872,8 @@ class AzureArm:
 
         if monprod_engine.handles(namespace, chain):
             return self._monprod(method, sub, rg, namespace, chain, payload, query)
+        if sa_engine.handles(namespace, chain):
+            return self._streamanalytics(method, sub, rg, namespace, chain, payload, query)
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -2126,6 +2138,8 @@ class AzureArm:
                     if blocked:
                         return blocked
             rec = self.state.pop(key, None)
+            if rec is not None and aksmon_engine.handles(rec):
+                aksmon_engine.cleanup(self.state, rec)
             if rec is not None:
                 dpb.cosmos_before_delete(self.state, rec)
                 dpb.storage_before_delete(self.state, rec)
@@ -3500,6 +3514,16 @@ class AzureArm:
         ext_engine.after_upsert(self.state, rec, payload or {})
         return _ok(_view(rec), 201 if created else 200)
 
+    def _streamanalytics(self, method, sub, rg, namespace, chain, payload, query):
+        try:
+            from core import azure_blob_core as _bm
+        except ImportError:
+            import azure_blob_core as _bm              # type: ignore
+        r = sa_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query, blob_store=self.blob_store, blob_mod=_bm)
+        if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE") and len(chain) == 2 and rg:
+            self._record_activity(sa_engine._rid(sub, rg, chain[1]), f"Microsoft.StreamAnalytics/streamingjobs/{'delete' if method == 'DELETE' else 'write'}", sub)
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
+
     def _monprod(self, method, sub, rg, namespace, chain, payload, query):
         r = monprod_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
@@ -3581,6 +3605,7 @@ class AzureArm:
 
     def _upsert(self, rid, key, full_type, name, catalog, payload, base, patch=False):
         existed = key in self.state
+        _aks_old = self.state.get(key)
         is_top = full_type.lower() == (catalog["namespace"] + "/" + catalog["type"]).lower()
         defaults = _expand_tokens(catalog.get("defaults", {}), name, base) if is_top else {"properties": {"provisioningState": "Succeeded"}}
         endpoints = catalog.get("endpoints", {}) if is_top else {}
@@ -3655,6 +3680,15 @@ class AzureArm:
             # cluster, from the moment it comes up — same seeding convention as the default
             # namespaces above (properties.namespaces, via the catalog defaults).
             k8s_engine.seed_storage_classes(rec)
+        if full_type.lower() == "microsoft.containerservice/managedclusters":
+            self.state[key] = rec
+            bad = aksmon_engine.reconcile(self.state, rec)
+            if bad is not None:
+                if existed:
+                    self.state[key] = _aks_old
+                else:
+                    self.state.pop(key, None)
+                return bad
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 

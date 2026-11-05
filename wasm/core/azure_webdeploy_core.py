@@ -25,7 +25,7 @@ Deployments are REAL through the shared CI seam (core/ci_core.py, one repo ``sit
 
 A build/fetch failure is recorded as a *Failed* deployment with the real reason (never a fake success). The deployed
 package is a stored artifact: the App Service runtime does not hot-swap to it (limited; see capability JSON). The
-GitHub Actions workflow is generated but not committed to the remote.
+GitHub Actions workflow is committed to the app's CI repo and, with a connected PAT, to the GitHub remote (no GitHub runner executes it).
 """
 from __future__ import annotations
 
@@ -268,7 +268,14 @@ def _put_source(rec, s, props, method):
         if g.get("generateWorkflowFile", True):
             g["workflowYaml"] = workflow_yaml(rec, branch, stack, code.get("runtimeVersion"), is_linux)
             g["workflowFilePath"] = f".github/workflows/{branch.replace('/', '-')}_{rec['name']}.yml"
-            g.pop("workflowCommit", None); g.pop("workflowCommitError", None)
+            g.pop("workflowCommit", None); g.pop("workflowCommitError", None); g.pop("workflowCiCommit", None); g.pop("workflowCiCommitError", None)
+            try:       # the workflow file is also committed to the app's own CI repo (core/ci_core.py: Gitea when present)
+                cdb, crepo = _site_repo(rec)
+                ev = ci.commit_files(cdb, crepo, branch, {g["workflowFilePath"]: g["workflowYaml"]},
+                                     f"Add or update the Azure App Service build and deployment workflow config ({rec['name']})", "Vyomi Deployment Center", rec)
+                g["workflowCiCommit"] = {"repo": crepo, "branch": branch, "sha": ev["after"], "path": g["workflowFilePath"]}
+            except ci.CiError as e:
+                g["workflowCommitError"] = f"The workflow could not be committed to the app's CI repo: {e.message}"
             if (ci.get_db(rec)["connections"].get("github") or {}).get("token"):
                 try:                                     # the real workflow file lands in the user's own repo
                     g["workflowCommit"] = ci.github_commit_file(ci.get_db(rec), repo, branch, g["workflowFilePath"], g["workflowYaml"],

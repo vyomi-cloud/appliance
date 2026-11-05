@@ -1474,6 +1474,12 @@ def _invoke(store, name, body, headers=None, query=None, msg_store=None, lam_sto
     # `run_function(fn, event, context) -> {ok, result | errorType, error, logs}`; otherwise
     # the in-process sandbox runs it.
     runner = getattr(store, "run_function", None)
+    hook = getattr(store, "role_use_hook", None)   # IAM Role manager: execution role last-used
+    if hook and fn.get("role"):
+        try:
+            hook(fn["role"], "lambda", "Invoke")
+        except Exception:
+            pass
     start = time.perf_counter()
     try:
         out = runner(fn, event, context) if callable(runner) else _sandbox_run(fn, event, context)

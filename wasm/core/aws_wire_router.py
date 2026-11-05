@@ -418,6 +418,7 @@ _SIGNING = {
     "dlm": "dlm",
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
+    "mgn": "mgn",   # Application Migration Service (rest-json POST /<Operation>) -> core/mgn_core over the shared EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "securityhub": "securityhub", "guardduty": "guardduty",   # Security Hub + GuardDuty (rest-json) -> core/secscan_core over the S3 store's persisted account bag
     "codeconnections": "codeconnections", "codestar-connections": "codeconnections",   # CodeConnections-lite + CloudFormation Git sync (JSON 1.0) -> core/aws_codeconn_core over the S3 store's account bag + the CFN core
@@ -834,6 +835,8 @@ class AwsWireRouter:
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
         self.rds.iam_store = self.iam             # RDS IAM role association validates the role + its trust policy
+        self.iam.role_usage_probe = self._role_usage_refs   # IAM Role manager: Lambda execution roles + EC2 instance profiles
+        self.lam.role_use_hook = lambda role, svc, act: iam.record_role_use(self.iam, role, svc, act)   # Lambda invoke -> role last-used
         self.sec.lam_store = self.lam             # Secrets Manager rotation really invokes the Lambda rotation function
         self.msg.kms_store = self.kms             # EventBridge bus/archive KMS encryption (real Encrypt/Decrypt)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
@@ -1323,6 +1326,27 @@ class AwsWireRouter:
             params.update(dict(parse_qsl(txt, keep_blank_values=True)))
         return params
 
+    def _role_usage_refs(self, role: dict) -> list:
+        """Live resources that still depend on an IAM role (IAM Role manager delete checks)."""
+        refs, arn, name = [], role["arn"], role["role_name"]
+        try:
+            fns = getattr(self.lam, "functions", None)
+            from core import lambda_core as _lc
+            fns = _lc._functions(self.lam)
+            refs += [{"Type": "LambdaFunction", "Id": n} for n, f in sorted(fns.items()) if str(f.get("role", "")).rsplit("/", 1)[-1] == name]
+        except Exception:
+            pass
+        try:
+            from core import vpc_core as _vc
+            ips = {n for n, ip in iam._ip_all(self.iam).items() if name in ip["roles"]}
+            for iid, inst in _vc._model(self.vpc)["instances"].items():
+                prof = str(inst.get("iam_instance_profile") or "").rsplit("/", 1)[-1]
+                if prof and prof in ips and str(inst.get("state")) not in ("terminated", "shutting-down"):
+                    refs.append({"Type": "Ec2Instance", "Id": iid})
+        except Exception:
+            pass
+        return refs
+
     # ── activity log (Vyomi-only — see iam_core.record_activity) ───────
     # Query/JSON-protocol services carry an explicit action name (Action= param or the
     # X-Amz-Target header); REST services (S3, Lambda, API Gateway, …) don't, so only the
@@ -1578,6 +1602,9 @@ class AwsWireRouter:
             from core import vpc_lattice_core
             return vpc_lattice_core.dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
 
+        if svc == "mgn":
+            from core import mgn_core
+            return mgn_core.dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
         if svc == "rbin":
             from core import ec2_ops_core
             r = ec2_ops_core.rbin_dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
