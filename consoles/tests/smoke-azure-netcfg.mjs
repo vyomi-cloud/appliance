@@ -135,7 +135,9 @@ try {
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.waitForFunction(async ([u]) => (await (await fetch(u)).json()).properties?.scmType === "VSTSRM", [`${WIRE}/subscriptions/${SUB}${WS}/sites/wapp${n}/config/web?api-version=2023-12-01`], { timeout: 10000 });
   check("Azure Repos source sets scmType VSTSRM", true);
-  await page.getByLabel("Source", { exact: true }).selectOption("container");
+  // After a Save the blade reloads and resets the form to the saved source; on Nano that lands late, so
+  // keep selecting until the container fields are actually showing.
+  for (let i = 0; i < 20 && !(await page.getByLabel("Image and tag").isVisible().catch(() => false)); i++) { await page.getByLabel("Source", { exact: true }).selectOption("container").catch(() => {}); await page.waitForTimeout(1500); }
   await page.getByLabel("Image and tag").fill("myreg.azurecr.io/shop/app:v1");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.waitForFunction(async ([u]) => (await (await fetch(u)).json()).properties?.linuxFxVersion === "DOCKER|myreg.azurecr.io/shop/app:v1", [`${WIRE}/subscriptions/${SUB}${WS}/sites/wapp${n}/config/web?api-version=2023-12-01`], { timeout: 10000 });
