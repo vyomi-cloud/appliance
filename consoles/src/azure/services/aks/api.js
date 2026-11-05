@@ -134,7 +134,7 @@ export function toArmBody(f) {
         omsagent: { enabled: f.containerInsights },
         azurepolicy: { enabled: f.azurePolicy },
       },
-      azureMonitorProfile: { metrics: { enabled: f.prometheus } },
+      azureMonitorProfile: { metrics: { enabled: f.prometheus, ...(f.prometheus && f.grafana ? { createGrafana: true } : {}) } },
       enableImageCleaner: f.imageCleaner,
       oidcIssuerProfile: { enabled: f.oidcIssuer },
       securityProfile: { workloadIdentity: { enabled: f.workloadIdentity }, defender: { securityMonitoring: { enabled: f.defender } } },
@@ -146,3 +146,19 @@ export function toArmBody(f) {
     },
   };
 }
+
+// ── Monitoring (Container Insights / Managed Prometheus / Grafana): Log Analytics + Azure Monitor workspaces, DCRs ──
+const sub = () => `/subscriptions/${getSubscription()}`;
+export const listLogWorkspaces = async () => (await restJson("GET", `${sub()}/providers/Microsoft.OperationalInsights/workspaces`, { query: { "api-version": "2022-10-01" } })).value || [];
+/** Container Insights needs a workspace; like the portal, create "DefaultWorkspace-<region>" when the user picked none. */
+export async function ensureWorkspace(rg, location, picked) {
+  if (picked) return picked;
+  const name = `DefaultWorkspace-${location}`;
+  const id = `${sub()}/resourceGroups/${rg}/providers/Microsoft.OperationalInsights/workspaces/${name}`;
+  await restJson("PUT", id, { query: { "api-version": "2022-10-01" }, body: { location, properties: { sku: { name: "PerGB2018" }, retentionInDays: 30 } } });
+  return id;
+}
+export const listDcrs = async (rg) => (await restJson("GET", `${sub()}/resourceGroups/${rg}/providers/Microsoft.Insights/dataCollectionRules`, { query: { "api-version": "2023-03-11" } })).value || [];
+export const listDcrAssociations = async (clusterId) => (await restJson("GET", `${clusterId}/providers/Microsoft.Insights/dataCollectionRuleAssociations`, { query: { "api-version": "2023-03-11" } })).value || [];
+export const getByIdSafe = async (id, v) => { try { return await restJson("GET", id, { query: { "api-version": v } }); } catch { return null; } };
+export const setMonitoring = (rg, name, properties) => ARM.patch(rg, name, { properties });

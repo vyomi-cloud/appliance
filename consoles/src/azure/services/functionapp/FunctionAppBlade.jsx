@@ -28,6 +28,7 @@ import { ErrorBar, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, NotSimulate
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as ops from "../appservices/AppOps.jsx";
+import { EntraAuthentication, AzureOpenAIConnection } from "../../kit/WebAuthPanels.jsx";
 import * as dev from "../appservices/DevTools.jsx";
 import { Configuration as WebConfiguration } from "../appservices/WebAppBlade.jsx";
 import * as api from "./api.js";
@@ -53,7 +54,7 @@ export const MENU = [
   { group: "Deployment", items: [{ id: "deployment-center", label: "Deployment Center" }] },
   { group: "Settings", items: [
     { id: "environment-variables", label: "Environment variables" }, { id: "configuration", label: "Configuration" },
-    { id: "authentication", label: "Authentication" }, { id: "application-insights", label: "Application Insights" },
+    { id: "authentication", label: "Authentication" }, { id: "azureopenai", label: "Azure OpenAI" }, { id: "application-insights", label: "Application Insights" },
     { id: "identity", label: "Identity" }, { id: "custom-domains", label: "Custom domains" }, { id: "certificates", label: "Certificates" },
     { id: "networking", label: "Networking" }, { id: "scale-and-concurrency", label: "Scale and concurrency" },
     { id: "service-connector", label: "Service Connector" }, { id: "locks", label: "Locks" },
@@ -112,7 +113,8 @@ export default function FunctionAppBlade({ params }) {
       "certificates": () => <Certificates a={a} />,
       "cors": () => <Cors a={a} reload={reload} />,
       "networking": () => <Networking a={a} reload={reload} />,
-      "authentication": () => <Authentication a={a} />,
+      "authentication": () => <EntraAuthentication rg={a.resourceGroup} name={a.name} capId="azure.functionapp.authentication" isFunctionApp />,
+      "azureopenai": () => <AzureOpenAIConnection rg={a.resourceGroup} name={a.name} capId="azure.functionapp.authentication" />,
       "diagnostic-settings": () => <DiagnosticSettings a={a} />,
       "metrics": () => <Metrics a={a} />,
       "logs": () => <LogsPanel a={a} />,
