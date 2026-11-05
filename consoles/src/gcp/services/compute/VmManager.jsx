@@ -5,6 +5,7 @@ import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogT
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { fmtDate } from "../../kit/common.jsx";
 import * as api from "./api.js";
 import { ListPage, ZONE_OPTS } from "./Ext.jsx";
@@ -197,5 +198,23 @@ export function VmExtensionPolicies() {
         { id: "ro", header: "Rollout", cell: (p) => p.rolloutOperation?.rolloutInput?.predefinedRolloutPlan || "—" },
         { id: "c", header: "Created", cell: (p) => fmtDate(p.creationTimestamp) },
       ]} />
+  );
+}
+
+/* Entry point shown on the VM list / VM detail pages: VM Manager is a working control plane (see the Patch,
+ * OS policies, OS inventory and Reports pages); the capability badge states what is and is not applied per substrate. */
+export function VmManagerPanel() {
+  return (
+    <CapabilityContainer id="gcp.compute.vm-manager" title="VM Manager">
+      <Typography variant="body2" sx={{ mb: 1 }}>
+        Patch jobs and deployments, OS policy assignments, VM extension policies, OS inventory and reports are available for these VMs.
+        Patch jobs are recorded per instance; a guest package manager only runs where a real guest exists (offline, VMs with metadata enable-osconfig=TRUE).
+        On Nano, patch jobs are record-only and inventory shows the OS declared by the boot image.
+      </Typography>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        {[["Patch", "patch"], ["OS policies", "os-policies"], ["OS inventory", "vm-inventory"], ["Reports", "vm-reports"], ["VM extension policies", "vm-extension-policies"]].map(([t, h]) =>
+          <Button key={h} size="small" href={`#/compute/${h}`}>{t}</Button>)}
+      </Box>
+    </CapabilityContainer>
   );
 }

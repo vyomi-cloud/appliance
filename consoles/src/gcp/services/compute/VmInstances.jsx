@@ -16,6 +16,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
+import { VmManagerPanel } from "./VmManager.jsx";
 import { PageHeader, NotSimulated, ErrorAlert, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link } from "../../link.jsx";
@@ -138,8 +139,7 @@ export default function VmInstances() {
             <RecommendationsTable />
           </CapabilityContainer>
         </Box>
-        <NotSimulated compact feature="VM Manager"
-          note="VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent, which Vyomi doesn't run." />
+        <VmManagerPanel />
       </TabPanel>
       <TabPanel value={tab} name="schedules">
         <InstanceSchedules instances={data} />

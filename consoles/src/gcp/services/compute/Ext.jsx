@@ -29,6 +29,21 @@ export function FormDialog({ open, title, fields, onClose, onSubmit, submitLabel
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   useEffect(() => { if (open) { setV(init()); setError(null); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A select whose options load after the dialog opened (e.g. an Interconnect list) starts empty: once the options
+  // arrive (or change), a value that is not among them falls back to the first option so the shown default is submitted.
+  const optSig = fields.map((f) => (f.options ? f.options.map((o) => o[0]).join("\u0001") : "")).join("\u0002");
+  useEffect(() => {
+    if (!open) return;
+    setV((cur) => {
+      let next = cur;
+      for (const f of fields) {
+        if (!f.options || !f.options.length || f.options.some((o) => o[0] === cur[f.key])) continue;
+        const d = f.options.some((o) => o[0] === f.default) ? f.default : f.options[0][0];
+        next = { ...next, [f.key]: d };
+      }
+      return next;
+    });
+  }, [open, optSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const go = async () => {
     setBusy(true); setError(null);
     try { await onSubmit(v); onClose(); } catch (e) { setError(e); } finally { setBusy(false); }
