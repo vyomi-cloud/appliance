@@ -36,6 +36,21 @@ const nanoChrome = (cloud) => `<script>window.__VY_ASSET_BASE = "../../";</scrip
 // Cache-busting: asset URLs carry a hash of the bundle, so browsers (and Nano's service
 // worker) fetch the new build after every rebuild/upgrade instead of a stale main.js.
 let assetVersion = "dev";
+// Nano: the relay-tunnel footer (Start tunnel / Logs / Local tunnel + Cloudflare tabs) is the shared
+// widget the Nano pages carry. It is lifted verbatim from wasm/aws-console.html at build time (single
+// source) and mounted on every v4 Nano console; __NANO_BASE points it at the bundle root (../..).
+function nanoFoot() {
+  try {
+    const src = readFileSync(join(ROOT, "wasm", "aws-console.html"), "utf8");
+    const i = src.indexOf(" #nano-star{");
+    const a = i < 0 ? -1 : src.lastIndexOf("<style>", i);
+    const b = src.indexOf('<script src="./vyomi-appbar.js"', a);
+    if (a < 0 || b < 0) throw new Error("tunnel footer block not found in wasm/aws-console.html");
+    return '<script>window.__NANO_BASE = "../..";</script>\n' + src.slice(a, b) + "\n";
+  } catch (e) { console.warn("[v4] tunnel footer not embedded:", e.message); return ""; }
+}
+const NANO_FOOT = nanoFoot();
+
 const html = (cloud, title, nano = false) => `<!doctype html>
 <html lang="en">
 <head>
@@ -47,6 +62,7 @@ ${existsSync(join(HERE, "..", "static", "v4", cloud, "main.css")) ? `<link rel="
 <body>
 ${nano ? NANO_BODY : ""}<div id="root"></div>
 ${nano ? nanoChrome(cloud) : ""}<script type="module" src="./main.js?v=${assetVersion}"></script>
+${nano ? NANO_FOOT : ""}
 </body>
 </html>
 `;
