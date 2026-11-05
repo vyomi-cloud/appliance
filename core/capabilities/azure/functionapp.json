@@ -224,11 +224,10 @@
   "title": "Authentication (Easy Auth)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Only a require-authentication toggle is modelled: when on, invoke requires a simulator-minted bearer token (shown on the Authentication panel) in the Authorization header.",
-   "Real OAuth/OIDC identity providers (Microsoft Entra ID, Google, Facebook, …) are not modelled — Vyomi is not a real identity provider."
+   "authsettingsV2 round-trips with real validation (Entra registration clientId/issuer, allowed audiences, excluded paths, secret setting must exist) and the function front door enforces unauthenticatedClientAction (302 to the Entra authorize URL, 401, 403, AllowAnonymous). A credential is the simulator bearer token or a JWT whose claims (exp, aud, tenant) validate; the JWT signature is not verified (Vyomi's Entra issues opaque tokens) and there is no interactive browser sign-in or Google/Facebook/Apple providers."
   ],
   "api": ["WebApps_UpdateAuthSettingsV2", "WebApps_InvokeFunction"],
-  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+  "tests": ["tests/conformance/test_azure_functionapp_core.py", "tests/conformance/test_azure_webauth_core.py"]
  },
  "azure.functionapp.diagnosticsettings": {
   "title": "Diagnostic settings",

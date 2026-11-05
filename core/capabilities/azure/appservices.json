@@ -406,17 +406,20 @@
  "azure.appservices.webapp.authentication": {
   "title": "Authentication (App Service authentication)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Only the on/off platform switch and one shared bearer token exist (enforced on function invocation for function apps); identity providers and interactive sign-in are not simulated."
+   "authsettingsV2 is validated and round-trips (Entra registration, audiences, excluded paths); the function-app front door enforces unauthenticatedClientAction (302/401/403/AllowAnonymous) against the simulator token or a JWT whose claims validate. JWT signatures are not verified and there is no interactive sign-in or non-Entra provider. Web (non-function) app requests are not served, so nothing is enforced for them.",
+   "Azure OpenAI hookup: AZURE_OPENAI_* app settings and aoaiconnection are validated against a real OpenAI/AI Services account, deployment and key; the app code is not run against it."
   ],
   "api": [
-   "sites/config/authsettingsV2 Get/Update"
+   "sites/config/authsettingsV2 Get/Update",
+   "sites/aoaiconnection Get/Put (Vyomi extension)"
   ],
   "tests": [
-   "tests/conformance/test_azure_webapp_ops.py"
+   "tests/conformance/test_azure_webapp_ops.py",
+   "tests/conformance/test_azure_webauth_core.py"
   ]
  },
  "azure.appservices.webapp.autoscale": {

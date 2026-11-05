@@ -596,6 +596,14 @@ def _update_site(state, rec, payload, method):
         rec["properties"][k] = _to_bool(v) if k in _BOOL_PROPS else v
 
 
+def _webauth():
+    try:
+        from core import azure_webauth_core as m
+    except ImportError:
+        import azure_webauth_core as m      # type: ignore  (Nano: flat module path)
+    return m
+
+
 def _webnet():
     try:
         from core import azure_webnet_core as m
@@ -693,6 +701,9 @@ def _site_subresource(state, rec, rest, method, payload):
         except ImportError:
             import azure_kudu_core as _kd               # type: ignore  (Nano: flat module path)
         r = _kd.dispatch(state, rec, rest, method, payload, _QUERY)
+        return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+    if _webauth().handles(rest):
+        r = _webauth().dispatch(state, rec, rest, method, payload)
         return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
     if _webnet().handles(rest):
         r = _webnet().dispatch(state, rec, rest, method, payload)
@@ -812,6 +823,11 @@ def _config_ops(rec, rest, method, payload):
         key = "_" + kind
         if read:
             return _ok({"properties": dict(rec[key])})
+        if method in ("PUT", "PATCH") and kind == "appsettings":
+            incoming = dict(_props(payload)) if method == "PUT" else {**rec[key], **_props(payload)}
+            _bad_aoai = _webauth().validate_settings(_STATE_REF[0] or {}, rec, incoming)
+            if _bad_aoai:
+                return _conv(_bad_aoai)
         if method == "PUT":
             rec[key] = dict(_props(payload))
             return _ok({"properties": dict(rec[key])})
@@ -837,13 +853,13 @@ def _config_ops(rec, rest, method, payload):
     elif kind == "authsettingsv2":
         auth = rec["_authsettingsv2"]
         if read:
-            return _ok({"properties": _auth_view(auth)})
+            return _ok({"properties": _auth_view(rec)})
         if method in ("PUT", "PATCH"):
-            enabled = _to_bool(_props(payload).get("platform", {}).get("enabled"), auth["enabled"])
-            auth["enabled"] = enabled
-            if enabled and not auth["token"]:
-                auth["token"] = _h(rec["id"], "authtoken", _now(), n=40)
-            return _ok({"properties": _auth_view(auth)})
+            chk = _webauth().validate_auth(rec, _props(payload), method)
+            if "ok" not in chk:
+                return _conv(chk)
+            _webauth().apply_auth(rec, chk["v2"], lambda: _h(rec["id"], "authtoken", _now(), n=40))
+            return _ok({"properties": _auth_view(rec)})
     return _err(405, "MethodNotAllowed", f"{method} not supported on config/{kind}.")
 
 
@@ -1084,8 +1100,8 @@ def _scale_capacity(rec):
         return 1
 
 
-def _auth_view(auth):
-    return {"platform": {"enabled": auth["enabled"]}, "token": auth["token"] if auth["enabled"] else None}
+def _auth_view(rec):
+    return _webauth().auth_view(rec)
 
 
 def _invoke_function(rec, fn, req):
@@ -1121,12 +1137,11 @@ def _invoke_function(rec, fn, req):
         return finish({"ok": False, "status": 403, "body": None,
                       "error": f"CorsRequestBlocked: origin '{origin}' is not in the allowed origins list "
                                "configured on CORS"})
-    auth = rec.get("_authsettingsv2") or {}
-    if auth.get("enabled"):
-        if headers.get("authorization") != f"Bearer {auth.get('token')}":
-            return finish({"ok": False, "status": 401, "body": None,
-                          "error": "Unauthorized: this app requires authentication — send "
-                                   "'Authorization: Bearer <token>' with the token from the Authentication panel"})
+    _den = _webauth().evaluate(rec, headers, req.get("path") or "/api/" + fn["name"])
+    if _den:
+        return finish({"ok": False, "status": _den[0], "body": None, "headers": _den[3],
+                      "error": f"{_den[1]}: {_den[2]}" + (" -- send 'Authorization: Bearer <token>' (the token from the Authentication panel, or an Entra JWT for the configured app)"
+                                                        if _den[0] == 401 else "")})
     sandbox = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
     try:
         exec(compile(fn["_code"], f"<function:{fn['name']}>", "exec"), sandbox)

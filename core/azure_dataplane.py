@@ -652,6 +652,14 @@ async def _function_app_handle(app_name: str, function_name: str, request: Reque
     if _den:
         return JSONResponse(status_code=_den[0], content={"error": {"code": _den[1], "message": _den[2]}})
 
+    try:                                     # Easy Auth (config/authsettingsV2) at the site front door
+        from core import azure_webauth_core as _wa
+        _au = _wa.evaluate(func_rec, dict(request.headers), "/api/" + function_name)
+    except Exception:
+        _au = None
+    if _au:
+        return JSONResponse(status_code=_au[0], headers=_au[3], content={"error": {"code": _au[1], "message": _au[2]}})
+
     props = func_rec.get("properties") or {}
     code = props.get("code") or props.get("sourceCode") or ""
     entry = props.get("entryPoint") or "main"
