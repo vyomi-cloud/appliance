@@ -1,17 +1,6 @@
 {
- "at": "2026-11-04T23:07:11+00:00",
+ "at": "2026-11-05T00:07:30+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "Cloud Storage",
-   "kind": "announcement",
-   "key": "feed:gcp:29b573c4df18",
-   "title": "Cloud Storage: Feature (November 04, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_04_2026",
-   "detail": "You can pause hard deletions for a bucket when you need more time to restore soft-deleted objects before they're permanently deleted. For more information, see Pause permanent (hard) deletions of soft-deleted objects .",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
