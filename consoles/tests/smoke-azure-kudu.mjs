@@ -119,7 +119,13 @@ ok("wizard application insights panel is real", (await NS()) === 0 && (await pg.
 await pg.getByRole("button", { name: "Review + create" }).click();
 await pg.getByText("Validation passed").waitFor({ timeout: 5000 });
 await pg.getByRole("button", { name: "Create", exact: true }).click();
-await pg.waitForTimeout(3000);
+// Poll for the real result instead of a fixed sleep: the wizard creates the site + SQL server/db + App Insights, which is slow under load.
+const wizDbPath = `${prov("Microsoft.Sql", "servers", `wizsql${n}`)}/databases/appdb`;
+for (let i = 0; i < 60; i++) {
+  const s1 = (await arm("GET", prov("Microsoft.Web", "sites", WA))).status, s2 = (await arm("GET", wizDbPath, null, "2023-08-01")).status;
+  if (s1 === 200 && s2 === 200) break;
+  await pg.waitForTimeout(1000);
+}
 const wsite = (await arm("GET", prov("Microsoft.Web", "sites", WA))).body;
 ok("wizard site has the secure hostname", /^wiz\d+-[a-z0-9]{16,}\.eastus-01\.azurewebsites\.net$/.test(wsite?.properties?.defaultHostName || ""), wsite?.properties?.defaultHostName);
 ok("wizard created the SQL database", (await arm("GET", `${prov("Microsoft.Sql", "servers", `wizsql${n}`)}/databases/appdb`, null, "2023-08-01")).status === 200);
