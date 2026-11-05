@@ -176,7 +176,8 @@ def evaluate(rec, headers, path="/", now=None):
             return None
     if gv.get("requireAuthentication") is False:
         return None
-    action = gv.get("unauthenticatedClientAction") or "RedirectToLoginPage"
+    # with no identity provider configured there is nothing to redirect to: the simulator-token mode answers 401
+    action = gv.get("unauthenticatedClientAction") or ("RedirectToLoginPage" if reg.get("clientId") else "Return401")
     if action == "AllowAnonymous":
         return None
     if action == "Return403":
