@@ -90,7 +90,7 @@ const CORES = [
   "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
-  "sql_store.py", "mysql_dialect.py", "rds_core.py", "iam_store.py", "iam_core.py",
+  "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "aws_console_detail.py",   // main-side Nano cores (merged)
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "autoscaling_core.py", "gcp_gke_dataplane_core.py", "dlm_core.py", "ram_core.py", "dax_core.py",
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
@@ -503,6 +503,8 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
   K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
   // Public readiness signal (tests, embedding pages): the in-browser backend now answers.
+  // Host access to in-browser databases: psql / mysql / ORMs reach RDS + Cloud SQL instances through `vyomi-tunnel` (db-bridge.js).
+  try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
   window.__vyomiNanoReady = true;
   try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
   banner("Nano: in-browser backend ready — this console runs with no server.");

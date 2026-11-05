@@ -29,7 +29,7 @@ const CORES = [
   "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
-  "sql_store.py", "mysql_dialect.py", "rds_core.py", "iam_store.py", "iam_core.py",
+  "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "gcp_eventarc_core.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",
@@ -195,6 +195,8 @@ async def _handle(req_json):
 import builtins; builtins._handle = _handle
 builtins._capture = _capture; builtins._restore = _restore
 `);
+    // Host access to in-browser databases (psql / mysql / ORMs via vyomi-tunnel): see wasm/db-bridge.js.
+    try { import(new URL("../db-bridge.js", import.meta.url).href).then((m) => m.installDbBridge(py)).catch((e) => log("db bridge skipped: " + e, "dim")); } catch (_) {}
     // CPU: time spent running Python here (each CLI / SDK request), reported every 5 s with
     // the heap size — the Health view's Host utilization reads it (sw.js /api/host/cpu).
     let _busyMs = 0, _busySince = performance.now();

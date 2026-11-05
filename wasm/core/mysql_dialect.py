@@ -39,6 +39,27 @@ _TOKEN = re.compile(
     re.X | re.S)
 
 
+_ESC = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "b": "\b", "Z": "\x1a", "\\": "\\", "'": "'", '"': '"', "%": "\\%", "_": "\\_"}
+
+
+def _requote(lit: str) -> str:
+    """A MySQL string literal ('..' or "..", with \\' \\n \\\\ escapes and doubled quotes) -> an equivalent sqlite literal ('..' with '' only)."""
+    q = lit[0]
+    body, out, i = lit[1:-1], [], 0
+    while i < len(body):
+        c = body[i]
+        if c == "\\" and i + 1 < len(body):
+            out.append(_ESC.get(body[i + 1], body[i + 1]))
+            i += 2
+        elif c == q and i + 1 < len(body) and body[i + 1] == q:
+            out.append(q)
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "'" + "".join(out).replace("'", "''") + "'"
+
+
 def _tokenize(sql: str, convert: bool = True) -> list[list]:
     out = []
     for m in _TOKEN.finditer(sql):
@@ -54,9 +75,8 @@ def _tokenize(sql: str, convert: bool = True) -> list[list]:
         if not convert:
             out.append([("id" if kind == "qid" else kind), text])
             continue
-        if kind == "str" and text[0] == '"':                       # MySQL: "x" is a string literal, not an identifier
-            body = text[1:-1].replace('""', '"').replace("'", "''")
-            text = "'" + body + "'"
+        if kind == "str":                                           # MySQL: "x" is a string literal; backslash escapes are decoded
+            text = _requote(text)
         if kind == "qid":
             text = '"' + text[1:-1].replace("``", "`").replace('"', '""') + '"'
             kind = "id"

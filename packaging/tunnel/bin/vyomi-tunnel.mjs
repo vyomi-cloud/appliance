@@ -32,6 +32,8 @@
  *   env: RELAY_PORT (default 8090), RELAY_HOST (default 127.0.0.1; set 0.0.0.0 for LAN),
  *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
+import { egress } from "./egress.mjs";
+import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
 import crypto from "node:crypto";
@@ -40,7 +42,7 @@ import { createRequire } from "node:module";
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN
 const pending = new Map();     // id -> {resolve}
@@ -89,9 +91,26 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp"],
-      vms: [...vmHosts.values()].map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp"],
+      vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
+      dbs: [...vmHosts.values()].filter((v) => v.db).map((v) => ({ db: v.vm, engine: v.engine, host_port: v.hostPort })),
     }));
+  }
+  // Nano VM egress: allow-listed package-manager / toolchain fetches for the in-browser VMs (wasm/relay/egress.mjs).
+  if (url.pathname === "/egress") {
+    const body = [];
+    req.on("data", (c) => body.push(c));
+    req.on("end", async () => {
+      try {
+        const headers = new Headers(); for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
+        const r = await egress(new Request("http://relay" + req.url, { method: req.method, headers,
+          body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(body) }));
+        res.writeHead(r.status, Object.fromEntries(r.headers));
+        if (!r.body) return res.end();
+        Readable.fromWeb(r.body).on("error", () => res.destroy()).pipe(res);
+      } catch (e) { cors(res, 500, { "content-type": "text/plain" }); res.end("egress error: " + (e && e.message)); }
+    });
+    return;
   }
   // Collect the external request body, forward to the tab, await the response.
   const chunks = [];
@@ -143,7 +162,7 @@ const wss = new WebSocketServer({ noServer: true });
 const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
-  const target = p === "/register" ? wss : p === "/vm" ? vmWss : null;
+  const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
 });
@@ -173,16 +192,21 @@ const VM_PORT_MIN = Number(process.env.VM_PORT_MIN || 22000);
 const VM_PORT_MAX = Number(process.env.VM_PORT_MAX || 22999);
 const vmHosts = new Map();     // vm id -> {vm, port, hostPort, ws, server, streams}
 let sidSeq = 1;
-function listenFree(start) {
+// Databases (Nano RDS / Cloud SQL / Azure SQL ... instances) bridge the same way on /db: the standard engine port
+// (5432 / 3306 / 1433) is tried first so `psql -h 127.0.0.1` and unmodified apps work with defaults, then DB_PORT_MIN..MAX.
+const DB_PORT_MIN = Number(process.env.DB_PORT_MIN || 25000);
+const DB_PORT_MAX = Number(process.env.DB_PORT_MAX || 25999);
+function listenFree(start, min = VM_PORT_MIN, max = VM_PORT_MAX) {
   return new Promise((resolve, reject) => {
-    const span = VM_PORT_MAX - VM_PORT_MIN + 1;
-    const first = start >= VM_PORT_MIN && start <= VM_PORT_MAX ? start : VM_PORT_MIN;
+    const span = max - min + 1;
+    const first = start > 0 ? start : min;
     let tries = 0;
     const attempt = (p) => {
       const srv = net.createServer();
       srv.once("error", () => {
-        if (++tries >= span) return reject(new Error("no free VM port"));
-        attempt(VM_PORT_MIN + ((p - VM_PORT_MIN + 1) % span));
+        if (++tries > span) return reject(new Error("no free port"));
+        const nxt = p >= min && p < max ? p + 1 : min;
+        attempt(nxt);
       });
       srv.listen(p, HOST, () => resolve(srv));
     };
@@ -190,20 +214,21 @@ function listenFree(start) {
   });
 }
 vmWss.on("connection", async (ws, req) => {
-  const q = new URL(req.url, "http://x").searchParams;
-  const vm = q.get("vm") || "", guestPort = Number(q.get("port") || 22);
-  if (!/^[A-Za-z0-9._-]{1,80}$/.test(vm)) { ws.close(1008, "bad vm id"); return; }
+  const u0 = new URL(req.url, "http://x"), q = u0.searchParams;
+  const isDb = u0.pathname === "/db", engine = isDb ? String(q.get("engine") || "postgres").slice(0, 20) : "";
+  const vm = (isDb ? "db:" : "") + (q.get(isDb ? "db" : "vm") || ""), guestPort = Number(q.get("port") || 22);
+  if (!/^(db:)?[A-Za-z0-9._-]{1,80}$/.test(vm)) { ws.close(1008, "bad id"); return; }
   const old = vmHosts.get(vm);
   // A VM that reconnects (worker restart, tab reload) keeps its host port.
   const prefer = old ? old.hostPort : Number(q.get("prefer") || 0);
   if (old) { try { old.server.close(); } catch (_) {} try { old.ws.terminate(); } catch (_) {} vmHosts.delete(vm); }
   let srv;
-  try { srv = await listenFree(prefer); } catch (e) { ws.close(1013, String(e.message)); return; }
+  try { srv = isDb ? await listenFree(prefer, DB_PORT_MIN, DB_PORT_MAX) : await listenFree(prefer); } catch (e) { ws.close(1013, String(e.message)); return; }
   const hostPort = srv.address().port;
-  const entry = { vm, port: guestPort, hostPort, ws, server: srv, streams: new Map() };
+  const entry = { vm, port: guestPort, hostPort, ws, server: srv, streams: new Map(), db: isDb, engine };
   vmHosts.set(vm, entry);
   ws.isAlive = true;
-  console.log(`[relay] vm ${vm} :${guestPort} ⇄ ${HOST}:${hostPort}`);
+  console.log(`[relay] ${isDb ? "db" : "vm"} ${vm} :${guestPort} ⇄ ${HOST}:${hostPort}`);
   ws.send(JSON.stringify({ type: "vm-listening", vm, port: guestPort, host_port: hostPort }));
   srv.on("connection", (sock) => {
     const sid = sidSeq++;
