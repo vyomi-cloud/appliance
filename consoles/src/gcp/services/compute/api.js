@@ -285,3 +285,37 @@ export async function ensureOpsAgentPolicy(zone) {
     rollout: { disruptionBudget: { percent: 100 }, minWaitDuration: "0s" },
   });
 }
+
+// ── Committed use discounts, Capacity advisor, Migrate to VMs, TPUs, VM Manager inventory (core/gcp_commit_core, gcp_capacity_core) ──
+const mig = (loc) => `/v1/projects/${e(getProject())}/locations/${e(loc || "us-central1")}`;
+const tpu = (zone) => `/v2/projects/${e(getProject())}/locations/${e(zone)}`;
+export const listCommitments = async () => {
+  const r = await restJson("GET", `${base()}/aggregated/commitments`);
+  return Object.entries(r.items || {}).flatMap(([, v]) => v.commitments || []);
+};
+export const insertCommitment = (region, body) => restJson("POST", `${base()}/regions/${e(region)}/commitments`, { body });
+export const commitmentSavings = () => restJson("GET", `${base()}/vyomi/commitmentSavings`);
+export const capacityPools = async (region) => (await restJson("GET", `${base()}/vyomi/capacity`, { query: region ? { region } : {} })).items || [];
+export const setCapacityPool = (zone, family, vcpus) => restJson("POST", `${base()}/vyomi/capacityPools`, { body: { zone, family, vcpus: Number(vcpus) } });
+export const resetCapacityPool = (zone, family) => restJson("DELETE", `${base()}/vyomi/capacityPools`, { query: { zone, family } });
+export const capacityAdvice = (region, machineType, size) => restJson("POST", `/compute/beta/projects/${e(getProject())}/regions/${e(region)}/advice/capacity`, { body: { instanceProperties: { machineType }, size: Number(size) } });
+export const listVmmSources = async (loc) => (await restJson("GET", `${mig(loc)}/sources`)).sources || [];
+export const createVmmSource = (loc, id, body) => restJson("POST", `${mig(loc)}/sources`, { query: { sourceId: id }, body });
+export const deleteVmmSource = (loc, id) => restJson("DELETE", `${mig(loc)}/sources/${e(id)}`);
+export const listVmmConnectors = async (loc, src) => (await restJson("GET", `${mig(loc)}/sources/${e(src)}/datacenterConnectors`)).datacenterConnectors || [];
+export const createVmmConnector = (loc, src, id) => restJson("POST", `${mig(loc)}/sources/${e(src)}/datacenterConnectors`, { query: { datacenterConnectorId: id }, body: {} });
+export const listMigratingVms = async (loc, src) => (await restJson("GET", `${mig(loc)}/sources/${e(src)}/migratingVms`)).migratingVms || [];
+export const createMigratingVm = (loc, src, id, body) => restJson("POST", `${mig(loc)}/sources/${e(src)}/migratingVms`, { query: { migratingVmId: id }, body });
+export const migratingVmVerb = (loc, src, id, verb) => restJson("POST", `${mig(loc)}/sources/${e(src)}/migratingVms/${e(id)}:${verb}`, { body: {} });
+export const deleteMigratingVm = (loc, src, id) => restJson("DELETE", `${mig(loc)}/sources/${e(src)}/migratingVms/${e(id)}`);
+export const listCycles = async (loc, src, id) => (await restJson("GET", `${mig(loc)}/sources/${e(src)}/migratingVms/${e(id)}/replicationCycles`)).replicationCycles || [];
+export const listVmmJobs = async (loc, src, id, kind) => (await restJson("GET", `${mig(loc)}/sources/${e(src)}/migratingVms/${e(id)}/${kind}`))[kind] || [];
+export const createVmmJob = (loc, src, id, kind, jid) => restJson("POST", `${mig(loc)}/sources/${e(src)}/migratingVms/${e(id)}/${kind}`, { query: { [kind === "cloneJobs" ? "cloneJobId" : "cutoverJobId"]: jid }, body: {} });
+export const listTpuNodes = async (zone) => (await restJson("GET", `${tpu(zone)}/nodes`)).nodes || [];
+export const createTpuNode = (zone, id, body) => restJson("POST", `${tpu(zone)}/nodes`, { query: { nodeId: id }, body });
+export const tpuNodeVerb = (zone, id, verb) => restJson("POST", `${tpu(zone)}/nodes/${e(id)}:${verb}`, { body: {} });
+export const deleteTpuNode = (zone, id) => restJson("DELETE", `${tpu(zone)}/nodes/${e(id)}`);
+export const listTpuTypes = async (zone) => (await restJson("GET", `${tpu(zone)}/acceleratorTypes`)).acceleratorTypes || [];
+export const listTpuRuntimes = async (zone) => (await restJson("GET", `${tpu(zone)}/runtimeVersions`)).runtimeVersions || [];
+export const listInventories = async () => (await restJson("GET", `${osc()}/locations/-/instances/-/inventories`)).inventories || [];
+export const patchReport = () => restJson("GET", `${osc()}/patchReport`);

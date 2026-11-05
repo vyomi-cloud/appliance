@@ -29,8 +29,10 @@ import Settings from "./Settings.jsx";
 import { gapById, gapRoutes } from "./GapPages.jsx";
 import { EXT_PAGE_IDS as EXT_BASE } from "./Ext.jsx";
 import { Patch, OsPolicies, VmExtensionPolicies } from "./VmManager.jsx";
+import { CommittedUseDiscounts, CapacityAdvisor, MigrateToVms, Tpus, VmInventory, VmReports } from "./Commit.jsx";
 
-const EXT_PAGE_IDS = { ...EXT_BASE, patch: Patch, "os-policies": OsPolicies, "vm-extension-policies": VmExtensionPolicies };
+const EXT_PAGE_IDS = { ...EXT_BASE, patch: Patch, "os-policies": OsPolicies, "vm-extension-policies": VmExtensionPolicies,
+  "committed-use-discounts": CommittedUseDiscounts, "capacity-advisor": CapacityAdvisor, "migrate-to-virtual-machines": MigrateToVms, tpus: Tpus, "vm-inventory": VmInventory, "vm-reports": VmReports };
 
 const link = (id, overrides) => { const g = gapById(id); return g ? { text: g[1], href: `#/compute/${g[2]}`, icon: g[3], ...overrides } : null; };
 
@@ -72,7 +74,7 @@ export default {
       ],
     },
     { section: "VM Extension Manager", items: [link("vm-extension-policies")].filter(Boolean) },
-    { section: "VM Manager", items: [link("patch"), link("os-policies")].filter(Boolean) },
+    { section: "VM Manager", items: [link("patch"), link("os-policies"), link("vm-inventory"), link("vm-reports")].filter(Boolean) },
     {
       section: "Bare Metal Solution",
       items: ["bms-servers", "bms-networks", "bms-vrfs", "bms-volumes", "bms-nfs-shares", "bms-procurements", "bms-maintenance-events"]

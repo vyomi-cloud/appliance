@@ -61,6 +61,8 @@ export const GAPS = [
   ["vm-extension-policies", "VM extension policies", "vm-extension-policies", ExtensionOutlinedIcon],
   ["patch", "Patch", "patch", BuildOutlinedIcon],
   ["os-policies", "OS policies", "os-policies", RuleOutlinedIcon],
+  ["vm-inventory", "OS inventory", "vm-inventory", ExtensionOutlinedIcon],
+  ["vm-reports", "Reports", "vm-reports", RuleOutlinedIcon],
   ["bms-servers", "Servers", "bms/servers", DnsOutlinedIcon],
   ["bms-networks", "Networks", "bms/networks", LanOutlinedIcon],
   ["bms-vrfs", "VRFs", "bms/vrfs", AccountTreeOutlinedIcon],
