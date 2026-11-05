@@ -343,7 +343,7 @@ export default function CreateAlarm({ query }) {
                       { value: "stop", label: "Stop this instance" },
                       { value: "terminate", label: "Terminate this instance" },
                       { value: "reboot", label: "Reboot this instance" },
-                      { value: "recover", label: "Recover this instance", disabled: true, description: "Not simulated in Vyomi." },
+                      { value: "recover", label: "Recover this instance", disabled: true, description: "Unavailable: Vyomi has no hardware-recovery automation (see the EC2 alarm action capability notes)." },
                     ]} />
                   </FormField>
                 </CapabilityContainer>
