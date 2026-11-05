@@ -1,14 +1,25 @@
 {
- "at": "2026-11-05T16:07:32+00:00",
+ "at": "2026-11-05T17:07:42+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "compute",
-   "kind": "spec-commit",
-   "key": "azure:compute:002fe105e2",
-   "title": "Azure compute: Compute: update gallery artifact name pattern (#47750)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/002fe105e27f4b3d2983a7cb1445058b5ee074b0",
+   "cloud": "gcp",
+   "service": "API Gateway",
+   "kind": "lifecycle",
+   "key": "feed:gcp:8e52bfcca79d",
+   "title": "API Gateway: Announcement (November 04, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_04_2026",
+   "detail": "Negative backend deadlines are no longer deprecated The deprecation of negative backend deadline values announced on October 23, 2026 is withdrawn. In an OpenAPI 2.0 x-google-backend extension or a gRPC BackendRule , a negative deadline continues to use the default deadline, the same as 0 , and won't be rejected. OpenAPI 3.x backends still reject a negative deadline. For more information, see OpenAPI 2.0 extensions and OpenAPI 3.x extensions .",
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "Compute Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:c41232a3a5dc",
+   "title": "Compute Engine: Feature (November 02, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_02_2026",
+   "detail": "Generally available : You can now create C4 sole-tenant nodes on Intel Granite Rapids with the following node types: c4-node-288-576 c4-node-288-1080 c4-node-288-1080-lssd c4-node-288-2232 c4-node-288-2232-lssd For more information, see Sole-tenancy overview .",
    "actionable": false
   }
  ],
