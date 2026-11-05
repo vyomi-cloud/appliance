@@ -1,6 +1,73 @@
 {
- "at": "2026-11-05T00:07:30+00:00",
+ "at": "2026-11-05T01:07:17+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:dc0067ff89b3",
+   "title": "Amazon S3 Tables now provide a simple, cost-effective path for data lake modernization",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-managed-migration-hive-to-iceberg/",
+   "detail": "Amazon S3 Tables now offer managed migration of your Apache Hive tables to Apache Iceberg. Iceberg adds ACID transactions, schema evolution, and time travel to your data lake, but moving off Hive usually means building a migration pipeline for each table, which can take weeks. You can now let S3 Tables manage your migration, resulting in query-ready Iceberg tables that stay optimized as data grows. S3 Tables validate, convert, and copy your data while production workloads keep running. To lower migration risk, you can review each step, sync destination tables with source changes as often as yo",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
