@@ -39,7 +39,9 @@ try {
   await page.getByLabel(/Properties \(comma/).fill("prio, title");
   await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
   await page.getByText("READY").first().waitFor({ timeout: 15000 });
-  const ok = await wj(`/v1/projects/${P}:runQuery`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ gqlQuery: { queryString: "SELECT * FROM Task WHERE prio > 0 ORDER BY title", allowLiterals: true } }) });
+  const runOk = () => wj(`/v1/projects/${P}:runQuery`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ gqlQuery: { queryString: "SELECT * FROM Task WHERE prio > 0 ORDER BY title", allowLiterals: true } }) });
+  let ok = await runOk();
+  for (let n = 0; n < 40 && ok.status !== 200; n++) { await page.waitForTimeout(500); ok = await runOk(); }   // index create is async over the Nano relay: wait on the condition, not the UI label
   check("same query succeeds once the index is READY", ok.status === 200);
   const dsAgainstNative = await wj(`/v1/projects/${P}/databases/(default)`, { method: "GET" });
   check("database is DATASTORE_MODE", dsAgainstNative.type === "DATASTORE_MODE");
