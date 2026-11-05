@@ -82,6 +82,7 @@ from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
+from core import gcp_commit_core as gcp_commit
 from core import gcp_apphub_core as gcp_apphub
 from core import gcp_clouddeploy_core as gcp_clouddeploy
 from core import gcp_backupdr_core as gcp_backupdr
@@ -98,6 +99,12 @@ def _gcp_service(path):
     client is pointed at the relay and the path is the service discriminator)."""
     if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
         return "gcp-scc"   # Security Command Center API v2 (core/gcp_scc_core over the posture/threat/vulnerability engines)
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/sources([/:]|$)", path) \
+            or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/operations/operation-[0-9a-f]{16}$", path):
+        return "gcp-commit"   # Migrate to Virtual Machines (vmmigration v1) over the Compute store (core/gcp_commit_core)
+    if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(nodes|acceleratorTypes|runtimeVersions)([/:]|$)", path) \
+            or re.match(r"^/v2/projects/[^/]+/locations/[a-z]+-[a-z]+[0-9]+-[a-z]/operations/operation-[0-9a-f]{16}$", path):
+        return "gcp-commit"   # Cloud TPU v2 nodes (record-level; core/gcp_commit_core)
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|workerPools|operations)([/:]|$)", path) \
             or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
         # Cloud Run Admin API v2 (+ its Knative v1 facades for `gcloud run` and
@@ -121,7 +128,8 @@ def _gcp_service(path):
         return "gcp-backupdr"   # Backup and DR: vaults/plans/associations; backups are real Compute snapshots (core/gcp_backupdr_core, state on the Compute store)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(applications|discoveredServices|discoveredWorkloads)([/:?]|$)", path):
         return "gcp-apphub"   # App Hub applications + registered services/workloads (core/gcp_apphub_core, state on the Monitoring store)
-    if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
+    if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments|patchReport)([/:]|$)", path) \
+            or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/instances/[^/]+/inventor(y|ies)$", path) \
             or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/osPolicyAssignments([/:]|$)", path):
         return "gcp-osconfig"   # VM Manager: OS Config patch jobs/deployments + OS policy assignments (core/gcp_osconfig_core, state on the VM store)
     if re.match(r"^/v1/projects/[^/]+/(securityPosture/(compute|storage|threats|vulnerabilities|all)|occurrences(:vulnerabilitySummary)?)$", path):
@@ -1877,6 +1885,7 @@ class AwsWireRouter:
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
+                "gcp-commit": (gcp_commit, self.gcp_compute_vm),
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
                 "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
                 "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),

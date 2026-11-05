@@ -385,6 +385,24 @@ def _guest_run(rec: dict):
     return run
 
 
+def _osconfig_guest_run(key: str, sh: str):
+    """VM Manager hook (core/gcp_osconfig_core.GUEST_RUN): docker-exec `sh` in the instance's container."""
+    from core import appliance_stores as aps
+    core_rec = aps.gcp_compute_vm_store().instances.get(key) or {}
+    rid = core_rec.get("_runtimeId")
+    rec = _runtime_store().get(rid) if rid else None
+    if not isinstance(rec, dict) or rec.get("state") != "running":
+        return 1, ""
+    return _guest_run(rec)(key, sh)
+
+
+try:
+    from core import gcp_osconfig_core as _osc
+    _osc.GUEST_RUN = _osconfig_guest_run
+except Exception:   # pragma: no cover
+    pass
+
+
 def _guest_access(verb: str, method: str, out: dict, rec: dict, name: str, payload: dict) -> dict:
     """Offline guest reach-in for the v4 instance: :sshKeys authorizes each USERNAME:KEY line in the
     container (what the guest agent does); :osInfo overlays os-release/kernel/uptime from the live guest."""
