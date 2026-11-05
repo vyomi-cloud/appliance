@@ -1,15 +1,13 @@
 {
- "at": "2026-11-05T18:07:44+00:00",
+ "at": "2026-11-05T19:07:38+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Identity and Access Management",
-   "kind": "announcement",
-   "key": "feed:aws:2151a3fbf6d5",
-   "title": "IAM Roles Anywhere now supports automatic certificate revocation checking",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-roles-anywhere-cdp/",
-   "detail": "AWS Identity and Access Management (IAM) Roles Anywhere now supports automatic revocation checking using certificate revocation list (CRL) distribution points (CDPs). This helps keep revocation checks in sync with your certificate authority (CA) and can help improve your security posture. When you enable this capability on a trust anchor, IAM Roles Anywhere reads the CDP URLs embedded in authenticating certificates, downloads the corresponding CRLs, and denies credential requests that use revoked certificates. Previously, to check revocation status, you had to import CRLs into IAM Roles Anywhe",
+   "cloud": "sdk",
+   "service": "pypi:google-cloud-secret-manager",
+   "kind": "release",
+   "key": "ver:pypi:google-cloud-secret-manager:2.32.0",
+   "title": "pypi:google-cloud-secret-manager: 2.31.0 \u2192 2.32.0",
    "actionable": false
   }
  ],

@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-05T19:07:38+00:00
+
+Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `release` pypi:google-cloud-secret-manager: 2.31.0 → 2.32.0
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-05T18:07:44+00:00
 
 Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
