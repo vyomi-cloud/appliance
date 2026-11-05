@@ -34,7 +34,11 @@
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
-    '#vy-modal{position:fixed;inset:0;z-index:200;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
+    /* Nano consoles: cloud UIs (MUI app bar 1100-1300, Cloudscape, Fluent) paint above 200-400, so dialogs opened from the drawer
+       were clipped by the console header. Lift them above the cloud UI, below the relay-tunnel strip (99999), and stop them above the strip. */
+    'body:has(#nano-foot) #vy-modal,body:has(#nano-foot) #vy-cap,body:has(#nano-foot) #vy-so{bottom:34px}' +
+    'body:has(#nano-foot) #vy-modal .box{max-height:calc(100% - 28px)}' +
+    '#vy-modal{position:fixed;inset:0;z-index:99980;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
     '#vy-modal.open{display:flex}' +
     '#vy-modal .box{width:min(1100px,94vw);height:min(760px,90vh);background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}' +
     '#vy-modal .hd{display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 18px;border-bottom:1px solid #e4e7ec;font:600 15px Inter,system-ui,sans-serif;color:#101828}' +
@@ -45,7 +49,7 @@
     '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
     '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
     '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
-    '#vy-acct-menu{position:fixed;z-index:250;min-width:250px;display:none;padding:6px;background:#fff;color:#101828;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.28);font-family:Inter,system-ui,sans-serif}' +
+    '#vy-acct-menu{position:fixed;z-index:99990;min-width:250px;display:none;padding:6px;background:#fff;color:#101828;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.28);font-family:Inter,system-ui,sans-serif}' +
     '#vy-acct-menu.open{display:block}' +
     '#vy-acct-menu .vy-who{display:flex;align-items:center;gap:10px;padding:8px 12px 10px;font-size:12px;color:#667085;word-break:break-all}' +
     '#vy-acct-menu .vy-av{width:40px;height:40px;flex:none;border-radius:50%;overflow:hidden;background:#4d8cf3;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:700 16px Inter,system-ui,sans-serif}' +
@@ -61,7 +65,7 @@
     '#vy-acct-menu a .vy-n{margin-left:auto;font-weight:600;font-size:12px;color:#475467}' +
     '#vy-acct-menu a[data-act=signout]{color:#b42318}#vy-acct-menu a[data-act=signout] svg{color:#b42318}' +
     /* ---- per-cloud look of the account menu + sign-out confirmation (follows each console's own account UX) ---- */
-    '#vy-so{position:fixed;inset:0;z-index:400;background:rgba(15,20,30,.55);display:none;align-items:center;justify-content:center}#vy-so.open{display:flex}' +
+    '#vy-so{position:fixed;inset:0;z-index:99995;background:rgba(15,20,30,.55);display:none;align-items:center;justify-content:center}#vy-so.open{display:flex}' +
     '#vy-so .dlg{width:min(440px,92vw);background:#fff;color:#16191f;box-shadow:0 12px 40px rgba(0,0,0,.35)}' +
     '#vy-so h4{margin:0;font-size:18px;font-weight:700}#vy-so p{margin:10px 0 0;font-size:14px;line-height:1.5;color:#414d5c}' +
     '#vy-so .row{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}#vy-so button{cursor:pointer;font:inherit;font-size:14px;font-weight:700}' +
