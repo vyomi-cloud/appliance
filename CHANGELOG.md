@@ -4,6 +4,37 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.43] — 2026-11-05
+
+Daily conformance release. **1 product fixes** (all clouds 1); 1 reach Nano and 1 reach the offline appliance; 1 test and harness improvements.
+
+### Highlights
+
+- **Postgres is now reachable from your host apps.** Apps running on your machine can connect to the simulated Postgres through the tunnel, in both Nano and the offline appliance.
+- **Duplicate names are now rejected.** Creating a resource with a name that already exists returns a 409 conflict, and default names are now unique.
+- **Connect cards show their endpoints.** The connect cards now include the endpoints you need to point your app at the simulator.
+
+### Fixes — all clouds
+
+- **[Nano + offline]** Postgres reachable from host apps via the tunnel; duplicate-name 409 + unique defaults; connect card endpoints
+
+<details><summary>Platform and release pipeline (1)</summary>
+
+- Remove duplicate `user: "0:0"` key in the conformance compose override
+
+</details>
+
+<details><summary>Test and harness improvements (1)</summary>
+
+- Offline-ui-crawl timed out (AWS console needs >1500s: 19 services in 25 min); budget 3600s per console and checkpoint results after every service (harness, reporting only)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.43`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.42] — 2026-11-04
 
 Daily conformance release. **7 product fixes** (AWS 4, GCP 1, Azure 1, all clouds 1); 5 reach Nano and 7 reach the offline appliance; 10 test and harness improvements.
