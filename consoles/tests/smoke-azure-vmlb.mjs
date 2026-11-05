@@ -55,6 +55,9 @@ check("offer editor present", (await pg.getByTestId("offer-editor").count()) ===
 await pg.getByLabel("Scope").selectOption("d1/c1"); await pg.getByLabel("RU/s").fill("400"); await pg.getByRole("button", { name: "Save" }).click(); await pg.waitForTimeout(1200);
 check("offer saved and shown", /Manual, 400 RU\/s/.test(await pg.getByTestId("offer-current").innerText()));
 let codes = [];
-for (let i = 0; i < 150; i++) codes.push((await dp("POST", "/dbs/d1/colls/c1/docs", { id: "x" + i, pk: "a" })).status);
+// ~40 KB documents (~200 RU each) so a 400 RU/s offer is exceeded within the window even when the
+// substrate (Nano, Pyodide) is slow: the RU window is wall-clock, a fast burst of tiny writes proves nothing there.
+const pad = "x".repeat(40 * 1024);
+for (let i = 0; i < 30; i++) codes.push((await dp("POST", "/dbs/d1/colls/c1/docs", { id: "x" + i, pk: "a", pad })).status);
 check("data plane throttled with 429 beyond the offer", codes.includes(429) && codes[0] === 201, codes.slice(0, 5).join(","));
 console.log(fails ? `${fails} FAILED` : "all passed"); await b.close(); process.exit(fails ? 1 : 0);
