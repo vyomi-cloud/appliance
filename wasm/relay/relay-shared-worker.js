@@ -236,12 +236,14 @@ builtins._capture = _capture; builtins._restore = _restore
     // Publish only a change from the state last saved or restored here: a read must never write
     // back a snapshot older than the console's latest change (it would undo it). Same as nano-boot.js.
     let _lastStores = null;
+    let _saveGen = 0;   // a snapshot read before a save started is stale: applying it would "delete" just-saved keys (see nano-boot.js restoreShared)
+    const restoreShared = async () => { const g = _saveGen; const j = await idbGet(_SK); if (g === _saveGen) resStores(j); };
     const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); _lastStores = capStores(); } catch (_) {} };
-    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; _saveGen++; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     saveNow = () => saveStores(true);
-    refreshStores = async () => { if (_restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } catch (_) {} finally { _restoring = false; } };
-    if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
+    refreshStores = async () => { if (_restoring) return; _restoring = true; try { await restoreShared(); } catch (_) {} finally { _restoring = false; } };
+    if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { await restoreShared(); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
     // Live engine status for Dashboard > Service status (same check as nano-boot.js).
     const writeEngines = async () => {
