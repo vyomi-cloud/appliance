@@ -10,6 +10,7 @@ import {
 } from "@fluentui/react-components";
 import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20Regular, Dismiss20Regular, Eye16Regular, EyeOff16Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
+import LocalModelBar from "../../../common/LocalModelBar.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
@@ -290,6 +291,7 @@ function ChatPlayground({ a }) {
   return (
     <>
       <div className="vy-panel-title">Chat playground</div>
+      <LocalModelBar />
       <CapabilityContainer id="azure.cognitiveservices.playground" title="Playground">
         {!api.MODEL_KINDS.includes(a.kind) && <NotSimulated feature="Chat playground" note={`Only Azure OpenAI and Azure AI services accounts serve models, not '${a.kind}'.`} />}
         {err && <ErrorBar error={err} title={err.code === "ServiceUnavailable" ? "The local model is not available" : "Request failed"} />}

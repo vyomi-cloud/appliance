@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import LocalModelBar from "../../../common/LocalModelBar.jsx";
 import * as api from "./api.js";
 
 function ChatPanel() {
@@ -67,6 +68,7 @@ export default function Studio() {
   return (
     <>
       <PageHeader title="Vertex AI Studio" />
+      <LocalModelBar />
       <Stack spacing={3}>
         <CapabilityContainer id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against a Gemini publisher model. Every model id is served by the same small local model.">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>

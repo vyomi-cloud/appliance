@@ -25,9 +25,12 @@ check("seed account + deployment", a < 300 && d < 300, `${a}/${d}`);
 await page.goto(`${UI}#/cognitiveservices/aoai-rg/aoai1/playground`);
 await page.getByLabel("User query").waitFor({ timeout: 30000 });
 await page.waitForTimeout(800);
+if (NANO && process.env.FAKE_LLM) {   // exercise the Nano bridge end to end with a stand-in browser model (headless has no WebGPU)
+  await page.evaluate(() => window.vyomiRegisterLLM({ model: "fake-webllm", chat: async (req) => JSON.stringify({ text: "STUB ANSWER from the in-browser model", input_tokens: 3, output_tokens: 6, finish_reason: "stop" }) }));
+}
 await page.getByLabel("User query").fill("hello model");
 await page.getByRole("button", { name: "Send" }).click();
-if (NANO) {
+if (NANO && !process.env.FAKE_LLM) {
   // Nano has no model until the page registers WebLLM: the honest result is a not-ready error, never a canned answer.
   await page.waitForTimeout(4000);
   const t = await page.locator("body").innerText();
