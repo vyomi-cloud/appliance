@@ -2108,6 +2108,36 @@ async def adispatch(store: SqlStore, params: dict | None = None, msg_store=None,
 
 
 # ── data plane (NOT a native RDS action — the in-tab SQL bridge) ───────────
+def _md():
+    try:
+        from core import mysql_dialect as m
+    except ImportError:  # Pyodide flat layout
+        import mysql_dialect as m  # type: ignore
+    return m
+
+
+def _mysql_on_sqlite(store: SqlStore, db_id: str):
+    """MySQL/MariaDB-family instance whose data plane is sqlite (Nano; real MySQL has no WebAssembly build): the MySQL SQL the
+    application sends is translated (core/mysql_dialect). Returns the module, or None to run the SQL as-is."""
+    try:
+        db = store.get_instance(db_id) or {}
+        md = _md()
+        if md.is_mysql_engine(db.get("engine")) and store.param_placeholder(1) == "?":
+            return md
+    except Exception:
+        pass
+    return None
+
+
+def _mysql_ver(store: SqlStore, db_id: str) -> str:
+    v = str((store.get_instance(db_id) or {}).get("engine_version") or "")
+    return v or _md().DEFAULT_VERSION
+
+
+def _mysql_name(store: SqlStore, db_id: str) -> str:
+    return str((store.get_instance(db_id) or {}).get("db_name") or "db")
+
+
 def _dataplane_precheck(store: SqlStore, db_instance_identifier: str) -> dict | None:
     """Shared gate for the sync + async data-plane entries (no divergence)."""
     db = store.get_instance(db_instance_identifier)
@@ -2187,7 +2217,12 @@ def execute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
     if err:
         return err
     try:
-        result = store.execute_sql(db_instance_identifier, sql, params)
+        md = _mysql_on_sqlite(store, db_instance_identifier)
+        if md:
+            result = md.run(sql, params, lambda q, p: store.execute_sql(db_instance_identifier, q, p),
+                            _mysql_name(store, db_instance_identifier), _mysql_ver(store, db_instance_identifier))
+        else:
+            result = store.execute_sql(db_instance_identifier, sql, params)
         _push_activity_metrics(store, db_instance_identifier, sql)
         _replicate_write(store, db_instance_identifier, sql, params)
         return {"ok": True, **result}
@@ -2206,7 +2241,12 @@ async def aexecute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
     if err:
         return err
     try:
-        result = await store.aexecute_sql(db_instance_identifier, sql, params)
+        md = _mysql_on_sqlite(store, db_instance_identifier)
+        if md:
+            result = await md.arun(sql, params, lambda q, p: store.aexecute_sql(db_instance_identifier, q, p),
+                                   _mysql_name(store, db_instance_identifier), _mysql_ver(store, db_instance_identifier))
+        else:
+            result = await store.aexecute_sql(db_instance_identifier, sql, params)
         _push_activity_metrics(store, db_instance_identifier, sql)
         await _areplicate_write(store, db_instance_identifier, sql, params)
         return {"ok": True, **result}
@@ -2255,7 +2295,12 @@ async def aexecute_in_transaction(store: SqlStore, transaction_id: str, sql: str
                                   params: list | None = None) -> dict:
     db_id = store.transaction_db_id(transaction_id)
     try:
-        result = await store.aexecute_in_transaction(transaction_id, sql, params)
+        md = _mysql_on_sqlite(store, db_id) if db_id is not None else None
+        if md:
+            result = await md.arun(sql, params, lambda q, p: store.aexecute_in_transaction(transaction_id, q, p),
+                                   _mysql_name(store, db_id), _mysql_ver(store, db_id))
+        else:
+            result = await store.aexecute_in_transaction(transaction_id, sql, params)
         if db_id is not None:
             _push_activity_metrics(store, db_id, sql)
         return {"ok": True, **result}

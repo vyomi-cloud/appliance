@@ -38,7 +38,7 @@ CORES = [
     "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
     "kms_keystore.py", "kms_core.py",               # KMS
     "kv_store.py", "secrets_core.py",               # Secrets Manager
-    "sql_store.py", "rds_core.py",                  # RDS
+    "sql_store.py", "mysql_dialect.py", "rds_core.py",                  # RDS
     "iam_store.py", "iam_core.py",                  # IAM
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)

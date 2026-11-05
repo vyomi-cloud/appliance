@@ -1076,7 +1076,15 @@ def _run_query(store: SqlStore, project: str, instance: str, body: dict) -> Clou
     t0 = time.time()
     try:
         _wal_pre(store, project, instance, sql)
-        res = store.execute_sql(db_id, sql, body.get("params"))
+        if str(rec.get("databaseVersion", "")).upper().startswith("MYSQL") and sq.engine_dialect(store) == "sqlite":
+            # no MySQL WebAssembly build: MySQL SQL is translated onto sqlite (core/mysql_dialect)
+            try:
+                from core import mysql_dialect as _md
+            except ImportError:  # Pyodide flat layout
+                import mysql_dialect as _md  # type: ignore
+            res = _md.run(sql, body.get("params"), lambda q, p: store.execute_sql(db_id, q, p), instance)
+        else:
+            res = store.execute_sql(db_id, sql, body.get("params"))
         _wal_post(store, project, instance, sql, body.get("params"))
         ok, error = True, None
     except Exception as e:  # noqa: BLE001 — a bad statement fails the query, not the RPC
