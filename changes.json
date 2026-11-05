@@ -1,44 +1,19 @@
 {
- "at": "2026-11-05T21:07:43+00:00",
+ "at": "2026-11-05T22:07:45+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "keyvault",
-   "kind": "spec-commit",
-   "key": "azure:keyvault:67d7ae2c78",
-   "title": "Azure keyvault: [KeyVault] Introduce Version 2026-10-01-preview for Azure Key Vault (#47789)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/67d7ae2c7878c896d0ddb588e45bd90726ea2044",
-   "actionable": true
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.43.125",
-   "title": "pypi:boto3: 1.43.124 \u2192 1.43.125",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.43.125",
-   "title": "pypi:botocore: 1.43.124 \u2192 1.43.125",
-   "actionable": false
-  },
-  {
    "cloud": "aws",
-   "service": "Amazon S3, DynamoDB",
+   "service": "Amazon RDS, Amazon EC2",
    "kind": "announcement",
-   "key": "feed:aws:f050771c7b4e",
-   "title": "Amazon DynamoDB now supports bulk put items",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-dynamodb-now-supports-bulk-put-items/",
-   "detail": "Today, AWS announces the general availability of bulk put items for Amazon DynamoDB, a fully managed feature that writes data from Amazon S3 into your existing DynamoDB tables. Many DynamoDB applications use data that other systems produce and store in Amazon S3. Writing this data into existing DynamoDB tables has typically meant building custom pipelines and managing table capacity. With bulk put items, developers and data engineers can write this data without impacting existing workloads or building a custom ingestion pipeline, in a cost-efficient way. You point bulk put items at the S3 loca",
+   "key": "feed:aws:644745bd09be",
+   "title": "Amazon RDS for Oracle now supports Kerberos authentication with self-managed Active Directory",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-kerberos-self-managed-ad/",
+   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle ( Amazon Relational Database Service (Amazon RDS) for Oracle ) now allows customers to join their RDS for Oracle DB instances directly to their self-managed Microsoft Active Directory (AD) domain. Your self-managed AD can run on premises, on Amazon EC2, or with another cloud provider. Users in your AD domain can authenticate to RDS for Oracle DB instances using Kerberos. Previously, in order to use Kerberos authentication with self-managed AD for their RDS for Oracle instances, customers were required to deploy AWS Managed Microsoft AD",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
  ]
 }
