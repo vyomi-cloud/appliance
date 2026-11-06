@@ -112,6 +112,16 @@ def main():
     check("Validate OK", call(st, "ValidateStateMachineDefinition", definition=json.dumps(DEF))[1]["result"] == "OK")
     s, b = call(st, "TestState", definition=json.dumps({"Type": "Pass", "Result": {"x": 1}, "End": True}), roleArn=ROLE, input="{}")
     check("TestState Pass", b["status"] == "SUCCEEDED" and json.loads(b["output"]) == {"x": 1}, b)
+    # Map Runs: no Distributed Map has run, so AWS answers ResourceNotFound for an unknown run.
+    mr = "arn:aws:states:us-east-1:000000000000:mapRun:m1/none:0000"
+    s, ex = call(st, "StartExecution", stateMachineArn=arn, input='{"n":9}')
+    check("ListMapRuns empty for a real execution", call(st, "ListMapRuns", executionArn=ex["executionArn"])[1].get("mapRuns") == [])
+    s, e = call(st, "ListMapRuns", executionArn=mr.replace("mapRun", "execution"))
+    check("ListMapRuns unknown execution -> ExecutionDoesNotExist", s == 400 and e["__type"] == "ExecutionDoesNotExist", e)
+    s, e = call(st, "DescribeMapRun", mapRunArn=mr)
+    check("DescribeMapRun unknown -> ResourceNotFound", s == 400 and e["__type"] == "ResourceNotFound", e)
+    s, e = call(st, "UpdateMapRun", mapRunArn=mr, maxConcurrency=2)
+    check("UpdateMapRun unknown -> ResourceNotFound", s == 400 and e["__type"] == "ResourceNotFound", e)
     check("DeleteStateMachine", call(st, "DeleteStateMachine", stateMachineArn=arn)[0] == 200
           and call(st, "DescribeStateMachine", stateMachineArn=arn)[1]["__type"] == "StateMachineDoesNotExist")
     print(f"\n{PASS} passed, {FAIL} failed")
