@@ -970,6 +970,24 @@ def test_apigateway_configs_routes_and_deploy(c, gwapi):
     assert out["item"]["labels"] == {"team": "orders"}
 
 
+def test_apigateway_negative_backend_deadline_uses_default(c, gwapi):
+    """Upstream #519: negative x-google-backend deadlines are NOT rejected for OpenAPI 2.0;
+    they behave like 0 (the default deadline)."""
+    doc = OPENAPI.replace("        address: https://orders-abc.a.run.app",
+                          "        address: https://orders-abc.a.run.app\n        deadline: -1.0")
+    st, _ = c.sub("apigateway", "createConfig", gwapi, {"name": "neg-deadline", "openapi": doc})
+    assert st == 200
+    st, out = c.sub("apigateway", "listRoutes", gwapi)
+    assert st == 200
+    post = [r for r in out["items"] if r["method"] == "POST"]
+    assert post and all(r.get("deadline", 15.0) == 15.0 for r in post)
+    st, out = c.sub("apigateway", "deleteConfig", gwapi, {"name": "neg-deadline"})
+    assert st == 200
+    # OpenAPI 3.x documents are still rejected
+    st, bad = c.sub("apigateway", "createConfig", gwapi, {"name": "oa3", "openapi": doc.replace('"2.0"', '"3.0"')})
+    assert st == 400
+
+
 # ── Eventarc ──────────────────────────────────────────────────────────────────
 @pytest.fixture(scope="module")
 def trigger(c):
