@@ -28,7 +28,7 @@ const SvcLink = ({ s, size = 20, fontSize }) => (
   </span>
 );
 import { follow } from "../../common/router.js";
-import { awsJson, awsQuery, awsRest, asList, getRegion, s3, WIRE_BASE } from "../../common/wire.js";
+import { awsJson, awsQuery, awsRest, asList, getRegion, s3, WIRE_BASE, probeWithRetry } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { fmtDate } from "../kit/common.jsx";
 import Tabs from "@cloudscape-design/components/tabs";
@@ -58,14 +58,11 @@ const PROBES = {
 const RESOURCE_NOUN = { s3: "buckets", dynamodb: "tables", sqs: "queues", sns: "topics", kms: "keys", secretsmanager: "secrets", iam: "roles" };
 
 function useProbes() {
-  return useAsync(async () => {
-    const out = await Promise.all(Object.entries(PROBES).map(async ([id, fn]) => {
-      const t = performance.now();
-      try { return { id, ok: true, count: await fn(), ms: Math.round(performance.now() - t) }; }
-      catch (e) { return { id, ok: false, error: e.code || e.message, ms: Math.round(performance.now() - t) }; }
-    }));
-    return out;
-  }, []);
+  return useAsync(() => probeWithRetry(Object.keys(PROBES), async (id) => {
+    const t = performance.now();
+    try { return { id, ok: true, count: await PROBES[id](), ms: Math.round(performance.now() - t) }; }
+    catch (e) { return { id, ok: false, error: e.code || e.message, ms: Math.round(performance.now() - t) }; }
+  }), []);
 }
 
 const WIDGETS = [

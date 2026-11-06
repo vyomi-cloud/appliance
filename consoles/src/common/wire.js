@@ -15,6 +15,31 @@ export const WIRE_BASE = (() => {
   return location.pathname.split("/v4/")[0] + "/_wire";
 })();
 
+/* Nano: the in-browser backend (service worker + Pyodide) comes up AFTER the page mounts, and a page that opened under an older service
+ * worker can send its first calls to the network (HTTP 404/405 from the host). Anything that fires calls at mount (the Home health
+ * probes) awaits this first. Resolves at once on the offline appliance or when Nano is already ready; never rejects (4 min cap). */
+export function backendReady() {
+  const nano = document.querySelector('meta[name="vyomi-substrate"]')?.content === "nano";
+  if (!nano || window.__vyomiNanoReady) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { window.removeEventListener("vyomi-nano-ready", done); clearTimeout(t); resolve(); };
+    const t = setTimeout(done, 240000);
+    window.addEventListener("vyomi-nano-ready", done);
+  });
+}
+
+/* Run `probe(id)` for every id; retry the failures once after a short pause (a just-activated service worker needs a beat). */
+export async function probeWithRetry(ids, probe) {
+  await backendReady();
+  let out = await Promise.all(ids.map(probe));
+  if (out.some((r) => !r.ok)) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const redo = await Promise.all(out.map((r) => (r.ok ? r : probe(r.id))));
+    out = redo;
+  }
+  return out;
+}
+
 export class WireError extends Error {
   constructor(status, code, message, raw) {
     super(message || code || `HTTP ${status}`);

@@ -21,7 +21,7 @@ import CategoryIcon from "@mui/icons-material/esm/CategoryOutlined.js";
 import TerminalIcon from "@mui/icons-material/esm/Terminal.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
 import { sdkEndpoint } from "../../common/connect.js";
-import { restJson, WIRE_BASE } from "../../common/wire.js";
+import { restJson, WIRE_BASE, probeWithRetry } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { useProject } from "../project.js";
 import { PRODUCTS, classicHref } from "../services/registry.js";
@@ -43,10 +43,10 @@ const PROBES = {
 const prodById = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
 
 function useProbes(project) {
-  return useAsync(() => Promise.all(Object.entries(PROBES).map(async ([id, fn]) => {
-    try { const [count, noun] = await fn(project); return { id, ok: true, count, noun }; }
+  return useAsync(() => probeWithRetry(Object.keys(PROBES), async (id) => {
+    try { const [count, noun] = await PROBES[id](project); return { id, ok: true, count, noun }; }
     catch (e) { return { id, ok: false, error: e.code || e.message }; }
-  })), [project]);
+  }), [project]);
 }
 
 function useEvents() {
