@@ -72,6 +72,7 @@ from core import gcp_container_core as gcp_gke
 from core import gcp_iamcredentials_core as gcp_iamc
 from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
+from core import gcp_vertex_core as gcp_vertex
 from core import gcp_artifactregistry_core as gcp_ar
 from core import nano_triggers
 from core import gcp_logging_core as gcp_logging
@@ -97,6 +98,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_vertex.handles(path):
+        return "gcp-vertex"   # Vertex AI control plane (endpoints/models/datasets/jobs/indexes/feature store/metadata) + Workbench + Model Garden (core/gcp_vertex_core)
     if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
         return "gcp-scc"   # Security Command Center API v2 (core/gcp_scc_core over the posture/threat/vulnerability engines)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/sources([/:]|$)", path) \
@@ -722,6 +725,7 @@ class AwsWireRouter:
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
+        self.gcp_vertex = s.get("gcp_vertex") or gcp_vertex.VertexStore()   # Vertex AI resources
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
@@ -1975,6 +1979,7 @@ class AwsWireRouter:
                 "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),
                 "gcp-backupdr": (gcp_backupdr, self.gcp_compute_vm),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
+                "gcp-vertex": (gcp_vertex, self.gcp_vertex),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
                 "gcp-compute": (gcp_compute, self.gcp_compute),

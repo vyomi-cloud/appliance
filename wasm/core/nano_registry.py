@@ -43,6 +43,7 @@ from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
+from core.gcp_vertex_core import VertexStore
 from core.gcp_container_core import ContainerStore
 from core.gcp_compute_core import ComputeStore
 from core.gcp_compute_instances_core import ComputeStore as ComputeVmStore
@@ -102,6 +103,7 @@ def get() -> dict:
             "gcp_sec": InMemoryKvStore(),
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
             "gcp_mon": MonitoringStore(),   # Cloud Monitoring (policies, channels, metrics, series)
+            "gcp_vertex": VertexStore(),   # Vertex AI (endpoints, models, datasets, jobs, indexes, feature store, metadata, Workbench)
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs

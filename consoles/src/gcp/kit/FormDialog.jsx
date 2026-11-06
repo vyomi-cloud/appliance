@@ -22,7 +22,7 @@ export default function FormDialog({ open, title, fields, submitLabel = "Create"
             ? <FormControlLabel key={f.key} control={<Checkbox checked={!!v[f.key]} onChange={(e) => set(f.key, e.target.checked)} />} label={f.label} />
             : <TextField key={f.key} size="small" label={f.label} value={v[f.key]} select={!!f.options} multiline={!!f.multiline} minRows={f.multiline ? 4 : undefined}
                 helperText={f.helper} onChange={(e) => set(f.key, e.target.value)} inputProps={{ "aria-label": f.label }}>
-                {(f.options || []).map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                {(f.options || []).map((o) => (typeof o === "string" ? <MenuItem key={o} value={o}>{o}</MenuItem> : <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>))}
               </TextField>)}
         </Stack>
       </DialogContent>
