@@ -469,6 +469,21 @@ _APPLICATIONINSIGHTS_SUB = [
     ]},
 ]
 
+_AKS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "nodepools",   "label": "Node pools",          "icon": "dns",         "type": "aksNodePools"},
+        {"key": "upgrades",    "label": "Cluster configuration", "icon": "system_update", "type": "aksUpgrades"},
+        {"key": "connect",     "label": "Connect",             "icon": "cable",       "type": "aksConnect"},
+        {"key": "identity",    "label": "Identity",            "icon": "badge",       "type": "identity"},
+        {"key": "networking",  "label": "Networking",          "icon": "lan",         "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",             "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -499,6 +514,7 @@ SUB_BLADES: dict[str, list] = {
     "redis":       _REDIS_SUB,
     "eventhub":    _EVENTHUB_SUB,
     "applicationinsights": _APPLICATIONINSIGHTS_SUB,
+    "containerservice": _AKS_SUB,
     "rbac":        _RBAC_SUB,
     "nsg":         _NSG_SUB,
     "role_definition": _ROLEDEF_SUB,

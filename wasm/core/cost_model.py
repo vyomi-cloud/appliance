@@ -134,6 +134,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.monitor": 0.10,    # metric alert rule: $0.10 per monitored time series per month (static threshold, 1 resource); action groups: first 1,000 emails/month free
     "azure.containerregistry": 5.08,  # Basic: $0.167 per registry per day (~30.4 days/month); Standard $20.28, Premium $50.69
     "azure.eventhub": 22.18,  # Standard, 1 throughput unit: $0.03/hr (~$21.90/month) + ~$0.028 per million ingress events
+    "azure.containerservice": 73.00,  # AKS Free tier: control plane free; billed for 1 x Standard_DS2_v2 node (~$0.10/h, ~730 h/month); Standard tier adds $0.10/cluster-hour
     "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
     "azure.applicationinsights": 2.30,  # Log-based pay-as-you-go ingestion: ~1 GB/month beyond the 5 GB free grant at $2.30/GB
     "azure.aiwebtest": 0.00,            # Standard/ping availability tests are billed per execution; negligible at the default frequency
