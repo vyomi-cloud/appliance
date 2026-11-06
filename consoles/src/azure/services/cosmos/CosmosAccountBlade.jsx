@@ -20,6 +20,8 @@ import { locationLabel, LOCATIONS } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
@@ -36,6 +38,7 @@ import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 import ResourceCost from "../../kit/ResourceCost.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -117,11 +120,14 @@ export default function CosmosAccountBlade({ params }) {
   else {
     const a = data.data, reload = data.reload;
     const P = {
+      tasks: () => <TasksPanel a={a} />,
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="cosmos" />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       cors: () => <CosmosCors a={a} reload={reload} />,
       dedicatedgateway: () => <CosmosDedicatedGateway a={a} />,
@@ -134,6 +140,8 @@ export default function CosmosAccountBlade({ params }) {
       networking: () => <CosmosNetworking a={a} reload={reload} />,
       backup: () => <Backup a={a} reload={reload} />,
       keys: () => <Keys a={a} />,
+      quickstart: () => <Quickstart a={a} />,
+      features: () => <Features a={a} reload={reload} />,
       locks: () => <Locks a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
@@ -638,6 +646,63 @@ function Backup({ a, reload }) {
 }
 
 // ── Keys ──────────────────────────────────────────────────────────────────────────────
+/* Quick start: the account's real endpoint and primary key (listKeys) in ready-to-paste SDK snippets (azure.cosmos.quickstart). */
+function Quickstart({ a }) {
+  const [lang, setLang] = useState("python");
+  const keys = useAsync(() => api.listKeys(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const ep = api.accountEndpoint(a.name);
+  const key = keys.data?.primaryMasterKey || "<primary key>";
+  const SNIP = {
+    python: `# pip install azure-cosmos\nfrom azure.cosmos import CosmosClient\nclient = CosmosClient("${ep}", "${key}")\ndb = client.create_database_if_not_exists("db1")\nc = db.create_container_if_not_exists("container1", partition_key={"paths": ["/id"], "kind": "Hash"})\nc.upsert_item({"id": "1", "hello": "cosmos"})`,
+    node: `// npm i @azure/cosmos\nconst { CosmosClient } = require("@azure/cosmos");\nconst client = new CosmosClient({ endpoint: "${ep}", key: "${key}" });\nconst { database } = await client.databases.createIfNotExists({ id: "db1" });\nconst { container } = await database.containers.createIfNotExists({ id: "container1", partitionKey: { paths: ["/id"] } });\nawait container.items.upsert({ id: "1", hello: "cosmos" });`,
+    dotnet: `// dotnet add package Microsoft.Azure.Cosmos\nvar client = new CosmosClient("${ep}", "${key}");\nvar db = (await client.CreateDatabaseIfNotExistsAsync("db1")).Database;\nvar c = (await db.CreateContainerIfNotExistsAsync("container1", "/id")).Container;\nawait c.UpsertItemAsync(new { id = "1", hello = "cosmos" });`,
+    java: `// com.azure:azure-cosmos\nCosmosClient client = new CosmosClientBuilder().endpoint("${ep}").key("${key}").buildClient();\nclient.createDatabaseIfNotExists("db1");\nCosmosContainer c = client.getDatabase("db1").getContainer("container1");`,
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Quick start</div>
+      <CapabilityContainer id="azure.cosmos.quickstart" title="Quick start">
+        <p style={{ fontSize: 13 }}>Connect an SDK to this account. The endpoint and primary key below are this account's real values; the key is a simulator secret.</p>
+        <TabList selectedValue={lang} onTabSelect={(_, d) => setLang(d.value)}>
+          <Tab value="python">Python</Tab><Tab value="node">Node.js</Tab><Tab value="dotnet">.NET</Tab><Tab value="java">Java</Tab>
+        </TabList>
+        <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", marginTop: 8 }} data-testid="cosmos-quickstart">{SNIP[lang].replace(/\\n/g, "\n")}</pre>
+      </CapabilityContainer>
+    </>
+  );
+}
+
+const FEATURES = [
+  ["enableBurstCapacity", "Burst capacity", "Lets idle provisioned RU/s absorb short spikes."],
+  ["enablePartitionMerge", "Partition merge", "Merges physical partitions to reclaim throughput."],
+  ["enableAnalyticalStorage", "Analytical storage", "Enables the column store behind Azure Synapse Link."],
+  ["enablePerRegionPerPartitionAutoscale", "Per-region and per-partition autoscale", "Autoscale each partition in each region independently."],
+];
+/* Features: account-level feature flags, stored on the account and returned by ARM exactly as set (azure.cosmos.features). */
+function Features({ a, reload }) {
+  const notify = useNotify();
+  const set = async (k, on) => {
+    try { await api.updateAccount(a.resourceGroup, a.name, { properties: { [k]: on } }); notify.success(`${k} ${on ? "enabled" : "disabled"}.`, "Feature updated"); reload(); }
+    catch (e) { notify.error(e, "Updating the feature failed"); }
+  };
+  const p = a.properties || {};
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Features</div>
+      <CapabilityContainer id="azure.cosmos.features" title="Features">
+        <table className="vy-grid" aria-label="Features">
+          <thead><tr><th>Feature</th><th>Description</th><th>Status</th></tr></thead>
+          <tbody>{FEATURES.map(([k, label, desc]) => (
+            <tr key={k}><td>{label}</td><td>{desc}</td><td><Checkbox checked={!!p[k]} label={p[k] ? "On" : "Off"} aria-label={label} onChange={(_, d) => set(k, !!d.checked)} /></td></tr>
+          ))}
+            <tr><td>Capabilities</td><td>Immutable account capabilities</td><td>{(p.capabilities || []).map((c) => c.name).join(", ") || "None"}</td></tr>
+          </tbody>
+        </table>
+      </CapabilityContainer>
+    </>
+  );
+}
+
 function Keys({ a }) {
   const notify = useNotify();
   const [tab, setTab] = useState("rw");

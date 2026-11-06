@@ -110,6 +110,51 @@ def _version_item(name: str, version: str, ver: dict) -> dict:
     return item
 
 
+# ── soft delete: Manage deleted secrets (list / get / recover / purge) ────
+def _deleted_item(name: str, rec: dict) -> dict:
+    cur = rec["versions"][rec["current"]]
+    out = {"id": _secret_id(name), "attributes": cur.get("attributes", {}),
+           "recoveryId": f"{VAULT_HOST}/deletedsecrets/{name}", "deletedDate": rec.get("deletedDate"),
+           "scheduledPurgeDate": (rec.get("deletedDate") or 0) + 90 * 24 * 3600}
+    if cur.get("contentType") is not None:
+        out["contentType"] = cur["contentType"]
+    if cur.get("tags") is not None:
+        out["tags"] = cur["tags"]
+    return out
+
+
+def _deleted_secrets(store, method: str, segs: list) -> KvResponse:
+    if len(segs) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /deletedsecrets")
+        items = []
+        for n in store.names():
+            r = store.get_secret(n)
+            if r and r.get("deleted") and r.get("versions"):
+                items.append(_deleted_item(n, r))
+        return _json(200, {"value": items, "nextLink": None})
+    name = segs[1]
+    rec = store.get_secret(name)
+    if not rec or not rec.get("deleted") or not rec.get("versions"):
+        return _err(404, "SecretNotFound", f"Deleted Secret not found: {name}")
+    if len(segs) == 2 and method == "GET":
+        out = _version_bundle(name, rec["current"], rec["versions"][rec["current"]])
+        out.update(_deleted_item(name, rec))
+        return _json(200, out)
+    if len(segs) == 2 and method == "DELETE":      # purge
+        store.drop_secret(name)
+        store.persist()
+        store.mirror_delete(name)
+        return KvResponse(status=204, body=b"")
+    if len(segs) == 3 and segs[2] == "recover" and method == "POST":
+        rec["deleted"], rec["deletedDate"] = False, None
+        store.put_secret(name, rec)
+        store.persist()
+        store.mirror_put(name, rec)
+        return _json(200, _version_bundle(name, rec["current"], rec["versions"][rec["current"]]))
+    return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /deletedsecrets/{name}")
+
+
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: InMemoryKvStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -137,6 +182,8 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
     p = path.split("?", 1)[0].rstrip("/")
     segs = [unquote(s) for s in p.split("/") if s != ""]
 
+    if segs and segs[0] == "deletedsecrets":
+        return _deleted_secrets(store, method, segs)
     if not segs or segs[0] != "secrets":
         return _err(404, "NotFound", f"Unknown path: {path}")
 

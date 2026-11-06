@@ -23,6 +23,8 @@ import { StorageVnetRules, StorageIpRules } from "../../kit/NetworkRules.jsx";
 import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { ErrorBar, Essentials, fmtBytes, fmtDate, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
@@ -95,6 +97,8 @@ export default function StorageAccountBlade({ params, query }) {
   else {
     const a = acct.data, reload = acct.reload;
     const P = {
+      tasks: () => <TasksPanel a={a} />,
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="storage" />,

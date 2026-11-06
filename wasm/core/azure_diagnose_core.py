@@ -306,6 +306,229 @@ def _site(state, rec):
     out.append(_d("logging", "Application logging", "Observability", "Info" if app_log == "Off" else "Healthy", f"Application logging level: {app_log}.", "Turn on App Service logs to keep diagnostics." if app_log == "Off" else None, {"level": app_log}))
     return out
 
+# ── Data, secrets, messaging and registry services ──────────────────────────────────
+def _net(p, name="Network access"):
+    """Shared network-exposure finding for the services that carry publicNetworkAccess / networkAcls."""
+    pna = p.get("publicNetworkAccess", "Enabled")
+    acl = p.get("networkAcls") or {}
+    rules = len(acl.get("ipRules") or []) + len(acl.get("virtualNetworkRules") or [])
+    open_ = pna == "Enabled" and (acl.get("defaultAction") or "Allow") == "Allow"
+    return _d("network", name, "Security", "Warning" if open_ else "Healthy",
+              "Reachable from every network." if open_ else f"Public access {pna}; default action {acl.get('defaultAction') or 'Deny'}; {rules} network rule(s).",
+              "Restrict with firewall rules or a private endpoint." if open_ else None,
+              {"publicNetworkAccess": pna, "defaultAction": acl.get("defaultAction"), "rules": rules})
+
+
+def _sqlserver(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    tls = p.get("minimalTlsVersion") or "None"
+    out.append(_d("tls", "Minimum TLS version", "Security", "Healthy" if tls in ("1.2", "1.3") else "Warning",
+                  f"Minimum TLS version is {tls}.", None if tls in ("1.2", "1.3") else "Raise minimalTlsVersion to 1.2.", {"minimalTlsVersion": tls}))
+    fw = [c for c in _children(state, rec["id"], "firewallrules")]
+    pna = p.get("publicNetworkAccess", "Enabled")
+    wide = [c.get("name") for c in fw if ((c.get("properties") or {}).get("startIpAddress"), (c.get("properties") or {}).get("endIpAddress")) == ("0.0.0.0", "255.255.255.255")]
+    out.append(_d("firewall", "Firewall rules", "Security", "Warning" if wide else ("Info" if pna == "Enabled" and not fw else "Healthy"),
+                  (f"Rule(s) {', '.join(wide)} allow every IP address." if wide else
+                   f"{len(fw)} firewall rule(s); public network access {pna}."),
+                  "Narrow the rule to the client addresses that need access." if wide else None, {"rules": len(fw), "publicNetworkAccess": pna}))
+    dbs = [c for c in _children(state, rec["id"], "databases") if (c.get("type") or "").lower().endswith("/servers/databases")]
+    out.append(_d("databases", "Databases", "Availability", "Info" if dbs else "Warning",
+                  f"{len(dbs)} user database(s)." if dbs else "The server hosts no database.", None if dbs else "Create a database.", {"databases": [d.get("name") for d in dbs]}))
+    aud = next((c for c in _children(state, rec["id"], "auditingsettings")), None)
+    on = ((aud or {}).get("properties") or {}).get("state") == "Enabled"
+    out.append(_d("auditing", "Auditing", "Security", "Healthy" if on else "Info", "Server auditing is enabled." if on else "Server auditing is disabled.", None if on else "Enable auditing to keep an audit trail.", {"state": "Enabled" if on else "Disabled"}))
+    return out
+
+
+def _sqldb(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    status = p.get("status") or "Online"
+    out.append(_d("status", "Database status", "Availability", "Healthy" if status == "Online" else "Critical",
+                  f"Database is {status}.", None if status == "Online" else "Resume or restore the database.", {"status": status}))
+    tde = next((c for c in _children(state, rec["id"], "transparentdataencryption")), None)
+    t = ((tde or {}).get("properties") or {}).get("state", "Enabled")
+    out.append(_d("tde", "Transparent data encryption", "Security", "Healthy" if t == "Enabled" else "Warning",
+                  f"Transparent data encryption is {t}.", None if t == "Enabled" else "Re-enable TDE.", {"state": t}))
+    st = next((c for c in _children(state, rec["id"], "backupshorttermretentionpolicies")), None)
+    days = ((st or {}).get("properties") or {}).get("retentionDays")
+    out.append(_d("backup", "Point-in-time restore retention", "Reliability", "Healthy" if (days or 0) >= 7 else "Warning",
+                  f"Short-term backup retention is {days} day(s)." if days is not None else "No short-term retention policy is recorded.",
+                  None if (days or 0) >= 7 else "Raise short-term retention to at least 7 days.", {"retentionDays": days}))
+    out.append(_d("redundancy", "Zone redundancy", "Reliability", "Healthy" if p.get("zoneRedundant") else "Info",
+                  "Zone redundant." if p.get("zoneRedundant") else "Not zone redundant; a zone outage affects this database.", None if p.get("zoneRedundant") else "Enable zoneRedundant on a supported tier.", {"zoneRedundant": bool(p.get("zoneRedundant"))}))
+    return out
+
+
+def _cosmosacct(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    locs = p.get("locations") or []
+    out.append(_d("regions", "Regions", "Reliability", "Healthy" if len(locs) > 1 else "Info",
+                  f"{len(locs)} region(s): {', '.join(l.get('locationName', '?') for l in locs)}.",
+                  None if len(locs) > 1 else "Add a second region for regional failover.", {"regions": len(locs)}))
+    af = bool(p.get("enableAutomaticFailover"))
+    out.append(_d("failover", "Automatic failover", "Reliability", "Healthy" if af or len(locs) < 2 else "Warning",
+                  "Automatic failover is on." if af else ("Single region: nothing to fail over to." if len(locs) < 2 else "Automatic failover is off; a regional outage needs a manual failover."),
+                  None if af or len(locs) < 2 else "Enable enableAutomaticFailover.", {"enableAutomaticFailover": af}))
+    cl = (p.get("consistencyPolicy") or {}).get("defaultConsistencyLevel") or "Session"
+    out.append(_d("consistency", "Default consistency level", "Configuration", "Info", f"Default consistency level is {cl}.",
+                  "Strong consistency is limited to single-write-region accounts." if cl == "Strong" and p.get("enableMultipleWriteLocations") else None, {"defaultConsistencyLevel": cl}))
+    dla = bool(p.get("disableLocalAuth"))
+    out.append(_d("auth", "Key authentication", "Security", "Healthy" if dla else "Info", "Account keys are disabled; only Entra ID works." if dla else "Account keys are enabled.", None if dla else "Prefer Entra ID and set disableLocalAuth.", {"disableLocalAuth": dla}))
+    ip = p.get("ipRules") or []
+    pna = p.get("publicNetworkAccess", "Enabled")
+    open_ = pna == "Enabled" and not ip and not p.get("isVirtualNetworkFilterEnabled")
+    out.append(_d("network", "Network access", "Security", "Warning" if open_ else "Healthy",
+                  "Reachable from every network." if open_ else f"Public access {pna}; {len(ip)} IP rule(s).",
+                  "Add IP or virtual-network rules, or use a private endpoint." if open_ else None, {"publicNetworkAccess": pna, "ipRules": len(ip)}))
+    dbs = [c for c in _children(state, rec["id"], "sqldatabases")]
+    out.append(_d("databases", "SQL databases", "Availability", "Info", f"{len(dbs)} SQL (NoSQL API) database(s)." if dbs else "No database in the account yet.", None, {"databases": len(dbs)}))
+    return out
+
+
+def _vault(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    sd = p.get("enableSoftDelete", True)
+    pp = bool(p.get("enablePurgeProtection"))
+    out.append(_d("softdelete", "Soft delete", "Reliability", "Healthy" if sd else "Critical",
+                  f"Soft delete is on; deleted objects are kept {p.get('softDeleteRetentionInDays', 90)} day(s)." if sd else "Soft delete is off; deleted keys and secrets are lost.", None if sd else "Soft delete cannot be disabled on a current vault; recreate it.", {"enableSoftDelete": sd}))
+    out.append(_d("purgeprotection", "Purge protection", "Security", "Healthy" if pp else "Warning",
+                  "Purge protection is on." if pp else "Purge protection is off; a soft-deleted vault or object can be purged before retention ends.", None if pp else "Enable purge protection (irreversible).", {"enablePurgeProtection": pp}))
+    rbac = bool(p.get("enableRbacAuthorization"))
+    n = len(p.get("accessPolicies") or [])
+    out.append(_d("authz", "Permission model", "Security", "Healthy" if rbac else "Info",
+                  "Azure RBAC governs data-plane access." if rbac else f"Vault access policies govern access ({n} policy entr{'y' if n == 1 else 'ies'}).", None if rbac else "Prefer Azure RBAC.", {"enableRbacAuthorization": rbac, "accessPolicies": n}))
+    out.append(_net(p))
+    return out
+
+
+def _storageacct(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    https = p.get("supportsHttpsTrafficOnly", True)
+    out.append(_d("https", "Secure transfer", "Security", "Healthy" if https else "Critical", "Secure transfer (HTTPS only) is required." if https else "Plain HTTP is accepted.", None if https else "Enable supportsHttpsTrafficOnly.", {"supportsHttpsTrafficOnly": https}))
+    tls = p.get("minimumTlsVersion") or "TLS1_0"
+    out.append(_d("tls", "Minimum TLS version", "Security", "Healthy" if tls in ("TLS1_2", "TLS1_3") else "Warning", f"Minimum TLS version is {tls}.", None if tls in ("TLS1_2", "TLS1_3") else "Raise minimumTlsVersion to TLS1_2.", {"minimumTlsVersion": tls}))
+    pub = p.get("allowBlobPublicAccess")
+    out.append(_d("blobpublic", "Anonymous blob access", "Security", "Warning" if pub else "Healthy", "Containers may be made publicly readable." if pub else "Anonymous access to blobs is disallowed.", "Set allowBlobPublicAccess to false." if pub else None, {"allowBlobPublicAccess": bool(pub)}))
+    sk = p.get("allowSharedKeyAccess", True)
+    out.append(_d("sharedkey", "Shared key authorization", "Security", "Info" if sk else "Healthy", "Account keys and SAS can authorize requests." if sk else "Only Entra ID authorizes requests.", None if not sk else "Prefer Entra ID and disable shared-key access.", {"allowSharedKeyAccess": sk}))
+    out.append(_net(p))
+    return out
+
+
+def _sbnamespace(state, rec):
+    p = rec.get("properties") or {}
+    sku = (rec.get("sku") or {}).get("name") or "Standard"
+    out = []
+    tls = p.get("minimumTlsVersion") or "1.0"
+    out.append(_d("tls", "Minimum TLS version", "Security", "Healthy" if tls in ("1.2", "1.3") else "Warning", f"Minimum TLS version is {tls}.", None if tls in ("1.2", "1.3") else "Raise minimumTlsVersion to 1.2.", {"minimumTlsVersion": tls}))
+    dla = bool(p.get("disableLocalAuth"))
+    out.append(_d("auth", "SAS authentication", "Security", "Healthy" if dla else "Info", "SAS keys are disabled; only Entra ID works." if dla else "Shared access signature authentication is enabled.", None if dla else "Prefer Entra ID and set disableLocalAuth.", {"disableLocalAuth": dla}))
+    out.append(_d("sku", "Pricing tier", "Capacity", "Info" if sku == "Premium" else "Warning" if sku == "Basic" else "Info",
+                  f"{sku} tier." + (" Topics and subscriptions are unavailable on Basic." if sku == "Basic" else ""), "Move to Standard or Premium for topics." if sku == "Basic" else None, {"sku": sku}))
+    qs = _children(state, rec["id"], "queues")
+    ts = _children(state, rec["id"], "topics")
+    out.append(_d("entities", "Messaging entities", "Availability", "Info" if (qs or ts) else "Warning", f"{len(qs)} queue(s), {len(ts)} topic(s)." if (qs or ts) else "The namespace has no queue or topic.", None if (qs or ts) else "Create a queue or topic.", {"queues": len(qs), "topics": len(ts)}))
+    out.append(_d("redundancy", "Zone redundancy", "Reliability", "Healthy" if p.get("zoneRedundant") else "Info", "Zone redundant." if p.get("zoneRedundant") else "Not zone redundant.", None, {"zoneRedundant": bool(p.get("zoneRedundant"))}))
+    return out
+
+
+def _registry(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    adm = bool(p.get("adminUserEnabled"))
+    out.append(_d("admin", "Admin user", "Security", "Warning" if adm else "Healthy", "The shared admin account is enabled." if adm else "The admin account is disabled.", "Disable the admin user and use Entra ID or repository tokens." if adm else None, {"adminUserEnabled": adm}))
+    out.append(_d("network", "Network access", "Security", "Warning" if p.get("publicNetworkAccess", "Enabled") == "Enabled" and not (p.get("networkRuleSet") or {}).get("ipRules") else "Healthy",
+                  f"Public network access {p.get('publicNetworkAccess', 'Enabled')}.", "Restrict with IP rules or a private endpoint.", {"publicNetworkAccess": p.get("publicNetworkAccess", "Enabled")}))
+    out.append(_d("anonpull", "Anonymous pull", "Security", "Warning" if p.get("anonymousPullEnabled") else "Healthy", "Anyone can pull images." if p.get("anonymousPullEnabled") else "Anonymous pull is disabled.", None, {"anonymousPullEnabled": bool(p.get("anonymousPullEnabled"))}))
+    return out
+
+
+def _workspace(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    ret = p.get("retentionInDays", 30)
+    out.append(_d("retention", "Data retention", "Configuration", "Info", f"Retention is {ret} day(s).", None, {"retentionInDays": ret}))
+    quota = (p.get("workspaceCapping") or {}).get("dailyQuotaGb", -1)
+    out.append(_d("quota", "Daily cap", "Capacity", "Info" if quota in (-1, None) else "Healthy", "No daily ingestion cap: a noisy source can run up cost." if quota in (-1, None) else f"Daily cap is {quota} GB.", "Set a daily cap." if quota in (-1, None) else None, {"dailyQuotaGb": quota}))
+    out.append(_d("access", "Public network access", "Security", "Info", f"Ingestion: {p.get('publicNetworkAccessForIngestion', 'Enabled')}; query: {p.get('publicNetworkAccessForQuery', 'Enabled')}.", None, {}))
+    return out
+
+
+def _vm(state, rec):
+    p = rec.get("properties") or {}
+    out = []
+    nics = (p.get("networkProfile") or {}).get("networkInterfaces") or []
+    out.append(_d("nic", "Network interfaces", "Availability", "Healthy" if nics else "Warning", f"{len(nics)} network interface(s) attached." if nics else "No network interface is attached: the VM is unreachable.", None if nics else "Attach a NIC.", {"nics": len(nics)}))
+    lin = (p.get("osProfile") or {}).get("linuxConfiguration") or {}
+    pw = lin and not lin.get("disablePasswordAuthentication")
+    out.append(_d("sshpassword", "Password authentication", "Security", "Warning" if pw else "Healthy", "Password sign-in is allowed over SSH." if pw else "SSH keys only." if lin else "Windows or unspecified OS profile.", "Disable password authentication and use SSH keys." if pw else None, {}))
+    bd = ((p.get("diagnosticsProfile") or {}).get("bootDiagnostics") or {}).get("enabled")
+    out.append(_d("bootdiag", "Boot diagnostics", "Observability", "Healthy" if bd else "Info", "Boot diagnostics are on." if bd else "Boot diagnostics are off: serial console output is not captured.", None if bd else "Enable boot diagnostics.", {"enabled": bool(bd)}))
+    return out
+
+
+def _dnszone(state, rec):
+    rs = _children(state, rec["id"])
+    n = sum(1 for r in rs if (r.get("type") or "").lower().find("/dnszones/") >= 0)
+    return [_d("recordsets", "Record sets", "Availability", "Info" if n else "Warning", f"{n} record set(s)." if n else "The zone has no record set.", None if n else "Add records.", {"recordSets": n})]
+
+
+def _containerapp(state, rec):
+    p = rec.get("properties") or {}
+    cfg = p.get("configuration") or {}
+    ing = cfg.get("ingress") or {}
+    tpl = p.get("template") or {}
+    out = []
+    env = p.get("managedEnvironmentId") or p.get("environmentId")
+    env_ok = bool(env) and (env or "").lower() in state
+    out.append(_d("environment", "Container Apps environment", "Availability", "Healthy" if env_ok else "Critical",
+                  "Hosted by an existing environment." if env_ok else "The managed environment this app references does not exist.",
+                  None if env_ok else "Recreate the environment or move the app to another one.", {"managedEnvironmentId": env}))
+    cs = tpl.get("containers") or []
+    out.append(_d("containers", "Containers", "Configuration", "Healthy" if cs else "Critical",
+                  f"{len(cs)} container(s): {', '.join(str(c.get('image')) for c in cs)}." if cs else "The template has no container.",
+                  None if cs else "Add a container with an image.", {"containers": len(cs)}))
+    if ing:
+        ok = bool(ing.get("targetPort"))
+        out.append(_d("ingress", "Ingress", "Networking", ("Warning" if ing.get("external") else "Healthy") if ok else "Critical",
+                      (f"{'External' if ing.get('external') else 'Internal'} ingress on port {ing.get('targetPort')}." if ok else "Ingress is enabled without a target port."),
+                      "External ingress is reachable from the internet; restrict with IP rules if not intended." if ing.get("external") and ok else (None if ok else "Set ingress.targetPort."),
+                      {"external": bool(ing.get("external")), "targetPort": ing.get("targetPort")}))
+    else:
+        out.append(_d("ingress", "Ingress", "Networking", "Info", "Ingress is disabled; the app is only reachable by other apps through the environment.", None, {}))
+    sc = tpl.get("scale") or {}
+    mn, mx = sc.get("minReplicas", 0), sc.get("maxReplicas", 10)
+    out.append(_d("scale", "Scale rule", "Capacity", "Info" if mn == 0 else "Healthy", f"Scales between {mn} and {mx} replicas." + (" Scale to zero is on: the first request waits for a cold start." if mn == 0 else ""), None, {"minReplicas": mn, "maxReplicas": mx}))
+    revs = _children(state, rec["id"], "revisions")
+    out.append(_d("revisions", "Revisions", "Reliability", "Healthy" if revs else "Info", f"{len(revs)} revision(s) recorded." if revs else "No revision record exists yet.", None, {"revisions": len(revs)}))
+    return out
+
+
+def _containerenv(state, rec):
+    p = rec.get("properties") or {}
+    apps = [v for v in state.values() if (v.get("type") or "").lower() == "microsoft.app/containerapps"
+            and ((v.get("properties") or {}).get("managedEnvironmentId") or "").lower() == rec["id"].lower()]
+    out = [_d("apps", "Hosted apps", "Availability", "Info" if apps else "Warning", f"{len(apps)} container app(s) run in this environment." if apps else "No container app uses this environment.", None if apps else "Create a container app or delete the unused environment.", {"apps": len(apps)})]
+    out.append(_d("zone", "Zone redundancy", "Reliability", "Healthy" if p.get("zoneRedundant") else "Info", "Zone redundant." if p.get("zoneRedundant") else "Not zone redundant.", None, {"zoneRedundant": bool(p.get("zoneRedundant"))}))
+    return out
+
+
+def _containerjob(state, rec):
+    p = rec.get("properties") or {}
+    cfg = p.get("configuration") or {}
+    trig = cfg.get("triggerType") or "Manual"
+    out = [_d("trigger", "Trigger", "Configuration", "Healthy" if trig in ("Manual", "Schedule", "Event") else "Critical", f"Trigger type {trig}." + (f" Schedule {cfg.get('scheduleTriggerConfig', {}).get('cronExpression')}." if trig == "Schedule" else ""), None, {"triggerType": trig})]
+    if trig == "Schedule":
+        cron = (cfg.get("scheduleTriggerConfig") or {}).get("cronExpression")
+        out.append(_d("cron", "Cron expression", "Configuration", "Healthy" if cron else "Critical", f"Cron expression {cron}." if cron else "A schedule job needs scheduleTriggerConfig.cronExpression.", None if cron else "Set a cron expression.", {"cronExpression": cron}))
+    out.append(_d("timeout", "Replica timeout", "Reliability", "Info", f"Replica timeout {cfg.get('replicaTimeout', 1800)} s, {cfg.get('replicaRetryLimit', 0)} retries.", None, {"replicaTimeout": cfg.get("replicaTimeout", 1800)}))
+    return out
+
 
 KINDS = {
     "microsoft.containerservice/managedclusters": _aks,
@@ -313,6 +536,19 @@ KINDS = {
     "microsoft.appconfiguration/configurationstores": _appconfig,
     "microsoft.cognitiveservices/accounts": _cogs,
     "microsoft.web/sites": _site,
+    "microsoft.sql/servers": _sqlserver,
+    "microsoft.sql/servers/databases": _sqldb,
+    "microsoft.documentdb/databaseaccounts": _cosmosacct,
+    "microsoft.keyvault/vaults": _vault,
+    "microsoft.storage/storageaccounts": _storageacct,
+    "microsoft.servicebus/namespaces": _sbnamespace,
+    "microsoft.containerregistry/registries": _registry,
+    "microsoft.operationalinsights/workspaces": _workspace,
+    "microsoft.compute/virtualmachines": _vm,
+    "microsoft.network/dnszones": _dnszone,
+    "microsoft.app/containerapps": _containerapp,
+    "microsoft.app/managedenvironments": _containerenv,
+    "microsoft.app/jobs": _containerjob,
 }
 
 

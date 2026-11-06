@@ -509,14 +509,65 @@ def _delete_key(store: KeyStore, name: str) -> KvResponse:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
     latest = versions[-1]
+    grave = _graveyard(store)
+    now = _now()
+    grave[name] = {"deletedDate": now, "versions": [(dict(m), store.get_material(_kid_key(name, m["version"]))) for m in versions]}
     for m in versions:
         store.drop_key(_kid_key(name, m["version"]))
     store.persist()
     bundle = _key_bundle(latest)
     bundle["recoveryId"] = f"{VAULT_HOST}/deletedkeys/{name}"
-    bundle["deletedDate"] = _now()
-    bundle["scheduledPurgeDate"] = _now() + 90 * 86400
+    bundle["deletedDate"] = now
+    bundle["scheduledPurgeDate"] = now + 90 * 86400
     return _json(200, bundle)
+
+
+# Soft delete: a deleted key keeps its versions and material here until recovered or purged
+# (the Manage deleted keys blade; GET /deletedkeys, POST /deletedkeys/{name}/recover, DELETE = purge).
+def _graveyard(store) -> dict:
+    g = getattr(store, "_deleted_keys", None)
+    if g is None:
+        g = {}
+        try:
+            store._deleted_keys = g
+        except Exception:
+            pass
+    return g
+
+
+def _deleted_item(name: str, rec: dict) -> dict:
+    latest = rec["versions"][-1][0]
+    return {"kid": _kid_url(name, latest["version"]), "attributes": _attributes(latest),
+            "recoveryId": f"{VAULT_HOST}/deletedkeys/{name}", "deletedDate": rec["deletedDate"],
+            "scheduledPurgeDate": rec["deletedDate"] + 90 * 86400}
+
+
+def _deleted_keys(store, method: str, segs: list) -> KvResponse:
+    grave = _graveyard(store)
+    if len(segs) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /deletedkeys")
+        return _json(200, {"value": [_deleted_item(n, r) for n, r in sorted(grave.items())]})
+    name = segs[1]
+    rec = grave.get(name)
+    if rec is None:
+        return _err(404, "KeyNotFound", f"Deleted Key not found: {name}")
+    if len(segs) == 2 and method == "GET":
+        out = _key_bundle(rec["versions"][-1][0])
+        out.update(_deleted_item(name, rec))
+        return _json(200, out)
+    if len(segs) == 2 and method == "DELETE":      # purge
+        del grave[name]
+        return KvResponse(status=204, body=b"")
+    if len(segs) == 3 and segs[2] == "recover" and method == "POST":
+        if _versions_for(store, name):
+            return _err(409, "Conflict", f"A key with name {name} already exists; delete and purge it before recovering.")
+        for meta, material in rec["versions"]:
+            store.put_key(_kid_key(name, meta["version"]), meta, material)
+        del grave[name]
+        store.persist()
+        return _json(200, _key_bundle(_latest(store, name)))
+    return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /deletedkeys/{name}")
 
 
 _OPS = ("encrypt", "decrypt", "wrapkey", "unwrapkey", "sign", "verify")
@@ -570,6 +621,8 @@ def dispatch(store: KeyStore, method: str, path: str,
     except Exception:
         payload = {}
 
+    if segs and segs[0] == "deletedkeys":
+        return _deleted_keys(store, method, segs)
     if not segs or segs[0] != "keys":
         return _err(404, "NotFound", f"Unknown path: {path}")
 

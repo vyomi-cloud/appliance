@@ -71,9 +71,15 @@
  },
  "azure.dns.diagnose": {
   "title": "Diagnose and solve problems",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "The guided DNS diagnostic tiles are not modelled."
+   "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter. Zones report their record-set inventory; guided DNS diagnostic tiles (resolution tests against live resolvers) are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_services_depth.py"
   ]
  }
 }

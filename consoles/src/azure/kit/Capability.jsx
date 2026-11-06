@@ -38,8 +38,9 @@ import cap_storage from "../../../../core/capabilities/azure/storage.json";
 import cap_subscriptions from "../../../../core/capabilities/azure/subscriptions.json";
 import cap_vms from "../../../../core/capabilities/azure/vms.json";
 import cap_vnets from "../../../../core/capabilities/azure/vnets.json";
+import cap_panels from "../../../../core/capabilities/azure/panels.json";
 
-const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appconfiguration, ...cap_appservices, ...cap_cognitiveservices, ...cap_common, ...cap_containerapps, ...cap_cosmos, ...cap_cost, ...cap_defender, ...cap_dns, ...cap_entra, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_loganalytics, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql, ...cap_streamanalytics, ...cap_storage, ...cap_subscriptions, ...cap_vms, ...cap_vnets , ...cap_managedidentity };
+const REGISTRY = { ...cap_panels, ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appconfiguration, ...cap_appservices, ...cap_cognitiveservices, ...cap_common, ...cap_containerapps, ...cap_cosmos, ...cap_cost, ...cap_defender, ...cap_dns, ...cap_entra, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_loganalytics, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql, ...cap_streamanalytics, ...cap_storage, ...cap_subscriptions, ...cap_vms, ...cap_vnets , ...cap_managedidentity };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

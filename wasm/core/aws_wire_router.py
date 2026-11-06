@@ -377,9 +377,9 @@ def _azure_service(path, lheaders, query):
         av = query.get("api-version") or (m.group(1) if m else "")
         if s0 == "keys" and not re.match(r"^\d+\.\d+$", str(av)):
             return "az-appconfig"
-        if s0 == "keys":
+        if s0 in ("keys", "deletedkeys"):
             return "az-kv-keys"
-        if s0 == "secrets":
+        if s0 in ("secrets", "deletedsecrets"):
             return "az-kv-secrets"
         if s0 == "certificates":
             return "az-kv-certs"

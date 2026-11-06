@@ -111,9 +111,16 @@
  },
  "azure.storage.diagnose": {
   "title": "Diagnose and solve problems",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Genuinely unmodellable: the real wizard's diagnosis comes from a proprietary, Microsoft-fleet-wide knowledge base and anomaly-detection model trained across millions of real customer incidents — there is no equivalent corpus, model or incident history a local simulator could stand in for, independent of how much telemetry Vyomi itself emits."],
-  "tests": []
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_services_depth.py"
+  ]
  },
  "azure.storage.iam": {
   "title": "Access control (IAM) scoped to a storage account",
@@ -265,9 +272,16 @@
  },
  "azure.storage.tasks": {
   "title": "Tasks (Azure Automation runbooks)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Genuinely unsafe/impossible to simulate generically: a real Storage task/Automation runbook executes arbitrary customer-authored PowerShell/Python on a separate managed worker fleet — faithfully simulating it means running untrusted arbitrary code, which this simulator deliberately does not do anywhere (every other 'task'-like feature here — Lifecycle, Blob inventory — is a fixed, bounded operation Vyomi implements directly, not an arbitrary script host)."],
-  "tests": []
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open. These are Logic App workflows, not Azure Automation runbooks: arbitrary customer PowerShell or Python is never executed."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_services_depth.py"
+  ]
  },
  "azure.storage.exporttemplate": {
   "title": "Export template (ARM/Bicep/Terraform generated client-side from this resource)",
