@@ -36,6 +36,7 @@ from core import gcp_redis_core as _redis
 from core import gcp_monitoring_core as _mon
 from core import gcp_artifactregistry_core as _ar
 from core import gcp_dns_core as _dns
+from core import gcp_logging_core as _log
 from core.sql_store import InMemorySqlStore
 
 from core import gcp_project as _gproj
@@ -64,11 +65,12 @@ _STORES = {
     "monitoring":    _R["gcp_mon"],
     "artifactregistry": _R["gcp_ar"],
     "dns":           _R["gcp_dns"],
+    "logging":       _R["gcp_logging"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log,
 }
 
 
@@ -498,6 +500,48 @@ def _dns_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "dns"}
 
 
+def _logging_op(operation, name, body):
+    """Cloud Logging console CRUD (log sinks, + enable/disable) over core/gcp_logging_core."""
+    store = _STORES["logging"]
+
+    def find(nm):
+        for full in store.sinks:
+            if full.rsplit("/", 1)[-1] == nm:
+                return full.split("/")[1], nm
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _log.dispatch(store, method, path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _log.list_all(store)}
+    if operation == "Create":
+        sink = _log.sink_from_form(dict(body, project=PROJ))
+        st, p = run("POST", "/v2/projects/%s/sinks" % PROJ, {"uniqueWriterIdentity": "true"}, sink)
+        if st < 300:
+            return {"ok": True, **_log.sink_console_view(PROJ, store.sinks["projects/%s/sinks/%s" % (PROJ, sink["name"])])}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    hit = find(name)
+    if not hit:
+        return {"ok": False, "code": "NotFound", "name": name}
+    proj, sid = hit
+    if operation == "Get":
+        return {"ok": True, **_log.sink_console_view(proj, store.sinks["projects/%s/sinks/%s" % (proj, sid)])}
+    if operation == "Delete":
+        st, _ = run("DELETE", "/v2/projects/%s/sinks/%s" % (proj, sid))
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Enable", "Disable"):
+        st, p = run("PATCH", "/v2/projects/%s/sinks/%s" % (proj, sid), {"updateMask": "disabled"}, {"disabled": operation == "Disable"})
+        return {"ok": True, **_log.sink_console_view(proj, store.sinks["projects/%s/sinks/%s" % (proj, sid)])} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "logging"}
+
+
 def resource_op(service, operation, name="", body=None):
     tab = tab_dispatch(service, operation, name, body)
     if tab is not None:
@@ -527,6 +571,8 @@ def _resource_op(service, operation, name="", body=None):
         return _redis_op(operation, name, body)
     if svc == "dns":
         return _dns_op(operation, name, body)
+    if svc == "logging":
+        return _logging_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

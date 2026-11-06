@@ -110,6 +110,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_logging",
+  "label": "LoggingStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_sched",
   "label": "CloudSchedulerStore",
   "category": "gcp"

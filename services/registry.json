@@ -447,6 +447,13 @@
    "name": "Cloud DNS",
    "upstream": "dns/v1",
    "status": "pending-release"
+  },
+  {
+   "cloud": "gcp",
+   "key": "logging",
+   "name": "Cloud Logging",
+   "upstream": "logging/v2",
+   "status": "pending-release"
   }
  ]
 }

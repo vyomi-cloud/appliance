@@ -71,6 +71,7 @@ from core import gcp_artifactregistry_core as gcp_ar
 from core import gcp_compute_core as gcp_compute
 from core import nano_triggers
 from core import gcp_dns_core as gcp_dns
+from core import gcp_logging_core as gcp_logging
 
 
 def _gcp_service(path):
@@ -88,6 +89,12 @@ def _gcp_service(path):
         return "gcp-monitoring"
     if path.startswith("/dns/v1"):   # Cloud DNS (dns/v1: /dns/v1/projects/{p}/managedZones...)
         return "gcp-dns"
+    # Cloud Logging v2: /v2/entries:write|list, /v2/projects/{p}/logs|sinks|metrics|exclusions|buckets
+    if re.search(r"^/v2(beta1)?/(entries:(write|list)|monitoredResourceDescriptors"
+                 r"|projects/[^/]+/(logs|sinks|metrics|exclusions)([/:]|$)"
+                 r"|projects/[^/]+/locations/?$"
+                 r"|projects/[^/]+/locations/[^/]+/buckets([/:]|$))", path):
+        return "gcp-logging"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
@@ -350,6 +357,7 @@ class AwsWireRouter:
         # returning one): Nano's fixed project unless the host injects its own.
         self.gcp_project = s.get("gcp_project") or dict(gcp_proj.NANO_PROJECT)
         self.gcp_dns = s.get("gcp_dns") or gcp_dns.CloudDnsStore()   # Cloud DNS zones / policies
+        self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging (entries, sinks, metrics, buckets)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -792,6 +800,7 @@ class AwsWireRouter:
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-dns": (gcp_dns, self.gcp_dns),
+                "gcp-logging": (gcp_logging, self.gcp_logging),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

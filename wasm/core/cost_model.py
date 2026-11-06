@@ -109,6 +109,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
     "gcp.monitoring": 0.10,     # $0.10 per alert-policy condition per month (metrics ingestion billed per MiB)
     "gcp.dns": 0.20,            # $0.20 per managed zone per month (first 25 zones; queries billed per use)
+    "gcp.logging": 0.50,        # $0.50 per GiB ingested (~1 GiB per sink; first 50 GiB/project/month free)
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month

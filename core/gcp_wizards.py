@@ -774,6 +774,29 @@ _DNS_WIZARD = _basic_wizard(
 )
 
 
+# ============================================================================
+# Cloud Logging — Create logs router sink (core/gcp_logging_core.sink_from_form)
+# ============================================================================
+_LOGGING_WIZARD = _basic_wizard(
+    name_field=_name("Sink name", "my-sink", r"^[A-Za-z0-9_.\-]{1,100}$",
+                     "Letters, numbers, hyphens, underscores and periods"),
+    name_default="my-sink", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "description", "label": "Sink description", "default": "Routes errors to Cloud Storage"},
+    ],
+    sections=[
+        {"label": "Sink destination", "fields": [
+            {"name": "destinationType", "label": "Sink service", "type": "select", "default": "Cloud Storage bucket", "options": [
+                {"value": v, "label": v} for v in ("Cloud Storage bucket", "BigQuery dataset", "Pub/Sub topic", "Cloud Logging bucket")]},
+            {"name": "destination", "label": "Destination (bucket, dataset, topic or log bucket id)", "default": "my-log-archive", "required": True},
+        ]},
+        {"label": "Choose logs to include in sink", "fields": [
+            {"name": "filter", "label": "Inclusion filter", "default": "severity>=WARNING"},
+        ]},
+    ],
+)
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -790,6 +813,7 @@ WIZARDS: dict[str, dict] = {
     "kms":           _KMS_WIZARD,
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
+    "logging":       _LOGGING_WIZARD,
     "container":     _CONTAINER_WIZARD,
     "monitoring":    _MONITORING_WIZARD,
     "redis":         _REDIS_WIZARD,
