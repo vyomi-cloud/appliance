@@ -609,27 +609,11 @@
       width: 6px; height: 6px; border-radius: 50%; background: #10b981;
       animation: live-pulse 1800ms ease-in-out infinite;
     }
-    .pie-card .pie-svg-wrap {
-      position: relative; width: 110px; height: 110px;
-    }
-    .pie-card .pie-svg-wrap svg {
-      width: 110px; height: 110px; transform: rotate(-90deg);
-      shape-rendering: geometricPrecision; overflow: visible;
-    }
-    .pie-card .pie-svg-wrap .pie-center {
-      position: absolute; inset: 0;
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; text-align: center;
-      pointer-events: none;
-    }
-    .pie-card .pie-svg-wrap .pie-center .pc-val {
-      font-size: 17px; font-weight: 700; color: #1f2937;
-      line-height: 1; letter-spacing: -0.01em;
-    }
-    .pie-card .pie-svg-wrap .pie-center .pc-sub {
-      font-size: 10.5px; color: #5f6b7a; margin-top: 2px;
-      letter-spacing: 0.03em; text-transform: uppercase; font-weight: 600;
-    }
+    .pie-card .pie-big { align-self: stretch; display: flex; align-items: baseline; gap: 6px; }
+    .pie-card .pie-big .pc-val { font-size: 26px; font-weight: 700; color: #1f2937; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .pie-card .pie-big .pc-sub { font-size: 10.5px; color: #5f6b7a; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600; }
+    .pie-card .hbar { align-self: stretch; display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; background: #eef0f3; }
+    .pie-card .hbar i { display: block; height: 100%; min-width: 3px; transition: flex-grow .4s ease; }
     .pie-card .pie-legend {
       align-self: stretch;
       display: flex; flex-direction: column; gap: 4px;
@@ -653,8 +637,7 @@
       font-variant-numeric: tabular-nums;
       color: #5f6b7a; font-weight: 600;
     }
-    .pie-card.empty .pie-svg-wrap svg circle.seg { stroke: #e7e7e9; }
-    .pie-card.empty .pie-center .pc-val { color: #94a3b8; font-size: 14px; }
+    .pie-card.empty .pie-big .pc-val { color: #94a3b8; }
 
     /* ── Cloud-locked modal (tier gate) ────────────────────────────
        Shown when the user clicks a space on a cloud their current
@@ -1768,32 +1751,20 @@
     <div class="provider-pies" id="provider-pies">
       <div class="pie-card empty" data-metric="cpu">
         <div class="pie-label"><span class="material-icons">developer_board</span> CPU distribution</div>
-        <div class="pie-svg-wrap">
-          <svg viewBox="0 0 36 36">
-            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
-          </svg>
-          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">vCPU</div></div>
-        </div>
+        <div class="pie-big"><span class="pc-val">—</span><span class="pc-sub">vCPU</span></div>
+        <div class="hbar" role="img" aria-label="share by cloud"></div>
         <div class="pie-legend"></div>
       </div>
       <div class="pie-card empty" data-metric="ram">
         <div class="pie-label"><span class="material-icons">memory</span> RAM distribution</div>
-        <div class="pie-svg-wrap">
-          <svg viewBox="0 0 36 36">
-            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
-          </svg>
-          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">RAM</div></div>
-        </div>
+        <div class="pie-big"><span class="pc-val">—</span><span class="pc-sub">RAM</span></div>
+        <div class="hbar" role="img" aria-label="share by cloud"></div>
         <div class="pie-legend"></div>
       </div>
       <div class="pie-card empty" data-metric="disk">
         <div class="pie-label"><span class="material-icons">storage</span> Disk distribution</div>
-        <div class="pie-svg-wrap">
-          <svg viewBox="0 0 36 36">
-            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
-          </svg>
-          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">Disk</div></div>
-        </div>
+        <div class="pie-big"><span class="pc-val">—</span><span class="pc-sub">Disk</span></div>
+        <div class="hbar" role="img" aria-label="share by cloud"></div>
         <div class="pie-legend"></div>
       </div>
     </div>
@@ -4068,39 +4039,23 @@
       // Donut chart via stroke-dasharray on a circle r=15.91549
       // (so its circumference is exactly 100 — pct maps to dasharray
       // length directly, no math).
-      const svg = card.querySelector('svg');
+      const bar = card.querySelector('.hbar');
       const legend = card.querySelector('.pie-legend');
       const pcVal = card.querySelector('.pc-val');
       const pcSub = card.querySelector('.pc-sub');
-      // Wipe existing arcs (keep the bg ring)
-      svg.querySelectorAll('circle.arc').forEach(n => n.remove());
-      let offset = 25; // start at 12 o'clock (SVG arc origin is 3 o'clock, rotated -90 = 12)
+      bar.innerHTML = '';
       let total = segments.reduce((acc, s) => acc + (s.pct || 0), 0);
-      if (total <= 0) {
-        card.classList.add('empty');
-        pcVal.textContent = '—';
-        legend.innerHTML = '';
-        return;
-      }
+      if (total <= 0) { card.classList.add('empty'); pcVal.textContent = '—'; legend.innerHTML = ''; return; }
       card.classList.remove('empty');
       pcVal.textContent = centerVal;
       pcSub.textContent = centerSub;
-      // Draw each segment
       segments.forEach(seg => {
         if (!seg.pct) return;
-        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        arc.setAttribute('class', 'arc');
-        arc.setAttribute('cx', '18');
-        arc.setAttribute('cy', '18');
-        arc.setAttribute('r',  '15.91549');
-        arc.setAttribute('fill', 'transparent');
-        arc.setAttribute('stroke', seg.color);
-        arc.setAttribute('stroke-width', '3.5');
-        arc.setAttribute('stroke-dasharray', seg.pct.toFixed(2) + ' ' + (100 - seg.pct).toFixed(2));
-        arc.setAttribute('stroke-dashoffset', offset.toFixed(2));
-        arc.style.transition = 'stroke-dasharray 0.4s ease';
-        svg.appendChild(arc);
-        offset = (offset - seg.pct + 100) % 100;
+        const el = document.createElement('i');
+        el.style.flexGrow = seg.pct.toFixed(2);
+        el.style.background = seg.color;
+        el.title = seg.label + ' ' + seg.pct.toFixed(1) + '%';
+        bar.appendChild(el);
       });
       // Legend
       legend.innerHTML = segments.map(seg => `
@@ -4160,11 +4115,10 @@
           if (!card) return;
           // Empty state — surface clearly so users know it's the data, not a bug.
           if (grandTotal === 0) {
-            const svg = card.querySelector('svg');
             const legend = card.querySelector('.pie-legend');
             const pcVal = card.querySelector('.pc-val');
             const pcSub = card.querySelector('.pc-sub');
-            svg.querySelectorAll('circle.arc').forEach(n => n.remove());
+            card.querySelector('.hbar').innerHTML = '';
             card.classList.add('empty');
             pcVal.textContent = '0';
             pcSub.textContent = metric === 'cpu' ? 'vCPU' : metric === 'ram' ? 'GiB' : 'GB';
