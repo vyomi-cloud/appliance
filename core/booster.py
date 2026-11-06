@@ -72,6 +72,9 @@ def _licence_tier() -> tuple[str, bool]:
             from core import license_remote as lr
             raw = str(claims.get("tier"))
             expired = lr.is_sub_expired(claims)
+            ts = lr.trial_status(claims=claims, data_dir=_state_dir())   # monotonic clock: setting the date back can't extend a trial
+            if ts.get("locked"):
+                expired = True
     except Exception:
         pass
     return tier_policy.normalize_tier(raw), expired
@@ -457,6 +460,12 @@ def status() -> dict:
     from core import license_remote as lr
     days = lr.days_until_sub_expiry(claims) if claims else None
     trial = bool(claims.get("trial"))
+    try:
+        tstat = lr.trial_status(claims=claims, data_dir=_state_dir())
+    except Exception:
+        tstat = {}
+    if trial and tstat.get("days_left") is not None:
+        days = tstat["days_left"]
     res = resource_budget()
     u = usage()
     on = booster_mode(tier)
@@ -465,7 +474,8 @@ def status() -> dict:
         "booster": on, "booster_id": booster_id(), "headless": on,
         "version": _version(), "tier": tier, "locked": bool(expired and on),
         "trial": trial, "trial_days_left": days if trial else None,
-        "sub_days_left": days,
+        "sub_days_left": days, "trial_state": tstat.get("state"), "reminder": bool(tstat.get("reminder")),
+        "export_blocked": bool(tstat.get("export_blocked")),
         "hostname": socket.gethostname(),
         "resources": {**res, "usage_mb": u,
                       "free_mb": {k: max(0, res["memory_split_mb"][k] - u[k]) for k in u}},
