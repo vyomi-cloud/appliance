@@ -8,6 +8,7 @@ import * as esbuild from "esbuild";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -116,5 +117,20 @@ async function publish(cloud, out) {
   console.log(`[v4] ${cloud} → wasm/v4/${cloud}`);
 }
 
+// "API reference" + "SDK & CLI usage" docs: generated from the registry + botocore/GCP discovery models + a live probe of the
+// Nano wire router (scripts/gen_nano_docs.py -> wasm/docs/, rendered by wasm/nano-docs.js in clouds.html). The output is
+// committed; regenerate with --docs (needs `pip install botocore google-api-python-client`, interpreter via $VYOMI_DOCS_PY).
+function docs() {
+  const idx = join(ROOT, "wasm", "docs", "index.json");
+  if (argv.includes("--docs")) {
+    const r = spawnSync(process.env.VYOMI_DOCS_PY || "python3", [join(ROOT, "scripts", "gen_nano_docs.py")], { encoding: "utf8" });
+    if (r.status !== 0) { console.error(r.stdout + r.stderr); throw new Error("gen_nano_docs.py failed"); }
+  }
+  if (!existsSync(idx)) throw new Error("wasm/docs/index.json missing — run: node build.mjs --docs");
+  const ix = JSON.parse(readFileSync(idx, "utf8")), n = (c) => ix.clouds[c].reduce((a, s) => a + s.o, 0);
+  console.log(`[docs] aws ${ix.clouds.aws.length} svc / ${n("aws")} ops · gcp ${ix.clouds.gcp.length} / ${n("gcp")} · azure ${ix.clouds.azure.length} / ${n("azure")}`);
+}
+
 const watch = argv.includes("--watch");
 for (const c of CLOUDS) await buildCloud(c, watch);
+if (!only || argv.includes("--docs")) docs();

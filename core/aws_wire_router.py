@@ -157,6 +157,11 @@ def _gcp_service(path):
         return "gcp-compute"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
+    # Cloud SQL Admin v1 on its own host (sqladmin.googleapis.com/v1/projects/{p}/instances …): the Python/Java/JS
+    # clients built from the v1 discovery document send no /sql prefix, so claim the unambiguous roots
+    # (instances, tiers) — nothing else simulated lives at /v1/projects/{p}/instances or /tiers.
+    if re.match(r"^/(v1|v1beta4)/projects/[^/]+/(instances|tiers)([/:?]|$)", path):
+        return "gcp-cloudsql"
     if path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3 (global, no project)
         return "gcp-monitoring"
     # Resource Manager's projects.create / projects.search (no project id in the path yet).
@@ -1297,6 +1302,28 @@ class AwsWireRouter:
                     f"</GetCallerIdentityResult><ResponseMetadata><RequestId>{rid}</RequestId></ResponseMetadata>"
                     "</GetCallerIdentityResponse>")
             return {"status": 200, "headers": {"content-type": "text/xml"}, "body": body.encode()}
+        if action in ("AssumeRole", "GetSessionToken", "GetAccessKeyInfo"):
+            import uuid as _uuid, datetime as _dt
+            acct = self.iam.account_id
+            x = _xml_escape
+            if action == "GetAccessKeyInfo":
+                inner = f"<Account>{acct}</Account>"
+            else:
+                exp = (_dt.datetime.utcnow() + _dt.timedelta(seconds=int(params.get("DurationSeconds") or 3600))).strftime("%Y-%m-%dT%H:%M:%SZ")
+                creds = (f"<Credentials><AccessKeyId>ASIA{_uuid.uuid4().hex[:16].upper()}</AccessKeyId>"
+                         f"<SecretAccessKey>{_uuid.uuid4().hex}{_uuid.uuid4().hex[:8]}</SecretAccessKey>"
+                         f"<SessionToken>{_uuid.uuid4().hex}{_uuid.uuid4().hex}</SessionToken><Expiration>{exp}</Expiration></Credentials>")
+                inner = creds
+                if action == "AssumeRole":
+                    rarn = params.get("RoleArn", "")
+                    sess = params.get("RoleSessionName", "session")
+                    rname = rarn.rsplit("/", 1)[-1] if "/" in rarn else rarn
+                    inner += (f"<AssumedRoleUser><AssumedRoleId>AROA{_uuid.uuid4().hex[:17].upper()}:{x(sess)}</AssumedRoleId>"
+                              f"<Arn>arn:aws:sts::{acct}:assumed-role/{x(rname)}/{x(sess)}</Arn></AssumedRoleUser>")
+            body = ('<?xml version="1.0" encoding="UTF-8"?>'
+                    f'<{action}Response xmlns="{self._STS_NS}"><{action}Result>{inner}</{action}Result>'
+                    f"<ResponseMetadata><RequestId>{rid}</RequestId></ResponseMetadata></{action}Response>")
+            return {"status": 200, "headers": {"content-type": "text/xml"}, "body": body.encode()}
         body = ('<?xml version="1.0" encoding="UTF-8"?>'
                 f'<ErrorResponse xmlns="{self._STS_NS}"><Error><Type>Sender</Type><Code>InvalidAction</Code>'
                 f"<Message>Unsupported STS action '{_xml_escape(action)}'.</Message></Error>"
@@ -2119,6 +2146,14 @@ class AwsWireRouter:
         if svc in _JSON_CT:
             target = lheaders.get("x-amz-target", "") or ""
             payload = self._json_body(body)
+            if svc == "ram" and not target:
+                # boto3 / aws-cli speak RAM as rest-json (POST /createresourceshare, DELETE /deleteresourceshare?resourceShareArn=…),
+                # not X-Amz-Target; map the lower-cased operation path onto the same core.
+                _act = {k.lower(): k for k in ram._OPS}.get(path.split("?", 1)[0].strip("/").lower())
+                if _act:
+                    target = "AWSRAMFrontendService." + _act
+                    if method in ("GET", "DELETE") and query:
+                        payload = {**dict(query), **(payload if isinstance(payload, dict) else {})}
             if svc == "dynamodb":
                 r = ddb.dispatch(self.ddb, target, payload, s3_store=self.s3)
             elif svc == "dax":
