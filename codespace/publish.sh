@@ -28,6 +28,12 @@ for prof in aws gcp azure; do
     cp -v "$SRC/.devcontainer/$prof/devcontainer.json" "$DEST/.devcontainer/$prof/"
   fi
 done
+# Booster pack (headless, 2-core): .devcontainer/booster/{devcontainer.json,boot-booster.sh,docker-compose.booster.yml}
+if [ -d "$SRC/.devcontainer/booster" ]; then
+  mkdir -p "$DEST/.devcontainer/booster"
+  cp -v "$SRC/.devcontainer/booster/"* "$DEST/.devcontainer/booster/"
+  chmod +x "$DEST/.devcontainer/booster/boot-booster.sh"
+fi
 cp -v "$SRC/README.md"                                 "$DEST/"
 chmod +x "$DEST/.devcontainer/boot.sh"
 
