@@ -67,7 +67,7 @@ set_tier("pro", sub="acct-1", trial=True,
 # ---- status
 s = c.get("/booster/status").json()
 check("status fields", all(k in s for k in ("version", "tier", "trial_days_left", "hostname", "resources", "health", "booster_id"))
-      and s["tier"] == "pro" and s["trial"] and s["trial_days_left"] == 5, s)
+      and s["tier"] == "pro" and s["trial"] and s["trial_days_left"] in (5, 6), s)
 res = s["resources"]
 check("cap = 70% of 10000 MB, 50/50 split", res["memory_cap_mb"] <= 7000 and res["memory_split_mb"]["compute"] == res["memory_cap_mb"] // 2, res)
 

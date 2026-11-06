@@ -537,6 +537,8 @@ def trial_status(now: Optional[float] = None, claims: Optional[dict] = None,
     is_paid = bool(paid) or (tier in ("pro", "max", "enterprise", "student", "developer")
                              and not claims.get("trial") and not claims.get("trial_ended"))
     exp = _parse_iso_ts(claims.get("booster_trial_expires"))
+    if exp is None and claims.get("trial"):          # the portal's existing 14-day reverse trial carries sub_expires_at + trial
+        exp = _parse_iso_ts(claims.get("sub_expires_at"))
     base = {"effective_now": eff, "trial_days": BOOSTER_TRIAL_DAYS, "expires_at": exp,
             "days_left": None, "reminder": False, "locked": False, "export_blocked": False}
     if is_paid:
