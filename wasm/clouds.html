@@ -5,6 +5,7 @@
   <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
   <script src="booster-link.js"></script>
+  <script src="nano-docs.js"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1165,6 +1166,19 @@
     #view-api .api-op .s { font-size: 11px; color: #8b8ba7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
     #view-api .api-caret { margin-left: auto; flex: none; color: #8b8ba7; font-size: 20px; transition: transform .15s ease; }
     #view-api .api-op-wrap.open .api-caret { transform: rotate(180deg); color: #cdd8e6; }
+    /* generated API reference + per-service SDK/CLI cards (nano-docs.js) */
+    .nd-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 6px; }
+    .nd-tab { border: 1px solid rgba(255,255,255,0.14); background: none; color: #a1a1aa; border-radius: 999px; padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+    .nd-tab.on { background: rgba(77,140,243,.2); color: #fff; border-color: rgba(96,165,250,.6); }
+    .nd-cp { margin-left: auto; border: 1px solid rgba(255,255,255,0.14); background: none; color: #a1a1aa; border-radius: 7px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+    .nd-cp:hover { color: #fff; }
+    .nd-svc > .api-op { padding: 12px 14px; }
+    .nd-svc > .api-detail.nd-body { padding: 8px 14px 14px; }
+    .nd-svc .api-grid { margin-top: 6px; }
+    .nd-unw { margin: 8px 0 4px; color: #8b8ba7; font-size: 12px; } .nd-unw summary { cursor: pointer; } .nd-unw p { line-height: 1.7; word-break: break-word; }
+    .nd-code { max-height: 300px; }
+    html.vy-embed .nd-tab.on { background: #000 !important; color: #fff !important; border-color: #000 !important; }
+    html.vy-embed .nd-tab, html.vy-embed .nd-cp { color: #475467; border-color: #d4d4d8; }
     #view-api .api-empty { color: #8b8ba7; text-align: center; padding: 34px; }
     .api-m { font-size: 10px; font-weight: 800; letter-spacing: .4px; padding: 4px 7px; border-radius: 6px; flex: none; min-width: 50px; text-align: center; }
     .api-m.get { background: rgba(77,140,243,.16); color: #7cc4ff; }
@@ -2728,6 +2742,7 @@
             + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'
             + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div></section>';
           wireTunnel();
+          if (window.NanoDocs){ var nd = document.createElement('div'); nd.id = 'nd-usage-host'; grid.appendChild(nd); NanoDocs.renderUsage(nd, cloudPick, endpoint); }
           grid.querySelectorAll('.u-cloud-tab').forEach(function(t){
             t.onclick = function(){
               cloudPick = t.dataset.cloud;
@@ -2999,7 +3014,19 @@
           };
         });
       }
+      function apiEndpoint(){
+        var nano = !!document.getElementById('nano-foot'), o = location.origin;
+        if(!nano) return o;
+        var ls = function(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } }; var ext = ls('nano_relay_external'); if(ext) return ext;
+        return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(o) ? 'http://127.0.0.1:8090' : 'https://relay.vyomi.cloud/' + encodeURIComponent((function(){ try{ return localStorage.getItem('nano_session'); }catch(_){ return null; } })() || 'nano');
+      }
       function loadSpec(cloud){
+        if (window.NanoDocs){   // generated reference (wasm/docs) — works offline in Nano, no /openapi-*.json needed
+          curCloud = cloud;
+          document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
+          NanoDocs.renderApi(document.getElementById('api-body'), cloud, filter, apiEndpoint());
+          return;
+        }
         curCloud = cloud;
         document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
         var body = document.getElementById('api-body');
@@ -3023,7 +3050,7 @@
         xhr.send();
       }
       var search = document.getElementById('api-search');
-      if (search) search.addEventListener('input', function(){ filter = search.value.trim(); render(); });
+      if (search) search.addEventListener('input', function(){ filter = search.value.trim(); if (window.NanoDocs){ clearTimeout(search._t); search._t = setTimeout(function(){ loadSpec(curCloud); }, 200); return; } render(); });
       document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.addEventListener('click', function(){ filter = ''; if (search) search.value = ''; loadSpec(t.dataset.c); }); });
       window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec('aws'); } };
       // Booted straight into the API view (e.g. a console link → clouds.html#api)?
