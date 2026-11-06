@@ -79,7 +79,7 @@ COPY routes /app/routes
 COPY static /app/static
 COPY scripts /app/scripts
 # Booster: the Nano<->host tunnel (relay + DB/VM bridges) runs INSIDE the appliance — no separate vyomi-tunnel release.
-COPY wasm/relay/local-relay.mjs wasm/relay/egress.mjs /app/relay/
+COPY wasm/relay/local-relay.mjs wasm/relay/egress.mjs wasm/relay/booster-hub.mjs wasm/relay/booster-session.mjs wasm/relay/booster-dial.mjs /app/relay/
 COPY relay-deps/ws /app/relay/node_modules/ws
 COPY server.py requirements.txt VERSION /app/
 COPY setup_cython.py /app/setup_cython.py
