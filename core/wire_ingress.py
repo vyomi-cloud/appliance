@@ -178,11 +178,11 @@ def offline_runtime_stores() -> dict:
     nn = aps.net_new_core_stores()
     out["gcp_iam"], out["gcp_rm"] = nn["gcp_iam"], nn["gcp_rm"]
     from core import (apigatewayv2_core, ssm_core, stepfunctions_core, gcp_cloudscheduler_core,
-                      gcp_container_core, gcp_iamcredentials_core, gcp_redis_core, gcp_monitoring_core)
+                      gcp_container_core, gcp_iamcredentials_core, gcp_redis_core, gcp_monitoring_core, gcp_vertex_core)
     for key, mod in (("ssm", ssm_core), ("sfn", stepfunctions_core), ("apigwv2", apigatewayv2_core),
                      ("gcp_sched", gcp_cloudscheduler_core), ("gcp_gke", gcp_container_core),
                      ("gcp_iamc", gcp_iamcredentials_core), ("gcp_redis", gcp_redis_core),
-                     ("gcp_mon", gcp_monitoring_core)):
+                     ("gcp_mon", gcp_monitoring_core), ("gcp_vertex", gcp_vertex_core)):
         out[key] = mod.shared_store()
     return out
 
@@ -931,6 +931,8 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
     stores["gcp_iamc"] = _gcp_iamc_store()   # shared with the console REST (/api/gcp/iamcredentials)
     from core.gcp_redis_core import shared_store as _gcp_redis_store
     stores["gcp_redis"] = _gcp_redis_store()   # shared with the console REST (/api/gcp/redis)
+    from core.gcp_vertex_core import shared_store as _gcp_vertex_store
+    stores["gcp_vertex"] = _gcp_vertex_store()   # Vertex AI resources
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
     stores["gcp_mon"] = _gcp_mon_store()   # shared with the console REST (/api/gcp/monitoring)
     from core.gcp_project import current as _gcp_project

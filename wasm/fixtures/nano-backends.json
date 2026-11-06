@@ -120,6 +120,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_vertex",
+  "label": "VertexStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_redis",
   "label": "RedisStore",
   "category": "gcp"

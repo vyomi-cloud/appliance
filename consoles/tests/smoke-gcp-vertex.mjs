@@ -10,7 +10,7 @@ const check = (name, ok, d = "") => { results.push(ok); console.log(`${ok ? "PAS
 const browser = await pw.chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errs = []; page.on("pageerror", (e) => errs.push(String(e)));
-await page.goto(`${BASE}${process.env.UI_PATH || "/v4/gcp/"}#/vertex-ai`);
+await page.goto(`${BASE}${process.env.UI_PATH || "/v4/gcp/"}#/vertex-ai/studio`);
 await page.getByRole("button", { name: "Submit" }).waitFor({ timeout: process.env.NANO === "1" ? 240000 : 30000 });
 if (process.env.NANO === "1") {   // Nano answers only through a WebLLM model the page registers (none in headless): the stub-driven checks below need the offline local-LLM seam
   check("Vertex AI Studio renders on Nano (no local-LLM stub: answer checks are offline-only)", true);

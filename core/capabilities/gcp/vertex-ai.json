@@ -1,5 +1,5 @@
 {
- "$doc": "Vyomi capability registry — GCP Vertex AI (Gemini publisher models over the local-LLM seam). Proven by tests/conformance/test_capabilities.py.",
+ "$doc": "Vyomi capability registry \u2014 GCP Vertex AI (Gemini publisher models over the local-LLM seam). Proven by tests/conformance/test_capabilities.py.",
  "gcp.vertex-ai.gemini": {
   "title": "Gemini generateContent / countTokens / streamGenerateContent",
   "level": {
@@ -11,7 +11,10 @@
   ],
   "tests": [
    "tests/conformance/test_local_llm_seam.py"
-  ]
+  ],
+  "probe": {
+   "gcp_vertex": "gemini"
+  }
  },
  "gcp.vertex-ai.embeddings": {
   "title": "Text embeddings (embedContent / predict)",
@@ -24,6 +27,129 @@
   ],
   "tests": [
    "tests/conformance/test_local_llm_seam.py"
+  ],
+  "probe": {
+   "gcp_vertex": "embed"
+  }
+ },
+ "gcp.vertex-ai.model-garden": {
+  "title": "Model Garden (publisher model catalog: list, get, filter)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A small fixed catalog of Google, Meta, Mistral and partner models. Only Gemini and text-embedding models can be called (local-LLM seam); other models are catalog entries, and 'Deploy' registers a model + endpoint record without a serving container."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ],
+  "probe": {
+   "gcp_vertex": "resources"
+  }
+ },
+ "gcp.vertex-ai.endpoints": {
+  "title": "Endpoints (create, list, get, delete, deployModel, undeployModel, traffic split)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deployed models are recorded and shown with their traffic split, but no container serves them: custom-model :predict / :rawPredict answer 501 UNIMPLEMENTED. Autoscaling and private endpoints are config-only."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.models": {
+  "title": "Model Registry (upload, list, get, delete, link to endpoints)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Model records only: artifacts are not validated, versions/aliases and model evaluation are not simulated, models:copy and export answer 501."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.datasets": {
+  "title": "Datasets (create, list, get, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dataset records only: no data items, annotations, import or export are stored."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.jobs": {
+  "title": "Training pipelines, custom jobs, batch predictions, hyperparameter tuning, pipeline jobs, tuning jobs (create, list, get, cancel, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Jobs advance PENDING -> RUNNING -> SUCCEEDED on a clock (about 5 seconds) and never run user containers or produce logs/metrics. A succeeded training pipeline registers its modelToUpload in the Model Registry; batch jobs report an output directory but write no predictions."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.notebooks": {
+  "title": "Workbench instances (notebooks v2) and Colab Enterprise runtimes/templates (create, list, get, start, stop, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Control-plane records only: no JupyterLab server or VM is started and the proxy URI does not open a notebook."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.vector-search": {
+  "title": "Vector Search (indexes, index endpoints, deployIndex, upsert/removeDatapoints, findNeighbors)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Exact brute-force nearest neighbour over the stored datapoints (cosine, dot-product, L1, squared-L2); no ANN tuning, restricts/filters, sparse embeddings or batch index builds from GCS."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.feature-store": {
+  "title": "Feature Store (feature groups, features, online stores, feature views)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Registry records only: no BigQuery sync, feature serving or online lookups."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.experiments": {
+  "title": "Experiments and metadata (metadata store contexts/artifacts/executions, TensorBoard instances/experiments/runs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Records created through the API or console; no experiment tracking SDK run logging, time series or lineage graph."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
   ]
  }
 }
