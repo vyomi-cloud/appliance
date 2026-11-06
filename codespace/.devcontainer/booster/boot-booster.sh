@@ -55,8 +55,29 @@ start_link() {
   fi
 }
 
+# Fetch the signed session token + this session's key from the portal (GitHub-verified by CODESPACE_NAME: the portal checks that
+# codespace is Available for the owning user). Retries while the portal learns the codespace is up. Needs no secret on this box.
+fetch_session() {
+  [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ] && [ -n "${VYOMI_BOOSTER_SESSION_KEY:-}" ] && return 0
+  local out tok key end i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    out=$(curl -fsS -m 10 -G "$PORTAL/api/booster/session/token" --data-urlencode "codespace_id=$CODESPACE" 2>/dev/null) && {
+      tok=$(printf '%s' "$out" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+      key=$(printf '%s' "$out" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
+      end=$(printf '%s' "$out" | sed -n 's/.*"session_end":\([0-9]*\).*/\1/p')
+      if [ -n "$tok" ] && [ -n "$key" ]; then
+        export VYOMI_BOOSTER_SESSION_TOKEN="$tok" VYOMI_BOOSTER_SESSION_KEY="$key"
+        [ -n "$end" ] && export VYOMI_BOOSTER_SESSION_END="$end"
+        log "session token fetched."; return 0
+      fi; }
+    sleep 6
+  done
+  log "WARNING: could not fetch a session token - the booster will refuse requests (fails closed)."; return 1
+}
+
 start_stack() {
   [ -f "$RUN_DIR/EXPIRED" ] && { log "session already expired — not starting."; return 1; }
+  fetch_session || true
   docker compose -f "$COMPOSE" up -d simulator
   for _ in $(seq 1 60); do
     if docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 3 http://localhost:9000/healthz >/dev/null 2>&1; then
