@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the Nano in-browser VM guest image (v86, 32-bit x86): an Alpine i386
 # kernel (linux-virt) + a whole-rootfs initramfs with dropbear (SSH), busybox
-# httpd, sudo and python3. Run on the host:
+# httpd, sudo, python3 and git (Nano in-browser VMs ship git + Python for every tier; every other language runs on the booster). Run on the host:
 #
 #   docker run --rm --platform linux/386 -v "$PWD/wasm/vm:/vm" alpine:3.21 sh /vm/build-image.sh
 #
@@ -11,10 +11,10 @@
 set -eu
 WITH_PY="${WITH_PY:-1}"
 apk add --no-cache linux-virt cpio kmod >/dev/null
-# apk (package manager) + the standard CLI tools; anything bigger (Java 8, Go, PHP, Node, pip...) is `apk add`-ed by the
-# user over SSH, so the image stays small and boots fast. (Alpine only builds OpenJDK 8 for 32-bit x86: apk add openjdk8-jre)
-PKGS="dropbear dropbear-scp busybox-extras sudo apk-tools alpine-keys ca-certificates bash curl nano less coreutils findutils grep sed gawk tar gzip unzip procps-ng openssl"
-[ "$WITH_PY" = 1 ] && PKGS="$PKGS python3"
+# apk (package manager) + the standard CLI tools. In the browser the supported toolchain is git + Python (below); other languages are the
+# booster's job (64-bit Docker, latest versions). Anything else can still be `apk add`-ed over SSH, but it is not supported or tested here.
+PKGS="dropbear dropbear-scp busybox-extras sudo apk-tools alpine-keys ca-certificates bash curl nano less coreutils findutils grep sed gawk tar gzip unzip procps-ng openssl git"
+[ "$WITH_PY" = 1 ] && PKGS="$PKGS python3 py3-pip"      # pip + apk are the package managers
 R=/tmp/rootfs
 rm -rf "$R"; mkdir -p "$R"
 apk add --no-cache --root "$R" --initdb --keys-dir /etc/apk/keys \
@@ -33,7 +33,7 @@ depmod -b "$R" "$KV"
 rm -rf "$R/var/cache/apk"/* "$R/usr/share/apk" "$R/lib/apk/db/scripts.tar" 2>/dev/null || true
 find "$R/usr/lib" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 rm -rf "$R/usr/lib/python3"*/test "$R/usr/lib/python3"*/idlelib "$R/usr/lib/python3"*/tkinter \
-       "$R/usr/lib/python3"*/ensurepip "$R/usr/lib/python3"*/lib2to3 2>/dev/null || true
+       "$R/usr/lib/python3"*/lib2to3 2>/dev/null || true
 
 cat > "$R/init" <<'EOF'
 #!/bin/sh
@@ -53,6 +53,9 @@ ttyS1::respawn:/etc/vyomi/agent.sh
 ::shutdown:/bin/true
 EOF
 mkdir -p "$R/etc/vyomi" "$R/etc/dropbear"
+# Package managers + git work as-is in the browser: the guest has no TLS, so it talks plain HTTP to the tunnel's allow-listed /egress, which upgrades to HTTPS upstream.
+printf '[global]\nindex-url = http://pypi.org/simple\ntrusted-host = pypi.org files.pythonhosted.org\nbreak-system-packages = true\n' > "$R/etc/pip.conf"
+printf '[url "http://github.com/"]\n\tinsteadOf = https://github.com/\n[url "http://gitlab.com/"]\n\tinsteadOf = https://gitlab.com/\n' > "$R/etc/gitconfig"
 cat > "$R/etc/vyomi/boot.sh" <<'EOF'
 #!/bin/sh
 hostname vyomi-vm

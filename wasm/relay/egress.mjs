@@ -45,12 +45,23 @@ export async function egress(request) {
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
     if (!/^https?:$/.test(target.protocol) || !hostAllowed(target.hostname))
       return new Response(`egress blocked: ${target.hostname} is not on the Nano VM allow-list`, { status: 403, headers: CORS });
+    if (target.protocol === "http:") target = new URL(target.href.replace(/^http:/, "https:"));   // the guest speaks plain HTTP (no TLS inside); upstream is always HTTPS (PyPI's CDN 403s plain HTTP)
     let res;
     try { res = await fetch(target, { method, headers, body, redirect: "manual" }); }
     catch (e) { return new Response("egress fetch failed: " + (e && e.message), { status: 502, headers: CORS }); }
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
       target = new URL(res.headers.get("location"), target);        // re-checked against the allow-list on the next hop
       continue;
+    }
+    // The guest cannot do TLS, so package indexes must point it at plain-HTTP URLs on allow-listed hosts (this proxy upgrades them upstream):
+    // PyPI's simple index links to https://files.pythonhosted.org/... which pip would otherwise try to fetch itself.
+    const ct = String(res.headers.get("content-type") || "");
+    if (/text\/html|application\/vnd\.pypi\.simple|application\/json/i.test(ct) && /(^|\.)(pypi\.org|pythonhosted\.org)$/.test(target.hostname) && method === "GET") {
+      const txt = (await res.text()).replace(/https:\/\/((?:[a-z0-9-]+\.)*(?:pypi\.org|pythonhosted\.org))/gi, "http://$1");
+      const oh = new Headers(res.headers);
+      for (const k of ["content-encoding", "content-length", "transfer-encoding", "connection", "set-cookie"]) oh.delete(k);
+      for (const [k, v] of Object.entries(CORS)) oh.set(k, v);
+      return new Response(txt, { status: res.status, headers: oh });
     }
     const out = new Headers(res.headers);
     for (const k of ["content-encoding", "content-length", "transfer-encoding", "connection", "set-cookie"]) out.delete(k);

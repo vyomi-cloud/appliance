@@ -117,7 +117,7 @@
     const k = await accountKey();
     const keys = [k.pub, ...(it.keys || [])].join("\n");
     return call(it.id, { type: "launch", id: it.id, cloud: it.cloud, user: it.user, pubkey: keys, hostname: it.name || it.ref,
-                         mem_mb: it.mem_mb || 256, relay: relayBase() });
+                         mem_mb: it.mem_mb || 512, relay: relayBase() });
   }
 
   // ── reconcile: stores → VMs ─────────────────────────────────────────────
@@ -240,7 +240,7 @@
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `No general internet egress from the VM yet (only CORS-enabled plain-HTTP URLs, fetched by the browser): git clone / apk / pip from the internet do not work.`,
+              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through the tunnel's allow-listed egress (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the booster (Pro/Max).`,
       };
     }
     return http(400, { detail: "unknown op " + op });
@@ -322,7 +322,7 @@
       // Browser shell: a real terminal (xterm.js) on the VM's serial console (ttyS0 -> /bin/sh). No tunnel needed.
       wrap.append(shellBox(cloud, ref));
       wrap.append(h("div", { style: S.sub }, "Limits: 32-bit x86 only; RAM is the VM's disk (Stop saves it, Terminate discards it); " +
-        "a background tab runs the VM several times slower; no general internet egress (only plain-HTTP URLs that allow CORS, fetched by the browser), so git clone / apk / pip from the internet do not work yet."));
+        "a background tab runs the VM several times slower; toolchain is git + Python (pip, apk) — package downloads need vyomi-tunnel running (allow-listed hosts only). Other languages run on the booster."));
     }
     paint();
     return wrap;

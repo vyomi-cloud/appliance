@@ -100,6 +100,17 @@ export async function probeVm(nano, cfg, check) {
                   "for i in $(seq 1 40); do wget -qO- http://127.0.0.1:8080/index.html 2>/dev/null && exit 0; sleep 1; done; exit 1", 90000);
     check("a python http.server runs and answers inside the VM", r.rc === 0 && r.out.includes("nano-http-ok"), `rc=${r.rc} ${r.out.slice(-80)} ${r.err.slice(-120)}`);
 
+    // In-browser toolchain (all tiers): git + Python and two package managers (pip, apk). Every other language is the booster's job.
+    r = ssh(argv, "git --version; python3 --version; pip --version; sudo apk --version", 60000);
+    check("VM has git, Python 3, pip and apk (the in-browser toolchain)", r.rc === 0 && /git version \d/.test(r.out) && /Python 3\.\d+/.test(r.out) && /^pip \d/m.test(r.out) && /apk-tools \d/.test(r.out), `rc=${r.rc} ${r.out.slice(-200)} ${r.err.slice(-120)}`);
+    r = ssh(argv, "mkdir -p /tmp/g && cd /tmp/g && git init -q . && git config user.email t@t && git config user.name t && echo hi > f && git add f && git commit -qm c && git log --oneline | wc -l && python3 -c 'import json,sqlite3,ssl;print(\"py-ok\")'", 90000);
+    check("git commits and Python's stdlib imports in the VM", r.rc === 0 && /^1$/m.test(r.out) && r.out.includes("py-ok"), `rc=${r.rc} ${r.out.slice(-120)} ${r.err.slice(-120)}`);
+    // Package-manager + git egress goes through the tunnel's allow-listed /egress (plain HTTP in the guest, HTTPS upstream).
+    r = ssh(argv, "cd /tmp && git clone --depth 1 https://github.com/octocat/Hello-World hw && ls hw && pip download --no-deps -q -d /tmp/pk six && ls /tmp/pk", 240000);
+    check("git clone (https) and pip download work from the VM via the tunnel", r.rc === 0 && /README/.test(r.out) && /six-.*\.whl/.test(r.out), `rc=${r.rc} ${r.out.slice(-160)} ${r.err.slice(-200)}`);
+    r = ssh(argv, "wget -qO- http://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86/APKINDEX.tar.gz | head -c 4 | od -An -tx1", 90000);
+    check("apk index reachable from the VM", r.rc === 0 && /1f\s+8b/.test(r.out), `rc=${r.rc} ${r.out.slice(-120)} ${r.err.slice(-120)}`);
+
     const ex = await call("POST", cfg.execPath, { command: "whoami; cat ~/pc.txt" });
     check("console exec runs in the instance VM", ex.status === 200 && (ex.body.stdout || "").includes("vyomi") && (ex.body.stdout || "").includes(cfg.user),
           `status ${ex.status} ${JSON.stringify(ex.body).slice(0, 160)}`);

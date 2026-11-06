@@ -78,7 +78,7 @@ async function gunzip(buf) {
 function makeEmulator(opts) {
   return new V86({
     wasm_path: HERE + "engine/v86.wasm",
-    memory_size: (inst.mem_mb || 256) * 1024 * 1024,
+    memory_size: (inst.mem_mb || 512) * 1024 * 1024,
     vga_memory_size: 2 * 1024 * 1024,
     bios: { url: HERE + "bios/seabios.bin" },
     vga_bios: { url: HERE + "bios/vgabios.bin" },
