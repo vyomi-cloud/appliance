@@ -14,7 +14,8 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1300 } });
 const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 const wj = (path, init) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); const t = await r.text(); try { return { status: r.status, ...JSON.parse(t || "{}") }; } catch { return { status: r.status, raw: t }; } }, [WIRE + path, init]);
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.goto(UI + "#/marketplace");
   await page.getByTestId("mp-catalog").waitFor({ timeout: 20000 });
   check("marketplace is a real page", (await page.locator("[data-vyomi-not-simulated]").count()) === 0);

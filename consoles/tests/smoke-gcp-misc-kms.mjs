@@ -22,7 +22,8 @@ const wj = (path, init) => page.evaluate(async ([u, i]) => { const r = await fet
 const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 const ns = () => page.locator("[data-vyomi-not-simulated]").count();
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   const ring = `imp${N}`;
   await wj(`/v1/projects/${P}/locations/global/keyRings?keyRingId=${ring}`, { method: "POST", headers: J, body: "{}" });
   await page.goto(UI + `#/security/kms/keyring/manage/global/${ring}?tab=import`);

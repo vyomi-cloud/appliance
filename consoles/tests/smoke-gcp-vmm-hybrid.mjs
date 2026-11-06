@@ -28,7 +28,8 @@ const gaps = () => page.locator("[data-vyomi-not-simulated]").count();
 const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
   const go = async (hash, heading) => { await page.goto(UI + hash); await page.getByRole("heading", { name: heading }).first().waitFor(); };
   const dlg = () => page.getByRole("dialog");

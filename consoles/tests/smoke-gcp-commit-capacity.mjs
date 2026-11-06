@@ -24,7 +24,8 @@ const wj = (path, method = "GET", b) => page.evaluate(async ([u, m, body]) => { 
 const vm = (name, mt, zone = "us-central1-a") => wj(`/compute/v1/projects/${P}/zones/${zone}/instances`, "POST", { name, machineType: `zones/${zone}/machineTypes/${mt}`,
   disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }], networkInterfaces: [{ network: "global/networks/default" }] });
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
   const go = async (hash, heading) => { await page.goto(UI + hash); await page.getByRole("heading", { name: heading }).first().waitFor(); };
   const dlg = () => page.getByRole("dialog");
@@ -93,8 +94,10 @@ try {
 
   // VM Manager
   await go("#/compute/vm-inventory", "OS inventory");
+  await page.getByText(`cud-a-${N}`).first().waitFor({ timeout: 30000 }).catch(() => {});
   check("VM Manager: inventory lists VMs", await page.getByText(`cud-a-${N}`).count() > 0);
   await go("#/compute/vm-reports", "VM Manager reports");
+  await page.getByTestId("vmm-report-summary").first().waitFor({ timeout: 30000 }).catch(() => {});
   check("VM Manager: report summary", await page.getByTestId("vmm-report-summary").count() > 0);
   check("no console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } catch (e) { fails++; console.log("FAIL exception " + e.message); await page.screenshot({ path: `${OUT}/fail.png`, fullPage: true }); }

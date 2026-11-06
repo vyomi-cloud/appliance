@@ -636,7 +636,7 @@ def _tpu(store, method, project, zone, rest, verb, payload, query):
         return o
     if rest[:1] == ["acceleratorTypes"]:
         avail = [{"name": "%s/acceleratorTypes/%s" % (pre, t), "type": t.split("-")[0].upper() if not t.startswith("v5") else t.rsplit("-", 1)[0].upper(),
-                  "acceleratorConfigs": [{"type": t.rsplit("-", 1)[0].upper(), "topology": "%dx%d" % (max(1, c // 2), 2)}]} for t, c in sorted(TPU_TYPES.items()) if zone in TPU_ZONES.get(_tpu_gen(t), ())]
+                  "acceleratorConfigs": [{"type": t.rsplit("-", 1)[0].upper(), "topology": "%dx%d" % (max(1, c // 2), 2)}]} for t, c in sorted(TPU_TYPES.items(), key=lambda kv: (_tpu_gen(kv[0]), kv[1], kv[0])) if zone in TPU_ZONES.get(_tpu_gen(t), ())]
         if len(rest) == 1:
             return {"acceleratorTypes": avail}
         a = next((x for x in avail if x["name"].endswith("/" + rest[1])), None)

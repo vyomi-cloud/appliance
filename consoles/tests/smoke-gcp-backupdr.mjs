@@ -12,8 +12,9 @@ const check = (name, ok, d = "") => { results.push(ok); console.log(`${ok ? "PAS
 const browser = await pw.chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errs = []; page.on("pageerror", (e) => errs.push(String(e)));
-await page.goto(UI, { waitUntil: "networkidle" });
-if (process.env.PROJECT) { await page.evaluate((p) => localStorage.setItem("vyomi.v4.gcp.project", p), process.env.PROJECT); await page.reload({ waitUntil: "networkidle" }); }   // dev_server (no Space) only knows nano-project
+await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
+if (process.env.PROJECT) { await page.evaluate((p) => localStorage.setItem("vyomi.v4.gcp.project", p), process.env.PROJECT); await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" }); }   // dev_server (no Space) only knows nano-project
 const project = await page.evaluate(() => { try { return localStorage.getItem("vyomi.v4.gcp.project") || (document.querySelector('meta[name="vyomi-substrate"]')?.content === "nano" ? "nano-project" : "vyomi-project"); } catch { return "nano-project"; } });
 const W = (method, path, body) => page.evaluate(async ([u, m, b]) => { const r = await fetch(u, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, text: await r.text() }; }, [WIRE + path, method, body]);
 const L = `/v1/projects/${project}/locations/us-central1`;
@@ -29,9 +30,9 @@ const plan = await W("POST", `${L}/backupPlans?backupPlanId=smoke-plan`, { resou
 check("plan created", plan.status === 200, plan.text);
 const asc = await W("POST", `${L}/backupPlanAssociations?backupPlanAssociationId=smoke-assoc`, { resourceType: "compute.googleapis.com/Instance", resource: `projects/${project}/zones/us-central1-a/instances/bdr-vm`, backupPlan: `projects/${project}/locations/us-central1/backupPlans/smoke-plan` });
 check("instance protected", asc.status === 200, asc.text);
-await page.goto(`${UI}#/backupdr?tab=protected`); await page.reload({ waitUntil: "networkidle" });
-await page.getByRole("button", { name: "Back up now" }).click();
-await page.goto(`${UI}#/backupdr?tab=backups`); await page.reload({ waitUntil: "networkidle" });
+await page.goto(`${UI}#/backupdr?tab=protected`); await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+await page.getByRole("button", { name: "Back up now" }).click(); await page.waitForTimeout(3000);   // let the in-flight backup request finish before navigating away
+await page.goto(`${UI}#/backupdr?tab=backups`); await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
 await page.getByRole("cell", { name: "ON_DEMAND" }).waitFor({ timeout: 15000 });
 check("on-demand backup listed", true);
 const snaps = await W("GET", `/compute/v1/projects/${project}/global/snapshots`);
