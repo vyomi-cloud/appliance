@@ -61,8 +61,8 @@
     "gcp.iam-admin.policy-troubleshooter": {"tier": "pro"},
     "gcp.iam-admin.policy-analyzer": {"tier": "pro"},
     "gcp.iam-admin.org-policy-simulation": {"tier": "pro"},
-    "iam.organizations.policies": {"tier": "max"},
-    "gcp.iam-admin.organization-policies": {"tier": "max"},
+    "iam.organizations.policies": {"tier": "pro"},
+    "gcp.iam-admin.organization-policies": {"tier": "pro"},
 
     "cost-explorer.cost-and-usage": {"tier": "pro"},
     "gcp.monitoring.cost-explorer": {"tier": "pro"},

@@ -108,7 +108,7 @@ def main() -> int:
     man = json.loads((ROOT / "wasm" / "tier-pills.json").read_text())
     check("manifest up to date", g.main.__module__ and man == g.build())
     check("manifest maps known ids", man["pills"].get("gcp.kubernetes.workloads") == "Booster"
-          and man["pills"].get("dynamodb.backups") == "Pro" and man["pills"].get("iam.organizations.policies") == "Max")
+          and man["pills"].get("dynamodb.backups") == "Pro" and man["pills"].get("iam.organizations.policies") == "Pro")
     check("core CRUD ungated", "ec2.instances.lifecycle" not in man["pills"] and "s3.bucket.crud" not in man["pills"])
 
     print("RESULT:", "FAIL - " + ", ".join(FAILS) if FAILS else "PASS")

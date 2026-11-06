@@ -222,7 +222,7 @@
   "tests": ["tests/conformance/test_organizations_core.py"]
  },
  "iam.organizations.policies": {
-  "tier": "max",
+  "tier": "pro",
   "title": "Service control policies (SCPs), resource control policies (RCPs) and the other organization policy types",
   "level": {"nano": "limited", "offline": "limited"},
   "limitations": [

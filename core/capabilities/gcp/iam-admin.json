@@ -83,7 +83,7 @@
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.organization-policies": {
-  "tier": "max",
+  "tier": "pro",
   "title": "Organization policy constraints",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
