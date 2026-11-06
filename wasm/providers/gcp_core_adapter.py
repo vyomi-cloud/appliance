@@ -35,7 +35,13 @@ from core import gcp_iamcredentials_core as _iamc
 from core import gcp_redis_core as _redis
 from core import gcp_monitoring_core as _mon
 from core import gcp_artifactregistry_core as _ar
+from core import gcp_dns_core as _dns
+from core import gcp_logging_core as _log
+from core import gcp_workflows_core as _wf
+from core import gcp_run_core as _run
+from core import gcp_bigquery_core as _bq
 from core.sql_store import InMemorySqlStore
+from core import gcp_cloudtasks_core as _ct
 
 from core import gcp_project as _gproj
 PROJ = _gproj.NANO_PROJECT["projectId"]   # the console's project — the one `gcloud projects list` shows
@@ -62,11 +68,17 @@ _STORES = {
     "redis":         _R["gcp_redis"],
     "monitoring":    _R["gcp_mon"],
     "artifactregistry": _R["gcp_ar"],
+    "dns":           _R["gcp_dns"],
+    "logging":       _R["gcp_logging"],
+    "cloudtasks":    _R["gcp_ct"],
+    "workflows":     _R["gcp_wf"],
+    "run":           _R["gcp_run"],
+    "bigquery":      _R["gcp_bq"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct, "workflows": _wf, "run": _run, "bigquery": _bq,
 }
 
 
@@ -456,6 +468,260 @@ def _mon_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "monitoring"}
 
 
+def _dns_op(operation, name, body):
+    """Cloud DNS console CRUD over core/gcp_dns_core (managed zones; records come with the zone view)."""
+    store = _STORES["dns"]
+
+    def run(method, path, payload=None):
+        r = _dns.dispatch(store, method, "/dns/v1/projects/%s/managedZones%s" % (PROJ, path), {}, {},
+                          json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    def fail(p, default, nm):
+        e = p.get("error", {})
+        return {"ok": False, "code": (e.get("errors") or [{}])[0].get("reason") or default,
+                "message": e.get("message", ""), "name": nm}
+
+    if operation == "List":
+        return {"ok": True, "items": _dns.list_all(store, PROJ)}
+    if operation == "Create":
+        z = _dns.zone_from_form(body)
+        st, p = run("POST", "", z)
+        if st < 300:
+            return {"ok": True, **_dns.console_view(store.zones["%s/%s" % (PROJ, z["name"])])}
+        return fail(p, "CreateFailed", body.get("name"))
+    key = "%s/%s" % (PROJ, name)
+    if key not in store.zones:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_dns.console_view(store.zones[key])}
+    if operation == "Delete":
+        _dns.delete_zone_with_records(store, PROJ, name)
+        return {"ok": True, "name": name}
+    if operation == "Update":
+        upd = {k: body[k] for k in ("description", "labels") if k in body}
+        st, p = run("PATCH", "/" + name, upd)
+        return {"ok": True, **_dns.console_view(store.zones[key])} if st < 300 else fail(p, "UpdateFailed", name)
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "dns"}
+
+
+def _logging_op(operation, name, body):
+    """Cloud Logging console CRUD (log sinks, + enable/disable) over core/gcp_logging_core."""
+    store = _STORES["logging"]
+
+    def find(nm):
+        for full in store.sinks:
+            if full.rsplit("/", 1)[-1] == nm:
+                return full.split("/")[1], nm
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _log.dispatch(store, method, path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _log.list_all(store)}
+    if operation == "Create":
+        sink = _log.sink_from_form(dict(body, project=PROJ))
+        st, p = run("POST", "/v2/projects/%s/sinks" % PROJ, {"uniqueWriterIdentity": "true"}, sink)
+        if st < 300:
+            return {"ok": True, **_log.sink_console_view(PROJ, store.sinks["projects/%s/sinks/%s" % (PROJ, sink["name"])])}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    hit = find(name)
+    if not hit:
+        return {"ok": False, "code": "NotFound", "name": name}
+    proj, sid = hit
+    if operation == "Get":
+        return {"ok": True, **_log.sink_console_view(proj, store.sinks["projects/%s/sinks/%s" % (proj, sid)])}
+    if operation == "Delete":
+        st, _ = run("DELETE", "/v2/projects/%s/sinks/%s" % (proj, sid))
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Enable", "Disable"):
+        st, p = run("PATCH", "/v2/projects/%s/sinks/%s" % (proj, sid), {"updateMask": "disabled"}, {"disabled": operation == "Disable"})
+        return {"ok": True, **_log.sink_console_view(proj, store.sinks["projects/%s/sinks/%s" % (proj, sid)])} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "logging"}
+
+
+def _cloudtasks_op(operation, name, body, rid):
+    """Console CRUD for Cloud Tasks queues — same engine + store the native /v2 wire uses."""
+    st_ = _STORES["cloudtasks"]
+
+    def find(short):
+        for q in st_.queues.values():
+            if q["name"].rsplit("/", 1)[-1] == short:
+                return q
+        return None
+
+    def err(code, nm):
+        return {"ok": False, "code": code, "name": nm}
+
+    if operation == "List":
+        return {"ok": True, "items": _ct.console_list(st_)}
+    if operation == "Create":
+        project = str(body.get("project") or PROJ).strip()
+        loc = str(body.get("location") or "us-central1").strip()
+        rl, rc = {}, {}
+        if body.get("max_dispatches_per_second") not in (None, ""):
+            rl["maxDispatchesPerSecond"] = float(body["max_dispatches_per_second"])
+        if body.get("max_concurrent_dispatches") not in (None, ""):
+            rl["maxConcurrentDispatches"] = int(body["max_concurrent_dispatches"])
+        if body.get("max_attempts") not in (None, ""):
+            rc["maxAttempts"] = int(body["max_attempts"])
+        try:
+            _ct.create_queue(st_, f"projects/{project}/locations/{loc}",
+                             {"name": f"projects/{project}/locations/{loc}/queues/{rid}",
+                              "rateLimits": rl, "retryConfig": rc})
+        except _ct._E as e:
+            return err("AlreadyExists" if e.status == 409 else "InvalidArgument", rid)
+        return {"ok": True, **_ct.queue_console_view(st_, find(rid))}
+    q = find(name)
+    if q is None:
+        return err("NotFound", name)
+    if operation == "Get":
+        return {"ok": True, **_ct.queue_console_view(st_, q)}
+    if operation == "Delete":
+        _ct.delete_queue(st_, q["name"])
+        return {"ok": True, "code": None, "name": name}
+    if operation == "Update":
+        upd = {}
+        if body.get("max_dispatches_per_second") not in (None, ""):
+            upd.setdefault("rateLimits", {})["maxDispatchesPerSecond"] = float(body["max_dispatches_per_second"])
+        if body.get("max_concurrent_dispatches") not in (None, ""):
+            upd.setdefault("rateLimits", {})["maxConcurrentDispatches"] = int(body["max_concurrent_dispatches"])
+        if body.get("max_attempts") not in (None, ""):
+            upd.setdefault("retryConfig", {})["maxAttempts"] = int(body["max_attempts"])
+        if upd:
+            _ct.patch_queue(st_, q["name"], upd)
+        return {"ok": True, **_ct.queue_console_view(st_, q)}
+    if operation == "ListChildren":
+        return {"ok": True, **_ct.children(st_, q, body.get("kind"))}
+    if operation == "QueueAction":
+        act = body.get("action")
+        if act == "pause":
+            _ct.set_state(st_, q["name"], "PAUSED")
+        elif act == "resume":
+            _ct.set_state(st_, q["name"], "RUNNING")
+        elif act == "purge":
+            _ct.purge_queue(st_, q["name"])
+        elif act == "tasks":
+            t = _ct.create_task(st_, q["name"], {"task": {"httpRequest": {
+                "url": body.get("url") or "https://example.com/handler", "httpMethod": body.get("method") or "POST"}}})
+            return {"ok": True, **_ct.task_console_view(st_.tasks[t["name"]])}
+        return {"ok": True, **_ct.queue_console_view(st_, q)}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "cloudtasks"}
+
+
+def _wf_op(operation, name, body):
+    """Workflows console CRUD (+ execute) over core/gcp_workflows_core."""
+    store = _STORES["workflows"]
+
+    def find(nm):
+        for full in store.workflows:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _wf.dispatch(store, method, "/v1/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _wf.list_all(store)}
+    if operation == "Create":
+        req = _wf.workflow_from_form(body, PROJ)
+        st, p = run("POST", req["parent"] + "/workflows", {"workflowId": req["workflowId"]}, req["workflow"])
+        if st < 300:
+            return {"ok": True, **_wf.view_by_name(store, _wf.workflow_name(PROJ, req["location"], req["workflowId"]))}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_wf.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation == "Execute":
+        arg = body.get("argument")
+        st, p = run("POST", full + "/executions", payload={"argument": arg} if arg else {})
+        return {"ok": True, **_wf.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "workflows"}
+
+
+def _run_op(operation, name, body):
+    """Cloud Run console CRUD (+ deploy / invoker) over core/gcp_run_core."""
+    store = _STORES["run"]
+
+    def find(nm):
+        for full in store.services:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def go(method, path, query=None, payload=None):
+        r = _run.dispatch(store, method, "/v2/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    def event(action, sid):
+        try:   # the Metrics tab reads events by service id
+            from core import nano_events
+            nano_events.record(provider="gcp", service="run", resource=str(sid), action=action,
+                               status="ok", detail="gcp/run: %s %s" % (action, sid))
+        except Exception:
+            pass
+
+    if operation == "List":
+        return {"ok": True, "items": _run.list_all(store)}
+    if operation == "Create":
+        req = _run.job_from_form(body, PROJ)
+        st, p = go("POST", req["parent"] + "/services", {"serviceId": req["serviceId"]}, req["service"])
+        if st >= 300:
+            return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                    "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+        full = _run.service_name(PROJ, req["location"], req["serviceId"])
+        if req["allowUnauthenticated"]:
+            go("POST", full + ":setIamPolicy", payload={"policy": {"bindings": [{"role": _run.IAM_INVOKER, "members": ["allUsers"]}]}})
+        event("Create", req["serviceId"])
+        return {"ok": True, **_run.view_by_name(store, full)}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_run.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = go("DELETE", full)
+        event("Delete", name)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Deploy", "Invoker"):
+        if operation == "Deploy":
+            tpl = json.loads(json.dumps(store.services[full]["template"]))
+            tpl.pop("revision", None)
+            tpl["containers"][0]["image"] = body.get("image") or tpl["containers"][0]["image"]
+            st, p = go("PATCH", full, {"updateMask": "template"}, {"template": tpl})
+        else:
+            members = ["allUsers"] if body.get("allow", True) else []
+            st, p = go("POST", full + ":setIamPolicy", payload={"policy": {"bindings": [{"role": _run.IAM_INVOKER, "members": members}] if members else []}})
+        return {"ok": True, **_run.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "run"}
+
+
 def resource_op(service, operation, name="", body=None):
     tab = tab_dispatch(service, operation, name, body)
     if tab is not None:
@@ -483,8 +749,20 @@ def _resource_op(service, operation, name="", body=None):
         return _mon_op(operation, name, body)
     if svc == "redis":
         return _redis_op(operation, name, body)
+    if svc == "dns":
+        return _dns_op(operation, name, body)
+    if svc == "logging":
+        return _logging_op(operation, name, body)
+    if svc == "workflows":
+        return _wf_op(operation, name, body)
+    if svc == "run":
+        return _run_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
+
+    # ---------------- CLOUD TASKS (queues + tasks) ----------------
+    if svc == "cloudtasks":
+        return _cloudtasks_op(operation, name, body, rid)
 
     # ---------------- STORAGE (GCS buckets) ----------------
     if svc == "storage":
@@ -700,6 +978,25 @@ def _resource_op(service, operation, name="", body=None):
             return _ar.console_push_sample(st_, name, body)
         if operation == "GetPushpull":         # Push / pull tab (no OCI registry in Nano: says so)
             return _ar.console_pushpull(st_, name)
+
+    # ---------------- BIGQUERY (datasets + tables/jobs/routines) ----------------
+    if svc == "bigquery":
+        st_ = _STORES[svc]
+        if operation == "List":
+            return {"ok": True, "items": _bq.console_list(st_)}
+        if operation == "Create":
+            return _bq.console_create(st_, PROJ, {**body, "name": rid})
+        if operation == "Get":
+            _, ds = _bq.console_find(st_, name)
+            return {"ok": True, **_bq.console_row(ds)} if ds else {"ok": False, "code": "NotFound", "name": name}
+        if operation == "Delete":
+            return _bq.console_delete(st_, name)
+        if operation in ("ListTables", "ListJobs", "ListRoutines"):
+            return {"ok": True, "items": _bq.console_children(st_, name, operation[4:].lower())}
+        if operation == "CreateSampleTable":
+            return _bq.console_sample(st_, name, "createTable")
+        if operation == "RunSampleQuery":
+            return _bq.console_sample(st_, name, "runQuery")
 
     # ---------------- CLOUD SQL (instances) ----------------
     if svc == "cloudsql":

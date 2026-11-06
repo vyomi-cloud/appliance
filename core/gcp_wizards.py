@@ -515,6 +515,23 @@ def _artifactregistry_wizard():
 
 _ARTIFACTREGISTRY_WIZARD = _artifactregistry_wizard()
 
+def _bigquery_wizard():
+    w = _basic_wizard(
+        name_field=_name("Dataset ID", "my_dataset", r"^[A-Za-z0-9_]{1,1024}$",
+                         "Letters, numbers and underscores only"),
+        name_default="my_dataset", region_or_zone=None,
+        extra_basic_fields=[
+            {"name": "location", "label": "Data location", "type": "select", "required": True, "default": "US",
+             "options": [{"value": v, "label": v} for v in
+                         ("US", "EU", "us-central1", "us-east1", "us-west1", "europe-west1", "europe-west4",
+                          "asia-northeast1", "asia-southeast1")]},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ])
+    return w
+
+
+_BIGQUERY_WIZARD = _bigquery_wizard()
+
 _SECRETMANAGER_WIZARD = _basic_wizard(
     name_field=_name("Name", "my-secret",
                      r"^[A-Za-z0-9_-]{1,255}$",
@@ -549,6 +566,38 @@ _SECRETMANAGER_WIZARD = _basic_wizard(
             {"name": "rotation_period", "label": "Rotation period (days)", "type": "number",
              "default": 90, "validate": {"min": 1, "max": 365},
              "ifEquals": {"__rotationEnabled__": True}},
+        ]},
+    ],
+)
+
+
+# ============================================================================
+# Cloud Tasks — Create queue
+# ============================================================================
+def _loc_select():
+    r = _region()
+    return {**r, "name": "location"}
+
+
+_CLOUDTASKS_WIZARD = _basic_wizard(
+    name_field=_name("Queue name", "my-queue", r"^[A-Za-z0-9-]{1,100}$",
+                     "1-100 chars; letters, digits and hyphens"),
+    name_default="my-queue", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "project", "label": "Project", "default": "my-project", "required": True,
+         "validate": {"regex": r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$", "message": "6-30 chars, lowercase, digits, hyphens"}},
+        _loc_select(),
+    ],
+    sections=[
+        {"label": "Rate limits", "fields": [
+            {"name": "max_dispatches_per_second", "label": "Max dispatches per second", "type": "number",
+             "default": 500, "validate": {"min": 0, "max": 500}},
+            {"name": "max_concurrent_dispatches", "label": "Max concurrent dispatches", "type": "number",
+             "default": 1000, "validate": {"min": 1, "max": 5000}},
+        ]},
+        {"label": "Retry parameters", "fields": [
+            {"name": "max_attempts", "label": "Max attempts", "type": "number",
+             "default": 100, "validate": {"min": -1, "max": 1000}},
         ]},
     ],
 )
@@ -745,6 +794,119 @@ _REDIS_WIZARD = _basic_wizard(
 _REDIS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 
 
+# ============================================================================
+# Cloud DNS — Create DNS zone (the REST ManagedZone fields; core/gcp_dns_core.zone_from_form)
+# ============================================================================
+_DNS_WIZARD = _basic_wizard(
+    name_field=_name("Zone name", "my-zone"),
+    name_default="my-zone", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "dnsName", "label": "DNS name", "default": "example.com.", "required": True,
+         "help": "The domain this zone serves, e.g. example.com. (a trailing dot is added if missing)",
+         "validate": {"regex": r"^([A-Za-z0-9_-]{1,63}\.)+$|^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$",
+                      "message": "Enter a DNS name such as example.com."}},
+        {"name": "description", "label": "Description", "default": "Managed by Vyomi"},
+    ],
+    sections=[
+        {"label": "Zone type", "fields": [
+            {"name": "visibility", "label": "Zone type", "type": "radio", "default": "public", "options": [
+                {"value": "public",  "label": "Public — visible on the internet"},
+                {"value": "private", "label": "Private — visible only to selected VPC networks"},
+            ]},
+            {"name": "dnssec", "label": "DNSSEC", "type": "select", "default": "off",
+             "ifEquals": {"visibility": "public"}, "options": [
+                {"value": "off", "label": "Off"}, {"value": "on", "label": "On"}]},
+            {"name": "network", "label": "VPC network", "default": "projects/demo/global/networks/default",
+             "ifEquals": {"visibility": "private"}},
+        ]},
+    ],
+)
+
+
+# ============================================================================
+# Cloud Logging — Create logs router sink (core/gcp_logging_core.sink_from_form)
+# ============================================================================
+_LOGGING_WIZARD = _basic_wizard(
+    name_field=_name("Sink name", "my-sink", r"^[A-Za-z0-9_.\-]{1,100}$",
+                     "Letters, numbers, hyphens, underscores and periods"),
+    name_default="my-sink", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "description", "label": "Sink description", "default": "Routes errors to Cloud Storage"},
+    ],
+    sections=[
+        {"label": "Sink destination", "fields": [
+            {"name": "destinationType", "label": "Sink service", "type": "select", "default": "Cloud Storage bucket", "options": [
+                {"value": v, "label": v} for v in ("Cloud Storage bucket", "BigQuery dataset", "Pub/Sub topic", "Cloud Logging bucket")]},
+            {"name": "destination", "label": "Destination (bucket, dataset, topic or log bucket id)", "default": "my-log-archive", "required": True},
+        ]},
+        {"label": "Choose logs to include in sink", "fields": [
+            {"name": "filter", "label": "Inclusion filter", "default": "severity>=WARNING"},
+        ]},
+    ],
+)
+
+
+# ============================================================================
+# Workflows — Create workflow (core/gcp_workflows_core.workflow_from_form)
+# ============================================================================
+_WORKFLOWS_WIZARD = _basic_wizard(
+    name_field=_name("Workflow name", "my-workflow", r"^[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?$",
+                     "Start with a letter; letters, digits, hyphens and underscores; up to 64 chars"),
+    name_default="my-workflow", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "description", "label": "Description", "default": "Demo workflow"},
+        {"name": "serviceAccount", "label": "Service account", "default": "demo-compute@developer.gserviceaccount.com"},
+        {"name": "callLogLevel", "label": "Call log level", "type": "select", "default": "CALL_LOG_LEVEL_UNSPECIFIED", "options": [
+            {"value": "CALL_LOG_LEVEL_UNSPECIFIED", "label": "Not specified"},
+            {"value": "LOG_ALL_CALLS", "label": "All calls"},
+            {"value": "LOG_ERRORS_ONLY", "label": "Errors only"},
+            {"value": "LOG_NONE", "label": "No logging"}]},
+    ],
+    sections=[
+        {"label": "Define workflow", "fields": [
+            {"name": "source", "label": "Workflow definition (JSON or YAML)", "required": True,
+             "default": '{"main":{"steps":[{"init":{"assign":[{"greeting":"Hello from Vyomi"}]}},{"done":{"return":"${greeting}"}}]}}'},
+        ]},
+    ],
+)
+_WORKFLOWS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
+# ============================================================================
+# Cloud Run — Create service (core/gcp_run_core.job_from_form)
+# ============================================================================
+_RUN_WIZARD = _basic_wizard(
+    name_field=_name("Service name", "hello", r"^[a-z]([-a-z0-9]{0,47}[a-z0-9])?$",
+                     "Up to 49 chars: lowercase letters, digits, hyphens; start with a letter"),
+    name_default="hello", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "image", "label": "Container image URL", "default": "us-docker.pkg.dev/cloudrun/container/hello"},
+        {"name": "description", "label": "Description", "default": "Demo Cloud Run service"},
+        {"name": "allowUnauthenticated", "label": "Authentication", "type": "radio", "default": "true", "options": [
+            {"value": "true",  "label": "Allow unauthenticated invocations"},
+            {"value": "false", "label": "Require authentication"},
+        ]},
+        {"name": "ingress", "label": "Ingress", "type": "select", "default": "all", "options": [
+            {"value": "all", "label": "All"},
+            {"value": "internal", "label": "Internal"},
+            {"value": "internal-and-cloud-load-balancing", "label": "Internal and Cloud Load Balancing"},
+        ]},
+    ],
+    sections=[
+        {"label": "Container, networking, security", "fields": [
+            {"name": "cpu", "label": "CPU", "default": "1"},
+            {"name": "memory", "label": "Memory", "default": "512Mi"},
+            {"name": "port", "label": "Container port", "type": "number", "default": 8080},
+            {"name": "concurrency", "label": "Maximum concurrent requests per instance", "type": "number", "default": 80},
+            {"name": "timeoutSeconds", "label": "Request timeout (seconds)", "type": "number", "default": 300},
+            {"name": "minInstances", "label": "Minimum number of instances", "type": "number", "default": 0},
+            {"name": "maxInstances", "label": "Maximum number of instances", "type": "number", "default": 100},
+        ]},
+    ],
+)
+_RUN_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -758,10 +920,16 @@ WIZARDS: dict[str, dict] = {
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
     "artifactregistry": _ARTIFACTREGISTRY_WIZARD,
+    "cloudtasks": _CLOUDTASKS_WIZARD,
     "kms":           _KMS_WIZARD,
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
+    "logging":       _LOGGING_WIZARD,
     "container":     _CONTAINER_WIZARD,
     "monitoring":    _MONITORING_WIZARD,
     "redis":         _REDIS_WIZARD,
+    "dns":           _DNS_WIZARD,
+    "workflows":     _WORKFLOWS_WIZARD,
+    "run":           _RUN_WIZARD,
+    "bigquery":      _BIGQUERY_WIZARD,
 }

@@ -362,6 +362,80 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Cloud Tasks — queues + tasks (core/gcp_cloudtasks_core.py). Console REST at
+    # /api/gcp/cloudtasks/*; the native /v2 wire serves SDKs/CLI off the same store.
+    # ========================================================================
+    {
+        "key": "cloudtasks", "label": "Cloud Tasks", "icon": "checklist",
+        "namespace": "GCP/CloudTasks", "service": "cloudtasks",
+        "collection_path": "/api/gcp/cloudtasks/queues",
+        "resource_path":   "/api/gcp/cloudtasks/queues/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "tasks":    {"method": "GET",    "path": "/api/gcp/cloudtasks/queues/{name}/tasks"},
+            "activity": {"method": "GET",    "path": "/api/gcp/cloudtasks/queues/{name}/activity"},
+            "pause":    {"method": "POST",   "path": "/api/gcp/cloudtasks/queues/{name}/pause"},
+            "resume":   {"method": "POST",   "path": "/api/gcp/cloudtasks/queues/{name}/resume"},
+            "purge":    {"method": "POST",   "path": "/api/gcp/cloudtasks/queues/{name}/purge"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/cloudtasks/queues/{name}"},
+        },
+        "columns": [
+            ["name",                      "Name"],
+            ["location",                  "Region"],
+            ["state",                     "State"],
+            ["tasks_in_queue",            "Tasks in queue"],
+            ["max_dispatches_per_second", "Max dispatches/sec"],
+            ["max_concurrent_dispatches", "Max concurrent"],
+            ["max_attempts",              "Max attempts"],
+            ["created",                   "Created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Queue name", "default": "my-queue"},
+            {"name": "project", "label": "Project", "default": "my-project"},
+            {"name": "location", "label": "Region", "default": "us-central1"},
+            {"name": "max_dispatches_per_second", "label": "Max dispatches per second", "default": "500"},
+            {"name": "max_concurrent_dispatches", "label": "Max concurrent dispatches", "default": "1000"},
+            {"name": "max_attempts", "label": "Max attempts", "default": "100"},
+        ],
+    },
+    # ========================================================================
+    # BigQuery — datasets holding tables, SQL jobs and routines
+    # (core/gcp_bigquery_core.py, the engine the native bigquery/v2 wire serves).
+    # ========================================================================
+    {
+        "key": "bigquery", "label": "BigQuery", "icon": "query_stats",
+        "namespace": "GCP/BigQuery", "service": "bigquery",
+        "collection_path": "/api/gcp/bigquery/datasets",
+        "resource_path":   "/api/gcp/bigquery/datasets/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "datasets":      {"method": "GET",    "path": "/api/gcp/bigquery/datasets"},
+            "tables":        {"method": "GET",    "path": "/api/gcp/sub/bigquery/listTables/{name}"},
+            "jobs":          {"method": "GET",    "path": "/api/gcp/sub/bigquery/listJobs/{name}"},
+            "routines":      {"method": "GET",    "path": "/api/gcp/sub/bigquery/listRoutines/{name}"},
+            "createSampleTable": {"method": "POST", "path": "/api/gcp/sub/bigquery/createSampleTable/{name}"},
+            "runSampleQuery":    {"method": "POST", "path": "/api/gcp/sub/bigquery/runSampleQuery/{name}"},
+            "delete":        {"method": "DELETE", "path": "/api/gcp/bigquery/datasets/{name}"},
+        },
+        "columns": [
+            ["name",       "Dataset ID"],
+            ["location",   "Location"],
+            ["tables",     "Tables"],
+            ["size",       "Size"],
+            ["expiration", "Default table expiration"],
+            ["encryption", "Encryption"],
+            ["created",    "Created"],
+            ["modified",   "Last modified"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Dataset ID",  "default": "my_dataset"},
+            {"name": "location",    "label": "Location",    "default": "US"},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ],
+    },
+    # ========================================================================
     # Cloud KMS — keys + key rings + versions + EKM
     # ========================================================================
     {
@@ -558,6 +632,44 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Workflows — serverless orchestration (core/gcp_workflows_core.py). Console REST at
+    # /api/gcp/workflows/*; the native /v1/projects/*/locations/*/workflows wire (+ executions)
+    # serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "workflows", "label": "Workflows", "icon": "account_tree",
+        "namespace": "GCP/Workflows", "service": "workflows",
+        "collection_path": "/api/gcp/workflows/workflows",
+        "resource_path":   "/api/gcp/workflows/workflows/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "workflows": {"method": "GET",    "path": "/api/gcp/workflows/workflows"},
+            "execute":   {"method": "POST",   "path": "/api/gcp/sub/workflows/execute/{name}"},
+            "delete":    {"method": "DELETE", "path": "/api/gcp/workflows/workflows/{name}"},
+        },
+        "columns": [
+            ["id",              "Name"],
+            ["region",          "Region"],
+            ["state",           "State"],
+            ["revision",        "Revision"],
+            ["service_account", "Service account"],
+            ["call_log_level",  "Call log level"],
+            ["execution_count", "Executions"],
+            ["last_execution",  "Last execution"],
+            ["updated",         "Last updated"],
+        ],
+        "createFields": [
+            {"name": "name",           "label": "Workflow name",         "default": "my-workflow"},
+            {"name": "region",         "label": "Region",                "default": "us-central1"},
+            {"name": "description",    "label": "Description",           "default": "Demo workflow"},
+            {"name": "serviceAccount", "label": "Service account",       "default": "demo-compute@developer.gserviceaccount.com"},
+            {"name": "callLogLevel",   "label": "Call log level",        "default": "CALL_LOG_LEVEL_UNSPECIFIED"},
+            {"name": "source",         "label": "Workflow definition (JSON or YAML)",
+             "default": '{"main":{"steps":[{"init":{"assign":[{"greeting":"Hello from Vyomi"}]}},{"done":{"return":"${greeting}"}}]}}'},
+        ],
+    },
+    # ========================================================================
     # Memorystore for Redis — instances (core/gcp_redis_core.py). Console REST at
     # /api/gcp/redis/*; the native /v1/projects/*/locations/*/instances wire serves the SDKs /
     # gcloud. Data plane: the shared Valkey container offline (control plane only in Nano).
@@ -596,6 +708,119 @@ RESOURCE_CATALOG_GCP = [
             {"name": "network",     "label": "Authorized network",               "default": "default"},
             {"name": "authEnabled", "label": "Enable AUTH (true or false)",      "default": "false"},
             {"name": "displayName", "label": "Display name",                     "default": "Demo Redis cache"},
+        ],
+    },
+    # ========================================================================
+    # Cloud DNS — managed zones + record sets (core/gcp_dns_core.py). Console REST at
+    # /api/gcp/dns/zones; the native /dns/v1/projects/*/managedZones wire serves the
+    # SDKs / gcloud dns.
+    # ========================================================================
+    {
+        "key": "dns", "label": "Cloud DNS", "icon": "dns",
+        "namespace": "GCP/DNS", "service": "dns",
+        "collection_path": "/api/gcp/dns/zones",
+        "resource_path":   "/api/gcp/dns/zones/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "zones":  {"method": "GET",    "path": "/api/gcp/dns/zones"},
+            "delete": {"method": "DELETE", "path": "/api/gcp/dns/zones/{name}"},
+        },
+        "columns": [
+            ["id",               "Zone name"],
+            ["dns_name",         "DNS name"],
+            ["zone_type",        "Type"],
+            ["description_text", "Description"],
+            ["record_count",     "Record sets"],
+            ["primary_ns",       "Primary name server"],
+            ["dnssec_state",     "DNSSEC"],
+            ["created",          "Created"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Zone name",   "default": "my-zone"},
+            {"name": "dnsName",     "label": "DNS name",    "default": "example.com."},
+            {"name": "description", "label": "Description", "default": "Managed by Vyomi"},
+            {"name": "visibility",  "label": "Zone type (public or private)", "default": "public"},
+            {"name": "dnssec",      "label": "DNSSEC (on or off, public zones)", "default": "off"},
+            {"name": "network",     "label": "VPC network (private zones)", "default": "projects/demo/global/networks/default"},
+        ],
+    },
+    # ========================================================================
+    # Cloud Logging — log sinks (routing rules); entries / metrics / exclusions / buckets
+    # ride the native wire (core/gcp_logging_core.py). Console REST at /api/gcp/logging/*.
+    # ========================================================================
+    {
+        "key": "logging", "label": "Cloud Logging", "icon": "receipt_long",
+        "namespace": "GCP/Logging", "service": "logging",
+        "collection_path": "/api/gcp/logging/sinks",
+        "resource_path":   "/api/gcp/logging/sinks/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "sinks":   {"method": "GET",    "path": "/api/gcp/logging/sinks"},
+            "enable":  {"method": "POST",   "path": "/api/gcp/sub/logging/enable/{name}"},
+            "disable": {"method": "POST",   "path": "/api/gcp/sub/logging/disable/{name}"},
+            "delete":  {"method": "DELETE", "path": "/api/gcp/logging/sinks/{name}"},
+        },
+        "columns": [
+            ["id",               "Name"],
+            ["destination_type", "Destination type"],
+            ["destination_name", "Destination"],
+            ["filter_text",      "Inclusion filter"],
+            ["state",            "State"],
+            ["writer",           "Writer identity"],
+            ["description_text", "Description"],
+            ["created",          "Created"],
+        ],
+        "createFields": [
+            {"name": "name",            "label": "Sink name",                 "default": "my-sink"},
+            {"name": "description",     "label": "Sink description",          "default": "Routes warnings to Cloud Storage"},
+            {"name": "destinationType", "label": "Sink service (Cloud Storage bucket, BigQuery dataset, Pub/Sub topic or Cloud Logging bucket)", "default": "Cloud Storage bucket"},
+            {"name": "destination",     "label": "Destination",               "default": "my-log-archive"},
+            {"name": "filter",          "label": "Inclusion filter",          "default": "severity>=WARNING"},
+        ],
+    },
+    # ========================================================================
+    # Cloud Run — services + revisions (core/gcp_run_core.py; jobs/executions via the API).
+    # Console REST at /api/gcp/run/*; the native /v2/projects/*/locations/*/services wire
+    # serves the SDKs / gcloud run. Control plane: containers are not executed.
+    # ========================================================================
+    {
+        "key": "run", "label": "Cloud Run", "icon": "directions_run",
+        "namespace": "GCP/Run", "service": "run",
+        "collection_path": "/api/gcp/run/services",
+        "resource_path":   "/api/gcp/run/services/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "services": {"method": "GET",    "path": "/api/gcp/run/services"},
+            "deploy":   {"method": "POST",   "path": "/api/gcp/sub/run/deploy/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/run/services/{name}"},
+        },
+        "columns": [
+            ["id",             "Name"],
+            ["deployment",     "Deployment type"],
+            ["region",         "Region"],
+            ["authentication", "Authentication"],
+            ["ingress_text",   "Ingress"],
+            ["revision",       "Latest revision"],
+            ["last_deployed",  "Last deployed"],
+            ["deployed_by",    "Deployed by"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Service name",               "default": "hello"},
+            {"name": "region",      "label": "Region",                     "default": "us-central1"},
+            {"name": "image",       "label": "Container image URL",        "default": "us-docker.pkg.dev/cloudrun/container/hello"},
+            {"name": "allowUnauthenticated", "label": "Allow unauthenticated invocations (true or false)", "default": "true"},
+            {"name": "ingress",     "label": "Ingress (all, internal or internal-and-cloud-load-balancing)", "default": "all"},
+            {"name": "cpu",         "label": "CPU",                        "default": "1"},
+            {"name": "memory",      "label": "Memory",                     "default": "512Mi"},
+            {"name": "port",        "label": "Container port",             "default": "8080"},
+            {"name": "concurrency", "label": "Max concurrent requests per instance", "default": "80"},
+            {"name": "timeoutSeconds", "label": "Request timeout (seconds)", "default": "300"},
+            {"name": "minInstances", "label": "Minimum instances",         "default": "0"},
+            {"name": "maxInstances", "label": "Maximum instances",         "default": "100"},
+            {"name": "description", "label": "Description",                "default": "Demo Cloud Run service"},
         ],
     },
 ]

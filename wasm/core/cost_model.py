@@ -104,13 +104,19 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.workflows": 0.10,      # $0.01 per 1k internal steps (first 5k/month free); priced at ~10k steps per workflow
     "gcp.redis": 35.77,         # Basic tier $0.049/GB-hr × 1 GB × ~730 h (Standard doubles it)
     "gcp.container": 73.00,     # $0.10/hr cluster management fee (~730 h); one zonal/Autopilot cluster per account is free
+    "gcp.run": 3.00,            # pay-per-use: ~1M requests/month at 100 ms on 1 vCPU/512 MiB (vCPU-s $0.000024, GiB-s $0.0000025, $0.40/M req); scales to zero when idle
     "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
     "gcp.monitoring": 0.10,     # $0.10 per alert-policy condition per month (metrics ingestion billed per MiB)
+    "gcp.dns": 0.20,            # $0.20 per managed zone per month (first 25 zones; queries billed per use)
+    "gcp.logging": 0.50,        # $0.50 per GiB ingested (~1 GiB per sink; first 50 GiB/project/month free)
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
+    "gcp.bigquery": 1.25,   # ~50 GB active storage at $0.02/GB-month (first 10 GB free) + a little on-demand query ($6.25/TiB)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
+    "gcp.cloudtasks": 0.40,     # $0.40 per million operations (~1M/month per queue)
     "gcp.eventarc": 0.04,       # triggers are free; events $0.40 per million delivered (modelled at ~100K events/month)
     "gcp.artifactregistry": 0.50,  # ~5 GB stored at $0.10/GB-month (first 0.5 GB free)
     # Azure

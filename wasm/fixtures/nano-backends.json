@@ -105,13 +105,33 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_wf",
+  "label": "WorkflowsStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_run",
+  "label": "RunStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_iamc",
   "label": "IamCredentialsStore",
   "category": "gcp"
  },
  {
+  "name": "gcp_logging",
+  "label": "LoggingStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_sched",
   "label": "CloudSchedulerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_dns",
+  "label": "CloudDnsStore",
   "category": "gcp"
  },
  {
@@ -132,6 +152,16 @@
  {
   "name": "gcp_ar",
   "label": "ArtifactRegistryStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_ct",
+  "label": "CloudTasksStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_bq",
+  "label": "BigQueryStore",
   "category": "gcp"
  },
  {

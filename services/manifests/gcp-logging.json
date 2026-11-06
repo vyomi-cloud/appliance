@@ -1,0 +1,50 @@
+{
+  "cloud": "gcp",
+  "key": "logging",
+  "name": "Cloud Logging",
+  "upstream": "logging/v2",
+  "issue": 73,
+  "core": "core/gcp_logging_core.py",
+  "operations": [
+    "logging.entries.write",
+    "logging.entries.list",
+    "logging.monitoredResourceDescriptors.list",
+    "logging.projects.logs.list",
+    "logging.projects.logs.delete",
+    "logging.projects.sinks.create",
+    "logging.projects.sinks.get",
+    "logging.projects.sinks.list",
+    "logging.projects.sinks.update",
+    "logging.projects.sinks.patch",
+    "logging.projects.sinks.delete",
+    "logging.projects.metrics.create",
+    "logging.projects.metrics.get",
+    "logging.projects.metrics.list",
+    "logging.projects.metrics.update",
+    "logging.projects.metrics.delete",
+    "logging.projects.exclusions.create",
+    "logging.projects.exclusions.get",
+    "logging.projects.exclusions.list",
+    "logging.projects.exclusions.patch",
+    "logging.projects.exclusions.delete",
+    "logging.projects.locations.list",
+    "logging.projects.locations.buckets.create",
+    "logging.projects.locations.buckets.get",
+    "logging.projects.locations.buckets.list",
+    "logging.projects.locations.buckets.patch",
+    "logging.projects.locations.buckets.delete",
+    "logging.projects.locations.buckets.undelete",
+    "logging.projects.locations.buckets.views.list"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-gcp-logging",
+    "offline-sdk-go-gcp-logging",
+    "offline-cli-gcp-logging",
+    "offline-ui-gcp-logging",
+    "nano-ui-gcp-logging"
+  ],
+  "status": "ready"
+}

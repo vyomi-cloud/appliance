@@ -32,7 +32,7 @@ _B64 = "__b64__"
 # cleanly onto either the router or the console adapter's registry.
 STORE_ATTRS = [
     "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2", "kinesis",
-    "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql", "gcp_ar",
+    "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql", "gcp_ar", "gcp_ct", "gcp_bq",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
     "apigwv2",  # API Gateway V2 (core/apigatewayv2_core.ApiGwV2Store)
     "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)
@@ -41,7 +41,11 @@ STORE_ATTRS = [
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
     "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
+    "gcp_wf",     # Workflows (core/gcp_workflows_core.WorkflowsStore)
+    "gcp_run",    # Cloud Run (core/gcp_run_core.RunStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
+    "gcp_dns",    # Cloud DNS (core/gcp_dns_core.CloudDnsStore)
+    "gcp_logging",  # Cloud Logging (core/gcp_logging_core.LoggingStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
     "resources",  # generic catalog CRUD (EC2, Lambda-adjacent, every GCP service; wasm/backends/store.ResourceStore)
     "compute",  # Lambda functions + API Gateway APIs + VPC model (core/nano_registry.ComputeStore)

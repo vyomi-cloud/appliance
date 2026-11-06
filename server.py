@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager
+from routes import gcp_resourcemanager, gcp_bigquery
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager]:
+            gcp_resourcemanager, gcp_bigquery]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2598,6 +2598,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Workflows — the shared wire/console store (console + SDK/CLI created workflows)
+        from core.gcp_workflows_core import shared_store as _wf_store
+        for _wn, _wf in _wf_store().workflows.items():
+            add("gcp", "workflows", "workflow", _wn.rsplit("/", 1)[-1],
+                {"name": _wn.rsplit("/", 1)[-1], "created": _wf.get("createTime", "")})
+    except Exception:
+        pass
+
     try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
         from core.gcp_redis_core import shared_store as _redis_store
         for _rn, _ri in _redis_store().instances.items():
@@ -2627,6 +2635,37 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         for _pn, _pol in _mon_store().alert_policies.items():
             add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
                 {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
+    except Exception:
+        pass
+
+    try:   # Cloud DNS — the shared wire/console store (console + SDK/CLI created zones)
+        from core.gcp_dns_core import shared_store as _gcp_dns_store
+        for _zk, _zr in _gcp_dns_store().zones.items():
+            add("gcp", "dns", "managed-zone", _zr["zone"]["name"],
+                {"name": _zr["zone"]["name"], "created": _zr["zone"].get("creationTime", "")})
+    except Exception:
+        pass
+
+    try:   # Cloud Logging — the shared wire/console store (console + SDK/CLI created sinks)
+        from core.gcp_logging_core import shared_store as _gcp_logging_store
+        for _sn, _sk in _gcp_logging_store().sinks.items():
+            add("gcp", "logging", "sink", _sn.rsplit("/", 1)[-1],
+                {"name": _sn.rsplit("/", 1)[-1], "created": _sk.get("createTime", "")})
+    except Exception:
+        pass
+
+    try:   # Cloud Tasks — the shared wire/console store (queues created by console + SDK/CLI)
+        from core.gcp_cloudtasks_core import shared_store as _ct_store
+        for q_name, q in _ct_store().queues.items():
+            add("gcp", "cloudtasks", "queue", q_name.rsplit("/", 1)[-1], {"name": q_name, "created": q["createTime"]})
+    except Exception:
+        pass
+
+    try:   # Cloud Run — the shared wire/console store (console + SDK/CLI created services)
+        from core.gcp_run_core import shared_store as _run_store
+        for _rn, _rs in _run_store().services.items():
+            add("gcp", "run", "service", _rn.rsplit("/", 1)[-1],
+                {"name": _rn.rsplit("/", 1)[-1], "created": _rs.get("createTime", "")})
     except Exception:
         pass
 
@@ -2699,6 +2738,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for repo_name, repo in gcp_ar.get("repositories", {}).items():
         if isinstance(repo, dict):
             add("gcp", "artifactregistry", "repository", repo_name, repo)
+
+    gcp_bq = _cloudsim_service_state(space, "gcp_bigquery")
+    for ds_key, ds in gcp_bq.get("datasets", {}).items():
+        if isinstance(ds, dict):
+            add("gcp", "bigquery", "dataset", ds_key, {"name": ds.get("id", ds_key), "location": ds.get("location"), "createTime": ds.get("creationTime")})
 
     gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
@@ -23431,6 +23475,7 @@ def api_runtime_host_distribution():
         ("gcp_kms", "keys", False),
         ("gcp_firestore", "databases", False),
         ("gcp_artifactregistry", "repositories", False),
+        ("gcp_bigquery", "datasets", False),
     ]
     # Azure ARM stores everything keyed by the full resourceId at the
     # top level of the service_state — values are themselves resources
@@ -24096,6 +24141,23 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-dns] routes skipped: {_e}")
 
+# Workflows: native /v1/projects/*/locations/*/workflows wire + console REST (/api/gcp/workflows/*).
+try:
+    from providers import gcp_workflows_console as _wf_console
+
+    def _wf_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "workflows", "workflow", payload, {}, None, action="delete")
+            _record_usage("gcp.workflows.delete_workflow", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "workflows", "workflow", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ACTIVE")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.workflows.create_workflow", {"name": payload["id"]})
+    _wf_console.register(app, _wf_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[workflows] routes skipped: {_e}")
+
 # Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
 try:
     from providers import gcp_redis_console as _redis_console
@@ -24153,6 +24215,74 @@ try:
     _gcp_tabs_console.register(app)
 except Exception as _e:   # never let this break appliance boot
     print(f"[gcp-tabs] routes skipped: {_e}")
+
+# Cloud DNS: native /dns/v1/projects/*/managedZones wire + console REST (/api/gcp/dns/*).
+try:
+    from providers import gcp_dns_console as _gcp_dns_console
+
+    def _gcp_dns_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "dns", "managed-zone", payload, {}, None, action="delete")
+            _record_usage("gcp.dns.delete_managed_zone", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "dns", "managed-zone", payload["id"],
+                                            {"name": payload["id"], "dnsName": payload.get("dnsName", "")}, None,
+                                            region="global")
+            _record_usage("gcp.dns.create_managed_zone", {"name": payload["id"]})
+    _gcp_dns_console.register(app, _gcp_dns_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-dns] routes skipped: {_e}")
+
+# Cloud Logging: native /v2/entries + /v2/projects/*/{logs,sinks,metrics,exclusions,locations/*/buckets} wire
+# + console REST (/api/gcp/logging/*).
+try:
+    from providers import gcp_logging_console as _gcp_logging_console
+
+    def _gcp_logging_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "logging", "sink", payload, {}, None, action="delete")
+            _record_usage("gcp.logging.delete_sink", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "logging", "sink", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "Enabled")}, None,
+                                            region="global")
+            _record_usage("gcp.logging.create_sink", {"name": payload["id"]})
+    _gcp_logging_console.register(app, _gcp_logging_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[logging] routes skipped: {_e}")
+
+# Cloud Tasks: native /v2 wire + console REST (/api/gcp/cloudtasks/*) on one shared store.
+try:
+    from providers import gcp_cloudtasks_console as _ct_console
+
+    def _ct_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "cloudtasks", "queue", payload, {}, None, action="delete")
+            _record_usage("cloudtasks.delete_queue", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "cloudtasks", "queue", payload["name"],
+                                            {"name": payload["name"], "created": payload["created"]}, None)
+            _record_usage("cloudtasks.create_queue", {"name": payload["name"]})
+    _ct_console.register(app, _ct_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[cloudtasks] routes skipped: {_e}")
+
+# Cloud Run: native /v2/projects/*/locations/*/services|jobs wire + console REST (/api/gcp/run/*).
+try:
+    from providers import gcp_run_console as _run_console
+
+    def _run_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "run", "service", payload, {}, None, action="delete")
+            _record_usage("gcp.run.delete_service", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "run", "service", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "Ready")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.run.create_service", {"name": payload["id"]})
+    _run_console.register(app, _run_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[run] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

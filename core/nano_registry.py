@@ -24,6 +24,7 @@ from core.iam_store import InMemoryIamStore
 from core.messaging_store import InMemoryMessagingStore
 from core.gcp_firestore_core import FirestoreStore
 from core.gcp_artifactregistry_core import ArtifactRegistryStore
+from core.gcp_bigquery_core import BigQueryStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
@@ -37,12 +38,17 @@ from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
+from core.gcp_logging_core import LoggingStore
+from core.gcp_workflows_core import WorkflowsStore
+from core.gcp_run_core import RunStore
 from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
 import types
 from core.cloudwatch_core import CloudWatchStore
 from core.gcp_monitoring_core import MonitoringStore
+from core.gcp_dns_core import CloudDnsStore
+from core.gcp_cloudtasks_core import CloudTasksStore
 
 _REG: dict | None = None
 
@@ -82,12 +88,18 @@ def get() -> dict:
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
             "gcp_mon": MonitoringStore(),   # Cloud Monitoring (policies, channels, metrics, series)
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
+            "gcp_wf": WorkflowsStore(),   # Workflows + executions
+            "gcp_run": RunStore(),   # Cloud Run services/revisions/jobs
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
+            "gcp_logging": LoggingStore(),   # Cloud Logging
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
+            "gcp_dns": CloudDnsStore(),           # Cloud DNS zones
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
+            "gcp_ct":  CloudTasksStore(),   # Cloud Tasks (queues + tasks)
+            "gcp_bq":  BigQueryStore(),   # BigQuery datasets / tables / jobs / routines
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),

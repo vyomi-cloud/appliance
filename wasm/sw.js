@@ -205,6 +205,12 @@ async function handleUpload(request, bucket, provider = "aws") {
 // table clouds.html uses for the Spaces cards, so both agree.
 const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
 NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
+NANO_RATE.dns = 0.20;   // core/cost_model.py gcp.dns
+NANO_RATE.logging = 0.50;   // core/cost_model.py gcp.logging
+NANO_RATE.cloudtasks = 0.40;   // core/cost_model.py gcp.cloudtasks
+NANO_RATE.workflows = 0.10;   // core/cost_model.py gcp.workflows
+NANO_RATE.run = 3.00;   // core/cost_model.py gcp.run
+NANO_RATE.bigquery = 1.25;   // core/cost_model.py gcp.bigquery
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -871,6 +877,11 @@ async function route(method, path, body, query) {
   // Project-wide subscription list (the Topics grid's Subscriptions column reads it).
   if (method === "GET" && /^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/?$/.test(path))
     return { tuple: ["gcp", "_resource", "ListAllSubscriptions", { service: "pubsub" }] };
+  // Cloud Tasks (core/gcp_cloudtasks_core.py) — queue detail tabs + actions
+  let ct = path.match(/^\/api\/gcp\/cloudtasks\/queues\/([^/]+)\/(tasks|activity)$/);
+  if (ct && method === "GET") return { tuple: ["gcp", "_resource", "ListChildren", { service: "cloudtasks", name: dec(ct[1]), body: { kind: ct[2] } }] };
+  ct = path.match(/^\/api\/gcp\/cloudtasks\/queues\/([^/]+)\/(pause|resume|purge|tasks)$/);
+  if (ct && method === "POST") return { tuple: ["gcp", "_resource", "QueueAction", { service: "cloudtasks", name: dec(ct[1]), body: { ...(body || {}), action: ct[2] } }] };
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };

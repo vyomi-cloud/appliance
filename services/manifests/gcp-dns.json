@@ -1,0 +1,47 @@
+{
+  "cloud": "gcp",
+  "key": "dns",
+  "name": "Cloud DNS",
+  "upstream": "dns/v1",
+  "issue": 71,
+  "core": "core/gcp_dns_core.py",
+  "operations": [
+    "dns.projects.get",
+    "dns.managedZones.create",
+    "dns.managedZones.get",
+    "dns.managedZones.list",
+    "dns.managedZones.patch",
+    "dns.managedZones.update",
+    "dns.managedZones.delete",
+    "dns.managedZoneOperations.get",
+    "dns.managedZoneOperations.list",
+    "dns.resourceRecordSets.create",
+    "dns.resourceRecordSets.get",
+    "dns.resourceRecordSets.list",
+    "dns.resourceRecordSets.patch",
+    "dns.resourceRecordSets.delete",
+    "dns.changes.create",
+    "dns.changes.get",
+    "dns.changes.list",
+    "dns.dnsKeys.get",
+    "dns.dnsKeys.list",
+    "dns.policies.create",
+    "dns.policies.get",
+    "dns.policies.list",
+    "dns.policies.patch",
+    "dns.policies.update",
+    "dns.policies.delete"
+  ],
+  "backend": {
+    "kind": "in-process",
+    "reason": "Zones, record sets and changes are control-plane state held by the engine (identical offline and in Nano, zero extra containers or idle memory). The shared CoreDNS data plane (dig/nslookup answering from these zones) is better added once, for Route 53 / Cloud DNS / Azure DNS together, with a zone-file sync from the shared store; it needs no change to this API surface."
+  },
+  "suites": [
+    "offline-sdk-java-gcp-dns",
+    "offline-sdk-go-gcp-dns",
+    "offline-cli-gcp-dns",
+    "offline-ui-gcp-dns",
+    "nano-ui-gcp-dns"
+  ],
+  "status": "ready"
+}

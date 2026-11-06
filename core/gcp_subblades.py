@@ -463,6 +463,172 @@ _ARTIFACTREGISTRY_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud DNS — managed zone detail (`schedkv` = generic key/value pane over the zone's
+# console view, `dnsrecords` = the zone's record-set table; every value filled)
+# ============================================================================
+_DNS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Zone", "items": [
+        {"key": "records",  "label": "Record sets",  "icon": "list_alt",    "type": "dnsrecords"},
+        {"key": "zone",     "label": "Zone details", "icon": "dns",         "type": "schedkv",
+         "fields": [["dns_name", "DNS name"], ["zone_type", "Type"], ["description_text", "Description"],
+                    ["created", "Created"]]},
+        {"key": "nameservers", "label": "Name servers", "icon": "lan",      "type": "schedkv",
+         "fields": [["name_servers_text", "Name servers"], ["zone_type", "Zone type"]]},
+        {"key": "dnssec",   "label": "DNSSEC",       "icon": "verified_user", "type": "schedkv",
+         "fields": [["dnssec_state", "DNSSEC state"], ["zone_type", "Zone type"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# Cloud Logging — log sink detail (generic `schedkv` renderer: `fields` is
+# [[field, label], …] read off the sink's console view, every value filled)
+# ============================================================================
+_LOGGING_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Sink", "items": [
+        {"key": "destination", "label": "Destination", "icon": "output", "type": "schedkv",
+         "fields": [["destination_type", "Destination type"], ["destination_name", "Destination"],
+                    ["destination", "Full destination URI"]]},
+        {"key": "inclusion",   "label": "Inclusion filter", "icon": "filter_alt", "type": "schedkv",
+         "fields": [["filter_text", "Filter"], ["include_children", "Include child resources"]]},
+        {"key": "exclusions",  "label": "Exclusions", "icon": "block", "type": "schedkv",
+         "fields": [["exclusion_count", "Exclusion filters"], ["state", "State"]]},
+        {"key": "identity",    "label": "Writer identity", "icon": "badge", "type": "schedkv",
+         "fields": [["writer", "Writer identity"], ["outputVersionFormat", "Output format"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# Cloud Tasks — queue detail (generic `ctlist` tab renderer; `list_key` names the
+# api_paths entry, `cols` the [field, label] grid columns)
+# ============================================================================
+_CLOUDTASKS_SUB = [
+    {"key": "overview", "label": "Overview", "icon": "dashboard", "type": "overview"},
+    {"group": "Tasks", "items": [
+        {"key": "tasks", "label": "Tasks", "icon": "checklist", "type": "ctlist", "list_key": "tasks",
+         "cols": [["name", "Task"], ["method", "Method"], ["url", "URL"], ["schedule_time", "Schedule time"],
+                  ["dispatch_count", "Dispatches"], ["response_count", "Responses"], ["last_attempt", "Last attempt"]]},
+        {"key": "activity", "label": "Activity", "icon": "list_alt", "type": "ctlist", "list_key": "activity",
+         "cols": [["time", "Time"], ["action", "Action"], ["detail", "Detail"]]},
+    ]},
+    {"group": "Configuration", "items": [
+        {"key": "properties", "label": "Rate limits & retries", "icon": "info", "type": "properties"},
+        {"key": "iam", "label": "Permissions", "icon": "admin_panel_settings", "type": "iam"},
+    ]},
+]
+
+
+# ============================================================================
+# Workflows — workflow detail (generic `schedkv` renderer: `fields` is [[field, label], …]
+# read off the workflow's console view, every value filled)
+# ============================================================================
+_WORKFLOWS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Workflow", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["state", "State"], ["revision", "Revision"], ["revision_count", "Revisions"],
+                    ["description_text", "Description"], ["created", "Created"], ["updated", "Last updated"]]},
+        {"key": "source",  "label": "Source", "icon": "code", "type": "schedkv",
+         "fields": [["source_language", "Language"], ["source_lines", "Lines of source"],
+                    ["revision_created", "Revision created"], ["sourceContents", "Definition"]]},
+        {"key": "executions", "label": "Executions", "icon": "play_circle", "type": "schedkv",
+         "fields": [["execution_count", "Executions"], ["last_execution", "Last execution"],
+                    ["call_log_level", "Call logging"], ["history_level", "Execution history"]]},
+        {"key": "security", "label": "Security", "icon": "lock", "type": "schedkv",
+         "fields": [["service_account", "Service account"], ["encryption", "Encryption"],
+                    ["env_text", "Environment variables"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# Cloud Run — service detail (generic `schedkv` renderer: `fields` is [[field, label], …]
+# read off the service's console view, every value filled)
+# ============================================================================
+_RUN_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Service", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["url", "URL"], ["revision", "Latest revision"], ["image", "Container image"],
+                    ["deployment", "Deployment type"], ["created", "Created"], ["creator_text", "Created by"],
+                    ["description_text", "Description"], ["data_plane", "Containers"]]},
+        {"key": "revisions", "label": "Revisions", "icon": "history", "type": "schedkv",
+         "fields": [["revisions_count", "Revisions"], ["revisions_text", "Revision names"], ["revision", "Serving (latest)"],
+                    ["traffic_text", "Traffic split"]]},
+        {"key": "container", "label": "Container", "icon": "deployed_code", "type": "schedkv",
+         "fields": [["image", "Image"], ["port", "Container port"], ["cpu", "CPU"], ["memory", "Memory"],
+                    ["cpu_allocation", "CPU allocation"], ["exec_env", "Execution environment"]]},
+        {"key": "scaling", "label": "Scaling", "icon": "open_in_full", "type": "schedkv",
+         "fields": [["instances", "Instances (min-max)"], ["concurrency", "Max concurrent requests per instance"],
+                    ["timeout", "Request timeout"]]},
+        {"key": "networking", "label": "Networking", "icon": "lan", "type": "schedkv",
+         "fields": [["ingress_text", "Ingress"], ["url", "Endpoint URL"], ["authentication", "Authentication"]]},
+        {"key": "security", "label": "Security", "icon": "security", "type": "schedkv",
+         "fields": [["service_account", "Service account"], ["authentication", "Invoker access"],
+                    ["labels_text", "Labels"], ["deployed_by", "Last deployed by"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# BigQuery — dataset detail
+# ============================================================================
+_BIGQUERY_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Explorer", "items": [
+        {"key": "tables", "label": "Tables", "icon": "table_chart", "type": "sublist",
+         "source": "tables", "empty": "No tables yet. Create one with the SDK, bq, or Create sample table.",
+         "columns": [["name", "Table ID"], ["type", "Type"], ["rows", "Rows"], ["columns", "Columns"],
+                     ["size", "Size"], ["created", "Created"]],
+         "actions": [{"label": "Create sample table", "op": "createSampleTable"}]},
+        {"key": "jobs", "label": "Jobs", "icon": "work_history", "type": "sublist",
+         "source": "jobs", "empty": "No jobs for this dataset yet. Run a query, or use Run sample query.",
+         "columns": [["name", "Job ID"], ["type", "Type"], ["statementType", "Statement"], ["state", "State"],
+                     ["bytes", "Bytes processed"], ["created", "Created"]],
+         "actions": [{"label": "Run sample query", "op": "runSampleQuery"}]},
+        {"key": "routines", "label": "Routines", "icon": "function", "type": "sublist",
+         "source": "routines", "empty": "No routines in this dataset.",
+         "columns": [["name", "Routine ID"], ["type", "Type"], ["language", "Language"],
+                     ["created", "Created"], ["modified", "Last modified"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "labels", "label": "Labels", "icon": "sell", "type": "tags"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -480,7 +646,13 @@ SUB_BLADES: dict[str, list] = {
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
+    "logging":       _LOGGING_SUB,
     "container":     _CONTAINER_SUB,
     "monitoring":    _MONITORING_SUB,
     "redis":         _REDIS_SUB,
+    "dns":           _DNS_SUB,
+    "cloudtasks":    _CLOUDTASKS_SUB,
+    "workflows":     _WORKFLOWS_SUB,
+    "run":           _RUN_SUB,
+    "bigquery":      _BIGQUERY_SUB,
 }

@@ -102,6 +102,16 @@ def build_backed_router() -> AwsWireRouter:
     stores["gcp_mon"] = _gcp_mon_store()   # shared with the console REST (/api/gcp/monitoring)
     from core.gcp_project import current as _gcp_project
     stores["gcp_project"] = _gcp_project   # the GCP space's project, not Nano's fixed one
+    from core.gcp_dns_core import shared_store as _gcp_dns_store
+    stores["gcp_dns"] = _gcp_dns_store()       # shared with the console REST (/api/gcp/dns)
+    from core.gcp_logging_core import shared_store as _gcp_logging_store
+    stores["gcp_logging"] = _gcp_logging_store()   # shared with the console REST (/api/gcp/logging)
+    from core.gcp_cloudtasks_core import shared_store as _ct_store
+    stores["gcp_ct"] = _ct_store()   # Cloud Tasks: shared with the console REST (/api/gcp/cloudtasks)
+    from core.gcp_workflows_core import shared_store as _gcp_wf_store
+    stores["gcp_wf"] = _gcp_wf_store()   # shared with the console REST (/api/gcp/workflows)
+    from core.gcp_run_core import shared_store as _gcp_run_store
+    stores["gcp_run"] = _gcp_run_store()   # shared with the console REST (/api/gcp/run)
     return AwsWireRouter(stores=stores)
 
 
@@ -154,7 +164,12 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
     from core.gcp_redis_core import shared_store as _gcp_redis_store
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
-    r = router or AwsWireRouter(stores={"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store()})
+    from core.gcp_dns_core import shared_store as _gcp_dns_store
+    from core.gcp_logging_core import shared_store as _gcp_logging_store
+    from core.gcp_cloudtasks_core import shared_store as _ct_store
+    from core.gcp_workflows_core import shared_store as _gcp_wf_store
+    from core.gcp_run_core import shared_store as _gcp_run_store
+    r = router or AwsWireRouter(stores={"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store(), "gcp_dns": _gcp_dns_store(), "gcp_logging": _gcp_logging_store(), "gcp_ct": _ct_store(), "gcp_wf": _gcp_wf_store(), "gcp_run": _gcp_run_store()})
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
 
     async def _proxy(request: Request):

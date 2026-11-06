@@ -912,14 +912,15 @@ function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
   rail.append(el("div",{class:"rail-h"}, "All products"));
   const groups = [
-    ["COMPUTE",       ["compute", "functions", "container"]],
+    ["COMPUTE",       ["compute", "functions", "container", "run"]],
     ["STORAGE",       ["storage", "artifactregistry"]],
     ["DATABASES",     ["cloudsql", "firestore", "redis"]],
-    ["NETWORKING",    ["vpc"]],
-    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
+    ["NETWORKING",    ["vpc", "dns"]],
+    ["ANALYTICS",     ["bigquery"]],
+    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler", "cloudtasks", "workflows"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
-    ["OPERATIONS",    ["monitoring"]],
+    ["OPERATIONS",    ["monitoring", "logging"]],
   ];
   // Section headers collapse like Google Cloud's ("Storage Intelligence ⌃"); the choice is remembered.
   let closed = []; try { closed = JSON.parse(localStorage.getItem("vyomi.gcp.rail.closed") || "[]"); } catch (_) {}
@@ -1114,7 +1115,7 @@ function nanoSavingsFromByService(bs){
 // Friendly service label for a by_service census key (aws/gcp/azure).
 function nanoSvcLabel(k){
   var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
-    compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager",
+    compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager",bigquery:"BigQuery",
     'microsoft.compute/virtualmachines':"Virtual Machines",'microsoft.sql/servers':"SQL Database",'microsoft.storage/storageaccounts':"Storage Account",'microsoft.documentdb/databaseaccounts':"Cosmos DB",'microsoft.web/sites':"App Service",'microsoft.servicebus/namespaces':"Service Bus",'microsoft.keyvault/vaults':"Key Vault"};
   if (M[k]) return M[k];
   var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
@@ -1255,12 +1256,17 @@ async function renderList(main){
                      : svc.key === "firestore" ? "Create database"
                      : svc.key === "functions" ? "Create function"
                      : svc.key === "vpc" ? "Create VPC network"
+                     : svc.key === "cloudtasks" ? "Create queue"
                      : svc.key === "iam" ? "Create service account"
+                     : svc.key === "dns" ? "Create zone"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
                      : svc.key === "redis" ? "Create instance"
+                     : svc.key === "workflows" ? "Create workflow"
+                     : svc.key === "run" ? "Create service"
                      : svc.key === "iamcredentials" ? "Create credential"
                      : svc.key === "monitoring" ? "Create policy"
+                     : svc.key === "logging" ? "Create sink"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));
@@ -1465,6 +1471,11 @@ async function renderDetail(main){
         if (r.ok) { toast("Policy "+name+": "+act+"d"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "enable" ? "notifications_active" : "notifications_off"), act === "enable" ? "Enable" : "Disable")) : []),
+      ...(svc.key === "workflows" ? [el("button",{class:"btn",onclick:async()=>{
+        const r = await api("POST", fillCommon((svc.api_paths||{}).execute.path, {name}), {});
+        if (r.ok) { toast("Workflow "+name+": execution succeeded"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("execute failed ("+r.status+")", "err");
+      }}, icon("play_arrow"), "Execute")] : []),
       ...(svc.key === "redis" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Capacity in GB", String(parseInt(STATE.item.capacity, 10) || 1));
         if (n === null) return;
@@ -1472,6 +1483,19 @@ async function renderDetail(main){
         if (r.ok) { toast("Instance "+name+": resized to "+n+" GB"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
         else toast("resize failed ("+r.status+")", "err");
       }}, icon("open_in_full"), "Resize")] : []),
+      ...(svc.key === "logging" ? ["enable","disable"].map(act => el("button",{class:"btn",onclick:async()=>{
+        const ap = (svc.api_paths||{})[act];
+        const r = await api(ap.method, fillCommon(ap.path, {name}));
+        if (r.ok) { toast("Sink "+name+": "+act+"d"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast(act+" failed ("+r.status+")", "err");
+      }}, icon(act === "enable" ? "play_arrow" : "pause"), act === "enable" ? "Enable" : "Disable")) : []),
+      ...(svc.key === "run" ? [el("button",{class:"btn",onclick:async()=>{
+        const img = prompt("Container image to deploy as a new revision", String(STATE.item.image || ""));
+        if (!img) return;
+        const r = await api("POST", fillCommon((svc.api_paths||{}).deploy.path, {name}), {image: img});
+        if (r.ok) { toast("Service "+name+": deployed a new revision"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("deploy failed ("+r.status+")", "err");
+      }}, icon("rocket_launch"), "Deploy revision")] : []),
       ...(svc.key === "container" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Number of nodes for the first node pool", String(STATE.item.nodes || 3));
         if (n === null) return;
@@ -1525,11 +1549,13 @@ async function renderDetail(main){
     const host = el("div",{}); content.append(host);
     if (GT[t]) return GT[t](host, svc, STATE.item, item);
     if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it, t));
+    if (t === "ctlist") return renderCtListTab(host, svc, STATE.item, item);
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
-    if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
+    if (t === "sublist")  return renderSublistTab(host, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
     // each key/value tab reads the resource under its own name (get<Tab>)
     if (t === "schedkv")  return tabView(svc, STATE.item, item.key.charAt(0).toUpperCase() + item.key.slice(1)).then(it => renderSchedKvTab(host, it, item.fields || []));
+    if (t === "dnsrecords") return renderDnsRecordsTab(host, STATE.item);
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
     if (t === "metrics")  return renderMetricsTab(content, svc);
@@ -1547,6 +1573,24 @@ async function renderDetail(main){
   paintNav(); paintContent();
 }
 
+// Cloud Tasks — generic list tab. `tab.list_key` selects svc.api_paths[list_key];
+// `tab.cols` is [[field,label],…]. Rows come back as {items:[…]} with every cell filled.
+async function renderCtListTab(host, svc, full, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  const r = await api("GET", fillCommon(ap.path, {name: (full && (full.name || full.id)) || ""}));
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  const items = (r.json || {}).items || [];
+  if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this queue yet.")); return; }
+  const cols = tab.cols || [];
+  const tbl = el("table",{class:"gc"});
+  tbl.append(el("thead",{}, el("tr",{}, ...cols.map(c => el("th",{}, c[1])))));
+  const tb = el("tbody",{});
+  items.forEach(it => tb.append(el("tr",{}, ...cols.map(c => {
+    const v = it[c[0]];
+    return el("td",{}, (v === undefined || v === null || v === "") ? "none" : String(v));
+  }))));
+  tbl.append(tb); host.append(tbl);
+}
 // Cloud Storage — Objects browser (upload / list / delete), parity with the
 // S3 + Azure Blob consoles. Upload streams the real file to the byte store so
 // the native google-cloud-storage SDK reads it back.
@@ -2108,6 +2152,18 @@ async function renderSublistTab(host, svc, item, tab){
   await load();
 }
 
+// Cloud DNS — the zone's record sets (the zone's console view carries them as `records`).
+function renderDnsRecordsTab(host, item){
+  const recs = Array.isArray(item && item.records) ? item.records : [];
+  const tbl = el("table",{class:"gc",style:"width:100%"});
+  tbl.append(el("thead",{}, el("tr",{}, ...["DNS name","Type","TTL (seconds)","Routing data"].map(h => el("th",{}, h)))));
+  const tb = el("tbody",{});
+  recs.forEach(r => tb.append(el("tr",{},
+    el("td",{}, r.name), el("td",{}, r.type), el("td",{}, String(r.ttl)),
+    el("td",{style:"white-space:pre-line"}, r.data))));
+  tbl.append(tb);
+  host.append(el("div",{class:"panel"}, tbl));
+}
 function renderLabelsTab(host, svc, item){
   const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};
   if (!Object.keys(labels).length) {

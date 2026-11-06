@@ -101,7 +101,7 @@ const CORES = [
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_cloudtasks_core.py", "gcp_bigquery_core.py",
   "function_shims.py", "gcp_console_tabs.py", "instance_catalog.py", "nano_triggers.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
@@ -115,7 +115,7 @@ const CORES = [
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
   "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_dns_core.py", "gcp_logging_core.py", "gcp_workflows_core.py", "gcp_run_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
@@ -157,6 +157,8 @@ async function bootBackend() {
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
+  // BigQuery's SQL engine (core/gcp_bigquery_core.py) runs on sqlite3, a loadable Pyodide package.
+  try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("sqlite3 load skipped", e); }
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
   py.FS.writeFile("/wasm/backends/__init__.py", "");

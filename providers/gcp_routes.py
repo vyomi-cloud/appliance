@@ -208,6 +208,9 @@ def register(app, h) -> None:
         rr = _redis.dispatch(_redis.shared_store(), "GET", f"/v1/projects/{project}/locations/{location}/operations")
         rops = json.loads(rr.body).get("operations", []) if rr.status == 200 else []
         ops = ops + rops
+        from core import gcp_workflows_core as _wf   # Workflows operations share this path family
+        rw = _wf.dispatch(_wf.shared_store(), "GET", f"/v1/projects/{project}/locations/{location}/operations")
+        ops = ops + (json.loads(rw.body).get("operations", []) if rw.status == 200 else [])
         return {"operations": ops, "missingZones": []} if ops else {"operations": []}
 
     @app.get("/v1/operations/{operation}")
