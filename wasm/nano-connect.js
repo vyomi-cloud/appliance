@@ -21,9 +21,17 @@
   /* o: {note, accent, build(ep) -> tabs} */
   window.vyConnectSwitch = function (o) {
     var root = document.createElement("div");
-    var bar = document.createElement("div"); bar.style.cssText = "display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:12px";
+    var bar = document.createElement("div");
     var body = document.createElement("div");
-    root.appendChild(bar); root.appendChild(body);
+    if (o.slot) {   // the toggle lives in the card header, right aligned (before the Info link when there is one)
+      bar.style.cssText = "display:flex;align-items:center;margin-left:auto;margin-right:10px;font-weight:400";
+      var info = o.slot.querySelector(".info");
+      if (info) o.slot.insertBefore(bar, info); else o.slot.appendChild(bar);
+    } else {
+      bar.style.cssText = "display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:12px";
+      root.appendChild(bar);
+    }
+    root.appendChild(body);
     var sel = (ls("nano_relay_mode") === "local") ? "local" : "cloud", local = false, drawn = "";
     function pill(id, label, on, dot, disabled) {   // segmented toggle switch: one rounded track, active segment filled
       var b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "switch"); b.setAttribute("aria-checked", String(on));
@@ -50,7 +58,6 @@
         ? "Local tunnel detected on this machine: fastest, and traffic stays private. Keep this Nano tab open."
         : (o.note || "Start the tunnel (bottom bar) to reach this browser tab from your CLI or SDK. Works from anywhere.");
       body.appendChild(window.vyCodeTabs({ note: note, accent: o.accent, tabs: o.build(ep) }));
-      // Both endpoints, always visible: the local URL alone is not enough (other machines, CI, containers need the Cloudflare one).
       var eps = document.createElement("div"); eps.style.cssText = "margin-top:10px;display:flex;flex-direction:column;gap:6px";
       function epRow(label, url, active, hint) {
         var r = document.createElement("div");
@@ -61,8 +68,10 @@
         c.onclick = function () { try { navigator.clipboard.writeText(url); c.textContent = "Copied"; setTimeout(function () { c.textContent = "Copy"; }, 1200); } catch (_) {} };
         r.appendChild(l); r.appendChild(u); r.appendChild(c); return r;
       }
-      eps.appendChild(epRow("Cloudflare", cloudEp(), sel === "cloud", "Works from anywhere: other machines, CI, containers"));
-      eps.appendChild(epRow("Local tunnel", LOCAL_EP().replace(/\/$/, ""), sel === "local", local ? "Fastest, private, this machine only" : "Not detected: run vyomi-tunnel on this machine"));
+      // Only the selected tunnel's URL: the toggle above picks which one is shown.
+      eps.appendChild(sel === "local"
+        ? epRow("Local tunnel", LOCAL_EP().replace(/\/$/, ""), true, "Fastest, private, this machine only")
+        : epRow("Cloudflare", cloudEp(), true, "Works from anywhere: other machines, CI, containers"));
       body.appendChild(eps);
     }
     function tick() {
