@@ -251,7 +251,7 @@
       }
     } catch (_) {}
     // ---- account menu: a button in the console's main header (top-right) -> Activate appliance · GitHub ★ · Sign out
-    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '' };
+    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '', edition: '', role: '' };
     // Nano: pulse the SDK & CLI usage item until the local vyomi-tunnel has been seen running on this machine.
     if (NANO) {
       var tl = nav.querySelector('a[data-v="usage"]');
@@ -273,6 +273,9 @@
     var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vy-acct-btn'; btn.className = 'vy-' + cloud; btn.title = 'Vyomi account'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
     btn.innerHTML = PERSON;
     if (host) host.appendChild(btn);
+    // Edition label next to the avatar ("Enterprise" for enterprise sandboxes), filled from /api/sandbox/whoami in a gated Codespace.
+    var edp = document.createElement('span'); edp.id = 'vy-ed-pill'; edp.style.cssText = 'display:none;margin-left:8px;padding:2px 8px;border:1px solid currentColor;border-radius:999px;font:700 10.5px Inter,system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;align-self:center';
+    if (host) host.insertBefore(edp, btn);
     var menu = document.createElement('div'); menu.id = 'vy-acct-menu'; menu.className = 'vy-' + cloud; menu.setAttribute('role', 'menu');
     var who$ = document.createElement('div'); who$.className = 'vy-who';
     var act = document.createElement('a'); act.href = '#'; act.setAttribute('data-act', 'activate'); act.setAttribute('role', 'menuitem');
@@ -299,14 +302,18 @@
       else { act.title = 'Sign in to activate — starts your free 14-day Pro trial'; act.setAttribute('data-act', 'activate'); act.innerHTML = ic + '<span>Activate appliance</span>'; }
       var em = prof.email || who, nm = prof.name || (em ? em.split('@')[0] : ''), signed = authed || (!NANO && st.tier && st.tier !== 'free');
       var av = prof.avatar ? '<img src="' + esc(prof.avatar) + '" alt="" referrerpolicy="no-referrer">' : (em ? '<span class="vy-ini">' + esc(em.charAt(0).toUpperCase()) + '</span>' : PERSON);
+      var edl = prof.edition === 'enterprise' ? 'Enterprise' : (prof.edition === 'personal' ? 'Personal' : ''); edp.textContent = edl; edp.style.display = edl ? 'inline-block' : 'none';
       btn.innerHTML = av; btn.title = signed && em ? 'Vyomi account \u2014 ' + em : 'Vyomi account';
-      who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
+      who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + (edl ? '<small class="vy-via">' + esc(edl) + (prof.role ? ' \u00b7 ' + esc(prof.role.charAt(0).toUpperCase() + prof.role.slice(1)) : '') + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
       so.style.display = (authed || (!NANO && st.tier && st.tier !== 'free') || (!NANO && t && t.activated)) ? '' : 'none';
     }
     function refreshAcct() {
       fetch('/api/license/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
         st = { tier: d && d.active_tier, trial: d && d.trial }; who = (d && (d.issued_to || (d.license && (d.license.email || d.license.issued_to)))) || who; paintAcct();
       }).catch(function () { paintAcct(); });
+      if (!NANO) fetch('/api/sandbox/whoami', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.authenticated) { authed = true; prof.email = j.email || ''; who = prof.email || j.login || ''; prof.avatar = j.avatar || ''; prof.name = j.name || j.login || ''; prof.via = 'GitHub'; prof.edition = j.edition || ''; prof.role = j.role || ''; paintAcct(); }
+      }).catch(function () {});
       if (NANO) { try { var x = new XMLHttpRequest(); x.open('GET', '/api/auth/me', true); x.withCredentials = true;
         x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) { who = j.email; prof.email = j.email; } prof.avatar = j.avatar_url || ''; prof.name = j.name || j.github_login || ''; prof.via = j.provider || ((j.github_login || /githubusercontent|github\.com/.test(j.avatar_url || '')) ? 'GitHub' : ''); } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
     }
