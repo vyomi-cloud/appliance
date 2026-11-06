@@ -133,6 +133,7 @@
   ]
  },
  "dynamodb.backups": {
+  "tier": "pro",
   "title": "On-demand backups + AWS Backup copy",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -173,6 +174,7 @@
   ]
  },
  "dynamodb.exports": {
+  "tier": "pro",
   "title": "Exports to S3",
   "level": {
    "nano": "limited",
@@ -188,6 +190,7 @@
   ]
  },
  "dynamodb.imports": {
+  "tier": "pro",
   "title": "Imports from S3",
   "level": {
    "nano": "limited",
@@ -354,6 +357,7 @@
   ]
  },
  "dynamodb.autoscaling": {
+  "tier": "pro",
   "title": "Auto scaling",
   "level": {
    "nano": "limited",
@@ -408,6 +412,7 @@
   ]
  },
  "dynamodb.account.reserved-capacity": {
+  "tier": "pro",
   "title": "Reserved capacity (purchase records + real utilization)",
   "level": {
    "nano": "limited",
@@ -432,5 +437,5 @@
   ],
   "api": []
  },
- "dynamodb.aws_backup_vaults": {"title": "AWS Backup vaults, plans, selections, jobs, recovery points, restore jobs, vault lock", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup plan rules with a ScheduleExpression (cron/rate, UTC) really run from the shared scheduler tick (core/schedule_core) against the selection's explicit Resources ARNs, creating attributed backup jobs + recovery points, and recovery points past DeleteAfterDays expire. Offline: background loop; Nano: only while the page is open. Tag/condition-based selections are listed but not expanded; missed runs coalesce into one; ScheduleExpressionTimezone is ignored.", "Real: vault CRUD + lock (min/max retention enforced on lifecycle and recovery-point deletion), plans/selections with validation, backup jobs for DynamoDB (S3-backed backup), RDS (awsbackup:job-* snapshot with table data), S3 (object artifact in vyomi-aws-backup) and EBS (EC2 snapshot), and restore jobs that create the table / DB instance / bucket / volume.", "EC2 AMI, EC2 instances (real AMI recovery points, restore launches an instance) and FSx for OpenZFS volumes (file-tree recovery points, restore into an existing volume) ARE protected; EFS and Aurora clusters are refused honestly (the simulator has no EFS file systems or Aurora DB clusters) and Redshift is not backed up; no audit frameworks, report plans, restore testing or logically air-gapped vaults; the IAM role is accepted but not checked."], "tests": ["tests/conformance/test_aws_backup_ec2_fsx.py", "tests/conformance/test_schedule_core.py", "tests/conformance/test_aws_backup_vaults.py"]}
+ "dynamodb.aws_backup_vaults": {"tier": "pro", "title": "AWS Backup vaults, plans, selections, jobs, recovery points, restore jobs, vault lock", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup plan rules with a ScheduleExpression (cron/rate, UTC) really run from the shared scheduler tick (core/schedule_core) against the selection's explicit Resources ARNs, creating attributed backup jobs + recovery points, and recovery points past DeleteAfterDays expire. Offline: background loop; Nano: only while the page is open. Tag/condition-based selections are listed but not expanded; missed runs coalesce into one; ScheduleExpressionTimezone is ignored.", "Real: vault CRUD + lock (min/max retention enforced on lifecycle and recovery-point deletion), plans/selections with validation, backup jobs for DynamoDB (S3-backed backup), RDS (awsbackup:job-* snapshot with table data), S3 (object artifact in vyomi-aws-backup) and EBS (EC2 snapshot), and restore jobs that create the table / DB instance / bucket / volume.", "EC2 AMI, EC2 instances (real AMI recovery points, restore launches an instance) and FSx for OpenZFS volumes (file-tree recovery points, restore into an existing volume) ARE protected; EFS and Aurora clusters are refused honestly (the simulator has no EFS file systems or Aurora DB clusters) and Redshift is not backed up; no audit frameworks, report plans, restore testing or logically air-gapped vaults; the IAM role is accepted but not checked."], "tests": ["tests/conformance/test_aws_backup_ec2_fsx.py", "tests/conformance/test_schedule_core.py", "tests/conformance/test_aws_backup_vaults.py"]}
 }

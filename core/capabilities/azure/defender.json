@@ -1,6 +1,7 @@
 {
  "$doc": "Vyomi capability registry \u2014 Microsoft Defender for Cloud (Microsoft.Security, core/azure_security_core.py; Kubernetes posture from Kubescape via core/kubescape_core.py). See aws/s3.json for the contract.",
  "azure.defender.recommendations": {
+  "tier": "pro",
   "title": "Recommendations (assessments, sub-assessments, assessment metadata) from the native rule engine",
   "level": {
    "nano": "full",
@@ -20,6 +21,7 @@
   ]
  },
  "azure.defender.kubernetes": {
+  "tier": "pro",
   "title": "Kubernetes recommendations from Kubescape (NSA-CISA, MITRE ATT&CK, CIS Kubernetes v1.12.0)",
   "level": {
    "nano": "limited",
@@ -37,6 +39,7 @@
   ]
  },
  "azure.defender.secure_score": {
+  "tier": "pro",
   "title": "Secure score and security controls",
   "level": {
    "nano": "full",
@@ -54,6 +57,7 @@
   ]
  },
  "azure.defender.plans": {
+  "tier": "pro",
   "title": "Defender plans (environment settings / pricings)",
   "level": {
    "nano": "limited",
@@ -71,6 +75,7 @@
   ]
  },
  "azure.defender.inventory": {
+  "tier": "pro",
   "title": "Inventory (resources with their recommendation health)",
   "level": {
    "nano": "full",
@@ -82,6 +87,7 @@
   ]
  },
  "azure.defender.compliance": {
+  "tier": "pro",
   "title": "Regulatory compliance (Kubescape framework scores per cluster)",
   "level": {
    "nano": "limited",
@@ -95,6 +101,7 @@
   ]
  },
  "azure.defender.alerts": {
+  "tier": "pro",
   "title": "Security alerts (deterministic detector over the ARM audit feed)",
   "level": {
    "nano": "limited",
@@ -116,6 +123,7 @@
   ]
  },
  "azure.defender.other": {
+  "tier": "pro",
   "title": "Getting started, Attack path analysis, Cloud Security Explorer, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions, Workflow automation",
   "level": {
    "nano": "not_simulated",
@@ -126,6 +134,7 @@
   ]
  },
  "azure.defender.image_vulnerabilities": {
+  "tier": "pro",
   "title": "Container registry image vulnerability assessment (Defender for Containers)",
   "level": {
    "nano": "limited",

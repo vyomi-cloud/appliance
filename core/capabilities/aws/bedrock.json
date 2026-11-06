@@ -55,6 +55,7 @@
   ]
  },
  "bedrock.agentcore.runtime": {
+  "booster": true,
   "title": "AgentCore runtime (hosted agents)",
   "level": {
    "nano": "limited",

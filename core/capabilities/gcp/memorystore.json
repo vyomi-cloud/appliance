@@ -23,6 +23,7 @@
     "tests": ["tests/conformance/test_gcp_redis_core.py"]
   },
   "gcp.memorystore.import-export": {
+    "tier": "pro",
     "title": "Import / export (Cloud Storage RDB)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [

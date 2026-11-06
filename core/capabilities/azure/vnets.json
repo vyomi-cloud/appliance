@@ -36,6 +36,7 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vnets.peerings": {
+  "tier": "pro",
   "title": "Virtual network peerings (Microsoft.Network/virtualNetworks/virtualNetworkPeerings)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
@@ -142,6 +143,7 @@
   ]
  },
  "azure.vnets.firewall": {
+  "tier": "pro",
   "title": "Azure Firewall",
   "level": {
    "nano": "limited",

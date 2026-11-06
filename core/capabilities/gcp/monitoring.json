@@ -188,6 +188,7 @@
   ]
  },
  "gcp.monitoring.cost-explorer": {
+  "tier": "pro",
   "title": "Cost Explorer",
   "level": {
    "nano": "limited",

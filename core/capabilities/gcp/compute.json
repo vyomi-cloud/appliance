@@ -168,6 +168,7 @@
   "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
  },
  "gcp.compute.instance_schedules": {
+  "tier": "pro",
   "title": "Instance schedules (scheduled VM start/stop)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -178,6 +179,7 @@
   "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
  },
  "gcp.compute.snapshot_schedules": {
+  "tier": "pro",
   "title": "Snapshot schedules (hourly / daily / weekly with retention)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -189,6 +191,7 @@
   "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
  },
  "gcp.compute.instant_snapshots": {
+  "tier": "pro",
   "title": "Instant snapshots",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -383,6 +386,7 @@
   ]
  },
   "gcp.compute.capacity-advisor": {
+  "tier": "pro",
   "title": "Capacity advisor (quota, reservations, simulated fleet)",
   "level": {
    "nano": "limited",

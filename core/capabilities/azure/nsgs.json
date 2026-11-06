@@ -84,6 +84,7 @@
   "tests": ["tests/conformance/test_azure_netsim_core.py"]
  },
  "azure.nsgs.packet_capture": {
+  "tier": "pro",
   "title": "Network Watcher packet capture",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["Packet capture (Microsoft.Network/networkWatchers/packetCaptures) is not simulated: there is no packet data plane that yields .cap files. Traffic flow summaries are available through flow logs and AWS-style traffic mirroring is the closest equivalent; Azure captures are not created."],

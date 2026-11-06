@@ -112,6 +112,7 @@
   ]
  },
  "azure.subscriptions.usage_quotas": {
+  "tier": "pro",
   "title": "Usage + quotas (Microsoft.Compute/Microsoft.Network locations/{location}/usages + Microsoft.Quota)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["Vyomi models a reduced subset of Azure's default regional quotas (Total Regional vCPUs and Virtual Machines for compute; Public IP Addresses, Virtual Networks, Network Security Groups for network). Counts are live off provisioned resources and ENFORCED with the real QuotaExceeded error. Quota increase requests (Microsoft.Quota quotas / quotaRequests) are validated (not below usage, not above 50x the default), auto-approved up to 4x the default and otherwise Failed with the real 'create a support request' message; an approved request really raises the enforced limit. The response lists the counted resource names, which real Azure does not."],
@@ -173,6 +174,7 @@
   ]
  },
  "azure.subscriptions.invoices": {
+  "tier": "pro",
   "title": "Invoices (Microsoft.Billing/invoices)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["Simulated and marked as such: one invoice per month the inventory existed, amountDue is always 0.00 (nothing is billed) and avoidedAmount carries what real Azure would have charged for the resources Vyomi ran (azure_cost_core list prices, accrued from each resource's creation). Deleted resources leave no ledger, so past months are a lower bound; no PDF documents, invoice sections or payment methods."],

@@ -80,6 +80,7 @@
     "tests": ["tests/conformance/test_gcp_datastore_core.py"]
   },
   "gcp.firestore.import-export": {
+    "tier": "pro",
     "title": "Import / Export (exportDocuments / importDocuments)",
     "level": { "nano": "full", "offline": "full" },
     "limitations": [
@@ -88,6 +89,7 @@
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
   "gcp.firestore.backups": {
+    "tier": "pro",
     "title": "Backup schedules and backups",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [

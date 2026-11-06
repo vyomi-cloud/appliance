@@ -42,6 +42,7 @@
   "tests": ["tests/conformance/test_azure_app_core.py"]
  },
  "azure.containerapps.app.scale": {
+  "booster": true,
   "title": "Scale (min/max replicas, scale rules)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["minReplicas/maxReplicas really bound the replica count Vyomi reports and (with the Docker runtime hook) runs; custom scale rules (HTTP concurrency, CPU, custom) are stored and returned but never evaluated — Vyomi does not scale a revision in response to real load."],
@@ -98,6 +99,7 @@
   "api": []
  },
  "azure.containerapps.job.crud": {
+  "booster": true,
   "title": "Container Apps Jobs (create, delete, run, stop, secrets, execution history)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": ["An execution's status is reported Succeeded immediately (no real workload runs the job's container); Manual/Schedule trigger configuration is validated and stored for real, including the cron expression."],

@@ -159,6 +159,7 @@
   ]
  },
  "aws.vpc.peering-connections": {
+  "tier": "pro",
   "title": "VPC peering connections (create, accept, describe, delete)",
   "level": {
    "nano": "limited",
@@ -392,6 +393,7 @@
   ]
  },
  "aws.vpc.network-firewall": {
+  "tier": "pro",
   "title": "AWS Network Firewall (firewalls, policies, stateless/stateful/Suricata/domain rule groups, TLS inspection, resource policies, logging, endpoint associations)",
   "level": {
    "nano": "limited",
@@ -406,6 +408,7 @@
   ]
  },
  "aws.vpc.vpn": {
+  "tier": "pro",
   "title": "Site-to-Site VPN and Client VPN (customer/virtual private gateways, VPN connections, VPN concentrators, Client VPN endpoints)",
   "level": {
    "nano": "limited",
@@ -434,6 +437,7 @@
   ]
  },
  "aws.vpc.transit-gateway": {
+  "tier": "pro",
   "title": "Transit Gateway (gateways, VPC attachments, route tables, static/propagated routes, associations, propagations)",
   "level": {
    "nano": "limited",
@@ -448,6 +452,7 @@
   ]
  },
  "aws.vpc.transit-gateway-advanced": {
+  "tier": "pro",
   "title": "Transit Gateway policy tables, multicast domains, metering policies",
   "level": {
    "nano": "limited",
@@ -489,6 +494,7 @@
   ]
  },
  "aws.vpc.network-firewall-containers": {
+  "tier": "pro",
   "title": "Network Firewall container associations",
   "level": {
    "nano": "not_simulated",

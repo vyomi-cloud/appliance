@@ -1,6 +1,7 @@
 {
  "$doc": "Vyomi capability registry \u2014 Azure Kubernetes Service (AKS). See aws/s3.json for the contract.",
  "azure.aks.cluster.crud": {
+  "booster": true,
   "title": "Managed clusters (create, get, list, delete) over ARM",
   "level": {
    "nano": "full",
@@ -36,6 +37,7 @@
   ]
  },
  "azure.aks.node_pools.crud": {
+  "booster": true,
   "title": "Node pools (agentPools): add, list, scale, update image, delete",
   "level": {
    "nano": "full",
@@ -62,6 +64,7 @@
   ]
  },
  "azure.aks.run_command": {
+  "booster": true,
   "title": "Run command (az aks command invoke) \u2014 kubectl against the cluster's Kubernetes objects",
   "level": {
    "nano": "limited",
@@ -103,6 +106,7 @@
   ]
  },
  "azure.aks.workloads": {
+  "booster": true,
   "title": "Kubernetes objects: Workloads, Services and ingresses, Configuration (Deployments, Pods, Replica/Stateful/Daemon sets, Jobs, Cron jobs, Services, Ingresses, Config maps, Secrets)",
   "level": {
    "nano": "limited",
@@ -156,6 +160,7 @@
   ]
  },
  "azure.aks.defender": {
+  "tier": "pro",
   "title": "Microsoft Defender for Cloud (this cluster's recommendations, from Kubescape)",
   "level": {
    "nano": "limited",
@@ -287,6 +292,7 @@
   ]
  },
  "azure.aks.backup": {
+  "tier": "pro",
   "title": "Azure Backup for AKS (Microsoft.DataProtection backup vaults, policies, backup instances, restore)",
   "level": {
    "nano": "limited",

@@ -83,6 +83,7 @@
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.organization-policies": {
+  "tier": "max",
   "title": "Organization policy constraints",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -119,12 +120,14 @@
   "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.policy-troubleshooter": {
+  "tier": "pro",
   "title": "Policy Troubleshooter",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.policy-analyzer": {
+  "tier": "pro",
   "title": "Policy Analyzer",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -189,6 +192,7 @@
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.quotas-system-limits": {
+  "tier": "pro",
   "title": "Quotas & System Limits",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
@@ -219,6 +223,7 @@
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.org-policy-simulation": {
+  "tier": "pro",
   "title": "Constraint simulation against existing resources",
   "level": {
    "nano": "limited",

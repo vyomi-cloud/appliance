@@ -98,6 +98,7 @@
   "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.policy.simulate": {
+  "tier": "pro",
   "title": "Policy simulator (SimulatePrincipalPolicy, SimulateCustomPolicy)",
   "level": {"nano": "limited", "offline": "limited"},
   "limitations": [
@@ -221,6 +222,7 @@
   "tests": ["tests/conformance/test_organizations_core.py"]
  },
  "iam.organizations.policies": {
+  "tier": "max",
   "title": "Service control policies (SCPs), resource control policies (RCPs) and the other organization policy types",
   "level": {"nano": "limited", "offline": "limited"},
   "limitations": [

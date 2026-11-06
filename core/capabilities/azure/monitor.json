@@ -15,6 +15,7 @@
     "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.monitor.autoscale": {
+    "tier": "pro",
     "title": "Autoscale settings (create, list, delete)",
     "level": { "nano": "full", "offline": "full" },
     "limitations": [

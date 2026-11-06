@@ -104,6 +104,7 @@
   ]
  },
  "gcp.networking.peering": {
+  "tier": "pro",
   "title": "VPC network peering",
   "level": {
    "nano": "limited",
@@ -135,6 +136,7 @@
   ]
  },
  "gcp.networking.network-firewall-policies": {
+  "tier": "pro",
   "title": "Network firewall policies (hierarchical / regional policy resources)",
   "level": {
    "nano": "limited",
@@ -193,6 +195,7 @@
   "tests": ["tests/conformance/test_gcp_vmmanager_hybrid.py"]
  },
  "gcp.networking.hybrid-connectivity": {
+  "tier": "pro",
   "title": "VPC connectivity (Cloud Interconnect, Cloud VPN, Network Connectivity Center)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [

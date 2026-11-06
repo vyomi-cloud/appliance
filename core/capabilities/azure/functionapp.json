@@ -38,6 +38,7 @@
   ]
  },
  "azure.functionapp.function.invoke": {
+  "booster": true,
   "title": "Function Test/Run (real sandboxed execution)",
   "level": {
    "nano": "limited",
@@ -167,6 +168,7 @@
   ]
  },
  "azure.functionapp.defender": {
+  "tier": "pro",
   "title": "Microsoft Defender for Cloud (this function app's recommendations)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
