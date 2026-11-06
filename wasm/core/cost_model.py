@@ -129,6 +129,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.cognitiveservices": 1.00,  # S0 pay-as-you-go: ~1K transactions/month (~$1 per 1K text records / transactions); F0 is free
     "azure.operationalinsights": 2.76,  # Log Analytics PerGB2018: $2.76/GB ingested beyond the 5 GB/month free allowance; modelled at ~1 GB/month
     "azure.msi": 0.01,        # NOMINAL: identities & federated credentials are free on real Azure; token-bearing workloads they front are billed elsewhere. Non-zero only so the space savings metrics register the resource.
+    "azure.redis": 16.06,     # Azure Cache for Redis Basic C0 (250 MB): ~$0.022/hour (Standard C1 ~$100, Premium P1 ~$405)
     "azure.dns": 0.50,        # Azure DNS: $0.50 per hosted zone per month (first 25 zones; $0.10 beyond) + $0.40 per million queries
     "azure.monitor": 0.10,    # metric alert rule: $0.10 per monitored time series per month (static threshold, 1 resource); action groups: first 1,000 emails/month free
     "azure.containerregistry": 5.08,  # Basic: $0.167 per registry per day (~30.4 days/month); Standard $20.28, Premium $50.69

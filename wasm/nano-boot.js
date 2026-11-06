@@ -93,6 +93,7 @@ const CORES = [
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_msi_core.py",   // Azure Managed Identities engine (Microsoft.ManagedIdentity) — loaded before azure_arm_core which delegates to it
+  "azure_redis_core.py", // Azure Cache for Redis engine (Microsoft.Cache) — loaded before azure_arm_core which delegates to it
   "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it
   "azure_operationalinsights_core.py",   // Azure Log Analytics engine (Microsoft.OperationalInsights) — loaded before azure_arm_core which delegates to it
   "azure_containerregistry_core.py",   // Azure Container Registry engine — loaded before azure_arm_core which delegates to it
