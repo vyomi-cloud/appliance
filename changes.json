@@ -1,8 +1,6 @@
 {
- "at": "2026-11-05T23:07:55+00:00",
+ "at": "2026-11-06T00:07:50+00:00",
  "baseline": false,
  "changes": [],
- "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
- ]
+ "errors": []
 }
