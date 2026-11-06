@@ -413,6 +413,9 @@ def _r53_census():
     from core import nano_registry
     st = nano_registry.get()["route53"]
     return list(st.hosted_zones) + list(st.health_checks)
+def _ec_census():
+    from core import nano_registry
+    return nano_registry.get()["elasticache"].clusters
 
 
 def _census_dispatch(backends: Backends, provider: str) -> dict:
@@ -448,6 +451,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "sts":            len(D.sts_list().get("items", [])),
                 "route53":        len(_r53_census()),
                 "ecs":            sum(1 for c in A.ECS.clusters.values() if c.get("status") != "INACTIVE"),
+                "elasticache":    len(_ec_census()),
             }
             try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
                 from core import nano_registry

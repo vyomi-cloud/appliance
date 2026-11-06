@@ -1178,6 +1178,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "ecr":
             from routes.aws_ecr import wire as _ecr_wire
             return await _ecr_wire(request)
+        if service == "elasticache":
+            from core import elasticache_core as _ec
+            from routes.aws_elasticache import STORE as _ec_store
+            _ec_r = _ec.dispatch(_ec_store, await _srv()._ec2_query_params(request))
+            return Response(content=_ec_r.body, status_code=_ec_r.status, media_type="text/xml")
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":

@@ -90,6 +90,11 @@
   "category": "aws"
  },
  {
+  "name": "elasticache",
+  "label": "ElastiCacheStore",
+  "category": "aws"
+ },
+ {
   "name": "gcs",
   "label": "InMemoryObjectStore",
   "category": "gcp"

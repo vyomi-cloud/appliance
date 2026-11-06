@@ -56,6 +56,7 @@ from core.ecs_core import InMemoryEcsStore
 from core import elbv2_core as elbv2
 from core import route53_core as route53
 from core import ecr_core as ecr
+from core import elasticache_core as elasticache
 from core import rds_data_core as rds_data
 from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
@@ -206,6 +207,7 @@ _SIGNING = {
     "ssm": "ssm",
     "sts": "sts",
     "ecs": "ecs",
+    "elasticache": "elasticache",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -266,6 +268,14 @@ _QUERY_ACTION = {
     "GetCallerIdentity": "sts", "GetSessionToken": "sts", "GetFederationToken": "sts",
     "GetAccessKeyInfo": "sts", "DecodeAuthorizationMessage": "sts",
 }
+
+# ElastiCache (Query protocol; signs as `elasticache`). Verbs shared with other
+# Query services (tags, events) only route here when signed.
+_AMBIGUOUS = {"AddTagsToResource", "RemoveTagsFromResource", "ListTagsForResource",
+              "DescribeEvents", "DescribeSnapshots", "CreateSnapshot", "DeleteSnapshot"}
+for _a in elasticache.OPERATIONS:
+    if _a not in _AMBIGUOUS:
+        _QUERY_ACTION.setdefault(_a, "elasticache")
 
 
 # ELBv2 (Query protocol; signs as `elasticloadbalancing`). Tag / limit verbs are
@@ -383,6 +393,7 @@ class AwsWireRouter:
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.elasticache = s.get("elasticache") or elasticache.ElastiCacheStore()
         self.ecs = s.get("ecs") or InMemoryEcsStore()   # Amazon ECS clusters/services/tasks
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         events.set_target_store("kinesis", self.kinesis)       # EventBridge Kinesis / Logs rule targets
@@ -894,6 +905,8 @@ class AwsWireRouter:
             r = vpc.dispatch(self.vpc, params)
         elif svc == "elbv2":
             r = elbv2.dispatch(self.elbv2, params)
+        elif svc == "elasticache":
+            r = elasticache.dispatch(self.elasticache, params)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})

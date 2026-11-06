@@ -22,6 +22,7 @@ from core import elbv2_core
 from core import route53_core
 from core import ssm_core
 from core import ecr_core
+from core import elasticache_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from core import kinesis_core
 from core import apigatewayv2_core
@@ -981,3 +982,48 @@ def r53_child_create(p):
 
 def r53_child_delete(p):
     return _r53_call(route53_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))
+# ── ElastiCache (core/elasticache_core.py) — shared store with the native wire ─
+def _ec_store():
+    from core import nano_registry
+    return nano_registry.get()["elasticache"]
+
+
+def _ec_call(fn, *a):
+    st = _ec_store()
+    try:
+        elasticache_core._ensure_defaults(st)
+        return fn(st, *a)
+    except elasticache_core.ElastiCacheError as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+
+
+def ec_list(p=None):
+    return _ec_call(elasticache_core.console_list)
+
+
+def ec_create(p):
+    return _ec_call(elasticache_core.console_create, dict(p or {}))
+
+
+def ec_get(p):
+    return _ec_call(elasticache_core.console_get, str(p.get("name") or ""))
+
+
+def ec_delete(p):
+    return _ec_call(elasticache_core.console_delete, str(p.get("name") or ""))
+
+
+def ec_tags(p):
+    return _ec_call(elasticache_core.console_set_tags, str(p.get("name") or ""), p.get("tags") or {})
+
+
+def ec_children(p):
+    return _ec_call(elasticache_core.console_children, str(p.get("kind") or ""))
+
+
+def ec_child_create(p):
+    return _ec_call(elasticache_core.console_child_create, str(p.get("kind") or ""), dict(p))
+
+
+def ec_child_delete(p):
+    return _ec_call(elasticache_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))

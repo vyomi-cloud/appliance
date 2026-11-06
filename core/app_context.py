@@ -999,6 +999,7 @@ kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "polici
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
 elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
 route53_state = _SpaceScopedDictProxy("route53", lambda: {"hosted_zones": {}, "changes": {}, "health_checks": {}, "delegation_sets": {}, "query_logging": {}, "tags": {}})
+elasticache_state = _SpaceScopedDictProxy("elasticache", lambda: {"clusters": {}, "replication_groups": {}, "subnet_groups": {}, "parameter_groups": {}, "snapshots": {}, "tags": {}, "events": []})
 
 runtime_state = STATE.setdefault(
     "runtime",

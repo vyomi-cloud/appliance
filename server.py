@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager, aws_sts, aws_route53, aws_ecr
+from routes import gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager, aws_sts, aws_route53, aws_ecr]:
+            gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2673,6 +2673,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for repo_name, repo in aws_ecr_state.get("repositories", {}).items():
         if isinstance(repo, dict):
             add("aws", "ecr", "repository", repo_name, repo)
+    aws_ec = _cloudsim_service_state(space, "elasticache")
+    for cache_id, cache in aws_ec.get("clusters", {}).items():
+        if isinstance(cache, dict):
+            add("aws", "elasticache", "cache_cluster", cache_id,
+                {**cache, "name": cache_id, "instance_type": cache.get("CacheNodeType", ""),
+                 "state": cache.get("CacheClusterStatus", "available"),
+                 "created": cache.get("CacheClusterCreateTime", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():

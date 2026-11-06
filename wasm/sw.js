@@ -203,7 +203,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sts:0.05,route53:0.50,ecr:0.10,ecs:9.01,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
+const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sts:0.05,route53:0.50,ecr:0.10,ecs:9.01,elasticache:12.41,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
 NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 async function nanoCostSavings() {
   const now = Date.now();
@@ -853,6 +853,20 @@ async function route(method, path, body, query) {
   if (m && method === "GET")    return { tuple: ["aws", "ecr", "Get", { name: dec(m[1]) }] };
   if (m && (method === "PATCH" || method === "PUT")) return { tuple: ["aws", "ecr", "Update", { name: dec(m[1]), ...(body || {}) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "ecr", "Delete", { name: dec(m[1]) }] };
+  // ElastiCache (core/elasticache_core.py) — caches + subnet/parameter groups + snapshots
+  if (path === "/api/aws/elasticache/clusters") {
+    if (method === "GET")  return { tuple: ["aws", "elasticache", "ListClusters", {}] };
+    if (method === "POST") return { tuple: ["aws", "elasticache", "CreateCluster", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/elasticache\/clusters\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "elasticache", "GetCluster", { name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "elasticache", "SetTags", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "elasticache", "DeleteCluster", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/elasticache\/(subnet-groups|parameter-groups|snapshots)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "elasticache", "ListChildren", { kind: m[1] }] };
+  if (m && method === "POST") return { tuple: ["aws", "elasticache", "CreateChild", { ...(body || {}), kind: m[1] }] };
+  m = path.match(/^\/api\/aws\/elasticache\/(subnet-groups|parameter-groups|snapshots)\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "elasticache", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };

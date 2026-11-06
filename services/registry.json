@@ -468,6 +468,13 @@
    "name": "Amazon ECS",
    "upstream": "ecs",
    "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "elasticache",
+   "name": "Amazon ElastiCache",
+   "upstream": "elasticache",
+   "status": "pending-release"
   }
  ]
 }

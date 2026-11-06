@@ -185,6 +185,15 @@ class Aws(CloudProvider):
             ("ecr", "Update"): lambda b, a, p: D.ecr_update(p),
             ("ecr", "Delete"): lambda b, a, p: D.ecr_delete(p),
             ("ecr", "Images"): lambda b, a, p: D.ecr_images(p),
+            # ElastiCache — caches, subnet/parameter groups, snapshots (core/elasticache_core.py)
+            ("elasticache", "ListClusters"):   lambda b, a, p: D.ec_list(p),
+            ("elasticache", "CreateCluster"):  lambda b, a, p: D.ec_create(p),
+            ("elasticache", "GetCluster"):     lambda b, a, p: D.ec_get(p),
+            ("elasticache", "DeleteCluster"):  lambda b, a, p: D.ec_delete(p),
+            ("elasticache", "SetTags"):        lambda b, a, p: D.ec_tags(p),
+            ("elasticache", "ListChildren"):   lambda b, a, p: D.ec_children(p),
+            ("elasticache", "CreateChild"):    lambda b, a, p: D.ec_child_create(p),
+            ("elasticache", "DeleteChild"):    lambda b, a, p: D.ec_child_delete(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

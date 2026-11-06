@@ -589,6 +589,18 @@ _ECS_SUB = [
 ]
 
 
+# ===========================================================================
+# ElastiCache — cache detail
+# ===========================================================================
+_ELASTICACHE_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Cache", "items": [
+        {"key": "details",     "label": "Details",     "icon": "info",   "type": "properties"},
+        {"key": "config",      "label": "Configuration", "icon": "data_object", "type": "json"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -618,4 +630,5 @@ SUB_BLADES: dict[str, list] = {
     "cloudwatch":     _CLOUDWATCH_SUB,
     "sts":            _STS_SUB,
     "route53":        _ROUTE53_SUB,
+    "elasticache":    _ELASTICACHE_SUB,
 }

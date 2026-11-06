@@ -47,6 +47,7 @@ from core.cloudwatch_core import CloudWatchStore
 from core.gcp_monitoring_core import MonitoringStore
 from core.route53_core import Route53Store
 from core.ecr_core import EcrStore
+from core.elasticache_core import ElastiCacheStore
 
 _REG: dict | None = None
 
@@ -82,6 +83,7 @@ def get() -> dict:
             "sfn": StepFunctionsStore(),
             "route53": Route53Store(),         # Route 53 hosted zones / records / health checks (control plane)
             "ecr": EcrStore(),                 # Elastic Container Registry
+            "elasticache": ElastiCacheStore(),  # ElastiCache clusters / groups / snapshots (control plane)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
