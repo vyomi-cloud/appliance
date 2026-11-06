@@ -1327,6 +1327,15 @@
     html.vy-embed #app-main #host-util-card > .sc-head, html.vy-embed #app-main #stats-card > .sc-head, html.vy-embed #app-main #svc-status-card > .sc-head {
       border-bottom: 1px solid #e4e4e7 !important; margin-left: -24px !important; margin-right: -24px !important; padding-left: 24px !important; padding-right: 24px !important; width: auto; }   /* bleed through the container's 24px gutters: edge to edge */
     html.vy-embed #app-main #host-util-card > .sc-head > .sc-title, html.vy-embed #app-main #stats-card > .sc-head > .sc-title, html.vy-embed #app-main #svc-status-card > .sc-head > .sc-title { border-bottom: 2px solid #000 !important; }
+    /* Spaces (drawer): same treatment as Health — no outer panel, edge-to-edge header baseline, rounded space cards. */
+    html.vy-embed #app-main #spaces-card { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; margin-bottom: 30px !important; }
+    html.vy-embed #app-main #spaces-card > .sc-head { border-bottom: 1px solid #e4e4e7 !important; margin-left: -24px !important; margin-right: -24px !important; padding-left: 24px !important; padding-right: 24px !important; width: auto; }
+    html.vy-embed #app-main #spaces-card > .sc-head > .sc-title { border-bottom: 2px solid #000 !important; }
+    html.vy-embed #app-main #spaces-card .space-card { background: #fff !important; border: 1px solid #d4d4d8 !important; border-radius: 14px !important; box-shadow: none !important; }
+    html.vy-embed #app-main #spaces-card .space-card.active, html.vy-embed #app-main #spaces-card .space-card:hover { border-color: #000 !important; }
+    html.vy-embed #app-main #spaces-card .space-card { filter: grayscale(1); }
+    html.vy-embed #view-spaces > .container > header.hero { display: none !important; }
+    html.vy-embed #view-spaces > .container { padding-top: 24px !important; }
     /* Service status tiles (Core / AWS / GCP / Azure): white cards with a visible rounded border */
     html.vy-embed #app-main #vyomi-services-mount > div > div { background: #fff !important; border: 1px solid #d4d4d8 !important; border-radius: 14px !important; }
     html.vy-embed #svc-status-card .material-icons, html.vy-embed #host-util-card .material-icons { color: #18181b !important; }
