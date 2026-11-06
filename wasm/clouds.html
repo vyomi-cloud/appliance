@@ -1878,12 +1878,28 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   html.vy-embed .space-logo svg { filter: grayscale(1); }
   html.vy-embed #app-main .space-card { overflow: hidden; }
   html.vy-embed #app-main #mkt-card .sc-desc { margin-bottom: 16px; }
-  .mk-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 4px 24px 16px; padding: 10px 14px; border: 1px solid #ececef; border-radius: 10px; background: #fafafa; font-size: 13px; color: #3f3f46; }
-  .mk-strip-lic { display: inline-flex; align-items: center; gap: 10px; }
-  .mk-strip-detail { color: #52525b; }
-  .mk-strip-plans { color: #71717a; font-size: 12.5px; }
-  .mk-strip-cta { margin-left: auto; font-weight: 600; color: #000; text-decoration: none; }
-  .mk-strip-cta:hover { text-decoration: underline; }
+  .mk-tabs { display: flex; gap: 28px; }
+  .mk-tab { margin: 0 0 -1px; padding: 0 2px 10px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 17px; font-weight: 700; color: #71717a; cursor: pointer; }
+  .mk-tab:hover { color: #18181b; }
+  .mk-tab.on { color: #000; border-bottom-color: #000; }
+  .mk-sec { margin: 22px 24px 10px; font-size: 14px; font-weight: 700; color: #18181b; }
+  .mk-sec span { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: #71717a; }
+  .mk-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 8px 24px 24px; }
+  .mk-plans.one { grid-template-columns: minmax(0, 420px); }
+  .mk-plan { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
+  .mk-plan.cur { border-color: #000; }
+  .mk-plan-h { display: flex; align-items: center; justify-content: space-between; }
+  .mk-plan-h b { font-size: 18px; color: #000; }
+  .mk-plan-p { font-size: 30px; font-weight: 700; letter-spacing: -.02em; color: #000; }
+  .mk-plan-p small { font-size: 14px; font-weight: 500; color: #71717a; }
+  .mk-plan-m, .mk-plan-n, .mk-plan-d, .mk-plan-own { font-size: 12.5px; color: #71717a; }
+  .mk-plan-own { margin: 0 24px 20px; }
+  .mk-plan ul { list-style: none; margin: 4px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: #3f3f46; }
+  .mk-plan li { display: flex; align-items: center; gap: 8px; }
+  .mk-plan li svg { flex: none; width: 15px; height: 15px; fill: none; stroke: #000; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-plan-btn { display: block; margin-top: auto; padding: 9px 14px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; text-align: center; font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  .mk-plan-btn:hover { background: #27272a; }
+  html.vy-embed .mk-plan a.mk-plan-btn, html.vy-embed .mk-plan a.mk-plan-btn:visited { color: #fff !important; text-decoration: none; }
   #mkt-ai { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 4px 24px 24px; }
   .mk-ai-card { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
   .mk-ai-card.all { background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; }
@@ -1901,8 +1917,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   html.vy-embed #app-main #mkt-card > .sc-head { margin: 0; padding: 20px 24px 0; border-bottom: 1px solid #e4e4e7; align-items: flex-end; }
   html.vy-embed #app-main #mkt-card .sc-title { display: inline-block; padding: 0 2px 10px; margin-bottom: -1px; border-bottom: 2px solid #000; }
   html.vy-embed #app-main #mkt-card .sc-title .material-icons { color: #000 !important; }
-  html.vy-embed #app-main #mkt-card > .sc-desc, html.vy-embed #app-main #mkt-card > #mkt-grid { margin-left: 24px; margin-right: 24px; }
-  html.vy-embed #app-main #mkt-card > .sc-desc { margin-top: 14px; }
+  html.vy-embed #app-main #mkt-card .sc-desc, html.vy-embed #app-main #mkt-card #mkt-grid { margin-left: 24px; margin-right: 24px; }
+  html.vy-embed #app-main #mkt-card .sc-desc { margin-top: 14px; }
 </style>
 
   <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
@@ -1986,13 +2002,18 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   <div id="view-marketplace" hidden>
   <div class="container">
     <div class="surface-card" id="mkt-card">
-      <div class="sc-head"><div class="sc-title"><h2><span class="material-icons">apps</span>Full Cloud stack</h2></div></div>
-      <p class="sc-desc">Pick a simulator to add it to your Spaces. Each one gets a single space; you can open it from Spaces any time.</p>
-      <div id="mkt-licence"></div>
-      <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
-      <div class="sc-head mk-ai-head"><div class="sc-title"><h2><span class="material-icons">auto_awesome</span>AI stack</h2></div></div>
-      <p class="sc-desc mk-ai-desc">Bedrock, Vertex AI and Azure OpenAI backed by a local model, with agents and knowledge bases. An add-on to the simulator: it runs on top of any plan and needs that cloud's simulator in Spaces.</p>
-      <div id="mkt-ai" role="list"></div>
+      <div class="sc-head"><div class="mk-tabs" role="tablist">
+        <button type="button" class="mk-tab on" role="tab" id="mkt-t-plan" data-tab="plan" aria-selected="true">Your current plan</button>
+        <button type="button" class="mk-tab" role="tab" id="mkt-t-payg" data-tab="payg" aria-selected="false">Pay as you go</button>
+      </div></div>
+      <div id="mkt-p-plan" role="tabpanel" aria-labelledby="mkt-t-plan"><div id="mkt-plan"></div></div>
+      <div id="mkt-p-payg" role="tabpanel" aria-labelledby="mkt-t-payg" hidden>
+        <p class="sc-desc">Buy only the clouds you need, month to month. Each simulator gets a single space you can open from Spaces any time.</p>
+        <div class="mk-sec">Full Cloud stack</div>
+        <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
+        <div class="mk-sec">AI stack <span>add-on · needs that cloud's simulator in Spaces</span></div>
+        <div id="mkt-ai" role="list"></div>
+      </div>
     </div>
   </div>
   </div><!-- /view-marketplace -->
@@ -3583,14 +3604,26 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       return '<div class="mk-ai-card' + (all ? ' all' : '') + '" role="listitem"><div class="mk-ai-t"><b>' + (all ? 'All clouds' : _esc(c.name)) + '</b><span>' +
              (all ? 'AWS + Google Cloud + Azure' : 'AI services for this cloud only') + '</span></div>' + body + '</div>';
     }
-    function _mktStripHtml(l) {
-      const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS, url = (l && l.pricing_url) || _pricingUrl();
-      const name = t === 'max' ? 'Max' : t === 'pro' ? 'Pro' : 'Free';
-      const owned = (l && l.owned && l.owned.length) ? ' \u00b7 ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately' : '';
-      const cta = t === 'max' ? '' : '<a class="mk-strip-cta" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer">' + (t === 'pro' ? 'Upgrade to Max' : 'View plans') + ' &rarr;</a>';
-      const plans = t === 'max' ? '' : '<span class="mk-strip-plans">Pro $' + (P.pro.price_usd||P.pro.price) + ' / month \u00b7 Max $' + (P.max.price_usd||P.max.price) + ' / month \u00b7 billed over a minimum of ' + (P.pro.min_months||P.pro.min) + ' months</span>';
-      return '<div class="mk-strip"><span class="mk-strip-lic"><span class="mk-pill' + (t === 'free' ? ' ghost' : '') + '">' + (t === 'free' ? '' : _CHECK) + name + '</span>' +
-             '<span class="mk-strip-detail">' + _esc((l && l.detail) || 'Free plan') + owned + '</span></span>' + plans + cta + '</div>';
+    function _planCard(k, P, cur, l) {
+      const p = P[k] || VY_PLANS[k], price = p.price_usd || p.price, mn = p.min_months || p.min;
+      const name = k === 'max' ? 'Max' : 'Pro', base = ((l && l.pricing_url) || _pricingUrl()).replace(/\/pricing$/, '');
+      const pts = k === 'max' ? ['All 3 clouds, unlimited', 'Every cloud at once'] : ['1 cloud of your choice', 'Switch cloud every 30 days'];
+      const head = '<div class="mk-plan-h"><b>' + name + '</b>' + (cur ? '<span class="mk-pill">' + _CHECK + 'Your plan</span>' : '') + '</div>' +
+        '<div class="mk-plan-p">$' + price + '<small> / month</small></div><div class="mk-plan-m">Billed over a minimum of ' + mn + ' months</div>' +
+        '<ul>' + pts.map(x => '<li>' + _CHECK + x + '</li>').join('') + '</ul>';
+      let act;
+      if (!cur) act = '<a class="mk-plan-btn" href="' + _esc(base + '/checkout?tier=' + k + '&period=monthly') + '" target="_blank" rel="noopener noreferrer">Pay $' + price + ' / month</a>';
+      else if (k === 'pro') act = '<a class="mk-plan-btn" href="' + _esc(base + '/dashboard') + '" target="_blank" rel="noopener noreferrer">Upgrade to Max</a><span class="mk-plan-n">Pro to Max is pro-rated for the days left.</span>';
+      else act = '<span class="mk-plan-n">You have everything this plan includes.</span>';
+      const det = cur && l && l.detail && k === 'pro' ? '<div class="mk-plan-d">' + _esc(l.detail) + '</div>' : '';
+      return '<div class="mk-plan' + (cur ? ' cur' : '') + '">' + head + det + act + '</div>';
+    }
+    function _mktPlanHtml(l) {
+      const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS;
+      const own = (l && l.owned && l.owned.length) ? '<p class="mk-plan-own">Plus ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately (see Pay as you go).</p>' : '';
+      if (t === 'free') return '<p class="sc-desc">You are on the <b>Free</b> plan. Choose a plan for full access, or buy individual simulators under Pay as you go.</p>' +
+        '<div class="mk-plans">' + _planCard('pro', P, false, l) + _planCard('max', P, false, l) + '</div>' + own;
+      return '<p class="sc-desc">Your current plan.</p><div class="mk-plans one">' + _planCard(t, P, true, l) + '</div>' + own;
     }
     function _mktCardHtml(c) {
       const tier = c.tier || 'free', T = tier.charAt(0).toUpperCase() + tier.slice(1);
@@ -3618,7 +3651,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       const g = document.getElementById('mkt-grid'); if (!g) return;
       const mc = await _mktCards(), cards = mc.cards;
       const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
-      const st = document.getElementById('mkt-licence'); if (st) st.innerHTML = _mktStripHtml(mc.licence);
+      const st = document.getElementById('mkt-plan'); if (st) st.innerHTML = _mktPlanHtml(mc.licence);
+      document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => {
+        document.querySelectorAll('.mk-tab').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+        document.getElementById('mkt-p-plan').hidden = b.dataset.tab !== 'plan'; document.getElementById('mkt-p-payg').hidden = b.dataset.tab !== 'payg'; }); } });
       g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
       g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));
     }
