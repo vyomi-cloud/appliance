@@ -47,6 +47,7 @@ STORE_ATTRS = [
     "compute",  # Lambda functions + API Gateway APIs + VPC model (core/nano_registry.ComputeStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
     "cw",       # CloudWatch metrics / alarms / dashboards
+    "ecr",      # Amazon ECR (core/ecr_core.EcrStore)
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
 ]
 

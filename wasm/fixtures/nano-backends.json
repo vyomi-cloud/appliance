@@ -80,6 +80,11 @@
   "category": "aws"
  },
  {
+  "name": "ecr",
+  "label": "EcrStore",
+  "category": "aws"
+ },
+ {
   "name": "gcs",
   "label": "InMemoryObjectStore",
   "category": "gcp"

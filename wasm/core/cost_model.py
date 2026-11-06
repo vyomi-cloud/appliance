@@ -88,6 +88,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.apigatewayv2": 1.00, # HTTP API $1.00/M requests (~1M calls)
     "aws.stepfunctions": 2.50, # Standard workflow: $0.025/1K state transitions (~100K/month)
+    "aws.ecr": 0.10,          # $0.10/GB-month private repository storage (~1 GB baseline)
     "aws.vpc": 0.00,          # free (NAT GW extra)
     "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
     "aws.secretsmanager": 0.40,  # $0.40 per secret per month

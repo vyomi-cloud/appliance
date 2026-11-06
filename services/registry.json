@@ -454,6 +454,13 @@
    "name": "Amazon Route 53",
    "upstream": "route53",
    "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "ecr",
+   "name": "Amazon ECR",
+   "upstream": "ecr",
+   "status": "pending-release"
   }
  ]
 }

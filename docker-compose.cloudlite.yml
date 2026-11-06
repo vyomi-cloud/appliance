@@ -96,6 +96,9 @@ services:
       CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
       # Route 53: hosted zones are rendered as zone files for CoreDNS.
       VYOMI_DNS_ZONES_DIR: /zones
+      # ECR: mirror images docker-pushed to the shared registry (best effort).
+      VYOMI_ECR_REGISTRY_URL: http://vyomi-registry:5000
+      VYOMI_ECR_REGISTRY_HOST: localhost:${VYOMI_REGISTRY_PORT:-15000}
       CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
       CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
       PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
@@ -233,6 +236,10 @@ services:
     networks: [vyomi-net]
     ports:
       - "127.0.0.1:${VYOMI_REGISTRY_PORT:-15000}:5000"
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"   # ECR BatchDeleteImage / DeleteRepository
+    volumes:
+      - vyomi-registry:/var/lib/registry
     mem_limit: 64m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
@@ -332,6 +339,7 @@ services:
 
 volumes:
   vyomi-dns-zones:
+  vyomi-registry:
   vyomi-data:
   cloudsim-data:
   vyomi-sql-pg:

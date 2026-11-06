@@ -176,6 +176,13 @@ class Aws(CloudProvider):
             ("route53", "ListChildren"):     lambda b, a, p: D.r53_children(p),
             ("route53", "CreateChild"):      lambda b, a, p: D.r53_child_create(p),
             ("route53", "DeleteChild"):      lambda b, a, p: D.r53_child_delete(p),
+            # ECR — repositories + images, via core/ecr_core.py
+            ("ecr", "List"):   lambda b, a, p: D.ecr_list(p),
+            ("ecr", "Create"): lambda b, a, p: D.ecr_create(p),
+            ("ecr", "Get"):    lambda b, a, p: D.ecr_get(p),
+            ("ecr", "Update"): lambda b, a, p: D.ecr_update(p),
+            ("ecr", "Delete"): lambda b, a, p: D.ecr_delete(p),
+            ("ecr", "Images"): lambda b, a, p: D.ecr_images(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

@@ -105,6 +105,18 @@ _S3_SUB = [
 
 
 # ===========================================================================
+# ECR — repository detail
+# ===========================================================================
+_ECR_SUB = [
+    {"key": "overview",   "label": "Overview",   "icon": "dashboard",  "type": "overview"},
+    {"key": "images",     "label": "Images",     "icon": "deployed_code", "type": "ecrImages"},
+    {"key": "properties", "label": "Properties", "icon": "info",       "type": "properties"},
+    {"key": "tags",       "label": "Tags",       "icon": "sell",       "type": "tags"},
+    {"key": "activityLog", "label": "Activity",  "icon": "list_alt",   "type": "activityLog"},
+]
+
+
+# ===========================================================================
 # IAM — composite (users / groups / roles / policies)
 # ===========================================================================
 _IAM_SUB = [
@@ -539,6 +551,7 @@ SUB_BLADES: dict[str, list] = {
     "stepfunctions":  _SFN_SUB,
     "vpc":            _VPC_SUB,
     "eventbridge":    _EVENTBRIDGE_SUB,
+    "ecr":            _ECR_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
     "kinesis":        _KINESIS_SUB,

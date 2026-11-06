@@ -53,6 +53,7 @@ from core import sqs_core as sqs
 from core import sns_core as sns
 from core import elbv2_core as elbv2
 from core import route53_core as route53
+from core import ecr_core as ecr
 from core import rds_data_core as rds_data
 from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
@@ -198,7 +199,7 @@ _SIGNING = {
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "route53": "route53",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "ecr": "ecr", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
     "sts": "sts",
@@ -212,6 +213,7 @@ _TARGET_PREFIX = {
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
+    "AmazonEC2ContainerRegistry_": "ecr",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -221,6 +223,7 @@ _JSON_CT = {
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
+    "ecr": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -394,6 +397,7 @@ class AwsWireRouter:
                 pass
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.route53 = s.get("route53") or route53.Route53Store()
+        self.ecr = s.get("ecr") or ecr.EcrStore()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
 
     def _iamc_resolve(self, ident):
@@ -857,6 +861,8 @@ class AwsWireRouter:
                 r = ssm.dispatch(self.ssm, target, payload)
             elif svc == "stepfunctions":
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
+            elif svc == "ecr":
+                r = ecr.dispatch(self.ecr, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})

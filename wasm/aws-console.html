@@ -919,6 +919,7 @@ function renderRail(){
     head("Dashboard", ()=>navigate({view:"home", service:null}));
     const groups = [
       ["Compute", ["ec2", "lambda"]],
+      ["Containers", ["ecr"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "sns", "apigateway", "apigatewayv2", "eventbridge", "stepfunctions"]],
@@ -1272,7 +1273,7 @@ function renderHome(main){
   }
   // Friendly service label for a by_service census key.
   function nanoSvcLabel(k){
-    var M={route53:"Route 53",sts:"STS",sns:"SNS",elbv2:"Load Balancing",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",ssm:"Systems Manager",
+    var M={route53:"Route 53",ecr:"ECR",sts:"STS",sns:"SNS",elbv2:"Load Balancing",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",ssm:"Systems Manager",
       compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager"};
     if (M[k]) return M[k];
     var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
@@ -3567,6 +3568,29 @@ SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
     host.append(tbl);
   });
 };
+
+SUB_RENDERERS.ecrimages = function(svc, full, host){
+  const name = itemKey(svc, full);
+  const ap = svc.api_paths.images;
+  fetch(ORIGIN+fillPath(ap.path, {name})).then(r=>r.json()).then(j=>{
+    const imgs = j.images || j.items || [];
+    if (!imgs.length) {
+      host.append(el("div",{class:"empty"}, "No images in "+name+" yet — push one with docker push or aws ecr put-image."));
+      return;
+    }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ["Image tags","Image digest","Type","Size","Pushed at","Scan status"].map(h => el("th",{}, h))));
+    imgs.forEach(i => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, i.tags)),
+      el("td",{class:"mono small"}, i.digest),
+      el("td",{}, i.type),
+      el("td",{}, i.size),
+      el("td",{class:"small"}, i.pushed),
+      el("td",{}, i.scan_status))));
+    host.append(tbl);
+  });
+};
+
 
 // API Gateway
 SUB_RENDERERS.apiresources = function(svc, full, host){
