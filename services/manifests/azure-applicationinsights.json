@@ -29,7 +29,8 @@
     "WebTests_Delete"
   ],
   "backend": {
-    "kind": "in-process"
+    "kind": "in-process",
+    "name": "logstore"
   },
   "suites": [
     "offline-sdk-java-azure-applicationinsights",
