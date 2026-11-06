@@ -1782,6 +1782,8 @@
   html.vy-embed #app-main #mkt-card .sc-desc { margin-bottom: 16px; }
   .mk-tabs { display: flex; gap: 28px; }
   .mk-tab { margin: 0 0 -1px; padding: 0 2px 10px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 17px; font-weight: 700; color: #71717a; cursor: pointer; }
+  .mk-tab { display: inline-flex; align-items: center; gap: 8px; }
+  .mk-tab .material-icons { font-size: 20px; }
   .mk-tab:hover { color: #18181b; }
   .mk-tab.on { color: #000; border-bottom-color: #000; }
   .mk-sec { margin: 22px 24px 10px; font-size: 14px; font-weight: 700; color: #18181b; }
@@ -1916,8 +1918,8 @@
   <div class="container">
     <div class="surface-card" id="mkt-card">
       <div class="sc-head"><div class="mk-tabs" role="tablist">
-        <button type="button" class="mk-tab on" role="tab" id="mkt-t-plan" data-tab="plan" aria-selected="true">Your current plan</button>
-        <button type="button" class="mk-tab" role="tab" id="mkt-t-payg" data-tab="payg" aria-selected="false">Pay as you go</button>
+        <button type="button" class="mk-tab on" role="tab" id="mkt-t-plan" data-tab="plan" aria-selected="true"><span class="material-icons">workspace_premium</span>Your current plan</button>
+        <button type="button" class="mk-tab" role="tab" id="mkt-t-payg" data-tab="payg" aria-selected="false"><span class="material-icons">shopping_bag</span>Pay as you go</button>
       </div></div>
       <div id="mkt-p-plan" role="tabpanel" aria-labelledby="mkt-t-plan"><div id="mkt-plan"></div></div>
       <div id="mkt-p-payg" role="tabpanel" aria-labelledby="mkt-t-payg" hidden>
