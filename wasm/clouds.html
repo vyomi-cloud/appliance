@@ -1925,6 +1925,28 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-inc-l li.mk-more { color: #71717a; font-weight: 600; }
   .mk-inc-l.chips li.mk-more { border-style: dashed; background: #fff; }
   .mk-inc-l:not(.chips) li.mk-more::before { display: none; }
+  /* ---- clean card body ---- */
+  .mk-card .mk-main { gap: 14px; padding: 16px 18px 6px; }
+  .mk-card .mk-free { padding: 0; font-size: 12.5px; color: #52525b; }
+  .mk-card .mk-free svg { width: 14px; height: 14px; color: #16a34a; }
+  .mk-card .mk-free b { display: inline; font-size: 12.5px; font-weight: 600; color: #18181b; }
+  .mk-card .mk-free small { display: inline; margin-left: 4px; font-size: 12.5px; color: #71717a; }
+  .mk-card .mk-free.no svg { color: #a1a1aa; }
+  .mk-inc { gap: 8px; padding-top: 14px; border-top: 1px solid #f0f0f2; }
+  .mk-inc-h { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #71717a; }
+  .mk-inc-l, .mk-inc-l.chips { flex-direction: column; flex-wrap: nowrap; gap: 7px; }
+  .mk-inc-l li, .mk-inc-l.chips li { display: flex; align-items: flex-start; gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 13px; color: #27272a; line-height: 1.35; }
+  .mk-inc-l li::before, .mk-inc-l.chips li::before { display: none; }
+  .mk-inc-l li svg { flex: none; width: 14px; height: 14px; margin-top: 2px; fill: none; stroke: #16a34a; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-inc-l li.mk-more, .mk-inc-l.chips li.mk-more { padding-left: 22px; border: 0; background: none; color: #71717a; font-weight: 600; }
+  .mk-card .mk-cta { padding-top: 2px; color: #000; font-weight: 600; }
+  .mk-card .mk-foot { padding: 12px 18px 16px; gap: 10px; border-top: 1px solid #f0f0f2; margin-top: 8px; }
+  .mk-buy { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+  .mk-buy-p { display: flex; flex-direction: column; font-size: 12.5px; color: #52525b; line-height: 1.25; }
+  .mk-buy-p b { font-size: 20px; letter-spacing: -.02em; color: #000; display: inline; }
+  .mk-buy-p small { font-size: 11.5px; color: #71717a; margin-top: 1px; }
+  html.vy-embed .mk-card a.mk-buy-b { flex: none; padding: 8px 22px; border-radius: 8px; background: #000; color: #fff !important; font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  html.vy-embed .mk-card a.mk-buy-b:hover { background: #27272a; }
   /* card header = landing-page grid field */
   .mk-head { margin: -16px -16px 0; padding: 16px 52px 14px 16px; background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; border-bottom: 1px solid #ececef; }
   .mk-main { gap: 12px; }
@@ -3616,7 +3638,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // One card design for both Pay-as-you-go sections: grid header (logo, name, ribbon) / status row / what's included / actions.
     function _pcIncluded(head, items, wide) {
       const vis = items.slice(0, 5), more = items.length - vis.length;
-      return '<div class="mk-inc"><div class="mk-inc-h">' + _esc(head) + '</div><ul class="mk-inc-l' + (wide ? ' chips' : '') + '">' + vis.map(x => '<li>' + _esc(x) + '</li>').join('') +
+      return '<div class="mk-inc"><div class="mk-inc-h">' + _esc(head) + '</div><ul class="mk-inc-l">' + vis.map(x => '<li>' + _CHECK + _esc(x) + '</li>').join('') +
         (more > 0 ? '<li class="mk-more">+' + more + ' more</li>' : '') + '</ul></div>';
     }
     function _pcLogo(id) {
@@ -3632,7 +3654,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         '<div class="mk-foot">' + o.foot + '</div></div>';
     }
     function _buyBtn(url, label, price, per, aria) {
-      return '<a class="mk-offer" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + _esc(aria) + '">' + _esc(label) + '<small>$' + price + ' ' + _esc(per) + ' · cancel any month</small></a>';
+      return '<div class="mk-buy"><span class="mk-buy-p"><span><b>$' + price + '</b> ' + _esc(per) + '</span><small>Cancel any month</small></span>' +
+        '<a class="mk-buy-b" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + _esc(aria) + '">Buy</a></div>';
     }
     function _aiHtml(c) {
       const all = c.id === 'all', inc = (c.includes && c.includes.length) ? c.includes : (VY_AI[c.id] ? VY_AI[c.id].includes : []);
