@@ -1815,12 +1815,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // ══ Marketplace: the onboarded simulator platforms. ONE registry — add a 4th simulator here (offline gets
     //    the same list, with live licence state, from /api/marketplace/simulators). ═════════════════════════
     const VY_SIMULATORS = [
-      { id: 'aws',   name: 'AWS',          free_tier: true, price: 21 },
-      { id: 'gcp',   name: 'Google Cloud', free_tier: true, price: 21 },
-      { id: 'azure', name: 'Azure',        free_tier: true, price: 21 },
+      { id: 'aws',   name: 'AWS',          free_tier: true, price: 21, services: ["EC2", "Lambda", "S3", "RDS", "DynamoDB", "SQS", "SNS", "API Gateway", "API Gateway V2", "EventBridge", "Step Functions", "Kinesis", "VPC", "Elastic Load Balancing", "IAM", "Secrets Manager", "KMS", "CloudWatch Logs", "Systems Manager", "CloudWatch"] },
+      { id: 'gcp',   name: 'Google Cloud', free_tier: true, price: 21, services: ["Compute Engine", "Cloud Functions", "Kubernetes Engine", "Cloud Storage", "Artifact Registry", "Cloud SQL", "Firestore", "Memorystore for Redis", "VPC Network", "Pub/Sub", "API Gateway", "Eventarc", "Cloud Scheduler", "Secret Manager", "Cloud KMS", "IAM & Admin", "IAM Service Account Credentials", "Cloud Monitoring"] },
+      { id: 'azure', name: 'Azure',        free_tier: true, price: 21, services: ["Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps", "API Management", "Virtual networks", "Network security groups"] },
     ];
     // Prices = the portal pricing page (Pro $19 / month, Max $29 / month; USD, billed in INR at checkout).
     const VY_PLANS = { pro: { price: 19, min: 3, scope: 'One cloud of your choice, switchable every 30 days' }, max: { price: 29, min: 3, scope: 'All clouds, unlimited' } };   // bought on the portal pricing page
+    const VY_AI = {"aws": {"product": "Amazon Bedrock", "includes": ["Model invoke and Converse, with streaming", "Foundation-model catalogue (Claude, Titan, Nova, Llama, Mistral formats)", "Agents", "Knowledge Bases: ingest from S3, Retrieve, RetrieveAndGenerate", "AgentCore runtimes and gateway (MCP)"]}, "gcp": {"product": "Google Vertex AI", "includes": ["Gemini generateContent, with streaming", "Token counting", "Embeddings (embedContent)", "Predict endpoints"]}, "azure": {"product": "Azure OpenAI", "includes": ["Chat completions and completions", "Embeddings", "Model deployments under Cognitive Services accounts", "AI Search: vector and hybrid search, integrated vectorization"]}};
     const VY_PORTAL = 'https://vyomi.cloud';
     const VY_NANO = /\.html$/.test(location.pathname);       // Nano serves clouds.html; the offline appliance serves /clouds
     const VY_EMBED = document.documentElement.classList.contains('vy-embed');
@@ -1900,14 +1901,30 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-plan-btn { display: block; margin-top: auto; padding: 9px 14px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; text-align: center; font-size: 13.5px; font-weight: 600; text-decoration: none; }
   .mk-plan-btn:hover { background: #27272a; }
   html.vy-embed .mk-plan a.mk-plan-btn, html.vy-embed .mk-plan a.mk-plan-btn:visited { color: #fff !important; text-decoration: none; }
-  #mkt-ai { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 4px 24px 24px; }
-  .mk-ai-card { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
+  #mkt-ai { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 4px 24px 24px; }
+  .mk-ai-card-unused { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
   .mk-ai-card.all { background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; }
   .mk-ai-t b { display: block; font-size: 15px; color: #000; }
   .mk-ai-t span { font-size: 12.5px; color: #71717a; }
   .mk-ai-card .mk-offer { flex: none; width: 100%; }
   html.vy-embed #app-main #mkt-card .mk-ai-head { margin: 8px 0 0; padding: 20px 24px 0; border-bottom: 1px solid #e4e4e7; }
   html.vy-embed #app-main #mkt-card .mk-ai-desc { margin: 14px 24px 12px; }
+  .mk-logo.multi { width: auto; padding: 0 8px; gap: 4px; }
+  .mk-logo.multi svg { width: 18px; height: 16px; }
+  .mk-inc { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: #3f3f46; }
+  .mk-inc-h { font-size: 12px; font-weight: 700; color: #18181b; }
+  .mk-inc-l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .mk-inc-l li { position: relative; padding-left: 12px; line-height: 1.35; }
+  .mk-inc-l li::before { content: ""; position: absolute; left: 0; top: .55em; width: 4px; height: 4px; border-radius: 50%; background: #a1a1aa; }
+  .mk-inc-l.chips { flex-direction: row; flex-wrap: wrap; gap: 4px 6px; }
+  .mk-inc-l.chips li { padding: 2px 8px; border: 1px solid #ececef; border-radius: 999px; background: #fafafa; font-size: 11.5px; }
+  .mk-inc-l.chips li::before { display: none; }
+  #mkt-grid .mk-card, #mkt-ai .mk-card { height: 100%; }
+  .mk-card .mk-main { flex: 1 1 auto; }
+  .mk-card .mk-foot { margin-top: auto; }
+  .mk-inc-l li.mk-more { color: #71717a; font-weight: 600; }
+  .mk-inc-l.chips li.mk-more { border-style: dashed; background: #fff; }
+  .mk-inc-l:not(.chips) li.mk-more::before { display: none; }
   /* card header = landing-page grid field */
   .mk-head { margin: -16px -16px 0; padding: 16px 52px 14px 16px; background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; border-bottom: 1px solid #ececef; }
   .mk-main { gap: 12px; }
@@ -3591,18 +3608,43 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     }
     function _aiLocal(added) {
       const u = id => (VY_PORTAL.replace(/\/$/, '')) + '/checkout?product=ai_stack&scope=' + id + '&period=monthly';
-      return VY_SIMULATORS.map(s => ({ id: s.id, name: s.name, enabled: false, price_usd: 12, per: '/ month', requires_simulator: added.indexOf(s.id) < 0, url: u(s.id) }))
-        .concat([{ id: 'all', name: 'All clouds', enabled: false, price_usd: 19, per: '/ month', requires_simulator: !added.length, url: u('all') }]);
+      return VY_SIMULATORS.map(s => ({ id: s.id, name: s.name, enabled: false, price_usd: 12, per: '/ month', product: VY_AI[s.id].product, includes: VY_AI[s.id].includes,
+                                        requires_simulator: added.indexOf(s.id) < 0, url: u(s.id) }))
+        .concat([{ id: 'all', name: 'All clouds', enabled: false, price_usd: 19, per: '/ month', product: 'AI stack on every cloud',
+                   includes: VY_SIMULATORS.map(s => VY_AI[s.id].product), requires_simulator: !added.length, url: u('all') }]);
+    }
+    // One card design for both Pay-as-you-go sections: grid header (logo, name, ribbon) / status row / what's included / actions.
+    function _pcIncluded(head, items, wide) {
+      const vis = items.slice(0, 5), more = items.length - vis.length;
+      return '<div class="mk-inc"><div class="mk-inc-h">' + _esc(head) + '</div><ul class="mk-inc-l' + (wide ? ' chips' : '') + '">' + vis.map(x => '<li>' + _esc(x) + '</li>').join('') +
+        (more > 0 ? '<li class="mk-more">+' + more + ' more</li>' : '') + '</ul></div>';
+    }
+    function _pcLogo(id) {
+      if (id !== 'all') return '<span class="mk-logo ' + id + '">' + (SPACE_LOGOS[id] || '').replace(/sp-az-g/g, 'mk-az-g' + id) + '</span>';
+      return '<span class="mk-logo multi">' + ['aws', 'gcp', 'azure'].map(k => (SPACE_LOGOS[k] || '').replace(/sp-az-g/g, 'mk-az-g-all')).join('') + '</span>';
+    }
+    function _packCard(o) {
+      return '<div class="mk-card' + (o.off ? ' off' : '') + '" role="listitem" data-sim="' + _esc(o.id) + '">' +
+        '<div class="mk-ribbon ' + (o.ribbonCls || 'free') + '" aria-hidden="true"><span>' + _esc(o.ribbon) + '</span></div>' +
+        '<' + (o.addId ? 'button type="button" data-add="' + _esc(o.addId) + '"' + (o.disabled ? ' disabled' : '') : 'div') + ' class="mk-main"' + (o.aria ? ' aria-label="' + _esc(o.aria) + '"' : '') + '>' +
+        '<span class="mk-head">' + _pcLogo(o.logo) + '<span><span class="mk-name">' + _esc(o.title) + '</span><span class="mk-sub">' + _esc(o.sub) + '</span></span></span>' +
+        o.status + o.included + (o.cta || '') + '</' + (o.addId ? 'button' : 'div') + '>' +
+        '<div class="mk-foot">' + o.foot + '</div></div>';
+    }
+    function _buyBtn(url, label, price, per, aria) {
+      return '<a class="mk-offer" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + _esc(aria) + '">' + _esc(label) + '<small>$' + price + ' ' + _esc(per) + ' · cancel any month</small></a>';
     }
     function _aiHtml(c) {
-      const all = c.id === 'all';
-      const body = c.enabled
-        ? '<span class="mk-pill">' + _CHECK + 'AI enabled' + (c.via === 'all' && !all ? ' \u00b7 all clouds' : '') + '</span>'
-        : (c.requires_simulator
-            ? '<span class="mk-note">Add ' + (all ? 'a simulator' : _esc(c.name)) + ' to Spaces first</span>'
-            : '<a class="mk-offer" href="' + _esc(c.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Buy AI stack for ' + _esc(c.name) + ', $' + c.price_usd + ' ' + _esc(c.per) + '">Buy AI stack<small>$' + c.price_usd + ' ' + _esc(c.per) + ' \u00b7 cancel any month</small></a>');
-      return '<div class="mk-ai-card' + (all ? ' all' : '') + '" role="listitem"><div class="mk-ai-t"><b>' + (all ? 'All clouds' : _esc(c.name)) + '</b><span>' +
-             (all ? 'AWS + Google Cloud + Azure' : 'AI services for this cloud only') + '</span></div>' + body + '</div>';
+      const all = c.id === 'all', inc = (c.includes && c.includes.length) ? c.includes : (VY_AI[c.id] ? VY_AI[c.id].includes : []);
+      const status = c.enabled
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>AI enabled</b><small>' + (c.via === 'all' && !all ? 'Included with your all-clouds AI stack' : 'Active on your licence') + '</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>Add-on</b><small>' + (all ? 'Needs at least one simulator in Spaces' : 'Needs the ' + _esc(c.name) + ' simulator in Spaces') + '</small></span></div>';
+      let foot = '';
+      if (c.enabled) foot = '<span class="mk-pill">' + _CHECK + 'AI enabled</span>';
+      else if (c.requires_simulator) foot = '<span class="mk-note">Add ' + (all ? 'a simulator' : _esc(c.name)) + ' to Spaces first</span>';
+      else foot = _buyBtn(c.url, 'Buy ' + (all ? 'AI stack · all clouds' : c.product || 'AI stack'), c.price_usd, c.per, 'Buy AI stack for ' + c.name + ', $' + c.price_usd + ' ' + c.per);
+      return _packCard({ id: 'ai-' + c.id, logo: c.id, title: all ? 'All clouds' : (c.product || c.name), sub: all ? 'AI stack · AWS + Google Cloud + Azure' : c.name + ' · AI stack',
+        ribbon: 'AI', ribbonCls: c.enabled ? 'pro' : 'free', status: status, included: _pcIncluded('What’s included', inc, false), foot: foot });
     }
     function _planCard(k, P, cur, l) {
       const p = P[k] || VY_PLANS[k], price = p.price_usd || p.price, mn = p.min_months || p.min;
@@ -3636,16 +3678,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (c.enabled_tier) {
         const E = c.owned ? 'Owned' : c.enabled_tier.charAt(0).toUpperCase() + c.enabled_tier.slice(1) + ' enabled';
         foot += '<span class="mk-pill">' + _CHECK + E + '</span>' + (c.licensed_by ? '<span class="mk-note">Licensed by ' + _esc(c.licensed_by) + '</span>' : '');
-      } else if (VY_NANO) foot += '<span class="mk-pill ghost">Free \u00b7 in-browser</span>';
+      } else if (VY_NANO) foot += '<span class="mk-pill ghost">Free · in-browser</span>';
       if (c.trial_ended) foot += '<span class="mk-pill ghost">Trial ended</span>';
-      (c.offers || []).forEach(o => {
-        foot += '<a class="mk-offer" href="' + _esc(o.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Buy ' + _esc(c.name) + ' for $' + o.price_usd + ' ' + _esc(o.per) + '">Buy ' + _esc(c.name) + '<small>$' + o.price_usd + ' ' + _esc(o.per) + ' \u00b7 cancel any month</small></a>';
-      });
-      return '<div class="mk-card' + (c.trial_ended ? ' off' : '') + '" role="listitem" data-sim="' + c.id + '">' +
-        '<div class="mk-ribbon ' + tier + '" aria-hidden="true"><span>' + T + '</span></div>' +
-        '<button type="button" class="mk-main" data-add="' + c.id + '"' + (c.can_add === false ? ' disabled' : '') + ' aria-label="' + (c.added ? 'Open ' : 'Add ') + _esc(c.name) + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier">' +
-        '<span class="mk-head"><span class="mk-logo ' + c.id + '">' + (SPACE_LOGOS[c.id] || '').replace(/sp-az-g/g, 'mk-az-g') + '</span><span><span class="mk-name">' + _esc(c.name) + '</span><span class="mk-sub">' + T + ' tier' + (c.added ? ' · in Spaces' : '') + '</span></span></span>' +
-        free + cta + '</button><div class="mk-foot">' + foot + '</div></div>';
+      (c.offers || []).forEach(o => { foot += _buyBtn(o.url, 'Buy ' + c.name, o.price_usd, o.per, 'Buy ' + c.name + ' for $' + o.price_usd + ' ' + o.per); });
+      const svc = (c.services && c.services.length) ? c.services : ((VY_SIMULATORS.filter(x => x.id === c.id)[0] || {}).services || []);
+      return _packCard({ id: c.id, logo: c.id, title: c.name, sub: 'Full Cloud stack' + (c.added ? ' · in Spaces' : ''), ribbon: T, ribbonCls: tier, off: c.trial_ended,
+        addId: c.id, disabled: c.can_add === false, aria: (c.added ? 'Open ' : 'Add ') + c.name + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier',
+        status: free, included: _pcIncluded('All ' + svc.length + ' services', svc, true), cta: cta, foot: foot });
     }
     async function loadMarketplace() {
       const g = document.getElementById('mkt-grid'); if (!g) return;

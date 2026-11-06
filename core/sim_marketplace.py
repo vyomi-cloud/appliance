@@ -32,10 +32,19 @@ TRIAL_TIERS = ("pro", "max")
 
 # Registry of onboarded simulator platforms. free_tier=False means the simulator has
 # no Free tier: it can only be used under a licence or a (single) trial.
+# `services` = what the Full Cloud stack contains (the console's service list). Keep in step with the consoles.
 SIMULATORS: list[dict[str, Any]] = [
-    {"id": "aws",   "name": "AWS",          "free_tier": True, "price_usd": 21},
-    {"id": "gcp",   "name": "Google Cloud", "free_tier": True, "price_usd": 21},
-    {"id": "azure", "name": "Azure",        "free_tier": True, "price_usd": 21},
+    {"id": "aws",   "name": "AWS",          "free_tier": True, "price_usd": 21, "services": [
+        "EC2", "Lambda", "S3", "RDS", "DynamoDB", "SQS", "SNS", "API Gateway", "API Gateway V2", "EventBridge",
+        "Step Functions", "Kinesis", "VPC", "Elastic Load Balancing", "IAM", "Secrets Manager", "KMS",
+        "CloudWatch Logs", "Systems Manager", "CloudWatch"]},
+    {"id": "gcp",   "name": "Google Cloud", "free_tier": True, "price_usd": 21, "services": [
+        "Compute Engine", "Cloud Functions", "Kubernetes Engine", "Cloud Storage", "Artifact Registry", "Cloud SQL",
+        "Firestore", "Memorystore for Redis", "VPC Network", "Pub/Sub", "API Gateway", "Eventarc", "Cloud Scheduler",
+        "Secret Manager", "Cloud KMS", "IAM & Admin", "IAM Service Account Credentials", "Cloud Monitoring"]},
+    {"id": "azure", "name": "Azure",        "free_tier": True, "price_usd": 21, "services": [
+        "Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps",
+        "API Management", "Virtual networks", "Network security groups"]},
 ]
 
 # PRICING LADDER (monthly, USD; the portal owns checkout, pro-rating and billing):
@@ -84,6 +93,16 @@ def licence_summary(tier: str | None, primary: str = "", owned: Iterable[str] = 
 # + that cloud's agent/knowledge-base plumbing), $19 for all clouds. It is an ADD-ON to the simulator (independent of
 # Pro/Max, runs on top of any tier) and needs that cloud's simulator in Spaces. No MySQL/RDS dependency of its own.
 AI_STACK = {"per_cloud_usd": 12, "all_usd": 19, "per": "/ month"}
+AI_INCLUDES = {
+    "aws": {"product": "Amazon Bedrock", "includes": [
+        "Model invoke and Converse, with streaming", "Foundation-model catalogue (Claude, Titan, Nova, Llama, Mistral formats)",
+        "Agents", "Knowledge Bases: ingest from S3, Retrieve, RetrieveAndGenerate", "AgentCore runtimes and gateway (MCP)"]},
+    "gcp": {"product": "Google Vertex AI", "includes": [
+        "Gemini generateContent, with streaming", "Token counting", "Embeddings (embedContent)", "Predict endpoints"]},
+    "azure": {"product": "Azure OpenAI", "includes": [
+        "Chat completions and completions", "Embeddings", "Model deployments under Cognitive Services accounts",
+        "AI Search: vector and hybrid search, integrated vectorization"]},
+}
 
 
 def _ai_set(ai: Any) -> tuple[bool, set]:
@@ -106,12 +125,16 @@ def ai_stack_cards(ai: Any, added: Iterable[str] = (), portal: str = "https://vy
     cards = []
     for sim in sims:
         on = all_on or sim["id"] in owned
+        meta = AI_INCLUDES.get(sim["id"], {})
         cards.append({"id": sim["id"], "name": sim["name"], "scope": sim["id"], "enabled": on,
+                      "product": meta.get("product", sim["name"] + " AI"), "includes": meta.get("includes", []),
                       "via": "all" if all_on else ("single" if on else ""),
                       "price_usd": AI_STACK["per_cloud_usd"], "per": AI_STACK["per"],
                       "requires_simulator": sim["id"] not in added and not on,
                       "url": "" if on else url(sim["id"])})
     cards.append({"id": "all", "name": "All clouds", "scope": "all", "enabled": all_on, "via": "all" if all_on else "",
+                  "product": "AI stack on every cloud",
+                  "includes": [f'{AI_INCLUDES[x["id"]]["product"]}' for x in sims if x["id"] in AI_INCLUDES],
                   "price_usd": AI_STACK["all_usd"], "per": AI_STACK["per"],
                   "requires_simulator": not all_on and not added,
                   "url": "" if all_on else url("all")})
@@ -236,7 +259,7 @@ def card_state(sim: dict, space: dict | None, covered_tier: str | None, ended: d
         "added": space is not None, "space_id": (space or {}).get("space_id"),
         "tier": eff["tier"], "licensed": bool(covered_tier), "enabled_tier": covered_tier or "",
         "offers": offers_for(sim["id"], covered_tier),
-        "price_usd": sim.get("price_usd"),
+        "price_usd": sim.get("price_usd"), "services": list(sim.get("services") or []),
         "trial_ended": trial_ended,
         # a no-free-tier simulator is only addable under a licence or before its single trial
         "can_add": bool(space) or bool(covered_tier) or (not trial_ended),
