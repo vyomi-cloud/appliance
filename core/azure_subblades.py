@@ -352,6 +352,25 @@ _DNS_SUB = [
     ]},
 ]
 
+_REDIS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "connect",      "label": "Connect",             "icon": "cable",       "type": "redisConnect"},
+        {"key": "accessKeys",   "label": "Access keys",         "icon": "key",         "type": "redisKeys"},
+        {"key": "config",       "label": "Advanced settings",   "icon": "tune",        "type": "redisConfig"},
+        {"key": "firewall",     "label": "Firewall",            "icon": "security",    "type": "redisFirewall"},
+        {"key": "patch",        "label": "Schedule updates",    "icon": "update",      "type": "redisPatch"},
+        {"key": "geo",          "label": "Geo-replication",     "icon": "public",      "type": "redisGeo"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Administration", "items": [
+        {"key": "dataops",      "label": "Reboot, import & export", "icon": "restart_alt", "type": "redisAdmin"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",      "label": "Metrics",             "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _MONITOR_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Alerting", "items": [
@@ -385,6 +404,86 @@ _OI_SUB = [
     ]},
 ]
 
+_MSI_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "fedcreds",   "label": "Federated credentials", "icon": "key",       "type": "msiFedCreds"},
+        {"key": "assoc",      "label": "Associated resources",  "icon": "link",      "type": "msiAssociated"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",               "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+_ACR_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Services", "items": [
+        {"key": "repositories",  "label": "Repositories",           "icon": "folder_open", "type": "acrRepositories"},
+        {"key": "webhooks",      "label": "Webhooks",               "icon": "webhook",     "type": "acrWebhooks"},
+        {"key": "replications",  "label": "Geo-replications",       "icon": "public",      "type": "acrReplications"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "accessKeys",    "label": "Access keys",            "icon": "vpn_key",     "type": "acrAccess"},
+        {"key": "identity",      "label": "Identity",               "icon": "badge",       "type": "identity"},
+        {"key": "networking",    "label": "Networking",             "icon": "lan",         "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
+_EVENTHUB_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Entities", "items": [
+        {"key": "eventHubs",    "label": "Event Hubs",             "icon": "bolt",       "type": "ehHubs"},
+        {"key": "dataExplorer", "label": "Data Explorer",          "icon": "manage_search", "type": "ehData"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "sharedAccess", "label": "Shared access policies", "icon": "vpn_key",    "type": "ehAccess"},
+        {"key": "georecovery",  "label": "Geo-Recovery",           "icon": "public",     "type": "ehGeo"},
+        {"key": "identity",     "label": "Identity",               "icon": "badge",      "type": "identity"},
+        {"key": "networking",   "label": "Networking",             "icon": "lan",        "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",      "label": "Metrics",                "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+_APPLICATIONINSIGHTS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Investigate", "items": [
+        {"key": "connection",  "label": "Connection and keys", "icon": "vpn_key",   "type": "aiConnection"},
+        {"key": "apikeys",     "label": "API Access",        "icon": "key",         "type": "aiApiKeys"},
+        {"key": "availability","label": "Availability",      "icon": "monitor_heart","type": "aiAvailability"},
+    ]},
+    {"group": "Configure", "items": [
+        {"key": "usage",       "label": "Usage and estimated costs", "icon": "payments", "type": "aiUsage"},
+        {"key": "network",     "label": "Network Isolation", "icon": "lan",         "type": "aiNetwork"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",           "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
+_AKS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "nodepools",   "label": "Node pools",          "icon": "dns",         "type": "aksNodePools"},
+        {"key": "upgrades",    "label": "Cluster configuration", "icon": "system_update", "type": "aksUpgrades"},
+        {"key": "connect",     "label": "Connect",             "icon": "cable",       "type": "aksConnect"},
+        {"key": "identity",    "label": "Identity",            "icon": "badge",       "type": "identity"},
+        {"key": "networking",  "label": "Networking",          "icon": "lan",         "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",             "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -410,6 +509,12 @@ SUB_BLADES: dict[str, list] = {
     "dns":         _DNS_SUB,
     "operationalinsights": _OI_SUB,
     "monitor":     _MONITOR_SUB,
+    "msi":         _MSI_SUB,
+    "containerregistry": _ACR_SUB,
+    "redis":       _REDIS_SUB,
+    "eventhub":    _EVENTHUB_SUB,
+    "applicationinsights": _APPLICATIONINSIGHTS_SUB,
+    "containerservice": _AKS_SUB,
     "rbac":        _RBAC_SUB,
     "nsg":         _NSG_SUB,
     "role_definition": _ROLEDEF_SUB,

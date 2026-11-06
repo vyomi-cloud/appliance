@@ -2685,6 +2685,581 @@ SUB_RENDERERS.oiusage = function(svc, full, host){
   }).catch(()=>wrap.append(emptyState("Could not load usage.")));
 };
 
+// ---- Managed Identities (Microsoft.ManagedIdentity/userAssignedIdentities) renderers ----------
+SUB_RENDERERS.msifedcreds = function(svc, full, host){
+  const base = ORIGIN + full.id + "/federatedIdentityCredentials";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"}, "Federated credentials let workloads outside Azure (GitHub Actions, Kubernetes, any OIDC issuer) exchange their token for ",
+      el("strong",{}, full.name), ". Up to 20 per identity; `az identity federated-credential` and the SDKs edit the same data."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn",onclick:addCred}, icon("add"), "Add credential"),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Issuer","Subject identifier","Audience",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      if (!items.length) t.append(el("tr",{}, el("td",{colspan:5}, "No federated credentials yet. Add one to trust an external OIDC issuer.")));
+      items.forEach(it=>{
+        const p = it.properties || {};
+        t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, p.issuer||""), el("td",{}, p.subject||""),
+          el("td",{}, (p.audiences||[]).join(", ")),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast("Credential deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load federated credentials.")));
+  }
+  function addCred(){
+    const name = (prompt("Credential name:", "github-actions")||"").trim(); if(!name) return;
+    const issuer = (prompt("Issuer URL:", "https://token.actions.githubusercontent.com")||"").trim(); if(!issuer) return;
+    const subject = (prompt("Subject identifier:", "repo:cloudlearn/demo:ref:refs/heads/main")||"").trim(); if(!subject) return;
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties:{issuer, subject, audiences:["api://AzureADTokenExchange"]}})})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast("Credential saved"); else toast((j.error&&j.error.message)||"Could not save credential","err");
+        render(); });
+  }
+  render();
+};
+SUB_RENDERERS.msiassociated = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Resources that use ", el("strong",{}, full.name),
+    " as a user-assigned identity (VMs, Container Apps, Functions, AI services…)."));
+  const out = el("div",{}); host.append(out);
+  fetch(ORIGIN + full.id + "/listAssociatedResources?api-version=" + svc.apiVersion, {method:"POST"}).then(r=>r.json()).then(j=>{
+    const items = j.value || [];
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Name","Type","Resource group","Subscription"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    if (!items.length) t.append(el("tr",{}, el("td",{colspan:4}, "No resources are using this identity yet. Attach it from a resource's Identity blade.")));
+    items.forEach(it=>t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, it.type), el("td",{}, it.resourceGroup), el("td",{}, it.subscriptionId))));
+    out.append(t);
+  }).catch(()=>out.append(emptyState("Could not load associated resources.")));
+};
+
+// ---- Container Registry (Microsoft.ContainerRegistry) renderers ------------------
+SUB_RENDERERS.acrrepositories = function(svc, full, host){
+  const login = getPath(full,"properties.loginServer") || (full.name + ".azurecr.io");
+  host.append(el("div",{class:"sub-info"},"Repositories in ", el("strong",{}, login),
+    ". Push with `docker tag IMAGE " + login + "/IMAGE:TAG && docker push " + login + "/IMAGE:TAG` (map " + login + " to this appliance's address first)."));
+  const listHost = el("div",{}); host.append(listHost);
+  const none = "No repositories yet — push an image to " + login + ". (The image data plane runs on the offline appliance; Nano keeps the registry control plane only.)";
+  fetch(ORIGIN + "/azure-data/acr/" + encodeURIComponent(full.name) + "/v2/_catalog").then(r=>r.ok ? r.json() : {repositories:[]}).then(j=>{
+    const repos = j.repositories || [];
+    if (!repos.length){ listHost.append(emptyState(none)); return; }
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Repository","Tags"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    repos.forEach(rp=>{
+      const tags = el("td",{}, "…");
+      t.append(el("tr",{}, el("td",{}, rp), tags));
+      fetch(ORIGIN + "/azure-data/acr/" + encodeURIComponent(full.name) + "/v2/" + rp + "/tags/list").then(r=>r.json())
+        .then(x=>{ tags.textContent = (x.tags||[]).join(", ") || "—"; }).catch(()=>{ tags.textContent = "—"; });
+    });
+    listHost.append(t);
+  }).catch(()=>listHost.append(emptyState(none)));
+};
+SUB_RENDERERS.acrwebhooks = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Webhooks notify a service URI when images are pushed to or deleted from this registry."));
+  listChildResources(svc, full, host, "webhooks",
+    [["name","Name"],["properties.serviceUri","Service URI"],["properties.status","Status"],["properties.scope","Scope"]],
+    "No webhooks defined.");
+};
+SUB_RENDERERS.acrreplications = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Geo-replication (Premium) serves the registry from additional regions."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Name","Location","Status"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  t.append(el("tr",{}, el("td",{}, full.location||"—"), el("td",{}, (full.location||"—") + " (home region)"),
+                       el("td",{}, getPath(full,"properties.provisioningState")||"Succeeded")));
+  host.append(t);
+  fetch(ORIGIN + full.id + "/replications?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    (j.value||[]).forEach(r=>t.append(el("tr",{}, el("td",{}, r.name), el("td",{}, r.location||"—"),
+      el("td",{}, getPath(r,"properties.provisioningState")||"Succeeded"))));
+  }).catch(()=>{});
+};
+SUB_RENDERERS.acraccess = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"The admin account authenticates docker login and the registry's tokens."));
+  const kv = el("div",{class:"kv prop-kv"});
+  [["Registry name", full.name], ["Login server", getPath(full,"properties.loginServer")||"—"],
+   ["Admin user", getPath(full,"properties.adminUserEnabled") === true ? "Enabled" : "Disabled"]].forEach(([k,v])=>kv.append(el("div",{class:"k"},k), el("div",{class:"v"}, String(v))));
+  host.append(kv);
+  if (getPath(full,"properties.adminUserEnabled") !== true){
+    host.append(emptyState("Admin user is disabled. Enable it (az acr update --admin-enabled true) to see its username and passwords."));
+    return;
+  }
+  fetch(ORIGIN + full.id + "/listCredentials?api-version=" + svc.apiVersion, {method:"POST"}).then(r=>r.json()).then(j=>{
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Username","Name","Password"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    (j.passwords||[]).forEach(p=>t.append(el("tr",{}, el("td",{}, j.username), el("td",{}, p.name), el("td",{}, p.value))));
+    host.append(t);
+  }).catch(()=>host.append(emptyState("Could not load credentials.")));
+};
+
+// ---- Azure Cache for Redis (Microsoft.Cache/redis) renderers --------------------
+function redisApi(svc, full, suffix, method, body){
+  const opt = {method: method || "GET", headers: {}};
+  if (body !== undefined){ opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  return fetch(ORIGIN + full.id + suffix + "?api-version=" + svc.apiVersion, opt)
+    .then(r => r.text().then(t => { let j = null; try { j = t ? JSON.parse(t) : null; } catch(e){} return {ok: r.ok, status: r.status, j}; }));
+}
+function redisKv(rows){
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Setting","Value"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  rows.forEach(([k,v])=>t.append(el("tr",{}, el("td",{}, k), el("td",{style:"word-break:break-all"}, String(v)))));
+  return t;
+}
+SUB_RENDERERS.redisconnect = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Connection details for this cache. Offline, the Redis protocol is served by the shared Valkey container; the host name below is the Azure endpoint your connection strings use."));
+  const out = el("div",{}); host.append(out);
+  redisApi(svc, full, "/connectionInfo").then(({j}) => {
+    if (!j) { out.append(emptyState("Could not load connection info.")); return; }
+    out.append(redisKv([["Host name", j.hostName], ["Non-TLS port", j.port], ["TLS port", j.sslPort], ["Cache size", j.size],
+      ["Max clients", j.maxClients], ["Data plane", j.dataPlane], ["redis-cli", j.redisCli],
+      ["Primary connection string (StackExchange.Redis)", j.primaryConnectionString],
+      ["Secondary connection string", j.secondaryConnectionString]]));
+    const bar = el("div",{style:"margin:12px 0"});
+    bar.append(el("button",{class:"btn",onclick:()=>{
+      fetch(ORIGIN + "/azure-data/redis/ping").then(r=>r.json()).then(p=>toast(p.dataPlane ? "Data plane answered " + p.reply : (p.message || "Control plane only"), p.dataPlane ? "ok" : "err"))
+        .catch(()=>toast("Data plane check failed","err"));
+    }}, icon("network_check"), "Test data plane (PING)"));
+    out.append(bar);
+  });
+};
+SUB_RENDERERS.rediskeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Access keys authenticate clients to the cache. Regenerate one key at a time to rotate without downtime."));
+  const out = el("div",{}); host.append(out);
+  function load(){
+    out.innerHTML = "";
+    redisApi(svc, full, "/listKeys", "POST", {}).then(({j}) => {
+      if (!j) { out.append(emptyState("Could not load access keys.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Key","Value",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      [["Primary","primaryKey"],["Secondary","secondaryKey"]].forEach(([label,f])=>t.append(el("tr",{},
+        el("td",{}, label), el("td",{style:"font-family:monospace;word-break:break-all"}, j[f]),
+        el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+          redisApi(svc, full, "/regenerateKey", "POST", {keyType: label}).then(r=>{ toast(r.ok ? label + " key regenerated" : "Could not regenerate key", r.ok ? "ok" : "err"); load(); });
+        }}, "Regenerate")))));
+      out.append(t);
+    });
+  }
+  load();
+};
+SUB_RENDERERS.redisconfig = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Redis configuration (maxmemory policy, reserved memory, TLS). Values marked computed are set by Azure from the cache size."));
+  const cfg = getPath(full,"properties.redisConfiguration") || {};
+  const rows = Object.keys(cfg).sort().map(k=>[k, cfg[k]]);
+  rows.push(["enableNonSslPort", getPath(full,"properties.enableNonSslPort")], ["minimumTlsVersion", getPath(full,"properties.minimumTlsVersion")],
+            ["publicNetworkAccess", getPath(full,"properties.publicNetworkAccess")], ["redisVersion", getPath(full,"properties.redisVersion")]);
+  host.append(redisKv(rows));
+  const form = el("div",{style:"display:flex;gap:8px;margin:14px 0;align-items:center;flex-wrap:wrap"});
+  const pol = el("select",{}); ["volatile-lru","allkeys-lru","volatile-lfu","allkeys-lfu","volatile-random","allkeys-random","volatile-ttl","noeviction"]
+    .forEach(p=>pol.append(el("option",{value:p, selected: p===cfg["maxmemory-policy"]}, p)));
+  form.append(el("span",{}, "Maxmemory policy:"), pol, el("button",{class:"btn",onclick:()=>{
+    redisApi(svc, full, "", "PATCH", {properties:{redisConfiguration:{"maxmemory-policy": pol.value}}}).then(r=>{
+      toast(r.ok ? "Configuration saved" : ((r.j&&r.j.error&&r.j.error.message)||"Could not save"), r.ok ? "ok" : "err"); if (r.ok) selectService(svc.key); });
+  }}, icon("save"), "Save"));
+  host.append(form);
+};
+SUB_RENDERERS.redisfirewall = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Firewall rules allow client IP ranges to reach the cache."));
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}, el("button",{class:"btn",onclick:add}, icon("add"), "Add rule"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh")));
+    redisApi(svc, full, "/firewallRules").then(({j}) => {
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Rule name","Start IP","End IP",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      const items = (j && j.value) || [];
+      if (!items.length) t.append(el("tr",{}, el("td",{colspan:4}, "No firewall rules: all client IPs are allowed.")));
+      items.forEach(it=>t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, it.properties.startIP), el("td",{}, it.properties.endIP),
+        el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>redisApi(svc, full, "/firewallRules/"+encodeURIComponent(it.name), "DELETE").then(()=>{ toast("Rule deleted"); render(); })}, "Delete")))));
+      wrap.append(t);
+    });
+  }
+  function add(){
+    const name = (prompt("Rule name:", "office")||"").trim(); if(!name) return;
+    const s = (prompt("Start IP:", "10.0.0.1")||"").trim(); if(!s) return;
+    const e = (prompt("End IP:", "10.0.0.255")||"").trim(); if(!e) return;
+    redisApi(svc, full, "/firewallRules/"+encodeURIComponent(name), "PUT", {properties:{startIP:s, endIP:e}}).then(r=>{
+      toast(r.ok ? "Rule saved" : ((r.j&&r.j.error&&r.j.error.message)||"Could not save rule"), r.ok ? "ok" : "err"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.redispatch = function(svc, full, host){
+  const premium = getPath(full,"properties.sku.name") === "Premium";
+  host.append(el("div",{class:"sub-info"}, premium ? "Choose the maintenance window in which Azure may apply Redis updates." : "Schedule updates is available on the Premium tier. This cache is " + getPath(full,"properties.sku.name") + "."));
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    redisApi(svc, full, "/patchSchedules/default").then(({ok, j}) => {
+      const entries = ok && j ? (j.properties.scheduleEntries || []) : [];
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Day","Start (UTC hour)","Maintenance window"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      if (!entries.length) t.append(el("tr",{}, el("td",{colspan:3}, "No schedule: updates are applied at any time.")));
+      entries.forEach(e=>t.append(el("tr",{}, el("td",{}, e.dayOfWeek), el("td",{}, String(e.startHourUtc)), el("td",{}, e.maintenanceWindow || "PT5H (default)"))));
+      wrap.append(t);
+      if (premium) wrap.append(el("div",{style:"display:flex;gap:8px;margin:12px 0"},
+        el("button",{class:"btn",onclick:()=>{
+          const day = (prompt("Day of week (Monday…Sunday, Everyday, Weekend):", "Sunday")||"").trim(); if(!day) return;
+          const hr = parseInt(prompt("Start hour (UTC, 0-23):", "2")||"2", 10);
+          redisApi(svc, full, "/patchSchedules/default", "PUT", {properties:{scheduleEntries:[{dayOfWeek:day, startHourUtc:hr, maintenanceWindow:"PT5H"}]}}).then(r=>{
+            toast(r.ok ? "Schedule saved" : ((r.j&&r.j.error&&r.j.error.message)||"Could not save schedule"), r.ok ? "ok" : "err"); render(); });
+        }}, icon("schedule"), "Set schedule"),
+        el("button",{class:"btn sec",onclick:()=>redisApi(svc, full, "/patchSchedules/default", "DELETE").then(()=>{ toast("Schedule removed"); render(); })}, "Remove")));
+    });
+  }
+  render();
+};
+SUB_RENDERERS.redisgeo = function(svc, full, host){
+  const premium = getPath(full,"properties.sku.name") === "Premium";
+  host.append(el("div",{class:"sub-info"}, premium ? "Link this cache to another Premium cache for geo-replication." : "Geo-replication is available on the Premium tier. This cache is " + getPath(full,"properties.sku.name") + "."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Linked cache","Location","Role"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  redisApi(svc, full, "/linkedServers").then(({j}) => {
+    const items = (j && j.value) || [];
+    if (!items.length) t.append(el("tr",{}, el("td",{colspan:3}, "No linked caches.")));
+    items.forEach(it=>t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, it.properties.linkedRedisCacheLocation), el("td",{}, it.properties.serverRole))));
+  });
+};
+SUB_RENDERERS.redisadmin = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Reboot nodes, or import / export data (Premium) through the same operations the SDKs and `az redis` call."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:12px 0;flex-wrap:wrap"});
+  const out = el("div",{}); host.append(bar, out);
+  [["AllNodes","Reboot all nodes"],["PrimaryNode","Reboot primary"],["SecondaryNode","Reboot secondary"]].forEach(([rt,label])=>bar.append(el("button",{class:"btn sec",onclick:()=>{
+    redisApi(svc, full, "/forceReboot", "POST", {rebootType: rt}).then(r=>{
+      out.innerHTML = ""; out.append(el("div",{class:"sub-info"}, r.ok ? ((r.j&&r.j.message)||"Reboot done") : ((r.j&&r.j.error&&r.j.error.message)||"Reboot failed")));
+      toast(r.ok ? "Reboot completed" : "Reboot failed", r.ok ? "ok" : "err"); });
+  }}, icon("restart_alt"), label)));
+  bar.append(el("button",{class:"btn sec",onclick:()=>{
+    redisApi(svc, full, "/export", "POST", {format:"RDB", prefix:"export", container:"https://cloudlearn.blob.core.windows.net/backups"}).then(r=>{
+      toast(r.ok ? "Export started" : ((r.j&&r.j.error&&r.j.error.message)||"Export failed"), r.ok ? "ok" : "err"); });
+  }}, icon("upload"), "Export data"));
+  bar.append(el("button",{class:"btn sec",onclick:()=>{
+    redisApi(svc, full, "/import", "POST", {format:"RDB", files:["https://cloudlearn.blob.core.windows.net/backups/export.rdb"]}).then(r=>{
+      toast(r.ok ? "Import started" : ((r.j&&r.j.error&&r.j.error.message)||"Import failed"), r.ok ? "ok" : "err"); });
+  }}, icon("download"), "Import data"));
+};
+
+// ---- Event Hubs (Microsoft.EventHub) renderers ----------------------------------
+SUB_RENDERERS.ehhubs = function(svc, full, host){
+  const base = ORIGIN + full.id + "/eventhubs";
+  const q = "?api-version=" + svc.apiVersion;
+  const state = {hub:null};
+  const wrap = el("div",{}); host.append(wrap);
+  const call = (path, method, body) => fetch(base + path + q, {method:method||"GET",
+    headers: body ? {"Content-Type":"application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  function render(){
+    wrap.innerHTML = "";
+    if (state.hub) return renderHub();
+    wrap.append(el("div",{class:"sub-info"}, "Event hubs in ", el("strong",{}, full.name),
+      ". Each event hub is split into partitions; consumer groups give independent readers their own view of the stream."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Event Hub"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    call("").then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No event hubs — click Event Hub to create one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Status","Partition count","Message retention (days)","Created",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(h=>{
+        const p = h.properties || {};
+        t.append(el("tr",{},
+          el("td",{}, el("a",{href:"#",onclick:(e)=>{ e.preventDefault(); state.hub = h.name; render(); }}, h.name)),
+          el("td",{}, p.status||"Active"), el("td",{}, String(p.partitionCount)), el("td",{}, String(p.messageRetentionInDays)),
+          el("td",{}, p.createdAt||""),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            call("/"+encodeURIComponent(h.name), "DELETE").then(()=>{ toast("Event hub deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load event hubs.")));
+  }
+  function add(){
+    const name = (prompt("Event hub name:", "orders")||"").trim(); if(!name) return;
+    const parts = parseInt(prompt("Partition count (1-32):", "4")||"4", 10);
+    const days = parseInt(prompt("Message retention (days):", "1")||"1", 10);
+    call("/"+encodeURIComponent(name), "PUT", {properties:{partitionCount:parts, messageRetentionInDays:days}})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Event hub created"); render(); });
+  }
+  function renderHub(){
+    const hn = state.hub;
+    drillCrumbs(wrap, [{label:"Event Hubs", onClick:()=>{ state.hub=null; render(); }}, {label:hn}]);
+    const info = el("div",{}); wrap.append(info);
+    call("/"+encodeURIComponent(hn)).then(r=>r.json()).then(h=>{
+      const p = h.properties || {};
+      info.append(el("div",{class:"kv prop-kv"},
+        el("div",{class:"k"},"Name"), el("div",{class:"v"}, h.name||hn),
+        el("div",{class:"k"},"Status"), el("div",{class:"v"}, p.status||"Active"),
+        el("div",{class:"k"},"Partition count"), el("div",{class:"v"}, String(p.partitionCount)),
+        el("div",{class:"k"},"Message retention (days)"), el("div",{class:"v"}, String(p.messageRetentionInDays)),
+        el("div",{class:"k"},"Capture"), el("div",{class:"v"}, p.captureDescription && p.captureDescription.enabled ? "On" : "Off")));
+    });
+    wrap.append(el("h4",{style:"margin:16px 0 6px"}, "Consumer groups"));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:6px 0 10px"});
+    bar.append(el("button",{class:"btn",onclick:addCg}, icon("add"), "Consumer group"));
+    wrap.append(bar);
+    const cgHost = el("div",{}); wrap.append(cgHost);
+    function loadCg(){
+      cgHost.innerHTML = "";
+      call("/"+encodeURIComponent(hn)+"/consumergroups").then(r=>r.json()).then(j=>{
+        const t = el("table",{class:"sub-table"});
+        const hdr = el("tr",{}); ["Name","Created","User metadata",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+        (j.value||[]).forEach(c=>t.append(el("tr",{}, el("td",{}, c.name), el("td",{}, getPath(c,"properties.createdAt")||""),
+          el("td",{}, getPath(c,"properties.userMetadata")||"—"),
+          el("td",{style:"text-align:right"}, c.name === "$Default" ? "" : el("button",{class:"btn sec",onclick:()=>{
+            call("/"+encodeURIComponent(hn)+"/consumergroups/"+encodeURIComponent(c.name), "DELETE").then(()=>{ toast("Consumer group deleted"); loadCg(); });
+          }}, "Delete")))));
+        cgHost.append(t);
+      }).catch(()=>cgHost.append(emptyState("Could not load consumer groups.")));
+    }
+    function addCg(){
+      const n = (prompt("Consumer group name:", "analytics")||"").trim(); if(!n) return;
+      call("/"+encodeURIComponent(hn)+"/consumergroups/"+encodeURIComponent(n), "PUT", {properties:{}})
+        .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Consumer group created"); loadCg(); });
+    }
+    loadCg();
+    wrap.append(el("h4",{style:"margin:16px 0 6px"}, "Partitions"));
+    const pHost = el("div",{}); wrap.append(pHost);
+    call("/"+encodeURIComponent(hn)+"/events/partitions").then(r=>r.json()).then(j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Partition","Beginning sequence","Last enqueued sequence","Last enqueued time"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      (j.value||[]).forEach(p=>t.append(el("tr",{}, el("td",{}, p.partitionId), el("td",{}, String(p.beginningSequenceNumber)),
+        el("td",{}, String(p.lastEnqueuedSequenceNumber)), el("td",{}, p.lastEnqueuedTimeUtc||"No events yet"))));
+      pHost.append(t);
+    }).catch(()=>pHost.append(emptyState("Could not load partitions.")));
+  }
+  render();
+};
+SUB_RENDERERS.ehdata = function(svc, full, host){
+  const base = ORIGIN + full.id + "/eventhubs";
+  const q = "?api-version=" + svc.apiVersion;
+  host.append(el("div",{class:"sub-info"}, "Send test events to an event hub and view what was received, per partition. Producers using the REST API at ",
+    getPath(full,"properties.serviceBusEndpoint")||"the namespace endpoint", " write to the same log."));
+  const sel = el("select",{id:"eh-hub"});
+  const key = el("input",{id:"eh-key",placeholder:"Partition key (optional)"});
+  const body = el("textarea",{id:"eh-body",rows:"3",style:"width:100%"});
+  body.value = '{"orderId": 1001, "status": "created"}';
+  const out = el("div",{});
+  host.append(el("div",{style:"display:flex;gap:8px;margin:10px 0;align-items:center;flex-wrap:wrap"}, el("span",{},"Event hub"), sel, key),
+              body,
+              el("div",{style:"display:flex;gap:8px;margin:10px 0"},
+                 el("button",{class:"btn",onclick:send}, icon("send"), "Send event"),
+                 el("button",{class:"btn",onclick:view}, icon("refresh"), "View events")),
+              out);
+  function view(){
+    out.innerHTML = "";
+    if (!sel.value){ out.append(emptyState("Create an event hub first (Event Hubs tab).")); return; }
+    fetch(base + "/" + encodeURIComponent(sel.value) + "/events" + q + "&maxCount=50").then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ out.append(emptyState("No events in this event hub yet — send one above.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Partition","Sequence","Offset","Enqueued (UTC)","Partition key","Body"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(e=>t.append(el("tr",{}, el("td",{}, e.partitionId), el("td",{}, String(e.sequenceNumber)), el("td",{}, e.offset),
+        el("td",{}, e.enqueuedTime), el("td",{}, e.partitionKey||"—"), el("td",{class:"mono small"}, e.body))));
+      out.append(t);
+    }).catch(()=>out.append(emptyState("Could not read events.")));
+  }
+  function send(){
+    if (!sel.value){ toast("Create an event hub first", "err"); return; }
+    fetch(base + "/" + encodeURIComponent(sel.value) + "/events" + q, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({events:[{body: body.value, partitionKey: key.value || undefined}]})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Event sent"); view(); });
+  }
+  fetch(base + q).then(r=>r.json()).then(j=>{
+    (j.value||[]).forEach(h=>sel.append(el("option",{value:h.name}, h.name)));
+    view();
+  }).catch(()=>out.append(emptyState("Could not load event hubs.")));
+};
+SUB_RENDERERS.ehaccess = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Shared access policies authorize SDKs and the CLI with a SAS connection string. Listen reads, Send writes, Manage administers the namespace."));
+  const base = ORIGIN + full.id + "/authorizationRules";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add policy"));
+    wrap.append(bar);
+    fetch(base + q).then(r=>r.json()).then(async j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Policy","Claims","Primary connection string",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      wrap.append(t);
+      for (const rule of (j.value||[])){
+        const k = getPath(full,"properties.disableLocalAuth") === true ? {} :
+          await fetch(base + "/" + encodeURIComponent(rule.name) + "/listKeys" + q, {method:"POST"}).then(r=>r.json()).catch(()=>({}));
+        t.append(el("tr",{}, el("td",{}, rule.name), el("td",{}, (getPath(rule,"properties.rights")||[]).join(", ")),
+          el("td",{class:"mono small"}, k.primaryConnectionString || "Local authentication is disabled"),
+          el("td",{style:"text-align:right"}, rule.name === "RootManageSharedAccessKey" ? "" : el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(rule.name) + q, {method:"DELETE"}).then(()=>{ toast("Policy deleted"); render(); });
+          }}, "Delete"))));
+      }
+    }).catch(()=>wrap.append(emptyState("Could not load shared access policies.")));
+  }
+  function add(){
+    const name = (prompt("Policy name:", "send-listen")||"").trim(); if(!name) return;
+    const rights = (prompt("Claims (comma separated: Listen, Send, Manage):", "Listen,Send")||"").split(",").map(s=>s.trim()).filter(Boolean);
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({properties:{rights}})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Policy created"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.ehgeo = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Geo-disaster recovery pairs this namespace with a secondary namespace so metadata can fail over to it."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Alias","Role","Partner namespace","Status"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  const st = el("div",{}); host.append(st);
+  fetch(ORIGIN + full.id + "/disasterRecoveryConfigs?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    const items = j.value || [];
+    if (!items.length){ st.append(emptyState("Geo-recovery is not configured. Pair a Standard or Premium namespace with another one using the SDK or `az eventhubs georecovery-alias set`.")); return; }
+    items.forEach(d=>t.append(el("tr",{}, el("td",{}, d.name), el("td",{}, getPath(d,"properties.role")||"—"),
+      el("td",{}, String(getPath(d,"properties.partnerNamespace")||"—").split("/").pop()), el("td",{}, getPath(d,"properties.provisioningState")||"Succeeded"))));
+  }).catch(()=>st.append(emptyState("Could not load geo-recovery configuration.")));
+};
+
+// ---- Application Insights (Microsoft.Insights/components) renderers ---------------
+SUB_RENDERERS.aiconnection = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Use the connection string (preferred) or the instrumentation key to configure the Application Insights SDK or agent."));
+  const p = full.properties || {};
+  appKv(host, [["Application ID", p.AppId], ["Instrumentation key", p.InstrumentationKey],
+               ["Connection string", p.ConnectionString], ["Application type", full.kind || p.Application_Type],
+               ["Created", p.CreationDate]]);
+};
+SUB_RENDERERS.aiapikeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"API keys let external applications read telemetry or write annotations. The key value is shown only when it is created."));
+  fetch(ORIGIN + full.id + "/ApiKeys?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    appTable(host, ["Description","Created","Read access","Write access"],
+      (j.value||[]).map(k=>[k.name, k.createdDate, (k.linkedReadProperties||[]).map(x=>x.split("/").pop()).join(", ") || "-",
+                            (k.linkedWriteProperties||[]).map(x=>x.split("/").pop()).join(", ") || "-"]),
+      "No API keys.");
+  }).catch(()=>host.append(emptyState("No API keys.")));
+};
+SUB_RENDERERS.aiavailability = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Availability tests probe your endpoint from test locations on a schedule."));
+  const m = String(full.id).match(/^(\/subscriptions\/[^/]+\/resourceGroups\/[^/]+)\//i);
+  if (!m) { host.append(emptyState("No availability tests.")); return; }
+  fetch(ORIGIN + m[1] + "/providers/Microsoft.Insights/webtests?api-version=2022-06-15").then(r=>r.json()).then(j=>{
+    const mine = (j.value||[]).filter(w=>Object.keys(w.tags||{}).some(t=>t.toLowerCase().indexOf(String(full.id).toLowerCase())>=0));
+    appTable(host, ["Name","Test type","Frequency (s)","Timeout (s)","Enabled"],
+      mine.map(w=>[w.name, w.properties.Kind, w.properties.Frequency, w.properties.Timeout, w.properties.Enabled ? "Yes" : "No"]),
+      "No availability tests.");
+  }).catch(()=>host.append(emptyState("No availability tests.")));
+};
+SUB_RENDERERS.aiusage = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Data retention, sampling and the daily volume cap for this component."));
+  const p = full.properties || {};
+  fetch(ORIGIN + full.id + "/currentbillingfeatures?api-version=" + svc.apiVersion).then(r=>r.json()).then(f=>{
+    const cap = f.DataVolumeCap || {};
+    appKv(host, [["Pricing plan", (f.CurrentBillingFeatures||[]).join(", ")], ["Daily cap (GB)", cap.Cap],
+                 ["Warning threshold (%)", cap.WarningThreshold], ["Retention (days)", p.RetentionInDays],
+                 ["Ingestion mode", p.IngestionMode], ["Sampling (%)", p.SamplingPercentage == null ? "100 (default)" : p.SamplingPercentage]]);
+  }).catch(()=>host.append(emptyState("Usage details unavailable.")));
+};
+SUB_RENDERERS.ainetwork = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Controls which networks can send telemetry to and query this component."));
+  const p = full.properties || {};
+  appKv(host, [["Accept data ingestion from public networks", p.publicNetworkAccessForIngestion],
+               ["Accept queries from public networks", p.publicNetworkAccessForQuery],
+               ["Local authentication", p.DisableLocalAuth ? "Disabled" : "Enabled"]]);
+};
+
+// ---- Azure Kubernetes Service (Microsoft.ContainerService) renderers --------------
+SUB_RENDERERS.aksnodepools = function(svc, full, host){
+  const base = ORIGIN + full.id + "/agentPools";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},"Node pools are groups of nodes with the same configuration. System pools host critical system pods; user pools run your workloads."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add node pool"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No node pools.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Mode","OS","Node size","Nodes","Kubernetes version","State",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(d=>{
+        const p = d.properties || {};
+        t.append(el("tr",{}, el("td",{}, d.name), el("td",{}, p.mode||"—"), el("td",{}, p.osType||"—"), el("td",{}, p.vmSize||"—"),
+          el("td",{}, String(p.count)), el("td",{}, p.orchestratorVersion||"—"), el("td",{}, p.provisioningState||"Succeeded"),
+          el("td",{style:"text-align:right"},
+            el("button",{class:"btn sec",onclick:()=>{
+              const n = parseInt(prompt("Node count:", String(p.count))||"", 10); if (isNaN(n)) return;
+              fetch(base + "/" + encodeURIComponent(d.name) + q, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({properties:{count:n}})})
+                .then(r=>r.json()).then(x=>{ toast(x.error ? x.error.message : "Scaled"); render(); });
+            }}, "Scale"), " ",
+            el("button",{class:"btn sec",onclick:()=>{
+              fetch(base + "/" + encodeURIComponent(d.name) + q, {method:"DELETE"}).then(r=>r.status===200||r.status===204?null:r.json()).then(x=>{ toast(x && x.error ? x.error.message : "Node pool deleted"); render(); });
+            }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load node pools.")));
+  }
+  function add(){
+    const name = (prompt("Node pool name (lowercase letters and digits):", "userpool1")||"").trim(); if(!name) return;
+    const size = (prompt("Node size:", "Standard_DS2_v2")||"").trim();
+    const n = parseInt(prompt("Node count:", "1")||"1", 10);
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties:{count:n, vmSize:size, mode:"User", osType:"Linux"}})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message); else toast("Node pool added"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.aksupgrades = function(svc, full, host){
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},"Kubernetes version, upgrade channel and power state of this cluster."));
+    wrap.append(el("div",{class:"kv prop-kv"},
+      el("div",{class:"k"},"Kubernetes version"), el("div",{class:"v"}, getPath(full,"properties.kubernetesVersion")||"—"),
+      el("div",{class:"k"},"Power state"), el("div",{class:"v"}, getPath(full,"properties.powerState.code")||"—"),
+      el("div",{class:"k"},"Upgrade channel"), el("div",{class:"v"}, getPath(full,"properties.autoUpgradeProfile.upgradeChannel")||"none"),
+      el("div",{class:"k"},"Node resource group"), el("div",{class:"v"}, getPath(full,"properties.nodeResourceGroup")||"—"),
+      el("div",{class:"k"},"Pricing tier"), el("div",{class:"v"}, getPath(full,"sku.tier")||"—")));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    const act = (label, path, msg)=>el("button",{class:"btn sec",onclick:()=>{ fetch(base + "/" + path + q, {method:"POST"}).then(()=>{ toast(msg); }); }}, label);
+    bar.append(act("Stop cluster","stop","Stopping cluster"), act("Start cluster","start","Starting cluster"), act("Rotate certificates","rotateClusterCertificates","Rotating certificates"));
+    wrap.append(bar);
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Available upgrade","Preview"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    wrap.append(t);
+    fetch(base + "/upgradeProfiles/default" + q).then(r=>r.json()).then(j=>{
+      const ups = getPath(j,"properties.controlPlaneProfile.upgrades")||[];
+      if (!ups.length){ wrap.append(emptyState("The cluster is on the latest supported version.")); return; }
+      ups.forEach(u=>t.append(el("tr",{}, el("td",{}, u.kubernetesVersion), el("td",{}, u.isPreview ? "Yes" : "No"))));
+    }).catch(()=>wrap.append(emptyState("Could not load upgrade versions.")));
+  }
+  render();
+};
+SUB_RENDERERS.aksconnect = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Connect to the cluster with kubectl. This simulator runs the control plane only — the API server address does not serve Kubernetes requests."));
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const rg = full.id.split("/")[4] || "";
+  host.append(el("div",{class:"kv prop-kv"},
+    el("div",{class:"k"},"API server address"), el("div",{class:"v"}, getPath(full,"properties.fqdn")||"—"),
+    el("div",{class:"k"},"Azure CLI"), el("div",{class:"v"}, "az aks get-credentials --resource-group " + rg + " --name " + full.name),
+    el("div",{class:"k"},"Location"), el("div",{class:"v"}, full.location||"—")));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Credential","Kubeconfig (decoded)"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  fetch(base + "/listClusterUserCredential" + q, {method:"POST"}).then(r=>r.json()).then(j=>{
+    (j.kubeconfigs||[]).forEach(k=>{
+      let txt = ""; try { txt = atob(k.value); } catch(e){ txt = k.value; }
+      t.append(el("tr",{}, el("td",{}, k.name), el("td",{}, el("pre",{style:"margin:0;white-space:pre-wrap;max-width:640px"}, txt))));
+    });
+  }).catch(()=>host.append(emptyState("Could not load credentials.")));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

@@ -440,6 +440,48 @@
    "upstream": "monitoring/v3",
    "status": "released",
    "released_in": "3.0.30"
+  },
+  {
+   "cloud": "azure",
+   "key": "msi",
+   "name": "Managed Identities",
+   "upstream": "msi",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "containerregistry",
+   "name": "Container Registry",
+   "upstream": "containerregistry",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "redis",
+   "name": "Azure Cache for Redis",
+   "upstream": "redis",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "eventhub",
+   "name": "Event Hubs",
+   "upstream": "eventhub",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "applicationinsights",
+   "name": "Application Insights",
+   "upstream": "applicationinsights",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "containerservice",
+   "name": "Azure Kubernetes Service",
+   "upstream": "containerservice",
+   "status": "pending-release"
   }
  ]
 }

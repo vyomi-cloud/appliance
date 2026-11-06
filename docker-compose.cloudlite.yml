@@ -223,10 +223,12 @@ services:
 
   vyomi-registry:
     profiles: ["full"]
-    # Shared OCI registry data plane for Artifact Registry (and, later, ECR / ACR): a real
+    # Shared OCI registry data plane for Artifact Registry and Azure Container Registry (and, later, ECR): a real
     # `docker push` target. CNCF Distribution (Apache-2.0). Images are namespaced
     # {project}/{repo}/{image}; the engine ingests them from /v2/_catalog.
     image: registry:2.8.3
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"   # ACR repository / manifest delete
     networks: [vyomi-net]
     ports:
       - "127.0.0.1:${VYOMI_REGISTRY_PORT:-15000}:5000"

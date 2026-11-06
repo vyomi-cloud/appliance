@@ -126,9 +126,16 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.appconfiguration": 36.50,  # Standard tier: $1.20 per store per day (~30.4 days/month); requests included to 200K/day
     "azure.cognitiveservices": 1.00,  # S0 pay-as-you-go: ~1K transactions/month (~$1 per 1K text records / transactions); F0 is free
     "azure.operationalinsights": 2.76,  # Log Analytics PerGB2018: $2.76/GB ingested beyond the 5 GB/month free allowance; modelled at ~1 GB/month
+    "azure.msi": 0.01,        # NOMINAL: identities & federated credentials are free on real Azure; token-bearing workloads they front are billed elsewhere. Non-zero only so the space savings metrics register the resource.
+    "azure.redis": 16.06,     # Azure Cache for Redis Basic C0 (250 MB): ~$0.022/hour (Standard C1 ~$100, Premium P1 ~$405)
     "azure.dns": 0.50,        # Azure DNS: $0.50 per hosted zone per month (first 25 zones; $0.10 beyond) + $0.40 per million queries
     "azure.monitor": 0.10,    # metric alert rule: $0.10 per monitored time series per month (static threshold, 1 resource); action groups: first 1,000 emails/month free
+    "azure.containerregistry": 5.08,  # Basic: $0.167 per registry per day (~30.4 days/month); Standard $20.28, Premium $50.69
+    "azure.eventhub": 22.18,  # Standard, 1 throughput unit: $0.03/hr (~$21.90/month) + ~$0.028 per million ingress events
+    "azure.containerservice": 73.00,  # AKS Free tier: control plane free; billed for 1 x Standard_DS2_v2 node (~$0.10/h, ~730 h/month); Standard tier adds $0.10/cluster-hour
     "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
+    "azure.applicationinsights": 2.30,  # Log-based pay-as-you-go ingestion: ~1 GB/month beyond the 5 GB free grant at $2.30/GB
+    "azure.aiwebtest": 0.00,            # Standard/ping availability tests are billed per execution; negligible at the default frequency
 }
 
 # ── Usage-based storage pricing (public list prices, USD) ────────────

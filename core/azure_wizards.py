@@ -999,6 +999,42 @@ _MONITOR_WIZARD = {
 
 
 # ---------------------------------------------------------------------------
+# Azure Cache for Redis — New Redis Cache (Basics → Advanced → Tags → Review).
+# ---------------------------------------------------------------------------
+_REDIS_WIZARD = {
+    "tabs": [
+        {"key": "basics", "label": "Basics", "sections": [
+            _project_section(),
+            {"label": "Instance details", "fields": [
+                {"name": "name", "label": "DNS name", "default": "cloudlearn-cache", "required": True,
+                 "validate": {"regex": r"^[A-Za-z0-9]([A-Za-z0-9]|-(?!-))*[A-Za-z0-9]$", "message": "1-63 letters, numbers and hyphens; start and end with a letter or number"}},
+                _location(),
+                {"name": "properties.sku.name", "label": "Cache SKU (pricing tier)", "type": "select", "default": "Basic", "options": [
+                    {"value": "Basic", "label": "Basic (single node, no SLA)"},
+                    {"value": "Standard", "label": "Standard (replicated, 99.9% SLA)"},
+                    {"value": "Premium", "label": "Premium (clustering, persistence, geo-replication)"}]},
+                {"name": "properties.sku.capacity", "label": "Cache size (capacity: C0-C6, Premium P1-P5)", "default": "0", "required": True,
+                 "help": "Basic/Standard: 0 = 250 MB, 1 = 1 GB … 6 = 53 GB. Premium: 1 = 6 GB … 5 = 120 GB."},
+            ]},
+        ]},
+        {"key": "advanced", "label": "Advanced", "sections": [
+            {"label": "Security and version", "fields": [
+                {"name": "properties.redisVersion", "label": "Redis version", "type": "select", "default": "6",
+                 "options": [{"value": "6", "label": "6 (latest)"}, {"value": "4", "label": "4"}]},
+                {"name": "properties.enableNonSslPort", "label": "Non-TLS port (6379)", "type": "select", "default": "false",
+                 "options": [{"value": "false", "label": "Disabled"}, {"value": "true", "label": "Enabled"}]},
+                {"name": "properties.minimumTlsVersion", "label": "Minimum TLS version", "type": "select", "default": "1.2",
+                 "options": [{"value": "1.2", "label": "1.2"}, {"value": "1.1", "label": "1.1"}, {"value": "1.0", "label": "1.0"}]},
+            ]},
+        ]},
+        _tags_tab(),
+        _review_tab(),
+    ],
+    "synthetic_map": {},
+}
+
+
+# ---------------------------------------------------------------------------
 # Export — keyed by catalog ``key`` (so azure_services.py can merge in place).
 # ---------------------------------------------------------------------------
 WIZARDS: dict[str, dict] = {
@@ -1014,4 +1050,5 @@ WIZARDS: dict[str, dict] = {
     "eventgrid": _EVENTGRID_WIZARD,
     "rbac": _RBAC_WIZARD,
     "monitor": _MONITOR_WIZARD,
+    "redis": _REDIS_WIZARD,
 }

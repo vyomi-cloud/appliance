@@ -67,6 +67,36 @@ try:                                              # Azure Log Analytics engine (
 except ImportError:
     import azure_operationalinsights_core as oi_engine   # type: ignore
 
+try:                                              # Managed Identities engine (Microsoft.ManagedIdentity)
+    from core import azure_msi_core as msi_engine
+except ImportError:
+    import azure_msi_core as msi_engine            # type: ignore
+
+try:                                              # Container Registry engine (Microsoft.ContainerRegistry)
+    from core import azure_containerregistry_core as acr_engine
+except ImportError:
+    import azure_containerregistry_core as acr_engine   # type: ignore
+
+try:                                              # Azure Cache for Redis engine (Microsoft.Cache)
+    from core import azure_redis_core as redis_engine
+except ImportError:
+    import azure_redis_core as redis_engine        # type: ignore
+
+try:                                              # Event Hubs engine (Microsoft.EventHub)
+    from core import azure_eventhub_core as eventhub_engine
+except ImportError:
+    import azure_eventhub_core as eventhub_engine   # type: ignore
+
+try:                                              # Application Insights engine (Microsoft.Insights)
+    from core import azure_applicationinsights_core as ai_engine
+except ImportError:
+    import azure_applicationinsights_core as ai_engine   # type: ignore
+
+try:                                              # AKS engine (Microsoft.ContainerService)
+    from core import azure_containerservice_core as aks_engine
+except ImportError:
+    import azure_containerservice_core as aks_engine   # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -488,6 +518,8 @@ class AzureArm:
         # this class's flat store is its resource map (so it persists with the rest of ARM).
         if namespace.lower() == "microsoft.appconfiguration":
             return self._appconfig(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.containerregistry":
+            return self._acr(method, sub, rg, chain, payload, query)
 
         # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
@@ -501,8 +533,22 @@ class AzureArm:
         if namespace.lower() == "microsoft.operationalinsights" and oi_engine.handles(chain):
             return self._oi(method, sub, rg, chain, payload, query)
 
+        # Microsoft.ManagedIdentity/userAssignedIdentities (+ federated credentials): the MSI engine owns the semantics.
+        if namespace.lower() == "microsoft.managedidentity" and msi_engine.handles(chain):
+            return self._msi(method, sub, rg, chain, payload, query)
+
+        # Microsoft.Cache/redis (caches, keys, firewall rules, patch schedules, linked servers).
+        if namespace.lower() == "microsoft.cache" and redis_engine.handles(chain):
+            return self._redis(method, sub, rg, chain, payload, query)
+
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
+
+        if namespace.lower() == "microsoft.eventhub":
+            return self._eventhub(method, sub, rg, chain, payload, query)
+
+        if namespace.lower() == "microsoft.containerservice":
+            return self._aks(method, sub, rg, chain, payload, query)
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -514,6 +560,8 @@ class AzureArm:
         # class's flat store is its resource map (so it persists with the rest of ARM).
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.insights":
+            return self._insights(method, sub, rg, chain, payload, query)
 
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -600,6 +648,15 @@ class AzureArm:
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 
+    def _redis(self, method, sub, rg, chain, payload, query):
+        r = redis_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or redis_engine.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
     def _monitor(self, method, sub, rg, chain, payload, query):
         r = monitor_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
@@ -613,6 +670,21 @@ class AzureArm:
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 
+    def _msi(self, method, sub, rg, chain, payload, query):
+        r = msi_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
+
+    def _eventhub(self, method, sub, rg, chain, payload, query):
+        eh = eventhub_engine
+        r = eh.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or eh.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
     def _cogs(self, method, sub, rg, chain, payload, query):
         cs = cogs_engine
         r = cs.dispatch(self.state, method, sub, rg, chain, [], payload, query)
@@ -621,6 +693,17 @@ class AzureArm:
             resp["status"] = 200 if r["status"] == 201 else r["status"]
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or cs.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _aks(self, method, sub, rg, chain, payload, query):
+        ak = aks_engine
+        r = ak.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or ak.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 
@@ -636,6 +719,16 @@ class AzureArm:
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 
+    def _acr(self, method, sub, rg, chain, payload, query):
+        r = acr_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or acr_engine.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
     def _app(self, method, sub, rg, chain, payload, query):
         app = app_engine
         r = app.dispatch(self.state, method, sub, rg, chain, [], payload, query)
@@ -647,6 +740,10 @@ class AzureArm:
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _insights(self, method, sub, rg, chain, payload, query):
+        r = ai_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type, parent=None):

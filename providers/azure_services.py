@@ -426,6 +426,32 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "redis", "label": "Azure Cache for Redis", "icon": "memory",
+        "namespace": "Microsoft.Cache", "type": "Redis",
+        "api_version": "2024-03-01", "scope": "rg",
+        "banner": "Managed Redis caches (Basic, Standard, Premium). The Azure SDKs, `az redis` and these blades edit the same caches; access keys, firewall rules, patch schedules and geo-replication links behave like Azure. Offline, a shared Valkey container serves the Redis protocol (Lite tier and up); Nano runs the control plane only.",
+        "children": [{"type": "firewallRules", "label": "Firewall rules", "icon": "security"}],
+        "columns": [["name", "Name"], ["properties.provisioningState", "Status"],
+                    ["properties.sku.name", "Pricing tier"], ["properties.sku.capacity", "Cache size (capacity)"],
+                    ["properties.redisVersion", "Redis version"], ["properties.hostName", "Host name"],
+                    ["properties.sslPort", "SSL port"], ["location", "Location"]],
+        "create_fields": [
+            {"name": "name", "label": "DNS name", "default": "cloudlearn-cache"},
+            {"name": "properties.sku.name", "label": "Pricing tier", "type": "select",
+             "options": ["Basic", "Standard", "Premium"], "default": "Basic"},
+            {"name": "properties.sku.capacity", "label": "Capacity (C0-C6 / P1-P5)", "default": "0"},
+            {"name": "properties.redisVersion", "label": "Redis version", "type": "select",
+             "options": ["6", "4"], "default": "6"},
+            {"name": "properties.enableNonSslPort", "label": "Allow access only via SSL (false = also non-SSL port 6379)", "type": "select",
+             "options": ["false", "true"], "default": "false"},
+            {"name": "properties.minimumTlsVersion", "label": "Minimum TLS version", "type": "select",
+             "options": ["1.2", "1.1", "1.0"], "default": "1.2"},
+        ],
+        "defaults": {
+            "properties": {"sku": {"name": "Basic", "family": "C", "capacity": 0}, "redisVersion": "6", "minimumTlsVersion": "1.2"},
+        },
+    },
+    {
         "key": "monitor", "label": "Monitor alerts", "icon": "notifications_active",
         "namespace": "Microsoft.Insights", "type": "metricAlerts",
         "api_version": "2018-03-01", "scope": "rg",
@@ -479,6 +505,25 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "msi", "label": "Managed Identities", "icon": "badge",
+        "namespace": "Microsoft.ManagedIdentity", "type": "userAssignedIdentities",
+        "api_version": "2023-01-31", "scope": "rg",
+        "banner": "User-assigned managed identities: create an identity once, attach it to VMs, Container Apps, Functions and more, and let those resources authenticate without secrets. Federated credentials trust tokens from an external OIDC issuer (GitHub Actions, Kubernetes). The SDKs, `az identity` and this console edit the same data.",
+        "children": [{"type": "federatedIdentityCredentials", "label": "Federated credentials", "icon": "key"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.clientId", "Client ID"], ["properties.principalId", "Principal (object) ID"],
+                    ["properties.tenantId", "Tenant ID"]],
+        "create_fields": [
+            {"name": "name", "label": "Identity name", "default": "cloudlearn-identity"},
+            {"name": "location", "label": "Region", "type": "select",
+             "options": ["eastus", "eastus2", "westus2", "westeurope", "northeurope", "centralindia"], "default": "eastus"},
+        ],
+        "defaults": {
+            "location": "eastus",
+            "properties": {},
+        },
+    },
+    {
         "key": "cognitiveservices", "label": "Azure AI services", "icon": "psychology",
         "namespace": "Microsoft.CognitiveServices", "type": "accounts",
         "api_version": "2024-10-01", "scope": "rg",
@@ -500,6 +545,115 @@ RESOURCE_CATALOG: list[dict] = [
             "kind": "OpenAI",
             "sku": {"name": "S0"},
             "properties": {"provisioningState": "Succeeded", "publicNetworkAccess": "Enabled"},
+        },
+    },
+    {
+        "key": "containerregistry", "label": "Container Registry", "icon": "inventory_2",
+        "namespace": "Microsoft.ContainerRegistry", "type": "registries",
+        "api_version": "2023-07-01", "scope": "rg",
+        "banner": "Private Docker/OCI registry. Offline, `docker push` / `docker pull` work against this registry's login server (see Access keys); the SDKs and `az acr` manage the registry resource.",
+        "children": [{"type": "webhooks", "label": "Webhooks", "icon": "webhook"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing plan"],
+                    ["properties.loginServer", "Login server"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Registry name (alphanumeric)", "default": "acrcloudlearn"},
+            {"name": "sku.name", "label": "Pricing plan (Basic, Standard, Premium)", "default": "Basic"},
+            {"name": "properties.adminUserEnabled", "label": "Admin user (true/false)", "default": "false"},
+            {"name": "properties.publicNetworkAccess", "label": "Public network access (Enabled/Disabled)", "default": "Enabled"},
+        ],
+        "defaults": {
+            "sku": {"name": "Basic"},
+            "properties": {"provisioningState": "Succeeded", "adminUserEnabled": False, "publicNetworkAccess": "Enabled"},
+        },
+    },
+    {
+        "key": "eventhub", "label": "Event Hubs", "icon": "bolt",
+        "namespace": "Microsoft.EventHub", "type": "namespaces",
+        "api_version": "2024-01-01", "scope": "rg",
+        "banner": "Event Hubs namespaces with event hubs, consumer groups, shared access policies and geo-recovery pairing behave like Azure (azure-mgmt-eventhub, `az eventhubs`). Events sent over the REST API or the Data Explorer are kept in an ordered per-partition log; AMQP and Kafka wire protocols are not exposed, so use the REST send API and the Data Explorer to produce and read events.",
+        "children": [{"type": "eventhubs", "label": "Event Hubs", "icon": "bolt"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing tier"],
+                    ["sku.capacity", "Throughput units"],
+                    ["properties.serviceBusEndpoint", "Endpoint"],
+                    ["properties.status", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Namespace name", "default": "eh-cloudlearn"},
+            {"name": "sku.name", "label": "Pricing tier", "type": "select",
+             "options": ["Basic", "Standard", "Premium"], "default": "Standard"},
+            {"name": "sku.capacity", "label": "Throughput units / processing units", "type": "number", "default": 1},
+            {"name": "properties.minimumTlsVersion", "label": "Minimum TLS version", "type": "select",
+             "options": ["1.0", "1.1", "1.2"], "default": "1.2"},
+        ],
+        "defaults": {
+            "sku": {"name": "Standard", "tier": "Standard", "capacity": 1},
+            "properties": {"provisioningState": "Succeeded", "status": "Active", "minimumTlsVersion": "1.2",
+                           "serviceBusEndpoint": "https://__NAME__.servicebus.windows.net:443/"},
+        },
+    },
+    {
+        "key": "applicationinsights", "label": "Application Insights", "icon": "insights",
+        "namespace": "Microsoft.Insights", "type": "components",
+        "api_version": "2020-02-02", "scope": "rg",
+        "banner": "Control plane for Application Insights (components, API keys, billing features, availability web tests). Telemetry ingestion and log queries are not simulated; the connection string and instrumentation key are issued so SDKs can be configured.",
+        "columns": [["name", "Name"], ["location", "Location"], ["kind", "Application type"],
+                    ["properties.RetentionInDays", "Retention (days)"],
+                    ["properties.InstrumentationKey", "Instrumentation key"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Name", "default": "appi-cloudlearn"},
+            {"name": "kind", "label": "Application type", "type": "select", "options": ["web", "other"], "default": "web"},
+            {"name": "properties.Application_Type", "label": "Application_Type", "type": "select",
+             "options": ["web", "other"], "default": "web"},
+            {"name": "properties.RetentionInDays", "label": "Retention (days)", "type": "select",
+             "options": ["30", "60", "90", "120", "180", "270", "365", "550", "730"], "default": "90"},
+            {"name": "properties.IngestionMode", "label": "Ingestion mode", "type": "select",
+             "options": ["ApplicationInsights", "LogAnalytics"], "default": "ApplicationInsights"},
+        ],
+        "defaults": {"kind": "web", "properties": {"Application_Type": "web", "provisioningState": "Succeeded"}},
+    },
+    {
+        "key": "aiwebtest", "label": "Application Insights Availability Tests", "icon": "monitor_heart", "hidden": True,
+        "namespace": "Microsoft.Insights", "type": "webtests",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.Kind", "Test type"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Test name", "default": "webtest-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded"}},
+    },
+    {
+        "key": "containerservice", "label": "Azure Kubernetes Service", "icon": "hub",
+        "namespace": "Microsoft.ContainerService", "type": "managedClusters",
+        "api_version": "2024-09-01", "scope": "rg",
+        "banner": "Azure Kubernetes Service (AKS) managed clusters. Control plane only: clusters, node pools, upgrades, credentials and maintenance windows behave like Azure; no Kubernetes API server runs behind the cluster FQDN.",
+        "children": [{"type": "agentPools", "label": "Node pools", "icon": "dns"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.kubernetesVersion", "Kubernetes version"],
+                    ["properties.powerState.code", "Power state"],
+                    ["sku.tier", "Pricing tier"],
+                    ["properties.fqdn", "API server address"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Cluster name", "default": "aks-cloudlearn"},
+            {"name": "properties.dnsPrefix", "label": "DNS prefix", "default": "aks-cloudlearn-dns"},
+            {"name": "properties.kubernetesVersion", "label": "Kubernetes version", "type": "select",
+             "options": ["1.31.1", "1.30.5", "1.29.9", "1.28.14"], "default": "1.30.5"},
+            {"name": "sku.tier", "label": "Pricing tier", "type": "select",
+             "options": ["Free", "Standard", "Premium"], "default": "Free"},
+            {"name": "properties.agentPoolProfiles.0.name", "label": "Primary node pool name", "default": "nodepool1"},
+            {"name": "properties.agentPoolProfiles.0.count", "label": "Node count", "default": "3"},
+        ],
+        "defaults": {
+            "sku": {"name": "Base", "tier": "Free"},
+            "identity": {"type": "SystemAssigned"},
+            "properties": {
+                "provisioningState": "Succeeded", "kubernetesVersion": "1.30.5", "dnsPrefix": "aks-cloudlearn-dns",
+                "agentPoolProfiles": [{"name": "nodepool1", "count": 3, "vmSize": "Standard_DS2_v2", "mode": "System",
+                                       "osType": "Linux"}],
+                "networkProfile": {"networkPlugin": "kubenet"},
+            },
         },
     },
     {
@@ -834,11 +988,18 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # store / key-value / replica semantics; the ARM store below is its resource map.
     if namespace.lower() == "microsoft.appconfiguration":
         return await _handle_appconfiguration(request, method, sub, rg, chain, names, base)
+    if namespace.lower() == "microsoft.containerregistry":
+        return await _handle_containerregistry(request, method, sub, rg, chain, names, base)
 
     if namespace.lower() == "microsoft.network":
         from core import azure_dns_core as _dns_probe
         if _dns_probe.handles(chain):
             return await _handle_dns(request, method, sub, rg, chain, names, base)
+
+    if namespace.lower() == "microsoft.cache":
+        from core import azure_redis_core as _redis_probe
+        if _redis_probe.handles(chain):
+            return await _handle_redis(request, method, sub, rg, chain, names, base)
 
     if namespace.lower() == "microsoft.insights":
         from core import azure_monitor_core as _mon_probe
@@ -850,8 +1011,19 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _oi_probe.handles(chain):
             return await _handle_operationalinsights(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.managedidentity":
+        from core import azure_msi_core as _msi_probe
+        if _msi_probe.handles(chain):
+            return await _handle_msi(request, method, sub, rg, chain, names, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
+
+    if namespace.lower() == "microsoft.eventhub":
+        return await _handle_eventhub(request, method, sub, rg, chain, names, base)
+
+    if namespace.lower() == "microsoft.containerservice":
+        return await _handle_containerservice(request, method, sub, rg, chain, names, base)
 
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
@@ -863,6 +1035,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # environment/app/revision/job semantics; the ARM store below is its resource map.
     if namespace.lower() == "microsoft.app":
         return await _handle_app(request, method, sub, rg, chain, names, base)
+
+    # Microsoft.Insights (Application Insights components / web tests): core/azure_applicationinsights_core.py.
+    if namespace.lower() == "microsoft.insights":
+        return await _handle_insights(request, method, sub, rg, chain, names)
 
     # POST action verbs (listKeys, regenerateKey, listConnectionStrings, …):
     # the trailing type segment is the action, names[-1] the target resource.
@@ -1020,6 +1196,25 @@ async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, c
     return resp
 
 
+async def _handle_redis(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                        names: list[str], base: str) -> JSONResponse:
+    from core import azure_redis_core as _rd
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _rd.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _rd.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    for hk, hv in r["headers"].items():
+        resp.headers[hk] = hv
+    if r["lro"] and r["status"] < 300:
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Cache/Redis", "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
 async def _handle_monitor(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
                           names: list[str], base: str) -> JSONResponse:
     from core import azure_monitor_core as _mo
@@ -1061,6 +1256,37 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
     return resp
 
 
+async def _handle_msi(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                      names: list[str], base: str) -> JSONResponse:
+    from core import azure_msi_core as _mi
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _mi.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+                                             "name": r["rid"].rsplit("/", 1)[-1], "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_eventhub(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                           names: list[str], base: str) -> JSONResponse:
+    from core import azure_eventhub_core as _eh
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _eh.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _eh.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.EventHub/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
 async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
                                     names: list[str], base: str) -> JSONResponse:
     from core import azure_cognitiveservices_core as _cs
@@ -1075,6 +1301,43 @@ async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg:
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.CognitiveServices/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_containerregistry(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                    names: list[str], base: str) -> JSONResponse:
+    from core import azure_containerregistry_core as _cr
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cr.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _cr.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.ContainerRegistry/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_containerservice(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                   names: list[str], base: str) -> JSONResponse:
+    from core import azure_containerservice_core as _cs
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _cs.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2 \
+            and chain[0].lower() == "managedclusters":
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.ContainerService/managedClusters", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
@@ -1094,6 +1357,19 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_insights(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                           names: list[str]) -> JSONResponse:
+    from core import azure_applicationinsights_core as _ai
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _ai.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params))
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"]:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
