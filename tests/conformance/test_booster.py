@@ -121,6 +121,31 @@ set_tier("pro", sub="acct-1")
 code = c.post("/booster/pair/start").json()["code"]
 pr = c.post("/booster/pair/complete", json={"code": code, "account_id": "acct-1"}, headers=ORIGIN).json()
 check("pair complete returns relay_url/local_url keys", "relay_url" in pr and "local_url" in pr, pr)
+# ---- pairing endpoints (derived / persisted / env)
+for k in ("VYOMI_BOOSTER_RELAY_URL", "VYOMI_BOOSTER_LOCAL_URL", "VYOMI_BOOSTER_LOCAL_HOSTNAME"):
+    os.environ.pop(k, None)
+if os.path.exists(B._endpoints_path()):
+    os.remove(B._endpoints_path())
+check("endpoints default to None/None", B.endpoints() == {"relay_url": None, "local_url": None}, B.endpoints())
+os.environ["VYOMI_BOOSTER_LOCAL_HOSTNAME"] = "1"
+check("local_url derived from booster id when hostname config enabled",
+      B.endpoints()["local_url"] == f"https://{B.booster_id()}.local.vyomi.cloud" and B.endpoints()["relay_url"] is None, B.endpoints())
+B.set_endpoints("https://r.example/bst/", "https://lan.example:8443")
+check("set_endpoints persists (trailing slash trimmed) and wins over derived",
+      B.endpoints() == {"relay_url": "https://r.example/bst", "local_url": "https://lan.example:8443"}
+      and os.path.exists(B._endpoints_path()), B.endpoints())
+os.environ["VYOMI_BOOSTER_RELAY_URL"] = "https://env.example"
+check("env overrides persisted file", B.endpoints()["relay_url"] == "https://env.example")
+os.environ.pop("VYOMI_BOOSTER_RELAY_URL")
+B.set_endpoints(None, None)
+os.environ.pop("VYOMI_BOOSTER_LOCAL_HOSTNAME")
+check("set_endpoints(None, None) clears", B.endpoints() == {"relay_url": None, "local_url": None})
+B.set_endpoints("https://relay.example/x", None)
+code = c.post("/booster/pair/start").json()["code"]
+pr2 = c.post("/booster/pair/complete", json={"code": code, "account_id": "acct-1"}, headers=ORIGIN).json()
+check("pair/complete returns persisted relay_url", pr2.get("relay_url") == "https://relay.example/x" and pr2.get("local_url") is None, pr2)
+B.set_endpoints(None, None)
+c.post("/booster/pair/start")
 check("status has locked + trial_days_left", {"locked", "trial_days_left"} <= set(c.get("/booster/status").json()))
 hdr = {**ORIGIN, "x-vyomi-booster-token": pr["token"], "authorization": "AWS4-HMAC-SHA256 Credential=x"}
 r = c.get("/_wire/healthz", headers=hdr)

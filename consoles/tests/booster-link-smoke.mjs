@@ -28,7 +28,7 @@ const fakeSrv = http.createServer((req, res) => {
     const send = (st, o) => { res.writeHead(st, { ...cors, "content-type": "application/json" }); res.end(JSON.stringify(o)); };
     if (u.pathname === "/booster/pair/complete" && req.method === "POST") {
       let code = ""; try { code = JSON.parse(body).code; } catch {}
-      return code === fake.code ? send(200, { token: fake.token }) : send(403, { detail: "bad code" });
+      return code === fake.code ? send(200, { token: fake.token, relay_url: BOOSTER + "/", local_url: "http://127.0.0.1:1" }) : send(403, { detail: "bad code" });
     }
     if (u.pathname === "/booster/status") {
       if (req.headers.authorization !== "Bearer " + fake.token) return send(401, { detail: "unauthorized" });
@@ -69,12 +69,18 @@ try {
   const id = paired.id;
   check("token stored in registry (not exposed via list)", await page.evaluate((i) => { const raw = JSON.parse(localStorage.getItem("vyomi.boosters"))[0]; return !!raw.token && VyomiBooster.list()[0].token === undefined; }, id));
   check("state connected", await wait((i) => VyomiBooster.state(i) === "connected", id));
+  const reg = await page.evaluate(() => JSON.parse(localStorage.getItem("vyomi.boosters"))[0]);
+  check("pair response relay_url/local_url stored in registry entry", reg.relay_url === BOOSTER && reg.local_url === "http://127.0.0.1:1", JSON.stringify([reg.relay_url, reg.local_url]));
+  const cands = await page.evaluate((i) => VyomiBooster.candidates(i), id);
+  check("candidates() uses stored local_url + relay_url", cands.includes("http://127.0.0.1:1") && cands.includes(BOOSTER), cands.join(","));
 
   // 3. Home picker visible; create booster-homed + browser-homed spaces
   const opts = await page.evaluate(() => { openCreateSpaceModal(); const s = document.getElementById("csm-home"); const o = { vis: document.getElementById("csm-home-field").style.display !== "none", opts: [...s.options].map((x) => x.textContent) }; closeCreateSpaceModal(); return o; });
   check("Home picker shown with booster option once paired", opts.vis && opts.opts.length === 2 && /Booster: lab-booster/.test(opts.opts[1]), opts.opts.join("|"));
-  const mk = (name, home) => page.evaluate(async ([n, h]) => { const r = await fetch("/api/spaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "aws", name: n, home: VyomiBooster.homePayload(h) }) }); return (await r.json()).space; }, [name, home]);
+  const mk = (name, home, provider = "aws") => page.evaluate(async ([n, h, p]) => { const r = await fetch("/api/spaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: p, name: n, home: VyomiBooster.homePayload(h) }) }); return (await r.json()).space; }, [name, home, provider]);
   const bs = await mk("boost-space", id), ws = await mk("web-space", "browser");
+  const spaces = { aws: [bs, ws] };
+  for (const cl of ["gcp", "azure"]) spaces[cl] = [await mk("boost-" + cl, id, cl), await mk("web-" + cl, "browser", cl)];
   check("booster-homed space record carries home", bs && bs.home && bs.home.type === "booster" && bs.home.booster_id === id, JSON.stringify(bs && bs.home));
   check("browser-homed space has no home", ws && !ws.home);
   await page.reload(); await wait(() => !!document.querySelector("#spaces-grid .space-card[data-space-id]"), null, 30000);
@@ -82,43 +88,57 @@ try {
   check("space list shows booster home badge", badges.b === "booster", JSON.stringify(badges));
   check("space list shows browser home badge", badges.w === "browser", JSON.stringify(badges));
 
-  // 4. console of the booster-homed space: wire routed to booster, then outage -> banner + refusal
-  await page.evaluate((s) => VyomiBooster.setActive(s), bs);
-  await page.goto(`${NANO}/v4/aws/`);
-  await wait(() => !!window.VyomiBooster && VyomiBooster.state && VyomiBooster.activeHome(), null);
-  await wait((i) => VyomiBooster.state(i) === "connected", id);
-  const viaBooster = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-1").then((r) => r.json(), (e) => ({ err: String(e) })));
-  check("booster-homed /_wire call goes to the booster", viaBooster.from === "booster" && fake.wire.some((w) => w.path === "/_wire/probe-1" && w.token === fake.token), JSON.stringify(viaBooster));
-  check("no banner while connected", !(await page.$("#vyb-banner")));
+  for (const cloud of ["aws", "gcp", "azure"]) {
+    const [bs, ws] = spaces[cloud];
+    // 4. console of the booster-homed space: wire routed to booster, then outage -> banner + refusal
+    await page.evaluate((s) => VyomiBooster.setActive(s), bs);
+    await page.goto(`${NANO}/v4/${cloud}/`);
+    await wait(() => !!window.VyomiBooster && VyomiBooster.state && VyomiBooster.activeHome(), null);
+    await wait((i) => VyomiBooster.state(i) === "connected", id);
+    const viaBooster = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-1").then((r) => r.json(), (e) => ({ err: String(e) })));
+    check(`[${cloud}] booster-homed /_wire call goes to the booster`, viaBooster.from === "booster" && fake.wire.some((w) => w.path === "/_wire/probe-1" && w.token === fake.token), JSON.stringify(viaBooster));
+    check(`[${cloud}] no banner while connected`, !(await page.$("#vyb-banner")));
 
+    await unlisten();
+    check(`[${cloud}] unreachable banner appears`, await wait(() => /Datacenter unreachable/.test(document.getElementById("vyb-banner")?.textContent || ""), null, 10000));
+    const refused = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-2", { method: "POST", body: "x" }).then(async (r) => ({ s: r.status, j: await r.json() })));
+    check(`[${cloud}] actions refused while unreachable (503 DatacenterUnreachable)`, refused.s === 503 && refused.j.error.code === "DatacenterUnreachable", JSON.stringify(refused));
+    check(`[${cloud}] console controls disabled (body class)`, await page.evaluate(() => document.body.classList.contains("vy-booster-down")));
+
+    await listen();
+    check(`[${cloud}] auto-retry recovers: banner clears`, await wait(() => !document.getElementById("vyb-banner") && VyomiBooster.state(JSON.parse(localStorage.getItem("vyomi.boosters"))[0].id) === "connected", null, 10000));
+    const again = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-3").then((r) => r.json()));
+    check(`[${cloud}] wire works again after recovery`, again.from === "booster");
+
+    // 5. trial warning (<=7 days) then lock (day 15 -> trial_days_left 0)
+    fake.trial_days_left = 5;
+    check(`[${cloud}] trial banner at 5 days left`, await wait(() => /trial ends in 5 days/i.test(document.getElementById("vyb-banner")?.textContent || ""), null, 8000));
+    fake.trial_days_left = 0;
+    check(`[${cloud}] lock screen when trial over`, await wait(() => !!document.getElementById("vyb-lock"), null, 8000));
+    const locked = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-4").then(async (r) => ({ s: r.status, j: await r.json() })));
+    check(`[${cloud}] wire refused while locked`, locked.s === 503 && locked.j.error.code === "BoosterTrialExpired", JSON.stringify(locked));
+    fake.trial_days_left = 14;
+    check(`[${cloud}] lock clears on valid entitlement`, await wait(() => !document.getElementById("vyb-lock"), null, 8000));
+
+    // 6. browser-homed space is never affected by an outage / lock
+    fake.trial_days_left = 0; await unlisten();
+    await page.evaluate((s) => VyomiBooster.setActive(s), ws);
+    await page.reload();
+    await page.waitForTimeout(2500);
+    check(`[${cloud}] browser-homed space: no banner/lock during outage+lock`, await page.evaluate(() => !document.getElementById("vyb-banner") && !document.getElementById("vyb-lock") && !document.body.classList.contains("vy-booster-down")));
+    check(`[${cloud}] browser-homed /_wire not redirected`, await page.evaluate(() => VyomiBooster.activeHome() === null));
+    await listen(); fake.trial_days_left = 14;
+    await wait((i) => VyomiBooster.state(i) === "connected", id, 15000);
+  }
+
+  // 7. legacy wasm/<cloud>-console.html pages carry the same hook (booster taken down first)
   await unlisten();
-  check("unreachable banner appears", await wait(() => /Datacenter unreachable/.test(document.getElementById("vyb-banner")?.textContent || ""), null, 10000));
-  const refused = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-2", { method: "POST", body: "x" }).then(async (r) => ({ s: r.status, j: await r.json() })));
-  check("actions refused while unreachable (503 DatacenterUnreachable)", refused.s === 503 && refused.j.error.code === "DatacenterUnreachable", JSON.stringify(refused));
-  check("console controls disabled (body class)", await page.evaluate(() => document.body.classList.contains("vy-booster-down")));
-
-  await listen();
-  check("auto-retry recovers: banner clears", await wait(() => !document.getElementById("vyb-banner") && VyomiBooster.state(JSON.parse(localStorage.getItem("vyomi.boosters"))[0].id) === "connected", null, 10000));
-  const again = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-3").then((r) => r.json()));
-  check("wire works again after recovery", again.from === "booster");
-
-  // 5. trial warning (<=7 days) then lock (day 15 -> trial_days_left 0)
-  fake.trial_days_left = 5;
-  check("trial banner at 5 days left", await wait(() => /trial ends in 5 days/i.test(document.getElementById("vyb-banner")?.textContent || ""), null, 8000));
-  fake.trial_days_left = 0;
-  check("lock screen when trial over", await wait(() => !!document.getElementById("vyb-lock"), null, 8000));
-  const locked = await page.evaluate(() => fetch(location.pathname.split("/v4/")[0] + "/_wire/probe-4").then(async (r) => ({ s: r.status, j: await r.json() })));
-  check("wire refused while locked", locked.s === 503 && locked.j.error.code === "BoosterTrialExpired", JSON.stringify(locked));
-  fake.trial_days_left = 14;
-  check("lock clears on valid entitlement", await wait(() => !document.getElementById("vyb-lock"), null, 8000));
-
-  // 6. browser-homed space is never affected by an outage / lock
-  fake.trial_days_left = 0; await unlisten();
-  await page.evaluate((s) => VyomiBooster.setActive(s), ws);
-  await page.reload();
-  await page.waitForTimeout(2500);
-  check("browser-homed space: no banner/lock during outage+lock", await page.evaluate(() => !document.getElementById("vyb-banner") && !document.getElementById("vyb-lock") && !document.body.classList.contains("vy-booster-down")));
-  check("browser-homed /_wire not redirected", await page.evaluate(() => VyomiBooster.activeHome() === null));
+  for (const cloud of ["aws", "gcp", "azure"]) {
+    await page.evaluate(([s, base]) => fetch(base + "/api/spaces/" + s.space_id + "/switch", { method: "POST" }).then(() => VyomiBooster.setActive(s)), [spaces[cloud][0], "/nano"]);   // like the Spaces list: make it the SW active space
+    await page.goto(`${NANO}/${cloud}-console.html`);
+    check(`[legacy ${cloud}] booster-link loaded`, await wait(() => !!window.VyomiBooster, null, 30000));
+    check(`[legacy ${cloud}] unreachable banner for booster-homed space`, await wait(() => /Datacenter unreachable/.test(document.getElementById("vyb-banner")?.textContent || ""), null, 15000));
+  }
 } catch (e) { check("harness error", false, e && e.stack || e); }
 
 console.log(errors.length ? `page errors (informational): ${errors.slice(0, 3).join(" | ")}` : "no page errors");

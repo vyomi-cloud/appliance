@@ -91,10 +91,50 @@ def booster_mode(tier: Optional[str] = None) -> bool:
     return t in BOOSTER_TIERS
 
 
+def _endpoints_path() -> str:
+    return os.path.join(_state_dir(), "booster_endpoints.json")
+
+
+def _read_endpoints_file() -> dict:
+    try:
+        with open(_endpoints_path()) as f:
+            d = json.load(f)
+        return {k: (str(d.get(k)) if d.get(k) else None) for k in ("relay_url", "local_url")}
+    except Exception:
+        return {"relay_url": None, "local_url": None}
+
+
+def set_endpoints(relay_url: Optional[str] = None, local_url: Optional[str] = None) -> dict:
+    """Persist the endpoints the tunnel/cert provisioning obtained (None/"" clears a value). Read back by endpoints()."""
+    cur = {}
+    for k, v in (("relay_url", relay_url), ("local_url", local_url)):
+        cur[k] = (v or "").strip().rstrip("/") or None
+    os.makedirs(_state_dir(), exist_ok=True)
+    tmp = _endpoints_path() + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cur, f)
+    os.replace(tmp, _endpoints_path())
+    return endpoints()
+
+
+def _local_hostname_enabled() -> bool:
+    """https://<id>.local.vyomi.cloud is only advertised once its hostname config is switched on
+    (VYOMI_BOOSTER_LOCAL_HOSTNAME=1, set by the cert/DNS provisioning)."""
+    return (os.environ.get("VYOMI_BOOSTER_LOCAL_HOSTNAME") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def endpoints() -> dict:
-    """relay_url / local_url when known (set by the tunnel/cert provisioning; None until then)."""
-    return {"relay_url": os.environ.get("VYOMI_BOOSTER_RELAY_URL") or None,
-            "local_url": os.environ.get("VYOMI_BOOSTER_LOCAL_URL") or None}
+    """relay_url / local_url the browser may use. Precedence: explicit env > persisted file (set_endpoints) >
+    derived (local_url = https://<booster_id>.local.vyomi.cloud when the hostname config is enabled) > None."""
+    f = _read_endpoints_file()
+    relay = os.environ.get("VYOMI_BOOSTER_RELAY_URL") or f["relay_url"] or None
+    local = os.environ.get("VYOMI_BOOSTER_LOCAL_URL") or f["local_url"]
+    if not local and _local_hostname_enabled():
+        try:
+            local = f"https://{booster_id()}.local.vyomi.cloud"
+        except Exception:
+            local = None
+    return {"relay_url": relay, "local_url": local or None}
 
 
 def nano_pointer() -> dict:

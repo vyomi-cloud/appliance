@@ -88,7 +88,7 @@
     });
   }
   var timer = null;
-  function pollAll() { return Promise.all(load().map(pollOne)); }
+  function pollAll() { return Promise.all(load().map(pollOne)).then(render, render); }   // re-render each cycle: legacy pages rebuild <body> after load and would drop the banner
   function start() { if (timer) return; pollAll(); timer = setInterval(pollAll, POLL_MS); }
 
   // ── pairing ─────────────────────────────────────────────────────────
@@ -107,11 +107,13 @@
       return timed(base + "/booster/pair/complete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: code }) }).then(function (r) {
         if (r.status === 400 || r.status === 401 || r.status === 403 || r.status === 404 || r.status === 410) return r.text().then(function (t) { throw new Error("Pairing refused (" + r.status + "): check the code. " + t.slice(0, 120)); });
         if (!r.ok) { lastErr = "HTTP " + r.status; return next(); }
-        return r.json().then(function (j) { if (!j || !j.token) throw new Error("Booster returned no token."); return { base: base, token: j.token }; });
+        return r.json().then(function (j) { if (!j || !j.token) throw new Error("Booster returned no token."); return { base: base, token: j.token, relay_url: j.relay_url || null, local_url: j.local_url || null }; });
       }, function (e) { if (e && /refused/.test(e.message || "")) throw e; lastErr = String((e && e.message) || e); return next(); });
     }
     return next().then(function (res) {
       b.token = res.token; b.base = res.base;
+      if (res.local_url) b.local_url = String(res.local_url).replace(/\/+$/, "");
+      if (res.relay_url) b.relay_url = String(res.relay_url).replace(/\/+$/, "");
       return timed(res.base + "/booster/status", { headers: { Authorization: "Bearer " + res.token } }).then(function (r) { return r.ok ? r.json() : {}; }, function () { return {}; }).then(function (st) {
         b.name = st.hostname || b.id; if (!b.id) b.id = String(st.hostname || "booster").toLowerCase();
         var all = load().filter(function (x) { return x.id !== b.id; }); all.push(b); save(all);
@@ -183,6 +185,7 @@
   var CSS = ".vyb-bar{position:fixed;top:0;left:0;right:0;z-index:2147483000;padding:9px 16px;font:600 13px/1.4 system-ui,sans-serif;display:flex;gap:10px;align-items:center;justify-content:center;color:#fff}" +
     ".vyb-down{background:#b91c1c}.vyb-warn{background:#b45309}.vyb-bar button{margin-left:8px;font:inherit;padding:2px 10px;border-radius:4px;border:1px solid #fff8;background:#0003;color:#fff;cursor:pointer}" +
     "body.vy-booster-down #root button:not([data-vyb-keep]),body.vy-booster-down #root input,body.vy-booster-down #root select,body.vy-booster-down #root textarea,body.vy-booster-down #root [role=button]{pointer-events:none!important;opacity:.55}" +
+    "body.vyb-legacy.vy-booster-down>*:not(.vyb-bar):not(.vyb-lock):not(script):not(style){pointer-events:none!important;opacity:.55}" +
     ".vyb-lock{position:fixed;inset:0;z-index:2147483001;background:#0f172a;color:#e5e7eb;display:flex;align-items:center;justify-content:center;font:15px/1.5 system-ui,sans-serif;text-align:center;padding:24px}" +
     ".vyb-lock h2{margin:0 0 8px;font-size:22px}.vyb-lock a,.vyb-lock button{margin-top:14px;display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;border:0;text-decoration:none;font:inherit;cursor:pointer}" +
     ".vyb-badge{display:inline-block;font:600 11px/1 system-ui,sans-serif;padding:3px 7px;border-radius:9px;background:#1e3a8a22;color:#2563eb;border:1px solid #2563eb55;margin-left:6px;vertical-align:middle}" +
@@ -199,6 +202,7 @@
     ensureStyle();
     var h = IS_CONSOLE ? activeHome() : null, why = h ? blocked() : null, name = h ? (h.booster_name || h.booster_id) : "";
     document.body.classList.toggle("vy-booster-down", !!why);
+    document.body.classList.toggle("vyb-legacy", !document.getElementById("root"));
     if (why === "unreachable") {
       var st = stateOf(h.booster_id), bar = el("vyb-banner", "vyb-bar vyb-down");
       bar.setAttribute("role", "alert"); bar.setAttribute("data-state", st);

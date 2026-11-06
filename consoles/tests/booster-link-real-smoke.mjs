@@ -16,7 +16,7 @@ let bad = 0; const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${o
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let booster = null;
 const startBooster = async (days = 14, stateDir) => {
-  booster = spawn(PY, [join(root, "tests/booster/run_real_booster.py"), String(BP), String(days)], { cwd: root, env: { ...process.env, PYTHONPATH: root, ...(stateDir ? { CLOUDLEARN_STATE_DIR: stateDir } : {}) }, stdio: "ignore" });
+  booster = spawn(PY, [join(root, "tests/booster/run_real_booster.py"), String(BP), String(days)], { cwd: root, env: { ...process.env, PYTHONPATH: root, VYOMI_BOOSTER_RELAY_URL: BOOSTER + "/", ...(stateDir ? { CLOUDLEARN_STATE_DIR: stateDir } : {}) }, stdio: "ignore" });
   for (let i = 0; i < 120; i++) { try { if ((await fetch(BOOSTER + "/booster/status")).ok) return; } catch {} await sleep(500); }
   throw new Error("booster did not start");
 };
@@ -48,7 +48,9 @@ try {
   check("pairing with the real code succeeds", !String(paired).startsWith("ERR"), JSON.stringify(paired));
   check("tab reports connected", await wait(() => VyomiBooster.list().some((b) => VyomiBooster.state(b.id) === "connected")));
   const reg = await page.evaluate(() => JSON.stringify(VyomiBooster.list()));
-  check("registry has the booster, token not exposed", /127-0-0-1-9101/.test(reg) && !/"token"/.test(reg), reg);
+  check("registry has the booster, token not exposed", new RegExp("127-0-0-1-" + BP).test(reg) && !/"token"/.test(reg), reg);
+  const regE = await page.evaluate(() => JSON.parse(localStorage.getItem("vyomi.boosters"))[0]);
+  check("pair response endpoints land in the registry (relay_url from the booster, local_url null)", regE.relay_url === BOOSTER && !regE.local_url, JSON.stringify([regE.relay_url, regE.local_url]));
   // authenticated /_wire straight at the real booster
   const tok = await page.evaluate(() => { const r = JSON.parse(localStorage.getItem("vyomi.boosters") || "[]"); return r[0] && r[0].token; });
   const okWire = await fetch(BOOSTER + "/_wire/", { headers: { "x-vyomi-booster-token": tok, origin: `http://127.0.0.1:${NP}` } });
