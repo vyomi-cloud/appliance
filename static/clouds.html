@@ -1718,7 +1718,7 @@
     const VY_SIMULATORS = [
       { id: 'aws',   name: 'AWS',          free_tier: true, price: 21, services: ["EC2", "Lambda", "S3", "RDS", "DynamoDB", "SQS", "SNS", "API Gateway", "API Gateway V2", "EventBridge", "Step Functions", "Kinesis", "VPC", "Elastic Load Balancing", "IAM", "Secrets Manager", "KMS", "CloudWatch Logs", "Systems Manager", "CloudWatch"] },
       { id: 'gcp',   name: 'Google Cloud', free_tier: true, price: 21, services: ["Compute Engine", "Cloud Functions", "Kubernetes Engine", "Cloud Storage", "Artifact Registry", "Cloud SQL", "Firestore", "Memorystore for Redis", "VPC Network", "Pub/Sub", "API Gateway", "Eventarc", "Cloud Scheduler", "Secret Manager", "Cloud KMS", "IAM & Admin", "IAM Service Account Credentials", "Cloud Monitoring"] },
-      { id: 'azure', name: 'Azure',        free_tier: true, price: 21, services: ["Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps", "API Management", "Virtual networks", "Network Security Group", "Event Grid topics", "Key vaults", "Container Apps", "App Configuration", "DNS zones", "Monitor alerts", "Log Analytics", "Azure AI services", "Role Definition", "Entra ID / RBAC"] },
+      { id: 'azure', name: 'Azure',        free_tier: true, price: 21, services: ["Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps", "API Management", "Virtual networks", "Network Security Group", "Event Grid topics", "Key vaults", "Container Apps", "App Configuration", "DNS zones", "Monitor alerts", "Log Analytics", "Azure AI services", "Entra ID / RBAC"] },
     ];
     // Prices = the portal pricing page (Pro $19 / month, Max $29 / month; USD, billed in INR at checkout).
     const VY_PLANS = { pro: { price: 19, min: 3, scope: 'One cloud of your choice, switchable every 30 days' }, max: { price: 29, min: 3, scope: 'All clouds, unlimited' } };   // bought on the portal pricing page
@@ -1849,6 +1849,7 @@
   .mk-inc-l, .mk-inc-l.chips { flex-direction: column; flex-wrap: nowrap; gap: 7px; }
   .mk-inc-l li, .mk-inc-l.chips li { display: flex; align-items: flex-start; gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 13px; color: #27272a; line-height: 1.35; }
   .mk-inc-l li::before, .mk-inc-l.chips li::before { display: none; }
+  .mk-inc-l li b { font-weight: 700; margin-right: 2px; }
   .mk-inc-l li svg { flex: none; width: 14px; height: 14px; margin-top: 2px; fill: none; stroke: #16a34a; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
   .mk-inc-l li.mk-more, .mk-inc-l.chips li.mk-more { padding-left: 22px; border: 0; background: none; color: #71717a; font-weight: 600; }
   .mk-card .mk-cta { padding-top: 2px; color: #000; font-weight: 600; }
@@ -3457,18 +3458,15 @@
       }) };
     }
     // Dev / DevOps environment packs (not on sale yet: no price, no Buy). Contents are the planned scope.
-    const VY_PACKS = [
-      { id: 'containers', icon: 'widgets', name: 'Containers & Kubernetes', sub: 'Run your app like production', inc: ['Real container and Kubernetes runtime', 'Registries and image pulls', 'EKS, GKE and AKS APIs'] },
-      { id: 'cicd', icon: 'sync_alt', name: 'CI/CD & delivery', sub: 'Test your build and deploy pipeline', inc: ['Build and pipeline services', 'Artifact registries', 'Deploy to your simulator spaces'] },
-      { id: 'cost', icon: 'payments', name: 'Cost forecast', sub: 'Know your bill before you go live', inc: ['Cost meter per service', 'Simulated monthly invoices', 'Capacity advisor'] },
-      { id: 'failure', icon: 'bolt', name: 'Failure testing', sub: 'What breaks when the cloud fails', inc: ['Throttling and no-capacity errors', 'Outage scenarios', 'Fault injection'] },
-      { id: 'security', icon: 'verified_user', name: 'Security readiness', sub: 'Would your setup pass a review?', inc: ['Posture scans', 'IAM and policy checks', 'Findings you can fix and re-run'] },
-      { id: 'iot', icon: 'sensors', name: 'IoT', sub: 'Build device-connected apps', inc: ['Device fleets and MQTT', 'Device shadows', 'Rules and routing'] }
-    ];
+    const VY_PACKS = [{"id": "serverless", "icon": "bolt", "name": "Serverless apps", "sub": "Functions, APIs and events", "by": {"AWS": ["Lambda", "API Gateway", "API Gateway V2", "Step Functions", "EventBridge", "SQS", "SNS"], "Google Cloud": ["Cloud Functions", "API Gateway", "Pub/Sub", "Eventarc", "Cloud Scheduler"], "Azure": ["Function apps", "API Management", "Event Grid topics", "Service Bus"]}}, {"id": "containers", "icon": "widgets", "name": "Containers & compute", "sub": "Run workloads like production", "by": {"AWS": ["EC2", "Elastic Load Balancing", "VPC"], "Google Cloud": ["Compute Engine", "Kubernetes Engine", "Artifact Registry"], "Azure": ["Virtual Machines", "Container Apps", "Virtual networks"]}}, {"id": "data", "icon": "database", "name": "Data & storage", "sub": "Databases, caches and streams", "by": {"AWS": ["S3", "RDS", "DynamoDB", "Kinesis"], "Google Cloud": ["Cloud Storage", "Cloud SQL", "Firestore", "Memorystore for Redis"], "Azure": ["Storage accounts", "SQL servers", "Cosmos DB"]}}, {"id": "network", "icon": "lan", "name": "Networking", "sub": "Networks, load balancing and DNS", "by": {"AWS": ["VPC", "Elastic Load Balancing"], "Google Cloud": ["VPC Network"], "Azure": ["Virtual networks", "Network Security Group", "DNS zones"]}}, {"id": "security", "icon": "verified_user", "name": "Security & identity", "sub": "Identity, secrets and keys", "by": {"AWS": ["IAM", "Secrets Manager", "KMS"], "Google Cloud": ["IAM & Admin", "IAM Service Account Credentials", "Secret Manager", "Cloud KMS"], "Azure": ["Key vaults", "Entra ID / RBAC", "Network Security Group"]}}, {"id": "ops", "icon": "monitoring", "name": "Observability & ops", "sub": "Logs, metrics and configuration", "by": {"AWS": ["CloudWatch", "CloudWatch Logs", "Systems Manager"], "Google Cloud": ["Cloud Monitoring"], "Azure": ["Monitor alerts", "Log Analytics", "App Configuration"]}}];
     function _packSoon(p) {
+      const rows = Object.keys(p.by).map(c => { const L = p.by[c], v = L.slice(0, 2).join(', '), m = L.length - 2;
+        return '<b>' + _esc(c === 'Google Cloud' ? 'GCP' : c) + '</b> ' + _esc(v) + (m > 0 ? ' +' + m + ' more' : ''); });
+      const n = Object.keys(p.by).reduce((a, c) => a + p.by[c].length, 0);
       return _packCard({ id: 'pack-' + p.id, logo: 'pack-' + p.icon, title: p.name, sub: p.sub, ribbon: 'Soon', ribbonCls: 'free',
-        status: '<div class="mk-free no">' + _CHECK + '<span><b>Coming soon</b><small>Not on sale yet</small></span></div>',
-        included: _pcIncluded('Planned scope', p.inc, false),
+        status: '<div class="mk-free no">' + _CHECK + '<span><b>Coming soon</b><small>Existing services</small></span></div>',
+        included: '<div class="mk-inc"><div class="mk-inc-h">' + n + ' services included</div><ul class="mk-inc-l">' +
+          '<li>' + _CHECK + 'SDK, CLI & API for all ' + n + ' services</li>' + rows.map(r => '<li>' + _CHECK + r + '</li>').join('') + '</ul></div>',
         foot: '<div class="mk-buy"><span class="mk-buy-p"><span>Pricing soon</span></span><span class="mk-buy-b off">Coming soon</span></div>' });
     }
     function _aiLocal(added) {
