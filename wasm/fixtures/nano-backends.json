@@ -115,6 +115,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_dns",
+  "label": "CloudDnsStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_msg",
   "label": "InMemoryMessagingStore",
   "category": "gcp"

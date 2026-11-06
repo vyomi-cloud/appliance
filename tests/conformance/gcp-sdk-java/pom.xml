@@ -61,6 +61,10 @@
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-artifact-registry</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-dns</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

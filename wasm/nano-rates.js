@@ -11,7 +11,7 @@ window.NANO_RATE = {
   vpc: 0, cloudwatch: 0.1, ssm: 0.05,
   // GCP
   compute: 24.53, storage: 0.5, cloudsql: 25, pubsub: 0.4,
-  firestore: 0.18, functions: 0.2, secretmanager: 0.18,
+  firestore: 0.18, functions: 0.2, secretmanager: 0.18, dns: 0.2,
   // Azure — ARM resource types (Azure console, VMs, storage accounts, …)
   'microsoft.compute/virtualmachines': 30.37, 'microsoft.sql/servers': 4.99, 'microsoft.storage/storageaccounts': 0.5, 'microsoft.documentdb/databaseaccounts': 24.48,
   'microsoft.web/sites': 0.2, 'microsoft.servicebus/namespaces': 9.81, 'microsoft.keyvault/vaults': 0.03,

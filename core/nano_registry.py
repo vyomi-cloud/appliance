@@ -43,6 +43,7 @@ from core.azure_arm_core import AzureArm
 import types
 from core.cloudwatch_core import CloudWatchStore
 from core.gcp_monitoring_core import MonitoringStore
+from core.gcp_dns_core import CloudDnsStore
 
 _REG: dict | None = None
 
@@ -84,6 +85,7 @@ def get() -> dict:
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
+            "gcp_dns": CloudDnsStore(),           # Cloud DNS zones
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),

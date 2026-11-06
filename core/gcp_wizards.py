@@ -745,6 +745,35 @@ _REDIS_WIZARD = _basic_wizard(
 _REDIS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 
 
+# ============================================================================
+# Cloud DNS — Create DNS zone (the REST ManagedZone fields; core/gcp_dns_core.zone_from_form)
+# ============================================================================
+_DNS_WIZARD = _basic_wizard(
+    name_field=_name("Zone name", "my-zone"),
+    name_default="my-zone", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "dnsName", "label": "DNS name", "default": "example.com.", "required": True,
+         "help": "The domain this zone serves, e.g. example.com. (a trailing dot is added if missing)",
+         "validate": {"regex": r"^([A-Za-z0-9_-]{1,63}\.)+$|^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$",
+                      "message": "Enter a DNS name such as example.com."}},
+        {"name": "description", "label": "Description", "default": "Managed by Vyomi"},
+    ],
+    sections=[
+        {"label": "Zone type", "fields": [
+            {"name": "visibility", "label": "Zone type", "type": "radio", "default": "public", "options": [
+                {"value": "public",  "label": "Public — visible on the internet"},
+                {"value": "private", "label": "Private — visible only to selected VPC networks"},
+            ]},
+            {"name": "dnssec", "label": "DNSSEC", "type": "select", "default": "off",
+             "ifEquals": {"visibility": "public"}, "options": [
+                {"value": "off", "label": "Off"}, {"value": "on", "label": "On"}]},
+            {"name": "network", "label": "VPC network", "default": "projects/demo/global/networks/default",
+             "ifEquals": {"visibility": "private"}},
+        ]},
+    ],
+)
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -764,4 +793,5 @@ WIZARDS: dict[str, dict] = {
     "container":     _CONTAINER_WIZARD,
     "monitoring":    _MONITORING_WIZARD,
     "redis":         _REDIS_WIZARD,
+    "dns":           _DNS_WIZARD,
 }
