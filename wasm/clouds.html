@@ -1887,8 +1887,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-tab.on { color: #000; border-bottom-color: #000; }
   .mk-sec { margin: 22px 24px 10px; font-size: 14px; font-weight: 700; color: #18181b; }
   .mk-sec span { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: #71717a; }
-  .mk-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 8px 24px 24px; }
-  .mk-plans.one { grid-template-columns: minmax(0, 360px); }
+  .mk-plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 8px 24px 24px; }
+  .mk-plans.one { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
   .mk-plan { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
   .mk-plan.cur { border-color: #000; }
   .mk-plan-h { display: flex; align-items: center; justify-content: space-between; }
