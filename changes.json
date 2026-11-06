@@ -1,15 +1,25 @@
 {
- "at": "2026-11-06T17:08:07+00:00",
+ "at": "2026-11-06T18:08:11+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon EC2, CloudWatch",
+   "service": "Amazon EC2",
    "kind": "announcement",
-   "key": "feed:aws:b818b6fe8c4e",
-   "title": "Amazon EC2 now publishes ImdsV1Enabled CloudWatch metric",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-imdsv1enabled-cloudwatch-metric/",
-   "detail": "Amazon EC2 now supports an ImdsV1Enabled CloudWatch metric, giving customers visibility into which of their EC2 instances still have Instance Metadata Service Version 1 (IMDSv1) enabled. You can use this metric to track your migration to IMDSv2 across your accounts and Regions, at scale. With the ImdsV1Enabled metric, you can configure CloudWatch dashboards and alarms to track instances that still allow IMDSv1, identify migration gaps, and prioritize remediation, without building your own tooling to check the metadata options of instances across accounts and Regions. This gives you a reliable,",
+   "key": "feed:aws:d923db058a13",
+   "title": "AWS launches support for amortization of EC2 Capacity Blocks for ML",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aws-ec2-capacity-blocks-ml/",
+   "detail": "AWS Data Exports for Cost and Usage Report (CUR) 2.0 and AWS Cost Explorer now amortize the upfront fee for Amazon EC2 Capacity Blocks for ML across the duration of each reservation. You can see the amortized cost of each instance launched into a Capacity Block and the amortized cost of unused capacity, so you can attribute your upfront fee to the workloads that used it and identify capacity that went unused. Previously, a Capacity Block's upfront fee appeared as a single charge on the purchase date, making it difficult to see how that cost was spread across usage over the reservation. Now the",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3, AWS IAM",
+   "kind": "announcement",
+   "key": "feed:aws:b3726d404647",
+   "title": "AWS Glue Data Catalog now supports catalog-vended credentials with Apache Iceberg REST catalog federation",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/glue-catalog-vended-credentials-iceberg/",
+   "detail": "AWS Glue Data Catalog now supports external catalog's vended credentials in Apache Iceberg REST catalog federation. You can now read external Iceberg tables from Amazon Athena, Amazon EMR, Amazon Redshift, and AWS Glue using coarse-grained table grants in your external Iceberg catalog. Glue Data Catalog already federates to external Iceberg REST catalogs through an AWS IAM role that you configure with access to your Amazon S3 buckets. This enhancement in Glue Data Catalog provides another way to connect to an external Iceberg catalog and read only the tables that the external catalog authorize",
    "actionable": false
   }
  ],
