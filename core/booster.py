@@ -17,6 +17,7 @@ entitlements; it only attests "this tab paired with this booster").
 from __future__ import annotations
 
 import base64
+import contextvars
 import hashlib
 import hmac
 import json
@@ -27,6 +28,7 @@ import shutil
 import socket
 import threading
 import time
+import uuid
 from typing import Any, Optional
 
 from fastapi import Request
@@ -178,6 +180,18 @@ class HeadlessMiddleware:
         await send({"type": "http.response.body", "body": body})
 
     async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            return await self._inner(scope, receive, send)
+        slots: list = []                 # admission slots this request reserves; leftovers are released when it ends
+        tok = REQUEST_SLOTS.set(slots)
+        try:
+            await self._inner(scope, receive, send)
+        finally:
+            REQUEST_SLOTS.reset(tok)
+            if slots:
+                release_slots("compute", slots)
+
+    async def _inner(self, scope, receive, send):
         if scope.get("type") == "http":
             headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                        for k, v in scope.get("headers") or []}
@@ -254,7 +268,10 @@ def resource_budget() -> dict:
     cap_mb = int(host_mb * CAP_FRACTION)
     if limit_mb:                         # Docker: min(70% host, Docker VM limit)
         cap_mb = min(cap_mb, limit_mb)
-    cpus = os.cpu_count() or 1
+    cap_env = os.environ.get("VYOMI_BOOSTER_CAP_MB")          # explicit booster budget (e.g. 8192 on a 2-core/8GB Codespace)
+    if cap_env and cap_env.isdigit():
+        cap_mb = int(cap_env)
+    cpus = int(os.environ.get("VYOMI_BOOSTER_CPUS") or 0) or os.cpu_count() or 1
     try:
         du = shutil.disk_usage(_state_dir() if os.path.isdir(_state_dir()) else ".")
         disk_cap_gb = round(min(du.total * CAP_FRACTION, du.free) / 1e9, 1)
@@ -294,10 +311,24 @@ class BoosterCapacityError(Exception):
 
 _LEDGER_LOCK = threading.Lock()
 _LEDGER: dict[str, dict[str, int]] = {"compute": {}, "ai": {}}
+_EXPIRES: dict[str, dict[str, float]] = {"compute": {}, "ai": {}}   # ident -> monotonic deadline (admission slots only)
+SLOT_PREFIX = "rsv:"
+REQUEST_SLOTS: "contextvars.ContextVar[Optional[list]]" = contextvars.ContextVar("booster_request_slots", default=None)
+SLOT_TTL_S = float(os.environ.get("VYOMI_BOOSTER_SLOT_TTL_S", "120"))
+
+
+def _purge_locked(now: Optional[float] = None) -> None:
+    """Drop admission slots whose create never completed (crash/failure between admit and create)."""
+    now = time.monotonic() if now is None else now
+    for kind, exp in _EXPIRES.items():
+        for ident in [i for i, t in exp.items() if t <= now]:
+            exp.pop(ident, None)
+            _LEDGER[kind].pop(ident, None)
 
 
 def usage() -> dict:
     with _LEDGER_LOCK:
+        _purge_locked()
         return {k: sum(v.values()) for k, v in _LEDGER.items()}
 
 
@@ -308,8 +339,8 @@ def _kind_budget_mb(kind: str) -> int:
 
 
 def can_allocate(kind: str, mb: int, *, cloud: str = "aws", zone: str = "-", enforce: Optional[bool] = None) -> None:
-    """Raise BoosterCapacityError if `mb` more RAM exceeds the kind's share of the 70% cap.
-    No-op when booster mode is off (the non-booster appliance keeps its existing behaviour)."""
+    """NON-reserving check: raise BoosterCapacityError if `mb` more RAM exceeds the kind's share of the cap.
+    Use reserve()/allocate() on a create path - a check alone races. No-op when booster mode is off."""
     if not (booster_mode() if enforce is None else enforce):
         return
     budget = _kind_budget_mb(kind)
@@ -319,18 +350,60 @@ def can_allocate(kind: str, mb: int, *, cloud: str = "aws", zone: str = "-", enf
 
 
 def allocate(kind: str, ident: str, mb: int, **kw) -> None:
-    with _LEDGER_LOCK:                 # check+reserve atomically
+    """Atomic check+reserve for `ident` (re-allocating the same ident replaces its previous size)."""
+    with _LEDGER_LOCK:
+        _purge_locked()
         budget = _kind_budget_mb(kind)
         used = sum(_LEDGER[kind].values()) - _LEDGER[kind].get(ident, 0)
         on = booster_mode() if kw.get("enforce") is None else kw["enforce"]
         if on and used + int(mb) > budget:
             raise BoosterCapacityError(kw.get("cloud", "aws"), kind, int(mb), max(0, budget - used), kw.get("zone", "-"))
         _LEDGER[kind][ident] = int(mb)
+        _EXPIRES[kind].pop(ident, None)
+
+
+def reserve_slots(kind: str, n: int, mb: int, *, cloud: str = "aws", zone: str = "-",
+                  enforce: Optional[bool] = None) -> list[str]:
+    """Admission: atomically reserve `n` slots of `mb` each (all-or-nothing) under a short TTL.
+    Concurrent admissions can never oversubscribe the budget. Slots are consumed by rebind() when the real
+    instance id exists; unconsumed ones expire. Returns [] (no-op) when booster mode is off."""
+    on = booster_mode() if enforce is None else enforce
+    if not on:
+        return []
+    n = max(1, int(n))
+    with _LEDGER_LOCK:
+        _purge_locked()
+        budget = _kind_budget_mb(kind)
+        used = sum(_LEDGER[kind].values())
+        if used + n * int(mb) > budget:
+            raise BoosterCapacityError(cloud, kind, n * int(mb), max(0, budget - used), zone)
+        ids = [f"{SLOT_PREFIX}{uuid.uuid4().hex[:12]}" for _ in range(n)]
+        deadline = time.monotonic() + SLOT_TTL_S
+        for i in ids:
+            _LEDGER[kind][i] = int(mb)
+            _EXPIRES[kind][i] = deadline
+        return ids
+
+
+def rebind(kind: str, slot: str, ident: str, mb: int, **kw) -> None:
+    """Turn an admission slot into the real instance's reservation (resizing to `mb`, atomically)."""
+    with _LEDGER_LOCK:
+        _LEDGER[kind].pop(slot, None)
+        _EXPIRES[kind].pop(slot, None)
+    allocate(kind, ident, mb, **kw)
+
+
+def release_slots(kind: str, slots) -> None:
+    with _LEDGER_LOCK:
+        for s_ in slots:
+            _LEDGER[kind].pop(s_, None)
+            _EXPIRES[kind].pop(s_, None)
 
 
 def release(kind: str, ident: str) -> None:
     with _LEDGER_LOCK:
         _LEDGER[kind].pop(ident, None)
+        _EXPIRES[kind].pop(ident, None)
 
 
 # --------------------------------------------------------------------------- identity / tokens

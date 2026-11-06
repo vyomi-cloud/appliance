@@ -8199,20 +8199,107 @@ def _docker_private_key_pem(instance: dict) -> bytes | None:
         return None
 
 
-def _docker_instance_memory_mb(instance: dict) -> int:
-    """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the booster cap)."""
+def _booster_cloud_of(instance: dict) -> str:
+    c = str(instance.get("cloud") or instance.get("provider") or "").lower()
+    if c.startswith("gcp") or c.startswith("google"):
+        return "gcp"
+    if c.startswith("az"):
+        return "azure"
+    if c.startswith("aws"):
+        return "aws"
+    iid = str(instance.get("instance_id") or "")
+    if iid.startswith("gce") or instance.get("machine_type") or instance.get("machineType"):
+        return "gcp"
+    if iid.startswith("az-"):
+        return "azure"
+    return "aws"
+
+
+def _catalog_memory_mb(instance_type: str, cloud: str) -> int:
+    """The instance TYPE's real memory (catalog ram_mb), 0 if unknown."""
     try:
-        return int(instance.get("memory_mb") or instance.get("memory") or 1024) or 1024
+        from core import runtime_sizer as _sizer
+        shape = _sizer.shape_for_instance(str(instance_type or ""), cloud)
+        return int((shape or {}).get("ram_mb") or 0)
+    except Exception:
+        return 0
+
+
+def _docker_instance_memory_mb(instance: dict) -> int:
+    """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the booster cap).
+    Explicit memory wins; in booster mode the instance TYPE's real memory (catalog) is used and counted, else 1024."""
+    try:
+        explicit = int(instance.get("memory_mb") or instance.get("memory") or 0)
     except (TypeError, ValueError):
-        return 1024
+        explicit = 0
+    if explicit > 0:
+        return explicit
+    try:
+        from core import booster as _b
+        if _b.booster_mode():
+            itype = (instance.get("instance_type") or instance.get("machine_type") or instance.get("machineType")
+                     or instance.get("vm_size") or "")
+            cat = _catalog_memory_mb(itype, _booster_cloud_of(instance))
+            if cat > 0:
+                return cat
+    except Exception:
+        pass
+    return 1024
 
 
 def _booster_capacity_precheck(cloud: str, instance_type: str = "", count: int = 1, zone: str = "-") -> None:
-    """Booster mode: raise core.booster.BoosterCapacityError BEFORE any instance record is created if `count`
-    instances would exceed the 70% compute share (same memory the Docker start will allocate). No-op otherwise."""
+    """Booster admission (named precheck for history): ATOMICALLY RESERVES `count` slots sized by the instance type's
+    real memory, or raises core.booster.BoosterCapacityError before any record exists. The slots are bound to the real
+    instance ids by _booster_claim() in the create core (same request context) and expire after a short TTL if the
+    create never completes. No-op outside booster mode."""
     from core import booster as _booster
-    mem = _docker_instance_memory_mb({"instance_type": instance_type, "provider": cloud})
-    _booster.can_allocate("compute", mem * max(1, int(count or 1)), cloud=cloud, zone=zone)
+    mem = _docker_instance_memory_mb({"instance_type": instance_type, "cloud": cloud})
+    slots = _booster.reserve_slots("compute", max(1, int(count or 1)), mem, cloud=cloud, zone=zone)
+    if slots:
+        lst = _booster.REQUEST_SLOTS.get()
+        if lst is None:                    # not under the ASGI request scope (direct call): TTL expiry cleans up
+            lst = []
+            _booster.REQUEST_SLOTS.set(lst)
+        lst.extend(slots)
+
+
+def _booster_claim(instance: dict, cloud: str = "", zone: str = "-") -> None:
+    """Create-core hook: bind the request's admission slot (or, on paths with no pre-check - REST, console - make a fresh
+    atomic reservation) to this instance id. Raises HTTPException with the cloud's native capacity error."""
+    from core import booster as _booster
+    if not _booster.booster_mode():
+        return
+    cloud = cloud or _booster_cloud_of(instance)
+    mem = _docker_instance_memory_mb(instance)
+    slots = _booster.REQUEST_SLOTS.get()
+    try:
+        if slots:
+            _booster.rebind("compute", slots.pop(0), str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
+        else:
+            _booster.allocate("compute", str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
+    except Exception as exc:
+        if exc.__class__.__name__ == "BoosterCapacityError":
+            raise HTTPException(status_code=exc.status, detail=f"{exc.code}: {exc.message}")
+        raise
+
+
+def _booster_resize_azure_vm(record: dict, vm_size: str) -> None:
+    """Booster: an Azure VM size change re-reserves under the new memory (atomic); raises BoosterCapacityError.
+    A VM currently holding a reservation is resized in place; one that isn't running only gets a fit check."""
+    from core import booster as _booster
+    if not _booster.booster_mode():
+        return
+    props = record.get("properties") if isinstance(record.get("properties"), dict) else {}
+    rt = props.get("runtime") if isinstance(props.get("runtime"), dict) else {}
+    iid = str(rt.get("instanceId") or "")
+    mem = _docker_instance_memory_mb({"instance_type": vm_size, "cloud": "azure"})
+    zone = str(record.get("location") or "-")
+    with _booster._LEDGER_LOCK:
+        held = iid in _booster._LEDGER["compute"]
+    if iid and held:
+        _booster.allocate("compute", iid, mem, cloud="azure", zone=zone)
+    else:
+        _booster.can_allocate("compute", mem, cloud="azure", zone=zone)
 
 
 def _booster_gcp_error_body(exc) -> dict:
@@ -8305,18 +8392,21 @@ def _start_docker_instance(instance: dict) -> dict:
     # Booster: instances count against the 70% host cap (compute share). Over it, the cloud's REAL capacity error
     # (InsufficientInstanceCapacity / ZONE_RESOURCE_POOL_EXHAUSTED / AllocationFailed). No-op outside booster mode.
     try:
-        from core import booster as _booster
-        _booster.allocate("compute", str(instance.get("instance_id")), int(inst.memory_mb),
-                          cloud=str(instance.get("cloud") or instance.get("provider") or "aws").lower()[:5].replace("googl", "gcp"),
-                          zone=str(instance.get("zone") or instance.get("availability_zone") or "-"))
-    except Exception as exc:
-        if exc.__class__.__name__ == "BoosterCapacityError":
-            raise HTTPException(status_code=exc.status, detail=f"{exc.code}: {exc.message}")
+        _booster_claim(instance, _booster_cloud_of(instance), str(instance.get("zone") or instance.get("availability_zone") or "-"))
+    except HTTPException:
+        raise
+    except Exception:
+        pass
     # create() is idempotent: reuses an existing container/volume, else
     # `docker run`s it (and (re)starts a stopped one).
     try:
         _docker_compute().create(inst)
     except Exception as exc:
+        try:    # failed launch holds no RAM
+            from core import booster as _booster
+            _booster.release("compute", str(instance.get("instance_id")))
+        except Exception:
+            pass
         raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
     instance["container_name"] = inst.container_name
     instance["container_id"] = inst.container_name
@@ -12948,6 +13038,7 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
             instance["private_ip"] = _vpc_core._allocate_private_ip(_probe, req.subnet_id)
         except Exception:
             pass
+    _booster_claim(instance, "aws", str(instance.get("availability_zone") or instance.get("zone") or "-"))
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
@@ -14301,6 +14392,7 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         "console_prompt": _cmd_prompt({"runtime_backend": runtime_backend, "container_name": f"cloudlearn-{instance_id}", "container_id": ""}),
         "network_interfaces": network_interfaces_payload,
     }
+    _booster_claim(instance, "gcp", f"projects/{project}/zones/{zone}")
     return instance
 
 
