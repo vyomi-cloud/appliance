@@ -1315,6 +1315,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #app-main a { color: #000; }
     /* vy-embed black-white, Health + API reference: strip every brand/status colour (green ticks, blue pills, coloured method badges, brand icons). */
     html.vy-embed #host-util-card, html.vy-embed #stats-card, html.vy-embed #svc-status-card { filter: grayscale(1); }
+    /* Health dashboard (drawer): no outer panel — the section header's baseline runs edge to edge and the tiles are the cards. */
+    html.vy-embed #app-main #host-util-card, html.vy-embed #app-main #stats-card, html.vy-embed #app-main #svc-status-card {
+      background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; margin-bottom: 30px !important; }
+    html.vy-embed #app-main #host-util-card > .sc-head, html.vy-embed #app-main #stats-card > .sc-head, html.vy-embed #app-main #svc-status-card > .sc-head {
+      border-bottom: 1px solid #e4e4e7 !important; margin-left: 0 !important; margin-right: 0 !important; width: 100%; }
+    html.vy-embed #app-main #host-util-card > .sc-head > .sc-title, html.vy-embed #app-main #stats-card > .sc-head > .sc-title, html.vy-embed #app-main #svc-status-card > .sc-head > .sc-title { border-bottom: 2px solid #000 !important; }
     html.vy-embed #svc-status-card .material-icons, html.vy-embed #host-util-card .material-icons { color: #18181b !important; }
     html.vy-embed #view-api .usage-tab.active { background: #000 !important; color: #fff !important; border-color: #000 !important; }
     html.vy-embed #view-api .api-tag-title { border-bottom-color: #000 !important; }
