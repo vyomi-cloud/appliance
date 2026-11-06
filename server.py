@@ -12638,7 +12638,10 @@ def _await_reboot_ready(instance: dict, is_running, timeout: float = 45.0) -> bo
     import time as _t
     if is_running():
         return True
-    if str(instance.get("state") or "").lower() not in {"pending", "rebooting"}:
+    # Only an instance that is genuinely down fails fast. A record that says pending / rebooting /
+    # running while the backend does not yet report running is a launch or restart still settling
+    # (the record can be ahead of the container), so give it time rather than 409 on a race.
+    if str(instance.get("state") or "").lower() in {"stopped", "stopping", "shutting-down", "terminated"}:
         return False
     deadline = _t.monotonic() + timeout
     while _t.monotonic() < deadline:
