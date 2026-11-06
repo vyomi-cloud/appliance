@@ -470,8 +470,16 @@ def status() -> dict:
         "resources": {**res, "usage_mb": u,
                       "free_mb": {k: max(0, res["memory_split_mb"][k] - u[k]) for k in u}},
         "health": {"ok": healthy, "state": "locked" if (on and expired) else ("ok" if on else "not-a-booster")},
-        "nano_ui": NANO_URL, **endpoints(),
+        "tunnel": _relay_info(), "nano_ui": NANO_URL, **endpoints(),
     }
+
+
+def _relay_info() -> dict:
+    try:
+        from core import booster_relay
+        return booster_relay.info()
+    except Exception:
+        return {"bundled": False, "running": False}
 
 
 def _version() -> str:
@@ -483,6 +491,12 @@ def _version() -> str:
 
 # --------------------------------------------------------------------------- routes
 def register(app) -> None:
+    if booster_mode() and os.environ.get("VYOMI_BOOSTER_NO_RELAY") != "1":
+        try:   # the Nano<->host tunnel ships inside the booster (no separate vyomi-tunnel release)
+            from core import booster_relay
+            booster_relay.start_supervised()
+        except Exception:
+            pass
     def _cors(resp, request):      # CORS headers are applied by HeadlessMiddleware
         return resp
 
