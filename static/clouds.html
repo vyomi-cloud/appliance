@@ -1834,7 +1834,7 @@
   /* both tab sections: no grey field, only the tiles */
   html.vy-embed body:has(#view-marketplace:not([hidden])), html.vy-embed body:has(#view-marketplace:not([hidden])) #app-main,
   html.vy-embed #view-marketplace, html.vy-embed #view-marketplace > .container, html.vy-embed #app-main #mkt-card,
-  html.vy-embed #app-main #mkt-card > .sc-head, #mkt-p-plan, #mkt-p-payg { background: #fff !important; }
+  html.vy-embed #app-main #mkt-card > .sc-head, #mkt-p-cur, #mkt-p-plan, #mkt-p-payg { background: #fff !important; }
   html.vy-embed #app-main #mkt-card { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
   /* ---- clean card body ---- */
   .mk-card .mk-main { gap: 14px; padding: 16px 18px 6px; }
@@ -1865,6 +1865,7 @@
   .mk-card[data-sim$="aws"] .mk-head { background: #fff4e3; }
   .mk-card[data-sim$="gcp"] .mk-head { background: #e8f0fe; }
   .mk-card[data-sim$="azure"] .mk-head { background: #e3f1fb; }
+  .mk-card[data-sim="plan-free"] .mk-head { background: #f4f4f5; }
   .mk-card[data-sim="plan-max"] .mk-head { background: #ece9fe; }
   .mk-head .mk-name { color: #000; }
   .mk-head .mk-sub { color: #52525b; }
@@ -1922,10 +1923,12 @@
   <div class="container">
     <div class="surface-card" id="mkt-card">
       <div class="sc-head"><div class="mk-tabs" role="tablist">
-        <button type="button" class="mk-tab on" role="tab" id="mkt-t-plan" data-tab="plan" aria-selected="true"><span class="material-icons">workspace_premium</span>Your current plan</button>
+        <button type="button" class="mk-tab on" role="tab" id="mkt-t-cur" data-tab="cur" aria-selected="true"><span class="material-icons">verified</span>Your current plan</button>
+        <button type="button" class="mk-tab" role="tab" id="mkt-t-plan" data-tab="plan" aria-selected="false"><span class="material-icons">workspace_premium</span>Subscription Plan</button>
         <button type="button" class="mk-tab" role="tab" id="mkt-t-payg" data-tab="payg" aria-selected="false"><span class="material-icons">shopping_bag</span>Pay as you go</button>
       </div></div>
-      <div id="mkt-p-plan" role="tabpanel" aria-labelledby="mkt-t-plan"><div id="mkt-plan"></div></div>
+      <div id="mkt-p-cur" role="tabpanel" aria-labelledby="mkt-t-cur"><div id="mkt-cur"></div></div>
+      <div id="mkt-p-plan" role="tabpanel" aria-labelledby="mkt-t-plan" hidden><div id="mkt-plan"></div></div>
       <div id="mkt-p-payg" role="tabpanel" aria-labelledby="mkt-t-payg" hidden>
         <p class="sc-desc">Buy only the clouds you need, month to month. Each simulator gets a single space you can open from Spaces any time.</p>
         <div class="mk-sec">Full Cloud stack</div>
@@ -3487,7 +3490,7 @@
     }
     function _pcLogo(id) {
       if (id.indexOf('pack-') === 0) return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">' + id.slice(5) + '</span></span>';
-      if (id === 'plan-pro') return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">cloud</span></span>';
+      if (id === 'plan-pro' || id === 'plan-free') return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">cloud</span></span>';
       if (id === 'plan-max') id = 'all';
       if (id !== 'all') return '<span class="mk-logo ' + id + '">' + (SPACE_LOGOS[id] || '').replace(/sp-az-g/g, 'mk-az-g' + id) + '</span>';
       return '<span class="mk-logo multi">' + ['aws', 'gcp', 'azure'].map(k => (SPACE_LOGOS[k] || '').replace(/sp-az-g/g, 'mk-az-g-all')).join('') + '</span>';
@@ -3530,6 +3533,17 @@
       return _packCard({ id: 'plan-' + k, logo: 'plan-' + k, title: name, sub: k === 'max' ? 'All clouds' : 'One cloud', ribbon: cur ? 'Yours' : name, ribbonCls: cur ? 'pro' : 'free',
         status: status, included: _pcIncluded('What’s included', inc, false), foot: foot });
     }
+    function _freeCard() {
+      const inc = ['All 3 clouds visible', 'Core services with limited quotas', 'SDK, CLI & API on free services', 'Runs in your browser or offline'];
+      return _packCard({ id: 'plan-free', logo: 'plan-free', title: 'Free', sub: 'Get started', ribbon: 'Yours', ribbonCls: 'pro',
+        status: '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>Free, no payment needed</small></span></div>',
+        included: _pcIncluded('What’s included', inc, false), foot: '<span class="mk-note">Upgrade any time under Subscription Plan.</span>' });
+    }
+    function _mktCurHtml(l) {
+      const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS;
+      const own = (l && l.owned && l.owned.length) ? '<p class="mk-plan-own">Plus ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately (see Pay as you go).</p>' : '';
+      return '<p class="sc-desc">Your current plan.</p><div class="mk-plans one">' + (t === 'free' ? _freeCard() : _planCard(t, P, true, l)) + '</div>' + own;
+    }
     function _mktPlanHtml(l) {
       const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS;
       const own = (l && l.owned && l.owned.length) ? '<p class="mk-plan-own">Plus ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately (see Pay as you go).</p>' : '';
@@ -3562,9 +3576,10 @@
       const pk = document.getElementById('mkt-packs'); if (pk) pk.innerHTML = VY_PACKS.map(p => _packSale(p, mc.packs)).join('');
       const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
       const st = document.getElementById('mkt-plan'); if (st) st.innerHTML = _mktPlanHtml(mc.licence);
+      const cu = document.getElementById('mkt-cur'); if (cu) cu.innerHTML = _mktCurHtml(mc.licence);
       document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => {
         document.querySelectorAll('.mk-tab').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
-        document.getElementById('mkt-p-plan').hidden = b.dataset.tab !== 'plan'; document.getElementById('mkt-p-payg').hidden = b.dataset.tab !== 'payg'; }); } });
+        ['cur', 'plan', 'payg'].forEach(k => { document.getElementById('mkt-p-' + k).hidden = b.dataset.tab !== k; }); }); } });
       g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
       g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));
     }
