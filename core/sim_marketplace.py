@@ -91,7 +91,7 @@ def licence_summary(tier: str | None, primary: str = "", owned: Iterable[str] = 
 
 
 # AI STACK add-on (monthly, USD; portal owns checkout): $12 for ONE cloud's AI services (Bedrock / Vertex / Azure OpenAI
-# + that cloud's agent/knowledge-base plumbing), $19 for all clouds. It is an ADD-ON to the simulator (independent of
+# + that cloud's agent/knowledge-base plumbing). No all-clouds card is shown (a licence claim of "all" still enables every cloud). It is an ADD-ON to the simulator (independent of
 # Pro/Max, runs on top of any tier) and needs that cloud's simulator in Spaces. No MySQL/RDS dependency of its own.
 AI_STACK = {"per_cloud_usd": 12, "all_usd": 19, "per": "/ month"}
 AI_INCLUDES = {
@@ -133,12 +133,6 @@ def ai_stack_cards(ai: Any, added: Iterable[str] = (), portal: str = "https://vy
                       "price_usd": AI_STACK["per_cloud_usd"], "per": AI_STACK["per"],
                       "requires_simulator": sim["id"] not in added and not on,
                       "url": "" if on else url(sim["id"])})
-    cards.append({"id": "all", "name": "All clouds", "scope": "all", "enabled": all_on, "via": "all" if all_on else "",
-                  "product": "AI stack on every cloud",
-                  "includes": [f'{AI_INCLUDES[x["id"]]["product"]}' for x in sims if x["id"] in AI_INCLUDES],
-                  "price_usd": AI_STACK["all_usd"], "per": AI_STACK["per"],
-                  "requires_simulator": not all_on and not added,
-                  "url": "" if all_on else url("all")})
     return cards
 
 

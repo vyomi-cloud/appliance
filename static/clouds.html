@@ -1787,7 +1787,7 @@
   .mk-sec { margin: 22px 24px 10px; font-size: 14px; font-weight: 700; color: #18181b; }
   .mk-sec span { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: #71717a; }
   .mk-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 8px 24px 24px; }
-  .mk-plans.one { grid-template-columns: minmax(0, 420px); }
+  .mk-plans.one { grid-template-columns: minmax(0, 360px); }
   .mk-plan { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
   .mk-plan.cur { border-color: #000; }
   .mk-plan-h { display: flex; align-items: center; justify-content: space-between; }
@@ -1820,7 +1820,7 @@
   .mk-inc-l.chips { flex-direction: row; flex-wrap: wrap; gap: 4px 6px; }
   .mk-inc-l.chips li { padding: 2px 8px; border: 1px solid #ececef; border-radius: 999px; background: #fafafa; font-size: 11.5px; }
   .mk-inc-l.chips li::before { display: none; }
-  #mkt-grid .mk-card, #mkt-ai .mk-card { height: 100%; }
+  #mkt-grid .mk-card, #mkt-ai .mk-card, #mkt-plan .mk-card { height: 100%; }
   .mk-card .mk-main { flex: 1 1 auto; }
   .mk-card .mk-foot { margin-top: auto; }
   .mk-inc-l li.mk-more { color: #71717a; font-weight: 600; }
@@ -3438,9 +3438,7 @@
     function _aiLocal(added) {
       const u = id => (VY_PORTAL.replace(/\/$/, '')) + '/checkout?product=ai_stack&scope=' + id + '&period=monthly';
       return VY_SIMULATORS.map(s => ({ id: s.id, name: s.name, enabled: false, price_usd: 12, per: '/ month', product: VY_AI[s.id].product, includes: VY_AI[s.id].includes,
-                                        requires_simulator: added.indexOf(s.id) < 0, url: u(s.id) }))
-        .concat([{ id: 'all', name: 'All clouds', enabled: false, price_usd: 19, per: '/ month', product: 'AI stack on every cloud',
-                   includes: VY_SIMULATORS.map(s => VY_AI[s.id].product), requires_simulator: !added.length, url: u('all') }]);
+                                        requires_simulator: added.indexOf(s.id) < 0, url: u(s.id) }));
     }
     // One card design for both Pay-as-you-go sections: grid header (logo, name, ribbon) / status row / what's included / actions.
     function _pcIncluded(head, items, wide) {
@@ -3449,6 +3447,8 @@
         (more > 0 ? '<li class="mk-more">+' + more + ' more</li>' : '') + '</ul></div>';
     }
     function _pcLogo(id) {
+      if (id === 'plan-pro') return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">cloud</span></span>';
+      if (id === 'plan-max') id = 'all';
       if (id !== 'all') return '<span class="mk-logo ' + id + '">' + (SPACE_LOGOS[id] || '').replace(/sp-az-g/g, 'mk-az-g' + id) + '</span>';
       return '<span class="mk-logo multi">' + ['aws', 'gcp', 'azure'].map(k => (SPACE_LOGOS[k] || '').replace(/sp-az-g/g, 'mk-az-g-all')).join('') + '</span>';
     }
@@ -3460,9 +3460,9 @@
         o.status + o.included + (o.cta || '') + '</' + (o.addId ? 'button' : 'div') + '>' +
         '<div class="mk-foot">' + o.foot + '</div></div>';
     }
-    function _buyBtn(url, label, price, per, aria) {
-      return '<div class="mk-buy"><span class="mk-buy-p"><span><b>$' + price + '</b> ' + _esc(per) + '</span><small>Cancel any month</small></span>' +
-        '<a class="mk-buy-b" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + _esc(aria) + '">Buy</a></div>';
+    function _buyBtn(url, label, price, per, aria, btn, note) {
+      return '<div class="mk-buy"><span class="mk-buy-p"><span><b>$' + price + '</b> ' + _esc(per) + '</span><small>' + _esc(note || 'Cancel any month') + '</small></span>' +
+        '<a class="mk-buy-b" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + _esc(aria) + '">' + _esc(btn || 'Buy') + '</a></div>';
     }
     function _aiHtml(c) {
       const all = c.id === 'all', inc = (c.includes && c.includes.length) ? c.includes : (VY_AI[c.id] ? VY_AI[c.id].includes : []);
@@ -3479,16 +3479,16 @@
     function _planCard(k, P, cur, l) {
       const p = P[k] || VY_PLANS[k], price = p.price_usd || p.price, mn = p.min_months || p.min;
       const name = k === 'max' ? 'Max' : 'Pro', base = ((l && l.pricing_url) || _pricingUrl()).replace(/\/pricing$/, '');
-      const pts = k === 'max' ? ['All 3 clouds, unlimited', 'Every cloud at once'] : ['1 cloud of your choice', 'Switch cloud every 30 days'];
-      const head = '<div class="mk-plan-h"><b>' + name + '</b>' + (cur ? '<span class="mk-pill">' + _CHECK + 'Your plan</span>' : '') + '</div>' +
-        '<div class="mk-plan-p">$' + price + '<small> / month</small></div><div class="mk-plan-m">Billed over a minimum of ' + mn + ' months</div>' +
-        '<ul>' + pts.map(x => '<li>' + _CHECK + x + '</li>').join('') + '</ul>';
-      let act;
-      if (!cur) act = '<a class="mk-plan-btn" href="' + _esc(base + '/checkout?tier=' + k + '&period=monthly') + '" target="_blank" rel="noopener noreferrer">Pay $' + price + ' / month</a>';
-      else if (k === 'pro') act = '<a class="mk-plan-btn" href="' + _esc(base + '/dashboard') + '" target="_blank" rel="noopener noreferrer">Upgrade to Max</a><span class="mk-plan-n">Pro to Max is pro-rated for the days left.</span>';
-      else act = '<span class="mk-plan-n">You have everything this plan includes.</span>';
-      const det = cur && l && l.detail && k === 'pro' ? '<div class="mk-plan-d">' + _esc(l.detail) + '</div>' : '';
-      return '<div class="mk-plan' + (cur ? ' cur' : '') + '">' + head + det + act + '</div>';
+      const inc = k === 'max' ? ['All 3 clouds, unlimited', 'Every cloud at once', 'Full access to every simulator service'] : ['1 cloud of your choice', 'Switch cloud every 30 days', 'Full access to that cloud’s services'];
+      const status = cur
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>' + (k === 'pro' && l && l.detail ? _esc(l.detail) : 'Active on your licence') + '</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>Billed over a minimum of ' + mn + ' months</b></span></div>';
+      let foot;
+      if (!cur) foot = _buyBtn(base + '/checkout?tier=' + k + '&period=monthly', 'Pay', price, '/ month', 'Pay for ' + name + ', $' + price + ' per month', 'Pay', 'Min. ' + mn + ' months');
+      else if (k === 'pro') { const mx = P.max || VY_PLANS.max; foot = _buyBtn(base + '/dashboard', 'Upgrade', mx.price_usd || mx.price, '/ month', 'Upgrade to Max', 'Upgrade', 'Pro → Max is pro-rated'); }
+      else foot = '<span class="mk-note">You have everything this plan includes.</span>';
+      return _packCard({ id: 'plan-' + k, logo: 'plan-' + k, title: name, sub: k === 'max' ? 'All clouds' : 'One cloud', ribbon: cur ? 'Yours' : name, ribbonCls: cur ? 'pro' : 'free',
+        status: status, included: _pcIncluded('What’s included', inc, false), foot: foot });
     }
     function _mktPlanHtml(l) {
       const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS;
@@ -3512,7 +3512,7 @@
       if (c.trial_ended) foot += '<span class="mk-pill ghost">Trial ended</span>';
       (c.offers || []).forEach(o => { foot += _buyBtn(o.url, 'Buy ' + c.name, o.price_usd, o.per, 'Buy ' + c.name + ' for $' + o.price_usd + ' ' + o.per); });
       const svc = (c.services && c.services.length) ? c.services : ((VY_SIMULATORS.filter(x => x.id === c.id)[0] || {}).services || []);
-      return _packCard({ id: c.id, logo: c.id, title: c.name, sub: 'Full Cloud stack' + (c.added ? ' · in Spaces' : ''), ribbon: T, ribbonCls: tier, off: c.trial_ended,
+      return _packCard({ id: c.id, logo: c.id, title: c.name, sub: 'Full Cloud stack' + (c.added ? ' · in Spaces' : ''), ribbon: (tier === 'free' ? 'Full' : T), ribbonCls: tier, off: c.trial_ended,
         addId: c.id, disabled: c.can_add === false, aria: (c.added ? 'Open ' : 'Add ') + c.name + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier',
         status: free, included: _pcIncluded('All ' + svc.length + ' services', svc, true), cta: cta, foot: foot });
     }

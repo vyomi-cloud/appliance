@@ -36,8 +36,8 @@ check("licence strip: Pro names its cloud", ls["tier"] == "pro" and "Google Clou
 
 # ---- AI stack add-on
 ai1 = mk.ai_stack_cards(["aws"], ["aws", "gcp"])
-check("AI stack: $12 per cloud, $19 all clouds", [(c["id"], c["price_usd"]) for c in ai1] == [("aws", 12), ("gcp", 12), ("azure", 12), ("all", 19)])
-check("AI single: only the bought cloud is enabled; needs the simulator in Spaces", [c["enabled"] for c in ai1] == [True, False, False, False] and ai1[2]["requires_simulator"] and not ai1[1]["requires_simulator"])
+check("AI stack: $12 per cloud, $19 all clouds", [(c["id"], c["price_usd"]) for c in ai1] == [("aws", 12), ("gcp", 12), ("azure", 12)])
+check("AI single: only the bought cloud is enabled; needs the simulator in Spaces", [c["enabled"] for c in ai1] == [True, False, False] and ai1[2]["requires_simulator"] and not ai1[1]["requires_simulator"])
 ai2 = mk.ai_stack_cards("all", ["aws"])
 check("AI all-clouds licence enables every card", all(c["enabled"] for c in ai2) and all(c["url"] == "" for c in ai2))
 check("AI checkout url", "product=ai_stack&scope=gcp" in ai1[1]["url"])
