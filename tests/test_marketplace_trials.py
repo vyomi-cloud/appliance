@@ -24,10 +24,15 @@ check("pro covers only its cloud", mk.licensed_tier("gcp", "pro", "gcp") == "pro
 check("pro with no primary cloud covers nothing", mk.licensed_tier("aws", "pro", "") is None)
 check("free/nano are not licences", mk.licensed_tier("aws", "free", "") is None and mk.licensed_tier("aws", "nano", "") is None)
 
-# ---- offers
+# ---- offers / ladder
 o = mk.offers_for("gcp", None)
-check("unlicensed: Pro $19 + Max $29 with checkout urls", [(x["tier"], x["price_usd"]) for x in o] == [("pro", 19), ("max", 29)] and "primary_cloud=gcp" in o[0]["url"] and o[1]["url"].endswith("tier=max&period=monthly"))
-check("Pro holder sees only the Max upgrade; Max holder none", [x["tier"] for x in mk.offers_for("gcp", "pro")] == ["max"] and mk.offers_for("gcp", "max") == [])
+check("unlicensed: one a-la-carte offer, $21 month-to-month, simulator checkout", len(o) == 1 and o[0]["price_usd"] == 21 and "product=simulator&simulator=gcp" in o[0]["url"])
+check("covered simulator has no offer", mk.offers_for("gcp", "pro") == [] and mk.offers_for("gcp", "max") == [])
+check("ladder order Pro < individual < Max", mk.PLANS["pro"]["price_usd"] < mk.SIMULATORS[0]["price_usd"] < mk.PLANS["max"]["price_usd"])
+check("owned simulator behaves as Pro on that cloud only", mk.licensed_tier("gcp", "free", "", ["gcp"]) == "pro" and mk.licensed_tier("aws", "free", "", ["gcp"]) is None)
+check("plan beats owned", mk.licensed_tier("gcp", "max", "", ["gcp"]) == "max")
+ls = mk.licence_summary("pro", "gcp", ["aws"])
+check("licence strip: Pro names its cloud", ls["tier"] == "pro" and "Google Cloud" in ls["detail"] and ls["owned"] == ["aws"])
 
 # ---- start / countdown
 sp = {"space_id": "s1", "provider": "aws"}

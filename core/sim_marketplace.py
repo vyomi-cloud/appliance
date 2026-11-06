@@ -33,29 +33,50 @@ TRIAL_TIERS = ("pro", "max")
 # Registry of onboarded simulator platforms. free_tier=False means the simulator has
 # no Free tier: it can only be used under a licence or a (single) trial.
 SIMULATORS: list[dict[str, Any]] = [
-    {"id": "aws",   "name": "AWS",          "free_tier": True},
-    {"id": "gcp",   "name": "Google Cloud", "free_tier": True},
-    {"id": "azure", "name": "Azure",        "free_tier": True},
+    {"id": "aws",   "name": "AWS",          "free_tier": True, "price_usd": 21},
+    {"id": "gcp",   "name": "Google Cloud", "free_tier": True, "price_usd": 21},
+    {"id": "azure", "name": "Azure",        "free_tier": True, "price_usd": 21},
 ]
 
-# Paid offers shown on every simulator card. SOURCE OF TRUTH = the portal pricing page
-# (portal/app/templates/pricing.html: Pro "$19 / month", Max "$29 / month"; USD, billed in INR at
-# checkout). Checkout URLs follow portal/app/checkout.py: /checkout?tier=pro&period=monthly&primary_cloud=<cloud>
-# (Pro is per-cloud) and /checkout?tier=max&period=monthly. No payment code lives in the appliance.
-OFFERS = {"pro": {"price_usd": 19, "per": "/ month"}, "max": {"price_usd": 29, "per": "/ month"}}
+# PRICING LADDER (monthly, USD; the portal owns checkout, pro-rating and billing):
+#   Pro  $19  one cloud (switchable every 30 days on the portal)   3-month minimum
+#   One simulator (a la carte) $21 (per simulator, set in SIMULATORS[].price_usd)   cancel any month
+#   Max  $29  every cloud at once                                   3-month minimum
+# Order must hold: Pro < individual < Max. The marketplace never sells Pro/Max itself; it links to the
+# portal pricing page. Only the a-la-carte simulator is bought from a card.
+PLANS = {
+    "pro": {"label": "Pro", "price_usd": 19, "per": "/ month", "min_months": 3, "scope": "One cloud of your choice, switchable every 30 days"},
+    "max": {"label": "Max", "price_usd": 29, "per": "/ month", "min_months": 3, "scope": "All clouds, unlimited"},
+}
 _RANK = {"free": 0, "pro": 1, "max": 2}
 
 
 def offers_for(sim_id: str, covered_tier: str | None, portal: str = "https://vyomi.cloud") -> list[dict]:
-    """Offers still worth buying for this simulator: all of them when unlicensed, Max when on Pro, none on Max."""
-    have = _RANK.get(covered_tier or "free", 3 if covered_tier else 0)
+    """The one thing a card can sell: this simulator on its own (month-to-month). Empty when a plan or
+    purchase already covers it. Pro/Max are bought on the portal pricing page, never from a card."""
+    if covered_tier:
+        return []
+    sim = get_simulator(sim_id)
+    price = (sim or {}).get("price_usd")
+    if not price:
+        return []
     portal = portal.rstrip("/")
-    out = []
-    for tier, o in OFFERS.items():
-        if _RANK[tier] <= have:
-            continue
-        url = f"{portal}/checkout?tier={tier}&period=monthly" + (f"&primary_cloud={sim_id}" if tier == "pro" else "")
-        out.append({"tier": tier, "price_usd": o["price_usd"], "per": o["per"], "url": url})
+    return [{"kind": "simulator", "price_usd": price, "per": "/ month",
+             "url": f"{portal}/checkout?product=simulator&simulator={sim_id}&period=monthly"}]
+
+
+def licence_summary(tier: str | None, primary: str = "", owned: Iterable[str] = (), portal: str = "https://vyomi.cloud") -> dict:
+    """The licence strip at the top of the Marketplace."""
+    t = tier if tier in PLANS else "free"
+    names = {s["id"]: s["name"] for s in SIMULATORS}
+    out = {"tier": t, "primary": primary, "owned": [o for o in owned if o in names],
+           "plans": PLANS, "pricing_url": portal.rstrip("/") + "/pricing"}
+    if t == "max":
+        out["detail"] = "All clouds, unlimited"
+    elif t == "pro":
+        out["detail"] = "One cloud: " + names.get(primary, primary or "not chosen yet") + " \u00b7 switch it on the portal"
+    else:
+        out["detail"] = "Free plan"
     return out
 
 
@@ -87,16 +108,16 @@ def get_simulator(sim_id: str, sims: Iterable[dict] | None = None) -> dict | Non
     return None
 
 
-def licensed_tier(sim_id: str, tier: str | None, primary_cloud: str | None = "") -> str | None:
+def licensed_tier(sim_id: str, tier: str | None, primary_cloud: str | None = "", owned: Iterable[str] = ()) -> str | None:
     """The paid tier ("pro"/"max"/...) covering this simulator, else None.
     Uses core.tier_policy provider entitlement (Pro = one cloud, Max = all)."""
     from core import tier_policy as tp
     t = tp.normalize_tier(tier)
     if t in _NOT_LICENSED_TIERS:
-        return None
+        return "pro" if sim_id in set(owned) else None   # a simulator bought on its own = Pro on that cloud
     providers = tp.policy_for(t).get("providers")
     if providers == "primary_cloud_only":
-        return t if primary_cloud and primary_cloud == sim_id else None
+        return t if primary_cloud and primary_cloud == sim_id else ("pro" if sim_id in set(owned) else None)
     if isinstance(providers, (list, tuple, set)):
         return t if sim_id in providers else None
     return None
@@ -177,6 +198,7 @@ def card_state(sim: dict, space: dict | None, covered_tier: str | None, ended: d
         "added": space is not None, "space_id": (space or {}).get("space_id"),
         "tier": eff["tier"], "licensed": bool(covered_tier), "enabled_tier": covered_tier or "",
         "offers": offers_for(sim["id"], covered_tier),
+        "price_usd": sim.get("price_usd"),
         "trial_ended": trial_ended,
         # a no-free-tier simulator is only addable under a licence or before its single trial
         "can_add": bool(space) or bool(covered_tier) or (not trial_ended),

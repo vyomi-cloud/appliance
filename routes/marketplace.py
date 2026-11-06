@@ -36,12 +36,13 @@ def _license_ctx() -> dict:
     by = org or (dom if dom and dom not in _PUBLIC_MAIL else "")
     import os
     portal = (os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL") or _lr.DEFAULT_BACKEND_URL).rstrip("/")
-    return {"tier": tier, "primary": primary, "licensed_by": by, "email": sub,
+    owned = [str(x).lower() for x in (claims.get("simulators") or lic.get("simulators") or []) if x]
+    return {"owned": owned, "tier": tier, "primary": primary, "licensed_by": by, "email": sub,
             "upgrade_url": portal + "/pricing", "portal": portal}
 
 
 def _covered(lc: dict, sims=None) -> dict:
-    return {s["id"]: mk.licensed_tier(s["id"], lc["tier"], lc["primary"]) for s in (sims if sims is not None else mk.SIMULATORS)}
+    return {s["id"]: mk.licensed_tier(s["id"], lc["tier"], lc["primary"], lc.get("owned") or ()) for s in (sims if sims is not None else mk.SIMULATORS)}
 
 
 def _spaces_map() -> dict:
@@ -91,8 +92,10 @@ def register(app: FastAPI) -> None:
             c = mk.card_state(sim, mine.get(sim["id"]), cov[sim["id"]], ended)
             c["licensed_by"] = lc["licensed_by"] if c["licensed"] else ""
             c["offers"] = mk.offers_for(sim["id"], cov[sim["id"]], lc["portal"])
+            c["owned"] = sim["id"] in (lc.get("owned") or []) and not mk.licensed_tier(sim["id"], lc["tier"], lc["primary"])
             cards.append(c)
-        return {"simulators": cards, "upgrade_url": lc["upgrade_url"]}
+        return {"simulators": cards, "upgrade_url": lc["upgrade_url"],
+                "licence": mk.licence_summary(lc["tier"], lc["primary"], lc.get("owned") or (), lc["portal"])}
 
     @app.post("/api/marketplace/simulators/{sim_id}/add")
     def marketplace_add(sim_id: str):

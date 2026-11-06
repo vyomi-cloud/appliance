@@ -1815,12 +1815,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // ══ Marketplace: the onboarded simulator platforms. ONE registry — add a 4th simulator here (offline gets
     //    the same list, with live licence state, from /api/marketplace/simulators). ═════════════════════════
     const VY_SIMULATORS = [
-      { id: 'aws',   name: 'AWS',          free_tier: true },
-      { id: 'gcp',   name: 'Google Cloud', free_tier: true },
-      { id: 'azure', name: 'Azure',        free_tier: true },
+      { id: 'aws',   name: 'AWS',          free_tier: true, price: 21 },
+      { id: 'gcp',   name: 'Google Cloud', free_tier: true, price: 21 },
+      { id: 'azure', name: 'Azure',        free_tier: true, price: 21 },
     ];
     // Prices = the portal pricing page (Pro $19 / month, Max $29 / month; USD, billed in INR at checkout).
-    const VY_OFFERS = { pro: { price: 19, per: '/ month' }, max: { price: 29, per: '/ month' } };
+    const VY_PLANS = { pro: { price: 19, min: 3, scope: 'One cloud of your choice, switchable every 30 days' }, max: { price: 29, min: 3, scope: 'All clouds, unlimited' } };   // bought on the portal pricing page
     const VY_PORTAL = 'https://vyomi.cloud';
     const VY_NANO = /\.html$/.test(location.pathname);       // Nano serves clouds.html; the offline appliance serves /clouds
     const VY_EMBED = document.documentElement.classList.contains('vy-embed');
@@ -1878,6 +1878,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   html.vy-embed .space-logo svg { filter: grayscale(1); }
   html.vy-embed #app-main .space-card { overflow: hidden; }
   html.vy-embed #app-main #mkt-card .sc-desc { margin-bottom: 16px; }
+  .mk-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 4px 24px 16px; padding: 10px 14px; border: 1px solid #ececef; border-radius: 10px; background: #fafafa; font-size: 13px; color: #3f3f46; }
+  .mk-strip-lic { display: inline-flex; align-items: center; gap: 10px; }
+  .mk-strip-detail { color: #52525b; }
+  .mk-strip-plans { color: #71717a; font-size: 12.5px; }
+  .mk-strip-cta { margin-left: auto; font-weight: 600; color: #000; text-decoration: none; }
+  .mk-strip-cta:hover { text-decoration: underline; }
   /* card header = landing-page grid field */
   .mk-head { margin: -16px -16px 0; padding: 16px 52px 14px 16px; background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; border-bottom: 1px solid #ececef; }
   .mk-main { gap: 12px; }
@@ -1974,6 +1980,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <div class="surface-card" id="mkt-card">
       <div class="sc-head"><div class="sc-title"><h2><span class="material-icons">apps</span>Simulators</h2></div></div>
       <p class="sc-desc">Pick a simulator to add it to your Spaces. Each one gets a single space; you can open it from Spaces any time.</p>
+      <div id="mkt-licence"></div>
       <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
     </div>
   </div>
@@ -3536,21 +3543,27 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
     const _CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
     const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    function _offerUrl(tier, id, base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/checkout?tier=' + tier + '&period=monthly' + (tier === 'pro' ? '&primary_cloud=' + id : ''); }
-    function _offersFor(id, enabled) {
-      const have = { '': 0, free: 0, pro: 1, max: 2 }[enabled || ''] ?? 3;
-      return Object.keys(VY_OFFERS).filter(t => ({ pro: 1, max: 2 })[t] > have).map(t => ({ tier: t, price_usd: VY_OFFERS[t].price, per: VY_OFFERS[t].per, url: _offerUrl(t, id) }));
-    }
+    function _pricingUrl(base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/pricing'; }
+    function _buyUrl(id, base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/checkout?product=simulator&simulator=' + id + '&period=monthly'; }
     async function _mktCards() {
       if (!VY_NANO) {
-        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) return (await r.json()).simulators; } catch (_) {}
+        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) { const d = await r.json(); return { cards: d.simulators, licence: d.licence }; } } catch (_) {}
       }
       let sp = []; try { sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || []; } catch (_) {}
-      return VY_SIMULATORS.map(sim => {
+      return { licence: { tier: 'free', detail: 'Free plan', plans: VY_PLANS, pricing_url: _pricingUrl() }, cards: VY_SIMULATORS.map(sim => {
         const s = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === sim.id)[0];
-        return { id: sim.id, name: sim.name, free_tier: sim.free_tier, added: !!s, space_id: s && s.space_id, tier: (s && s.tier) || 'free',
-                 licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: _offersFor(sim.id, '') };
-      });
+        return { id: sim.id, name: sim.name, free_tier: sim.free_tier, added: !!s, space_id: s && s.space_id, tier: (s && s.tier) || 'free', price_usd: sim.price,
+                 licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: [{ kind: 'simulator', price_usd: sim.price, per: '/ month', url: _buyUrl(sim.id) }] };
+      }) };
+    }
+    function _mktStripHtml(l) {
+      const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS, url = (l && l.pricing_url) || _pricingUrl();
+      const name = t === 'max' ? 'Max' : t === 'pro' ? 'Pro' : 'Free';
+      const owned = (l && l.owned && l.owned.length) ? ' \u00b7 ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately' : '';
+      const cta = t === 'max' ? '' : '<a class="mk-strip-cta" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer">' + (t === 'pro' ? 'Upgrade to Max' : 'View plans') + ' &rarr;</a>';
+      const plans = t === 'max' ? '' : '<span class="mk-strip-plans">Pro $' + (P.pro.price_usd||P.pro.price) + ' / month \u00b7 Max $' + (P.max.price_usd||P.max.price) + ' / month \u00b7 billed over a minimum of ' + (P.pro.min_months||P.pro.min) + ' months</span>';
+      return '<div class="mk-strip"><span class="mk-strip-lic"><span class="mk-pill' + (t === 'free' ? ' ghost' : '') + '">' + (t === 'free' ? '' : _CHECK) + name + '</span>' +
+             '<span class="mk-strip-detail">' + _esc((l && l.detail) || 'Free plan') + owned + '</span></span>' + plans + cta + '</div>';
     }
     function _mktCardHtml(c) {
       const tier = c.tier || 'free', T = tier.charAt(0).toUpperCase() + tier.slice(1);
@@ -3561,13 +3574,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         : '<span class="mk-cta">' + (c.added ? 'Open in Spaces' : 'Add to Spaces') + '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>';
       let foot = '';
       if (c.enabled_tier) {
-        const E = c.enabled_tier.charAt(0).toUpperCase() + c.enabled_tier.slice(1);
-        foot += '<span class="mk-pill">' + _CHECK + E + ' Enabled</span>' + (c.licensed_by ? '<span class="mk-note">Licensed by ' + _esc(c.licensed_by) + '</span>' : '<span class="mk-note">Licensed to you</span>');
-      } else if (VY_NANO) foot += '<span class="mk-pill ghost">Free · in-browser</span>';
+        const E = c.owned ? 'Owned' : c.enabled_tier.charAt(0).toUpperCase() + c.enabled_tier.slice(1) + ' enabled';
+        foot += '<span class="mk-pill">' + _CHECK + E + '</span>' + (c.licensed_by ? '<span class="mk-note">Licensed by ' + _esc(c.licensed_by) + '</span>' : '');
+      } else if (VY_NANO) foot += '<span class="mk-pill ghost">Free \u00b7 in-browser</span>';
       if (c.trial_ended) foot += '<span class="mk-pill ghost">Trial ended</span>';
       (c.offers || []).forEach(o => {
-        foot += '<a class="mk-offer" href="' + _esc(o.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Buy ' + o.tier + ' for ' + _esc(c.name) + ', $' + o.price_usd + ' ' + _esc(o.per) + '">' +
-                o.tier.charAt(0).toUpperCase() + o.tier.slice(1) + '<small>$' + o.price_usd + ' ' + _esc(o.per) + '</small></a>';
+        foot += '<a class="mk-offer" href="' + _esc(o.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Buy ' + _esc(c.name) + ' for $' + o.price_usd + ' ' + _esc(o.per) + '">Buy ' + _esc(c.name) + '<small>$' + o.price_usd + ' ' + _esc(o.per) + ' \u00b7 cancel any month</small></a>';
       });
       return '<div class="mk-card' + (c.trial_ended ? ' off' : '') + '" role="listitem" data-sim="' + c.id + '">' +
         '<div class="mk-ribbon ' + tier + '" aria-hidden="true"><span>' + T + '</span></div>' +
@@ -3577,7 +3589,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     }
     async function loadMarketplace() {
       const g = document.getElementById('mkt-grid'); if (!g) return;
-      const cards = await _mktCards();
+      const mc = await _mktCards(), cards = mc.cards;
+      const st = document.getElementById('mkt-licence'); if (st) st.innerHTML = _mktStripHtml(mc.licence);
       g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
       g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));
     }
@@ -3616,7 +3629,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     function _tierBannerHtml(s) {
       const tier = s.tier || 'free', src = s.tier_source || 'free', tr = s.trial || {};
       const T = tier.toUpperCase();
-      const up = '<button type="button" class="st-act" onclick="event.preventDefault();event.stopPropagation();window.open(\'' + _offerUrl('pro', String(s.provider || '').toLowerCase()) + '\', \'_blank\', \'noopener\')">Upgrade</button>';
+      const up = '<button type="button" class="st-act" onclick="event.preventDefault();event.stopPropagation();window.open(\'' + _pricingUrl() + '\', \'_blank\', \'noopener\')">Upgrade</button>';
       let cls = '', label = 'Free', act = '';
       if (src === 'trial' && tr.state === 'active') { cls = ' t-trial'; label = T + ' trial · ' + tr.days_left + ' day' + (tr.days_left === 1 ? '' : 's') + ' left'; act = up; }
       else if (src === 'license') { cls = ' t-paid'; label = T; }
