@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-06 04:12 UTC · refreshes after every pipeline run_
+_Updated 2026-11-06 04:52 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-06 04:12 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 287 of 289 suites passing (run 02:53 UTC)
+- **Hourly tests:** 289 of 290 suites passing (run 04:46 UTC)
 - **Upstream watch:** 12 open changes from the real clouds to adopt
 
 ## By cloud
@@ -936,7 +936,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-aws | ✅ | 15/15 |
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
-| offline-ui-core | ❌ | 8/9 |
+| offline-ui-core | ✅ | 9/9 |
 | nano-ui-crawl | ✅ | 63/63 |
 | nano-cores | ✅ | 347/347 |
 | nano-gcp-kms-core | ✅ | 35/35 |
@@ -1033,6 +1033,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-aws-stepfunctions | ✅ | 22/22 |
 | nano-ui-aws-event-delivery | ✅ | 9/9 |
 | nano-ui-gcp-eventarc-delivery | ✅ | 7/7 |
+| aws-dynamodb-bulk-ops-core | ✅ | 13/13 |
 | nano-core-triggers | ✅ | 11/11 |
 | nano-ui-aws-stepfunctions | ✅ | 22/22 |
 | offline-sdk-java-gcp-cloudscheduler | ✅ | 12/12 |
@@ -1189,7 +1190,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-gcp-console-tools-routes | ✅ | 16/16 |
 | offline-cli-gcp-scheduler-pubsub-gcloud | ✅ | 7/7 |
 | offline-api-gcp-console-maintenance-routes | ✅ | 5/5 |
-| aws-dynamodb-bulk-ops-core | ✅ | 13/13 |
+| offline-core-gcp-apigateway-deadline | ✅ | 4/4 |
 
 </details>
 
