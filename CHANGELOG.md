@@ -4,6 +4,42 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.44] — 2026-11-06
+
+Daily conformance release. **3 product fixes** (AWS 1, Azure 2); 3 reach Nano and 1 reach the offline appliance; 7 test and harness improvements.
+
+### Highlights
+
+- **DynamoDB bulk operations are now supported.** You can start, list, describe and cancel bulk put-item jobs against DynamoDB, both in Nano and in the offline appliance.
+- **Azure resource creation in Nano is more reliable.** Default names now respect each field's validation rules, so creating a Storage account no longer gets rejected over a hyphen in the generated name.
+- **Azure App Configuration and AI services now create successfully in Nano.** Default SKU names are no longer altered with a unique suffix, which was causing those creates to fail with a 400 error.
+
+### Fixes — AWS
+
+- **[Nano + offline]** Fixes #512 Fixes #513 Fixes #514 Fixes #515 DynamoDB bulk operations (StartBulkPutItems/List/Describe/Cancel) in core + offline provider + Nano; aws-dynamodb-bulk-ops-core test
+
+### Fixes — Azure
+
+- **[Nano]** Nano Azure unique default names honour the field's validation regex (Storage account create was rejected for the hyphen); validate-azure-flat-create covers it
+- **[Nano]** Nano Azure create no longer suffixes sku.name defaults (App Configuration, AI services create 400); covered by validate-azure-appconfiguration/cognitiveservices
+
+<details><summary>Test and harness improvements (7)</summary>
+
+- Fixes #520 Key Vault accepts api-version 2026-10-01-preview; added to test_azure_new_api_versions
+- VM post-create probes drive the Connect tab's xterm shell (the old command box was replaced); GCE probe green again
+- Gcp apigw tabs validator fills the visible form input, not the console's hidden 'Search capabilities' box (harness fix)
+- Fix azure-sdk-go-operationalinsights build (merged duplicate azlogs block -> official azquery client); suite passes
+- Validate-azure-app accepts the unique name suffix in the Ingress application URL
+- Gcp create-defaults test cleans the Eventarc default trigger name before re-runs (real clouds 409 on duplicates)
+- Nano AWS row/kinesis validators match unique-suffixed default names (harness fix)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.44`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.43] — 2026-11-05
 
 Daily conformance release. **1 product fixes** (all clouds 1); 1 reach Nano and 1 reach the offline appliance; 1 test and harness improvements.
