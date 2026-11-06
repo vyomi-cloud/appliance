@@ -130,7 +130,7 @@
     // ---- expand: the Marketplace of onboarded simulators. The dialog hosts the Marketplace view of the Spaces page
     //      (?embed=1#marketplace): cards are generated from its single simulator registry, never hard-coded here.
     var cap = document.createElement('div'); cap.id = 'vy-cap';
-    cap.innerHTML = '<div class="cbox" role="dialog" aria-modal="true" aria-labelledby="vy-cap-t"><div class="chd"><div class="cbrand" id="vy-cap-t"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg><span>Vyomi Marketplace</span></div>' +
+    cap.innerHTML = '<div class="cbox" role="dialog" aria-modal="true" aria-labelledby="vy-cap-t"><div class="chd"><div class="cbrand" id="vy-cap-t"><img src="/assets/brand/vyomi-logo.png" alt="vyomi" style="height:24px;width:auto;display:block"><span style="font-weight:500;color:#52525b;padding-left:10px;border-left:1px solid #d4d4d8">Marketplace</span></div>' +
       '<button type="button" class="cx" aria-label="Collapse" title="Collapse"><svg viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></button></div>' +
       '<div class="cbody"><iframe title="Marketplace"></iframe></div></div>';
     document.body.appendChild(cap);
