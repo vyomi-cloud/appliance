@@ -20,6 +20,10 @@ def check(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}{' - ' + str(detail)[:300] if detail and not ok else ''}")
 
 
+from core import app_context as _ctx  # noqa: E402
+import time as _t  # noqa: E402
+_ctx._tier_cache.update({"tier": "max", "verified_at": _t.time(), "ttl": 10 ** 9})
+_ctx.STATE["license_claims"] = {"tier": "max"}   # hermetic: never let a developer's local instance count / free-tier quota (tier_quantity_limit) mask the capacity errors
 c = TestClient(server.app, base_url="http://127.0.0.1:9000")
 c.__enter__()   # run the app lifespan (project registry etc.)
 from core import gcp_project  # noqa: E402
