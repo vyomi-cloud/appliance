@@ -657,6 +657,14 @@
       "timeout": 180
     },
     {
+      "id": "offline-core-gcp-apigateway-deadline",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/test_gcp_apigateway_deadline_core.py",
+      "timeout": 60
+    },
+    {
       "id": "offline-api-gcp-apigateway-savings",
       "target": "offline",
       "cloud": "gcp",
