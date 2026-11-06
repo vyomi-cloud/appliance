@@ -3748,14 +3748,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       const inc = k === 'max' ? ['All 3 clouds, unlimited', 'SDK, CLI & API on every cloud', 'Full access to every simulator service'] : ['1 cloud of your choice', 'Switch cloud every 30 days', 'SDK, CLI & API on that cloud', 'Full access to that cloud’s services'];
       const status = cur
         ? '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>' + (k === 'pro' && l && l.detail ? _esc(l.detail) : 'Active on your licence') + '</small></span></div>'
-        : '<div class="mk-free no">' + _CHECK + '<span><b>Billed over a minimum of ' + mn + ' months</b></span></div>';
+        : '<div class="mk-free no">' + _CHECK + '<span><b>Charged for ' + mn + ' months upfront</b><small>' + mn + ' × $' + price + ' = $' + (price * mn) + '</small></span></div>';
       let foot;
       if (!cur) {
         // Pro is one cloud: pick it here so Pay goes STRAIGHT to the payment page (no bounce through /pricing).
         const pick = k === 'pro'
           ? '<label class="mk-pick"><span>Cloud</span><select aria-label="Cloud for Pro" onchange="var a=this.closest(\'.mk-card\').querySelector(\'.mk-buy-b\');a.href=a.href.replace(/primary_cloud=[a-z]+/,\'primary_cloud=\'+this.value)"><option value="aws">AWS</option><option value="gcp">Google Cloud</option><option value="azure">Azure</option></select></label>'
           : '';
-        foot = pick + _buyBtn(base + '/checkout?tier=' + k + '&period=monthly' + (k === 'pro' ? '&primary_cloud=aws' : ''), 'Pay', price, '/ month', 'Pay for ' + name + ', $' + price + ' per month', 'Pay', 'Min. ' + mn + ' months');
+        foot = pick + _buyBtn(base + '/checkout?tier=' + k + '&period=monthly' + (k === 'pro' ? '&primary_cloud=aws' : ''), 'Pay', price * mn, '/ ' + mn + ' months', 'Pay for ' + name + ', $' + (price * mn) + ' for ' + mn + ' months', 'Pay', mn + ' × $' + price + ' · min. term');
       }
       else if (k === 'pro') { const mx = P.max || VY_PLANS.max; foot = _buyBtn(base + '/dashboard', 'Upgrade', mx.price_usd || mx.price, '/ month', 'Upgrade to Max', 'Upgrade', 'Pro → Max is pro-rated'); }
       else foot = '<span class="mk-note">You have everything this plan includes.</span>';
