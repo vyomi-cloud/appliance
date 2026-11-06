@@ -3033,7 +3033,8 @@
     })();
 
     // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
-    const PROVIDER_PATHS = { aws: 'v4/aws/', gcp: 'v4/gcp/', azure: 'v4/azure/' };
+    // v4 is the Nano console. Absolute (resolved against THIS page's base) so it also works from the embedded drawer iframe.
+    const PROVIDER_PATHS = Object.fromEntries(['aws', 'gcp', 'azure'].map(c => [c, new URL('v4/' + c + '/', document.baseURI).pathname]));
     document.querySelectorAll('.cloud-card').forEach(card => {
       for (const key of Object.keys(PROVIDER_PATHS)) {
         if (card.classList.contains(key)) {

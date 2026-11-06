@@ -355,7 +355,4 @@ echo "      ${C}docker compose down${R}                   stop everything"
 echo "      ${C}docker compose pull && docker compose up -d${R}   upgrade to latest"
 echo
 
-# Try to open the browser (best-effort, ignore failures)
-if command -v open >/dev/null 2>&1; then open "$URL" 2>/dev/null || true     # macOS
-elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" 2>/dev/null || true   # Linux
-fi
+# 4.0.0: the appliance is headless (API only). The UI is Nano at https://vyomi.cloud/nano — nothing to open locally.

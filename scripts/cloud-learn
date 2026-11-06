@@ -1619,6 +1619,8 @@ vyomi_open_browser() {
   # Best-effort browser launch. Honors VYOMI_NO_OPEN=1 (CI, headless, or
   # users who already have the tab open). Failure is silent — the URL is
   # also printed in the banner so the user can copy it.
+  # 4.0.0: the appliance is headless (API only) — nothing to open. The UI is Nano at https://vyomi.cloud/nano.
+  return 0
   [ "${VYOMI_NO_OPEN:-0}" = "1" ] && return 0
   local url="$1"
   [ -z "$url" ] && return 0
@@ -2607,7 +2609,7 @@ _docker_substrate_run() {
     _dc --profile full up -d || printf '==> Warning: some backends failed to start; re-run `vyomi up` or check `vyomi logs`.\n' >&2
   }
   case "$action" in
-    up|start)      _dc up -d && printf '==> Vyomi (Docker) console starting — open http://localhost:9000 in ~30s\n' && _wave2 ;;
+    up|start)      _dc up -d && printf '==> Vyomi (Docker) headless API starting at http://localhost:9000 in ~30s (UI: Nano at https://vyomi.cloud/nano)\n' && _wave2 ;;
     down|stop)     _dc --profile full down ;;
     restart)       _dc --profile full down; _dc up -d && _wave2 ;;
     status|ps)     _dc --profile full ps ;;
