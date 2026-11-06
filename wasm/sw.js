@@ -1292,9 +1292,12 @@ self.addEventListener("fetch", (event) => {
       // control-plane portal). The license JWT the portal issues drives the tier.
       if (apiPath === "/api/runtime/tier" && method === "GET") {
         const c = licenseClaims(await metaGet("license_jwt"));
-        return json({ active_tier: (c && c.tier) || "free",
+        const t = (c && c.tier) || "free";
+        // Pro = ONE cloud: same shape the appliance's /api/runtime/tier returns, so clouds.html / the cloud picker lock the other two.
+        return json({ active_tier: t,
                       all_tiers: ["free", "lite", "pro", "max"],
-                      primary_cloud: (c && c.primary_cloud) || "" });
+                      primary_cloud: (c && c.primary_cloud) || "",
+                      active_policy: { providers: t === "pro" && c && c.primary_cloud ? "primary_cloud_only" : "all" } });   // a Pro licence with no cloud yet is pinned on first use (booster-link.js)
       }
       if (apiPath === "/api/license/status" && method === "GET") {
         const c = licenseClaims(await metaGet("license_jwt"));

@@ -3517,6 +3517,15 @@
       return _tierPolicy;
     }
 
+    // Pro = ONE cloud: the portal account record (VyomiBooster) is authoritative when present; else the licence policy below.
+    async function _cloudGate(provider, policy) {
+      const B = window.VyomiBooster;
+      if (B && B.loadAccount && !B.account()) { try { await B.loadAccount(); } catch (_) {} }
+      if (B && B.cloudAllowed && !B.cloudAllowed(provider)) return false;
+      if (!_canAccessProvider(provider, policy)) return false;
+      if (B && B.pinCloud && !(await B.pinCloud(provider))) return false;    // first use of a cloud on Pro chooses it
+      return true;
+    }
     function _canAccessProvider(provider, policy) {
       if (!policy) return true;  // unknown policy → fail open
       const ap = policy.active_policy || policy.policy || policy;
@@ -3533,12 +3542,12 @@
     function openClModal(provider, policy) {
       const tier   = (policy && policy.active_tier) || 'free';
       const ap     = (policy && policy.active_policy) || {};
-      const primary= (policy && policy.primary_cloud) || ap.primary_cloud || '—';
+      const primary= ((window.VyomiBooster && VyomiBooster.planCloud && VyomiBooster.planCloud()) || (policy && policy.primary_cloud) || ap.primary_cloud || '—');
       const label  = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
       document.getElementById('cl-modal-sub').textContent =
         `Your ${tier.charAt(0).toUpperCase()+tier.slice(1)} plan doesn't include ${label[provider]||provider}.`;
       let ctx = `<div>Active plan: <strong>${tier.charAt(0).toUpperCase()+tier.slice(1)}</strong></div>`;
-      if (ap.providers === 'primary_cloud_only' && primary) {
+      if ((ap.providers === 'primary_cloud_only' || (window.VyomiBooster && VyomiBooster.planCloud && VyomiBooster.planCloud())) && primary && primary !== '—') {
         ctx += `<div style="margin-top:4px">Primary cloud: <strong>${label[primary]||primary}</strong></div>`;
       }
       ctx += `<div style="margin-top:8px">Upgrade to <strong>Max</strong> for all 3 clouds simultaneously.</div>`;
@@ -3577,7 +3586,7 @@
       // the server's 302 send them to a different /console/<x>?denied=…
       // URL.
       const policy = await ensureTierPolicy();
-      if (!_canAccessProvider(provider, policy)) {
+      if (!(await _cloudGate(provider, policy))) {
         openClModal(provider, policy);
         return;
       }
@@ -3646,6 +3655,10 @@
       btn.disabled = true;
       btn.textContent = 'Creating…';
       try {
+        if (!(await _cloudGate(provider, await ensureTierPolicy()))) {
+          const pc = window.VyomiBooster && VyomiBooster.planCloud && VyomiBooster.planCloud();
+          throw new Error('Your Pro plan covers one cloud' + (pc ? ' (' + pc.toUpperCase() + ')' : '') + ' — upgrade to Max for all three.');
+        }
         const payload = { provider: provider, name: name };
         if (region) payload.region = region;
         const home = window.VyomiBooster && VyomiBooster.homePayload(document.getElementById('csm-home').value);

@@ -16,6 +16,7 @@
   function setDefault(id) { try { localStorage.setItem(KEY, id); } catch (e) {} }
   function jget(u) { return fetch(u).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
   function canUse(c, pol) {          // same rule as clouds.html _canAccessProvider; unknown policy fails open
+    if (window.VyomiBooster && window.VyomiBooster.cloudAllowed && !window.VyomiBooster.cloudAllowed(c)) return false;   // Pro = ONE cloud (portal account record)
     if (!pol) return true;
     var ap = pol.active_policy || pol.policy || pol, provs = ap.providers;
     if (provs === 'primary_cloud_only') { var pc = String(pol.primary_cloud || ap.primary_cloud || '').toLowerCase(); return !!pc && c === pc; }

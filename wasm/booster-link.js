@@ -112,6 +112,16 @@
       var e = new Error((r.body && r.body.message) || "Could not change the booster setting."); e.account = r.body; throw e;
     });
   }
+  // Pro = ONE cloud (all services on it); Max / Enterprise = all three. The portal's account record says which applies and
+  // (once chosen) which cloud. No record (not signed in / Free) -> not gated here.
+  function planCloud() { return account && account.clouds === "one" ? String(account.primary_cloud || "").toLowerCase() : null; }
+  function cloudAllowed(c) { if (!account || account.clouds !== "one") return true; var pc = planCloud(); return !pc || String(c).toLowerCase() === pc; }
+  function pinCloud(c) {   // first use of a cloud on a Pro plan chooses it; refused once another is chosen
+    if (!account || account.clouds !== "one" || planCloud()) return Promise.resolve(cloudAllowed(c));
+    return _origFetch("/api/account/booster/primary-cloud", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ cloud: c }) })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (r) { if (r.ok) { account = r.body; try { window.dispatchEvent(new CustomEvent("vyomi-booster-account", { detail: account })); } catch (_) {} return true; } if (r.body && r.body.primary_cloud) { account = Object.assign({}, account, { primary_cloud: r.body.primary_cloud }); } return false; }, function () { return true; });
+  }
   function boosterOn() { return account === null || account.effective === true; }   // unknown -> don't hide anything
   function start() { if (timer) return; loadAccount(); accTimer = setInterval(loadAccount, 60000); pollAll(); timer = setInterval(pollAll, POLL_MS); }
 
@@ -287,7 +297,7 @@
     list: list, get: function (id) { var b = get(id); return b && Object.assign({}, b, { token: undefined }); }, pair: pair, unpair: unpair,
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
-    homeOptions: homeOptions, defaultHome: defaultHome, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
+    homeOptions: homeOptions, defaultHome: defaultHome, cloudAllowed: cloudAllowed, planCloud: planCloud, pinCloud: pinCloud, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
     isBlocked: blocked, candidates: function (id) { var b = get(id); return b ? candidates(b) : []; },
   };
 

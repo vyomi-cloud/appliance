@@ -906,6 +906,16 @@ async def _tier_enforcement_middleware(request: Request, call_next):
                 pass  # fail-open on internal errors
 
     from core import tier_policy as _tp
+    # Pro = ONE cloud. A Pro licence with no cloud chosen yet (e.g. the reverse trial) is not locked out of everything:
+    # the first cloud it actually uses becomes its primary cloud, persisted on the tenant, and the others stay locked.
+    if (not primary_cloud and provider in ("aws", "gcp", "azure") and tenant
+            and _tp.policy_for(_tp.normalize_tier(tier)).get("providers") == "primary_cloud_only"):
+        tenant["primary_cloud"] = primary_cloud = provider
+        tenant.setdefault("primary_cloud_changed_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        try:
+            _persist_state()
+        except Exception:
+            pass
     result = _tp.check_service(tier, service_key,
                                primary_cloud=primary_cloud,
                                request_cloud=provider)
