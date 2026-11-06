@@ -1,27 +1,8 @@
 {
- "at": "2026-11-06T01:07:49+00:00",
+ "at": "2026-11-06T02:07:51+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "AWS Lambda, Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:00d42fb8b77a",
-   "title": "AWS Security Hub now provides an SBOM inventory for your compute resources",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-sbom-inventory/",
-   "detail": "Today, AWS announces that AWS Security Hub now provides a Software Bill of Materials (SBOM) inventory, giving central security teams a continuously updated, organization-wide view of the software packages and applications installed on their compute resources. Security Hub builds the inventory from the SBOMs that Amazon Inspector generates for Amazon EC2 instances, Amazon ECR container images, and AWS Lambda functions, with no additional configuration. The SBOM page lists each package with its version, type, and the number of resources where it is installed. You can filter and group the list by",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS Lambda",
-   "kind": "announcement",
-   "key": "feed:aws:d04ea6de6131",
-   "title": "AWS Lambda durable functions increases default execution and API quotas",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-functions-default-quotas/",
-   "detail": "AWS Lambda durable functions has increased default quotas for running executions and API request rates. The new quotas below apply in all AWS Regions except US East (N. Virginia), US West (Oregon), and Europe (Ireland), which have twice these quotas. Running durable executions per account (1 million to 5 million) Function invocation rate to start durable executions (300 to 3,000 requests per second) CheckpointDurableExecution and GetDurableExecutionState (1,000 to 10,000 requests per second) SendDurableExecutionCallbackSuccess, SendDurableExecutionCallbackFailure, and SendDurableExecutionCallb",
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
+ ]
 }
