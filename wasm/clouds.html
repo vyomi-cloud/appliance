@@ -3609,6 +3609,7 @@
       const opts = (window.VyomiBooster && VyomiBooster.homeOptions()) || [];
       f.style.display = opts.length ? '' : 'none';
       sel.innerHTML = '<option value="browser">This browser</option>' + opts.map(o => '<option value="' + o.id + '">Booster: ' + o.name.replace(/[<&"]/g, '') + '</option>').join('');
+      if (window.VyomiBooster && VyomiBooster.defaultHome) sel.value = VyomiBooster.defaultHome();   // account booster enabled -> backend by default
     }
     function closeCreateSpaceModal() {
       document.getElementById('create-space-modal').classList.remove('open');

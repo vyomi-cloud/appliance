@@ -89,7 +89,31 @@
   }
   var timer = null;
   function pollAll() { return Promise.all(load().map(pollOne)).then(render, render); }   // re-render each cycle: legacy pages rebuild <body> after load and would drop the banner
-  function start() { if (timer) return; pollAll(); timer = setInterval(pollAll, POLL_MS); }
+  // ── account: the portal's per-user booster subscription record (portal DB) ──────────────────────
+  // enabled booster -> spaces default to the booster (backend); not enabled -> everything stays in the browser.
+  // `null` = the portal can't say (preview / offline / signed out): behave as before (paired boosters stay usable).
+  var account = null, accTimer = null;
+  var _origFetch = window.fetch.bind(window);
+  function accountFetch(method, path) {
+    return _origFetch("/api/account/booster" + (path || ""), { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" } })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, body: j }; }); });
+  }
+  function loadAccount() {
+    return accountFetch("GET").then(function (r) {
+      var was = JSON.stringify(account);
+      account = (r.ok && r.body && typeof r.body.enabled === "boolean") ? r.body : null;
+      if (JSON.stringify(account) !== was) { try { window.dispatchEvent(new CustomEvent("vyomi-booster-account", { detail: account })); } catch (_) {} render(); }
+      return account;
+    }, function () { account = null; return null; });
+  }
+  function setBooster(on) {
+    return accountFetch("POST", on ? "/enable" : "/disable").then(function (r) {
+      if (r.ok) { account = r.body; try { window.dispatchEvent(new CustomEvent("vyomi-booster-account", { detail: account })); } catch (_) {} render(); return account; }
+      var e = new Error((r.body && r.body.message) || "Could not change the booster setting."); e.account = r.body; throw e;
+    });
+  }
+  function boosterOn() { return account === null || account.effective === true; }   // unknown -> don't hide anything
+  function start() { if (timer) return; loadAccount(); accTimer = setInterval(loadAccount, 60000); pollAll(); timer = setInterval(pollAll, POLL_MS); }
 
   // ── pairing ─────────────────────────────────────────────────────────
   // addr: a booster id ("bst-ab12"), or an https/http URL (relay / LAN / loopback). code: from `vyomi booster pair`.
@@ -147,7 +171,7 @@
     return null;
   }
   function daysLeft(id) { var s = (state[id] || {}).status; return s && typeof s.trial_days_left === "number" ? s.trial_days_left : null; }
-  function isLocked(id) { var s = (state[id] || {}).status; var d = daysLeft(id); return !!(s && (s.locked === true || (d !== null && d <= 0))); }
+  function isLocked(id) { if (account && account.locked) return true; var s = (state[id] || {}).status; var d = daysLeft(id); return !!(s && (s.locked === true || (d !== null && d <= 0))); }
   function refuse(reason) {
     var code = reason === "locked" ? "BoosterTrialExpired" : "DatacenterUnreachable";
     return new Response(JSON.stringify({ error: { code: code, message: reason === "locked" ? "The booster trial has ended; booster-homed spaces are locked." : "Datacenter unreachable: this space lives on a booster that cannot be reached right now." } }),
@@ -229,7 +253,9 @@
     var down = stateOf(h.booster_id) !== "connected" && stateOf(h.booster_id) !== "unknown";
     return '<span class="vyb-badge' + (down ? " vyb-b-down" : "") + '" data-home="booster" data-booster="' + esc(h.booster_id) + '" title="' + (down ? "Datacenter unreachable" : "Runs on the booster") + '">Booster: ' + esc(h.booster_name || h.booster_id) + (down ? " (unreachable)" : "") + "</span>";
   }
-  function homeOptions() { return load().map(function (b) { return { id: b.id, name: b.name || b.id }; }); }
+  function homeOptions() { return boosterOn() ? load().map(function (b) { return { id: b.id, name: b.name || b.id }; }) : []; }
+  // The id the create-space picker should preselect: the booster when the account has it enabled (backend), else the browser.
+  function defaultHome() { var o = homeOptions(); return (account && account.effective && o.length) ? o[0].id : "browser"; }
   function homePayload(selectValue) {   // select value "" | "browser" -> undefined, else booster id -> home record
     if (!selectValue || selectValue === "browser") return undefined;
     var b = get(selectValue); return b ? { type: "booster", booster_id: b.id, booster_name: b.name || b.id } : undefined;
@@ -238,12 +264,15 @@
     ensureStyle();
     var m = document.createElement("div"); m.className = "vyb-modal"; m.id = "vyb-pair";
     function paint(err) {
-      m.innerHTML = "<div class='vyb-card' role='dialog' aria-labelledby='vyb-t'><h3 id='vyb-t'>Boosters</h3><div style='color:#4b5563'>Pair a booster (a Pro/Max appliance) to host spaces on your own machine. Run <code>vyomi booster pair</code> there to get a code.</div>" +
+      var acc = account, accLine = acc ? ("<div id='vyb-acc' style='margin:8px 0;padding:8px;border:1px solid #d1d5db;border-radius:8px'>Booster: <b>" + (acc.effective ? "on" : acc.locked ? "locked (trial ended)" : "off") + "</b>" + (acc.status === "trial" && acc.days_left != null ? " &middot; trial, " + acc.days_left + " day(s) left" : acc.status === "active" ? " &middot; " + esc(acc.tier || "plan") : "") + " <button type='button' id='vyb-acc-btn'>" + (acc.enabled ? "Turn off" : "Turn on") + "</button></div>") : "";
+      m.innerHTML = "<div class='vyb-card' role='dialog' aria-labelledby='vyb-t'><h3 id='vyb-t'>Boosters</h3>" + accLine + "<div style='color:#4b5563'>Pair a booster (a Pro/Max appliance) to host spaces on your own machine. Run <code>vyomi booster pair</code> there to get a code.</div>" +
         "<ul>" + load().map(function (b) { return "<li><span>" + esc(b.name || b.id) + " <span class='vyb-badge' data-vyb-state='" + esc(b.id) + "'>" + esc(stateOf(b.id)) + "</span></span><button type='button' data-unpair='" + esc(b.id) + "'>Unpair</button></li>"; }).join("") + "</ul>" +
         "<label for='vyb-addr'>Booster id or address</label><input id='vyb-addr' placeholder='bst-ab12 or http://127.0.0.1:8765' autocomplete='off'>" +
         "<label for='vyb-code'>Pairing code</label><input id='vyb-code' placeholder='e.g. 482913' autocomplete='off'>" +
         "<div class='vyb-err' id='vyb-err'>" + esc(err || "") + "</div><div class='vyb-row'><button type='button' id='vyb-close'>Close</button><button type='button' class='vyb-primary' id='vyb-go'>Pair</button></div></div>";
       m.querySelector("#vyb-close").onclick = function () { m.remove(); };
+      var ab = m.querySelector("#vyb-acc-btn");
+      if (ab) ab.onclick = function () { ab.disabled = true; setBooster(!(account && account.enabled)).then(function () { paint(""); }, function (e) { paint(String(e.message || e)); }); };
       m.querySelector("#vyb-go").onclick = function () {
         var btn = this; btn.disabled = true; btn.textContent = "Pairing...";
         pair(m.querySelector("#vyb-addr").value, m.querySelector("#vyb-code").value).then(function () { paint(""); }, function (e) { paint(String(e.message || e)); });
@@ -258,7 +287,7 @@
     list: list, get: function (id) { var b = get(id); return b && Object.assign({}, b, { token: undefined }); }, pair: pair, unpair: unpair,
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
-    homeOptions: homeOptions, homePayload: homePayload, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
+    homeOptions: homeOptions, defaultHome: defaultHome, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
     isBlocked: blocked, candidates: function (id) { var b = get(id); return b ? candidates(b) : []; },
   };
 
