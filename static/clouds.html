@@ -1734,38 +1734,39 @@
 <style id="vy-mkt-css">
   /* ── Marketplace view + space tier banner (black & white) ── */
   #mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-top: 4px; }
-  .mk-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #e4e4e7; border-radius: 10px; color: #18181b; transition: border-color .12s; }
-  .mk-card:hover, .mk-card:focus-within { border-color: #000; }
+  .mk-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #ececef; border-radius: 12px; color: #18181b; transition: border-color .12s; }
+  .mk-card:hover, .mk-card:focus-within { border-color: #a1a1aa; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
   .mk-card.off { opacity: .92; }
-  .mk-main { display: flex; flex-direction: column; gap: 14px; width: 100%; padding: 18px 18px 14px; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 10px 10px 0 0; }
+  .mk-main { display: flex; flex-direction: column; gap: 14px; width: 100%; padding: 16px 16px 10px; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 10px 10px 0 0; }
   .mk-main:focus-visible { outline: 2px solid #000; outline-offset: -3px; }
   .mk-main:disabled { cursor: not-allowed; }
-  .mk-head { display: flex; align-items: center; gap: 12px; padding-right: 52px; }
-  .mk-logo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: 1px solid #e4e4e7; border-radius: 10px; background: #fff; }
+  .mk-head { display: flex; align-items: center; gap: 12px; padding-right: 40px; }
+  .mk-logo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: 1px solid #f0f0f2; border-radius: 10px; background: #fafafa; }
   .mk-logo svg { width: 28px; height: 22px; filter: grayscale(1); }
   .mk-logo.aws svg path[fill="#fff"] { fill: #232f3e; }
-  .mk-name { font-size: 17px; font-weight: 700; letter-spacing: -.01em; color: #000; line-height: 1.2; }
+  .mk-name { font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: #000; line-height: 1.2; }
   .mk-sub { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 500; color: #71717a; }
-  .mk-free { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; line-height: 1.35; }
-  .mk-free b { display: block; font-size: 14.5px; letter-spacing: -.005em; }
-  .mk-free small { display: block; font-size: 12px; opacity: .8; }
-  .mk-free svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  .mk-free.yes { background: #000; color: #fff; }
-  .mk-free.no { background: #fff; color: #000; border: 1.5px dashed #000; }
-  .mk-cta { font-size: 13px; font-weight: 600; color: #000; display: inline-flex; align-items: center; gap: 6px; }
+  .mk-free { display: flex; align-items: center; gap: 8px; padding: 0; border-radius: 8px; font-size: 13px; line-height: 1.35; }
+  .mk-free b { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -.005em; }
+  .mk-free small { display: block; font-size: 12px; color: #71717a; opacity: 1; }
+  .mk-free svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-free.yes { color: #18181b; }
+  .mk-free.no { color: #52525b; }
+  .mk-cta { font-size: 12.5px; font-weight: 600; color: #3f3f46; display: inline-flex; align-items: center; gap: 6px; }
   .mk-cta svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  .mk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid #f0f0f2; }
-  .mk-offer { flex: 1 1 120px; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 10px; border: 1px solid #000; border-radius: 8px; background: #fff; color: #000; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; line-height: 1.25; }
-  .mk-offer small { font-size: 11.5px; font-weight: 500; opacity: .75; }
-  .mk-offer:hover, .mk-offer:focus-visible { background: #000; color: #fff; outline: none; }
+  .mk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 16px 14px; border-top: 0; }
+  .mk-offer { flex: 1 1 120px; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fff; color: #27272a; font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; line-height: 1.25; }
+  .mk-offer small { font-size: 11.5px; font-weight: 400; color: #71717a; opacity: 1; }
+  .mk-offer:hover, .mk-offer:focus-visible { border-color: #000; outline: none; }
+  .mk-offer:hover small, .mk-offer:focus-visible small { color: #3f3f46; }
   .mk-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: #000; color: #fff; border: 1px solid #000; }
   .mk-pill svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .mk-pill.ghost { background: #fff; color: #000; }
   .mk-note { font-size: 12px; color: #71717a; }
   /* diagonal corner ribbon = the tier you currently get */
-  .mk-ribbon { position: absolute; top: 0; right: 0; width: 92px; height: 92px; overflow: hidden; pointer-events: none; z-index: 2; border-radius: 0 10px 0 0; }
-  .mk-ribbon span { position: absolute; top: 16px; right: -30px; width: 120px; padding: 4px 0; text-align: center; transform: rotate(45deg); font-size: 11.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; background: #000; color: #fff; }
-  .mk-ribbon.free span { background: #fff; color: #000; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; padding: 3px 0; }
+  .mk-ribbon { position: absolute; top: 0; right: 0; width: 72px; height: 72px; overflow: hidden; pointer-events: none; z-index: 2; border-radius: 0 12px 0 0; }
+  .mk-ribbon span { position: absolute; top: 11px; right: -28px; width: 96px; padding: 2px 0; text-align: center; transform: rotate(45deg); font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; background: #000; color: #fff; }
+  .mk-ribbon.free span { background: #f4f4f5; color: #52525b; }
   .mk-empty { padding: 28px 0; color: #71717a; font-size: 14px; }
   /* Spaces: tier banner along the bottom of each space card */
   .sp-tier { display: flex; align-items: center; gap: 8px; margin: 12px -16px -14px; padding: 8px 16px; border-top: 1px solid #e4e4e7; font-size: 12px; font-weight: 700; letter-spacing: .02em; background: #fff; color: #000; border-radius: 0 0 8px 8px; }
