@@ -1878,6 +1878,32 @@
   .mk-head .mk-logo { border-color: rgba(0,0,0,.06); background: #fff; }
   .mk-card .mk-ribbon span, .mk-card .mk-ribbon.free span, .mk-card .mk-ribbon.pro span { background: #18181b; color: #fff; border: 0; padding: 2px 0; }
   .mk-main { gap: 12px; }
+  /* ---- card polish: depth, lift, pill badge, softer checks, confident price + CTA ---- */
+  .mk-card { border-radius: 16px; box-shadow: 0 0 0 1px #e4e4e7, 0 1px 2px rgba(0,0,0,.04), 0 10px 28px -16px rgba(0,0,0,.18); transition: transform .18s ease, box-shadow .18s ease; }
+  .mk-card:hover, .mk-card:focus-within { transform: translateY(-4px); box-shadow: 0 0 0 1px #d4d4d8, 0 2px 4px rgba(0,0,0,.05), 0 22px 40px -18px rgba(0,0,0,.28); }
+  .mk-card .mk-main { padding: 0 20px 6px; gap: 16px; }
+  .mk-card .mk-head { margin: 0 -20px; padding: 24px 20px 22px; gap: 14px; position: relative; }
+  .mk-card .mk-head::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 140% at 100% 0%, rgba(255,255,255,.65), rgba(255,255,255,0) 60%); }
+  .mk-card .mk-head > * { position: relative; z-index: 1; }
+  .mk-card .mk-logo { width: 54px; height: 54px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 14px -6px rgba(0,0,0,.22); }
+  .mk-card .mk-logo svg { width: 32px; height: 26px; filter: none; }
+  .mk-card .mk-name { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+  .mk-card .mk-sub { font-size: 13px; }
+  .mk-card .mk-ribbon { top: 14px; right: 14px; width: auto; height: auto; overflow: visible; border-radius: 0; z-index: 3; }
+  .mk-card .mk-ribbon span, .mk-card .mk-ribbon.free span, .mk-card .mk-ribbon.pro span { position: static; display: inline-block; width: auto; transform: none; padding: 4px 10px; border-radius: 999px; background: #000; color: #fff; font-size: 10px; letter-spacing: .1em; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .mk-card .mk-head { padding-right: 76px; }
+  .mk-card .mk-free { padding: 10px 12px; margin-top: 2px; border-radius: 10px; background: #f6fbf7; border: 1px solid #e1f2e5; }
+  .mk-card .mk-free.no { background: #fafafa; border-color: #f0f0f2; }
+  .mk-inc { padding-top: 16px; }
+  .mk-inc-l li svg { box-sizing: content-box; width: 10px; height: 10px; padding: 3px; margin-top: 0; border-radius: 50%; background: #dcfce7; stroke: #15803d; }
+  .mk-card .mk-cta { padding: 6px 0 2px; }
+  .mk-card .mk-foot { padding: 16px 20px 20px; background: linear-gradient(180deg, #fff, #fafafa); border-top: 1px solid #f0f0f2; }
+  .mk-buy-p b { font-size: 28px; font-weight: 800; letter-spacing: -.03em; }
+  html.vy-embed .mk-card a.mk-buy-b { padding: 11px 26px; border-radius: 999px; font-size: 14px; font-weight: 700; box-shadow: 0 6px 14px -6px rgba(0,0,0,.5); transition: transform .15s, box-shadow .15s, background .15s; }
+  html.vy-embed .mk-card a.mk-buy-b::after { content: "\2192"; margin-left: 8px; display: inline-block; transition: transform .15s; }
+  html.vy-embed .mk-card a.mk-buy-b:hover { transform: translateY(-1px); box-shadow: 0 10px 18px -8px rgba(0,0,0,.55); }
+  html.vy-embed .mk-card a.mk-buy-b:hover::after { transform: translateX(3px); }
+  .mk-plans { gap: 20px; }
   /* no outer panel; section tab baseline runs edge to edge */
   html.vy-embed #app-main #mkt-card { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
   html.vy-embed #view-marketplace > .container { padding-left: 0; padding-right: 0; padding-top: 0; max-width: none; }
