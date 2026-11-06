@@ -31,7 +31,7 @@ const NANO_BODY = `<script src="../../nano-kernel.js?v=${_bootHash("nano-kernel.
 // Nano chrome the legacy consoles carried and users see today: the bottom app bar (Spaces / Health / Knowledge /
 // SDK & CLI / API, back to clouds.html) and the "How Nano <cloud> works" video banner (mounted on each Home by
 // consoles/src/common/NanoVideoBanner.jsx). Plain scripts, shared with clouds.html; v4 pages sit two levels down.
-const nanoChrome = (cloud) => `<script>window.__VY_ASSET_BASE = "../../";</script>\n<script src="../../nano-video.js?v=${_bootHash("nano-video.js")}"></script>\n<script src="../../vyomi-appbar.js?v=${_bootHash("vyomi-appbar.js")}" data-cloud="${cloud}" data-clouds="../../clouds.html" defer></script>\n`;
+const nanoChrome = (cloud) => `<script>window.__VY_ASSET_BASE = "../../";</script>\n<script src="../../nano-video.js?v=${_bootHash("nano-video.js")}"></script>\n<script src="../../nano-disk-chip.js?v=${_bootHash("nano-disk-chip.js")}"></script>\n<script src="../../vyomi-appbar.js?v=${_bootHash("vyomi-appbar.js")}" data-cloud="${cloud}" data-clouds="../../clouds.html" defer></script>\n`;
 
 // Cache-busting: asset URLs carry a hash of the bundle, so browsers (and Nano's service
 // worker) fetch the new build after every rebuild/upgrade instead of a stale main.js.
