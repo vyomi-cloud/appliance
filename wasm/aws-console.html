@@ -924,7 +924,7 @@ function renderRail(){
       ["Application Integration", ["sqs", "sns", "apigateway", "apigatewayv2", "eventbridge", "stepfunctions"]],
       ["Analytics", ["kinesis"]],
       ["Networking & Content Delivery", ["vpc", "elbv2"]],
-      ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
+      ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms", "sts"]],
       ["Management & Governance", ["logs", "ssm", "cloudwatch"]],
     ];
     groups.forEach(([label, keys]) => {
@@ -1272,7 +1272,7 @@ function renderHome(main){
   }
   // Friendly service label for a by_service census key.
   function nanoSvcLabel(k){
-    var M={sns:"SNS",elbv2:"Load Balancing",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",ssm:"Systems Manager",
+    var M={sts:"STS",sns:"SNS",elbv2:"Load Balancing",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",ssm:"Systems Manager",
       compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager"};
     if (M[k]) return M[k];
     var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);

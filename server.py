@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager
+from routes import gcp_resourcemanager, aws_sts
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager]:
+            gcp_resourcemanager, aws_sts]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2657,6 +2657,10 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(topic, dict):
             add("aws", "sns", "topic", topic.get("name", topic_arn),
                 {**topic, "state": "active", "created": topic.get("created", "")})
+    aws_sts = _cloudsim_service_state(space, "sts")
+    for akid, sess in aws_sts.get("sessions", {}).items():
+        if isinstance(sess, dict) and sess.get("origin") == "console":
+            add("aws", "sts", "session", akid, sess)
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
@@ -22165,25 +22169,12 @@ async def api_iam_query(request: Request) -> Response:
 
 
 async def api_sts_query(request: Request) -> Response:
+    """STS Query wire — served by core/sts_core.py (shared with Nano)."""
+    from routes.aws_sts import get_store
+    from core import sts_core
     params = await _ec2_query_params(request)
-    action = str(params.get("Action", "")).strip()
-    if action == "GetCallerIdentity":
-        body = (
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            f'<GetCallerIdentityResponse xmlns="{STS_XML_NS}"><GetCallerIdentityResult>'
-            f"<Arn>{_iam_root_principal()}</Arn><UserId>AIDACLOUDLEARNSIMULATOR</UserId>"
-            f"<Account>{AWS_ACCOUNT_ID}</Account></GetCallerIdentityResult>"
-            f"<ResponseMetadata><RequestId>{_iam_request_id()}</RequestId></ResponseMetadata>"
-            "</GetCallerIdentityResponse>"
-        )
-        return _xml_response(body)
-    return _xml_response(
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<ErrorResponse xmlns="{STS_XML_NS}"><Error><Type>Sender</Type><Code>InvalidAction</Code>'
-        f"<Message>Unsupported STS action '{xml_escape(action)}'.</Message></Error>"
-        f"<RequestId>{_iam_request_id()}</RequestId></ErrorResponse>",
-        400,
-    )
+    r = sts_core.dispatch(get_store(), params, dict(request.headers))
+    return _xml_response(r.body, r.status)
 
 
 _EC2_VPC_ACTIONS = {
@@ -22219,6 +22210,10 @@ def _ssm_usage(target: str, payload: dict, resp) -> None:
 async def aws_query_root(request: Request) -> Response:
     """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
     service = _aws_query_target_service(request)
+    if not service and request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+        # STS ops the SDKs send unsigned (no SigV4 credential scope to route on).
+        if str((await _ec2_query_params(request)).get("Action", "")) in ("AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return await api_sts_query(request)
     if service == "ec2":
         # VPC/networking actions sign under the ec2 service scope but are served
         # by the dedicated VPC query handler.

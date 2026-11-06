@@ -440,6 +440,13 @@
    "upstream": "monitoring/v3",
    "status": "released",
    "released_in": "3.0.30"
+  },
+  {
+   "cloud": "aws",
+   "key": "sts",
+   "name": "STS",
+   "upstream": "sts",
+   "status": "pending-release"
   }
  ]
 }

@@ -1219,6 +1219,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                             status_code=400 if isinstance(resp, dict) and "__type" in resp else 200)
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
+        if not service and action in ("AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return await _srv().api_sts_query(request)   # STS ops the SDKs send unsigned
         hint = "" if service else (
             " Request is unsigned and the Action is not in the unsigned-routing table;"
             " sign it (any AWS SDK/CLI with dummy creds) or add an Authorization header"

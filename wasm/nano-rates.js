@@ -8,7 +8,7 @@ window.NANO_RATE = {
   s3: 0.5, dynamodb: 1.25, kms: 1, secretsmanager: 0.4,
   sqs: 0.4, sns: 0.5, iam: 0, rds: 25.55,
   elbv2: 16.43, ec2: 30.37, lambda: 0.2, apigateway: 3.5,
-  vpc: 0, cloudwatch: 0.1, ssm: 0.05,
+  vpc: 0, cloudwatch: 0.1, ssm: 0.05, sts: 0.05,
   // GCP
   compute: 24.53, storage: 0.5, cloudsql: 25, pubsub: 0.4,
   firestore: 0.18, functions: 0.2, secretmanager: 0.18,

@@ -35,6 +35,11 @@
   "category": "aws"
  },
  {
+  "name": "sts",
+  "label": "StsStore",
+  "category": "aws"
+ },
+ {
   "name": "msg",
   "label": "InMemoryMessagingStore",
   "category": "aws"

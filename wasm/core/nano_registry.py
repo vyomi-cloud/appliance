@@ -23,6 +23,7 @@ from core.kms_keystore import InMemoryKeyStore
 from core.kv_store import InMemoryKvStore
 from core.sql_store import InMemorySqlStore
 from core.iam_store import InMemoryIamStore
+from core.sts_core import StsStore
 from core.messaging_store import InMemoryMessagingStore
 from core.gcp_firestore_core import FirestoreStore
 from core.gcp_artifactregistry_core import ArtifactRegistryStore
@@ -63,6 +64,7 @@ def get() -> dict:
             "sec": InMemoryKvStore(),
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
+            "sts": StsStore(),                 # STS sessions (temporary credentials issued)
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
             "apigwv2": ApiGwV2Store(),

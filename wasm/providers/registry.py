@@ -425,6 +425,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # them via the same list handlers the console uses.
         if provider == "aws":
             from . import aws_core_adapter as A
+            from . import dataplane_adapter as D
             aws_counts = {
                 "s3":             len(A.s3_list_buckets().get("buckets", [])),
                 "dynamodb":       len(A.ddb_list_tables().get("tables", [])),
@@ -440,6 +441,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
                 "sns":            len(A.MSG.topics),
+                "sts":            len(D.sts_list().get("items", [])),
             }
             try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
                 from core import nano_registry

@@ -46,6 +46,8 @@ from core.sql_store import InMemorySqlStore
 from core import rds_core as rds
 from core.iam_store import InMemoryIamStore
 from core import iam_core as iam
+from core.sts_core import StsStore
+from core import sts_core as sts
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
@@ -249,6 +251,10 @@ _QUERY_ACTION = {
     "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
     "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "DescribeNetworkAcls": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
+    # STS (unsigned query requests; signed ones route by credential scope)
+    "AssumeRole": "sts", "AssumeRoleWithWebIdentity": "sts", "AssumeRoleWithSAML": "sts",
+    "GetCallerIdentity": "sts", "GetSessionToken": "sts", "GetFederationToken": "sts",
+    "GetAccessKeyInfo": "sts", "DecodeAuthorizationMessage": "sts",
 }
 
 
@@ -326,6 +332,7 @@ class AwsWireRouter:
         self.sec = s.get("sec") or InMemoryKvStore()
         self.rds = s.get("rds") or sql_store or InMemorySqlStore()
         self.iam = s.get("iam") or InMemoryIamStore()
+        self.sts = s.get("sts") or StsStore()
         self.msg = s.get("msg") or InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
         # GCP services — each its own store instance (namespaced from AWS).
         self.gcs = s.get("gcs") or InMemoryObjectStore()
@@ -854,6 +861,8 @@ class AwsWireRouter:
             return self._ec2_describe_instances(params)
         if svc == "iam":
             r = iam.dispatch(self.iam, params)
+        elif svc == "sts":
+            r = sts.dispatch(self.sts, params, lheaders)
         elif svc == "rds":
             r = rds.dispatch(self.rds, params)
         elif svc == "vpc":

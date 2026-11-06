@@ -95,6 +95,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
     "aws.ssm": 0.05,          # Parameter Store advanced-tier parameter $0.05/mo (standard tier is free)
     "aws.cloudwatch": 0.10,   # standard-resolution metric alarm, per alarm-month
+    "aws.sts": 0.05,          # STS itself is free; nominal per-session figure so console sessions register in savings
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations

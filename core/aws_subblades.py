@@ -494,6 +494,20 @@ _CLOUDWATCH_SUB = [
 ]
 
 
+# ===========================================================================
+# STS — session detail
+# ===========================================================================
+_STS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Session", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -519,4 +533,5 @@ SUB_BLADES: dict[str, list] = {
     "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
     "cloudwatch":     _CLOUDWATCH_SUB,
+    "sts":            _STS_SUB,
 }

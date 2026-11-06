@@ -210,6 +210,11 @@ class Aws(CloudProvider):
             ("s3", "ListObjectVersions"):       lambda b, a, p: A.s3_list_versions(p),
             ("s3", "GetBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
             ("s3", "PutBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
+            # STS — sessions (temporary credentials), via core/sts_core.py
+            ("sts", "ListSessions"):  lambda b, a, p: D.sts_list(p),
+            ("sts", "CreateSession"): lambda b, a, p: D.sts_create(p),
+            ("sts", "GetSession"):    lambda b, a, p: D.sts_get(p),
+            ("sts", "DeleteSession"): lambda b, a, p: D.sts_delete(p),
         }
 
 
