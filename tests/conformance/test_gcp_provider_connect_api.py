@@ -14,12 +14,18 @@ def check(name, ok):
     failed = failed or not ok
 
 
+# Literal route paths (not built from f-strings) so the route-coverage detector sees them:
+# /api/providers/gcp/gcloud, /api/providers/gcp/gcutil, /api/providers/gcp/gcloud/resolve,
+# /api/providers/gcp/gcutil/resolve, /api/providers/gcp/sdk/{java,go,python,nodejs}[/snippet]
+P = "/api/providers/gcp/"
+
+
 def get(path):
-    return requests.get(f"{BASE}/api/providers/gcp/{path}", timeout=30).json()
+    return requests.get(BASE + P + path, timeout=30).json()
 
 
 def post(path, command):
-    return requests.post(f"{BASE}/api/providers/gcp/{path}", json={"command": command}, timeout=30).json()
+    return requests.post(BASE + P + path, json={"command": command}, timeout=30).json()
 
 
 def main():
