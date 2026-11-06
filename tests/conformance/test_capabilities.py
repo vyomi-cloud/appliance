@@ -143,6 +143,25 @@ def run_tests(files: list[str]) -> tuple[bool, str]:
         return True, "test files run in-process only"
     bad = []
     for f in files:
+        if f.endswith(".mjs"):
+            # Console smokes are Node/Playwright scripts, not Python: run them through the Nano smoke runner
+            # (it owns its preview server + a fresh browser per smoke) on a private free port so a sweep never
+            # collides with another server or leftover state.
+            import re
+            import socket
+            m = re.match(r"smoke-(.+)\.mjs$", Path(f).name)
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+            env = {**os.environ}
+            pw = Path("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright")
+            if "PW" not in env and pw.exists():
+                env["PW"] = str(pw)
+            r = subprocess.run(["node", str(ROOT / "consoles/tests/run-nano-smokes.mjs"), "--only", m.group(1) if m else Path(f).stem,
+                                "--port", str(port)], cwd=ROOT, capture_output=True, text=True, env=env)
+            if r.returncode != 0:
+                bad.append(f)
+            continue
         r = subprocess.run([sys.executable, str(ROOT / f)], cwd=ROOT, capture_output=True, text=True,
                            env={**os.environ, "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1"})
         if r.returncode != 0:
