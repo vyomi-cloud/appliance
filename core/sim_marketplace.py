@@ -43,8 +43,9 @@ SIMULATORS: list[dict[str, Any]] = [
         "Firestore", "Memorystore for Redis", "VPC Network", "Pub/Sub", "API Gateway", "Eventarc", "Cloud Scheduler",
         "Secret Manager", "Cloud KMS", "IAM & Admin", "IAM Service Account Credentials", "Cloud Monitoring"]},
     {"id": "azure", "name": "Azure",        "free_tier": True, "price_usd": 21, "services": [
-        "Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps",
-        "API Management", "Virtual networks", "Network security groups"]},
+        "Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps", "API Management",
+        "Virtual networks", "Network Security Group", "Event Grid topics", "Key vaults", "Container Apps", "App Configuration",
+        "DNS zones", "Monitor alerts", "Log Analytics", "Azure AI services", "Role Definition", "Entra ID / RBAC"]},
 ]
 
 # PRICING LADDER (monthly, USD; the portal owns checkout, pro-rating and billing):
