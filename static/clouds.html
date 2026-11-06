@@ -1303,6 +1303,7 @@
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
     html.vy-embed .mk-tabs { display: none !important; }
     html.vy-embed #mkt-card > .sc-head { display: none !important; }
+    html.vy-embed #mkt-card { padding-top: 22px !important; }
     html.vy-embed:not(.vy-acct) #activate-modal, html.vy-embed:not(.vy-acct) .am-overlay { display: none !important; }
     /* ?embed=1&acct=1: the drawer's "Activate appliance" dialog - only the real activation dialog, nothing else. */
     html.vy-acct #app-main { visibility: hidden !important; }
@@ -1935,8 +1936,6 @@
       <div id="mkt-p-cur" role="tabpanel" aria-labelledby="mkt-t-cur"><div id="mkt-cur"></div></div>
       <div id="mkt-p-plan" role="tabpanel" aria-labelledby="mkt-t-plan" hidden><div id="mkt-plan"></div></div>
       <div id="mkt-p-payg" role="tabpanel" aria-labelledby="mkt-t-payg" hidden>
-        <p class="sc-desc">Buy only the clouds you need, month to month. Each simulator gets a single space you can open from Spaces any time.</p>
-        <div class="mk-sec">Full Cloud stack</div>
         <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
         <!-- AI stack hidden for now: no AI services in this build. -->
         <!-- Dev & DevOps packs hidden for now: pack entitlements are not enforced yet. -->
@@ -3575,7 +3574,7 @@
       if (c.trial_ended) foot += '<span class="mk-pill ghost">Trial ended</span>';
       (c.offers || []).forEach(o => { foot += _buyBtn(o.url, 'Buy ' + c.name, o.price_usd, o.per, 'Buy ' + c.name + ' for $' + o.price_usd + ' ' + o.per); });
       const svc = (c.services && c.services.length) ? c.services : ((VY_SIMULATORS.filter(x => x.id === c.id)[0] || {}).services || []);
-      return _packCard({ id: c.id, logo: c.id, title: c.name, sub: 'Full Cloud stack' + (c.added ? ' · in Spaces' : ''), ribbon: (tier === 'free' ? 'Full' : T), ribbonCls: tier, off: c.trial_ended,
+      return _packCard({ id: c.id, logo: c.id, title: c.name, sub: (c.added ? 'In Spaces' : ''), ribbon: (tier === 'free' ? 'Full' : T), ribbonCls: tier, off: c.trial_ended,
         addId: c.id, disabled: c.can_add === false, aria: (c.added ? 'Open ' : 'Add ') + c.name + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier',
         status: free, included: _pcIncluded('All ' + svc.length + ' services', ['SDK, CLI & API for all ' + svc.length + ' services'].concat(svc), true), cta: cta, foot: foot });
     }
