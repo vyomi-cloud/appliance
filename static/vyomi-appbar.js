@@ -101,7 +101,7 @@
     '#vy-appbar .vy-notch button.vy-exp{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-left:2px;padding:0;border:0;border-radius:8px;background:none;color:#b4b8cc;cursor:pointer}' +
     '#vy-appbar .vy-notch button.vy-exp:hover,#vy-appbar .vy-notch button.vy-exp[aria-expanded=true]{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){order:9}' +   /* expand = always the last icon; the info/download icons (order 2,3) sit before it */
-    '#vy-appbar .vy-notch button.vy-exp svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+    '#vy-appbar .vy-notch button.vy-exp svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     /* Expanded drawer = Vyomi Marketplace: standard black & white, landing-page grid field, thin borders, no shadows */
     '#vy-cap{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}#vy-cap.open{display:flex}' +
     '#vy-cap .cbox{width:min(1120px,96vw);height:min(720px,90vh);display:flex;flex-direction:column;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden}' +
@@ -217,7 +217,7 @@
     }
     cap.querySelector('.csearch input').addEventListener('input', function (e) { query = e.target.value; paintCap(); });
     var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'All capabilities'; expBtn.setAttribute('aria-label', 'All capabilities'); expBtn.setAttribute('aria-expanded', 'false');
-    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="8" cy="5" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/><circle cx="16" cy="19" r="2"/></g></svg>';
     bar.querySelector('.vy-notch').appendChild(expBtn);
     function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); }
     function openCap() { curCat = 'All'; query = ''; var inp = cap.querySelector('.csearch input'); inp.value = ''; paintCap(); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { inp.focus(); }, 30); }
