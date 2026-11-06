@@ -1779,6 +1779,17 @@
   html.vy-embed .space-logo svg { filter: grayscale(1); }
   html.vy-embed #app-main .space-card { overflow: hidden; }
   html.vy-embed #app-main #mkt-card .sc-desc { margin-bottom: 16px; }
+  /* card header = landing-page grid field */
+  .mk-head { margin: -16px -16px 0; padding: 16px 52px 14px 16px; background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; border-bottom: 1px solid #ececef; }
+  .mk-main { gap: 12px; }
+  /* no outer panel; section tab baseline runs edge to edge */
+  html.vy-embed #app-main #mkt-card { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+  html.vy-embed #view-marketplace > .container { padding-left: 0; padding-right: 0; padding-top: 0; max-width: none; }
+  html.vy-embed #app-main #mkt-card > .sc-head { margin: 0; padding: 20px 24px 0; border-bottom: 1px solid #e4e4e7; align-items: flex-end; }
+  html.vy-embed #app-main #mkt-card .sc-title { display: inline-block; padding: 0 2px 10px; margin-bottom: -1px; border-bottom: 2px solid #000; }
+  html.vy-embed #app-main #mkt-card .sc-title .material-icons { color: #000 !important; }
+  html.vy-embed #app-main #mkt-card > .sc-desc, html.vy-embed #app-main #mkt-card > #mkt-grid { margin-left: 24px; margin-right: 24px; }
+  html.vy-embed #app-main #mkt-card > .sc-desc { margin-top: 14px; }
 </style>
 
   <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
