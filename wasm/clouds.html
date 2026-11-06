@@ -1925,6 +1925,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-inc-l li.mk-more { color: #71717a; font-weight: 600; }
   .mk-inc-l.chips li.mk-more { border-style: dashed; background: #fff; }
   .mk-inc-l:not(.chips) li.mk-more::before { display: none; }
+  /* both tab sections: no grey field, only the tiles */
+  html.vy-embed body:has(#view-marketplace:not([hidden])), html.vy-embed body:has(#view-marketplace:not([hidden])) #app-main,
+  html.vy-embed #view-marketplace, html.vy-embed #view-marketplace > .container, html.vy-embed #app-main #mkt-card,
+  html.vy-embed #app-main #mkt-card > .sc-head, #mkt-p-plan, #mkt-p-payg { background: #fff !important; }
+  html.vy-embed #app-main #mkt-card { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
   /* ---- clean card body ---- */
   .mk-card .mk-main { gap: 14px; padding: 16px 18px 6px; }
   .mk-card .mk-free { padding: 0; font-size: 12.5px; color: #52525b; }
