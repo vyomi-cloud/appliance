@@ -17,6 +17,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Glyph, KV, Loading } from "../../kit/common.jsx";
+import { UserAuditLogs, UserSignInLogs, UserAzureRoles, UserAuthMethods } from "./BladePanels.jsx";
+import { NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
 export const MENU = [
@@ -36,6 +38,14 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.map((m) => [m.id, m.label]));
 
+const NS_USER = {
+  diagnose: "Diagnose and solve problems runs Microsoft's fleet-wide Entra diagnostics against telemetry Vyomi never collects.",
+  customsecurityattributes: "Custom security attribute sets and definitions are not modelled by the Graph core.",
+  administrativeunits: "Administrative units exist (Entra > Administrative units) but unit membership is not modelled, so no unit can list this user.",
+  applications: "Application ownership/assignment per user is not modelled; app registrations list their owners under Owners.",
+  licenses: "Licensing (SKUs and assignments) is a Microsoft 365 billing service Vyomi does not run.",
+};
+
 export default function UserBlade({ params }) {
   const { id, panel = "overview" } = params;
   const u = useAsync(() => api.getUser(id), [id]);
@@ -51,12 +61,13 @@ export default function UserBlade({ params }) {
       groups: () => <Groups user={user} />,
       assignedroles: () => <AssignedRoles user={user} />,
       devices: () => <Devices user={user} />,
+      auditlogs: () => <UserAuditLogs user={user} />,
+      signinlogs: () => <UserSignInLogs user={user} />,
+      azureroleassignments: () => <UserAzureRoles user={user} />,
+      authenticationmethods: () => <UserAuthMethods user={user} reload={reload} />,
     }[panel];
     body = P ? P() : (
-      <>
-        <div className="vy-panel-title">{`${user.displayName} | ${LABEL[panel] || panel}`}</div>
-        <p>Nothing further to show here for this user.</p>
-      </>
+      <NotSimulatedContainer title={`${user.displayName} | ${LABEL[panel] || panel}`} feature={LABEL[panel] || panel} note={NS_USER[panel]} />
     );
   }
 

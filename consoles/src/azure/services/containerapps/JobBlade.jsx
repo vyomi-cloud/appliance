@@ -13,6 +13,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, Glyph, Loading, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
@@ -53,6 +54,7 @@ export default function JobBlade({ params }) {
   else {
     const a = job.data, reload = job.reload;
     const P = {
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog resPath={resPath} name={a.name} />,
       iam: () => <AccessControlIam resPath={resPath} name={a.name} capId="azure.containerapps.iam" />,

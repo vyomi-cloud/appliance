@@ -15,10 +15,30 @@ import { Essentials, ErrorBar, Glyph, Loading, NotSimulatedContainer } from "../
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { SqlVnetRules } from "../../kit/NetworkRules.jsx";
 import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 import * as api from "./api.js";
 
-export const MENU = [{ id: "overview", label: "Overview" }, { id: "networking", label: "Networking" }];
-const LABEL = { overview: "Overview", networking: "Networking" };
+export const MENU = [
+  { id: "overview", label: "Overview" }, { id: "activitylog", label: "Activity log" }, { id: "iam", label: "Access control (IAM)" },
+  { id: "diagnose", label: "Diagnose and solve problems" },
+  { group: "Security", items: [{ id: "networking", label: "Networking" }, { id: "defender", label: "Microsoft Defender for Cloud" }] },
+  { group: "Monitoring", items: [{ id: "diagnosticsettings", label: "Diagnostic settings" }] },
+  { group: "Automation", items: [{ id: "tasks", label: "Tasks" }, { id: "exporttemplate", label: "Export template" }] },
+  { group: "Help", items: [{ id: "resourcehealth", label: "Resource health" }, { id: "support", label: "Support + Troubleshooting" }] },
+];
+const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
+const SQL_SERVER_ACTIONS = [
+  "Microsoft.Sql/servers/read", "Microsoft.Sql/servers/write", "Microsoft.Sql/servers/delete",
+  "Microsoft.Sql/servers/databases/read", "Microsoft.Sql/servers/databases/write", "Microsoft.Sql/servers/firewallRules/write",
+];
 
 export default function SqlServerBlade({ params }) {
   const { rg, server } = params;
@@ -31,7 +51,20 @@ export default function SqlServerBlade({ params }) {
   else if (data.error) body = <><ErrorBar error={data.error} title="Failed to load the server" /><Link href="#/sql">Back to SQL databases</Link></>;
   else {
     const a = data.data, reload = data.reload;
-    body = panel === "networking" ? <Networking a={a} /> : <Overview a={a} reload={reload} />;
+    const P = {
+      overview: () => <Overview a={a} reload={reload} />,
+      networking: () => <Networking a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
+      iam: () => <ResourceIam a={a} capId="azure.sql.server.iam" actions={SQL_SERVER_ACTIONS} />,
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
+      tasks: () => <TasksPanel a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="sql" />,
+    }[panel];
+    body = P ? P() : <Overview a={a} reload={reload} />;
   }
 
   return (

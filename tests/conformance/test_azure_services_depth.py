@@ -60,6 +60,17 @@ def run():
     h("POST", P + "/Microsoft.Logic/workflows/rot2/triggers/Recurrence/run", None, "2019-05-01")
     new = h("POST", P + res["st"][0] + "/listKeys", None, "2023-01-01")["body"]["keys"][0]["value"]
     _check("the scheduled task really rotated key1", old != new)
+    # ── Container Apps ──
+    env = P + "/Microsoft.App/managedEnvironments/cae1"
+    h("PUT", env, {"location": "eastus"}, "2024-03-01")
+    ca = P + "/Microsoft.App/containerApps/ca1"
+    h("PUT", ca, {"location": "eastus", "properties": {"managedEnvironmentId": env, "configuration": {"ingress": {"external": True, "targetPort": 80}}, "template": {"containers": [{"name": "web", "image": "nginx"}]}}}, "2024-03-01")
+    d = {x["id"]: x for x in dg("/Microsoft.App/containerApps/ca1")["body"]["detectors"]}
+    _check("container app detectors", d["environment"]["status"] == "Healthy" and d["ingress"]["status"] == "Warning" and "scale" in d)
+    _check("environment lists its apps", {x["id"]: x for x in dg("/Microsoft.App/managedEnvironments/cae1")["body"]["detectors"]}["apps"]["detail"].startswith("1 container app"))
+    h("PUT", P + "/Microsoft.App/jobs/job1", {"location": "eastus", "properties": {"environmentId": env, "configuration": {"triggerType": "Manual"}, "template": {"containers": [{"image": "busybox"}]}}}, "2024-03-01")
+    _check("job trigger detector", {x["id"]: x for x in dg("/Microsoft.App/jobs/job1")["body"]["detectors"]}["trigger"]["status"] == "Healthy")
+    _check("containerapp-stop task creates and runs", wf("containerapp-stop", ca)["status"] == 201 and h("POST", P + "/Microsoft.Logic/workflows/t-containerapp-stop/triggers/Recurrence/run", None, "2019-05-01")["body"].get("status") == "Succeeded")
     # ── VM extensions ──
     V = P + "/Microsoft.Compute/virtualMachines/vm1"
     h("PUT", V, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}, "osProfile": {"computerName": "vm1", "adminUsername": "u", "adminPassword": "Passw0rd!x1"}, "networkProfile": {"networkInterfaces": []}}}, "2024-03-01")

@@ -14,6 +14,9 @@ import { useAsync } from "../../../common/useAsync.js";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Glyph, KV, Loading } from "../../kit/common.jsx";
+import { ExposeApi, AppRoles, TokenConfiguration, Branding, Quickstart, IntegrationAssistant } from "./BladePanels.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
 export const MENU = [
@@ -36,6 +39,12 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.map((m) => [m.id, m.label]));
 
+const NS_APP = {
+  diagnose: "Diagnose and solve problems runs Microsoft's fleet-wide Entra diagnostics against telemetry Vyomi never collects.",
+  troubleshooting: "Sign-in troubleshooting needs Entra's interactive sign-in service; Vyomi only records token-endpoint sign-ins (see Sign-in logs).",
+  rolesandadministrators: "Directory role scoping to a single application registration is not modelled; assign directory roles from Entra > Roles and administrators.",
+};
+
 export default function AppBlade({ params }) {
   const { id, panel = "overview" } = params;
   const a = useAsync(() => api.getApplication(id), [id]);
@@ -52,12 +61,16 @@ export default function AppBlade({ params }) {
       apipermissions: () => <ApiPermissions app={app} />,
       manifest: () => <Manifest app={app} />,
       owners: () => <Owners app={app} />,
+      exposeanapi: () => <ExposeApi app={app} reload={reload} />,
+      approles: () => <AppRoles app={app} reload={reload} />,
+      tokenconfiguration: () => <TokenConfiguration app={app} reload={reload} />,
+      brandingproperties: () => <Branding app={app} reload={reload} />,
+      quickstart: () => <Quickstart app={app} />,
+      integrationassistant: () => <IntegrationAssistant app={app} />,
+      newsupportrequest: () => <SharedSupportPanel resourceId={`/applications/${app.id}`} name={app.displayName} service="entra" />,
     }[panel];
     body = P ? P() : (
-      <>
-        <div className="vy-panel-title">{`${app.displayName} | ${LABEL[panel] || panel}`}</div>
-        <p>Nothing further to show here for this application.</p>
-      </>
+      <NotSimulatedContainer title={`${app.displayName} | ${LABEL[panel] || panel}`} feature={LABEL[panel] || panel} note={NS_APP[panel]} />
     );
   }
 

@@ -476,6 +476,58 @@ def _dnszone(state, rec):
     return [_d("recordsets", "Record sets", "Availability", "Info" if n else "Warning", f"{n} record set(s)." if n else "The zone has no record set.", None if n else "Add records.", {"recordSets": n})]
 
 
+def _containerapp(state, rec):
+    p = rec.get("properties") or {}
+    cfg = p.get("configuration") or {}
+    ing = cfg.get("ingress") or {}
+    tpl = p.get("template") or {}
+    out = []
+    env = p.get("managedEnvironmentId") or p.get("environmentId")
+    env_ok = bool(env) and (env or "").lower() in state
+    out.append(_d("environment", "Container Apps environment", "Availability", "Healthy" if env_ok else "Critical",
+                  "Hosted by an existing environment." if env_ok else "The managed environment this app references does not exist.",
+                  None if env_ok else "Recreate the environment or move the app to another one.", {"managedEnvironmentId": env}))
+    cs = tpl.get("containers") or []
+    out.append(_d("containers", "Containers", "Configuration", "Healthy" if cs else "Critical",
+                  f"{len(cs)} container(s): {', '.join(str(c.get('image')) for c in cs)}." if cs else "The template has no container.",
+                  None if cs else "Add a container with an image.", {"containers": len(cs)}))
+    if ing:
+        ok = bool(ing.get("targetPort"))
+        out.append(_d("ingress", "Ingress", "Networking", ("Warning" if ing.get("external") else "Healthy") if ok else "Critical",
+                      (f"{'External' if ing.get('external') else 'Internal'} ingress on port {ing.get('targetPort')}." if ok else "Ingress is enabled without a target port."),
+                      "External ingress is reachable from the internet; restrict with IP rules if not intended." if ing.get("external") and ok else (None if ok else "Set ingress.targetPort."),
+                      {"external": bool(ing.get("external")), "targetPort": ing.get("targetPort")}))
+    else:
+        out.append(_d("ingress", "Ingress", "Networking", "Info", "Ingress is disabled; the app is only reachable by other apps through the environment.", None, {}))
+    sc = tpl.get("scale") or {}
+    mn, mx = sc.get("minReplicas", 0), sc.get("maxReplicas", 10)
+    out.append(_d("scale", "Scale rule", "Capacity", "Info" if mn == 0 else "Healthy", f"Scales between {mn} and {mx} replicas." + (" Scale to zero is on: the first request waits for a cold start." if mn == 0 else ""), None, {"minReplicas": mn, "maxReplicas": mx}))
+    revs = _children(state, rec["id"], "revisions")
+    out.append(_d("revisions", "Revisions", "Reliability", "Healthy" if revs else "Info", f"{len(revs)} revision(s) recorded." if revs else "No revision record exists yet.", None, {"revisions": len(revs)}))
+    return out
+
+
+def _containerenv(state, rec):
+    p = rec.get("properties") or {}
+    apps = [v for v in state.values() if (v.get("type") or "").lower() == "microsoft.app/containerapps"
+            and ((v.get("properties") or {}).get("managedEnvironmentId") or "").lower() == rec["id"].lower()]
+    out = [_d("apps", "Hosted apps", "Availability", "Info" if apps else "Warning", f"{len(apps)} container app(s) run in this environment." if apps else "No container app uses this environment.", None if apps else "Create a container app or delete the unused environment.", {"apps": len(apps)})]
+    out.append(_d("zone", "Zone redundancy", "Reliability", "Healthy" if p.get("zoneRedundant") else "Info", "Zone redundant." if p.get("zoneRedundant") else "Not zone redundant.", None, {"zoneRedundant": bool(p.get("zoneRedundant"))}))
+    return out
+
+
+def _containerjob(state, rec):
+    p = rec.get("properties") or {}
+    cfg = p.get("configuration") or {}
+    trig = cfg.get("triggerType") or "Manual"
+    out = [_d("trigger", "Trigger", "Configuration", "Healthy" if trig in ("Manual", "Schedule", "Event") else "Critical", f"Trigger type {trig}." + (f" Schedule {cfg.get('scheduleTriggerConfig', {}).get('cronExpression')}." if trig == "Schedule" else ""), None, {"triggerType": trig})]
+    if trig == "Schedule":
+        cron = (cfg.get("scheduleTriggerConfig") or {}).get("cronExpression")
+        out.append(_d("cron", "Cron expression", "Configuration", "Healthy" if cron else "Critical", f"Cron expression {cron}." if cron else "A schedule job needs scheduleTriggerConfig.cronExpression.", None if cron else "Set a cron expression.", {"cronExpression": cron}))
+    out.append(_d("timeout", "Replica timeout", "Reliability", "Info", f"Replica timeout {cfg.get('replicaTimeout', 1800)} s, {cfg.get('replicaRetryLimit', 0)} retries.", None, {"replicaTimeout": cfg.get("replicaTimeout", 1800)}))
+    return out
+
+
 KINDS = {
     "microsoft.containerservice/managedclusters": _aks,
     "microsoft.apimanagement/service": _apim,
@@ -492,6 +544,9 @@ KINDS = {
     "microsoft.operationalinsights/workspaces": _workspace,
     "microsoft.compute/virtualmachines": _vm,
     "microsoft.network/dnszones": _dnszone,
+    "microsoft.app/containerapps": _containerapp,
+    "microsoft.app/managedenvironments": _containerenv,
+    "microsoft.app/jobs": _containerjob,
 }
 
 

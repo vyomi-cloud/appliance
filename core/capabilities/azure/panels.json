@@ -3,11 +3,14 @@
     "tier": "pro",
     "title": "Azure Backup for AKS",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Azure Backup for AKS (backup vault, backup extension, backup instances for a cluster) is not modelled; the Backup page shows an honest Not simulated panel."
+      "A backup vault, AKS backup policy and backup instance are real ARM resources validated like the RP (see azure.aks.backup in aks.json); no volume snapshot is taken from a running cluster."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_backup_core.py"
     ]
   },
   "azure.aks.tools": {
@@ -28,21 +31,27 @@
   "azure.apim.capacity": {
     "title": "Capacity gauge",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "The capacity gauge is not modelled: Vyomi has no gateway load to measure."
+      "The Capacity gauge is derived from the gateway's own recorded request rate over the last 60 s against a nominal requests-per-second per unit of the service tier (azure_apim_gateway_core); it is a simulator throughput model, not CPU or memory of a real gateway."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_apim_gateway_core.py"
     ]
   },
   "azure.apim.create_monitoring": {
     "title": "Wiring a new service to Log Analytics, Application Insights or Defender for APIs at create time",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "These create-wizard checkboxes provision separate monitoring and security resources in real Azure; Vyomi does not model that provisioning (create the Log Analytics workspace / Application Insights component separately and link it from the service)."
+      "The create wizard's Monitor + secure tab really creates the diagnostic setting (Log Analytics), the Application Insights logger and the Defender for APIs plan; the wiring is created together with the service request, not as one atomic deployment, so a failure part-way leaves the service created."
+    ],
+    "tests": [
+      "consoles/tests/smoke-azure-apim-monitor-secure.mjs"
     ]
   },
   "azure.appconfiguration.tools": {
@@ -116,11 +125,14 @@
   "azure.cosmos.container_blades": {
     "title": "Browse and Scale blades for a single container",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "The standalone Browse and Scale blades are not modelled: select the container in Data Explorer (azure.cosmos.data_explorer) and use account-level throughput (azure.cosmos.scale_ru) instead."
+      "The Browse blade lists a container's items through the Cosmos data plane and the Scale blade charts request-unit consumption from the account's metrics and sets throughput; the standalone container-level Settings blade is a Data Explorer tab."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_core.py"
     ]
   },
   "azure.entra.bitlocker_keys": {
@@ -233,11 +245,14 @@
   "azure.storage.private_endpoints": {
     "title": "Private endpoint connections",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Private endpoint connections on the storage account are not modelled in the Networking page (the Private Endpoint resource itself is a Network service object)."
+      "The storage account's Networking > Private endpoint connections tab is real: Microsoft.Network/privateEndpoints targeting the account write a privateEndpointConnections child on it, approve/reject/delete flow back to the endpoint, and the create wizard can add an endpoint inline (azure.vnets.private_endpoints). No packet is routed: the endpoint does not change how the account's data plane is reached."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_netsvc_core.py"
     ]
   },
   "azure.resourcegroups.tools": {
