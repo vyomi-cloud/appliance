@@ -94,8 +94,10 @@ try {
 
   // VM Manager
   await go("#/compute/vm-inventory", "OS inventory");
+  await page.getByText(`cud-a-${N}`).first().waitFor({ timeout: 30000 }).catch(() => {});
   check("VM Manager: inventory lists VMs", await page.getByText(`cud-a-${N}`).count() > 0);
   await go("#/compute/vm-reports", "VM Manager reports");
+  await page.getByTestId("vmm-report-summary").first().waitFor({ timeout: 30000 }).catch(() => {});
   check("VM Manager: report summary", await page.getByTestId("vmm-report-summary").count() > 0);
   check("no console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } catch (e) { fails++; console.log("FAIL exception " + e.message); await page.screenshot({ path: `${OUT}/fail.png`, fullPage: true }); }

@@ -31,7 +31,7 @@ check("plan created", plan.status === 200, plan.text);
 const asc = await W("POST", `${L}/backupPlanAssociations?backupPlanAssociationId=smoke-assoc`, { resourceType: "compute.googleapis.com/Instance", resource: `projects/${project}/zones/us-central1-a/instances/bdr-vm`, backupPlan: `projects/${project}/locations/us-central1/backupPlans/smoke-plan` });
 check("instance protected", asc.status === 200, asc.text);
 await page.goto(`${UI}#/backupdr?tab=protected`); await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
-await page.getByRole("button", { name: "Back up now" }).click();
+await page.getByRole("button", { name: "Back up now" }).click(); await page.waitForTimeout(3000);   // let the in-flight backup request finish before navigating away
 await page.goto(`${UI}#/backupdr?tab=backups`); await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
 await page.getByRole("cell", { name: "ON_DEMAND" }).waitFor({ timeout: 15000 });
 check("on-demand backup listed", true);

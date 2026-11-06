@@ -634,8 +634,8 @@ def _data_script(store: SqlStore, project: str, instance: str) -> str:
 def _apply_data(store: SqlStore, project: str, instance: str, script: str, replay=()) -> None:
     from core import sql_store as sq
     db_id = _key(project, instance)
-    if not store.instance_exists(db_id):
-        return
+    if not store.instance_exists(db_id) or sq.is_async_engine(store):
+        return      # PGlite data plane is async-only: row data isn't captured by backups either (see _data_script)
     for t in sq.dump_tables(store, db_id):
         store.execute_sql(db_id, f"DROP TABLE IF EXISTS {sq.quote_ident(t['name'])}")
     for stmt in sq.split_sql(script or ""):
@@ -1117,7 +1117,9 @@ def _list_tables(store: SqlStore, project: str, instance: str) -> CloudSqlRespon
     db_id = _key(project, instance)
     names: list[str] = []
     try:
-        if sq.engine_dialect(store) == "sqlite":
+        # An async-only engine (PGlite) answers the sync execute_sql path (the one _run_query uses) from its
+        # sqlite fallback, so the table catalogue must be read from sqlite_master there too.
+        if sq.engine_dialect(store) == "sqlite" or sq.is_async_engine(store):
             res = store.execute_sql(db_id, "SELECT name FROM sqlite_master WHERE type='table' "
                                             "AND name NOT LIKE 'sqlite_%' ORDER BY name")
         else:

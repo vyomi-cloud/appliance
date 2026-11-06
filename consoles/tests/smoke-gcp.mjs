@@ -428,7 +428,7 @@ try {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: SUB, network: NET, ipCidrRange: "10.9.0.0/24" }),
   });
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
   await page.getByRole("cell", { name: SUB, exact: true }).waitFor({ timeout: 10000 });
   check("subnet created over wire → shown in UI (Subnets tab)", true);
 
@@ -1041,7 +1041,7 @@ try {
   check("configmap created over native wire → shown in Secrets & ConfigMaps UI", true);
 
   // Nodes tab: real Node objects derived from the real node pool (wire-pool, 2 nodes).
-  await page.goto(UI + `#/kubernetes/clusters/us-central1/${K2}`, { waitUntil: "networkidle" });
+  await page.goto(UI + `#/kubernetes/clusters/us-central1/${K2}`, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
   await page.getByRole("tab", { name: "Nodes" }).click();
   await page.getByRole("heading", { name: "Nodes", exact: true }).waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
@@ -1516,7 +1516,7 @@ try {
   // Nano saves to IndexedDB ~400 ms after a write (debounced); a reload inside that window
   // loses the write (known Nano limitation, tracked) — give the save time to land.
   await page.waitForTimeout(1500);
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
   // On Nano a reload re-boots the in-tab engine before the list can load — wait, don't sample.
   const wireColl = await page.getByText("wire-coll", { exact: true }).waitFor({ timeout: 20000 }).then(() => true, () => false);
   check("document created over wire → collection shown in Studio UI", wireColl);
@@ -1811,7 +1811,7 @@ try {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: { data: Buffer.from("smoke-value-3").toString("base64") } }),
   });
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
   await page.getByRole("cell", { name: "3", exact: true }).waitFor({ timeout: 10000 });
   check("version added over wire → shown in UI versions table", true);
 

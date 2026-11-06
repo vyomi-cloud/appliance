@@ -31,6 +31,7 @@ try {
   await ed.fill(RULES);
   await page.getByRole("button", { name: "Publish" }).click();
   await page.getByText(/Rules published/).first().waitFor({ timeout: 15000 });
+  await page.getByTestId("rules-history").first().waitFor({ timeout: 15000 }).catch(() => {});
   check("rules history lists the new ruleset", (await page.getByTestId("rules-history").count()) === 1);
   const ok = await wj(`${D}/notes/alice`, { headers: { authorization: "Bearer " + jwt("alice") } });
   const bad = await wj(`${D}/notes/alice`, { headers: { authorization: "Bearer " + jwt("mallory") } });
