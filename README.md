@@ -38,11 +38,11 @@ Everything below is cumulative — every capability shipped from v1.0 through v3
 | **Three clouds, real backends** | AWS, GCP and Azure — 35+ services backed by real engines: Postgres, MySQL, MinIO (S3/GCS), DynamoDB Local, ElasticMQ (SQS), Vault (KMS + secrets), NATS (eventing), Azurite, fake-gcs, the Pub/Sub and Firestore emulators |
 | **Native SDKs and CLIs, unchanged** | boto3, aws-sdk-java/go, google-cloud-\*, azure-sdk-for-\*; `aws`, `gcloud`, `gsutil`, `az`, `terraform` — only the endpoint changes |
 | **Operation depth** | S3 multipart + CopyObject, DynamoDB transactions + GSIs, SQS FIFO + DLQ redrive, KMS rotation, API Gateway (MOCK + Lambda proxy), VPC with a reachability analyzer, Azure Service Bus topics + Azure SQL, Cosmos queries |
-| **Real compute** | EC2 / GCE / Azure VM instances as SSH-able Docker containers (Pro) or LXD VMs (Max), with cloud CLIs pre-installed and working SSH + `.pem` connect info |
+| **Real compute** | EC2 / GCE / Azure VM instances as SSH-able Docker containers (Pro and Max; WASM Edge VMs in the browser on Nano), with cloud CLIs pre-installed and working SSH + `.pem` connect info |
 | **Native consoles** | `/console/aws`, `/console/gcp`, `/console/azure` with second-level detail tabs, per-resource events, and per-service **cost savings** (what the same resources would cost on real cloud) |
 | **Spaces** | Isolated per-cloud workspaces (`/clouds`) with live host telemetry, per-space TTL countdowns, Renew/Force-shutdown, and enterprise/shared sandbox modes |
 | **Vyomi Nano** | The whole simulator in the browser (no install) at [vyomi.cloud](https://vyomi.cloud) — Pyodide + PGlite + IndexedDB persistence, with a local (`vyomi-tunnel`) or cloud relay so external SDKs/CLIs reach it |
-| **One launcher, two substrates** | `vyomi up` runs Docker for Free/Lite/Pro and Multipass for Max; compiled `vyomi` binary on Windows |
+| **Two substrates: WASM Edge + Docker** | Nano runs entirely in your browser (WASM Edge); `vyomi up` runs the full appliance on Docker for every paid tier. Multipass/LXD is retired as of v4.0.0 |
 | **Install anywhere** | Homebrew (`vyomi`, `vyomi-docker`), `.deb` / `.rpm` (`cloud-learn`, `vyomi-docker`), Windows MSI, Docker Compose, source |
 | **Licensing and trial** | Free · Lite · Pro · Max · Enterprise, activated from the portal; offline appliances get a **14-day Pro trial**, then drop to Free |
 | **Enterprise** | Multi-tenant RBAC, shared cohort sandboxes, cloud sandboxes on GitHub Codespaces, SSO, Helm + air-gapped install, audit sinks |
@@ -248,7 +248,7 @@ Production deployment: [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYM
 Tier middleware enforces the gates server-side; standard SDKs work natively on every tier. Current pricing: [vyomi.cloud/pricing](https://vyomi.cloud/pricing) (USD, billed in INR).
 
 - **Free** — Vyomi Nano in your browser, no install, plus the self-hosted appliance on the Free tier.
-- **Lite** ($9/mo), **Pro** ($19/mo), **Max** ($29/mo) — self-hosted appliance tiers: more services, spaces and storage; Pro adds Docker compute, Max adds VM compute (Multipass) and every service on all three clouds. New offline activations start with a **14-day Pro trial**.
+- **Lite** ($9/mo), **Pro** ($19/mo), **Max** ($29/mo) — self-hosted appliance tiers: more services, spaces and storage; Pro and Max add Docker compute and the booster; they differ in one way: **Pro gets every service on one cloud of your choice, Max gets all three clouds**. New offline activations start with a **14-day Pro trial**.
 - **Enterprise** — cloud sandboxes for teams on GitHub Codespaces, pay per use; multi-tenant RBAC, SSO, audit sinks, air-gapped install.
 
 ## Conformance & testing

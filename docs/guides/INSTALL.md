@@ -24,15 +24,14 @@ What happens, in order:
 
 5. (Optional) Adds a one-time `127.0.0.1 vyomi.local` line to your `/etc/hosts`
    (sudo prompt) so the simulator is reachable at the same `vyomi.local`
-   URL that the Multipass-based install paths publish. Idempotent — skipped
+   URL that earlier (Multipass-era) releases published. Idempotent — skipped
    if the line already exists.
 6. Opens **http://vyomi.local:9000** in your browser (falls back to
    `http://localhost:9000` if you skipped step 5).
 
-> **Why `vyomi.local`?** The Multipass-based install paths (Brew, .deb, .rpm,
-> Scoop) publish the appliance VM at `vyomi.local` via mDNS so users don't
-> have to memorise an IP that changes between runs. Docker Compose runs in
-> your host Docker so it can't broadcast mDNS — but a single `/etc/hosts`
+> **Why `vyomi.local`?** Earlier (Multipass-era) releases published the appliance VM at
+> `vyomi.local` via mDNS so users didn't have to memorise an IP that changes between runs.
+> Docker Compose runs in your host Docker so it can't broadcast mDNS — but a single `/etc/hosts`
 > entry (`127.0.0.1 vyomi.local`) maps the same hostname to localhost,
 > so you can use the same URL across every install path.
 
@@ -108,21 +107,21 @@ until curl -fsS http://localhost:9000/healthz >/dev/null; do sleep 1; done
 open http://localhost:9000           # or xdg-open on Linux
 ```
 
-## Package-manager paths (Multipass-VM based)
+## Package-manager paths (Docker)
 
-These are the older, heavier paths. They use a Multipass / VirtualBox VM
-under the hood and a wrapper CLI (`cloud-learn up`). Each one ultimately
-fetches the same Docker images.
+From v4.0.0 Vyomi runs on two substrates: **WASM Edge** (Nano, in your browser, nothing to install) and **Docker**
+(the full appliance). The Multipass / LXD VM build is retired. The packages below install a small `vyomi`
+launcher that runs the appliance on your Docker.
 
 | Platform | Install command |
 |---|---|
-| macOS / Linux (Brew) | `brew install vyomi-cloud/tap/vyomi && vyomi up` |
-| Ubuntu / Debian | Download `vyomi_<ver>_all.deb` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest), then `sudo apt install ./vyomi_<ver>_all.deb && vyomi up` |
-| Fedora / RHEL | Download `vyomi-<ver>-1.noarch.rpm`, then `sudo dnf install ./vyomi-<ver>-1.noarch.rpm && vyomi up` |
-| Windows (MSI) | Download `vyomi-<ver>-x64.msi` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest) and run it |
+| macOS / Linux (Brew) | `brew install vyomi-cloud/tap/vyomi-docker && vyomi up` |
+| Ubuntu / Debian | Download `vyomi-docker_<ver>_all.deb` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest), then `sudo apt install ./vyomi-docker_<ver>_all.deb && vyomi up` |
+| Fedora / RHEL | Download `vyomi-docker-<ver>-1.noarch.rpm`, then `sudo dnf install ./vyomi-docker-<ver>-1.noarch.rpm && vyomi up` |
+| Windows | Use Nano in the browser, or run the `curl-bash` / Docker Compose path above with Docker Desktop |
 
-Use these if you need the Multipass-VM isolation. The `curl-bash` path
-above is simpler if you already have Docker.
+Upgrading from a Multipass-based install (v3 and earlier)? Your data lives in the Multipass VM and is not migrated
+automatically: export what you need first, then `multipass delete --purge vyomi` and install the Docker package.
 
 ## From source
 

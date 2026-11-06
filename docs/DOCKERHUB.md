@@ -30,11 +30,11 @@ docker compose up -d
 
 ### Recommended: the Vyomi appliance launcher
 
-For a hands-off install that provisions a Multipass VM, brings up the full backend stack, and gives you `https://vyomi.local/` with a trusted local cert:
+For a hands-off install that runs the full backend stack on Docker and gives you `http://localhost:9000/`:
 
 ```bash
-brew install vyomi-cloud/tap/vyomi   # macOS
-# or .deb / .rpm / scoop — see vyomi.cloud/install
+brew install vyomi-cloud/tap/vyomi-docker   # macOS / Linux
+# or the vyomi-docker .deb / .rpm — see vyomi.cloud/install
 vyomi up
 ```
 
