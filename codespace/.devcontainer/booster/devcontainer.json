@@ -1,0 +1,13 @@
+{
+  "name": "Vyomi Booster (headless, 2-core)",
+  "//": "Pro/Max booster pack: compute + AI only, NO UI, NO forwarded port. Nano is the UI; the booster dials OUT to the relay with the signed session token. 2-core so the 40h/60h allowance fits GitHub's 120 core-hour free quota (design: docs/architecture/v4.0/BOOSTER-CODESPACES-GITHUB-APP.md).",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": true, "version": "latest" }
+  },
+  "postCreateCommand": "bash .devcontainer/booster/boot-booster.sh up",
+  "postStartCommand": "bash .devcontainer/booster/boot-booster.sh resume",
+  "containerEnv": { "VYOMI_ROLE": "booster" },
+  "remoteEnv": { "VYOMI_BOOSTER_MAX_SESSION": "8h", "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud", "VYOMI_BILLING": "free_personal_quota" },
+  "hostRequirements": { "cpus": 2, "memory": "8gb", "storage": "32gb" }
+}

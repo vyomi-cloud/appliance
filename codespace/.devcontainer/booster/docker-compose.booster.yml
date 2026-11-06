@@ -1,0 +1,26 @@
+# Vyomi Booster — headless. Simulator only (compute + AI); no host ports are published.
+# Access is exclusively via the outbound relay link started by boot-booster.sh.
+name: vyomi-booster
+networks:
+  vyomi-net:
+    name: vyomi-net
+services:
+  simulator:
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    pull_policy: always
+    user: "0:0"
+    networks: [vyomi-net]
+    expose: ["9000"]
+    environment:
+      CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      CLOUDLEARN_DISTRIBUTION_MODE: developer
+      VYOMI_ROLE: booster
+      VYOMI_COMPUTE_BACKEND: docker
+      VYOMI_INSTANCE_NETWORK: vyomi-net
+      VYOMI_LICENSE_JWT: ${VYOMI_LICENSE_JWT:-}
+      VYOMI_INSTALL_ID: ${CODESPACE_NAME:-vyomi-booster}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - booster-data:/data
+volumes:
+  booster-data:
