@@ -260,6 +260,7 @@ services:
       - vyomi-sql-postgres
       - vyomi-gcs
     environment:
+      VYOMI_HOST_MEM_MB: ${VYOMI_HOST_MEM_MB:-}   # booster 70% cap is of the HOST, not the Docker VM
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       # The URL SNS HTTP/S deliveries point back at (SigningCertURL, SubscribeURL, UnsubscribeURL):
       # it must be the PUBLISHED port, or an endpoint verifying the signature fetches another

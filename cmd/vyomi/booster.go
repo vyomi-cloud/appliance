@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -79,5 +82,24 @@ func (c *Config) boosterCmd(args []string) int {
 	default:
 		fmt.Println("usage: vyomi booster status [--json] | vyomi booster pair")
 		return 2
+	}
+}
+
+// exportHostMem puts the REAL host RAM (MB) in VYOMI_HOST_MEM_MB so docker compose forwards it to the appliance:
+// inside a container the appliance only sees the Docker VM, and the booster's 70% cap is of the HOST (core/booster.py).
+func exportHostMem() {
+	if os.Getenv("VYOMI_HOST_MEM_MB") != "" {
+		return
+	}
+	b := hostMemBytes()
+	if runtime.GOOS == "darwin" {
+		if out, err := exec.Command("sysctl", "-n", "hw.memsize").Output(); err == nil {
+			if n, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64); err == nil && n > 0 {
+				b = n
+			}
+		}
+	}
+	if b > 0 {
+		os.Setenv("VYOMI_HOST_MEM_MB", strconv.FormatInt(b/(1024*1024), 10))
 	}
 }

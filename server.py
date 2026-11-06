@@ -8279,6 +8279,16 @@ def _start_docker_instance(instance: dict) -> dict:
     if _port_publish_enabled() and not str(instance.get("ssh_host_port") or "").strip().isdigit():
         instance["ssh_host_port"] = _allocate_host_port()
     inst = _docker_instance_obj(instance)
+    # Booster: instances count against the 70% host cap (compute share). Over it, the cloud's REAL capacity error
+    # (InsufficientInstanceCapacity / ZONE_RESOURCE_POOL_EXHAUSTED / AllocationFailed). No-op outside booster mode.
+    try:
+        from core import booster as _booster
+        _booster.allocate("compute", str(instance.get("instance_id")), int(inst.memory_mb),
+                          cloud=str(instance.get("cloud") or instance.get("provider") or "aws").lower()[:5].replace("googl", "gcp"),
+                          zone=str(instance.get("zone") or instance.get("availability_zone") or "-"))
+    except Exception as exc:
+        if exc.__class__.__name__ == "BoosterCapacityError":
+            raise HTTPException(status_code=exc.status, detail=f"{exc.code}: {exc.message}")
     # create() is idempotent: reuses an existing container/volume, else
     # `docker run`s it (and (re)starts a stopped one).
     try:
@@ -8309,6 +8319,11 @@ def _stop_docker_instance(instance: dict) -> dict:
         _docker_compute().stop(_docker_instance_obj(instance))
     except Exception as exc:
         raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
+    try:   # a stopped instance holds no RAM: give its share of the booster cap back
+        from core import booster as _booster
+        _booster.release("compute", str(instance.get("instance_id")))
+    except Exception:
+        pass
     instance["state"] = "stopped"
     instance["stopped_at"] = _now()
     instance["container_status"] = "exited"
@@ -8335,6 +8350,11 @@ def _reboot_docker_instance(instance: dict) -> dict:
 
 
 def _terminate_docker_instance(instance: dict) -> dict:
+    try:
+        from core import booster as _booster
+        _booster.release("compute", str(instance.get("instance_id")))
+    except Exception:
+        pass
     try:
         _docker_compute().terminate(_docker_instance_obj(instance))
     except Exception:
