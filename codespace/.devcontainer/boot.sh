@@ -19,6 +19,10 @@ COMPOSE_PROFILES="${COMPOSE_PROFILES:-aws,gcp,azure}"; export COMPOSE_PROFILES
 BILLING="${VYOMI_BILLING:-free_personal_quota}"
 TTL="${VYOMI_SANDBOX_TTL:-8h}"
 FWD_DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+# Detached default (enterprise-access-spec.md §3.8): the port stays owner-only
+# private. `org` is the legacy turnkey behavior (org-owned sandboxes, port
+# visible to any org member) — kept only for sandboxes that still need it.
+PORT_VISIBILITY="${VYOMI_PORT_VISIBILITY:-private}"
 
 RUN_DIR="${HOME}/.vyomi-sandbox"
 mkdir -p "$RUN_DIR"
@@ -32,8 +36,13 @@ fi
 
 log() { echo "[vyomi-sandbox] $*"; }
 
-post() {  # post <path> <json>   (fail-soft)
-  curl -fsS -m 10 -X POST "$PORTAL$1" -H 'Content-Type: application/json' -d "$2" >/dev/null 2>&1 || true
+post() {  # post <path> <json>   (fail-soft; logs "webhook <path> → HTTP <code>")
+  local code
+  code="$(curl -sS -m 10 -o /dev/null -w '%{http_code}' -X POST "$PORTAL$1" \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${VYOMI_SANDBOX_TOKEN:-}" \
+    -d "$2" 2>/dev/null)" || code="000"
+  log "webhook $1 → HTTP ${code:-000}"
 }
 
 # Optional per-sandbox secret for the readiness webhook (portal verifies it iff
@@ -57,10 +66,18 @@ ttl_seconds() {  # 8h | 90m | 1d | 1w → seconds
 
 make_port_public() {
   # Mark the forwarded console port 9000 ORG-visible so a developer who ISN'T the
-  # Codespace owner (the turnkey model: the box runs in the org/PAT-owner account,
-  # the dev just opens the URL) can still reach it. A default forward is `private`
-  # = owner-only → a non-owner dev hitting it gets a proxy error (the 502).
+  # Codespace owner (the legacy turnkey model: the box runs in the org/PAT-owner
+  # account, the dev just opens the URL) can still reach it. A default forward is
+  # `private` = owner-only → a non-owner dev hitting it gets a proxy error (502).
   #
+  # Detached sandboxes (owned by the developer, VYOMI_PORT_VISIBILITY unset or
+  # `private`) skip this entirely — the owner is already the only one who needs
+  # the port, and ORG visibility on a developer-owned Codespace would expose it
+  # to the whole GitHub org, not just the enterprise. Only `org` opts back in.
+  if [ "$PORT_VISIBILITY" != "org" ]; then
+    log "port 9000 visibility: private (VYOMI_PORT_VISIBILITY=$PORT_VISIBILITY)."
+    return 0
+  fi
   # ORG (not public) — SOC/InfoSec: the console must not be an anonymous
   # internet-reachable endpoint; only authenticated org members reach it.
   #
@@ -78,6 +95,7 @@ make_port_public() {
       sleep 2
     done
     log "note: couldn't set port 9000 org-visible after retries — set it in the Ports tab or via the portal."
+    post_status port_visibility_failed 100
   fi
 }
 
@@ -115,10 +133,17 @@ start_stack() {
 provision() {
   local ttl_s; ttl_s="$(ttl_seconds "$TTL")"
   log "registering sandbox with the cost meter (org=${ORG:-personal} billing=$BILLING profile=$PROFILE)…"
-  post /api/sandbox/provision "$(cat <<JSON
-{"codespace_id":"$CODESPACE","org":"$ORG","owner_email":"${GH_USER:+$GH_USER@users.noreply.github.com}","github_login":"$GH_USER","profile_id":"$PROFILE","compute_profile":"S","billing":"$BILLING","ttl_seconds":$ttl_s,"install_id":"$CODESPACE"}
-JSON
-)"
+  # Omit org/owner_email/github_login entirely when unset, rather than sending
+  # them as "" — an empty string is a value (and not the same as "no org" to a
+  # consumer checking truthiness-vs-presence), Optional fields on the portal
+  # side expect a missing key for "none".
+  local fields="\"codespace_id\":\"$CODESPACE\""
+  [ -n "$ORG" ] && fields="$fields,\"org\":\"$ORG\""
+  if [ -n "$GH_USER" ]; then
+    fields="$fields,\"owner_email\":\"${GH_USER}@users.noreply.github.com\",\"github_login\":\"$GH_USER\""
+  fi
+  fields="$fields,\"profile_id\":\"$PROFILE\",\"compute_profile\":\"S\",\"billing\":\"$BILLING\",\"ttl_seconds\":$ttl_s,\"install_id\":\"$CODESPACE\""
+  post /api/sandbox/provision "{$fields}"
 }
 
 start_heartbeat() {

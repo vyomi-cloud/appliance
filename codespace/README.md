@@ -46,7 +46,7 @@ aws --endpoint-url "$EP" ec2 run-instances --image-id ami-ubuntu --instance-type
 |--|--|
 | **Clouds** | AWS · GCP · Azure (pick one or all at create time) |
 | **Compute** | Real instances (EC2 / GCE / VM) as sibling Docker containers |
-| **Default tier** | Unlicensed = Free → 1 VM + 1 DB + 1 bucket per space (enough to smoke-test). Activate Pro for more. |
+| **Default tier** | Comes from the portal-issued `VYOMI_LICENSE_JWT` secret, applied at boot. No JWT = Free → 1 VM + 1 DB + 1 bucket per space (enough to smoke-test). |
 | **TTL** | 8 h by default — the sandbox stops itself after the window (`VYOMI_SANDBOX_TTL`) |
 | **Cost** | $0 on your account's free Codespaces quota; metered in the Vyomi admin cost dashboard |
 

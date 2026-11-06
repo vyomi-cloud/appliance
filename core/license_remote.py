@@ -431,6 +431,11 @@ def claims_to_tier_payload(claims: dict) -> dict:
         "trial": bool(claims.get("trial")),
         "trial_ended": bool(claims.get("trial_ended")),
         "issued_via": "license_remote_jwt",
+        # Enterprise access (enterprise-access-spec.md §3.5): present only on
+        # JWTs minted for a membership; tier=enterprise is minted only with ent.
+        "ent": claims.get("ent"),
+        "ent_role": claims.get("ent_role"),
+        "gh_uid": claims.get("gh_uid"),
     }
 
 

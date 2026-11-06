@@ -21,6 +21,10 @@ def register(app: FastAPI) -> None:
         """Admin: provision a developer on the shared instance → tenant + join link."""
         from core.admin_auth import require_admin_key
         require_admin_key(request)
+        if sh.shared_enabled() and sh.secret_is_default():
+            raise HTTPException(status_code=503, detail={
+                "ok": False, "code": "shared_secret_unset",
+                "reason": "Set CLOUDLEARN_LICENSE_SECRET before provisioning shared-mode developers."})
         spec = dict(payload or {})
         name = str(spec.get("name") or "").strip()
         if not name:
@@ -78,6 +82,10 @@ def register(app: FastAPI) -> None:
         spec = dict(payload or {})
         if "enabled" not in spec:
             raise HTTPException(status_code=400, detail="enabled (true|false|null) required")
+        if spec.get("enabled") and sh.secret_is_default():
+            raise HTTPException(status_code=503, detail={
+                "ok": False, "code": "shared_secret_unset",
+                "reason": "Set CLOUDLEARN_LICENSE_SECRET before enabling shared mode."})
         return sh.set_shared_mode(spec.get("enabled"))
 
     # MVP: no quota endpoint — shared namespaces are unlimited.

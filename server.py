@@ -11471,6 +11471,18 @@ def _apply_license_jwt(token: str) -> dict:
             "reason": "this license has been revoked; contact support for a new one",
         })
 
+    # Enterprise access (enterprise-access-spec.md §3.6): sandboxes set
+    # VYOMI_REQUIRED_ENTERPRISE so a JWT minted for a different (or no)
+    # enterprise is refused outright — defense in depth; the portal is the
+    # real gate. Also covers the backup-restore path, which calls this
+    # same function.
+    required_ent = os.environ.get("VYOMI_REQUIRED_ENTERPRISE", "").strip()
+    if required_ent and claims.get("ent") != required_ent:
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "enterprise_mismatch",
+            "reason": "This sandbox belongs to a different enterprise.",
+        })
+
     # Persist on the active tenant — middleware reads license_tier from here.
     # Use the canonical tenants_state path so _tenant_dict() finds the value.
     tier = claims["tier"]
@@ -11479,6 +11491,7 @@ def _apply_license_jwt(token: str) -> dict:
     tenants = ts.setdefault("tenants", {})
     t = tenants.setdefault(tid, {"tenant_id": tid, "name": tid})
     t["license_tier"] = tier
+    t["license_enterprise"] = claims.get("ent")
     t["primary_cloud"] = claims.get("primary_cloud") or t.get("primary_cloud") or ""
     t["license_seats"] = int(claims.get("seats") or 1)
     t["license_jti"] = claims.get("jti")
@@ -11778,9 +11791,12 @@ def _restore_license_from_backup() -> bool:
             if token:
                 _apply_license_jwt(token)
                 return True
-        # Fall back to JSON snapshot (dev-mode signup)
+        # Fall back to JSON snapshot (dev-mode signup). Unlike the JWT above,
+        # this payload carries no signature to verify — restoring it outside
+        # dev mode would let anyone who can write to the data dir grant
+        # themselves a tier for free.
         json_file = backup_dir / "license-backup.json"
-        if json_file.exists():
+        if json_file.exists() and os.environ.get("CLOUDLEARN_DEV_MODE", "").strip() == "1":
             import json as _json
             payload = _json.loads(json_file.read_text(encoding="utf-8"))
             if isinstance(payload, dict) and payload.get("tier"):
@@ -11804,6 +11820,29 @@ def _restore_license_from_backup() -> bool:
         # Never break startup on a restore failure — user can always
         # re-activate via paste-key or device flow.
         return False
+
+
+@app.on_event("startup")
+def _apply_env_license_jwt_at_boot():
+    """Enterprise access (enterprise-access-spec.md §5.2): a sandbox created
+    by the portal gets its tier JWT injected as VYOMI_LICENSE_JWT. Applying
+    it here, before `_restore_license_at_boot`, means the portal-issued
+    claims win over anything in the stale state/backup — an enterprise
+    sandbox never boots on a leftover personal tier.
+
+    Runs before the background license daemons so they pick up the applied
+    claims on their first tick. Fails soft: an invalid/rejected JWT (bad
+    signature, expired, enterprise mismatch) just leaves the sandbox on
+    whatever tier it already had (normally Free) and logs why."""
+    token = os.environ.get("VYOMI_LICENSE_JWT", "").strip()
+    if not token or token == STATE.get("license_jwt"):
+        return
+    try:
+        _apply_license_jwt(token)
+    except HTTPException as e:
+        print(f"[vyomi] VYOMI_LICENSE_JWT rejected at boot: {e.detail}")
+    except Exception as e:
+        print(f"[vyomi] VYOMI_LICENSE_JWT could not be applied at boot: {e}")
 
 
 @app.on_event("startup")
@@ -11956,7 +11995,9 @@ def _start_license_background_tasks():
                      "sub": (STATE.get("license_claims") or {}).get("sub")})
 
     try:
-        _lr.start_revocation_poll(STATE, interval_seconds=24 * 3600, on_revoked=_on_revoked)
+        _lr.start_revocation_poll(STATE, interval_seconds=int(os.environ.get(
+            "CLOUDLEARN_LICENSE_REVOCATION_INTERVAL_SECONDS", str(24 * 3600))),
+            on_revoked=_on_revoked)
         # Refresh cadence default: 24h. Matches the JWT TTL + the user-facing
         # "validate once per day" promise. Override via env if a deployment
         # genuinely wants tighter coupling (e.g. high-churn enterprise).
