@@ -71,6 +71,7 @@ from core import nano_triggers
 from core import gcp_dns_core as gcp_dns
 from core import gcp_logging_core as gcp_logging
 from core import gcp_cloudtasks_core as gcp_ct
+from core import gcp_workflows_core as gcp_wf
 
 
 def _gcp_service(path):
@@ -100,6 +101,8 @@ def _gcp_service(path):
             "/queues" in path or path.rstrip("/").endswith("/locations") or path.count("/") == 5):
         return "gcp-cloudtasks"   # Cloud Tasks v2 (Cloud Run's /v2 paths are .../services)
     if "/projects/" in path:
+        if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/workflows([/:]|$)", path):
+            return "gcp-workflows"
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig)([/:]|$)", path):
@@ -352,6 +355,7 @@ class AwsWireRouter:
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
+        self.gcp_wf = s.get("gcp_wf") or gcp_wf.WorkflowsStore()   # Workflows + Workflow Executions
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
@@ -805,15 +809,17 @@ class AwsWireRouter:
                 "gcp-dns": (gcp_dns, self.gcp_dns),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
                 "gcp-cloudtasks": (gcp_ct, self.gcp_ct),
+                "gcp-workflows": (gcp_wf, self.gcp_wf),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
             elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
-            elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore
-                r = gcp_redis.dispatch_shared_operations(
-                    self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
+            elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore + Workflows
+                r = gcp_wf.dispatch_operations_chain(
+                    [lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), lambda *a: gcp_redis.dispatch(self.gcp_redis, *a),
+                     lambda *a: gcp_wf.dispatch(self.gcp_wf, *a)], method, path, query or {}, headers or {}, bytes(body))
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             nano_triggers.after_gcp(self, svc, method, path, query, bytes(body), r)   # uploads / publishes fire Eventarc triggers

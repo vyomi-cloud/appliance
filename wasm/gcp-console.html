@@ -916,7 +916,7 @@ function renderRail(){
     ["STORAGE",       ["storage", "artifactregistry"]],
     ["DATABASES",     ["cloudsql", "firestore", "redis"]],
     ["NETWORKING",    ["vpc", "dns"]],
-    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler", "cloudtasks"]],
+    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler", "cloudtasks", "workflows"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
     ["OPERATIONS",    ["monitoring", "logging"]],
@@ -1261,6 +1261,7 @@ async function renderList(main){
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
                      : svc.key === "redis" ? "Create instance"
+                     : svc.key === "workflows" ? "Create workflow"
                      : svc.key === "iamcredentials" ? "Create credential"
                      : svc.key === "monitoring" ? "Create policy"
                      : svc.key === "logging" ? "Create sink"
@@ -1468,6 +1469,11 @@ async function renderDetail(main){
         if (r.ok) { toast("Policy "+name+": "+act+"d"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "enable" ? "notifications_active" : "notifications_off"), act === "enable" ? "Enable" : "Disable")) : []),
+      ...(svc.key === "workflows" ? [el("button",{class:"btn",onclick:async()=>{
+        const r = await api("POST", fillCommon((svc.api_paths||{}).execute.path, {name}), {});
+        if (r.ok) { toast("Workflow "+name+": execution succeeded"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("execute failed ("+r.status+")", "err");
+      }}, icon("play_arrow"), "Execute")] : []),
       ...(svc.key === "redis" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Capacity in GB", String(parseInt(STATE.item.capacity, 10) || 1));
         if (n === null) return;

@@ -38,6 +38,7 @@ from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
 from core.gcp_logging_core import LoggingStore
+from core.gcp_workflows_core import WorkflowsStore
 from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
@@ -85,6 +86,7 @@ def get() -> dict:
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
             "gcp_mon": MonitoringStore(),   # Cloud Monitoring (policies, channels, metrics, series)
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
+            "gcp_wf": WorkflowsStore(),   # Workflows + executions
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_logging": LoggingStore(),   # Cloud Logging
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs

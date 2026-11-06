@@ -1,0 +1,31 @@
+{
+  "cloud": "gcp",
+  "key": "workflows",
+  "name": "Workflows",
+  "upstream": "workflows/v1",
+  "issue": 77,
+  "core": "core/gcp_workflows_core.py",
+  "operations": [
+    "workflows.projects.locations.get",
+    "workflows.projects.locations.list",
+    "workflows.projects.locations.workflows.create",
+    "workflows.projects.locations.workflows.get",
+    "workflows.projects.locations.workflows.list",
+    "workflows.projects.locations.workflows.patch",
+    "workflows.projects.locations.workflows.delete",
+    "workflows.projects.locations.operations.get",
+    "workflows.projects.locations.operations.list",
+    "workflows.projects.locations.operations.delete"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-gcp-workflows",
+    "offline-sdk-go-gcp-workflows",
+    "offline-cli-gcp-workflows",
+    "offline-ui-gcp-workflows",
+    "nano-ui-gcp-workflows"
+  ],
+  "status": "ready"
+}

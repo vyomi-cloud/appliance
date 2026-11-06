@@ -37,6 +37,7 @@ from core import gcp_monitoring_core as _mon
 from core import gcp_artifactregistry_core as _ar
 from core import gcp_dns_core as _dns
 from core import gcp_logging_core as _log
+from core import gcp_workflows_core as _wf
 from core.sql_store import InMemorySqlStore
 from core import gcp_cloudtasks_core as _ct
 
@@ -68,11 +69,12 @@ _STORES = {
     "dns":           _R["gcp_dns"],
     "logging":       _R["gcp_logging"],
     "cloudtasks":    _R["gcp_ct"],
+    "workflows":     _R["gcp_wf"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct, "workflows": _wf,
 }
 
 
@@ -613,6 +615,48 @@ def _cloudtasks_op(operation, name, body, rid):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "cloudtasks"}
 
 
+def _wf_op(operation, name, body):
+    """Workflows console CRUD (+ execute) over core/gcp_workflows_core."""
+    store = _STORES["workflows"]
+
+    def find(nm):
+        for full in store.workflows:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _wf.dispatch(store, method, "/v1/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _wf.list_all(store)}
+    if operation == "Create":
+        req = _wf.workflow_from_form(body, PROJ)
+        st, p = run("POST", req["parent"] + "/workflows", {"workflowId": req["workflowId"]}, req["workflow"])
+        if st < 300:
+            return {"ok": True, **_wf.view_by_name(store, _wf.workflow_name(PROJ, req["location"], req["workflowId"]))}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_wf.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation == "Execute":
+        arg = body.get("argument")
+        st, p = run("POST", full + "/executions", payload={"argument": arg} if arg else {})
+        return {"ok": True, **_wf.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "workflows"}
+
+
 def resource_op(service, operation, name="", body=None):
     tab = tab_dispatch(service, operation, name, body)
     if tab is not None:
@@ -644,6 +688,8 @@ def _resource_op(service, operation, name="", body=None):
         return _dns_op(operation, name, body)
     if svc == "logging":
         return _logging_op(operation, name, body)
+    if svc == "workflows":
+        return _wf_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

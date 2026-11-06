@@ -461,6 +461,13 @@
    "name": "Cloud Tasks",
    "upstream": "cloudtasks/v2",
    "status": "pending-release"
+  },
+  {
+   "cloud": "gcp",
+   "key": "workflows",
+   "name": "Workflows",
+   "upstream": "workflows/v1",
+   "status": "pending-release"
   }
  ]
 }
