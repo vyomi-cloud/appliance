@@ -106,7 +106,7 @@
     '#vy-cap .cbox{width:min(1120px,96vw);height:min(720px,90vh);display:flex;flex-direction:column;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden}' +
     '#vy-cap .chd{display:flex;align-items:center;gap:16px;padding:12px 20px;background:#fff;border-bottom:1px solid #e4e4e7}' +
     '#vy-cap .cbrand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:-.01em;color:#000;white-space:nowrap}' +
-    '#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
+    '#vy-cap .ctabs{margin-left:auto;display:flex;gap:4px}#vy-cap .ctab{border:0;background:none;font:600 14px/1 inherit;font-family:inherit;color:#71717a;padding:8px 12px;border-radius:8px;cursor:pointer}#vy-cap .ctab:hover{color:#18181b;background:#f4f4f5}#vy-cap .ctab.on{color:#000;background:#f4f4f5;box-shadow:inset 0 -2px 0 #000}#vy-cap .ctabs+.cx{margin-left:12px}#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
     '#vy-cap .cx svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     '#vy-cap .cbody{flex:1;min-height:0;display:flex;background:#fff}#vy-cap .cbody iframe{flex:1;border:0;width:100%;background:#fff}' +
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
@@ -131,6 +131,7 @@
     //      (?embed=1#marketplace): cards are generated from its single simulator registry, never hard-coded here.
     var cap = document.createElement('div'); cap.id = 'vy-cap';
     cap.innerHTML = '<div class="cbox" role="dialog" aria-modal="true" aria-labelledby="vy-cap-t"><div class="chd"><div class="cbrand" id="vy-cap-t"><img src="assets/brand/vyomi-logo.png" alt="vyomi" style="height:24px;width:auto;display:block"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600;color:#18181b;padding-left:10px;border-left:1px solid #d4d4d8"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>Marketplace</span></div>' +
+      '<div class="ctabs" role="tablist"><button type="button" class="ctab on" data-tab="cur" aria-selected="true">Your current plan</button><button type="button" class="ctab" data-tab="plan" aria-selected="false">Subscription Plan</button><button type="button" class="ctab" data-tab="payg" aria-selected="false">Pay as you go</button></div>' +
       '<button type="button" class="cx" aria-label="Collapse" title="Collapse"><svg viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></button></div>' +
       '<div class="cbody"><iframe title="Marketplace"></iframe></div></div>';
     document.body.appendChild(cap);
@@ -139,10 +140,13 @@
     expBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>';
     bar.querySelector('.vy-notch').appendChild(expBtn);
     function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); capFr.removeAttribute('src'); }
-    function openCap() { capFr.src = CL + '?embed=1#marketplace'; cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { expBtn.blur(); capFr.focus(); }, 60); }
+    function openCap() { capFr.src = CL + '?embed=1#marketplace'; cap.querySelectorAll('.ctab').forEach(function (x, i) { x.classList.toggle('on', i === 0); x.setAttribute('aria-selected', i === 0); }); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { expBtn.blur(); capFr.focus(); }, 60); }
     expBtn.addEventListener('click', function () { if (cap.classList.contains('open')) closeCap(); else openCap(); });
     cap.addEventListener('click', function (e) { if (e.target === cap) closeCap(); });
     cap.querySelector('.cx').addEventListener('click', closeCap);
+    cap.querySelectorAll('.ctab').forEach(function (b) { b.addEventListener('click', function () {
+      cap.querySelectorAll('.ctab').forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+      try { capFr.contentWindow.vyMktTab(b.dataset.tab); } catch (e) {} }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCap(); });
     // Enterprise / Codespaces: spaces are pre-provisioned by the admin, so there is no Marketplace. The button is shown by
     // default (a normal appliance never waits on this) and removed as soon as the runtime profile says sandbox / restricted.

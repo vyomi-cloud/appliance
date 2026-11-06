@@ -1295,6 +1295,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #app-topbar, html.vy-embed #app-sidebar, html.vy-embed .side-collapse, html.vy-embed #side-scrim,
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
+    html.vy-embed .mk-tabs { display: none !important; }
+    html.vy-embed #mkt-card > .sc-head { display: none !important; }
     html.vy-embed:not(.vy-acct) #activate-modal, html.vy-embed:not(.vy-acct) .am-overlay { display: none !important; }
     /* ?embed=1&acct=1: the drawer's "Activate appliance" dialog - only the real activation dialog, nothing else. */
     html.vy-acct #app-main { visibility: hidden !important; }
@@ -3777,9 +3779,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
       const st = document.getElementById('mkt-plan'); if (st) st.innerHTML = _mktPlanHtml(mc.licence);
       const cu = document.getElementById('mkt-cur'); if (cu) cu.innerHTML = _mktCurHtml(mc.licence);
-      document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => {
-        document.querySelectorAll('.mk-tab').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
-        ['cur', 'plan', 'payg'].forEach(k => { document.getElementById('mkt-p-' + k).hidden = b.dataset.tab !== k; }); }); } });
+      window.vyMktTab = function (k) {
+        document.querySelectorAll('.mk-tab').forEach(x => { const on = x.dataset.tab === k; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+        ['cur', 'plan', 'payg'].forEach(p => { const el = document.getElementById('mkt-p-' + p); if (el) el.hidden = p !== k; }); };
+      document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => window.vyMktTab(b.dataset.tab)); } });
       g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
       g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));
     }
