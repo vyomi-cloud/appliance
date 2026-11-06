@@ -72,6 +72,7 @@ from core import gcp_dns_core as gcp_dns
 from core import gcp_logging_core as gcp_logging
 from core import gcp_cloudtasks_core as gcp_ct
 from core import gcp_workflows_core as gcp_wf
+from core import gcp_run_core as gcp_run
 
 
 def _gcp_service(path):
@@ -95,6 +96,8 @@ def _gcp_service(path):
                  r"|projects/[^/]+/locations/?$"
                  r"|projects/[^/]+/locations/[^/]+/buckets([/:]|$))", path):
         return "gcp-logging"
+    if path.startswith("/apis/serving.knative.dev/v1/namespaces/"):   # gcloud run (Knative-style API)
+        return "gcp-run"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if path.startswith("/v2/projects/") and (
@@ -105,6 +108,9 @@ def _gcp_service(path):
             return "gcp-workflows"
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
+        if re.search(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|operations)([/:]|$)", path) or \
+                re.search(r"^/v1/projects/[^/]+/locations/[^/]+/services/[^/:]+:(get|set|test)IamPolicy$", path):
+            return "gcp-run"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig)([/:]|$)", path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
@@ -356,6 +362,7 @@ class AwsWireRouter:
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
         self.gcp_wf = s.get("gcp_wf") or gcp_wf.WorkflowsStore()   # Workflows + Workflow Executions
+        self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run services/revisions/jobs
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
@@ -810,6 +817,7 @@ class AwsWireRouter:
                 "gcp-logging": (gcp_logging, self.gcp_logging),
                 "gcp-cloudtasks": (gcp_ct, self.gcp_ct),
                 "gcp-workflows": (gcp_wf, self.gcp_wf),
+                "gcp-run": (gcp_run, self.gcp_run),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

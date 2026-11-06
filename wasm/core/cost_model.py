@@ -107,6 +107,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.workflows": 0.10,      # $0.01 per 1k internal steps (first 5k/month free); priced at ~10k steps per workflow
     "gcp.redis": 35.77,         # Basic tier $0.049/GB-hr × 1 GB × ~730 h (Standard doubles it)
     "gcp.container": 73.00,     # $0.10/hr cluster management fee (~730 h); one zonal/Autopilot cluster per account is free
+    "gcp.run": 3.00,            # pay-per-use: ~1M requests/month at 100 ms on 1 vCPU/512 MiB (vCPU-s $0.000024, GiB-s $0.0000025, $0.40/M req); scales to zero when idle
     "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
     "gcp.monitoring": 0.10,     # $0.10 per alert-policy condition per month (metrics ingestion billed per MiB)
     "gcp.dns": 0.20,            # $0.20 per managed zone per month (first 25 zones; queries billed per use)

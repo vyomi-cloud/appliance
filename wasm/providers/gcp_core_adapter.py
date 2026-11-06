@@ -38,6 +38,7 @@ from core import gcp_artifactregistry_core as _ar
 from core import gcp_dns_core as _dns
 from core import gcp_logging_core as _log
 from core import gcp_workflows_core as _wf
+from core import gcp_run_core as _run
 from core.sql_store import InMemorySqlStore
 from core import gcp_cloudtasks_core as _ct
 
@@ -70,11 +71,12 @@ _STORES = {
     "logging":       _R["gcp_logging"],
     "cloudtasks":    _R["gcp_ct"],
     "workflows":     _R["gcp_wf"],
+    "run":           _R["gcp_run"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct, "workflows": _wf,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct, "workflows": _wf, "run": _run,
 }
 
 
@@ -657,6 +659,67 @@ def _wf_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "workflows"}
 
 
+def _run_op(operation, name, body):
+    """Cloud Run console CRUD (+ deploy / invoker) over core/gcp_run_core."""
+    store = _STORES["run"]
+
+    def find(nm):
+        for full in store.services:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def go(method, path, query=None, payload=None):
+        r = _run.dispatch(store, method, "/v2/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    def event(action, sid):
+        try:   # the Metrics tab reads events by service id
+            from core import nano_events
+            nano_events.record(provider="gcp", service="run", resource=str(sid), action=action,
+                               status="ok", detail="gcp/run: %s %s" % (action, sid))
+        except Exception:
+            pass
+
+    if operation == "List":
+        return {"ok": True, "items": _run.list_all(store)}
+    if operation == "Create":
+        req = _run.job_from_form(body, PROJ)
+        st, p = go("POST", req["parent"] + "/services", {"serviceId": req["serviceId"]}, req["service"])
+        if st >= 300:
+            return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                    "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+        full = _run.service_name(PROJ, req["location"], req["serviceId"])
+        if req["allowUnauthenticated"]:
+            go("POST", full + ":setIamPolicy", payload={"policy": {"bindings": [{"role": _run.IAM_INVOKER, "members": ["allUsers"]}]}})
+        event("Create", req["serviceId"])
+        return {"ok": True, **_run.view_by_name(store, full)}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_run.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = go("DELETE", full)
+        event("Delete", name)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Deploy", "Invoker"):
+        if operation == "Deploy":
+            tpl = json.loads(json.dumps(store.services[full]["template"]))
+            tpl.pop("revision", None)
+            tpl["containers"][0]["image"] = body.get("image") or tpl["containers"][0]["image"]
+            st, p = go("PATCH", full, {"updateMask": "template"}, {"template": tpl})
+        else:
+            members = ["allUsers"] if body.get("allow", True) else []
+            st, p = go("POST", full + ":setIamPolicy", payload={"policy": {"bindings": [{"role": _run.IAM_INVOKER, "members": members}] if members else []}})
+        return {"ok": True, **_run.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "run"}
+
+
 def resource_op(service, operation, name="", body=None):
     tab = tab_dispatch(service, operation, name, body)
     if tab is not None:
@@ -690,6 +753,8 @@ def _resource_op(service, operation, name="", body=None):
         return _logging_op(operation, name, body)
     if svc == "workflows":
         return _wf_op(operation, name, body)
+    if svc == "run":
+        return _run_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

@@ -110,6 +110,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_run",
+  "label": "RunStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_iamc",
   "label": "IamCredentialsStore",
   "category": "gcp"

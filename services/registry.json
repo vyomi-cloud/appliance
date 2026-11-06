@@ -468,6 +468,13 @@
    "name": "Workflows",
    "upstream": "workflows/v1",
    "status": "pending-release"
+  },
+  {
+   "cloud": "gcp",
+   "key": "run",
+   "name": "Cloud Run",
+   "upstream": "run/v2",
+   "status": "pending-release"
   }
  ]
 }

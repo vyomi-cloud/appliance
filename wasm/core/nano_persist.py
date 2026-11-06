@@ -42,6 +42,7 @@ STORE_ATTRS = [
     "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
     "gcp_wf",     # Workflows (core/gcp_workflows_core.WorkflowsStore)
+    "gcp_run",    # Cloud Run (core/gcp_run_core.RunStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_dns",    # Cloud DNS (core/gcp_dns_core.CloudDnsStore)
     "gcp_logging",  # Cloud Logging (core/gcp_logging_core.LoggingStore)
