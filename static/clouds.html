@@ -1735,8 +1735,8 @@
 <style id="vy-mkt-css">
   /* ── Marketplace view + space tier banner (black & white) ── */
   #mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-top: 4px; }
-  .mk-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #ececef; border-radius: 12px; color: #18181b; transition: border-color .12s; }
-  .mk-card:hover, .mk-card:focus-within { border-color: #a1a1aa; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .mk-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 0; box-shadow: 0 0 0 1px #e4e4e7; border-radius: 12px; color: #18181b; transition: border-color .12s; }
+  .mk-card:hover, .mk-card:focus-within { box-shadow: 0 0 0 1px #a1a1aa, 0 2px 10px rgba(0,0,0,.05); }
   .mk-card.off { opacity: .92; }
   .mk-main { display: flex; flex-direction: column; gap: 14px; width: 100%; padding: 16px 16px 10px; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 10px 10px 0 0; }
   .mk-main:focus-visible { outline: 2px solid #000; outline-offset: -3px; }
@@ -1854,7 +1854,7 @@
   html.vy-embed .mk-card a.mk-buy-b { flex: none; padding: 8px 22px; border-radius: 8px; background: #000; color: #fff !important; font-size: 13.5px; font-weight: 600; text-decoration: none; }
   html.vy-embed .mk-card a.mk-buy-b:hover { background: #27272a; }
   /* card header = landing-page grid field */
-  .mk-head { margin: -16px -16px 0; padding: 16px 52px 14px 16px; background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; border-bottom: 1px solid #ececef; }
+  .mk-head { margin: -16px -16px 0; padding: 16px 52px 20px 16px; background-color: #eef0eb; background-image: linear-gradient(to bottom, rgba(255,255,255,0) 45%, #fff 100%), linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 100% 100%, 32px 32px, 32px 32px; border-bottom: 0; }
   .mk-main { gap: 12px; }
   /* no outer panel; section tab baseline runs edge to edge */
   html.vy-embed #app-main #mkt-card { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
