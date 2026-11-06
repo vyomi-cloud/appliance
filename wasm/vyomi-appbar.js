@@ -217,7 +217,7 @@
     }
     cap.querySelector('.csearch input').addEventListener('input', function (e) { query = e.target.value; paintCap(); });
     var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'All capabilities'; expBtn.setAttribute('aria-label', 'All capabilities'); expBtn.setAttribute('aria-expanded', 'false');
-    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="8" cy="5" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/><circle cx="16" cy="19" r="2"/></g></svg>';
+    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="8.5" r="2"/><circle cx="12" cy="8.5" r="2"/><circle cx="19" cy="8.5" r="2"/><circle cx="5" cy="15.5" r="2"/><circle cx="12" cy="15.5" r="2"/><circle cx="19" cy="15.5" r="2"/></g></svg>';
     bar.querySelector('.vy-notch').appendChild(expBtn);
     function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); }
     function openCap() { curCat = 'All'; query = ''; var inp = cap.querySelector('.csearch input'); inp.value = ''; paintCap(); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { inp.focus(); }, 30); }
