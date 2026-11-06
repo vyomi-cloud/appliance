@@ -452,6 +452,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "route53":        len(_r53_census()),
                 "ecs":            sum(1 for c in A.ECS.clusters.values() if c.get("status") != "INACTIVE"),
                 "elasticache":    len(_ec_census()),
+                "cognito-idp":    len(A.COG.pools),
             }
             try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
                 from core import nano_registry

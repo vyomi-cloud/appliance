@@ -2698,6 +2698,10 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for group_name, group in aws_logs.get("log_groups", {}).items():
         if isinstance(group, dict):
             add("aws", "logs", "log_group", group_name, group)
+    aws_cognito = _cloudsim_service_state(space, "cognito-idp")
+    for pool_id, pool in aws_cognito.get("user_pools", {}).items():
+        if isinstance(pool, dict):
+            add("aws", "cognito-idp", "user_pool", pool_id, pool)
 
     gcp_compute = _cloudsim_service_state(space, "gcp_compute")
     for instance_id, instance in gcp_compute.get("instances", {}).items():
@@ -2943,6 +2947,23 @@ def _ecs_mirror_state(ecs_store) -> None:
                 st["ecs"] = {"clusters": clusters}
     try:
         _cloudsim_refresh_bridge("ecs.mirror")
+    except Exception:
+        pass
+
+
+
+def _cognito_mirror_state(cog_store) -> None:
+    """Mirror Cognito user pools (held in the SDK/console store) into the active
+    space's service state so the space's cost-savings metrics count them."""
+    pools = {pid: {"name": p["Name"], "created": p["CreationDate"]} for pid, p in cog_store.pools.items()}
+    with STATE_LOCK:
+        spaces_state = _spaces_state()
+        active = spaces_state.get("spaces", {}).get(spaces_state.get("active_space_id", ""))
+        for st in ([active.setdefault("service_states", {})] if isinstance(active, dict) else []) + [STATE]:
+            if isinstance(st, dict):
+                st["cognito-idp"] = {"user_pools": pools}
+    try:
+        _cloudsim_refresh_bridge("cognito-idp.mirror")
     except Exception:
         pass
 
@@ -24205,6 +24226,11 @@ if not _UNIFIED_INGRESS:
         _ecs_routes.register(app, mirror=_ecs_mirror_state)
     except Exception as _e:
         print(f"[ecs] routes skipped: {_e}")
+    try:
+        from core import cognito_idp_routes as _cognito_routes
+        _cognito_routes.register(app, mirror=_cognito_mirror_state)
+    except Exception as _e:
+        print(f"[cognito-idp] routes skipped: {_e}")
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)

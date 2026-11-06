@@ -1066,6 +1066,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "states"
     if target.startswith("AmazonSQS."):
         return "sqs"
+    if target.startswith("AWSCognitoIdentityProviderService."):
+        return "cognito-idp"
     return ""
 
 
@@ -1183,6 +1185,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             from routes.aws_elasticache import STORE as _ec_store
             _ec_r = _ec.dispatch(_ec_store, await _srv()._ec2_query_params(request))
             return Response(content=_ec_r.body, status_code=_ec_r.status, media_type="text/xml")
+        if service == "cognito-idp":
+            from core import cognito_idp_routes as _cognito_routes
+            return await _cognito_routes.root_dispatch(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":

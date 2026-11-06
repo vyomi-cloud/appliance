@@ -106,6 +106,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.cloudwatch": 0.10,   # standard-resolution metric alarm, per alarm-month
     "aws.sts": 0.05,          # STS itself is free; nominal per-session figure so console sessions register in savings
     "aws.route53": 0.50,      # hosted zone / health check, per month
+    "aws.cognito-idp": 15.00, # Essentials $0.015/MAU x 1,000 MAU baseline (user pool)
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations

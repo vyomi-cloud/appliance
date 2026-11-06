@@ -67,6 +67,8 @@ class Aws(CloudProvider):
             ("sqs", "Purge"):       lambda b, a, p: A.sqs_purge(p),
             # Amazon ECS — console REST facade over core/ecs_core.py
             ("ecs", "Api"): lambda b, a, p: A.ecs_api(p),
+            # Cognito user pools — console REST facade over core/cognito_idp_core.py
+            ("cognito-idp", "Api"): lambda b, a, p: A.cognito_api(p),
             # IAM — users/roles/policies/groups, via core/iam_core.py
             ("iam", "ListUsers"):       lambda b, a, p: A.iam_list_users(p),
             ("iam", "ListRoles"):       lambda b, a, p: A.iam_list_roles(p),

@@ -26,6 +26,7 @@ from core.iam_store import InMemoryIamStore
 from core.sts_core import StsStore
 from core.messaging_store import InMemoryMessagingStore
 from core.ecs_core import InMemoryEcsStore
+from core.cognito_idp_core import InMemoryCognitoIdpStore
 from core.gcp_firestore_core import FirestoreStore
 from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
@@ -86,6 +87,7 @@ def get() -> dict:
             "route53": Route53Store(),         # Route 53 hosted zones / records / health checks (control plane)
             "ecr": EcrStore(),                 # Elastic Container Registry
             "elasticache": ElastiCacheStore(),  # ElastiCache clusters / groups / snapshots (control plane)
+            "cognito": InMemoryCognitoIdpStore(),   # Cognito user pools
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

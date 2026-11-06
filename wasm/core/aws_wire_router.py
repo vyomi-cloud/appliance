@@ -59,6 +59,8 @@ from core import elbv2_core as elbv2
 from core import route53_core as route53
 from core import ecr_core as ecr
 from core import elasticache_core as elasticache
+from core import cognito_idp_core as cognito
+from core.cognito_idp_core import CognitoIdpStore, InMemoryCognitoIdpStore
 from core import rds_data_core as rds_data
 from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
@@ -210,6 +212,7 @@ _SIGNING = {
     "sts": "sts",
     "ecs": "ecs",
     "elasticache": "elasticache",
+    "cognito-idp": "cognito-idp",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -218,11 +221,15 @@ _TARGET_PREFIX = {
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
     "Kinesis_20131202": "kinesis",
     "AmazonEC2ContainerServiceV20141113": "ecs",
+    "AWSCognitoIdentityProviderService": "cognito-idp",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
     "AmazonEC2ContainerRegistry_": "ecr",
 }
+
+# Cognito's public OIDC discovery documents: /<poolId>/.well-known/{jwks.json,openid-configuration}
+_COGNITO_WELLKNOWN = re.compile(r"^/([a-z]{2}(?:-[a-z]+)+-\d_[A-Za-z0-9]+)/\.well-known/(jwks\.json|openid-configuration)$")
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
@@ -233,6 +240,7 @@ _JSON_CT = {
     "stepfunctions": "application/x-amz-json-1.0",
     "ecr": "application/x-amz-json-1.1",
     "ecs": "application/x-amz-json-1.1",
+    "cognito-idp": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -395,6 +403,7 @@ class AwsWireRouter:
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.cognito = s.get("cognito") or InMemoryCognitoIdpStore()   # Cognito user pools
         self.elasticache = s.get("elasticache") or elasticache.ElastiCacheStore()
         self.ecs = s.get("ecs") or InMemoryEcsStore()   # Amazon ECS clusters/services/tasks
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
@@ -503,6 +512,8 @@ class AwsWireRouter:
             return "azure-sql"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
             return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
+        if _COGNITO_WELLKNOWN.match(path):    # Cognito OIDC discovery (public, unsigned GET)
+            return "cognito-wellknown"
         target = lheaders.get("x-amz-target", "") or ""
         if target.startswith(cw.TARGET_PREFIX + "."):
             return "cloudwatch"            # CloudWatch JSON 1.0
@@ -675,6 +686,13 @@ class AwsWireRouter:
         if svc == "rds-data":  # async-only — guard the sync path
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
                     "body": b'{"message":"RDS Data API requires the async dispatch path"}'}
+
+        if svc == "cognito-wellknown":
+            m = _COGNITO_WELLKNOWN.match(path)
+            doc = (cognito.jwks if m.group(2) == "jwks.json" else cognito.openid_configuration)(self.cognito, m.group(1))
+            if doc is None:
+                return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"message":"Not Found"}'}
+            return {"status": 200, "headers": {"content-type": "application/json"}, "body": json.dumps(doc).encode()}
 
         if svc == "s3":
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
@@ -876,6 +894,8 @@ class AwsWireRouter:
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "ecs":
                 r = ecs.dispatch(self.ecs, target, payload)
+            elif svc == "cognito-idp":
+                r = cognito.dispatch(self.cognito, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
             elif svc == "ssm":

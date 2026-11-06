@@ -46,6 +46,7 @@ from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import cloudwatch_core as cw
 from core import console_ecs as _ecs_console
+from core import console_cognito_idp as _cog_console
 
 # Shared registry (Fix #2): the console adapter and the native-wire relay
 # (AwsWireRouter via stores=) draw from ONE store set, so console-created resources
@@ -61,6 +62,7 @@ IAM = _R["iam"]
 MSG = _R["msg"]
 CW = _R["cw"]
 ECS = _R["ecs"]
+COG = _R["cognito"]
 REGION = "us-east-1"
 
 _CODE_RE = re.compile(rb"<Code>([^<]+)</Code>")
@@ -485,6 +487,15 @@ def ecs_api(p):
     """The console's /api/ecs/* REST, served by the SAME facade the offline
     appliance uses; the native SDK/CLI wire (aws_wire_router) shares ECS."""
     status, body = _ecs_console.handle(ECS, str(p.get("method") or "GET"), str(p.get("path") or "/"),
+                                       p.get("query") or {}, p.get("body") or {})
+    return {"__http": {"status": status, "headers": {}, "body": body}}
+
+
+# ── Cognito user pools (console REST facade over core/cognito_idp_core.py) ──
+def cognito_api(p):
+    """The console's /api/cognito-idp/* REST, served by the SAME facade the offline
+    appliance uses; the native SDK/CLI wire (aws_wire_router) shares COG."""
+    status, body = _cog_console.handle(COG, str(p.get("method") or "GET"), str(p.get("path") or "/"),
                                        p.get("query") or {}, p.get("body") or {})
     return {"__http": {"status": status, "headers": {}, "body": body}}
 
