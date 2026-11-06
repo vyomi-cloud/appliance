@@ -124,6 +124,39 @@ def main():
     check("UpdateMapRun unknown -> ResourceNotFound", s == 400 and e["__type"] == "ResourceNotFound", e)
     check("DeleteStateMachine", call(st, "DeleteStateMachine", stateMachineArn=arn)[0] == 200
           and call(st, "DescribeStateMachine", stateMachineArn=arn)[1]["__type"] == "StateMachineDoesNotExist")
+    # Choice-state comparison operators (ASL): each rule routes to Yes/No via a real execution
+    def choice(rule, inp, tag):
+        d = {"StartAt": "C", "States": {
+            "C": {"Type": "Choice", "Choices": [{**rule, "Variable": "$.v", "Next": "Yes"}], "Default": "No"},
+            "Yes": {"Type": "Pass", "Result": "yes", "End": True},
+            "No": {"Type": "Pass", "Result": "no", "End": True}}}
+        _, m = call(st, "CreateStateMachine", name="ch-" + tag, definition=json.dumps(d), roleArn=ROLE)
+        _, e = call(st, "StartExecution", stateMachineArn=m["stateMachineArn"], input=json.dumps(inp))
+        return json.loads(call(st, "DescribeExecution", executionArn=e["executionArn"])[1]["output"])
+    T1, T2 = "2024-01-01T00:00:00Z", "2025-01-01T00:00:00Z"
+    cases = [
+        ("StringLessThan", {"StringLessThan": "b"}, "a", "yes"), ("StringLessThan", {"StringLessThan": "b"}, "c", "no"),
+        ("StringLessThanEquals", {"StringLessThanEquals": "b"}, "b", "yes"),
+        ("StringGreaterThan", {"StringGreaterThan": "b"}, "c", "yes"),
+        ("StringGreaterThanEquals", {"StringGreaterThanEquals": "b"}, "a", "no"),
+        ("StringMatches", {"StringMatches": "log-*.txt"}, "log-1.txt", "yes"),
+        ("StringMatches", {"StringMatches": "log-*.txt"}, "log-1.csv", "no"),
+        ("NumericEquals", {"NumericEquals": 3}, 3, "yes"), ("NumericLessThan", {"NumericLessThan": 3}, 2, "yes"),
+        ("NumericLessThanEquals", {"NumericLessThanEquals": 3}, 4, "no"),
+        ("NumericGreaterThanEquals", {"NumericGreaterThanEquals": 3}, 3, "yes"),
+        ("IsNumeric", {"IsNumeric": True}, 1.5, "yes"), ("IsNumeric", {"IsNumeric": True}, "1", "no"),
+        ("IsString", {"IsString": True}, "x", "yes"), ("IsString", {"IsString": True}, 1, "no"),
+        ("IsTimestamp", {"IsTimestamp": True}, T1, "yes"), ("IsTimestamp", {"IsTimestamp": True}, "nope", "no"),
+        ("IsPresent", {"IsPresent": True}, 1, "yes"),
+        ("TimestampEquals", {"TimestampEquals": T1}, T1, "yes"),
+        ("TimestampLessThan", {"TimestampLessThan": T2}, T1, "yes"),
+        ("TimestampLessThanEquals", {"TimestampLessThanEquals": T1}, T2, "no"),
+        ("TimestampGreaterThan", {"TimestampGreaterThan": T1}, T2, "yes"),
+        ("TimestampGreaterThanEquals", {"TimestampGreaterThanEquals": T2}, T1, "no"),
+    ]
+    for i, (op, rule, v, want) in enumerate(cases):
+        check(f"Choice {op} v={v!r} -> {want}", choice(rule, {"v": v}, f"{op}{i}") == want)
+    check("Choice IsPresent false when variable missing", choice({"IsPresent": True}, {}, "absent") == "no")
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 
