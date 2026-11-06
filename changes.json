@@ -1,6 +1,17 @@
 {
- "at": "2026-11-06T16:08:13+00:00",
+ "at": "2026-11-06T17:08:07+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2, CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:b818b6fe8c4e",
+   "title": "Amazon EC2 now publishes ImdsV1Enabled CloudWatch metric",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-imdsv1enabled-cloudwatch-metric/",
+   "detail": "Amazon EC2 now supports an ImdsV1Enabled CloudWatch metric, giving customers visibility into which of their EC2 instances still have Instance Metadata Service Version 1 (IMDSv1) enabled. You can use this metric to track your migration to IMDSv2 across your accounts and Regions, at scale. With the ImdsV1Enabled metric, you can configure CloudWatch dashboards and alarms to track instances that still allow IMDSv1, identify migration gaps, and prioritize remediation, without building your own tooling to check the metadata options of instances across accounts and Regions. This gives you a reliable,",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
