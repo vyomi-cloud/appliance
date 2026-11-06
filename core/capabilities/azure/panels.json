@@ -13,11 +13,16 @@
   "azure.aks.tools": {
     "title": "Diagnose and solve problems, Tasks",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_kudu_diagnose.py",
+      "tests/conformance/test_azure_tasks_core.py"
     ]
   },
   "azure.apim.capacity": {
@@ -43,41 +48,59 @@
   "azure.appconfiguration.tools": {
     "title": "Diagnose and solve problems, Tasks",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_kudu_diagnose.py",
+      "tests/conformance/test_azure_tasks_core.py"
     ]
   },
   "azure.appservices.webapp.create_options": {
     "title": "Create wizard: linked database and secure unique default hostname",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Provisioning a linked database from the Web App wizard is not modelled (create the database in its own service). 'Secure unique default hostname' has no effect: Vyomi always uses the exact name you choose, there is no name-collision suffix."
+      "The Create Web App wizard provisions a linked Azure SQL or Cosmos DB database, writes the connection string, links Application Insights and honours 'secure unique default hostname' (azure.appservices.webapp.createdatabase); PostgreSQL, MySQL and Redis options are not offered."
+    ],
+    "tests": [
+      "consoles/tests/smoke-azure-kudu.mjs"
     ]
   },
   "azure.cognitiveservices.tools": {
     "title": "Diagnose and solve problems, Tasks",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_kudu_diagnose.py",
+      "tests/conformance/test_azure_tasks_core.py"
     ]
   },
   "azure.cosmos.tools": {
     "title": "Diagnose and solve problems, Tasks, Support + Troubleshooting",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both. Support + Troubleshooting (the shared support-request panel, azure.common.support) is not wired into the Cosmos DB blade."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open.",
+      "Support + Troubleshooting opens the simulator's own support-request panel; nothing is sent to Microsoft."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
     ]
   },
   "azure.cosmos.integrations": {
@@ -123,31 +146,43 @@
   "azure.keyvaults.tools": {
     "title": "Diagnose and solve problems, Tasks",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
     ]
   },
   "azure.keyvaults.deleted_objects": {
     "title": "Manage deleted keys and secrets (recover / purge)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "The Manage deleted keys / Manage deleted secrets pages (soft-delete recover and purge) are not modelled; backup and restore of a key or secret (azure.keyvaults.backup_restore) are real."
+      "Soft-deleted keys and secrets are kept (with deletedDate and a 90-day scheduledPurgeDate) and can be listed, read, recovered or purged over the native /deletedkeys and /deletedsecrets REST. The retention clock is informational: nothing is purged automatically when scheduledPurgeDate passes, and re-creating a deleted name overwrites it instead of returning 409. Deleted certificates are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py",
+      "tests/conformance/test_azure_keyvault_keys_core.py",
+      "tests/conformance/test_azure_keyvault_secrets_core.py"
     ]
   },
   "azure.keyvaults.resource_access_flags": {
     "title": "Enable access for VMs, ARM template deployment and disk encryption",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Enabling Key Vault access for virtual machines, ARM template deployment and disk encryption is not modelled: Vyomi does not run those services' Key Vault integrations, so the three access-configuration flags are not honoured."
+      "The Access configuration blade stores enabledForDeployment, enabledForDiskEncryption and enabledForTemplateDeployment on the vault through ARM and reads them back; no VM, template-deployment or disk-encryption flow consults them, so the flags are configuration only."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_keyvault_access_core.py"
     ]
   },
   "azure.sql.integrations": {
@@ -173,11 +208,16 @@
   "azure.sql.tools": {
     "title": "Diagnose and solve problems, Tasks, external SQL client",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems runs Microsoft's fleet-wide diagnostics against telemetry Vyomi never collects, and Tasks links to Azure Automation / Logic Apps backends that no local simulator has; the console shows an honest Not simulated panel for both. Launching an external SQL client (SSMS, Azure Data Studio) from the portal is not modelled; connect to the database with any client directly or use the Query editor."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter. Available on the database blade.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open. Available on the database blade.",
+      "The external SQL client download pages are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
     ]
   },
   "azure.sql.always_encrypted": {
@@ -213,11 +253,15 @@
   "azure.acr.support_troubleshooting": {
     "title": "Container Registry support and troubleshooting pages",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Diagnose and solve problems, Tasks-style automation and the other support pages of the registry blade have no backend: Vyomi collects none of the telemetry Microsoft's fleet-wide diagnostics run against. The console shows an honest Not simulated panel."
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Registry Tasks (build tasks) are a separate real feature (azure.acr.tasks); the support request panel is the simulator's own."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
     ]
   }
 }

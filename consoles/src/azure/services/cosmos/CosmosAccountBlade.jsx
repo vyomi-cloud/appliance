@@ -20,6 +20,8 @@ import { locationLabel, LOCATIONS } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
@@ -36,6 +38,7 @@ import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 import ResourceCost from "../../kit/ResourceCost.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -117,11 +120,14 @@ export default function CosmosAccountBlade({ params }) {
   else {
     const a = data.data, reload = data.reload;
     const P = {
+      tasks: () => <TasksPanel a={a} />,
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="cosmos" />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       cors: () => <CosmosCors a={a} reload={reload} />,
       dedicatedgateway: () => <CosmosDedicatedGateway a={a} />,

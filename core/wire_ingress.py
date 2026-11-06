@@ -583,6 +583,7 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         p = kv_core_path(path)
         kind = p.lstrip("/").split("/", 1)[0]
         mod, st = {"secrets": (kvs, r.az_kvsec), "keys": (kvk, r.az_kvkeys),
+                   "deletedsecrets": (kvs, r.az_kvsec), "deletedkeys": (kvk, r.az_kvkeys),
                    "certificates": (kvc, r.az_kvcerts)}.get(kind, (None, None))
         if mod is None:
             return {"status": 404, "headers": {"content-type": "application/json"},

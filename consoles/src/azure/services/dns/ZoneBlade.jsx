@@ -15,6 +15,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, fmtDate, Glyph, InfoBar, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { remember, forget } from "../../kit/recent.js";
@@ -55,7 +56,7 @@ export default function ZoneBlade({ params }) {
       activitylog: () => <SharedActivityLog scope={z.id} name={z.name} />,
       iam: () => <Iam z={z} />,
       exporttemplate: () => <SharedExportTemplate id={z.id} name={z.name} resourceGroup={z.resourceGroup || z.id.split("/")[4]} />,
-      diagnose: () => <NotSimulatedContainer title={`${z.name} | Diagnose and solve problems`} feature="The guided DNS diagnostic tiles" />,
+      diagnose: () => <Diagnose id={z.id} name={z.name} />,
     }[panel];
     body = P ? P() : <NotSimulatedContainer title={`${z.name} | ${LABEL[panel] || panel}`} feature={`The ${LABEL[panel] || panel} panel`} />;
   }

@@ -230,13 +230,17 @@
  "azure.appservices.webapp.devtools": {
   "title": "Development Tools (Clone App, Console, Advanced Tools, App Service Editor, Extensions)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "No Kudu/SCM console, in-browser editor or site extension gallery."
+   "Console, Advanced Tools (Kudu), App Service Editor, Process explorer, Log stream and Extensions are real over the Kudu API served as an ARM extension (azure.appservices.webapp.kudu, .extensions); commands run in the simulator's bounded shell against the app's virtual /home, not in a real container. Clone App is not modelled."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "consoles/tests/smoke-azure-kudu.mjs",
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
  },
  "azure.appservices.webapp.api": {
   "title": "API (API Management link, API definition, CORS)",
@@ -300,13 +304,17 @@
  "azure.appservices.webapp.automation": {
   "title": "Automation (Tasks, Export template)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Tasks are real (azure.appservices.webapp.tasks). ARM/Bicep/Terraform template export for the Web App is not provided here."
+   "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open.",
+   "Export template is the shared client-side ARM/Bicep/Terraform export."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_tasks_core.py"
+  ]
  },
  "azure.appservices.defender": {
   "tier": "pro",
@@ -328,13 +336,18 @@
  "azure.appservices.webapp.support": {
   "title": "Diagnose and solve problems, Events (preview)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "No diagnostics engine or Event Grid wiring for Web Apps. Resource health (azure.common.resource_health), Resource visualizer (azure.common.resource_visualizer) and New support request (azure.common.support) are the shared panels and are not part of this gap."
+   "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+   "Events (preview) are real Event Grid subscriptions scoped to the site (azure.appservices.webapp.events)."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py",
+   "consoles/tests/smoke-azure-kudu.mjs"
+  ]
  },
  "azure.appservices.webapp.siteconfigpanels": {
   "title": "Default documents, Path mappings, Error pages, Health check, API definition, API Management link",

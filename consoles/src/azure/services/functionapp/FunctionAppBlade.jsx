@@ -30,6 +30,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as ops from "../appservices/AppOps.jsx";
 import { EntraAuthentication, AzureOpenAIConnection } from "../../kit/WebAuthPanels.jsx";
 import * as dev from "../appservices/DevTools.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import { Configuration as WebConfiguration } from "../appservices/WebAppBlade.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
@@ -122,6 +123,8 @@ export default function FunctionAppBlade({ params }) {
       "console": () => <dev.Console a={a} rg={rg} name={name} cap="azure.functionapp" />,
       "advanced-tools": () => <dev.AdvancedTools a={a} rg={rg} name={name} cap="azure.functionapp" base="functionapp" links={{ console: "console", proc: "process-explorer", log: "log-stream", ext: "extensions", editor: "app-service-editor" }} />,
       "app-service-editor": () => <dev.AppEditor a={a} rg={rg} name={name} cap="azure.functionapp" />,
+      "extensions": () => <dev.Extensions a={a} rg={rg} name={name} cap="azure.functionapp" />,
+      "tasks": () => <TasksPanel a={a} />,
       "process-explorer": () => <dev.ProcessExplorer a={a} rg={rg} name={name} cap="azure.functionapp" />,
       "events-preview": () => <EventsPreview a={a} />,
       "alerts": () => <Alerts a={a} />,

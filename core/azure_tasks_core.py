@@ -37,6 +37,10 @@ ARM_HOST = "https://management.azure.com"
 AKS, APIM, APPCFG, SITES, COG = ("microsoft.containerservice/managedclusters", "microsoft.apimanagement/service",
                                  "microsoft.appconfiguration/configurationstores", "microsoft.web/sites",
                                  "microsoft.cognitiveservices/accounts")
+VM, STORAGE, COSMOS, KV, SB, SQL, SQLDB, CAPP = (
+    "microsoft.compute/virtualmachines", "microsoft.storage/storageaccounts", "microsoft.documentdb/databaseaccounts",
+    "microsoft.keyvault/vaults", "microsoft.servicebus/namespaces", "microsoft.sql/servers", "microsoft.sql/servers/databases",
+    "microsoft.app/containerapps")
 _FREQ = {"minute": "minutes", "hour": "hours", "day": "days", "week": "days"}
 
 _REC = {"frequency": "Day", "interval": 1}
@@ -71,6 +75,39 @@ TEMPLATES = [
     {"id": "cogsvc-usage-report", "title": "Capture the account's usage", "resourceTypes": [COG], "recurrence": {"frequency": "Day", "interval": 1},
      "description": "Reads the account's quota usages into the run output.", "params": [],
      "actions": lambda rid, p: [("Get_usages", "GET", f"{rid}/usages", "2023-05-01", None)]},
+    {"id": "vm-deallocate", "title": "Stop (deallocate) the virtual machine on a schedule", "resourceTypes": [VM], "recurrence": {"frequency": "Day", "interval": 1, "schedule": {"hours": [20], "minutes": [0]}},
+     "description": "Deallocates the VM outside working hours so compute is not billed.", "params": [],
+     "actions": lambda rid, p: [("Deallocate_VM", "POST", f"{rid}/deallocate", "2024-03-01", None)]},
+    {"id": "vm-start", "title": "Start the virtual machine on a schedule", "resourceTypes": [VM], "recurrence": {"frequency": "Day", "interval": 1, "schedule": {"hours": [7], "minutes": [0]}},
+     "description": "Starts the VM at the beginning of the working day.", "params": [],
+     "actions": lambda rid, p: [("Start_VM", "POST", f"{rid}/start", "2024-03-01", None)]},
+    {"id": "vm-restart", "title": "Restart the virtual machine on a schedule", "resourceTypes": [VM], "recurrence": {"frequency": "Week", "interval": 1},
+     "description": "Restarts the VM.", "params": [],
+     "actions": lambda rid, p: [("Restart_VM", "POST", f"{rid}/restart", "2024-03-01", None)]},
+    {"id": "storage-rotate-key", "title": "Rotate a storage account key on a schedule", "resourceTypes": [STORAGE], "recurrence": {"frequency": "Week", "interval": 1},
+     "description": "Regenerates key1 or key2 of the account.", "params": [{"name": "keyName", "label": "Key to regenerate", "default": "key1", "enum": ["key1", "key2"]}],
+     "actions": lambda rid, p: [("Regenerate_key", "POST", f"{rid}/regenerateKey", "2023-01-01", {"keyName": p.get("keyName", "key1")})]},
+    {"id": "storage-keys-report", "title": "Capture the account's key inventory", "resourceTypes": [STORAGE], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Lists the account keys into the run output.", "params": [],
+     "actions": lambda rid, p: [("List_keys", "POST", f"{rid}/listKeys", "2023-01-01", None)]},
+    {"id": "cosmos-rotate-key", "title": "Rotate a Cosmos DB account key on a schedule", "resourceTypes": [COSMOS], "recurrence": {"frequency": "Week", "interval": 1},
+     "description": "Regenerates one key of the account.", "params": [{"name": "keyKind", "label": "Key to regenerate", "default": "secondary", "enum": ["primary", "secondary", "primaryReadonly", "secondaryReadonly"]}],
+     "actions": lambda rid, p: [("Regenerate_key", "POST", f"{rid}/regenerateKey", "2023-11-15", {"keyKind": p.get("keyKind", "secondary")})]},
+    {"id": "cosmos-account-report", "title": "Capture the account's configuration", "resourceTypes": [COSMOS], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Reads the account (regions, consistency, network rules) into the run output.", "params": [],
+     "actions": lambda rid, p: [("Get_account", "GET", rid, "2023-11-15", None)]},
+    {"id": "keyvault-config-report", "title": "Capture the vault's configuration", "resourceTypes": [KV], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Reads the vault (access model, soft delete, network rules) into the run output.", "params": [],
+     "actions": lambda rid, p: [("Get_vault", "GET", rid, "2023-07-01", None)]},
+    {"id": "servicebus-queues-report", "title": "Capture the namespace's queues", "resourceTypes": [SB], "recurrence": {"frequency": "Hour", "interval": 1},
+     "description": "Lists the queues (message counts, dead-letter counts) into the run output.", "params": [],
+     "actions": lambda rid, p: [("List_queues", "GET", f"{rid}/queues", "2022-10-01-preview", None)]},
+    {"id": "sql-databases-report", "title": "Capture the server's databases", "resourceTypes": [SQL], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Lists the databases (SKU, status, size) into the run output.", "params": [],
+     "actions": lambda rid, p: [("List_databases", "GET", f"{rid}/databases", "2023-05-01-preview", None)]},
+    {"id": "sqldb-report", "title": "Capture the database's configuration", "resourceTypes": [SQLDB], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Reads the database into the run output.", "params": [],
+     "actions": lambda rid, p: [("Get_database", "GET", rid, "2023-05-01-preview", None)]},
 ]
 
 

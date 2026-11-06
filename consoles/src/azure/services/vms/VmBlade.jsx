@@ -22,11 +22,13 @@ import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
+import { restJson } from "../../../common/wire.js";
 import { locationLabel, parseId } from "../../kit/arm.js";
 import { capability, CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
@@ -115,6 +117,8 @@ export default function VmBlade({ params }) {
   else {
     const a = vm.data, reload = vm.reload;
     const P = {
+      tasks: () => <TasksPanel a={a} />,
+      extensions: () => <Extensions a={a} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
@@ -1328,6 +1332,61 @@ function Backup({ a, reload }) {
         ]}
       />
     </CapabilityContainer>
+  );
+}
+
+// ── Extensions + applications — Microsoft.Compute/virtualMachines/extensions are real ARM child
+// resources (create, list, delete); the extension code itself is not downloaded or run in a guest
+// (azure.vms.extensions). ──────────────────────────────────────────────────────────────────
+const EXT_CATALOG = [
+  { name: "CustomScript", publisher: "Microsoft.Azure.Extensions", type: "CustomScript", version: "2.1", label: "Custom Script Extension for Linux", settings: { commandToExecute: "echo hello" } },
+  { name: "AzureMonitorLinuxAgent", publisher: "Microsoft.Azure.Monitor", type: "AzureMonitorLinuxAgent", version: "1.0", label: "Azure Monitor Agent for Linux", settings: {} },
+  { name: "DependencyAgentLinux", publisher: "Microsoft.Azure.Monitoring.DependencyAgent", type: "DependencyAgentLinux", version: "9.10", label: "Dependency Agent for Linux", settings: {} },
+  { name: "AzureNetworkWatcherExtension", publisher: "Microsoft.Azure.NetworkWatcher", type: "NetworkWatcherAgentLinux", version: "1.4", label: "Network Watcher Agent for Linux", settings: {} },
+  { name: "DockerExtension", publisher: "Microsoft.Azure.Extensions", type: "DockerExtension", version: "1.1", label: "Docker Extension for Linux", settings: {} },
+];
+function Extensions({ a }) {
+  const notify = useNotify();
+  const base = `${a.id}/extensions`;
+  const q = { "api-version": "2024-03-01" };
+  const { data, loading, error, reload } = useAsync(async () => (await restJson("GET", base, { query: q })).value || [], [a.id]);
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState(EXT_CATALOG[0].name);
+  const [settings, setSettings] = useState(JSON.stringify(EXT_CATALOG[0].settings));
+  const add = async () => {
+    const c = EXT_CATALOG.find((x) => x.name === pick);
+    try {
+      await restJson("PUT", `${base}/${c.name}`, { query: q, body: { location: a.location, properties: { publisher: c.publisher, type: c.type, typeHandlerVersion: c.version, autoUpgradeMinorVersion: true, settings: JSON.parse(settings || "{}") } } });
+      notify.success(`${c.label} was added.`, "Add succeeded"); setOpen(false); reload();
+    } catch (e) { notify.error(e, "Add extension failed"); }
+  };
+  const del = async (n) => { try { await restJson("DELETE", `${base}/${n}`, { query: q }); notify.success(`${n} was uninstalled.`, "Uninstall succeeded"); reload(); } catch (e) { notify.error(e, "Uninstall failed"); } };
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Extensions + applications</div>
+      <CapabilityContainer id="azure.vms.extensions" title="Extensions"
+        actions={<><Button size="small" appearance="primary" icon={<Add20Regular />} onClick={() => setOpen(true)}>Add</Button> <Button size="small" icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</Button></>}>
+        <ErrorBar error={error} title="Failed to list extensions" />
+        {loading && !data ? <Loading /> : (
+          <table className="vy-grid" aria-label="Extensions">
+            <thead><tr><th>Name</th><th>Type</th><th>Version</th><th>Status</th><th></th></tr></thead>
+            <tbody>{(data || []).length ? data.map((e) => (
+              <tr key={e.name}><td>{e.name}</td><td>{e.properties?.publisher}.{e.properties?.type}</td><td>{e.properties?.typeHandlerVersion}</td><td>{e.properties?.provisioningState}</td>
+                <td><Button size="small" onClick={() => del(e.name)}>Uninstall</Button></td></tr>
+            )) : <tr><td colSpan={5} className="vy-muted">No extensions installed.</td></tr>}</tbody>
+          </table>
+        )}
+      </CapabilityContainer>
+      <Dialog open={open} onOpenChange={(_, d) => setOpen(d.open)}><DialogSurface><DialogBody>
+        <DialogTitle>Install an extension</DialogTitle>
+        <DialogContent>
+          <Field label="Extension"><Select aria-label="Extension" value={pick} onChange={(_, d) => { setPick(d.value); setSettings(JSON.stringify(EXT_CATALOG.find((x) => x.name === d.value).settings)); }}>
+            {EXT_CATALOG.map((c) => <option key={c.name} value={c.name}>{c.label}</option>)}</Select></Field>
+          <Field label="Settings (JSON)"><Textarea aria-label="Settings" value={settings} onChange={(_, d) => setSettings(d.value)} /></Field>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setOpen(false)}>Cancel</Button><Button appearance="primary" onClick={add}>Review + create</Button></DialogActions>
+      </DialogBody></DialogSurface></Dialog>
+    </>
   );
 }
 

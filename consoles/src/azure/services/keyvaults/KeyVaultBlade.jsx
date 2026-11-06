@@ -16,6 +16,8 @@ import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
@@ -78,6 +80,8 @@ export default function KeyVaultBlade({ params, query }) {
   else {
     const a = vault.data, reload = vault.reload;
     const P = {
+      tasks: () => <TasksPanel a={a} />,
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
@@ -509,9 +513,39 @@ function Keys() {
           { key: "expiration", label: "Expiration date", value: (r) => (r.raw.attributes?.exp ? fmtDate(r.raw.attributes.exp * 1000) : "--") },
         ]}
       />
-      <NotSimulatedContainer feature="Manage deleted keys (recover / purge)" />
+      <DeletedObjects kind="key" onRecovered={reload} />
       <CreateKeyDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
     </>
+  );
+}
+
+/* Manage deleted keys / secrets: soft-deleted objects stay recoverable (GET /deleted{keys,secrets}, POST .../recover,
+ * DELETE = purge) -- azure.keyvaults.deleted_objects. */
+function DeletedObjects({ kind, onRecovered }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDeleted(kind), [kind]);
+  const nameOf = (r) => (r.id || r.kid || "").split("/")[4] || "";
+  const act = async (r, purge) => {
+    try {
+      if (purge) await api.purgeDeleted(kind, nameOf(r)); else await api.recoverDeleted(kind, nameOf(r));
+      notify.success(purge ? `${nameOf(r)} was purged.` : `${nameOf(r)} was recovered.`, purge ? "Purge succeeded" : "Recover succeeded");
+      reload(); if (!purge && onRecovered) onRecovered();
+    } catch (e) { notify.error(e, purge ? "Purge failed" : "Recover failed"); }
+  };
+  return (
+    <CapabilityContainer id="azure.keyvaults.deleted_objects" title={`Manage deleted ${kind}s`}
+      actions={<Button size="small" icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</Button>}>
+      <ErrorBar error={error} title={`Failed to list deleted ${kind}s`} />
+      {loading && !data ? <Loading /> : (
+        <table className="vy-grid" aria-label={`Deleted ${kind}s`}>
+          <thead><tr><th>Name</th><th>Deleted on</th><th>Scheduled purge</th><th></th></tr></thead>
+          <tbody>{(data || []).length ? data.map((r) => (
+            <tr key={nameOf(r)}><td>{nameOf(r)}</td><td>{fmtDate(r.deletedDate * 1000)}</td><td>{fmtDate(r.scheduledPurgeDate * 1000)}</td>
+              <td><Button size="small" onClick={() => act(r, false)}>Recover</Button> <Button size="small" onClick={() => act(r, true)}>Purge</Button></td></tr>
+          )) : <tr><td colSpan={4} className="vy-muted">No deleted {kind}s.</td></tr>}</tbody>
+        </table>
+      )}
+    </CapabilityContainer>
   );
 }
 
@@ -602,7 +636,7 @@ function SecretsList({ self }) {
           { key: "expiration", label: "Expiration date", value: (r) => (r.raw.attributes?.exp ? fmtDate(r.raw.attributes.exp * 1000) : "--") },
         ]}
       />
-      <NotSimulatedContainer feature="View sample code and Manage deleted secrets (recover / purge)" />
+      <DeletedObjects kind="secret" onRecovered={reload} />
       <CreateSecretDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
     </>
   );

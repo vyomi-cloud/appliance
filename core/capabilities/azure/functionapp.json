@@ -340,11 +340,18 @@
  },
  "azure.functionapp.extensions": {
   "title": "Extensions (site extensions)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Installing an extension requires fetching a real package from Microsoft's live Site Extensions gallery over the internet; Vyomi's cores never egress to real endpoints."
+   "Site extensions install from the same bundled gallery as App Service (Windows function apps only; Linux returns 400 as in Azure): install/uninstall records state and a marker file, and the extension's own code is never downloaded or run."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py",
+   "consoles/tests/smoke-azure-functionapp-kudu.mjs"
+  ]
  },
  "azure.functionapp.apimanagement": {
   "title": "API Management integration",
@@ -397,11 +404,17 @@
  },
  "azure.functionapp.tasks": {
   "title": "Tasks (Automation)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Tasks run on Azure's hosted Automation/Logic Apps runtime to execute scheduled actions outside the request/response cycle; Vyomi has no always-on background scheduler or compute to run them."
+   "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_tasks_core.py"
+  ]
  },
  "azure.functionapp.bindingseditor": {
   "title": "Function Integration (bindings editor)",

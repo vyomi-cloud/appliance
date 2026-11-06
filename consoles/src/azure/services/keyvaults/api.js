@@ -61,6 +61,9 @@ export const backupKey = async (name) => (await kv("POST", `/keys/${encodeURICom
 export const restoreKey = (value) => kv("POST", "/keys/restore", { body: { value } });
 export const backupSecret = async (name) => (await kv("POST", `/secrets/${encodeURIComponent(name)}/backup`)).value;
 export const restoreSecret = (value) => kv("POST", "/secrets/restore", { body: { value } });
+export const listDeleted = async (kind) => (await kv("GET", `/deleted${kind}s`)).value || [];
+export const recoverDeleted = (kind, name) => kv("POST", `/deleted${kind}s/${encodeURIComponent(name)}/recover`);
+export const purgeDeleted = (kind, name) => kv("DELETE", `/deleted${kind}s/${encodeURIComponent(name)}`);
 export const deleteKey = (name) => kv("DELETE", `/keys/${encodeURIComponent(name)}`);
 
 /** kid (https://vault/keys/{name}/{version}) -> {name, version}. */
