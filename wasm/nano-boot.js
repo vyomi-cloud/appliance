@@ -90,6 +90,7 @@ const CORES = [
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
   "aws_console_detail.py",   // AWS resource-detail tab model (EC2 placement/ENI/volumes/attributes, IAM resource access)
+  "azure_eventhub_core.py",           // Azure Event Hubs engine (Microsoft.EventHub) — loaded before azure_arm_core which delegates to it
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_msi_core.py",   // Azure Managed Identities engine (Microsoft.ManagedIdentity) — loaded before azure_arm_core which delegates to it

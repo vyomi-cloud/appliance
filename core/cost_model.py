@@ -131,6 +131,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.dns": 0.50,        # Azure DNS: $0.50 per hosted zone per month (first 25 zones; $0.10 beyond) + $0.40 per million queries
     "azure.monitor": 0.10,    # metric alert rule: $0.10 per monitored time series per month (static threshold, 1 resource); action groups: first 1,000 emails/month free
     "azure.containerregistry": 5.08,  # Basic: $0.167 per registry per day (~30.4 days/month); Standard $20.28, Premium $50.69
+    "azure.eventhub": 22.18,  # Standard, 1 throughput unit: $0.03/hr (~$21.90/month) + ~$0.028 per million ingress events
     "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
 }
 

@@ -17,6 +17,7 @@ window.NANO_RATE = {
   'microsoft.managedidentity/userassignedidentities': 0.01,
   'microsoft.containerregistry/registries': 5.08,
   'microsoft.cache/redis': 16.06,
+  'microsoft.eventhub/namespaces': 22.18,
   'microsoft.web/sites': 0.2, 'microsoft.servicebus/namespaces': 9.81, 'microsoft.keyvault/vaults': 0.03,
   // Azure — data-plane cores (blob containers, queues, Cosmos, Key Vault, Service Bus, SQL, RBAC)
   blobcontainers: 0.02, queues: 0.05, cosmosdbs: 23.36, kvsecrets: 0.03,
