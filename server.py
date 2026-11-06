@@ -7593,7 +7593,7 @@ def _reboot_lxd_instance(instance: dict) -> dict:
     ref = instance.get("container_id") or instance.get("container_name")
     if not ref:
         raise HTTPException(409, detail="InstanceContainerMissing")
-    if _lxd_status(ref) != "running":
+    if not _await_reboot_ready(instance, lambda: _lxd_status(ref) == "running"):
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     _lxd_run_checked(["restart", ref], timeout=180)
@@ -8073,7 +8073,7 @@ def _reboot_docker_instance(instance: dict) -> dict:
     if not _docker_available():
         raise HTTPException(status_code=503, detail="DockerUnavailable")
     inst = _docker_instance_obj(instance)
-    if _docker_compute().status(inst) != "running":
+    if not _await_reboot_ready(instance, lambda: _docker_compute().status(inst) == "running"):
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     try:
@@ -8411,7 +8411,7 @@ def _reboot_multipass_instance(instance: dict) -> dict:
     ref = instance.get("container_id") or instance.get("container_name")
     if not ref:
         raise HTTPException(409, detail="InstanceContainerMissing")
-    if _multipass_status(ref) != "running":
+    if not _await_reboot_ready(instance, lambda: _multipass_status(ref) == "running"):
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     _multipass_run_checked(["restart", ref], timeout=180)
@@ -12628,6 +12628,24 @@ def _stop_runtime_process(instance: dict) -> None:
         _stop_lxd_instance(instance)
         return
     raise HTTPException(status_code=503, detail="RuntimeUnavailable")
+
+
+def _await_reboot_ready(instance: dict, is_running, timeout: float = 45.0) -> bool:
+    """A reboot issued while the launch is still settling (state pending / container not up yet)
+    used to 409 InstanceNotRunning. Give an in-flight launch time to finish instead, so
+    create -> reboot from the console or a script is not a race. A genuinely stopped instance
+    still fails fast."""
+    import time as _t
+    if is_running():
+        return True
+    if str(instance.get("state") or "").lower() not in {"pending", "rebooting"}:
+        return False
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        _t.sleep(1.0)
+        if is_running():
+            return True
+    return False
 
 
 def _reboot_runtime_process(instance: dict) -> None:
