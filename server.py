@@ -228,6 +228,12 @@ app.add_middleware(HeaderAliasMiddleware)
 from core.glassbox import GlassBoxCaptureMiddleware
 app.add_middleware(GlassBoxCaptureMiddleware)
 
+# ── Sandbox access gate (Codespace console privacy) ────────────────────
+# OUTERMOST layer: inert unless CODESPACE_NAME is set; gates only requests on the
+# forwarded public host (HTTP + WebSocket + preflight). See core/sandbox_access.py.
+from core import sandbox_access as _sandbox_access
+_sandbox_access.register(app)
+
 # ── Azure state injection ────────────────────────────────────────────
 init_azure_state()
 
