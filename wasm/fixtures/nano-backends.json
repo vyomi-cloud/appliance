@@ -160,6 +160,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_bq",
+  "label": "BigQueryStore",
+  "category": "gcp"
+ },
+ {
   "name": "az_blob",
   "label": "AzureBlobStore",
   "category": "azure"

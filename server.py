@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager
+from routes import gcp_resourcemanager, gcp_bigquery
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager]:
+            gcp_resourcemanager, gcp_bigquery]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2738,6 +2738,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for repo_name, repo in gcp_ar.get("repositories", {}).items():
         if isinstance(repo, dict):
             add("gcp", "artifactregistry", "repository", repo_name, repo)
+
+    gcp_bq = _cloudsim_service_state(space, "gcp_bigquery")
+    for ds_key, ds in gcp_bq.get("datasets", {}).items():
+        if isinstance(ds, dict):
+            add("gcp", "bigquery", "dataset", ds_key, {"name": ds.get("id", ds_key), "location": ds.get("location"), "createTime": ds.get("creationTime")})
 
     gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
@@ -23470,6 +23475,7 @@ def api_runtime_host_distribution():
         ("gcp_kms", "keys", False),
         ("gcp_firestore", "databases", False),
         ("gcp_artifactregistry", "repositories", False),
+        ("gcp_bigquery", "datasets", False),
     ]
     # Azure ARM stores everything keyed by the full resourceId at the
     # top level of the service_state — values are themselves resources

@@ -84,6 +84,10 @@
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-tasks</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-bigquery</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

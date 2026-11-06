@@ -101,7 +101,7 @@ const CORES = [
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_cloudtasks_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_cloudtasks_core.py", "gcp_bigquery_core.py",
   "function_shims.py", "gcp_console_tabs.py", "instance_catalog.py", "nano_triggers.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
@@ -157,6 +157,8 @@ async function bootBackend() {
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
+  // BigQuery's SQL engine (core/gcp_bigquery_core.py) runs on sqlite3, a loadable Pyodide package.
+  try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("sqlite3 load skipped", e); }
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
   py.FS.writeFile("/wasm/backends/__init__.py", "");

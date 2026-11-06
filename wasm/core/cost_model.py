@@ -113,6 +113,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.dns": 0.20,            # $0.20 per managed zone per month (first 25 zones; queries billed per use)
     "gcp.logging": 0.50,        # $0.50 per GiB ingested (~1 GiB per sink; first 50 GiB/project/month free)
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
+    "gcp.bigquery": 1.25,   # ~50 GB active storage at $0.02/GB-month (first 10 GB free) + a little on-demand query ($6.25/TiB)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
     "gcp.cloudtasks": 0.40,     # $0.40 per million operations (~1M/month per queue)

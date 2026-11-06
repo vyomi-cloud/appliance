@@ -475,6 +475,13 @@
    "name": "Cloud Run",
    "upstream": "run/v2",
    "status": "pending-release"
+  },
+  {
+   "cloud": "gcp",
+   "key": "bigquery",
+   "name": "BigQuery",
+   "upstream": "bigquery/v2",
+   "status": "pending-release"
   }
  ]
 }

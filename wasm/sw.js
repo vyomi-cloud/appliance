@@ -210,6 +210,7 @@ NANO_RATE.logging = 0.50;   // core/cost_model.py gcp.logging
 NANO_RATE.cloudtasks = 0.40;   // core/cost_model.py gcp.cloudtasks
 NANO_RATE.workflows = 0.10;   // core/cost_model.py gcp.workflows
 NANO_RATE.run = 3.00;   // core/cost_model.py gcp.run
+NANO_RATE.bigquery = 1.25;   // core/cost_model.py gcp.bigquery
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };

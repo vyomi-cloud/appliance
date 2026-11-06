@@ -515,6 +515,23 @@ def _artifactregistry_wizard():
 
 _ARTIFACTREGISTRY_WIZARD = _artifactregistry_wizard()
 
+def _bigquery_wizard():
+    w = _basic_wizard(
+        name_field=_name("Dataset ID", "my_dataset", r"^[A-Za-z0-9_]{1,1024}$",
+                         "Letters, numbers and underscores only"),
+        name_default="my_dataset", region_or_zone=None,
+        extra_basic_fields=[
+            {"name": "location", "label": "Data location", "type": "select", "required": True, "default": "US",
+             "options": [{"value": v, "label": v} for v in
+                         ("US", "EU", "us-central1", "us-east1", "us-west1", "europe-west1", "europe-west4",
+                          "asia-northeast1", "asia-southeast1")]},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ])
+    return w
+
+
+_BIGQUERY_WIZARD = _bigquery_wizard()
+
 _SECRETMANAGER_WIZARD = _basic_wizard(
     name_field=_name("Name", "my-secret",
                      r"^[A-Za-z0-9_-]{1,255}$",
@@ -914,4 +931,5 @@ WIZARDS: dict[str, dict] = {
     "dns":           _DNS_WIZARD,
     "workflows":     _WORKFLOWS_WIZARD,
     "run":           _RUN_WIZARD,
+    "bigquery":      _BIGQUERY_WIZARD,
 }

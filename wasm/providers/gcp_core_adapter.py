@@ -39,6 +39,7 @@ from core import gcp_dns_core as _dns
 from core import gcp_logging_core as _log
 from core import gcp_workflows_core as _wf
 from core import gcp_run_core as _run
+from core import gcp_bigquery_core as _bq
 from core.sql_store import InMemorySqlStore
 from core import gcp_cloudtasks_core as _ct
 
@@ -72,11 +73,12 @@ _STORES = {
     "cloudtasks":    _R["gcp_ct"],
     "workflows":     _R["gcp_wf"],
     "run":           _R["gcp_run"],
+    "bigquery":      _R["gcp_bq"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct, "workflows": _wf, "run": _run,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "monitoring": _mon, "artifactregistry": _ar, "dns": _dns, "logging": _log, "cloudtasks": _ct, "workflows": _wf, "run": _run, "bigquery": _bq,
 }
 
 
@@ -976,6 +978,25 @@ def _resource_op(service, operation, name="", body=None):
             return _ar.console_push_sample(st_, name, body)
         if operation == "GetPushpull":         # Push / pull tab (no OCI registry in Nano: says so)
             return _ar.console_pushpull(st_, name)
+
+    # ---------------- BIGQUERY (datasets + tables/jobs/routines) ----------------
+    if svc == "bigquery":
+        st_ = _STORES[svc]
+        if operation == "List":
+            return {"ok": True, "items": _bq.console_list(st_)}
+        if operation == "Create":
+            return _bq.console_create(st_, PROJ, {**body, "name": rid})
+        if operation == "Get":
+            _, ds = _bq.console_find(st_, name)
+            return {"ok": True, **_bq.console_row(ds)} if ds else {"ok": False, "code": "NotFound", "name": name}
+        if operation == "Delete":
+            return _bq.console_delete(st_, name)
+        if operation in ("ListTables", "ListJobs", "ListRoutines"):
+            return {"ok": True, "items": _bq.console_children(st_, name, operation[4:].lower())}
+        if operation == "CreateSampleTable":
+            return _bq.console_sample(st_, name, "createTable")
+        if operation == "RunSampleQuery":
+            return _bq.console_sample(st_, name, "runQuery")
 
     # ---------------- CLOUD SQL (instances) ----------------
     if svc == "cloudsql":

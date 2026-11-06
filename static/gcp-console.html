@@ -812,6 +812,7 @@ function renderRail(){
     ["STORAGE",       ["storage", "artifactregistry"]],
     ["DATABASES",     ["cloudsql", "firestore", "redis"]],
     ["NETWORKING",    ["vpc", "dns"]],
+    ["ANALYTICS",     ["bigquery"]],
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler", "cloudtasks", "workflows"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
@@ -1388,7 +1389,7 @@ async function renderDetail(main){
     if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it, t));
     if (t === "ctlist") return renderCtListTab(host, svc, STATE.item, item);
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
-    if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
+    if (t === "sublist")  return renderSublistTab(host, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
     // each key/value tab reads the resource under its own name (get<Tab>)
     if (t === "schedkv")  return tabView(svc, STATE.item, item.key.charAt(0).toUpperCase() + item.key.slice(1)).then(it => renderSchedKvTab(host, it, item.fields || []));

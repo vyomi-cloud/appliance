@@ -73,6 +73,7 @@ from core import gcp_logging_core as gcp_logging
 from core import gcp_cloudtasks_core as gcp_ct
 from core import gcp_workflows_core as gcp_wf
 from core import gcp_run_core as gcp_run
+from core import gcp_bigquery_core as gcp_bq
 
 
 def _gcp_service(path):
@@ -98,6 +99,8 @@ def _gcp_service(path):
         return "gcp-logging"
     if path.startswith("/apis/serving.knative.dev/v1/namespaces/"):   # gcloud run (Knative-style API)
         return "gcp-run"
+    if path.startswith(("/bigquery/v2", "/upload/bigquery/v2")):
+        return "gcp-bigquery"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if path.startswith("/v2/projects/") and (
@@ -372,6 +375,7 @@ class AwsWireRouter:
         self.gcp_dns = s.get("gcp_dns") or gcp_dns.CloudDnsStore()   # Cloud DNS zones / policies
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging (entries, sinks, metrics, buckets)
         self.gcp_ct = s.get("gcp_ct") or gcp_ct.CloudTasksStore()   # Cloud Tasks (queues + tasks)
+        self.gcp_bq = s.get("gcp_bq") or gcp_bq.BigQueryStore()
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -818,6 +822,7 @@ class AwsWireRouter:
                 "gcp-cloudtasks": (gcp_ct, self.gcp_ct),
                 "gcp-workflows": (gcp_wf, self.gcp_wf),
                 "gcp-run": (gcp_run, self.gcp_run),
+                "gcp-bigquery": (gcp_bq, self.gcp_bq),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
