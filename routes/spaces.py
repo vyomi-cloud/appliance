@@ -223,6 +223,10 @@ def register(app: FastAPI) -> None:
                     _s.update(_updated)
             except Exception:
                 pass
+        # MARKETPLACE: expire per-simulator trials (no-free-tier spaces are removed), then
+        # stamp each space with its effective tier + trial. Best-effort.
+        from routes import marketplace as _mkt
+        spaces, _tiers = _mkt.sweep_and_annotate(spaces)
         ss = _spaces_state()
         active_id = ss.get("active_space_id", "")
         active_space_dict = ss.get("spaces", {}).get(active_id, {}) if active_id else {}
@@ -230,7 +234,7 @@ def register(app: FastAPI) -> None:
             active_id, active_space_dict = "", {}
         federation_summary = _federation_space_summary()
         return {
-            "spaces": [_space_payload(space) for space in spaces],
+            "spaces": [{**_space_payload(space), **_tiers.get(space.get('space_id'), {})} for space in spaces],
             "count": len(spaces),
             "active_space_id": active_id,
             "active_space": _space_payload(active_space_dict) if active_id else None,

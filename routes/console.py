@@ -129,9 +129,14 @@ def register(app: FastAPI) -> None:
         restriction (unset / all-clouds), allowed_clouds is all three."""
         from core import tier_policy as _tp
         clouds = _tp.profile_clouds()
+        import os as _os
+        # sandbox = enterprise/Codespaces deployment (CODESPACE_NAME) or a cloud-restricted profile:
+        # spaces are pre-provisioned by the admin, so the drawer hides the Marketplace.
+        sandbox = bool((_os.environ.get("CODESPACE_NAME") or "").strip()) or clouds is not None
         return {
             "profile": _tp.active_profile(),
             "restricted": clouds is not None,
+            "sandbox": sandbox,
             "allowed_clouds": sorted(clouds) if clouds else ["aws", "gcp", "azure"],
         }
 
