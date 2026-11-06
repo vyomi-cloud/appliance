@@ -1313,6 +1313,17 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #app-main .u-code, html.vy-embed #app-main .u-code { background: #fff !important; border: 1px solid #e4e4e7 !important; border-radius: 6px !important; color: #18181b !important; }
     html.vy-embed #app-main .u-ibtn, html.vy-embed #app-main .u-ibtn { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; box-shadow: none !important; color: #3f3f46 !important; }
     html.vy-embed #app-main a { color: #000; }
+    /* vy-embed black-white, Health + API reference: strip every brand/status colour (green ticks, blue pills, coloured method badges, brand icons). */
+    html.vy-embed #host-util-card, html.vy-embed #stats-card, html.vy-embed #svc-status-card { filter: grayscale(1); }
+    html.vy-embed #svc-status-card .material-icons, html.vy-embed #host-util-card .material-icons { color: #18181b !important; }
+    html.vy-embed #view-api .usage-tab.active { background: #000 !important; color: #fff !important; border-color: #000 !important; }
+    html.vy-embed #view-api .api-tag-title { border-bottom-color: #000 !important; }
+    html.vy-embed #view-api .api-tag-head .material-icons, html.vy-embed #view-api .api-tag-title .material-icons { color: #000 !important; }
+    html.vy-embed #view-api .api-op, html.vy-embed #view-api .api-detail { border-color: #e4e4e7 !important; }
+    html.vy-embed #view-api .api-op:hover, html.vy-embed #view-api .api-op-wrap.open .api-op, html.vy-embed #view-api .api-op-wrap.open .api-detail { border-color: #000 !important; }
+    html.vy-embed .api-m, html.vy-embed .api-m.get, html.vy-embed .api-m.post, html.vy-embed .api-m.put, html.vy-embed .api-m.delete, html.vy-embed .api-m.patch { background: #f4f4f5 !important; color: #18181b !important; border: 1px solid #d4d4d8; }
+    html.vy-embed #view-api .api-code, html.vy-embed #view-api .api-code.ok, html.vy-embed #view-api .api-code.err, html.vy-embed #view-api .api-req, html.vy-embed #view-api .am-req { color: #18181b !important; }
+    html.vy-embed #view-api .api-code, html.vy-embed #view-api .api-code.ok, html.vy-embed #view-api .api-code.err { background: #f4f4f5 !important; border: 1px solid #d4d4d8; }
     html.vy-embed #app-main .kct-open, html.vy-embed #app-main .kct a, html.vy-embed #app-main .u-card a { color: #000 !important; }
     html.vy-embed #app-main .stat-card .stat-actions button { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; background: #fff !important; color: #18181b !important; }
   </style>
@@ -3856,7 +3867,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // v2.0.5: gray-scale palette across the donut wheels. AWS = darkest,
     // GCP = mid, Azure = lightest — clear contrast steps along the
     // black→gray ramp. Replaces brand colors that competed visually.
-    const PROV_PALETTE = { aws: '#60a5fa', gcp: '#a78bfa', azure: '#22d3ee' };
+    const PROV_PALETTE = document.documentElement.classList.contains('vy-embed')
+      ? { aws: '#18181b', gcp: '#71717a', azure: '#d4d4d8' }      // black & white drawer theme
+      : { aws: '#60a5fa', gcp: '#a78bfa', azure: '#22d3ee' };
     const PROV_LABEL   = { aws: 'AWS',     gcp: 'GCP',     azure: 'Azure' };
     // Per-VM rough averages — a real EC2/GCE/Az VM in our LXD-backed
     // setup averages a small instance type. Will be replaced with
