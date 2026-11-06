@@ -58,7 +58,6 @@
         ? "Local tunnel detected on this machine: fastest, and traffic stays private. Keep this Nano tab open."
         : (o.note || "Start the tunnel (bottom bar) to reach this browser tab from your CLI or SDK. Works from anywhere.");
       body.appendChild(window.vyCodeTabs({ note: note, accent: o.accent, tabs: o.build(ep) }));
-      // Both endpoints, always visible: the local URL alone is not enough (other machines, CI, containers need the Cloudflare one).
       var eps = document.createElement("div"); eps.style.cssText = "margin-top:10px;display:flex;flex-direction:column;gap:6px";
       function epRow(label, url, active, hint) {
         var r = document.createElement("div");
@@ -69,8 +68,10 @@
         c.onclick = function () { try { navigator.clipboard.writeText(url); c.textContent = "Copied"; setTimeout(function () { c.textContent = "Copy"; }, 1200); } catch (_) {} };
         r.appendChild(l); r.appendChild(u); r.appendChild(c); return r;
       }
-      eps.appendChild(epRow("Cloudflare", cloudEp(), sel === "cloud", "Works from anywhere: other machines, CI, containers"));
-      eps.appendChild(epRow("Local tunnel", LOCAL_EP().replace(/\/$/, ""), sel === "local", local ? "Fastest, private, this machine only" : "Not detected: run vyomi-tunnel on this machine"));
+      // Only the selected tunnel's URL: the toggle above picks which one is shown.
+      eps.appendChild(sel === "local"
+        ? epRow("Local tunnel", LOCAL_EP().replace(/\/$/, ""), true, "Fastest, private, this machine only")
+        : epRow("Cloudflare", cloudEp(), true, "Works from anywhere: other machines, CI, containers"));
       body.appendChild(eps);
     }
     function tick() {
