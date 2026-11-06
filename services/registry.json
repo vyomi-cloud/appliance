@@ -468,6 +468,13 @@
    "name": "Event Hubs",
    "upstream": "eventhub",
    "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "applicationinsights",
+   "name": "Application Insights",
+   "upstream": "applicationinsights",
+   "status": "pending-release"
   }
  ]
 }

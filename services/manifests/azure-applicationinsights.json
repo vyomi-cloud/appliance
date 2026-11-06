@@ -1,0 +1,42 @@
+{
+  "cloud": "azure",
+  "key": "applicationinsights",
+  "name": "Application Insights",
+  "upstream": "applicationinsights",
+  "issue": 80,
+  "core": "core/azure_applicationinsights_core.py",
+  "operations": [
+    "Components_CreateOrUpdate",
+    "Components_Get",
+    "Components_List",
+    "Components_ListByResourceGroup",
+    "Components_UpdateTags",
+    "Components_Delete",
+    "Components_Purge",
+    "Components_GetPurgeStatus",
+    "APIKeys_Create",
+    "APIKeys_Get",
+    "APIKeys_List",
+    "APIKeys_Delete",
+    "ComponentCurrentBillingFeatures_Get",
+    "ComponentCurrentBillingFeatures_Update",
+    "WebTests_CreateOrUpdate",
+    "WebTests_Get",
+    "WebTests_List",
+    "WebTests_ListByResourceGroup",
+    "WebTests_ListByComponent",
+    "WebTests_UpdateTags",
+    "WebTests_Delete"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-azure-applicationinsights",
+    "offline-sdk-go-azure-applicationinsights",
+    "offline-cli-azure-applicationinsights",
+    "offline-ui-azure-applicationinsights",
+    "nano-ui-azure-applicationinsights"
+  ],
+  "status": "ready"
+}
