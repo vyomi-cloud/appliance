@@ -25164,6 +25164,9 @@ def _migrate_dynamodb_local_once():
 # Booster pack: headless guard (404 JSON for UI paths when booster mode is on). Added before the
 # /_wire rewrite so the rewrite stays outermost and `/_wire/ui` is blocked as `/ui`.
 app.add_middleware(_booster.HeadlessMiddleware)
+# Booster ROLE (VYOMI_ROLE=booster): nothing is served without a valid signed session token; Pro = one cloud; refuses all after session_end.
+from core import booster_session as _booster_session
+app.add_middleware(_booster_session.SessionMiddleware)
 
 # v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
 try:
