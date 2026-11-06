@@ -457,6 +457,14 @@ def compute(method: str, native: str, query: dict, body: bytes, classic: bool = 
                     _insert_gates(payload)
                 except HTTPException as exc:
                     return _http_error(exc)
+                try:   # booster: ZONE_RESOURCE_POOL_EXHAUSTED (503) before any record exists
+                    import server as _s
+                    _s._booster_capacity_precheck("gcp", str(payload.get("machineType") or "").rsplit("/", 1)[-1], 1,
+                                                  "projects/%s/zones/%s" % (target[0], target[1]))
+                except Exception as exc:
+                    if exc.__class__.__name__ != "BoosterCapacityError":
+                        raise
+                    return _json_out(exc.status, _s._booster_gcp_error_body(exc))
     rec = prev = None
     full = ""
     if target and target[3] != "insert":

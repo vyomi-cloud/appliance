@@ -8197,6 +8197,30 @@ def _docker_private_key_pem(instance: dict) -> bytes | None:
         return None
 
 
+def _docker_instance_memory_mb(instance: dict) -> int:
+    """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the booster cap)."""
+    try:
+        return int(instance.get("memory_mb") or instance.get("memory") or 1024) or 1024
+    except (TypeError, ValueError):
+        return 1024
+
+
+def _booster_capacity_precheck(cloud: str, instance_type: str = "", count: int = 1, zone: str = "-") -> None:
+    """Booster mode: raise core.booster.BoosterCapacityError BEFORE any instance record is created if `count`
+    instances would exceed the 70% compute share (same memory the Docker start will allocate). No-op otherwise."""
+    from core import booster as _booster
+    mem = _docker_instance_memory_mb({"instance_type": instance_type, "provider": cloud})
+    _booster.can_allocate("compute", mem * max(1, int(count or 1)), cloud=cloud, zone=zone)
+
+
+def _booster_gcp_error_body(exc) -> dict:
+    return {"error": {"code": exc.status, "message": exc.message,
+                      "errors": [{"message": exc.message, "domain": "global", "reason": "zoneResourcePoolExhausted"}],
+                      "status": "UNAVAILABLE",
+                      "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                                   "reason": exc.code, "domain": "compute.googleapis.com"}]}}
+
+
 def _docker_instance_obj(instance: dict):
     """Build a core.compute.Instance from the server instance dict."""
     from core.compute import Instance, ensure_instance_ssh_key
@@ -8213,10 +8237,7 @@ def _docker_instance_obj(instance: dict):
         cpus = float(instance.get("vcpus") or instance.get("cpus") or 1) or 1.0
     except (TypeError, ValueError):
         cpus = 1.0
-    try:
-        mem = int(instance.get("memory_mb") or instance.get("memory") or 1024) or 1024
-    except (TypeError, ValueError):
-        mem = 1024
+    mem = _docker_instance_memory_mb(instance)
     _ssh_port = instance.get("ssh_host_port")
     try:
         _ssh_port = int(_ssh_port) if str(_ssh_port or "").strip().isdigit() else None
@@ -13679,6 +13700,12 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     count = max(min_count, max_count)
     image_id = str(params.get("ImageId", "ami-amzn2023"))
     instance_type = str(params.get("InstanceType", "t3.micro"))
+    try:   # booster: the real EC2 capacity error, synchronously, before any record exists
+        _booster_capacity_precheck("aws", instance_type, count, str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "-"))))
+    except Exception as _bexc:
+        if _bexc.__class__.__name__ != "BoosterCapacityError":
+            raise
+        return _ec2_error_response(_bexc.code, _bexc.message, _bexc.status)
     key_name = str(params.get("KeyName", ""))
     subnet_id = str(params.get("SubnetId", params.get("Placement.SubnetId", "")))
     az = str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "us-east-1a")))
@@ -14771,6 +14798,12 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
     )
     _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
     _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
+    try:
+        _booster_capacity_precheck("gcp", str(getattr(req, "machineType", "") or ""), 1, f"projects/{project}/zones/{zone}")
+    except Exception as _bexc:
+        if _bexc.__class__.__name__ != "BoosterCapacityError":
+            raise
+        return JSONResponse(status_code=_bexc.status, content=_booster_gcp_error_body(_bexc))
     instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
     instance["runtime_bundle_id"] = _cloudsim_runtime_bundle("gcp_compute").get("id", "")
     instance["runtime_bundle_name"] = _cloudsim_runtime_bundle("gcp_compute").get("name", "")
