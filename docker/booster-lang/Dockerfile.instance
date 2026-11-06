@@ -1,0 +1,20 @@
+# Booster instance variant: all-languages toolchain + the sshd/tini entrypoint of vyomi/instance, so an
+# EC2/GCE/VM instance created with toolchain=all is SSH-able with every language preinstalled.
+# Build from the REPO ROOT (needs packaging/instance/entrypoint.sh):
+#   docker/booster-lang/build.sh vyomi/booster-lang:base
+#   docker build -f docker/booster-lang/Dockerfile.instance -t vyomi/booster-lang:latest .
+ARG BASE=vyomi/booster-lang:base
+FROM ${BASE}
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server sudo iproute2 tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && (id ubuntu >/dev/null 2>&1 || useradd -m -s /bin/bash ubuntu) \
+    && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu && chmod 0440 /etc/sudoers.d/ubuntu \
+    && mkdir -p /run/sshd /etc/ssh/sshd_config.d /work && chown ubuntu /work \
+    && printf 'PasswordAuthentication no\nPubkeyAuthentication yes\nPermitRootLogin no\n' > /etc/ssh/sshd_config.d/vyomi.conf \
+    && printf 'export JAVA_HOME=/opt/java/current DOTNET_ROOT=/opt/dotnet GOROOT=/opt/go DOTNET_CLI_TELEMETRY_OPTOUT=1\nexport PATH=%s\n' \
+         "$PATH" > /etc/profile.d/booster-lang.sh
+COPY packaging/instance/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+EXPOSE 22
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

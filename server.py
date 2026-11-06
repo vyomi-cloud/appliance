@@ -8317,8 +8317,10 @@ def _docker_instance_obj(instance: dict):
         pubkey, _ = ensure_instance_ssh_key()
     except Exception:
         pubkey = None
+    from core.compute.backend import booster_toolchain_image
     image = (
-        str(instance.get("docker_image") or "").strip()
+        booster_toolchain_image(instance)   # booster role + toolchain=all only; None otherwise
+        or str(instance.get("docker_image") or "").strip()
         or os.environ.get("VYOMI_INSTANCE_IMAGE")
         or "vyomi/instance:ubuntu-24.04"
     )

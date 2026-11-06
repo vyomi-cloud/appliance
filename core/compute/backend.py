@@ -24,6 +24,31 @@ from pathlib import Path
 DEFAULT_INSTANCE_IMAGE = os.environ.get("VYOMI_INSTANCE_IMAGE", "vyomi/instance:ubuntu-24.04")
 
 
+BOOSTER_LANG_IMAGE_DEFAULT = "vyomi/booster-lang:latest"
+
+
+def booster_toolchain_image(meta: dict | None) -> str | None:
+    """Booster-only per-instance toolchain selection (docs/architecture/v4.0/BOOSTER-LANGUAGES.md, option 1).
+
+    Returns the all-languages image (env VYOMI_BOOSTER_LANG_IMAGE, default vyomi/booster-lang:latest) when
+    VYOMI_ROLE=booster AND the instance asks for it via `toolchain=all` (instance field, label, or tag).
+    Otherwise None -> caller keeps the normal image, so non-booster behaviour is unchanged."""
+    if (os.environ.get("VYOMI_ROLE") or "").strip().lower() != "booster" or not isinstance(meta, dict):
+        return None
+    want = meta.get("toolchain")
+    for bag in (meta.get("labels"), meta.get("tags")):
+        if want:
+            break
+        if isinstance(bag, dict):
+            want = bag.get("toolchain")
+        elif isinstance(bag, list):
+            want = next((t.get("Value") or t.get("value") for t in bag
+                         if isinstance(t, dict) and (t.get("Key") or t.get("key")) == "toolchain"), None)
+    if str(want or "").strip().lower() != "all":
+        return None
+    return os.environ.get("VYOMI_BOOSTER_LANG_IMAGE") or BOOSTER_LANG_IMAGE_DEFAULT
+
+
 @dataclass
 class Instance:
     """Provider-neutral instance record (server.py passes a dict today; only the

@@ -73,4 +73,9 @@ image from `VYOMI_INSTANCE_IMAGE` or per-instance AMI). Three options, in order 
    toolchains, but unverified).
 3. **Inner Docker:** instances are privileged DinD-capable; `docker run vyomi/booster-lang` inside the instance works
    but pulls the image per instance store.
-None of the three is wired into the backend yet (that file belongs to another workstream); only the image is built.
+**Wired: option 1.** `core/compute/backend.py::booster_toolchain_image()`, called from `server._docker_instance_obj`:
+when `VYOMI_ROLE=booster` and the instance carries `toolchain=all` (instance field, label, or EC2-style tag), the instance
+image becomes `VYOMI_BOOSTER_LANG_IMAGE` (default `vyomi/booster-lang:latest`). Non-booster and booster-without-toolchain are
+unchanged. The image must contain sshd + the instance entrypoint, so build the derived variant
+(`docker/booster-lang/Dockerfile.instance`, build from the repo root) and tag it as that image. Test:
+`tests/conformance/test_booster_toolchain.py`.
