@@ -4,6 +4,7 @@
   <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
   <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
+  <script src="booster-link.js"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1873,6 +1874,7 @@
           </label>
           <!-- the per-cloud counts (read by the save chip); shown through the options above -->
           <span id="prov-filter" hidden><span id="pf-count-all">0</span><span id="pf-count-aws">0</span><span id="pf-count-gcp">0</span><span id="pf-count-azure">0</span></span>
+          <button class="btn-secondary" type="button" id="btn-boosters" onclick="VyomiBooster.openPairDialog()" style="margin-right:8px">Boosters</button>
           <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
           <span class="material-icons">add</span>Create Space
         </button>
@@ -2066,6 +2068,12 @@
         <div class="field">
           <label for="csm-region">Region (optional)</label>
           <input id="csm-region" type="text" placeholder="defaults: us-east-1 / us-central1 / eastus" autocomplete="off">
+        </div>
+
+        <div class="field" id="csm-home-field" style="display:none">
+          <label for="csm-home">Home</label>
+          <select id="csm-home"></select>
+          <div style="font-size:12px;opacity:.7;margin-top:4px">Fixed at creation. Booster-homed spaces run on your booster and are only available while it is reachable.</div>
         </div>
 
         <div class="modal-error" id="csm-error"></div>
@@ -3380,6 +3388,7 @@
         if (meta) { const dot = meta.querySelector('.dot'); if (dot && dot.nextSibling) dot.nextSibling.textContent = n + ' resource' + (n === 1 ? '' : 's'); }
       });
     }
+    window.addEventListener('vyomi-booster-state', () => { if (window.loadSpaces) loadSpaces(); });
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
       if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }  // no leaked timers on re-render
@@ -3387,6 +3396,7 @@
         const r = await fetch('/api/spaces');
         const d = await r.json();
         const spaces = d.spaces || [];
+        window._vySpaces = {}; spaces.forEach(s => { window._vySpaces[s.space_id] = s; });
         const active = d.active_space_id;
         // Update pill counts (per provider + total)
         const counts = { aws: 0, gcp: 0, azure: 0, total: spaces.length };
@@ -3467,6 +3477,7 @@
               <div class="space-row">
                 <span class="space-logo ${ provider }" title="${ ({aws: "AWS", gcp: "Google Cloud", azure: "Microsoft Azure"})[provider] || provider }">${ SPACE_LOGOS[provider] || provider }</span>
                 <span class="space-name">${ s.name || s.space_id }</span>
+                ${ window.VyomiBooster && (VyomiBooster.list().length || s.home) ? VyomiBooster.badgeHtml(s) : '' }
                 ${ _statusPillHtml(s, isActive) }
                 <button type="button" class="space-star ${ s.space_id === _defaultSpace() ? 'on' : '' }" title="${ s.space_id === _defaultSpace() ? 'Default space — Vyomi opens here' : 'Make this the default space' }" aria-label="${ s.space_id === _defaultSpace() ? 'Default space' : 'Make default space' }" aria-pressed="${ s.space_id === _defaultSpace() }" data-star="${ s.space_id }" onclick="event.preventDefault();event.stopPropagation();setDefaultSpace('${ s.space_id }')"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
               </div>
@@ -3571,6 +3582,7 @@
         return;
       }
       try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', spaceId); } catch (_) {}
+      try { const sp = (window._vySpaces || {})[spaceId]; if (sp && window.VyomiBooster) VyomiBooster.setActive(sp); } catch (_) {}
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
@@ -3587,8 +3599,16 @@
       document.getElementById('csm-error').classList.remove('show');
       document.getElementById('csm-submit').disabled = false;
       document.getElementById('csm-submit').textContent = 'Create & open console';
+      _fillHomePicker();
       el.classList.add('open');
       setTimeout(() => document.getElementById('csm-name').focus(), 50);
+    }
+    // Booster pack: "Home" choice, shown only when a booster is paired.
+    function _fillHomePicker() {
+      const f = document.getElementById('csm-home-field'), sel = document.getElementById('csm-home');
+      const opts = (window.VyomiBooster && VyomiBooster.homeOptions()) || [];
+      f.style.display = opts.length ? '' : 'none';
+      sel.innerHTML = '<option value="browser">This browser</option>' + opts.map(o => '<option value="' + o.id + '">Booster: ' + o.name.replace(/[<&"]/g, '') + '</option>').join('');
     }
     function closeCreateSpaceModal() {
       document.getElementById('create-space-modal').classList.remove('open');
@@ -3627,6 +3647,8 @@
       try {
         const payload = { provider: provider, name: name };
         if (region) payload.region = region;
+        const home = window.VyomiBooster && VyomiBooster.homePayload(document.getElementById('csm-home').value);
+        if (home) payload.home = home;
         const r = await fetch('/api/spaces', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -1409,6 +1409,9 @@ self.addEventListener("fetch", (event) => {
         if (!["aws", "gcp", "azure"].includes(provider))
           return json({ ok: false, detail: { reason: "provider must be aws, gcp, or azure" } }, 400);
         const s = mkSpace(provider, (body.name || "").trim(), (body.region || "").trim());
+        // Booster pack: the space's home is fixed at creation (absent = this browser).
+        if (body.home && body.home.type === "booster" && body.home.booster_id)
+          s.home = { type: "booster", booster_id: String(body.home.booster_id), booster_name: String(body.home.booster_name || body.home.booster_id) };
         try { await spacePut(s); await metaPut("active", s.space_id); }
         catch (e) { return json({ ok: false, detail: { reason: "could not persist space: " + e } }, 500); }
         nanoWsPush();   // fire-and-forget: keep the synced workspace current (no-op if signed out)

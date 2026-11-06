@@ -26,7 +26,7 @@ const CLOUDS = ["aws", "gcp", "azure"].filter((c) => (!only || c === only) && ex
 // Content-hash the boot scripts so a fixed nano-boot.js / nano-kernel.js always reaches an open
 // browser (a fixed ?v= let a broken boot script linger in caches).
 const _bootHash = (f) => { try { return createHash("sha256").update(readFileSync(new URL(`../wasm/${f}`, import.meta.url))).digest("hex").slice(0, 12); } catch { return "0"; } };
-const NANO_HEAD = `<script type="module" src="../../nano-boot.js?v=${_bootHash("nano-boot.js")}"></script>\n`;
+const NANO_HEAD = `<script src="../../booster-link.js?v=${_bootHash("booster-link.js")}"></script>\n<script type="module" src="../../nano-boot.js?v=${_bootHash("nano-boot.js")}"></script>\n`;
 const NANO_BODY = `<script src="../../nano-kernel.js?v=${_bootHash("nano-kernel.js")}"></script>\n<script>window.__nk = window.NanoKernel && NanoKernel.start("Vyomi console");</script>\n`;
 // Nano chrome the legacy consoles carried and users see today: the bottom app bar (Spaces / Health / Knowledge /
 // SDK & CLI / API, back to clouds.html) and the "How Nano <cloud> works" video banner (mounted on each Home by
