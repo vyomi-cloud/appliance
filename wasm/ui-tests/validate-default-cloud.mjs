@@ -18,9 +18,9 @@ const cov = await p.evaluate(() => { const g = document.getElementById("spaces-g
 check("the old Spaces page is not visible behind the dialog", cov);
 await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await sleep(300);
 check("Esc / backdrop do not close it", await p.locator("#vy-pick").isVisible());
-// Open (or, on an empty Nano, create) a GCP space from the dialog -> it becomes the default
+// Open (or, on an empty Nano, add GCP from the Marketplace) a GCP space from the dialog -> it becomes the default
 if ((await pfr.locator('.space-card[data-provider="gcp"]').count()) > 0) await pfr.locator('.space-card[data-provider="gcp"]').first().click();
-else { await pfr.getByText("Create Space").first().click(); await pfr.locator("#csm-name").fill("GCP first"); await pfr.locator('input[name="csm-provider"][value="gcp"]').check({ force: true }); await pfr.locator("#csm-submit").click(); }
+else { await pfr.getByText("Browse the Marketplace").first().click(); await pfr.locator('[data-add="gcp"]').click(); await pfr.locator('.space-card[data-provider="gcp"]').first().click(); }
 await p.waitForURL(/gcp-console\.html/, { timeout: 60000 });
 check("opening/creating a space goes to its console", /gcp-console\.html/.test(p.url()), p.url());
 const gcpId = await KEY();

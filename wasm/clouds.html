@@ -1811,6 +1811,74 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   </div>
   </div><!-- /view-workspace (Dashboard) -->
 
+<script>
+    // ══ Marketplace: the onboarded simulator platforms. ONE registry — add a 4th simulator here (offline gets
+    //    the same list, with live licence state, from /api/marketplace/simulators). ═════════════════════════
+    const VY_SIMULATORS = [
+      { id: 'aws',   name: 'AWS',          free_tier: true },
+      { id: 'gcp',   name: 'Google Cloud', free_tier: true },
+      { id: 'azure', name: 'Azure',        free_tier: true },
+    ];
+    // Prices = the portal pricing page (Pro $19 / month, Max $29 / month; USD, billed in INR at checkout).
+    const VY_OFFERS = { pro: { price: 19, per: '/ month' }, max: { price: 29, per: '/ month' } };
+    const VY_PORTAL = 'https://vyomi.cloud';
+    const VY_NANO = /\.html$/.test(location.pathname);       // Nano serves clouds.html; the offline appliance serves /clouds
+    const VY_EMBED = document.documentElement.classList.contains('vy-embed');
+    let _vySandbox = false;                                  // enterprise / Codespaces: spaces are pre-provisioned, no Marketplace
+    fetch('/api/runtime/profile', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => {
+      _vySandbox = !!(j && (j.sandbox || j.restricted));
+      if (_vySandbox) { const v = document.getElementById('view-marketplace'); if (v) v.remove(); if (window.loadSpaces) loadSpaces(); }
+    }).catch(() => {});
+</script>
+<style id="vy-mkt-css">
+  /* ── Marketplace view + space tier banner (black & white) ── */
+  #mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-top: 4px; }
+  .mk-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #e4e4e7; border-radius: 10px; color: #18181b; transition: border-color .12s; }
+  .mk-card:hover, .mk-card:focus-within { border-color: #000; }
+  .mk-card.off { opacity: .92; }
+  .mk-main { display: flex; flex-direction: column; gap: 14px; width: 100%; padding: 18px 18px 14px; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 10px 10px 0 0; }
+  .mk-main:focus-visible { outline: 2px solid #000; outline-offset: -3px; }
+  .mk-main:disabled { cursor: not-allowed; }
+  .mk-head { display: flex; align-items: center; gap: 12px; padding-right: 52px; }
+  .mk-logo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: 1px solid #e4e4e7; border-radius: 10px; background: #fff; }
+  .mk-logo svg { width: 28px; height: 22px; filter: grayscale(1); }
+  .mk-logo.aws svg path[fill="#fff"] { fill: #232f3e; }
+  .mk-name { font-size: 17px; font-weight: 700; letter-spacing: -.01em; color: #000; line-height: 1.2; }
+  .mk-sub { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 500; color: #71717a; }
+  .mk-free { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; line-height: 1.35; }
+  .mk-free b { display: block; font-size: 14.5px; letter-spacing: -.005em; }
+  .mk-free small { display: block; font-size: 12px; opacity: .8; }
+  .mk-free svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-free.yes { background: #000; color: #fff; }
+  .mk-free.no { background: #fff; color: #000; border: 1.5px dashed #000; }
+  .mk-cta { font-size: 13px; font-weight: 600; color: #000; display: inline-flex; align-items: center; gap: 6px; }
+  .mk-cta svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid #f0f0f2; }
+  .mk-offer { flex: 1 1 120px; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 10px; border: 1px solid #000; border-radius: 8px; background: #fff; color: #000; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; line-height: 1.25; }
+  .mk-offer small { font-size: 11.5px; font-weight: 500; opacity: .75; }
+  .mk-offer:hover, .mk-offer:focus-visible { background: #000; color: #fff; outline: none; }
+  .mk-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: #000; color: #fff; border: 1px solid #000; }
+  .mk-pill svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-pill.ghost { background: #fff; color: #000; }
+  .mk-note { font-size: 12px; color: #71717a; }
+  /* diagonal corner ribbon = the tier you currently get */
+  .mk-ribbon { position: absolute; top: 0; right: 0; width: 92px; height: 92px; overflow: hidden; pointer-events: none; z-index: 2; border-radius: 0 10px 0 0; }
+  .mk-ribbon span { position: absolute; top: 16px; right: -30px; width: 120px; padding: 4px 0; text-align: center; transform: rotate(45deg); font-size: 11.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; background: #000; color: #fff; }
+  .mk-ribbon.free span { background: #fff; color: #000; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; padding: 3px 0; }
+  .mk-empty { padding: 28px 0; color: #71717a; font-size: 14px; }
+  /* Spaces: tier banner along the bottom of each space card */
+  .sp-tier { display: flex; align-items: center; gap: 8px; margin: 12px -16px -14px; padding: 8px 16px; border-top: 1px solid #e4e4e7; font-size: 12px; font-weight: 700; letter-spacing: .02em; background: #fff; color: #000; border-radius: 0 0 8px 8px; }
+  .sp-tier.t-paid { background: #000; color: #fff; border-top-color: #000; }
+  .sp-tier.t-trial { background: #000; color: #fff; border-top-color: #000; }
+  .sp-tier .st-act { margin-left: auto; padding: 3px 10px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; text-decoration: none; }
+  .sp-tier .st-act:hover { background: #000; color: #fff; border-color: #000; }
+  .sp-tier.t-paid .st-act:hover, .sp-tier.t-trial .st-act:hover { background: #fff; color: #000; border-color: #fff; }
+  .empty-spaces .es-btn { display: inline-flex; margin-top: 12px; padding: 8px 18px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  html.vy-embed .space-logo svg { filter: grayscale(1); }
+  html.vy-embed #app-main .space-card { overflow: hidden; }
+  html.vy-embed #app-main #mkt-card .sc-desc { margin-bottom: 16px; }
+</style>
+
   <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
   <div id="view-spaces">
   <div class="container">
@@ -1875,9 +1943,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           </label>
           <!-- the per-cloud counts (read by the save chip); shown through the options above -->
           <span id="prov-filter" hidden><span id="pf-count-all">0</span><span id="pf-count-aws">0</span><span id="pf-count-gcp">0</span><span id="pf-count-azure">0</span></span>
-          <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
-          <span class="material-icons">add</span>Create Space
-        </button>
         </div>
       </div>
       <!-- Description + actions, right above the space cards -->
@@ -1890,6 +1955,18 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
   </div>
   </div><!-- /view-spaces -->
+
+  <!-- ── Marketplace view — the onboarded simulator platforms (rendered from VY_SIMULATORS / the API) ── -->
+  <div id="view-marketplace" hidden>
+  <div class="container">
+    <div class="surface-card" id="mkt-card">
+      <div class="sc-head"><div class="sc-title"><h2><span class="material-icons">apps</span>Simulators</h2></div></div>
+      <p class="sc-desc">Pick a simulator to add it to your Spaces. Each one gets a single space; you can open it from Spaces any time.</p>
+      <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
+    </div>
+  </div>
+  </div><!-- /view-marketplace -->
+
 
     <!-- ── Overlays (outside the views, so they work from any tab) ────── -->
     <!-- ── Connect external apps — floating pill + collapsible pop-up (moved out
@@ -2018,63 +2095,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <div class="cl-actions">
           <button class="cl-cancel" type="button" onclick="closeClModal()">Stay here</button>
           <a class="cl-upgrade" href="/pricing">Upgrade plan &rarr;</a>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Create Space modal ──────────────────────────────────────── -->
-    <div class="modal-backdrop" id="create-space-modal" onclick="onModalBackdropClick(event)">
-      <div class="modal" role="dialog" aria-labelledby="csm-title">
-        <h3 id="csm-title">Create a new space</h3>
-        <p class="modal-sub">A space is a single-cloud project with its own services, IAM, and state.</p>
-
-        <div class="field">
-          <label for="csm-name">Space name</label>
-          <input id="csm-name" type="text" placeholder="e.g. dev-orders, prod-analytics" autocomplete="off">
-        </div>
-
-        <div class="field">
-          <label>Cloud</label>
-          <div class="provider-picker">
-            <label>
-              <input type="radio" name="csm-provider" value="aws" checked>
-              <svg class="provider-glyph" viewBox="0 0 24 24">
-                <path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" fill="#ff9900"/>
-                <path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/>
-              </svg>
-              <span>AWS</span>
-            </label>
-            <label>
-              <input type="radio" name="csm-provider" value="gcp">
-              <svg class="provider-glyph" viewBox="0 0 24 24">
-                <circle cx="12" cy="7" r="2.4" fill="#fbbc04"/>
-                <circle cx="17" cy="12" r="2.4" fill="#34a853"/>
-                <circle cx="12" cy="17" r="2.4" fill="#ea4335"/>
-                <circle cx="7"  cy="12" r="2.4" fill="#4285f4"/>
-              </svg>
-              <span>GCP</span>
-            </label>
-            <label>
-              <input type="radio" name="csm-provider" value="azure">
-              <svg class="provider-glyph" viewBox="0 0 24 24">
-                <path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/>
-                <path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#0078d4"/>
-              </svg>
-              <span>Azure</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="csm-region">Region (optional)</label>
-          <input id="csm-region" type="text" placeholder="defaults: us-east-1 / us-central1 / eastus" autocomplete="off">
-        </div>
-
-        <div class="modal-error" id="csm-error"></div>
-
-        <div class="modal-actions">
-          <button class="btn-secondary" type="button" onclick="closeCreateSpaceModal()">Cancel</button>
-          <button class="btn-primary" type="button" id="csm-submit" onclick="submitCreateSpace()">Create &amp; open console</button>
         </div>
       </div>
     </div>
@@ -2771,9 +2791,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     const SPACE_LOGOS = {"aws": "<svg viewBox=\"0 0 304 182\" role=\"img\" aria-label=\"AWS\"><path fill=\"#fff\" d=\"M86.4 66.4c0 3.7.4 6.7 1.1 8.9.8 2.2 1.8 4.6 3.2 7.2.5.8.7 1.6.7 2.3 0 1-.6 2-1.9 3l-6.3 4.2c-.9.6-1.8.9-2.6.9-1 0-2-.5-3-1.4-1.4-1.5-2.6-3.1-3.6-4.7-1-1.7-2-3.6-3.1-5.9-7.8 9.2-17.6 13.8-29.4 13.8-8.4 0-15.1-2.4-20-7.2-4.9-4.8-7.4-11.2-7.4-19.2 0-8.5 3-15.4 9.1-20.6 6.1-5.2 14.2-7.8 24.5-7.8 3.4 0 6.9.3 10.6.8 3.7.5 7.5 1.3 11.5 2.2v-7.3c0-7.6-1.6-12.9-4.7-16-3.2-3.1-8.6-4.6-16.3-4.6-3.5 0-7.1.4-10.8 1.3-3.7.9-7.3 2-10.8 3.4-1.6.7-2.8 1.1-3.5 1.3-.7.2-1.2.3-1.6.3-1.4 0-2.1-1-2.1-3.1v-4.9c0-1.6.2-2.8.7-3.5.5-.7 1.4-1.4 2.8-2.1 3.5-1.8 7.7-3.3 12.6-4.5 4.9-1.3 10.1-1.9 15.6-1.9 11.9 0 20.6 2.7 26.2 8.1 5.5 5.4 8.3 13.6 8.3 24.6v32.4zM45.8 81.6c3.3 0 6.7-.6 10.3-1.8 3.6-1.2 6.8-3.4 9.5-6.4 1.6-1.9 2.8-4 3.4-6.4.6-2.4 1-5.3 1-8.7v-4.2c-2.9-.7-6-1.3-9.2-1.7-3.2-.4-6.3-.6-9.4-.6-6.7 0-11.6 1.3-14.9 4-3.3 2.7-4.9 6.5-4.9 11.5 0 4.7 1.2 8.2 3.7 10.6 2.4 2.5 5.9 3.7 10.5 3.7zm80.3 10.8c-1.8 0-3-.3-3.8-1-.8-.6-1.5-2-2.1-3.9L96.7 10.2c-.6-2-.9-3.3-.9-4 0-1.6.8-2.5 2.4-2.5h9.8c1.9 0 3.2.3 3.9 1 .8.6 1.4 2 2 3.9l16.8 66.2 15.6-66.2c.5-2 1.1-3.3 1.9-3.9.8-.6 2.2-1 4-1h8c1.9 0 3.2.3 4 1 .8.6 1.5 2 1.9 3.9l15.8 67 17.3-67c.6-2 1.3-3.3 2-3.9.8-.6 2.1-1 3.9-1h9.3c1.6 0 2.5.8 2.5 2.5 0 .5-.1 1-.2 1.6-.1.6-.3 1.4-.7 2.5l-24.1 77.3c-.6 2-1.3 3.3-2.1 3.9-.8.6-2.1 1-3.8 1h-8.6c-1.9 0-3.2-.3-4-1-.8-.7-1.5-2-1.9-4L156 23l-15.4 64.4c-.5 2-1.1 3.3-1.9 4-.8.7-2.2 1-4 1h-8.6zm128.5 2.7c-5.2 0-10.4-.6-15.4-1.8-5-1.2-8.9-2.5-11.5-4-1.6-.9-2.7-1.9-3.1-2.8-.4-.9-.6-1.9-.6-2.8v-5.1c0-2.1.8-3.1 2.3-3.1.6 0 1.2.1 1.8.3.6.2 1.5.6 2.5 1 3.4 1.5 7.1 2.7 11 3.5 4 .8 7.9 1.2 11.9 1.2 6.3 0 11.2-1.1 14.6-3.3 3.4-2.2 5.2-5.4 5.2-9.5 0-2.8-.9-5.1-2.7-7-1.8-1.9-5.2-3.6-10.1-5.2L246 52c-7.3-2.3-12.7-5.7-16-10.2-3.3-4.4-5-9.3-5-14.5 0-4.2.9-7.9 2.7-11.1 1.8-3.2 4.2-6 7.2-8.2 3-2.3 6.4-4 10.4-5.2 4-1.2 8.2-1.7 12.6-1.7 2.2 0 4.5.1 6.7.4 2.3.3 4.4.7 6.5 1.1 2 .5 3.9 1 5.7 1.6 1.8.6 3.2 1.2 4.2 1.8 1.4.8 2.4 1.6 3 2.5.6.8.9 1.9.9 3.3v4.7c0 2.1-.8 3.2-2.3 3.2-.8 0-2.1-.4-3.8-1.2-5.7-2.6-12.1-3.9-19.2-3.9-5.7 0-10.2.9-13.3 2.8-3.1 1.9-4.7 4.8-4.7 8.9 0 2.8 1 5.2 3 7.1 2 1.9 5.7 3.8 11 5.5l14.2 4.5c7.2 2.3 12.4 5.5 15.5 9.6 3.1 4.1 4.6 8.8 4.6 14 0 4.3-.9 8.2-2.6 11.6-1.8 3.4-4.2 6.4-7.3 8.8-3.1 2.5-6.8 4.3-11.1 5.6-4.5 1.4-9.2 2.1-14.3 2.1z\"/><path fill=\"#ff9900\" d=\"M273.5 143.7c-32.9 24.3-80.7 37.2-121.8 37.2-57.6 0-109.5-21.3-148.7-56.7-3.1-2.8-.3-6.6 3.4-4.4 42.4 24.6 94.7 39.5 148.8 39.5 36.5 0 76.6-7.6 113.5-23.2 5.5-2.5 10.2 3.6 4.8 7.6z\"/><path fill=\"#ff9900\" d=\"M287.2 128.1c-4.2-5.4-27.8-2.6-38.5-1.3-3.2.4-3.7-2.4-.8-4.5 18.8-13.2 49.7-9.4 53.3-5 3.6 4.5-1 35.4-18.6 50.2-2.7 2.3-5.3 1.1-4.1-1.9 4-9.9 12.9-32.2 8.7-37.5z\"/></svg>", "gcp": "<svg viewBox=\"0 0 32 28\" role=\"img\" aria-label=\"Google Cloud\"><path fill=\"#ea4335\" d=\"M21.85,7.41l1,0,2.85-2.85.14-1.21A12.81,12.81,0,0,0,5,9.6a1.55,1.55,0,0,1,1-.06l5.7-.94s.29-.48.44-.45a7.11,7.11,0,0,1,9.73-.74Z\"/><path fill=\"#4285f4\" d=\"M29.76,9.6a12.84,12.84,0,0,0-3.87-6.24l-4,4A7.11,7.11,0,0,1,24.5,13v.71a3.56,3.56,0,1,1,0,7.12H17.38l-.71.72v4.27l.71.71H24.5A9.26,9.26,0,0,0,29.76,9.6Z\"/><path fill=\"#34a853\" d=\"M10.25,26.49h7.12v-5.7H10.25a3.54,3.54,0,0,1-1.47-.32l-1,.31L4.91,23.63l-.25,1A9.21,9.21,0,0,0,10.25,26.49Z\"/><path fill=\"#fbbc05\" d=\"M10.25,8A9.26,9.26,0,0,0,4.66,24.6l4.13-4.13a3.56,3.56,0,1,1,4.71-4.71l4.13-4.13A9.25,9.25,0,0,0,10.25,8Z\"/></svg>", "azure": "<svg viewBox=\"0 0 96 96\" role=\"img\" aria-label=\"Microsoft Azure\"><defs><linearGradient id=\"sp-az-g0\" x1=\"-1032.172\" x2=\"-1059.213\" y1=\"145.312\" y2=\"65.426\" gradientTransform=\"matrix(1 0 0 -1 1075 158)\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"#114a8b\"/><stop offset=\"1\" stop-color=\"#0669bc\"/></linearGradient><linearGradient id=\"sp-az-g1\" x1=\"-1023.725\" x2=\"-1029.98\" y1=\"108.083\" y2=\"105.968\" gradientTransform=\"matrix(1 0 0 -1 1075 158)\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-opacity=\".3\"/><stop offset=\".071\" stop-opacity=\".2\"/><stop offset=\".321\" stop-opacity=\".1\"/><stop offset=\".623\" stop-opacity=\".05\"/><stop offset=\"1\" stop-opacity=\"0\"/></linearGradient><linearGradient id=\"sp-az-g2\" x1=\"-1027.165\" x2=\"-997.482\" y1=\"147.642\" y2=\"68.561\" gradientTransform=\"matrix(1 0 0 -1 1075 158)\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"#3ccbf4\"/><stop offset=\"1\" stop-color=\"#2892df\"/></linearGradient></defs><path fill=\"url(#sp-az-g0)\" d=\"M33.338 6.544h26.038l-27.03 80.087a4.152 4.152 0 0 1-3.933 2.824H8.149a4.145 4.145 0 0 1-3.928-5.47L29.404 9.368a4.152 4.152 0 0 1 3.934-2.825z\"/><path fill=\"#0078d4\" d=\"M71.175 60.261h-41.29a1.911 1.911 0 0 0-1.305 3.309l26.532 24.764a4.171 4.171 0 0 0 2.846 1.121h23.38z\"/><path fill=\"url(#sp-az-g1)\" d=\"M33.338 6.544a4.118 4.118 0 0 0-3.943 2.879L4.252 83.917a4.14 4.14 0 0 0 3.908 5.538h20.787a4.443 4.443 0 0 0 3.41-2.9l5.014-14.777 17.91 16.705a4.237 4.237 0 0 0 2.666.972H81.24L71.024 60.261l-29.781.007L59.47 6.544z\"/><path fill=\"url(#sp-az-g2)\" d=\"M66.595 9.364a4.145 4.145 0 0 0-3.928-2.82H33.648a4.146 4.146 0 0 1 3.928 2.82l25.184 74.62a4.146 4.146 0 0 1-3.928 5.472h29.02a4.146 4.146 0 0 0 3.927-5.472z\"/></svg>"};
 
     // ── v2.3.0 left nav: view switch (Workspace / Knowledge Center) + collapse ──
-    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc', usage: 'view-usage', api: 'view-api' };
+    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', marketplace: 'view-marketplace', kc: 'view-kc', usage: 'view-usage', api: 'view-api' };
     function showAppView(view) {
       if (!APP_VIEWS[view]) view = 'spaces';
+      if (view === 'marketplace' && window.loadMarketplace) loadMarketplace();
       if (view === 'api' && window.__apiShow) window.__apiShow();   // lazy-load the spec on first open
       Object.keys(APP_VIEWS).forEach(function (k) {
         var el = document.getElementById(APP_VIEWS[k]);
@@ -3064,7 +3085,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (prov && visible.length === 0 && grid.querySelectorAll('.space-card').length > 0) {
         const div = document.createElement('div');
         div.className = 'filter-empty';
-        div.textContent = `No ${prov.toUpperCase()} spaces yet — click + Create Space to make one.`;
+        div.textContent = `No ${prov.toUpperCase()} spaces yet — add one from the Marketplace.`;
         grid.appendChild(div);
       }
     }
@@ -3328,7 +3349,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         _lastSpaceCount = counts.total;
         refreshSaveLic().then(function(){ maybeSaveModal(counts.total); });   // sign-in-to-save prompt
         if (spaces.length === 0) {
-          grid.innerHTML = `<div class="empty-spaces">No spaces yet — pick a cloud below to create your first one.</div>`;
+          grid.innerHTML = `<div class="empty-spaces">No spaces yet.${ _vySandbox ? ' Your administrator provisions the spaces for this environment.' : '<br>Add a simulator from the Marketplace to create your first one.<br><button type="button" class="es-btn" onclick="openMarketplaceView()">Browse the Marketplace</button>' }</div>`;
           // Empty state spans full width so it doesn't render as a tiny card
           grid.style.gridTemplateColumns = '1fr';
           return;
@@ -3404,10 +3425,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                           data-tip="Force shutdown — stop runtimes now" aria-label="Force shutdown"><span class="material-icons">power_settings_new</span></button>
                 </span>
               </div>` : '' }
+              ${ _tierBannerHtml(s) }
             </a>
           `;
         }).join('');
         _startTtlTimer();
+        if (_vyJustAdded) { const jc = grid.querySelector('[data-space-id="' + _vyJustAdded + '"]'); if (jc) { jc.scrollIntoView({ block: 'nearest' }); jc.style.outline = '2px solid #000'; setTimeout(() => { jc.style.outline = ''; }, 1800); } _vyJustAdded = null; }
       } catch (e) {
         grid.innerHTML = `<div class="empty-spaces">Couldn't load spaces: ${ e.message }</div>`;
         grid.style.gridTemplateColumns = '1fr';
@@ -3499,83 +3522,100 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
     }
 
-    // ── Create Space modal ──────────────────────────────────────────
-    function openCreateSpaceModal() {
-      const el = document.getElementById('create-space-modal');
-      if (!el) return;
-      // Reset state
-      document.getElementById('csm-name').value = '';
-      document.getElementById('csm-region').value = '';
-      document.getElementById('csm-error').classList.remove('show');
-      document.getElementById('csm-submit').disabled = false;
-      document.getElementById('csm-submit').textContent = 'Create & open console';
-      el.classList.add('open');
-      setTimeout(() => document.getElementById('csm-name').focus(), 50);
+    const _CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function _offerUrl(tier, id, base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/checkout?tier=' + tier + '&period=monthly' + (tier === 'pro' ? '&primary_cloud=' + id : ''); }
+    function _offersFor(id, enabled) {
+      const have = { '': 0, free: 0, pro: 1, max: 2 }[enabled || ''] ?? 3;
+      return Object.keys(VY_OFFERS).filter(t => ({ pro: 1, max: 2 })[t] > have).map(t => ({ tier: t, price_usd: VY_OFFERS[t].price, per: VY_OFFERS[t].per, url: _offerUrl(t, id) }));
     }
-    function closeCreateSpaceModal() {
-      document.getElementById('create-space-modal').classList.remove('open');
-    }
-    function onModalBackdropClick(ev) {
-      // Close only when clicking the dim backdrop, not the modal itself.
-      if (ev.target.id === 'create-space-modal') closeCreateSpaceModal();
-    }
-    document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') closeCreateSpaceModal();
-    });
-
-    async function submitCreateSpace() {
-      const name = document.getElementById('csm-name').value.trim();
-      const provider = document.querySelector('input[name="csm-provider"]:checked')?.value || 'aws';
-      const region = document.getElementById('csm-region').value.trim();
-      const errEl = document.getElementById('csm-error');
-      const btn = document.getElementById('csm-submit');
-      errEl.classList.remove('show');
-
-      if (!name) {
-        errEl.textContent = 'Space name is required.';
-        errEl.classList.add('show');
-        return;
+    async function _mktCards() {
+      if (!VY_NANO) {
+        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) return (await r.json()).simulators; } catch (_) {}
       }
-      // Lowercase a-z 0-9 - only — keeps S3 / GCS bucket names happy when
-      // services derive resource names from the space.
-      if (!/^[a-z][a-z0-9-]{1,62}$/.test(name)) {
-        errEl.textContent = 'Use 2–63 chars, lowercase letters/digits/dashes, must start with a letter.';
-        errEl.classList.add('show');
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Creating…';
+      let sp = []; try { sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || []; } catch (_) {}
+      return VY_SIMULATORS.map(sim => {
+        const s = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === sim.id)[0];
+        return { id: sim.id, name: sim.name, free_tier: sim.free_tier, added: !!s, space_id: s && s.space_id, tier: (s && s.tier) || 'free',
+                 licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: _offersFor(sim.id, '') };
+      });
+    }
+    function _mktCardHtml(c) {
+      const tier = c.tier || 'free', T = tier.charAt(0).toUpperCase() + tier.slice(1);
+      const free = c.free_tier
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>Free forever</b><small>' + (VY_NANO ? 'Free · in-browser, no expiry' : 'Use the Free tier as long as you like') + '</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>No free tier — trial only</b><small>14-day trial, then a licence is required</small></span></div>';
+      const cta = c.trial_ended ? '<span class="mk-cta mk-note">A licence is needed to add it again</span>'
+        : '<span class="mk-cta">' + (c.added ? 'Open in Spaces' : 'Add to Spaces') + '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>';
+      let foot = '';
+      if (c.enabled_tier) {
+        const E = c.enabled_tier.charAt(0).toUpperCase() + c.enabled_tier.slice(1);
+        foot += '<span class="mk-pill">' + _CHECK + E + ' Enabled</span>' + (c.licensed_by ? '<span class="mk-note">Licensed by ' + _esc(c.licensed_by) + '</span>' : '<span class="mk-note">Licensed to you</span>');
+      } else if (VY_NANO) foot += '<span class="mk-pill ghost">Free · in-browser</span>';
+      if (c.trial_ended) foot += '<span class="mk-pill ghost">Trial ended</span>';
+      (c.offers || []).forEach(o => {
+        foot += '<a class="mk-offer" href="' + _esc(o.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Buy ' + o.tier + ' for ' + _esc(c.name) + ', $' + o.price_usd + ' ' + _esc(o.per) + '">' +
+                o.tier.charAt(0).toUpperCase() + o.tier.slice(1) + '<small>$' + o.price_usd + ' ' + _esc(o.per) + '</small></a>';
+      });
+      return '<div class="mk-card' + (c.trial_ended ? ' off' : '') + '" role="listitem" data-sim="' + c.id + '">' +
+        '<div class="mk-ribbon ' + tier + '" aria-hidden="true"><span>' + T + '</span></div>' +
+        '<button type="button" class="mk-main" data-add="' + c.id + '"' + (c.can_add === false ? ' disabled' : '') + ' aria-label="' + (c.added ? 'Open ' : 'Add ') + _esc(c.name) + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier">' +
+        '<span class="mk-head"><span class="mk-logo ' + c.id + '">' + (SPACE_LOGOS[c.id] || '').replace(/sp-az-g/g, 'mk-az-g') + '</span><span><span class="mk-name">' + _esc(c.name) + '</span><span class="mk-sub">' + T + ' tier' + (c.added ? ' · in Spaces' : '') + '</span></span></span>' +
+        free + cta + '</button><div class="mk-foot">' + foot + '</div></div>';
+    }
+    async function loadMarketplace() {
+      const g = document.getElementById('mkt-grid'); if (!g) return;
+      const cards = await _mktCards();
+      g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
+      g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));
+    }
+    async function addSimulator(id, btn) {
+      if (btn) btn.disabled = true;
+      let spaceId = null;
       try {
-        const payload = { provider: provider, name: name };
-        if (region) payload.region = region;
-        const r = await fetch('/api/spaces', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!r.ok) {
-          let detail = await r.text();
-          try { detail = JSON.parse(detail); detail = detail.detail?.reason || detail.detail || detail.message || JSON.stringify(detail); } catch (_) {}
-          throw new Error(detail || `HTTP ${r.status}`);
+        if (!VY_NANO) {
+          const r = await fetch('/api/marketplace/simulators/' + id + '/add', { method: 'POST' });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) { alert((d.detail && d.detail.reason) || 'Could not add this simulator.'); if (btn) btn.disabled = false; loadMarketplace(); return; }
+          spaceId = d.space_id;
+        } else {
+          const sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || [];
+          const have = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === id)[0];
+          if (have) spaceId = have.space_id;
+          else {
+            const sim = VY_SIMULATORS.filter(x => x.id === id)[0];
+            const r = await fetch('/api/spaces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: id, name: (sim && sim.name || id).toLowerCase().replace(/[^a-z0-9]+/g, '-') }) });
+            spaceId = ((await r.json()).space || {}).space_id;
+          }
         }
-        const d = await r.json();
-        const newId = d?.space?.space_id;
-        if (newId) {
-          // Switch active context to the new space, then jump to console.
-          try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', newId); } catch (_) {}
-          try { await fetch(`/api/spaces/${newId}/switch`, { method: 'POST' }); } catch (_) {}
-          (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
-          return;
-        }
-        // Fallback: reload page so it shows the new card.
-        window.location.reload();
-      } catch (e) {
-        errEl.textContent = String(e.message || e);
-        errEl.classList.add('show');
-        btn.disabled = false;
-        btn.textContent = 'Create & open console';
-      }
+      } catch (e) { if (btn) btn.disabled = false; return; }
+      if (spaceId) { try { await fetch('/api/spaces/' + spaceId + '/switch', { method: 'POST' }); } catch (_) {} }
+      _vyJustAdded = spaceId;
+      if (VY_EMBED && !_PICK && window.parent !== window) window.parent.postMessage({ vy: 'open-spaces' }, '*');   // the drawer closes the Marketplace and shows Spaces
+      else showAppView('spaces');
+      loadSpaces();
+    }
+    let _vyJustAdded = null;
+    function openMarketplaceView() {
+      if (_vySandbox) return;
+      if (VY_EMBED && !_PICK && window.parent !== window) window.parent.postMessage({ vy: 'open-marketplace' }, '*'); else showAppView('marketplace');
+    }
+    // Spaces banner: tier + (Spaces-only) trial countdown, with "Try Pro" / "Upgrade".
+    function _tierBannerHtml(s) {
+      const tier = s.tier || 'free', src = s.tier_source || 'free', tr = s.trial || {};
+      const T = tier.toUpperCase();
+      const up = '<button type="button" class="st-act" onclick="event.preventDefault();event.stopPropagation();window.open(\'' + _offerUrl('pro', String(s.provider || '').toLowerCase()) + '\', \'_blank\', \'noopener\')">Upgrade</button>';
+      let cls = '', label = 'Free', act = '';
+      if (src === 'trial' && tr.state === 'active') { cls = ' t-trial'; label = T + ' trial · ' + tr.days_left + ' day' + (tr.days_left === 1 ? '' : 's') + ' left'; act = up; }
+      else if (src === 'license') { cls = ' t-paid'; label = T; }
+      else if (tr.state === 'ended') { label = 'Free · trial ended'; act = up; }
+      else if (!VY_NANO) act = '<button type="button" class="st-act" onclick="startSpaceTrial(\'' + s.space_id + '\', event)">Try Pro</button>';
+      return '<div class="sp-tier' + cls + '" title="Tier you currently get on this simulator">' + _esc(label) + act + '</div>';
+    }
+    async function startSpaceTrial(id, ev) {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      try { await fetch('/api/spaces/' + id + '/trial/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier: 'pro' }) }); } catch (_) {}
+      loadSpaces();
     }
 
     // ── Live host stats (CPU / Memory / Disk) ───────────────────────
