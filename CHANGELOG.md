@@ -4,6 +4,45 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.45] — 2026-11-06
+
+Daily conformance release. **15 product fixes** (AWS 2, all clouds 13); 12 reach Nano and 12 reach the offline appliance.
+
+### Highlights
+
+- **Black-and-white Health and API reference.** Health and the API reference now use a complete black-and-white theme, with no outer panels, section headers that run edge to edge, and rounded Service status tiles (Nano and offline).
+- **Spaces view matches Health.** Spaces now have an edge-to-edge header and rounded greyscale space cards, and space names no longer carry the "Nano" prefix across AWS, GCP and Azure (Nano and offline).
+- **Clearer appliance health distribution.** Health distribution now appears as stacked bars instead of donuts, in both Nano and the offline console, and in the offline appliance the charts show only the clouds in your profile (for example, AWS only for the aws-full sandbox).
+- **Tidier Connect card in Nano.** The Connect card shows only the URL for the tunnel you selected (Cloudflare or Local), and the tunnel toggle now sits right-aligned in the card header; the CLI/Python tab underline also runs the full width of the card.
+- **New apps icon.** The "All capabilities" button now uses an apps-grid icon instead of the expand arrows (Nano and offline).
+- **More reliable AWS EC2 reboot.** In the offline appliance, rebooting an instance whose container is recorded as running now waits for it to settle first.
+
+### Fixes — AWS
+
+- **[offline]** Reboot waits for a record-says-running container to settle too
+- **[offline]** Distribution pies show only the profile's clouds (aws-full sandbox -> AWS only)
+
+### Fixes — all clouds
+
+- **[Nano + offline]** Apps icon is the 3x3 grid
+- **[Nano + offline]** Apps icon is 3x2 (horizontal) instead of 2x3
+- **[Nano + offline]** 'All capabilities' button uses the 6-dot apps icon instead of the expand arrows
+- **[Nano + offline]** Drop the 'Nano' prefix from space names (AWS / GCP / Azure)
+- **[Nano + offline]** Spaces view gets the Health treatment (no outer panel, edge-to-edge header, rounded greyscale space cards)
+- **[Nano + offline]** Health header baselines bleed edge to edge; Service status tiles get rounded borders
+- **[Nano + offline]** Health view without outer panels; section header baseline runs edge to edge
+- **[Nano + offline]** Complete black & white theme for Health and API reference
+- **[Nano + offline]** CLI/Python tab underline runs edge to edge of the Connect card
+- **[Nano]** Connect card shows only the selected tunnel's URL (Cloudflare or Local)
+- **[Nano]** CF/Local tunnel toggle moves into the Connect card header (right-aligned)
+- **[Nano]** Appliance health distribution as stacked bars (same as offline console)
+- **[offline]** Appliance health distribution as stacked bars instead of donuts
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.45`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.44] — 2026-11-06
 
 Daily conformance release. **3 product fixes** (AWS 1, Azure 2); 3 reach Nano and 1 reach the offline appliance; 7 test and harness improvements.
