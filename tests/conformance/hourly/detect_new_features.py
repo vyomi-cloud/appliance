@@ -151,6 +151,18 @@ def _cloud_of(core_file: str) -> str:
     return "azure" if b.startswith("azure_") else "gcp" if b.startswith("gcp_") else "aws"
 
 
+# Private helpers (`_verb_noun` functions, not dispatched) in mixed cores that the verb-name
+# heuristic mistakes for SDK operations; none is an AWS API operation.
+INTERNAL_HELPERS = {
+    "apigatewayv2_core": {"CreateGrand", "GetGrand", "GetChild", "CreateMapping", "CreateVpclink"},
+    "cloudwatch_core": {"QueryEnvelope", "RunQueries", "SetState", "StateReasonData", "StateUpdatedTimestamp"},
+    "eventbridge_core": {"SendSqs"},
+    "lambda_core": {"InvokeRaw"},
+    "sns_core": {"PublishToEndpoint", "PublishToPhone", "PublishToTopic", "SubscribeResult"},
+    "stepfunctions_core": {"RunMachine", "RunState"},
+}
+
+
 def operations(target: str) -> list[dict]:
     pattern = "wasm/core/*_core.py" if target == "nano" else "core/*_core.py"
     feats = []
@@ -160,6 +172,8 @@ def operations(target: str) -> list[dict]:
             # ASL Choice-state comparators (StringEquals, IsNull...) are state-language
             # syntax matched via `op == ...`, not Step Functions API operations.
             if engine == "stepfunctions_core" and ASL_COMPARATOR_RE.match(op):
+                continue
+            if op in INTERNAL_HELPERS.get(engine, ()):
                 continue
             feats.append({"target": target, "cloud": _cloud_of(f), "service": engine, "kind": "operation", "name": op})
     return feats
