@@ -279,6 +279,8 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
 # Booster pack (headless Pro/Max appliance): /booster/* status + pairing routes.
 from core import booster as _booster
 _booster.register(app)
+from core import feedback as _feedback
+_feedback.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
 from core.middleware import register_middleware

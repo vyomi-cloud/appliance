@@ -50,6 +50,7 @@ function nanoFoot() {
   } catch (e) { console.warn("[v4] tunnel footer not embedded:", e.message); return ""; }
 }
 const NANO_FOOT = nanoFoot();
+const _fbHash = createHash("sha256").update(readFileSync(new URL("./feedback-widget.js", import.meta.url))).digest("hex").slice(0, 12);
 
 const html = (cloud, title, nano = false) => `<!doctype html>
 <html lang="en">
@@ -62,7 +63,7 @@ ${existsSync(join(HERE, "..", "static", "v4", cloud, "main.css")) ? `<link rel="
 <body>
 ${nano ? NANO_BODY : ""}<div id="root"></div>
 ${nano ? nanoChrome(cloud) : ""}<script type="module" src="./main.js?v=${assetVersion}"></script>
-${nano ? NANO_FOOT : ""}
+${nano ? NANO_FOOT : ""}<script src="./feedback.js?v=${_fbHash}" defer></script>
 </body>
 </html>
 `;
@@ -88,6 +89,7 @@ async function buildCloud(cloud, watch) {
     logLevel: "info",
   };
   await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
+  await cp(join(HERE, "feedback-widget.js"), join(out, "feedback.js"));   // "Share feedback" floating button (both substrates)
   if (watch) {
     const ctx = await esbuild.context({ ...opts, plugins: [emit(cloud, out)] });
     await ctx.watch();
