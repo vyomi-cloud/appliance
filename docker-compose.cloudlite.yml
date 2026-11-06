@@ -41,6 +41,8 @@ services:
     user: "0:0"
     ports:
       - "${VYOMI_SIMULATOR_PORT:-9000}:9000"
+      - "2587:2587"   # SES SMTP interface (STARTTLS, SES SMTP credentials)
+      - "2525:2525"   # SES inbound SMTP (receipt rules)
     networks: [vyomi-net]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -84,6 +86,8 @@ services:
       CLOUDLEARN_VALKEY_HOST: vyomi-valkey
       CLOUDLEARN_REGISTRY_HOST: vyomi-registry
       VYOMI_GATEWAY_ADMIN: http://vyomi-gateway:2019
+      VYOMI_MAILPIT_HOST: vyomi-mailpit
+      VYOMI_MAILPIT_UI: http://localhost:8025
       CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
       # Published loopback ports the user's machine reaches (Memorystore / Artifact Registry show these).
@@ -205,6 +209,26 @@ services:
     mem_limit: 128m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  vyomi-mailpit:
+    profiles: ["full"]
+    # Shared SMTP data plane for Amazon SES (SendEmail, the SES SMTP interface, the optional
+    # relay and inbound mail all land here). Mailpit (MIT); web inbox on the host at :8025.
+    image: axllent/mailpit:v1.20
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "8025:8025"
+    networks: [vyomi-net]
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
       interval: 10s
       timeout: 3s
       retries: 5

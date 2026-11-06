@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache
+from routes import gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache, aws_sesv2
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache]:
+            gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache, aws_sesv2]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2640,6 +2640,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
 
+    aws_ses = _cloudsim_service_state(space, "sesv2")
+    for ident_name, ident in aws_ses.get("identities", {}).items():
+        if isinstance(ident, dict):
+            add("aws", "sesv2", "identity", ident_name,
+                {**ident, "name": ident_name, "state": "active", "created": ident.get("created", "")})
     aws_elbv2 = _cloudsim_service_state(space, "elbv2")
     for lb_arn, lb in aws_elbv2.get("load_balancers", {}).items():
         if isinstance(lb, dict):

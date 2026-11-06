@@ -482,6 +482,13 @@
    "name": "Amazon Cognito",
    "upstream": "cognito-idp",
    "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "sesv2",
+   "name": "Amazon SES",
+   "upstream": "sesv2",
+   "status": "pending-release"
   }
  ]
 }

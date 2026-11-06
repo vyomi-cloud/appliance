@@ -437,6 +437,17 @@ _ELBV2_SUB = [
 
 
 # ===========================================================================
+# Amazon SES — verified identity detail
+# ===========================================================================
+_SESV2_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Identity", "items": [
+        {"key": "details",       "label": "Details",        "icon": "info",   "type": "properties"},
+    ]},
+]
+
+
+# ===========================================================================
 # CloudWatch Logs — log group detail
 # ===========================================================================
 _LOGS_SUB = [
@@ -676,6 +687,7 @@ SUB_BLADES: dict[str, list] = {
     "kms":            _KMS_SUB,
     "kinesis":        _KINESIS_SUB,
     "ecs":            _ECS_SUB,
+    "sesv2":          _SESV2_SUB,
     "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
     "cloudwatch":     _CLOUDWATCH_SUB,

@@ -55,6 +55,11 @@
   "category": "aws"
  },
  {
+  "name": "sesv2",
+  "label": "SesV2Store",
+  "category": "aws"
+ },
+ {
   "name": "apigwv2",
   "label": "ApiGwV2Store",
   "category": "aws"

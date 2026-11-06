@@ -397,6 +397,9 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _ses_census():
+    from core import nano_registry
+    return list(nano_registry.get()["sesv2"].identities)
 def _logs_group_count() -> int:
     """CloudWatch Logs groups held by the shared in-browser store (core/logs_core.py)."""
     try:
@@ -445,6 +448,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "sesv2":          len(_ses_census()),
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
                 "sns":            len(A.MSG.topics),

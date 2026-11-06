@@ -55,6 +55,7 @@ from core import sqs_core as sqs
 from core import sns_core as sns
 from core import ecs_core as ecs
 from core.ecs_core import InMemoryEcsStore
+from core import sesv2_core as sesv2
 from core import elbv2_core as elbv2
 from core import route53_core as route53
 from core import ecr_core as ecr
@@ -205,6 +206,7 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "route53": "route53",
+    "ses": "sesv2",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "ecr": "ecr", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
@@ -294,6 +296,8 @@ _AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimit
 for _a in elbv2.OPERATIONS:
     if _a not in _AMBIGUOUS_ELB:
         _QUERY_ACTION.setdefault(_a, "elbv2")
+for _a in sesv2.V1_ACTIONS:   # SES v1 (receipt rules, identity verification); signs as `ses`
+    _QUERY_ACTION.setdefault(_a, "sesv2")
 # CloudWatch actions whose names other Query services also use — routed by SigV4 scope only.
 _GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
@@ -405,6 +409,7 @@ class AwsWireRouter:
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.cognito = s.get("cognito") or InMemoryCognitoIdpStore()   # Cognito user pools
         self.elasticache = s.get("elasticache") or elasticache.ElastiCacheStore()
+        self.sesv2 = s.get("sesv2") or sesv2.SesV2Store()
         self.ecs = s.get("ecs") or InMemoryEcsStore()   # Amazon ECS clusters/services/tasks
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         events.set_target_store("kinesis", self.kinesis)       # EventBridge Kinesis / Logs rule targets
@@ -491,6 +496,8 @@ class AwsWireRouter:
             return "apigw-invoke"
         if route53.is_route53_path(path):     # Route 53 REST-XML (/2013-04-01/…)
             return "route53"
+        if sesv2.is_sesv2_path(path):         # SES v2 REST-JSON (/v2/email/…)
+            return "sesv2"
         if "/2015-03-31/functions" in path or "/2021-10-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if path.startswith("/lambda-url/"):   # a Function URL's public invoke path
@@ -711,6 +718,15 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "sesv2":   # native SES v2 REST-JSON (identities, templates, sending) + SES v1 Query (receipt rules)
+            if not sesv2.is_sesv2_path(path) and "Action=" in (self._text(body) or ""):
+                r = sesv2.dispatch_query(self.sesv2, self._query_params(query, body))
+            else:
+                r = sesv2.dispatch(self.sesv2, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "route53":   # native Route 53 REST-XML (hosted zones, records, health checks)

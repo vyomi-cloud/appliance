@@ -63,6 +63,7 @@ CORES = [
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
+    "sesv2_core.py",                                # AWS: SES v2 identities / templates / sending — native REST-JSON wire + console REST
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST

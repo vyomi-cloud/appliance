@@ -96,6 +96,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.ecr": 0.10,          # $0.10/GB-month private repository storage (~1 GB baseline)
     "aws.vpc": 0.00,          # free (NAT GW extra)
     "aws.ecs": 9.01,          # per cluster: baseline of one Fargate task, 0.25 vCPU / 0.5 GB, 730h
+    "aws.sesv2": 0.10,        # per verified identity: ~1,000 emails/month at $0.10 per 1,000
     "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
     "aws.secretsmanager": 0.40,  # $0.40 per secret per month
     "aws.kms": 1.00,             # $1.00 per customer-managed key per month

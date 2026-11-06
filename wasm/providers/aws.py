@@ -157,6 +157,10 @@ class Aws(CloudProvider):
             ("kinesis", "UpdateStream"): lambda b, a, p: D.kinesis_update(p),
             ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
             ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
+            # Amazon SES v2 — identities, templates, contact lists (core/sesv2_core.py)
+            ("sesv2", "GetSesResource"):    lambda b, a, p: D.ses_console(p),
+            ("sesv2", "CreateSesResource"): lambda b, a, p: D.ses_console(p),
+            ("sesv2", "DeleteSesResource"): lambda b, a, p: D.ses_console(p),
             # Elastic Load Balancing — LBs, target groups, listeners (core/elbv2_core.py)
             ("elbv2", "ListLoadBalancers"):  lambda b, a, p: D.elb_list(p),
             ("elbv2", "CreateLoadBalancer"): lambda b, a, p: D.elb_create(p),

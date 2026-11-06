@@ -23,6 +23,7 @@ from core import route53_core
 from core import ssm_core
 from core import ecr_core
 from core import elasticache_core
+from core import sesv2_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from core import kinesis_core
 from core import apigatewayv2_core
@@ -649,6 +650,16 @@ def extras_config_put(p):
     return {"ok": True}
 
 
+# ── Amazon SES v2 (core/sesv2_core.py) — shared store with the native wire ──
+def ses_console(p):
+    from core import nano_registry
+    store = nano_registry.get()["sesv2"]
+    status, out = sesv2_core.console_dispatch(store, str(p.get("method") or "GET"), str(p.get("path") or ""),
+                                              dict(p.get("query") or {}), dict(p.get("body") or {}))
+    if status >= 400:
+        return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
+    store.persist()
+    return out
 # ── API Gateway V2 (HTTP/WebSocket APIs) — core/apigatewayv2_core.py ────────
 # Store = the shared registry's `apigwv2`, the SAME one the native /v2 relay wire
 # reads/writes, so console-created APIs are visible to the CLI/SDK and vice-versa.

@@ -1096,6 +1096,12 @@ _UNSIGNED_QUERY_ACTION = {
     # EC2 (compute; VPC actions are matched via _EC2_VPC_ACTIONS in register())
     "RunInstances": "ec2", "DescribeInstances": "ec2", "TerminateInstances": "ec2",
     "StartInstances": "ec2", "StopInstances": "ec2", "DescribeImages": "ec2",
+    # SES v1 (receipt rules, identity verification)
+    "CreateReceiptRuleSet": "ses", "CloneReceiptRuleSet": "ses", "DeleteReceiptRuleSet": "ses",
+    "ListReceiptRuleSets": "ses", "DescribeReceiptRuleSet": "ses", "DescribeActiveReceiptRuleSet": "ses",
+    "SetActiveReceiptRuleSet": "ses", "CreateReceiptRule": "ses", "UpdateReceiptRule": "ses",
+    "DescribeReceiptRule": "ses", "DeleteReceiptRule": "ses", "ReorderReceiptRuleSet": "ses",
+    "VerifyEmailIdentity": "ses", "VerifyDomainIdentity": "ses",
 }
 
 
@@ -1158,6 +1164,12 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "kinesis":
             from routes.aws_kinesis import handle_wire as _kinesis_wire
             return await _kinesis_wire(request)
+        if service == "ses":
+            # SES v1 Query protocol (receipt rules, identity verification) on the SES v2 engine.
+            from core import sesv2_core as _ses
+            from routes.aws_sesv2 import STORE as _ses_store
+            _ses_r = _ses.dispatch_query(_ses_store, await _srv()._ec2_query_params(request))
+            return Response(content=_ses_r.body, status_code=_ses_r.status, media_type="text/xml")
         if service == "logs":
             from routes import aws_logs as _aws_logs
             return await _aws_logs.wire(request)
