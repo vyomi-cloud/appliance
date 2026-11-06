@@ -20,6 +20,7 @@
 (function () {
   if (window.VyomiBooster) return;
   var LS_REG = "vyomi.boosters", LS_ACTIVE = "vyomi.active_space";
+  var SESSION_ID = "vyomi-session", vboost = null;   // the portal-started Codespace booster: in-memory only (its token expires with the session)
   var POLL_MS = (function () { try { var v = Number(localStorage.getItem("vyomi.booster_poll_ms")); if (v >= 100) return v; } catch (_) {} return 5000; })();
   var PROBE_TIMEOUT = 2500, FAILS_TO_DOWN = 2, TRIAL_WARN_DAYS = 7;
   var realFetch = window.fetch.bind(window);
@@ -28,14 +29,16 @@
   var IS_CONSOLE = /\/v4\/|-console\.html/.test(location.pathname);
 
   // ── registry ────────────────────────────────────────────────────────
-  function load() { try { var a = JSON.parse(localStorage.getItem(LS_REG) || "[]"); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
-  function save(a) { try { localStorage.setItem(LS_REG, JSON.stringify(a)); } catch (_) {} emit("vyomi-booster-registry", { boosters: list() }); }
+  function stored() { try { var a = JSON.parse(localStorage.getItem(LS_REG) || "[]"); return Array.isArray(a) ? a.filter(function (b) { return b.id !== SESSION_ID; }) : []; } catch (_) { return []; } }
+  function load() { var a = stored(); if (vboost) a.push(vboost); return a; }
+  function save(a) { a = a.filter(function (b) { return b.id !== SESSION_ID; }); try { localStorage.setItem(LS_REG, JSON.stringify(a)); } catch (_) {} emit("vyomi-booster-registry", { boosters: list() }); }
   function list() { return load().map(function (b) { return Object.assign({}, b, { token: undefined, has_token: !!b.token }); }); }
   function get(id) { return load().find(function (b) { return b.id === id; }) || null; }
   function emit(name, detail) { try { window.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (_) {} }
 
   // ── connection ──────────────────────────────────────────────────────
   function candidates(b) {
+    if (b.session) return b.relay_url ? [b.relay_url] : [];
     var c = [];
     if (b.local_url) c.push(b.local_url);
     else if (b.id) c.push("https://" + b.id + ".local.vyomi.cloud" + (b.local_port ? ":" + b.local_port : ""));
@@ -55,7 +58,7 @@
     function next() {
       if (i >= cs.length) return Promise.resolve(null);
       var base = cs[i++];
-      return timed(base + "/booster/status", { headers: b.token ? { Authorization: "Bearer " + b.token } : {} }).then(function (r) {
+      return timed(base + "/booster/status", { headers: b.session ? { "x-vyomi-session-token": b.token } : b.token ? { Authorization: "Bearer " + b.token } : {} }).then(function (r) {
         if (r.status === 401 || r.status === 403) return { unauthorized: true, base: base };
         if (!r.ok) return next();
         return r.json().then(function (j) { return { base: base, status: j }; });
@@ -123,7 +126,56 @@
       .then(function (r) { if (r.ok) { account = r.body; try { window.dispatchEvent(new CustomEvent("vyomi-booster-account", { detail: account })); } catch (_) {} return true; } if (r.body && r.body.primary_cloud) { account = Object.assign({}, account, { primary_cloud: r.body.primary_cloud }); } return false; }, function () { return true; });
   }
   function boosterOn() { return account === null || account.effective === true; }   // unknown -> don't hide anything
-  function start() { if (timer) return; loadAccount(); accTimer = setInterval(loadAccount, 60000); pollAll(); timer = setInterval(pollAll, POLL_MS); }
+  function start() { if (timer) return; loadSession(); sessTimer = setInterval(loadSession, POLL_MS); setInterval(sessionTick, 1000); loadAccount(); accTimer = setInterval(loadAccount, 60000); pollAll(); timer = setInterval(pollAll, POLL_MS); }
+
+
+  // ── portal session (the portal-Nano flow: Start/Stop live on the vyomi.cloud dashboard; Nano only shows + uses it) ──────────
+  // /api/booster/status -> {session:{state,countdown_seconds,session_token,error},relay_url,error,ended_note,hours_remaining,...}.
+  // While the session is running the relay is registered as an in-memory booster and compute/AI wire calls are routed to it.
+  var sess = null, sessTimer = null;
+  var COMPUTE_SCOPE = /Credential=[^/]+\/[^/]+\/[^/]+\/(ec2|lambda|ecs|eks|batch|lightsail|autoscaling|apprunner|bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime|sagemaker|sagemaker-runtime)\//i;
+  var COMPUTE_PATH = /^\/(compute\/v1\/|v1\/projects\/[^/]+\/locations\/[^/]+\/(publishers|endpoints|models)\b|.*\/aiplatform\/)|\/providers\/Microsoft\.(Compute|ContainerService|CognitiveServices|MachineLearningServices|Batch|ContainerInstance)\//i;
+  // Heuristic classifier for native-wire calls: EC2/VMs, languages (Lambda/functions), AI. Everything else stays in the browser.
+  function isComputeCall(wirePath, authorization) { return COMPUTE_SCOPE.test(authorization || "") || COMPUTE_PATH.test(wirePath || ""); }
+  function httpBase(u) { try { var x = new URL(u); x.protocol = x.protocol === "wss:" ? "https:" : x.protocol === "ws:" ? "http:" : x.protocol; x.pathname = ""; x.search = ""; return x.toString().replace(/\/+$/, ""); } catch (_) { return ""; } }
+  function applySession(st) {
+    var prev = JSON.stringify(sess && { s: sess.session && sess.session.state, e: sess.error && sess.error.code, n: sess.ended_note });
+    sess = st;
+    var live = st && st.session && st.session.state === "running" && st.relay_url && st.session.session_token;
+    if (live) {
+      var base = httpBase(st.relay_url);
+      if (!vboost || vboost.token !== st.session.session_token || vboost.relay_url !== base) {
+        vboost = { id: SESSION_ID, name: "Codespace booster", session: true, relay_url: base, token: st.session.session_token, base: base };
+        delete state[SESSION_ID]; pollOne(vboost);
+      }
+    } else if (vboost) { vboost = null; delete state[SESSION_ID]; }
+    var now = JSON.stringify(sess && { s: sess.session && sess.session.state, e: sess.error && sess.error.code, n: sess.ended_note });
+    if (prev !== now) emit("vyomi-booster-session", { session: sess });
+    render();
+  }
+  function loadSession() {
+    return realFetch("/api/booster/status", { credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { applySession(j && typeof j.entitled === "boolean" && j.entitled ? j : null); }, function () { applySession(null); });
+  }
+  function sessionTick() { if (sess && sess.session && sess.session.countdown_seconds > 0) { sess.session.countdown_seconds -= 1; renderChip(); } }
+  function fmtLeft(s) { s = Math.max(0, s | 0); return Math.floor(s / 3600) + "h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m"; }
+  var ACTION_TEXT = { reconnect: "Reconnect GitHub", copy_repo: "Fix on dashboard", choose_cloud: "Choose your cloud", upgrade: "See plans", wait: "Open dashboard", retry: "Open dashboard", contact: "Contact support", restart: "Open dashboard" };
+  function renderChip() {
+    if (!document.body) return;
+    if (!sess) { kill("vyb-chip"); return; }
+    var x = sess.session, st = x && x.state, err = (st === "failed" && x.error) ? x.error : sess.error, link = stateOf(SESSION_ID);
+    var text, cls = "vyb-c-off", action = "";
+    if (st === "running") {
+      cls = link === "connected" ? "vyb-c-ok" : "vyb-c-warn";
+      text = "Booster " + (link === "connected" ? "connected" : "linking…") + " · ends in " + fmtLeft(x.countdown_seconds) + (x.warning ? " · " + x.warning : "");
+    } else if (st === "pending" || st === "starting") { cls = "vyb-c-warn"; text = "Booster starting… (about 2 minutes)"; }
+    else if (st === "stopping") { cls = "vyb-c-warn"; text = "Booster stopping…"; }
+    else if (err) { cls = "vyb-c-err"; text = "Booster: " + err.message; action = err.action || "retry"; }
+    else if (st === "ended" && sess.ended_note) { text = sess.ended_note; action = "restart"; }
+    else { text = "Booster off · " + (sess.hours_remaining != null ? sess.hours_remaining + " h left this month" : "start it from your dashboard"); action = "restart"; }
+    var c = el("vyb-chip", "vyb-chip " + cls); c.className = "vyb-chip " + cls; c.setAttribute("role", "status"); c.setAttribute("data-state", st || "off"); c.setAttribute("data-link", link);
+    c.innerHTML = "<span>" + esc(text) + "</span>" + (action ? "<a data-vyb-keep href='/dashboard#booster-session' target='_blank' rel='noopener'>" + esc(ACTION_TEXT[action] || "Open dashboard") + "</a>" : "");
+  }
 
   // ── pairing ─────────────────────────────────────────────────────────
   // addr: a booster id ("bst-ab12"), or an https/http URL (relay / LAN / loopback). code: from `vyomi booster pair`.
@@ -191,15 +243,21 @@
     try {
       var url = typeof input === "string" ? input : (input && input.url) || String(input);
       var u = new URL(url, location.href), wi = u.pathname.indexOf("/_wire/");
-      if (u.origin === location.origin && (wi >= 0 || /\/_wire$/.test(u.pathname)) && activeHome()) {
-        var h = activeHome(), b = get(h.booster_id), why = blocked();
+      var isWire = u.origin === location.origin && (wi >= 0 || /\/_wire$/.test(u.pathname));
+      var sh = null;   // portal session: compute/AI calls of ANY space go to the running Codespace booster; emulators stay in the browser
+      if (isWire && !activeHome() && vboost) {
+        var hd = new Headers((init && init.headers) || (typeof input !== "string" && input && input.headers) || {});
+        if (isComputeCall(u.pathname.slice(wi >= 0 ? wi + 6 : 0), hd.get("authorization") || "")) sh = { booster_id: SESSION_ID, booster_name: vboost.name };
+      }
+      if (isWire && (activeHome() || sh)) {
+        var h = sh || activeHome(), b = get(h.booster_id), why = sh ? (/^(unreachable|unauthorized)$/.test(stateOf(SESSION_ID)) ? "unreachable" : null) : blocked();
         if (why) return Promise.resolve(refuse(why));
         if (!b) return Promise.resolve(refuse("unreachable"));
         var base = (state[b.id] || {}).base || b.base || candidates(b)[0];
         var req = typeof input === "string" ? null : input;
         var headers = new Headers((init && init.headers) || (req && req.headers) || {});
-        headers.set("x-vyomi-booster-token", b.token || "");
-        if (!headers.has("authorization")) headers.set("authorization", "Bearer " + (b.token || ""));
+        if (b.session) headers.set("x-vyomi-session-token", b.token || "");   // relay plane: the SAME signed token the booster re-verifies
+        else { headers.set("x-vyomi-booster-token", b.token || ""); if (!headers.has("authorization")) headers.set("authorization", "Bearer " + (b.token || "")); }
         var target = base + u.pathname.slice(wi >= 0 ? wi : u.pathname.indexOf("/_wire")) + u.search;
         var ni = Object.assign({}, init || {}, { headers: headers });
         if (req && !(init && init.method)) { ni.method = req.method; if (!/^(GET|HEAD)$/i.test(req.method)) ni.body = req.body; }
@@ -222,6 +280,8 @@
     "body.vyb-legacy.vy-booster-down>*:not(.vyb-bar):not(.vyb-lock):not(script):not(style){pointer-events:none!important;opacity:.55}" +
     ".vyb-lock{position:fixed;inset:0;z-index:2147483001;background:#0f172a;color:#e5e7eb;display:flex;align-items:center;justify-content:center;font:15px/1.5 system-ui,sans-serif;text-align:center;padding:24px}" +
     ".vyb-lock h2{margin:0 0 8px;font-size:22px}.vyb-lock a,.vyb-lock button{margin-top:14px;display:inline-block;background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;border:0;text-decoration:none;font:inherit;cursor:pointer}" +
+    ".vyb-chip{position:fixed;left:12px;bottom:12px;z-index:2147482999;max-width:min(560px,92vw);padding:7px 12px;border-radius:8px;font:600 12px/1.4 system-ui,sans-serif;display:flex;gap:10px;align-items:center;color:#fff;box-shadow:0 4px 14px #0004}.vyb-chip a{color:#fff;text-decoration:underline;white-space:nowrap}" +
+    ".vyb-c-ok{background:#047857}.vyb-c-warn{background:#b45309}.vyb-c-err{background:#b91c1c}.vyb-c-off{background:#334155}" +
     ".vyb-badge{display:inline-block;font:600 11px/1 system-ui,sans-serif;padding:3px 7px;border-radius:9px;background:#1e3a8a22;color:#2563eb;border:1px solid #2563eb55;margin-left:6px;vertical-align:middle}" +
     ".vyb-badge.vyb-b-down{background:#b91c1c22;color:#b91c1c;border-color:#b91c1c55}" +
     ".vyb-modal{position:fixed;inset:0;z-index:2147483002;background:#0008;display:flex;align-items:center;justify-content:center;font:14px/1.45 system-ui,sans-serif}" +
@@ -233,7 +293,7 @@
   function kill(id) { var e = document.getElementById(id); if (e) e.remove(); }
   function render() {
     if (!document.body) return;
-    ensureStyle();
+    ensureStyle(); renderChip();
     var h = IS_CONSOLE ? activeHome() : null, why = h ? blocked() : null, name = h ? (h.booster_name || h.booster_id) : "";
     document.body.classList.toggle("vy-booster-down", !!why);
     document.body.classList.toggle("vyb-legacy", !document.getElementById("root"));
@@ -298,6 +358,7 @@
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
     homeOptions: homeOptions, defaultHome: defaultHome, cloudAllowed: cloudAllowed, planCloud: planCloud, pinCloud: pinCloud, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
+    session: function () { return sess; }, sessionBooster: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall,
     isBlocked: blocked, candidates: function (id) { var b = get(id); return b ? candidates(b) : []; },
   };
 

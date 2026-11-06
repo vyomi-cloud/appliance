@@ -59,15 +59,17 @@ start_link() {
 # codespace is Available for the owning user). Retries while the portal learns the codespace is up. Needs no secret on this box.
 fetch_session() {
   [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ] && [ -n "${VYOMI_BOOSTER_SESSION_KEY:-}" ] && return 0
-  local out tok key end i
+  local out tok key end rel i
   for i in 1 2 3 4 5 6 7 8 9 10; do
     out=$(curl -fsS -m 10 -G "$PORTAL/api/booster/session/token" --data-urlencode "codespace_id=$CODESPACE" 2>/dev/null) && {
       tok=$(printf '%s' "$out" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
       key=$(printf '%s' "$out" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
       end=$(printf '%s' "$out" | sed -n 's/.*"session_end":\([0-9]*\).*/\1/p')
+      rel=$(printf '%s' "$out" | sed -n 's/.*"relay_url":"\([^"]*\)".*/\1/p')
       if [ -n "$tok" ] && [ -n "$key" ]; then
         export VYOMI_BOOSTER_SESSION_TOKEN="$tok" VYOMI_BOOSTER_SESSION_KEY="$key"
         [ -n "$end" ] && export VYOMI_BOOSTER_SESSION_END="$end"
+        [ -z "${VYOMI_RELAY_URL:-}" ] && [ -n "$rel" ] && export VYOMI_RELAY_URL="$rel"   # the portal says where to dial out to
         log "session token fetched."; return 0
       fi; }
     sleep 6
