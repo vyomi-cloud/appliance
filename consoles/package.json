@@ -2,7 +2,7 @@
   "name": "vyomi-consoles",
   "private": true,
   "version": "4.0.0-dev",
-  "description": "Vyomi v4 native-fidelity consoles (AWS/GCP/Azure lenses). One source, built into static/v4 (offline appliance) and wasm/v4 (Nano).",
+  "description": "Vyomi v4 native-fidelity consoles (AWS/GCP/Azure lenses). One source, built into wasm/v4 (Nano, the only UI; the appliance is headless).",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

@@ -42,8 +42,8 @@ Everything below is cumulative — every capability shipped from v1.0 through v3
 | **Native SDKs and CLIs, unchanged** | boto3, aws-sdk-java/go, google-cloud-\*, azure-sdk-for-\*; `aws`, `gcloud`, `gsutil`, `az`, `terraform` — only the endpoint changes |
 | **Operation depth** | S3 multipart + CopyObject, DynamoDB transactions + GSIs, SQS FIFO + DLQ redrive, KMS rotation, API Gateway (MOCK + Lambda proxy), VPC with a reachability analyzer, Azure Service Bus topics + Azure SQL, Cosmos queries |
 | **Real compute** | EC2 / GCE / Azure VM instances as SSH-able Docker containers (Pro and Max; WASM Edge VMs in the browser on Nano), with cloud CLIs pre-installed and working SSH + `.pem` connect info |
-| **Native consoles** | `/console/aws`, `/console/gcp`, `/console/azure` with second-level detail tabs, per-resource events, and per-service **cost savings** (what the same resources would cost on real cloud) |
-| **Spaces** | Isolated per-cloud workspaces (`/clouds`) with live host telemetry, per-space TTL countdowns, Renew/Force-shutdown, and enterprise/shared sandbox modes |
+| **Native consoles (Nano)** | The AWS, GCP and Azure consoles live in Nano (https://vyomi.cloud/nano); the 4.0.0 appliance is headless. Second-level detail tabs, per-resource events, and per-service **cost savings** (what the same resources would cost on real cloud) |
+| **Spaces** | Isolated per-cloud workspaces (API/CLI; UI in Nano) with live host telemetry, per-space TTL countdowns, Renew/Force-shutdown, and enterprise/shared sandbox modes |
 | **Vyomi Nano** | The whole simulator in the browser (no install) at [vyomi.cloud](https://vyomi.cloud) — Pyodide + PGlite + IndexedDB persistence, with a local (`vyomi-tunnel`) or cloud relay so external SDKs/CLIs reach it |
 | **Two substrates: WASM Edge + Docker** | Nano runs entirely in your browser (WASM Edge); `vyomi up` runs the full appliance on Docker for every paid tier. Multipass/LXD is retired as of v4.0.0 |
 | **Install anywhere** | Homebrew (`vyomi`, `vyomi-docker`), `.deb` / `.rpm` (`cloud-learn`, `vyomi-docker`), Windows MSI, Docker Compose, source |
@@ -140,7 +140,8 @@ vyomi up
 ```bash
 git clone https://github.com/vyomi-cloud/appliance && cd appliance
 docker compose up -d
-open http://localhost:9000/clouds
+# headless: API/SDK/CLI only — use Nano (https://vyomi.cloud/nano) for the UI
+curl http://localhost:9000/healthz
 ```
 
 ### From source
@@ -150,8 +151,7 @@ pip install -r requirements.txt
 uvicorn server:app --host 0.0.0.0 --port 9000
 ```
 
-Open `http://localhost:9000/clouds` (your spaces). From there:
-- `/console/aws` · `/console/gcp` · `/console/azure` — native cloud consoles
+**Appliance 4.0.0 is headless** — it serves the API, SDK and CLI endpoints only (no console UI). **Vyomi Nano** at https://vyomi.cloud/nano is the only UI. Useful endpoints:
 - `/api/runtime/tier` — current tier policy
 - `/api/runtime/backends` — health of all 8 real backends
 - `/docs` — auto-generated OpenAPI swagger

@@ -1080,10 +1080,6 @@ def _capabilities(lens: str = "aws", substrate: str | None = None) -> dict:
 
 def register(app: FastAPI) -> None:
     # ── Static assets for the SPA ──
-    if os.path.isdir(_ASSETS_DIR):
-        app.mount("/console-next-assets",
-                  StaticFiles(directory=_ASSETS_DIR),
-                  name="console-next-assets")
 
     # ── Capability manifest (§15.1) ── lens-aware: ?lens=aws|gcp (default aws).
     #    The status-bar cloud-lens switcher re-fetches this per lens; widgets read
@@ -2357,17 +2353,3 @@ def register(app: FastAPI) -> None:
             return snaps.fork(snap_id, name=name)
         except snaps.SnapshotError as e:
             raise HTTPException(e.status, detail=e.message)
-
-    # ── The SPA shell — serves index.html at /console-next and any sub-path so the
-    #    client-side router can own deep-links. Asset refs inside index.html are
-    #    relative to /console-next-assets/, base-path-friendly. ──
-    @app.get("/console-next", include_in_schema=False)
-    @app.get("/console-next/", include_in_schema=False)
-    @app.get("/console-next/{path:path}", include_in_schema=False)
-    def console_next_spa(path: str = ""):
-        try:
-            with open(_INDEX, "rb") as f:
-                html = f.read().decode("utf-8")
-        except FileNotFoundError:
-            return HTMLResponse("<h1>console-next not built</h1>", status_code=500)
-        return HTMLResponse(content=html, headers={"Cache-Control": "no-store, max-age=0"})

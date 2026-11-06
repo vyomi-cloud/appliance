@@ -1,5 +1,4 @@
 /* Build the v4 consoles once and emit them to every substrate:
- *   static/v4/<cloud>/  — offline appliance + Codespaces sandbox (served at /v4/<cloud>/)
  *   wasm/v4/<cloud>/    — Nano canonical (served by the portal at /nano/v4/<cloud>/)
  * Everything is bundled locally (no CDN) so Nano and air-gapped appliances work offline.
  *
@@ -14,7 +13,8 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
-const TARGETS = [join(ROOT, "static", "v4"), join(ROOT, "wasm", "v4")];
+// Headless appliance 4.0.0: Nano (wasm/v4) is the only UI target.
+const TARGETS = [join(ROOT, "wasm", "v4")];
 const argv = process.argv.slice(2);
 const only = argv.includes("--cloud") ? argv[argv.indexOf("--cloud") + 1] : null;
 const TITLES = { aws: "Vyomi · AWS", gcp: "Vyomi · Google Cloud", azure: "Vyomi · Azure" };
@@ -59,7 +59,7 @@ const html = (cloud, title, nano = false) => `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <meta name="vyomi-substrate" content="${nano ? "nano" : "offline"}">
-${existsSync(join(HERE, "..", "static", "v4", cloud, "main.css")) ? `<link rel="stylesheet" href="./main.css?v=${assetVersion}">\n` : ""}${nano ? NANO_HEAD : ""}</head>
+${existsSync(join(HERE, "..", "wasm", "v4", cloud, "main.css")) ? `<link rel="stylesheet" href="./main.css?v=${assetVersion}">\n` : ""}${nano ? NANO_HEAD : ""}</head>
 <body>
 ${nano ? NANO_BODY : ""}<div id="root"></div>
 ${nano ? nanoChrome(cloud) : ""}<script type="module" src="./main.js?v=${assetVersion}"></script>
@@ -113,7 +113,7 @@ async function publish(cloud, out) {
     await cp(out, dst, { recursive: true });
     if (t.includes(`${join("wasm", "v4")}`)) await writeFile(join(dst, "index.html"), html(cloud, TITLES[cloud], true));
   }
-  console.log(`[v4] ${cloud} → static/v4/${cloud}, wasm/v4/${cloud}`);
+  console.log(`[v4] ${cloud} → wasm/v4/${cloud}`);
 }
 
 const watch = argv.includes("--watch");

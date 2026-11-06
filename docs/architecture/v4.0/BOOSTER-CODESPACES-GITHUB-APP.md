@@ -225,6 +225,9 @@ Decisions taken after the sections above were written. Design only; items marked
 
 ## 10. Substrates and tiers (supersedes any Multipass/LXD wording above)
 
+- **Appliance 4.0.0 is HEADLESS (owner decision, 2026-11-07).** Pro/Max serve API/SDK/CLI only; the offline
+  console UI (static/ pages, `/v4`, `/console/*`, `/clouds`) is removed. **Nano in the portal is the ONLY UI**
+  (Pro/Max/booster users drive their appliance from Nano via the relay). Offline-console behaviour is not preserved.
 - **Multipass/LXD is retired.** v4.0.0 compute = **WASM Edge** (Nano, in the browser) + **Docker** (Pro/Max).
   Pending: stop building/publishing Multipass deb/rpm/MSI and the brew `vyomi` formula in `release.yml`;
   mark `cmd/vyomi/multipass.go` deprecated.

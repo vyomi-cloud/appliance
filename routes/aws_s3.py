@@ -24,7 +24,7 @@ from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from core import app_context as ctx
 
@@ -1276,12 +1276,6 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
 
     _aws_xamz_dispatchers = aws_xamz_dispatchers or {}
 
-    # Static dir reference for SPA serving
-    import os
-    STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
-    _UI_HTML = os.path.join(STATIC_DIR, "index.html")
-    _PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
-
     # ── AWS query-protocol root dispatch ─────────────────────────────────
 
     _EC2_VPC_ACTIONS = {
@@ -1443,7 +1437,7 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
 
     @app.get("/")
     async def s3_list_buckets(request: Request) -> Response:
-        """GET / -> ListBuckets (S3 wire) OR launch page = pricing.html (browser).
+        """GET / -> ListBuckets (S3 wire) OR a headless notice (browser).
 
         / is now the appliance launch view (tier cards + SDK strip + compare
         table). The old /pricing route is retired and 302-redirects here.
@@ -1460,8 +1454,13 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         # from a browser; only an unsigned browser navigation gets the launch page.
         signed = "AWS4-HMAC-SHA256" in request.headers.get("authorization", "") or request.scope.get("vyomi.wire_prefix")
         if not signed and ("text/html" in accept or "Mozilla" in user_agent):
-            with open(_PRICING_HTML, "rb") as f:
-                return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
+            return JSONResponse({
+                "service": "vyomi-appliance",
+                "mode": "headless",
+                "message": "The Vyomi appliance is headless (API/SDK/CLI only). The UI is Nano: https://vyomi.cloud/nano",
+                "api_docs": "/docs",
+                "health": "/healthz",
+            }, headers={"Cache-Control": "no-store, max-age=0"})
 
         if _s3_unified:
             return await _wi.serve_service("s3", request, path="/")

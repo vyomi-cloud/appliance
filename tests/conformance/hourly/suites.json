@@ -2,22 +2,6 @@
   "_comment": "Hourly conformance manifest. The agent ADDS suites here as it writes new test beds; never delete or weaken one to make the page green. kind: ui | sdk-java | sdk-go | sdk-python | cli | api | core. {ENDPOINT} and {RELAY} are substituted at run time.",
   "suites": [
     {
-      "id": "offline-ui-crawl",
-      "target": "offline",
-      "cloud": "all",
-      "kind": "ui",
-      "cmd": "TARGET=offline OUT=tests/conformance/hourly/out/ui-offline.json node tests/conformance/hourly/ui_crawler.mjs",
-      "timeout": 3600
-    },
-    {
-      "id": "offline-console-actions",
-      "target": "offline",
-      "cloud": "all",
-      "kind": "api",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} VYOMI_CONFORMANCE_REPORT=tests/conformance/console_actions/REPORT.md python3 -m pytest tests/conformance/console_actions/ -q --tb=line",
-      "timeout": 1200
-    },
-    {
       "id": "offline-api-ec2-instance-detail",
       "target": "offline",
       "cloud": "aws",
@@ -287,14 +271,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-core",
-      "target": "offline",
-      "cloud": "all",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/offline-console-core.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-crawl",
@@ -923,14 +899,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-aws-elbv2",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-elbv2.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-aws-elbv2",
       "target": "nano",
       "cloud": "aws",
@@ -963,14 +931,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-logs-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-aws-logs",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-logs.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-aws-logs",
@@ -1007,14 +967,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-aws-ssm",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-ssm.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-aws-ssm",
       "target": "nano",
       "cloud": "aws",
@@ -1047,14 +999,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-stepfunctions-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-aws-stepfunctions",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-stepfunctions.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-aws-event-delivery",
@@ -1179,14 +1123,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-gcp-cloudscheduler",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-cloudscheduler.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-gcp-cloudscheduler",
       "target": "nano",
       "cloud": "gcp",
@@ -1229,14 +1165,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-gcp-container",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-container.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-gcp-container",
       "target": "nano",
       "cloud": "gcp",
@@ -1269,14 +1197,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-iamcredentials-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-gcp-iamcredentials",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-iamcredentials.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-gcp-iamcredentials",
@@ -1313,14 +1233,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-gcp-redis",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-redis.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-gcp-redis",
       "target": "nano",
       "cloud": "gcp",
@@ -1353,14 +1265,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-app-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-azure-app",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-app.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-azure-app",
@@ -1397,14 +1301,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-azure-appconfiguration",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-appconfiguration.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-azure-appconfiguration",
       "target": "nano",
       "cloud": "azure",
@@ -1437,14 +1333,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-cognitiveservices-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-azure-cognitiveservices",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-cognitiveservices.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-azure-cognitiveservices",
@@ -1481,14 +1369,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-azure-dns",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-dns.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-azure-dns",
       "target": "nano",
       "cloud": "azure",
@@ -1523,14 +1403,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-azure-monitor",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-monitor.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-azure-monitor",
       "target": "nano",
       "cloud": "azure",
@@ -1563,14 +1435,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-operationalinsights-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-azure-operationalinsights",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-operationalinsights.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-azure-operationalinsights",
@@ -1677,14 +1541,6 @@
       "timeout": 120
     },
     {
-      "id": "offline-ui-azure-nsg-roledef-create",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-nsg-roledef-create.mjs",
-      "timeout": 300
-    },
-    {
       "id": "nano-ui-azure-nsg-roledef-create",
       "target": "nano",
       "cloud": "azure",
@@ -1693,28 +1549,12 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-azure-tags-tab",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-tags-tab.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-azure-tags-tab",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tags-tab.mjs",
       "timeout": 600
-    },
-    {
-      "id": "offline-ui-azure-nsg-rules",
-      "target": "offline",
-      "cloud": "azure",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-nsg-rules.mjs",
-      "timeout": 300
     },
     {
       "id": "nano-ui-azure-nsg-rules",
@@ -1749,14 +1589,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-kinesis-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-aws-kinesis",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-kinesis.mjs",
-      "timeout": 600
     },
     {
       "id": "offline-sdk-java-gcp-artifactregistry",
@@ -1889,22 +1721,6 @@
       "timeout": 600
     },
     {
-      "id": "offline-ui-gcp-artifactregistry",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-artifactregistry.mjs",
-      "timeout": 600
-    },
-    {
-      "id": "offline-ui-gcp-metrics-tab",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-metrics-tab.mjs",
-      "timeout": 300
-    },
-    {
       "id": "nano-ui-aws-kinesis",
       "target": "nano",
       "cloud": "aws",
@@ -1939,14 +1755,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-aws-apigatewayv2",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-apigatewayv2.mjs",
-      "timeout": 600
-    },
-    {
       "id": "nano-ui-aws-apigatewayv2",
       "target": "nano",
       "cloud": "aws",
@@ -1979,14 +1787,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-cloudwatch-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-aws-cloudwatch",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-cloudwatch.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-aws-cloudwatch",
@@ -2029,14 +1829,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-sns-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-aws-sns",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-sns.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-aws-sns",
@@ -2096,14 +1888,6 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-monitoring-cli-smoke.sh",
       "timeout": 300
-    },
-    {
-      "id": "offline-ui-gcp-monitoring",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-monitoring.mjs",
-      "timeout": 600
     },
     {
       "id": "nano-ui-gcp-monitoring",

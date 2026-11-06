@@ -173,8 +173,8 @@ func (v *launchView) waitReady(url string) {
 
 // LAUNCH-VIEW-READY (keep identical across launchers)
 func (v *launchView) ready(url string) {
-	fmt.Fprintf(os.Stderr, "\n  %sReady.%s Open %s%s%s   ·   SDK/CLI: point --endpoint-url at %s\n", v.b, v.z, v.c, url, v.z, url)
-	fmt.Fprintf(os.Stderr, "  %sPro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.%s\n\n", v.d, v.z)
+	fmt.Fprintf(os.Stderr, "\n  %sReady.%s API endpoint %s%s%s   ·   SDK/CLI: point --endpoint-url at it   ·   UI: https://vyomi.cloud/nano\n", v.b, v.z, v.c, url, v.z)
+	fmt.Fprintf(os.Stderr, "  %sPro tier: launch an EC2 instance with the CLI/SDK, then ssh ubuntu@<ip>.%s\n\n", v.d, v.z)
 }
 
 var reComposeVer = regexp.MustCompile(`vyomi/appliance:([0-9][0-9.]*)`)

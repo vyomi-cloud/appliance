@@ -16,7 +16,7 @@ The simulator image is the FastAPI control plane. For a full local stack with th
 ### One-container quick try
 ```bash
 docker run --rm -p 9000:9000 vyomi/appliance:latest
-# Open http://localhost:9000/pricing
+# Headless: API/SDK/CLI at http://localhost:9000 (UI = Nano, https://vyomi.cloud/nano)
 ```
 
 This runs the simulator alone (no real backends). Many services will use in-memory state. For the full experience:
@@ -25,7 +25,7 @@ This runs the simulator alone (no real backends). Many services will use in-memo
 ```bash
 git clone https://github.com/vyomi-cloud/appliance && cd appliance
 docker compose up -d
-# Open http://localhost:9000/pricing
+# Headless: API/SDK/CLI at http://localhost:9000 (UI = Nano, https://vyomi.cloud/nano)
 ```
 
 ### Recommended: the Vyomi appliance launcher
@@ -83,10 +83,8 @@ Full env reference: [`.env.example`](https://github.com/vyomi-cloud/appliance/bl
 ## Useful endpoints
 
 After boot:
-- http://localhost:9000/pricing — pick a tier
-- http://localhost:9000/console/aws — AWS console
-- http://localhost:9000/console/gcp — GCP console
-- http://localhost:9000/console/azure — Azure console
+> **Appliance 4.0.0 is headless** — it serves the API, SDK and CLI endpoints only (no console UI). **Vyomi Nano** at https://vyomi.cloud/nano is the only UI. `GET /` with a browser Accept header returns a short headless notice; S3 clients get ListBuckets XML.
+
 - http://localhost:9000/api/runtime/tier — tier policy
 - http://localhost:9000/api/runtime/backends — real backend health
 - http://localhost:9000/docs — OpenAPI swagger

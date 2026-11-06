@@ -7,58 +7,6 @@ from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, Resp
 from core import app_context as ctx
 
 
-# ─── Tier gate shared across the 3 console HTML routes ──────────────────────
-# A Student-tier subscription is locked to ONE cloud. We must block UI access
-# to other clouds at the HTML route level — otherwise the user sees an empty
-# but fully-rendered console shell (every click 403s through the middleware,
-# which is correct but a leaky UX).
-#
-# Returns a RedirectResponse to use, or None to continue with the normal
-# HTMLResponse.
-def _console_tier_gate(provider: str) -> RedirectResponse | None:
-    try:
-        from core import tier_policy as _tp
-        # PROFILE gate first — a profiled sandbox (e.g. aws-full) blocks the
-        # consoles of clouds not in the profile, INDEPENDENT of tier. Bounce to
-        # the first allowed cloud's console with a param the SPA shows as a toast.
-        _pclouds = _tp.profile_clouds()
-        if _pclouds and provider not in _pclouds:
-            _dest = sorted(_pclouds)[0]
-            return RedirectResponse(
-                f"/console/{_dest}?denied={provider}&reason=profile", status_code=302)
-        tenant = ctx._tenant_dict(ctx._active_tenant_id()) or {}
-    except Exception:
-        return None  # fail-open on internal errors — middleware still gates APIs
-    tier = str(tenant.get("license_tier") or "free")
-    primary = str(tenant.get("primary_cloud") or "")
-    policy = _tp.policy_for(tier)
-    providers = policy.get("providers", [])
-
-    if providers == "primary_cloud_only":
-        # Student tier with no primary_cloud set → bounce to /pricing so they
-        # can fix the activation. Matches the fail-safe in tier_policy.
-        if not primary:
-            return RedirectResponse(
-                "/pricing?error=student_primary_cloud_required",
-                status_code=302,
-            )
-        # Student tier asking for a different cloud → bounce to their cloud's
-        # console with a query param the SPA can use to show a "locked" toast.
-        if primary != provider:
-            return RedirectResponse(
-                f"/console/{primary}?denied={provider}",
-                status_code=302,
-            )
-    elif isinstance(providers, list) and provider not in providers:
-        # Free tier hitting a console it doesn't have access to — bounce to
-        # /pricing with the upgrade context.
-        return RedirectResponse(
-            f"/pricing?error=tier_console_locked&cloud={provider}&tier={tier}",
-            status_code=302,
-        )
-    return None
-
-
 # App-matching dark theme for Swagger UI (bg #05071a, tiles #14172e/#0d1228,
 # text #cdd8e6). Injected before </head> when the page is asked for with
 # ?theme=dark — used by the embedded in-console / dashboard API view.
@@ -230,74 +178,6 @@ def register(app: FastAPI) -> None:
     def docs_azure(request: Request):
         return _swagger_html("/openapi-azure.json", "CloudLearn — Azure API", request.query_params.get("theme") == "dark")
 
-    @app.get("/aws", include_in_schema=False)
-    def _shortpath_aws():
-        return RedirectResponse(url="/console/aws", status_code=302)
-
-    @app.get("/gcp", include_in_schema=False)
-    def _shortpath_gcp():
-        return RedirectResponse(url="/console/gcp", status_code=302)
-
-    @app.get("/azure", include_in_schema=False)
-    def _shortpath_azure():
-        return RedirectResponse(url="/console/azure", status_code=302)
-
-    @app.get("/pricing", include_in_schema=False)
-    def pricing_legacy_redirect():
-        # /pricing is retired — the launch page is now served at /.
-        # Kept as a 302 so old bookmarks and existing redirects in the
-        # codebase (e.g. tier-gate error redirects) still land correctly.
-        from urllib.parse import urlencode
-        from fastapi import Request
-        # Preserve query string (e.g. ?error=student_primary_cloud_required)
-        # so /pricing?error=… → /?error=… without losing context.
-        # FastAPI gives us no Request here without a dep; we can use the
-        # actual request object via Starlette's request scope when needed.
-        return RedirectResponse(url="/", status_code=302)
-
-    @app.get("/clouds", include_in_schema=False)
-    def clouds_page_landing():
-        # /clouds (exact) now serves the polished standalone workspaces
-        # landing — eyebrow + hero + 'Active spaces' grid + per-cloud
-        # provider cards. Was briefly merged into the SPA for v2.0.x;
-        # restored as a separate page in v2.0.4 because the SPA's
-        # spaces view reads as a dashboard, not a "pick up where you
-        # left off" landing surface.
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "clouds.html")
-        with open(html_path, "rb") as f:
-            return HTMLResponse(content=f.read().decode("utf-8"),
-                                headers={"Cache-Control": "no-store, max-age=0"})
-
-    @app.get("/clouds/{path:path}", include_in_schema=False)
-    def clouds_page_deep(path: str = ""):
-        # Deep links (/clouds/aws-prod-1 etc.) remain SPA-routed so the
-        # dozens of "Go to Spaces" buttons inside per-cloud consoles
-        # still work — they were built against the SPA's URL handling.
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
-        with open(html_path, "rb") as f:
-            return HTMLResponse(content=f.read().decode("utf-8"),
-                                headers={"Cache-Control": "no-store, max-age=0"})
-
-    @app.get("/console/azure", include_in_schema=False)
-    @app.get("/console/azure/{path:path}", include_in_schema=False)
-    def console_azure(path: str = ""):
-        gate = _console_tier_gate("azure")
-        if gate is not None:
-            return gate
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "azure-console.html")
-        with open(html_path, "rb") as f:
-            return HTMLResponse(content=f.read().decode("utf-8"), headers={"Cache-Control": "no-store, max-age=0"})
-
-    @app.get("/console/aws", include_in_schema=False)
-    @app.get("/console/aws/{path:path}", include_in_schema=False)
-    def console_aws(path: str = ""):
-        gate = _console_tier_gate("aws")
-        if gate is not None:
-            return gate
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "aws-console.html")
-        with open(html_path, "rb") as f:
-            return HTMLResponse(content=f.read().decode("utf-8"), headers={"Cache-Control": "no-store, max-age=0"})
-
     @app.get("/api/aws/catalog", include_in_schema=False)
     def api_aws_catalog():
         from providers.aws_catalog import build_console_payload
@@ -305,16 +185,6 @@ def register(app: FastAPI) -> None:
         region  = str(space.get("active_region") or "us-east-1")
         account = str(space.get("active_account") or "123456789012")
         return JSONResponse(build_console_payload(active_region=region, active_account=account))
-
-    @app.get("/console/gcp", include_in_schema=False)
-    @app.get("/console/gcp/{path:path}", include_in_schema=False)
-    def console_gcp(path: str = ""):
-        gate = _console_tier_gate("gcp")
-        if gate is not None:
-            return gate
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "gcp-console.html")
-        with open(html_path, "rb") as f:
-            return HTMLResponse(content=f.read().decode("utf-8"), headers={"Cache-Control": "no-store, max-age=0"})
 
     @app.get("/api/gcp/catalog", include_in_schema=False)
     def api_gcp_catalog():
@@ -389,7 +259,6 @@ def register(app: FastAPI) -> None:
    <div class="col">
      <a class="card azure" href="/docs/azure"><h2>Azure API ›</h2><p>Virtual Machines, Blob Storage, SQL, Service Bus, Cosmos DB, Functions, API Management, VNet, Entra/RBAC.</p></a>
      <a class="ulink" href="/docs/azure/usage">⌨ SDK &amp; CLI usage (az CLI · Java · Go) ›</a>
-     <a class="ulink" href="/console/azure">🖥 Azure portal console ›</a>
    </div>
  </div>
  <a class="all" href="/docs/all">View all endpoints (combined) →</a>
@@ -415,21 +284,3 @@ def register(app: FastAPI) -> None:
         server._reconcile_runtime_instances(ctx.gcp_compute_state.get("instances", {}))
         server._prune_expired_terminated_instances()
         server._prune_expired_terminated_instances_from(ctx.gcp_compute_state.get("instances", {}))
-
-    @app.get("/ui", include_in_schema=False)
-    @app.get("/ui/{path:path}", include_in_schema=False)
-    async def serve_ui_legacy_redirect(path: str = "") -> Response:
-        # /ui retired — the SPA is now canonical at /clouds. Kept as a
-        # 302 redirect so the dozens of "Go to Spaces" buttons inside
-        # aws-console.html / gcp-console.html / azure-console.html
-        # (and the SPA's own brand logo) keep working without each
-        # needing to be rewritten.
-        suffix = f"/{path}" if path else ""
-        return RedirectResponse(url=f"/clouds{suffix}", status_code=302)
-
-    @app.get("/product", include_in_schema=False)
-    @app.get("/product/{path:path}", include_in_schema=False)
-    async def serve_product(path: str = "") -> Response:
-        _UI_HTML = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
-        with open(_UI_HTML, "rb") as f:
-            return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})

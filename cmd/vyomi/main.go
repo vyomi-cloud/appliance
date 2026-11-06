@@ -41,7 +41,7 @@ Environment (VYOMI_* preferred; CLOUD_LEARN_* still honored):
   VYOMI_SUBSTRATE         docker | multipass
   VYOMI_APPLIANCE_NAME    Multipass VM name (default: cloudlearn-appliance)
   VYOMI_APPLIANCE_CPUS/MEMORY/DISK   VM sizing overrides
-  VYOMI_NO_OPEN=1         Don't auto-open the browser
+  VYOMI_NO_OPEN=1         (no effect: appliance is headless)
 `)
 }
 

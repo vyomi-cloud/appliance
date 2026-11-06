@@ -256,7 +256,7 @@ jobs:
           # or the PR carries bundles without their source (seen: azure-cosmos). .github stays out.
           git add -A && git reset -q -- .github
           git diff --cached --quiet || git commit -qm "v4: agent work left uncommitted in the workspace (committed by the runner)"
-          git add static/v4 wasm/v4 && git commit -qm "build(v4): rebuild console bundles" || true
+          git add wasm/v4 && git commit -qm "build(v4): rebuild console bundles" || true
           if git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD; then echo "no changes"; exit 0; fi
           git push -q origin HEAD
           {

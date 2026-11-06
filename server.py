@@ -305,18 +305,11 @@ app.add_middleware(GlassBoxCaptureMiddleware)
 # ── Azure state injection ────────────────────────────────────────────
 init_azure_state()
 
-# ── Static files mount ───────────────────────────────────────────────
+# ── Static files: headless appliance (4.0.0) serves NO console UI. Only the
+# bundled Swagger UI assets (used by /docs) are mounted. Nano is the only UI.
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-os.makedirs(STATIC_DIR, exist_ok=True)
-_UI_HTML = os.path.join(STATIC_DIR, "index.html")
-_PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
-app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
-# v4 native-fidelity consoles (built by consoles/build.mjs) at /v4/<cloud>/. They call the
-# native cloud wire through /_wire (routes/wire_prefix.py). Note: shadows a path-style S3
-# bucket literally named "v4" on this port.
-_V4_DIR = os.path.join(STATIC_DIR, "v4")
-if os.path.isdir(_V4_DIR):
-    app.mount("/v4", StaticFiles(directory=_V4_DIR, html=True), name="console-v4")
+if os.path.isdir(os.path.join(STATIC_DIR, "swagger")):
+    app.mount("/assets/swagger", StaticFiles(directory=os.path.join(STATIC_DIR, "swagger")), name="swagger-assets")
 
 # S3 routes are registered at the BOTTOM of this file (see end-of-file
 # block) so the catch-all @app.post("/{bucket}/{key:path}") doesn't
@@ -23087,7 +23080,7 @@ async def aws_query_root(request: Request) -> Response:
 # ── S3 REST API — root level ─────────────────────────────────────────────────
 
 async def s3_list_buckets(request: Request) -> Response:
-    """GET / → ListBuckets (S3 wire) OR serve pricing.html (browser).
+    """GET / → ListBuckets (S3 wire) OR a headless notice (browser).
 
     / is now the canonical launch page — pricing/features/SDKs all live
     on a single page that opens to browsers at the root URL. The old
@@ -23099,8 +23092,13 @@ async def s3_list_buckets(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     user_agent = request.headers.get("user-agent", "")
     if "text/html" in accept or "Mozilla" in user_agent:
-        with open(_PRICING_HTML, "rb") as f:
-            return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
+        return JSONResponse({
+            "service": "vyomi-appliance",
+            "mode": "headless",
+            "message": "The Vyomi appliance is headless (API/SDK/CLI only). The UI is Nano: https://vyomi.cloud/nano",
+            "api_docs": "/docs",
+            "health": "/healthz",
+        }, headers={"Cache-Control": "no-store, max-age=0"})
 
     now = _now()
     xml_parts = [

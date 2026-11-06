@@ -32,7 +32,7 @@ func (c *Config) startLocalhostBridge(vmIp string) {
 	}
 }
 
-// showUrlBanner prints the READY banner and opens the browser (Show-UrlBanner).
+// showUrlBanner prints the READY banner (Show-UrlBanner).
 func (c *Config) showUrlBanner(vmIp string) {
 	url := "http://localhost:9000/"
 	if vmIp != "" {
@@ -47,9 +47,8 @@ func (c *Config) showUrlBanner(vmIp string) {
 	if vmIp != "" {
 		progress(fmt.Sprintf("  Direct: http://%s:9000/   (VM IP, no bridge needed)", vmIp))
 	}
-	if envAny("", "VYOMI_NO_OPEN", "CLOUD_LEARN_NO_OPEN") != "1" {
-		openBrowser(url)
-	}
+	// Headless appliance (4.0.0): nothing to open at the endpoint. The UI is Nano.
+	progress("  UI: Nano — https://vyomi.cloud/nano   (the appliance is API/SDK/CLI only)")
 }
 
 func openBrowser(url string) {
@@ -124,7 +123,7 @@ func (c *Config) printVBoxManualFallback(vbox string) {
 	progress("     psexec -s -nobanner -accepteula $vb list runningvms      # note the \"name\"")
 	progress(`     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi9000,tcp,127.0.0.1,9000,,9000"`)
 	progress("")
-	progress("   Then open http://localhost:9000/")
+	progress("   Then point your SDK/CLI at http://localhost:9000/ (API endpoint)")
 	progress("  ------------------------------------------------------------")
 }
 

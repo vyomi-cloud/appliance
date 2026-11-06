@@ -26,8 +26,8 @@ What happens, in order:
    (sudo prompt) so the simulator is reachable at the same `vyomi.local`
    URL that earlier (Multipass-era) releases published. Idempotent — skipped
    if the line already exists.
-6. Opens **http://vyomi.local:9000** in your browser (falls back to
-   `http://localhost:9000` if you skipped step 5).
+6. Prints the API endpoint **http://vyomi.local:9000** (falls back to
+   `http://localhost:9000` if you skipped step 5). Appliance 4.0.0 is headless — it serves the API, SDK and CLI endpoints only (no console UI). **Vyomi Nano** at https://vyomi.cloud/nano is the only UI.
 
 > **Why `vyomi.local`?** Earlier (Multipass-era) releases published the appliance VM at
 > `vyomi.local` via mDNS so users didn't have to memorise an IP that changes between runs.
@@ -104,7 +104,7 @@ docker compose up -d
 
 # 3. Wait for healthy
 until curl -fsS http://localhost:9000/healthz >/dev/null; do sleep 1; done
-open http://localhost:9000           # or xdg-open on Linux
+# headless: point SDKs/CLIs at http://localhost:9000; the UI is Nano (https://vyomi.cloud/nano)
 ```
 
 ## Package-manager paths (Docker)
