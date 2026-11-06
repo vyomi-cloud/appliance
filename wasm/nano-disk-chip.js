@@ -157,9 +157,12 @@ function renderDiskWidget(d) {
       '</div>' +
     '</div>', d);
 }
+// Nano is served under /nano/ on the portal: root-relative /api/* must be sent to the in-page service worker (scope /nano/), as the
+// legacy consoles' fetch shim does. Offline/dev (served from /) keeps the plain path.
+function _api(u) { var m = location.pathname.match(/^(.*\/nano)\//); return m && u.charAt(0) === "/" && u.indexOf(m[1] + "/") !== 0 ? m[1] + u : u; }
 async function fetchDiskHealth() {
   try {
-    const r = await fetch("/api/runtime/disk-health");
+    const r = await fetch(_api("/api/runtime/disk-health"));
     const d = await r.json();
     renderDiskWidget(d);
   } catch (e) { /* keep last render */ }
@@ -180,7 +183,7 @@ async function openDiskCleanup() {
   modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
   document.body.appendChild(modal);
   try {
-    const r = await fetch("/api/runtime/disk-cleanup/suggestions");
+    const r = await fetch(_api("/api/runtime/disk-cleanup/suggestions"));
     const d = await r.json();
     const body = modal.querySelector("#cleanup-body");
     const foot = modal.querySelector("#cleanup-foot");
@@ -204,7 +207,7 @@ async function openDiskCleanup() {
       foot.querySelector("#cleanup-run").textContent = "Running…";
       foot.querySelector("#cleanup-run").disabled = true;
       try {
-        const r = await fetch("/api/runtime/disk-cleanup/run", {
+        const r = await fetch(_api("/api/runtime/disk-cleanup/run"), {
           method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({categories: cats}),
         });
@@ -250,7 +253,7 @@ function openDiskGrow() {
     b.onclick = async () => {
       const target = parseInt(b.dataset.gb, 10);
       try {
-        const r = await fetch("/api/runtime/disk-grow", {
+        const r = await fetch(_api("/api/runtime/disk-grow"), {
           method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({target_gb: target}),
         });
