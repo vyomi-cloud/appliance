@@ -11,6 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCAN = Path(sys.argv[1]); OLD = json.load(open(sys.argv[2]))
+# optional: gap-probe.mjs output (argv[3]) settles "closed-unmatched" sections by opening their original routes
+PROBE = {}
+if len(sys.argv) > 3 and os.path.exists(sys.argv[3]):
+    for r in json.load(open(sys.argv[3])): PROBE[(r["cloud"], r["service"], re.sub(r"^[^|]{1,60} \| ", "", r["title"]).strip().lower())] = r
 CLOUDS = ["aws", "gcp", "azure"]
 norm = lambda t: re.sub(r"^[^|]{1,60} \| ", "", t or "").strip().lower()
 toks = lambda s: set(w for w in re.findall(r"[a-z0-9]+", s.lower()) if len(w) > 2)
@@ -59,7 +63,30 @@ for k, o in old.items():
         if not cap: cap, sc = fuzzy(o["cloud"], o["service"], o["title"]); how = f"title match {sc:.2f}" if cap else ""
         lv = reg[cap]["off"] if cap else None
         st = "nano-only-unscanned" if (o["substrates"] == ["nano"] and "nano/" + o["cloud"] not in scanmeta) else "limited" if lv in ("limited", "config_only") else "real" if lv == "full" else "closed-unmatched"
-        closed.append(dict(o, state=st, regid=cap, level=lv, how=how))
+        ev = ""
+        if st == "closed-unmatched" and PROBE:
+            pr = PROBE.get((o["cloud"], o["service"], (o["title"] or "").strip().lower()))
+            if pr is None: ev = "no probe result"
+            elif pr["nsSame"]: st, ev = "probe-panel-present", f"probe: Not-simulated panel still renders at {pr['route']}"
+            else:
+                tt = toks(o["title"]); pcap = None
+                for cid, _lv in pr["caps"]:
+                    if cid in reg and reg[cid]["cloud"] == o["cloud"] and len(tt & toks(reg[cid]["title"])) / max(1, len(tt | toks(reg[cid]["title"]))) >= 0.34: pcap = cid; break
+                if pcap:
+                    lv = reg[pcap]["off"]; cap = pcap; how = "probe: capability id rendered on the section's page"
+                    st = "limited" if lv in ("limited", "config_only") else "real" if lv == "full" else "closed-unmatched"
+                    ev = f"probe: {pcap} at {pr['route']}"
+                elif pr["titleHit"] and not pr["err"]: st, ev = "ui-present", f"probe: '{(pr.get('text') or '')[:90]}' at {pr['route']}" + (f" tab {pr['tab']}" if pr.get("tab") else "")
+                elif pr.get("fallback") or pr["err"] or pr["len"] < 200: st, ev = "undeterminable", ("probe: route needs a resource that a fresh store lacks (detail/state-dependent page)" if pr.get("fallback") else "probe: page did not render usable content")
+                else: st, ev = "undeterminable", f"probe: page renders ({pr['len']} chars) but the section title text is not on it (renamed/merged/state-dependent)"
+        closed.append(dict(o, state=st, regid=cap, level=lv, how=how, evidence=ev))
+# the crawl is capped (MAX_PAGES), so a section it never reached looks "closed"; a probe hit on the panel overrides that
+for x in closed:
+    pr = PROBE.get((x["cloud"], x["service"], (x["title"] or "").strip().lower()))
+    if pr and pr["nsSame"] and x["state"] != "probe-panel-present":
+        x["state"], x["evidence"] = "probe-panel-present", f"probe: Not-simulated panel still renders at {pr['route']}"
+still += [dict(x, routes=[pr["route"]], subs=["nano-probe"]) for x in closed if x["state"] == "probe-panel-present" for pr in [PROBE[(x["cloud"], x["service"], (x["title"] or "").strip().lower())]]]
+closed = [x for x in closed if x["state"] != "probe-panel-present"]
 appeared = [dict(v, routes=sorted(v["routes"])[:2], subs=sorted(v["subs"])) for k, v in new.items() if k not in old]
 
 # ---- stale / contradictory registry text
@@ -84,19 +111,20 @@ tot = lambda L, c: sum(1 for x in L if x["cloud"] == c)
 W = []; w = W.append
 w("# v4 gap status: what v4 really does vs honestly does not")
 w("")
-w(f"Generated {datetime.date.today().isoformat()} at `{os.popen('git -C %s rev-parse --short HEAD' % ROOT).read().strip()}` by `consoles/tests/gap-scan.mjs` + `consoles/tests/gap-status.py`. Baseline = the original 683-section queue (`V4-GAP-QUEUE.md`, scan at `{OLD['baseCommit']}`). Scan = text-only Playwright crawl of the offline consoles" + (" and Nano" if any(k.startswith("nano") for k in scanmeta) else " (Nano was not re-scanned; see section 7)") + ". This doubles as the launch-claim checklist.")
+w(f"Generated {datetime.date.today().isoformat()} at `{os.popen('git -C %s rev-parse --short HEAD' % ROOT).read().strip()}` by `consoles/tests/gap-scan.mjs` + `consoles/tests/gap-status.py`. Baseline = the original 683-section queue (`V4-GAP-QUEUE.md`, scan at `{OLD['baseCommit']}`). Scan = text-only Playwright crawl of the " + ("NANO consoles only (the appliance UI is removed in 4.0.0; Nano is the only UI), capped at MAX_PAGES per cloud, plus a per-section probe of every baseline section's original route (`gap-probe.mjs`)" if all(k.startswith("nano") for k in scanmeta) else "offline consoles" + (" and Nano" if any(k.startswith("nano") for k in scanmeta) else "")) + ". This doubles as the launch-claim checklist.")
 w("")
 w("## 1. Headline counts")
 w("")
-w("| Cloud | Original sections | Closed (real) | Closed (limited, honest text) | Closed (state not determinable) | Not re-scanned (Nano-only page) | Still Not simulated | New since baseline |")
-w("|---|---|---|---|---|---|---|---|")
+w("| Cloud | Original sections | Closed (real) | Closed (limited, honest text) | Closed (UI present, unregistered; probe) | Closed (state not determinable) | Not re-scanned (Nano-only page) | Still Not simulated | New since baseline |")
+w("|---|---|---|---|---|---|---|---|---|")
+UND = ("closed-unmatched", "undeterminable")
 for c in CLOUDS:
     o = [x for x in old.values() if x["cloud"] == c]
     cl = [x for x in closed if x["cloud"] == c]
-    w(f"| {c.upper()} | {len(o)} | {sum(1 for x in cl if x['state']=='real')} | {sum(1 for x in cl if x['state']=='limited')} | {sum(1 for x in cl if x['state']=='closed-unmatched')} | {sum(1 for x in cl if x['state']=='nano-only-unscanned')} | {tot(still, c)} | {tot(appeared, c)} |")
-w(f"| **Total** | {len(old)} | {sum(1 for x in closed if x['state']=='real')} | {sum(1 for x in closed if x['state']=='limited')} | {sum(1 for x in closed if x['state']=='closed-unmatched')} | {sum(1 for x in closed if x['state']=='nano-only-unscanned')} | {len(still)} | {len(appeared)} |")
+    w(f"| {c.upper()} | {len(o)} | {sum(1 for x in cl if x['state']=='real')} | {sum(1 for x in cl if x['state']=='limited')} | {sum(1 for x in cl if x['state']=='ui-present')} | {sum(1 for x in cl if x['state'] in UND)} | {sum(1 for x in cl if x['state']=='nano-only-unscanned')} | {tot(still, c)} | {tot(appeared, c)} |")
+w(f"| **Total** | {len(old)} | {sum(1 for x in closed if x['state']=='real')} | {sum(1 for x in closed if x['state']=='limited')} | {sum(1 for x in closed if x['state']=='ui-present')} | {sum(1 for x in closed if x['state'] in UND)} | {sum(1 for x in closed if x['state']=='nano-only-unscanned')} | {len(still)} | {len(appeared)} |")
 w("")
-w("How to read: a section is *closed* when its `Not simulated in Vyomi` panel no longer renders anywhere in the console. Its state is taken from the capability registry (by id, else the best title match in the same cloud; the match score is in the JSON): `real` = registered `full`, `limited` = registered `limited`/`config_only` (the page works but shows the border tab with the honest limitation), *state not determinable* = no registry entry matched (the panel was replaced by a real page or removed, but nothing in the registry states which; treat as unverified until a registry entry exists). 'New since baseline' = panels the scanner now finds that were not in the original 683 (new pages added since, or titles that changed).")
+w("How to read: a section is *closed* when its `Not simulated in Vyomi` panel no longer renders anywhere in the console. Its state is taken from the capability registry (by id, else the best title match in the same cloud; the match score is in the JSON): `real` = registered `full`, `limited` = registered `limited`/`config_only` (the page works but shows the border tab with the honest limitation), *UI present* = no registry entry matched but the per-section probe found the section title on the real page with no Not-simulated panel (a UI exists; its fidelity level is unregistered, so this is NOT evidence of `real`), *state not determinable* = no registry entry matched and the probe could not reach the section (detail pages that need a resource, renamed/merged titles) or found its panel still rendering (listed in section 4 with evidence); no registry entry matched (the panel was replaced by a real page or removed, but nothing in the registry states which; treat as unverified until a registry entry exists). 'New since baseline' = panels the scanner now finds that were not in the original 683 (new pages added since, or titles that changed).")
 w("")
 w("Registry totals (all 1 281 entries, offline level / Nano level):")
 w("")
@@ -132,14 +160,14 @@ for c in CLOUDS:
         w("")
 w("## 4. Closed since the baseline")
 w("")
-for st, lab in (("real", "Closed real (registered full)"), ("limited", "Closed but registered limited / config_only (honest text)"), ("closed-unmatched", "Closed, no registry entry matched (verify)"), ("nano-only-unscanned", "Not re-scanned: only reachable on Nano (EC2 instance detail needs RunInstances, unsupported on macOS offline)")):
+for st, lab in (("real", "Closed real (registered full)"), ("limited", "Closed but registered limited / config_only (honest text)"), ("ui-present", "Closed, UI present but no registry entry (per-section probe found the section's real page; level unregistered)"), ("undeterminable", "Closed, still not determinable after the probe (no registry match and the probe could not find the section)"), ("closed-unmatched", "Closed, no registry entry matched (verify)"), ("nano-only-unscanned", "Not re-scanned: only reachable on Nano (EC2 instance detail needs RunInstances, unsupported on macOS offline)")):
     L = [x for x in closed if x["state"] == st]
     w(f"### {lab}: {len(L)}")
     w("")
     for c in CLOUDS:
         Lc = [x for x in L if x["cloud"] == c]
         if not Lc: continue
-        w(f"{c.upper()}: " + "; ".join(f"{x['service']}: {x['title'][:60]}" + (f" [{x['regid']}]" if x["regid"] else "") for x in sorted(Lc, key=lambda x: (x["service"], x["title"]))))
+        w(f"{c.upper()}: " + "; ".join(f"{x['service']}: {x['title'][:60]}" + (f" [{x['regid']}]" if x["regid"] else "") + (f" ({x['evidence']})" if x.get("evidence") and st in ("ui-present", "undeterminable", "probe-panel-present", "limited", "real") else "") for x in sorted(Lc, key=lambda x: (x["service"], x["title"]))))
         w("")
 if appeared:
     w(f"### New panels not in the baseline: {len(appeared)}")
@@ -188,6 +216,6 @@ for k, m in sorted(scanmeta.items()): w(f"- {k}: pages visited {m['pages']}, pag
 w("")
 (ROOT / "docs/architecture/v4.0/V4-GAP-STATUS.md").write_text("\n".join(W) + "\n")
 (ROOT / "docs/architecture/v4.0/V4-GAP-STATUS.json").write_text(json.dumps(dict(
-    counts={c: dict(original=sum(1 for x in old.values() if x["cloud"] == c), real=sum(1 for x in closed if x["cloud"] == c and x["state"] == "real"), limited=sum(1 for x in closed if x["cloud"] == c and x["state"] == "limited"), unmatched=sum(1 for x in closed if x["cloud"] == c and x["state"] == "closed-unmatched"), remaining=tot(still, c), new=tot(appeared, c)) for c in CLOUDS},
+    counts={c: dict(original=sum(1 for x in old.values() if x["cloud"] == c), real=sum(1 for x in closed if x["cloud"] == c and x["state"] == "real"), limited=sum(1 for x in closed if x["cloud"] == c and x["state"] == "limited"), ui_present=sum(1 for x in closed if x["cloud"] == c and x["state"] == "ui-present"), unmatched=sum(1 for x in closed if x["cloud"] == c and x["state"] in UND), remaining=tot(still, c), new=tot(appeared, c)) for c in CLOUDS},
     remaining=still, closed=closed, appeared=appeared, contradictions=contra, scan=scanmeta), indent=1, default=list))
 print({c: (tot(still, c), tot(appeared, c)) for c in CLOUDS}, "closed", collections.Counter(x["state"] for x in closed))
