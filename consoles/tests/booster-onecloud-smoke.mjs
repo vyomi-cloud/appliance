@@ -37,7 +37,7 @@ async function open(acc) {
   await page.waitForTimeout(800);
   return { ctx, page, calls };
 }
-const picker = (page) => page.evaluate(() => { window.openCreateSpaceModal(); const f = document.getElementById("csm-home-field"), s = document.getElementById("csm-home"); const r = { shown: f.style.display !== "none", value: s.value, opts: [...s.options].map((o) => o.value) }; window.closeCreateSpaceModal(); return r; });
+const picker = (page) => page.evaluate(() => { const o = VyomiBooster.homeOptions(); return { shown: o.length > 0, value: VyomiBooster.defaultHome(), opts: ["browser"].concat(o.map((x) => x.id)) }; });   // portal-Nano flow: no Create Space modal; the account decides where spaces/compute live
 const allowed = (page) => page.evaluate(() => ["aws", "gcp", "azure"].map((c) => VyomiBooster.cloudAllowed(c)));
 try {
   let t = await open(PRO(""));
@@ -49,8 +49,8 @@ try {
 
   t = await open(PRO("aws"));
   check("Pro, aws chosen: only aws", JSON.stringify(await allowed(t.page)) === "[true,false,false]");
-  const r = await t.page.evaluate(async () => { window.openCreateSpaceModal(); document.getElementById("csm-name").value = "x-space"; const r = document.querySelector('input[name="csm-provider"][value="gcp"]'); if (r) r.checked = true; await window.submitCreateSpace(); return document.getElementById("csm-error").textContent; });
-  check("Pro: creating a GCP space is refused with the Max upgrade message", /one cloud/i.test(r) && /Max/.test(r), r);
+  const g = await t.page.evaluate(async () => ({ gate: await window._cloudGate("gcp", null), allowed: VyomiBooster.cloudAllowed("gcp") }));
+  check("Pro: a GCP space/compute request is refused (one cloud only)", g.gate === false && g.allowed === false, JSON.stringify(g));
   check("Pro: no pin call when a cloud is already chosen", !t.calls.includes("POST /api/account/booster/primary-cloud"), t.calls.join(","));
   await t.ctx.close();
 

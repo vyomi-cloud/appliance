@@ -1,5 +1,5 @@
 /* Account flow: the portal's booster record decides backend vs browser. Faked /api/account/booster (route) against the Nano preview.
- *   not enabled  -> no booster option in the create-space picker (everything stays in the browser)
+ *   not enabled  -> no booster option (no Create Space modal in the portal-Nano flow) (everything stays in the browser)
  *   enabled      -> picker offers the booster and PRESELECTS it (backend)
  *   toggle       -> dialog Turn off / Turn on call POST /disable | /enable and the picker follows
  *   unknown (404, e.g. preview/offline) -> unchanged: a paired booster is offered
@@ -34,7 +34,7 @@ async function open(acc) {
   await page.waitForTimeout(800);
   return { ctx, page, calls };
 }
-const picker = (page) => page.evaluate(() => { window.openCreateSpaceModal(); const f = document.getElementById("csm-home-field"), s = document.getElementById("csm-home"); const r = { shown: f.style.display !== "none", value: s.value, opts: [...s.options].map((o) => o.value) }; window.closeCreateSpaceModal(); return r; });
+const picker = (page) => page.evaluate(() => { const o = VyomiBooster.homeOptions(); return { shown: o.length > 0, value: VyomiBooster.defaultHome(), opts: ["browser"].concat(o.map((x) => x.id)) }; });   // portal-Nano flow: no Create Space modal; the account decides where spaces/compute live
 try {
   let t = await open({ ...OFF });
   check("not enabled: no booster option, browser only", await t.page.evaluate(() => VyomiBooster.homeOptions().length === 0) && !(await picker(t.page)).shown);

@@ -59,7 +59,7 @@ try {
   await page.waitForTimeout(1500);   // nano-sw may reload once to become controlled
   await wait(() => !!window.VyomiBooster && !!navigator.serviceWorker.controller, null, 30000);
   check("booster-link loaded on launcher", await page.evaluate(() => !!window.VyomiBooster));
-  check("no Home picker before pairing", await page.evaluate(() => { window.openCreateSpaceModal(); const v = document.getElementById("csm-home-field").style.display === "none"; window.closeCreateSpaceModal(); return v; }));
+  check("no booster home option before pairing (no Create Space modal in the portal-Nano flow)", await page.evaluate(() => VyomiBooster.homeOptions().length === 0));
 
   // 2. pairing: wrong code refused, right code -> token stored, connected
   const wrong = await page.evaluate((b) => VyomiBooster.pair(b, "000000").then(() => "paired", (e) => String(e.message)), BOOSTER);
@@ -75,7 +75,7 @@ try {
   check("candidates() uses stored local_url + relay_url", cands.includes("http://127.0.0.1:1") && cands.includes(BOOSTER), cands.join(","));
 
   // 3. Home picker visible; create booster-homed + browser-homed spaces
-  const opts = await page.evaluate(() => { openCreateSpaceModal(); const s = document.getElementById("csm-home"); const o = { vis: document.getElementById("csm-home-field").style.display !== "none", opts: [...s.options].map((x) => x.textContent) }; closeCreateSpaceModal(); return o; });
+  const opts = await page.evaluate(() => ({ vis: VyomiBooster.homeOptions().length > 0, opts: ["This browser"].concat(VyomiBooster.homeOptions().map((x) => "Booster: " + x.name)) }));
   check("Home picker shown with booster option once paired", opts.vis && opts.opts.length === 2 && /Booster: lab-booster/.test(opts.opts[1]), opts.opts.join("|"));
   const mk = (name, home, provider = "aws") => page.evaluate(async ([n, h, p]) => { const r = await fetch("/api/spaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: p, name: n, home: VyomiBooster.homePayload(h) }) }); return (await r.json()).space; }, [name, home, provider]);
   const bs = await mk("boost-space", id), ws = await mk("web-space", "browser");
