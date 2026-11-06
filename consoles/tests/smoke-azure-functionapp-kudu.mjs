@@ -16,7 +16,8 @@ const arm = (m, path, body, v = "2023-12-01") => pg.evaluate(async ([m, url, bod
 }, [m, `${WIRE}/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, body]);
 const site = `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`;
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
 ok("create function app", [200, 201].includes((await arm("PUT", site, { location: "eastus", kind: "functionapp,linux", properties: { reserved: true } })).status));
 await arm("PUT", `${site}/config/appsettings`, { properties: { GREETING: "hello-fn" } });

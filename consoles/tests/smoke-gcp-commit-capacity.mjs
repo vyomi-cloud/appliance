@@ -24,7 +24,8 @@ const wj = (path, method = "GET", b) => page.evaluate(async ([u, m, body]) => { 
 const vm = (name, mt, zone = "us-central1-a") => wj(`/compute/v1/projects/${P}/zones/${zone}/instances`, "POST", { name, machineType: `zones/${zone}/machineTypes/${mt}`,
   disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }], networkInterfaces: [{ network: "global/networks/default" }] });
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
   const go = async (hash, heading) => { await page.goto(UI + hash); await page.getByRole("heading", { name: heading }).first().waitFor(); };
   const dlg = () => page.getByRole("dialog");

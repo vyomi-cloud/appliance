@@ -15,7 +15,8 @@ const check = (name, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS"
 const browser = await pw.chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = []; page.on("pageerror", (e) => errors.push(e.message));
-await page.goto(UI, { waitUntil: "networkidle" });
+await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
 const arm = (method, path, body, av = "2024-05-15") => wire(`/subscriptions/${SUB}${path}?api-version=${av}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");

@@ -16,7 +16,8 @@ const call = (m, url, body) => pg.evaluate(async ([m, url, body]) => {
   const t = await r.text(); let j = null; try { j = t ? JSON.parse(t) : null; } catch {} return { status: r.status, body: j };
 }, [m, url, body]);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1500, height: 1600 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 const arm = (m, p, body, v) => call(m, `${WIRE}/subscriptions/${SUB}${p}?api-version=${v}`, body);
 await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
 const put = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Dashboard/grafana/${G}`, { location: "eastus", sku: { name: "Standard" }, identity: { type: "SystemAssigned" }, properties: { grafanaMajorVersion: "11" } }, "2023-09-01");

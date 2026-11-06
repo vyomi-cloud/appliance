@@ -17,7 +17,8 @@ const call = (m, url, body) => pg.evaluate(async ([m, url, body]) => {
 }, [m, url, body]);
 const arm = (m, path, body, v = "2024-05-01") => call(m, `${WIRE}/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, body);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1500, height: 1000 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
 await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
 const C = `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`;
 await arm("PUT", C, { location: "eastus", properties: { dnsPrefix: "go", agentPoolProfiles: [{ name: "np", count: 1, vmSize: "Standard_DS2_v2", mode: "System" }] } });

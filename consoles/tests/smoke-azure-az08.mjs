@@ -36,7 +36,8 @@ const noNS = async (label, allow = []) => {
 const blobPut = (container, name, body) => wire(`/${SA}/${container}/${name}`, { method: "PUT", body, headers: { "x-ms-blob-type": "BlockBlob", "x-ms-version": "2021-12-02", authorization: `SharedKey ${SA}:smoke` } });
 
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.getByRole("heading", { name: "Azure services" }).waitFor({ timeout: 120000 });
   await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
   await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`, { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" } }, "2023-05-01");

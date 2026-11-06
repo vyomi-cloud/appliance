@@ -18,7 +18,8 @@ const J = { "content-type": "application/json" };
 const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project", L = "us-central1";
 const N = Date.now() % 100000;
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   const job = `ev${N}`;
   await wj(`/v2/projects/${P}/locations/${L}/jobs?jobId=${job}`, { method: "POST", headers: J, body: JSON.stringify({ template: { template: { containers: [{ image: "gcr.io/x/y" }] } } }) });
   await page.goto(UI + `#/run/jobs/details/${L}/${job}?tab=triggers`);

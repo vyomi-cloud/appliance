@@ -19,7 +19,8 @@ page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.getByRole("heading", { name: "Azure services" }).waitFor({ timeout: 120000 });
   await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
   const P = (ns, t, name) => `/resourceGroups/${RG}/providers/Microsoft.${ns}/${t}/${name}`;

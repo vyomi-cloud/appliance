@@ -19,7 +19,8 @@ const D = `/v1/projects/${P}/databases/(default)/documents`;
 const jwt = (uid) => { const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url"); return `${b({ alg: "none" })}.${b({ iss: "https://securetoken.google.com/" + P, sub: uid, user_id: uid })}.`; };
 const RULES = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /notes/{id} {\n      allow read, write: if request.auth != null && request.auth.uid == id;\n    }\n  }\n}`;
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.goto(UI + "#/firestore/create-database");
   await page.getByText("Security rules").first().waitFor();
   check("create-database has no rules-enforcement Not-simulated panel", (await page.locator("[data-vyomi-not-simulated='Security rules enforcement']").count()) === 0);
