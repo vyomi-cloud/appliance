@@ -19,9 +19,12 @@ let pass = 0, fail = 0; const ok = (n, c, d = "") => { c ? pass++ : fail++; cons
   ok("create mysql instance", (await mk(MYDB, "mysql")).s === 200);
   // wait for the bridge to register both with the tunnel
   let dbs = [];
-  for (let i = 0; i < 40; i++) { dbs = (await (await fetch(TUN + "/health")).json()).dbs || []; if (dbs.length >= 2) break; await new Promise((r) => setTimeout(r, 1500)); }
+  for (let i = 0; i < 40; i++) { dbs = (await (await fetch(TUN + "/health")).json()).dbs || []; const h = await (await fetch(TUN + "/health")).json(); if ((h.dbs || []).length >= 1 && (h.vms || []).length >= 1) break; await new Promise((r) => setTimeout(r, 1500)); }
   console.log("tunnel dbs:", JSON.stringify(dbs));
-  const pgEp = dbs.find((d) => d.engine === "postgres"), myEp = dbs.find((d) => d.engine === "mysql");
+  // Postgres (PGlite) is published through the tunnel's /vm bridge (pglite-loader.js), MySQL through /db (db-bridge.js).
+  const vmsList = (await (await fetch(TUN + "/health")).json()).vms || [];
+  const pv = vmsList.find((v) => String(v.vm || v.name || v.id || "").startsWith("db-rds_" + PGDB) || JSON.stringify(v).includes(PGDB));
+  const pgEp = dbs.find((d) => d.engine === "postgres") || (pv ? { host_port: pv.host_port || pv.port } : null), myEp = dbs.find((d) => d.engine === "mysql");
   ok("tunnel lists a postgres endpoint", !!pgEp); ok("tunnel lists a mysql endpoint", !!myEp);
   if (pgEp) {
     const o = sh(`psql "host=127.0.0.1 port=${pgEp.host_port} user=master dbname=postgres sslmode=prefer" -v ON_ERROR_STOP=1 -At -c "CREATE TABLE hosts(id serial primary key, n text)" -c "INSERT INTO hosts(n) VALUES ('from-psql')" -c "SELECT id||':'||n FROM hosts"`, { PGPASSWORD: "pw12345678" });

@@ -429,6 +429,14 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
   };
   // Boot: rehydrate the persisted dataset into the shared registry BEFORE releasing
   // /api/* requests, so the console opens with its previous resources intact.
+  // RDS + Cloud SQL Postgres run on REAL Postgres (PGlite) in the page too, so host apps (psql/psycopg/JDBC) reach them through the
+  // booster/tunnel (pglite-loader publishes each database on a host port). MySQL-family instances keep the sqlite store behind the
+  // dialect translator (no MySQL WebAssembly build). Must precede the restore + any router construction (they cache the store).
+  try {
+    const pgOk = await Promise.race([import("./pglite-loader.js").then((m) => m.installPGlite()), new Promise((r) => setTimeout(() => r(false), 12000))]);
+    if (pgOk) py.runPython("from core import nano_registry as _r\nfrom core.sql_store import PGliteSqlStore as _P\n_s = _r.get()\n_s['rds'] = _P(ns='rds')\n_s['gcp_sql'] = _P(ns='gcp_sql')");
+    else console.warn("[nano] PGlite unavailable: RDS/Cloud SQL keep the sqlite engine");
+  } catch (e) { console.warn("[nano] PGlite skipped:", e); }
   st = K.step("store", "restoring your resources from IndexedDB");
   try { restoreStores(await nbMetaGet(STORE_KEY)); st.ok(); } catch (e) { st.ok("starting fresh"); }
 
