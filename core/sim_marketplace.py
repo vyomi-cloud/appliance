@@ -136,6 +136,23 @@ def ai_stack_cards(ai: Any, added: Iterable[str] = (), portal: str = "https://vy
     return cards
 
 
+def entitlements_from_claims(*sources: Any, sims: Iterable[dict] | None = None) -> tuple[set, set]:
+    """(owned_clouds, ai_clouds) from licence claims / licence dicts (first non-empty `simulators` / `ai_stack` wins).
+    `ai_stack: "all"` enables every cloud. Used by the tier gate so the add-ons are enforced, not just displayed."""
+    ids = {s["id"] for s in (sims if sims is not None else SIMULATORS)}
+    owned: set = set()
+    ai_val: Any = None
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        if not owned and src.get("simulators"):
+            owned = {str(x).lower() for x in src["simulators"] if x} & ids
+        if ai_val is None and src.get("ai_stack"):
+            ai_val = src["ai_stack"]
+    all_on, singles = _ai_set(ai_val)
+    return owned, (set(ids) if all_on else (singles & ids))
+
+
 _NOT_LICENSED_TIERS = ("free", "nano")
 
 

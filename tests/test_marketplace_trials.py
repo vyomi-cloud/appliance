@@ -42,6 +42,19 @@ ai2 = mk.ai_stack_cards("all", ["aws"])
 check("AI all-clouds licence enables every card", all(c["enabled"] for c in ai2) and all(c["url"] == "" for c in ai2))
 check("AI checkout url", "product=ai_stack&scope=gcp" in ai1[1]["url"])
 
+# ---- add-on enforcement (tier gate)
+from core import tier_policy as tp
+check("AI services are closed on Free", tp.check_service("free", "bedrock", request_cloud="aws")["ok"] is False)
+check("AI services are closed even on Max without the AI stack", tp.check_service("max", "bedrock", request_cloud="aws")["code"] == "ai_stack_required")
+check("AI stack for aws opens AI on aws only", tp.check_service("free", "bedrock", request_cloud="aws", ai_clouds={"aws"})["ok"] and not tp.check_service("free", "vertexai", request_cloud="gcp", ai_clouds={"aws"})["ok"])
+check("AI stack does NOT unlock non-AI services (RDS stays Pro-locked on Free)", tp.check_service("free", "dynamodb", request_cloud="aws", ai_clouds={"aws"})["ok"] is False)
+check("AI stack does not change what Free already gets (it adds nothing to compute)", tp.check_service("free", "ec2", request_cloud="aws", ai_clouds={"aws"}) == tp.check_service("free", "ec2", request_cloud="aws"))
+check("owned Full Cloud stack opens every non-AI service on that cloud", tp.check_service("free", "dynamodb", request_cloud="aws", owned_clouds={"aws"})["ok"])
+check("owned stack on aws does not open gcp services or AI", tp.check_service("free", "firestore", request_cloud="gcp", owned_clouds={"aws"})["ok"] is False and tp.check_service("free", "bedrock", request_cloud="aws", owned_clouds={"aws"})["ok"] is False)
+own, ai = mk.entitlements_from_claims({"simulators": ["aws", "bogus"], "ai_stack": ["gcp"]})
+check("claims -> entitlements", own == {"aws"} and ai == {"gcp"})
+check("ai_stack 'all' -> every cloud", mk.entitlements_from_claims({"ai_stack": "all"})[1] == {"aws", "gcp", "azure"})
+
 # ---- start / countdown
 sp = {"space_id": "s1", "provider": "aws"}
 check("no trial -> free", mk.effective(sp, None, now)["tier"] == "free")

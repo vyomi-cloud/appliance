@@ -3667,12 +3667,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       else if (c.requires_simulator) foot = '<span class="mk-note">Add ' + (all ? 'a simulator' : _esc(c.name)) + ' to Spaces first</span>';
       else foot = _buyBtn(c.url, 'Buy ' + (all ? 'AI stack · all clouds' : c.product || 'AI stack'), c.price_usd, c.per, 'Buy AI stack for ' + c.name + ', $' + c.price_usd + ' ' + c.per);
       return _packCard({ id: 'ai-' + c.id, logo: c.id, title: all ? 'All clouds' : (c.product || c.name), sub: all ? 'AI stack · AWS + Google Cloud + Azure' : c.name + ' · AI stack',
-        ribbon: 'AI', ribbonCls: c.enabled ? 'pro' : 'free', status: status, included: _pcIncluded('What’s included', inc, false), foot: foot });
+        ribbon: 'AI', ribbonCls: c.enabled ? 'pro' : 'free', status: status, included: _pcIncluded('What’s included', ['SDK, CLI & API for these AI services only'].concat(inc), false), foot: foot });
     }
     function _planCard(k, P, cur, l) {
       const p = P[k] || VY_PLANS[k], price = p.price_usd || p.price, mn = p.min_months || p.min;
       const name = k === 'max' ? 'Max' : 'Pro', base = ((l && l.pricing_url) || _pricingUrl()).replace(/\/pricing$/, '');
-      const inc = k === 'max' ? ['All 3 clouds, unlimited', 'Every cloud at once', 'Full access to every simulator service'] : ['1 cloud of your choice', 'Switch cloud every 30 days', 'Full access to that cloud’s services'];
+      const inc = k === 'max' ? ['All 3 clouds, unlimited', 'SDK, CLI & API on every cloud', 'Full access to every simulator service'] : ['1 cloud of your choice', 'Switch cloud every 30 days', 'SDK, CLI & API on that cloud', 'Full access to that cloud’s services'];
       const status = cur
         ? '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>' + (k === 'pro' && l && l.detail ? _esc(l.detail) : 'Active on your licence') + '</small></span></div>'
         : '<div class="mk-free no">' + _CHECK + '<span><b>Billed over a minimum of ' + mn + ' months</b></span></div>';
@@ -3707,7 +3707,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       const svc = (c.services && c.services.length) ? c.services : ((VY_SIMULATORS.filter(x => x.id === c.id)[0] || {}).services || []);
       return _packCard({ id: c.id, logo: c.id, title: c.name, sub: 'Full Cloud stack' + (c.added ? ' · in Spaces' : ''), ribbon: (tier === 'free' ? 'Full' : T), ribbonCls: tier, off: c.trial_ended,
         addId: c.id, disabled: c.can_add === false, aria: (c.added ? 'Open ' : 'Add ') + c.name + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier',
-        status: free, included: _pcIncluded('All ' + svc.length + ' services', svc, true), cta: cta, foot: foot });
+        status: free, included: _pcIncluded('All ' + svc.length + ' services', ['SDK, CLI & API for all ' + svc.length + ' services'].concat(svc), true), cta: cta, foot: foot });
     }
     async function loadMarketplace() {
       const g = document.getElementById('mkt-grid'); if (!g) return;

@@ -78,6 +78,14 @@ SERVICE_CATEGORY = {
     "vnet":            "network",
     "keyvault":        "secrets",  # also acts as KMS — Free unlocks both buckets together
     "servicebus":      "queue",
+    # AI stack (sold separately, month-to-month, per cloud — see core/sim_marketplace.AI_STACK). NOT part of any
+    # plan: even Max needs the AI stack for the cloud. Keys are the service ids the AI routers resolve to.
+    "bedrock":         "ai",
+    "bedrock-agent":   "ai",
+    "bedrock-agentcore": "ai",
+    "vertexai":        "ai",
+    "azureopenai":     "ai",
+    "openai":          "ai",
     "cosmos":          "nosql",
     "eventgrid":       "eventing",
 }
@@ -617,7 +625,9 @@ def all_tiers() -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 def check_service(tier: str, service_key: str,
                   primary_cloud: str | None = None,
-                  request_cloud: str | None = None) -> dict[str, Any]:
+                  request_cloud: str | None = None,
+                  owned_clouds: Any = (),
+                  ai_clouds: Any = ()) -> dict[str, Any]:
     """Is this service unlocked for this tier?
 
     service_key — one of the keys in SERVICE_CATEGORY (e.g. "ec2", "rds",
@@ -628,6 +638,21 @@ def check_service(tier: str, service_key: str,
     """
     p = policy_for(tier)
     tier_norm = normalize_tier(tier)
+
+    # Pay-as-you-go add-ons (marketplace). They are independent of the plan and of each other:
+    #   * AI stack for cloud X  -> unlocks ONLY the "ai" services on X. It never widens compute/storage/etc.
+    #   * Full Cloud stack for X -> every non-AI service on X (a single-cloud Pro), nothing on other clouds.
+    # The "ai" category is closed to everyone (even Max) unless the AI stack covers the cloud.
+    if SERVICE_CATEGORY.get(service_key) == "ai":
+        if request_cloud and request_cloud in set(ai_clouds or ()):
+            return {"ok": True}
+        return {
+            "ok": False, "code": "ai_stack_required",
+            "reason": f"{service_key} needs the AI stack for {request_cloud or 'this cloud'} (buy it in the Marketplace)",
+            "upgrade_to": "ai_stack", "service": service_key, "category": "ai",
+        }
+    if request_cloud and request_cloud in set(owned_clouds or ()):
+        return {"ok": True}
 
     # Provider gate — Pro is locked to one cloud.
     providers = p.get("providers", [])

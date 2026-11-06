@@ -840,9 +840,15 @@ async def _tier_enforcement_middleware(request: Request, call_next):
                 pass  # fail-open on internal errors
 
     from core import tier_policy as _tp
+    try:
+        from core import sim_marketplace as _mk
+        _owned, _ai = _mk.entitlements_from_claims(STATE.get("license_claims"), STATE.get("license"))
+    except Exception:
+        _owned, _ai = set(), set()
     result = _tp.check_service(tier, service_key,
                                primary_cloud=primary_cloud,
-                               request_cloud=provider)
+                               request_cloud=provider,
+                               owned_clouds=_owned, ai_clouds=_ai)
     if not result["ok"]:
         # Augment with the docs URL + active tier facts for the SPA modal.
         result["active_tier"] = tier
