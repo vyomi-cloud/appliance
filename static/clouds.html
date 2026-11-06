@@ -1904,6 +1904,8 @@
   html.vy-embed .mk-card a.mk-buy-b:hover { transform: translateY(-1px); box-shadow: 0 10px 18px -8px rgba(0,0,0,.55); }
   html.vy-embed .mk-card a.mk-buy-b:hover::after { transform: translateX(3px); }
   .mk-plans { gap: 20px; }
+  .mk-card[data-sim="plan-pro"] .mk-head::after, .mk-card[data-sim="plan-max"] .mk-head::after, .mk-card[data-sim^="pack-"] .mk-head::after { display: none; }
+  .mk-card[data-sim="plan-pro"] .mk-head, .mk-card[data-sim="plan-max"] .mk-head, .mk-card[data-sim^="pack-"] .mk-head { background: linear-gradient(100deg, #ffe1b3 0%, #cfe0fd 52%, #b9dcf6 100%); }
   /* no outer panel; section tab baseline runs edge to edge */
   html.vy-embed #app-main #mkt-card { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
   html.vy-embed #view-marketplace > .container { padding-left: 0; padding-right: 0; padding-top: 0; max-width: none; }
