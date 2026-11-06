@@ -13165,6 +13165,27 @@ def ec2_runtime_alarm_action(instance_id: str, action: str) -> bool | None:
     return True
 
 
+def _await_reboot_ready(instance: dict, is_running, timeout: float = 45.0) -> bool:
+    """A reboot issued while the launch is still settling (state pending / container not up yet)
+    used to 409 InstanceNotRunning. Give an in-flight launch time to finish instead, so
+    create -> reboot from the console or a script is not a race. A genuinely stopped instance
+    still fails fast."""
+    import time as _t
+    if is_running():
+        return True
+    # Only an instance that is genuinely down fails fast. A record that says pending / rebooting /
+    # running while the backend does not yet report running is a launch or restart still settling
+    # (the record can be ahead of the container), so give it time rather than 409 on a race.
+    if str(instance.get("state") or "").lower() in {"stopped", "stopping", "shutting-down", "terminated"}:
+        return False
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        _t.sleep(1.0)
+        if is_running():
+            return True
+    return False
+
+
 def _reboot_runtime_process(instance: dict) -> None:
     backend = str(instance.get("runtime_backend") or "lxd").strip().lower()
     if backend == "docker":
