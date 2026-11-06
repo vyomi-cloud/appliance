@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-06 07:58 UTC · refreshes after every pipeline run_
+_Updated 2026-11-06 08:09 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-06 07:58 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 98%
 - **Hourly tests:** 289 of 290 suites passing (run 06:34 UTC)
-- **Upstream watch:** 12 open changes from the real clouds to adopt
+- **Upstream watch:** 13 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -128,7 +128,7 @@ _Updated 2026-11-06 07:58 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|---|
 | Virtual Machines | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | Storage accounts | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
-| SQL servers | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
+| SQL servers | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sql) | before gate |
 | Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Cosmos DB | — | not audited | ✅ 20/20 · ✅ 20/20 | 0 · 0 | ✅ watched | before gate |
 | Function apps | — | not audited | ✅ 23/23 · ✅ 23/23 | 0 · 0 | ✅ watched | before gate |
