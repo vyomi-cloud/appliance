@@ -30,6 +30,7 @@
  *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
 import { egress } from "./egress.mjs";
+import { createHub } from "./booster-hub.mjs";
 import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
@@ -52,6 +53,8 @@ const pending = new Map();     // id -> {resolve}
 // tab answers consistently — no need to force-close others (which would war with
 // their auto-reconnect).
 const tabs = new Set();        // live registrant sockets, insertion-ordered
+// Booster link (outbound-dialed booster <-> token-paired clients). Inert unless VYOMI_BOOSTER_SESSION_KEY is set.
+const hub = createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
 function pickTab() {           // most-recently-registered OPEN socket, or null
   let chosen = null;
   for (const ws of tabs) if (ws.readyState === ws.OPEN) chosen = ws;
@@ -88,7 +91,8 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp"],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(hub.enabled() ? ["booster-link"] : [])],
+      booster_sessions: hub.enabled() ? hub.linked().length : undefined,
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
       dbs: [...vmHosts.values()].filter((v) => v.db).map((v) => ({ db: v.vm, engine: v.engine, host_port: v.hostPort })),
     }));
@@ -113,6 +117,7 @@ const server = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
+    if (hub.http(req, res, Buffer.concat(chunks))) return;     // booster plane (carries X-Vyomi-Session-Token)
     const tab = pickTab();
     if (!tab) {
       cors(res, 503, { "content-type": "text/plain" });
@@ -159,6 +164,7 @@ const wss = new WebSocketServer({ noServer: true });
 const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
+  if (p === "/booster") { hub.upgrade(req, socket, head); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));

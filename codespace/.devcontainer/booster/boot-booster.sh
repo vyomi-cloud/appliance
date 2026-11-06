@@ -14,12 +14,22 @@ post() { curl -fsS -m 10 -X POST "$PORTAL$1" -H 'Content-Type: application/json'
 
 ttl_seconds() { local t="${1:-8h}" n="${1%[hmd]}" u="${1##*[0-9]}"; case "$u" in m) echo $((n*60));; d) echo $((n*86400));; *) echo $(( ${n:-8}*3600 ));; esac; }
 
+# session_end claim of the signed session token (payload is the 2nd dot-separated base64url part; verified by the simulator).
+token_end() {
+  [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ] || return 0
+  python3 - "$VYOMI_BOOSTER_SESSION_TOKEN" <<'PY' 2>/dev/null
+import base64, json, sys
+p = sys.argv[1].split(".")[1]
+print(int(json.loads(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)))["session_end"]))
+PY
+}
+
 # session_end (epoch s): VYOMI_BOOSTER_SESSION_END (from the portal's signed token) is capped at start+max; persisted so
 # a resume (idle-stop/restart) can NEVER extend the window.
 resolve_end() {
   [ -s "$END_FILE" ] && { cat "$END_FILE"; return; }
   local now max end; now=$(date +%s); max=$(( now + $(ttl_seconds "${VYOMI_BOOSTER_MAX_SESSION:-8h}") ))
-  end="${VYOMI_BOOSTER_SESSION_END:-$max}"; [ "$end" -gt "$max" ] && end="$max"
+  end="${VYOMI_BOOSTER_SESSION_END:-$(token_end)}"; end="${end:-$max}"; [ "$end" -gt "$max" ] && end="$max"
   echo "$end" | tee "$END_FILE"
 }
 
@@ -32,16 +42,26 @@ arm_expiry() {
 }
 expire() {
   post /api/booster/session/ended "{\"codespace_id\":\"$CODESPACE\",\"reason\":\"ttl\"}"
-  docker compose -f "$COMPOSE" down 2>/dev/null || true
+  docker compose -f "$COMPOSE" --profile link down 2>/dev/null || true
   date -u +%FT%TZ > "$RUN_DIR/EXPIRED"; log "session ended — stack stopped (idle timeout will stop the Codespace)."
+}
+
+# Outbound relay link (no inbound port): only when the portal supplied a relay URL + session token.
+start_link() {
+  if [ -n "${VYOMI_RELAY_URL:-}" ] && [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ]; then
+    docker compose -f "$COMPOSE" --profile link up -d link && log "relay link dialling out to $VYOMI_RELAY_URL"
+  else
+    log "no VYOMI_RELAY_URL / VYOMI_BOOSTER_SESSION_TOKEN - relay link not started."
+  fi
 }
 
 start_stack() {
   [ -f "$RUN_DIR/EXPIRED" ] && { log "session already expired — not starting."; return 1; }
-  docker compose -f "$COMPOSE" up -d
+  docker compose -f "$COMPOSE" up -d simulator
   for _ in $(seq 1 60); do
     if docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 3 http://localhost:9000/healthz >/dev/null 2>&1; then
       post /api/booster/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
+      start_link
       log "booster ready."; return 0
     fi; sleep 3
   done
