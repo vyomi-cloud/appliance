@@ -508,6 +508,18 @@ _STS_SUB = [
 ]
 
 
+# ===========================================================================
+# Route 53 — hosted zone detail
+# ===========================================================================
+_ROUTE53_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Hosted zone", "items": [
+        {"key": "records",     "label": "Records",       "icon": "list",        "type": "r53Records"},
+        {"key": "details",     "label": "Details",       "icon": "info",        "type": "properties"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -534,4 +546,5 @@ SUB_BLADES: dict[str, list] = {
     "logs":           _LOGS_SUB,
     "cloudwatch":     _CLOUDWATCH_SUB,
     "sts":            _STS_SUB,
+    "route53":        _ROUTE53_SUB,
 }

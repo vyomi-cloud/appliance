@@ -409,6 +409,10 @@ def _logs_group_count() -> int:
 def _elb_census():
     from core import nano_registry
     return nano_registry.get()["elbv2"].load_balancers
+def _r53_census():
+    from core import nano_registry
+    st = nano_registry.get()["route53"]
+    return list(st.hosted_zones) + list(st.health_checks)
 
 
 def _census_dispatch(backends: Backends, provider: str) -> dict:
@@ -442,6 +446,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "elbv2":          len(_elb_census()),
                 "sns":            len(A.MSG.topics),
                 "sts":            len(D.sts_list().get("items", [])),
+                "route53":        len(_r53_census()),
             }
             try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
                 from core import nano_registry

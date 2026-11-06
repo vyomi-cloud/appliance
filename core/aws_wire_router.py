@@ -52,6 +52,7 @@ from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
 from core import elbv2_core as elbv2
+from core import route53_core as route53
 from core import rds_data_core as rds_data
 from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
@@ -195,6 +196,7 @@ _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
 _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
+    "route53": "route53",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
@@ -391,6 +393,7 @@ class AwsWireRouter:
             except Exception:
                 pass
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
+        self.route53 = s.get("route53") or route53.Route53Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
 
     def _iamc_resolve(self, ident):
@@ -454,6 +457,8 @@ class AwsWireRouter:
             return "az-servicebus"
         if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
             return "apigw-invoke"
+        if route53.is_route53_path(path):     # Route 53 REST-XML (/2013-04-01/…)
+            return "route53"
         if "/2015-03-31/functions" in path or "/2021-10-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if path.startswith("/lambda-url/"):   # a Function URL's public invoke path
@@ -665,6 +670,12 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "route53":   # native Route 53 REST-XML (hosted zones, records, health checks)
+            r = route53.dispatch(self.route53, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "apigw-invoke":   # an HTTP API's invoke URL → the shared gateway engine

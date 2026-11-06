@@ -998,6 +998,7 @@ ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": [
 kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "policies": {}, "seq": {"n": 0}})
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
 elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
+route53_state = _SpaceScopedDictProxy("route53", lambda: {"hosted_zones": {}, "changes": {}, "health_checks": {}, "delegation_sets": {}, "query_logging": {}, "tags": {}})
 
 runtime_state = STATE.setdefault(
     "runtime",

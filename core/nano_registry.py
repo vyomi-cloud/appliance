@@ -44,6 +44,7 @@ from core.azure_arm_core import AzureArm
 import types
 from core.cloudwatch_core import CloudWatchStore
 from core.gcp_monitoring_core import MonitoringStore
+from core.route53_core import Route53Store
 
 _REG: dict | None = None
 
@@ -76,6 +77,7 @@ def get() -> dict:
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
             "sfn": StepFunctionsStore(),
+            "route53": Route53Store(),         # Route 53 hosted zones / records / health checks (control plane)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

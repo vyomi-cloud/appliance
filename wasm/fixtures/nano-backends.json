@@ -75,6 +75,11 @@
   "category": "aws"
  },
  {
+  "name": "route53",
+  "label": "Route53Store",
+  "category": "aws"
+ },
+ {
   "name": "gcs",
   "label": "InMemoryObjectStore",
   "category": "gcp"

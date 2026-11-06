@@ -447,6 +447,13 @@
    "name": "STS",
    "upstream": "sts",
    "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "route53",
+   "name": "Amazon Route 53",
+   "upstream": "route53",
+   "status": "pending-release"
   }
  ]
 }
