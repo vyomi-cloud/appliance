@@ -3377,7 +3377,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                onclick="switchAndOpen('${ s.space_id }', '${ provider }')">
               <div class="space-row">
                 <span class="space-logo ${ provider }" title="${ ({aws: "AWS", gcp: "Google Cloud", azure: "Microsoft Azure"})[provider] || provider }">${ SPACE_LOGOS[provider] || provider }</span>
-                <span class="space-name">${ s.name || s.space_id }</span>
+                <span class="space-name">${ String(s.name || s.space_id).replace(/^Nano\s+/i, "") }</span>
                 ${ _statusPillHtml(s, isActive) }
                 <button type="button" class="space-star ${ s.space_id === _defaultSpace() ? 'on' : '' }" title="${ s.space_id === _defaultSpace() ? 'Default space — Vyomi opens here' : 'Make this the default space' }" aria-label="${ s.space_id === _defaultSpace() ? 'Default space' : 'Make default space' }" aria-pressed="${ s.space_id === _defaultSpace() }" data-star="${ s.space_id }" onclick="event.preventDefault();event.stopPropagation();setDefaultSpace('${ s.space_id }')"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
               </div>
