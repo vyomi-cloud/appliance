@@ -45,6 +45,7 @@ import types
 from core.cloudwatch_core import CloudWatchStore
 from core.gcp_monitoring_core import MonitoringStore
 from core.gcp_dns_core import CloudDnsStore
+from core.gcp_cloudtasks_core import CloudTasksStore
 
 _REG: dict | None = None
 
@@ -92,6 +93,7 @@ def get() -> dict:
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
+            "gcp_ct":  CloudTasksStore(),   # Cloud Tasks (queues + tasks)
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),

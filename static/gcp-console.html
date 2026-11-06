@@ -812,7 +812,7 @@ function renderRail(){
     ["STORAGE",       ["storage", "artifactregistry"]],
     ["DATABASES",     ["cloudsql", "firestore", "redis"]],
     ["NETWORKING",    ["vpc", "dns"]],
-    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
+    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler", "cloudtasks"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
     ["OPERATIONS",    ["monitoring", "logging"]],
@@ -1093,6 +1093,7 @@ async function renderList(main){
                      : svc.key === "firestore" ? "Create database"
                      : svc.key === "functions" ? "Create function"
                      : svc.key === "vpc" ? "Create VPC network"
+                     : svc.key === "cloudtasks" ? "Create queue"
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "dns" ? "Create zone"
                      : svc.key === "cloudscheduler" ? "Create job"
@@ -1371,6 +1372,7 @@ async function renderDetail(main){
     const host = el("div",{}); content.append(host);
     if (GT[t]) return GT[t](host, svc, STATE.item, item);
     if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it, t));
+    if (t === "ctlist") return renderCtListTab(host, svc, STATE.item, item);
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
     if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
@@ -1390,6 +1392,24 @@ async function renderDetail(main){
   paintNav(); paintContent();
 }
 
+// Cloud Tasks — generic list tab. `tab.list_key` selects svc.api_paths[list_key];
+// `tab.cols` is [[field,label],…]. Rows come back as {items:[…]} with every cell filled.
+async function renderCtListTab(host, svc, full, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  const r = await api("GET", fillCommon(ap.path, {name: (full && (full.name || full.id)) || ""}));
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  const items = (r.json || {}).items || [];
+  if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this queue yet.")); return; }
+  const cols = tab.cols || [];
+  const tbl = el("table",{class:"gc"});
+  tbl.append(el("thead",{}, el("tr",{}, ...cols.map(c => el("th",{}, c[1])))));
+  const tb = el("tbody",{});
+  items.forEach(it => tb.append(el("tr",{}, ...cols.map(c => {
+    const v = it[c[0]];
+    return el("td",{}, (v === undefined || v === null || v === "") ? "none" : String(v));
+  }))));
+  tbl.append(tb); host.append(tbl);
+}
 // Cloud Storage — Objects browser (upload / list / delete), parity with the
 // S3 + Azure Blob consoles. Upload streams the real file to the byte store so
 // the native google-cloud-storage SDK reads it back.

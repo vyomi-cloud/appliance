@@ -516,6 +516,26 @@ _LOGGING_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud Tasks — queue detail (generic `ctlist` tab renderer; `list_key` names the
+# api_paths entry, `cols` the [field, label] grid columns)
+# ============================================================================
+_CLOUDTASKS_SUB = [
+    {"key": "overview", "label": "Overview", "icon": "dashboard", "type": "overview"},
+    {"group": "Tasks", "items": [
+        {"key": "tasks", "label": "Tasks", "icon": "checklist", "type": "ctlist", "list_key": "tasks",
+         "cols": [["name", "Task"], ["method", "Method"], ["url", "URL"], ["schedule_time", "Schedule time"],
+                  ["dispatch_count", "Dispatches"], ["response_count", "Responses"], ["last_attempt", "Last attempt"]]},
+        {"key": "activity", "label": "Activity", "icon": "list_alt", "type": "ctlist", "list_key": "activity",
+         "cols": [["time", "Time"], ["action", "Action"], ["detail", "Detail"]]},
+    ]},
+    {"group": "Configuration", "items": [
+        {"key": "properties", "label": "Rate limits & retries", "icon": "info", "type": "properties"},
+        {"key": "iam", "label": "Permissions", "icon": "admin_panel_settings", "type": "iam"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -538,4 +558,5 @@ SUB_BLADES: dict[str, list] = {
     "monitoring":    _MONITORING_SUB,
     "redis":         _REDIS_SUB,
     "dns":           _DNS_SUB,
+    "cloudtasks":    _CLOUDTASKS_SUB,
 }

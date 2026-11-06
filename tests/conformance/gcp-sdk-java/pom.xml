@@ -72,6 +72,10 @@
       <artifactId>google-api-services-logging</artifactId>
       <version>v2-rev20240913-2.0.0</version>
     </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-tasks</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

@@ -454,6 +454,13 @@
    "name": "Cloud Logging",
    "upstream": "logging/v2",
    "status": "pending-release"
+  },
+  {
+   "cloud": "gcp",
+   "key": "cloudtasks",
+   "name": "Cloud Tasks",
+   "upstream": "cloudtasks/v2",
+   "status": "pending-release"
   }
  ]
 }

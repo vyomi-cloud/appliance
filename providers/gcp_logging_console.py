@@ -14,7 +14,10 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_logging_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID (core/gcp_project) -- the project SDK/CLI traffic is normalized to."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
 
 
 def _http_error(r):
@@ -82,12 +85,12 @@ def register(app, on_change=None):
     @app.post("/api/logging/sinks")
     async def create_sink(request: Request):
         form = await request.json()
-        form = dict(form, project=DEFAULT_PROJECT)
+        form = dict(form, project=_project())
         sink = core.sink_from_form(form)
-        r = call("POST", f"/v2/projects/{DEFAULT_PROJECT}/sinks", {"uniqueWriterIdentity": "true"}, json.dumps(sink).encode())
+        r = call("POST", f"/v2/projects/{_project()}/sinks", {"uniqueWriterIdentity": "true"}, json.dumps(sink).encode())
         if r.status >= 300:
             raise _http_error(r)
-        v = core.sink_console_view(DEFAULT_PROJECT, store().sinks[f"projects/{DEFAULT_PROJECT}/sinks/{sink['name']}"])
+        v = core.sink_console_view(_project(), store().sinks[f"projects/{_project()}/sinks/{sink['name']}"])
         changed("create", v)
         return v
 

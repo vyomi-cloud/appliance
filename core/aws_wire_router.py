@@ -70,6 +70,7 @@ from core import gcp_compute_core as gcp_compute
 from core import nano_triggers
 from core import gcp_dns_core as gcp_dns
 from core import gcp_logging_core as gcp_logging
+from core import gcp_cloudtasks_core as gcp_ct
 
 
 def _gcp_service(path):
@@ -95,6 +96,9 @@ def _gcp_service(path):
         return "gcp-logging"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
+    if path.startswith("/v2/projects/") and (
+            "/queues" in path or path.rstrip("/").endswith("/locations") or path.count("/") == 5):
+        return "gcp-cloudtasks"   # Cloud Tasks v2 (Cloud Run's /v2 paths are .../services)
     if "/projects/" in path:
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
@@ -356,6 +360,7 @@ class AwsWireRouter:
         self.gcp_project = s.get("gcp_project") or dict(gcp_proj.NANO_PROJECT)
         self.gcp_dns = s.get("gcp_dns") or gcp_dns.CloudDnsStore()   # Cloud DNS zones / policies
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging (entries, sinks, metrics, buckets)
+        self.gcp_ct = s.get("gcp_ct") or gcp_ct.CloudTasksStore()   # Cloud Tasks (queues + tasks)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -799,6 +804,7 @@ class AwsWireRouter:
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-dns": (gcp_dns, self.gcp_dns),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
+                "gcp-cloudtasks": (gcp_ct, self.gcp_ct),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

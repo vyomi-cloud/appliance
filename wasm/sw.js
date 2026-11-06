@@ -207,6 +207,7 @@ const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/
 NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 NANO_RATE.dns = 0.20;   // core/cost_model.py gcp.dns
 NANO_RATE.logging = 0.50;   // core/cost_model.py gcp.logging
+NANO_RATE.cloudtasks = 0.40;   // core/cost_model.py gcp.cloudtasks
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -873,6 +874,11 @@ async function route(method, path, body, query) {
   // Project-wide subscription list (the Topics grid's Subscriptions column reads it).
   if (method === "GET" && /^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/?$/.test(path))
     return { tuple: ["gcp", "_resource", "ListAllSubscriptions", { service: "pubsub" }] };
+  // Cloud Tasks (core/gcp_cloudtasks_core.py) — queue detail tabs + actions
+  let ct = path.match(/^\/api\/gcp\/cloudtasks\/queues\/([^/]+)\/(tasks|activity)$/);
+  if (ct && method === "GET") return { tuple: ["gcp", "_resource", "ListChildren", { service: "cloudtasks", name: dec(ct[1]), body: { kind: ct[2] } }] };
+  ct = path.match(/^\/api\/gcp\/cloudtasks\/queues\/([^/]+)\/(pause|resume|purge|tasks)$/);
+  if (ct && method === "POST") return { tuple: ["gcp", "_resource", "QueueAction", { service: "cloudtasks", name: dec(ct[1]), body: { ...(body || {}), action: ct[2] } }] };
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };

@@ -11,7 +11,10 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_dns_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID (core/gcp_project) -- the project SDK/CLI traffic is normalized to."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
 
 
 def _http_error(r):
@@ -54,20 +57,20 @@ def register(app, on_change=None):
     # The provider-alias middleware rewrites /api/gcp/<x> → /api/<x>, so the console's
     # /api/gcp/dns/zones land on these.
     def rec(name):
-        r = store().zones.get("%s/%s" % (DEFAULT_PROJECT, name))
+        r = store().zones.get("%s/%s" % (_project(), name))
         if r is None:
             raise HTTPException(404, detail=f"Managed zone {name} not found.")
         return r
 
     @app.get("/api/dns/zones")
     async def list_zones():
-        items = core.list_all(store(), DEFAULT_PROJECT)
+        items = core.list_all(store(), _project())
         return {"items": items, "count": len(items)}
 
     @app.post("/api/dns/zones")
     async def create_zone(request: Request):
         z = core.zone_from_form(await request.json())
-        r = core.dispatch(store(), "POST", f"/dns/v1/projects/{DEFAULT_PROJECT}/managedZones", {}, {}, json.dumps(z).encode())
+        r = core.dispatch(store(), "POST", f"/dns/v1/projects/{_project()}/managedZones", {}, {}, json.dumps(z).encode())
         if r.status >= 300:
             raise _http_error(r)
         v = core.console_view(rec(z["name"]))
@@ -83,7 +86,7 @@ def register(app, on_change=None):
         b = await request.json()
         rec(name)
         upd = {k: b[k] for k in ("description", "labels") if k in b}
-        r = core.dispatch(store(), "PATCH", f"/dns/v1/projects/{DEFAULT_PROJECT}/managedZones/{name}", {}, {}, json.dumps(upd).encode())
+        r = core.dispatch(store(), "PATCH", f"/dns/v1/projects/{_project()}/managedZones/{name}", {}, {}, json.dumps(upd).encode())
         if r.status >= 300:
             raise _http_error(r)
         return core.console_view(rec(name))
@@ -91,6 +94,6 @@ def register(app, on_change=None):
     @app.delete("/api/dns/zones/{name}")
     async def delete_zone(name: str):
         rec(name)
-        core.delete_zone_with_records(store(), DEFAULT_PROJECT, name)
+        core.delete_zone_with_records(store(), _project(), name)
         changed("delete", name)
         return {"message": "Managed zone deleted", "name": name}

@@ -145,6 +145,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_ct",
+  "label": "CloudTasksStore",
+  "category": "gcp"
+ },
+ {
   "name": "az_blob",
   "label": "AzureBlobStore",
   "category": "azure"
