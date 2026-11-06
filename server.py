@@ -276,6 +276,10 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             gcp_resourcemanager]:
     mod.register(app)
 
+# Booster pack (headless Pro/Max appliance): /booster/* status + pairing routes.
+from core import booster as _booster
+_booster.register(app)
+
 # ── Middleware registration ──────────────────────────────────────────
 from core.middleware import register_middleware
 register_middleware(app)
@@ -1515,7 +1519,7 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
     method = request.method.upper()
     query = dict(request.query_params)
 
-    if path in {"/healthz", "/docs", "/redoc", "/openapi.json"} or path.startswith(("/ui", "/product", "/assets/", "/static/", "/favicon.ico", "/console", "/docs/", "/api/tenants", "/api/instances", "/api/runtime")):
+    if path in {"/healthz", "/docs", "/redoc", "/openapi.json"} or path.startswith(("/ui", "/product", "/assets/", "/static/", "/favicon.ico", "/console", "/booster", "/docs/", "/api/tenants", "/api/instances", "/api/runtime")):
         return None
     if path.startswith("/api/catalog") or path.startswith("/api/packs") or path.startswith("/api/license") or path.startswith("/api/runtime/bundles") or path.startswith("/api/deployments") or path.startswith("/api/actions"):
         return None
@@ -25009,6 +25013,10 @@ def _migrate_dynamodb_local_once():
     except Exception as _e:
         print(f"[ddb-migrate] skipped: {_e}")
 
+
+# Booster pack: headless guard (404 JSON for UI paths when booster mode is on). Added before the
+# /_wire rewrite so the rewrite stays outermost and `/_wire/ui` is blocked as `/ui`.
+app.add_middleware(_booster.HeadlessMiddleware)
 
 # v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
 try:

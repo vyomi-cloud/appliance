@@ -28,6 +28,8 @@ Usage:
   vyomi logs        Tail service logs (Docker tiers)
   vyomi update      Pull the latest images and recreate (Docker tiers)
   vyomi upgrade     Pull the latest appliance image (Max)
+  vyomi booster status [--json]   Booster (headless Pro/Max) health, tier, trial, 70% cap usage
+  vyomi booster pair              Print a pairing code to attach the Nano UI at vyomi.cloud
   vyomi doctor      Print diagnostics
   vyomi help        This help
 
