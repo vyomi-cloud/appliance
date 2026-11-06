@@ -1056,6 +1056,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "events"
     if target.startswith("Kinesis_20131202."):
         return "kinesis"
+    if target.startswith("AmazonEC2ContainerServiceV20141113."):
+        return "ecs"
     if target.startswith("Logs_20140328."):
         return "logs"
     if target.startswith("AmazonSSM."):
@@ -1162,6 +1164,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _cw_handle(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "ecs":
+            from core import ecs_routes as _ecs_routes
+            return await _ecs_routes.root_dispatch(request)
         if service == "elasticloadbalancing":
             from core import elbv2_core as _elb
             from routes.aws_elbv2 import STORE as _elb_store

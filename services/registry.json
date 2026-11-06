@@ -461,6 +461,13 @@
    "name": "Amazon ECR",
    "upstream": "ecr",
    "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "ecs",
+   "name": "Amazon ECS",
+   "upstream": "ecs",
+   "status": "pending-release"
   }
  ]
 }

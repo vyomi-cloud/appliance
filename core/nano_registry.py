@@ -23,6 +23,7 @@ from core.sql_store import InMemorySqlStore
 from core.iam_store import InMemoryIamStore
 from core.sts_core import StsStore
 from core.messaging_store import InMemoryMessagingStore
+from core.ecs_core import InMemoryEcsStore
 from core.gcp_firestore_core import FirestoreStore
 from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
@@ -67,6 +68,7 @@ def get() -> dict:
             "sts": StsStore(),                 # STS sessions (temporary credentials issued)
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
+            "ecs": InMemoryEcsStore(),   # Amazon ECS
             "apigwv2": ApiGwV2Store(),
             # Console compute/network models: Lambda + API Gateway share ONE namespace
             # (AWS_PROXY reaches the registered functions); VPC has its own. They

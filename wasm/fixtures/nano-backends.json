@@ -50,6 +50,11 @@
   "category": "aws"
  },
  {
+  "name": "ecs",
+  "label": "InMemoryEcsStore",
+  "category": "aws"
+ },
+ {
   "name": "apigwv2",
   "label": "ApiGwV2Store",
   "category": "aws"

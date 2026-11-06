@@ -2683,6 +2683,10 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for stream_name, stream in aws_kinesis.get("streams", {}).items():
         if isinstance(stream, dict):
             add("aws", "kinesis", "stream", stream_name, stream)
+    aws_ecs = _cloudsim_service_state(space, "ecs")
+    for cluster_name, cluster in aws_ecs.get("clusters", {}).items():
+        if isinstance(cluster, dict):
+            add("aws", "ecs", "cluster", cluster_name, cluster)
     aws_logs = _cloudsim_service_state(space, "logs")
     for group_name, group in aws_logs.get("log_groups", {}).items():
         if isinstance(group, dict):
@@ -2915,6 +2919,23 @@ def _cloudsim_attach_storage_usage(nodes: list[dict], space: dict) -> None:
             elif prov == "azure" and svc == "storage" and not azure_done:
                 azure_done = True
                 node["stored_bytes"], node["write_requests"] = _azurite_usage()
+    except Exception:
+        pass
+
+
+def _ecs_mirror_state(ecs_store) -> None:
+    """Mirror ECS clusters (held in the SDK/console store) into the active space's
+    service state so the space's cost-savings metrics count them."""
+    clusters = {n: {"name": n, "created": ecs_store.meta.get(c["clusterArn"], {}).get("created")}
+                for n, c in ecs_store.clusters.items() if c.get("status") != "INACTIVE"}
+    with STATE_LOCK:
+        spaces_state = _spaces_state()
+        active = spaces_state.get("spaces", {}).get(spaces_state.get("active_space_id", ""))
+        for st in ([active.setdefault("service_states", {})] if isinstance(active, dict) else []) + [STATE]:
+            if isinstance(st, dict):
+                st["ecs"] = {"clusters": clusters}
+    try:
+        _cloudsim_refresh_bridge("ecs.mirror")
     except Exception:
         pass
 
@@ -24172,6 +24193,11 @@ if not _UNIFIED_INGRESS:
         _mount_new_services(app)
     except Exception as _e:   # never let this break appliance boot
         print(f"[wire_ingress] net-new service mount skipped: {_e}")
+    try:
+        from core import ecs_routes as _ecs_routes
+        _ecs_routes.register(app, mirror=_ecs_mirror_state)
+    except Exception as _e:
+        print(f"[ecs] routes skipped: {_e}")
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)

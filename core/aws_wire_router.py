@@ -51,6 +51,8 @@ from core import sts_core as sts
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
+from core import ecs_core as ecs
+from core.ecs_core import InMemoryEcsStore
 from core import elbv2_core as elbv2
 from core import route53_core as route53
 from core import ecr_core as ecr
@@ -203,6 +205,7 @@ _SIGNING = {
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
     "sts": "sts",
+    "ecs": "ecs",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -210,6 +213,7 @@ _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
     "Kinesis_20131202": "kinesis",
+    "AmazonEC2ContainerServiceV20141113": "ecs",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
@@ -224,6 +228,7 @@ _JSON_CT = {
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ecr": "application/x-amz-json-1.1",
+    "ecs": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -378,6 +383,7 @@ class AwsWireRouter:
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.ecs = s.get("ecs") or InMemoryEcsStore()   # Amazon ECS clusters/services/tasks
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         events.set_target_store("kinesis", self.kinesis)       # EventBridge Kinesis / Logs rule targets
         events.set_target_store("logs", self.logs)
@@ -855,6 +861,8 @@ class AwsWireRouter:
                 r = events.dispatch(self.events, target, payload, lambda_store=self.lam)
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
+            elif svc == "ecs":
+                r = ecs.dispatch(self.ecs, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
             elif svc == "ssm":
