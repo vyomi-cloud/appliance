@@ -1903,6 +1903,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-plan-btn { display: block; margin-top: auto; padding: 9px 14px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; text-align: center; font-size: 13.5px; font-weight: 600; text-decoration: none; }
   .mk-plan-btn:hover { background: #27272a; }
   html.vy-embed .mk-plan a.mk-plan-btn, html.vy-embed .mk-plan a.mk-plan-btn:visited { color: #fff !important; text-decoration: none; }
+  #mkt-packs { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 4px 24px 24px; }
+  #mkt-packs .mk-card { height: 100%; }
+  .mk-buy-b.off { padding: 8px 14px; border-radius: 8px; background: #f4f4f5; color: #71717a; font-size: 12.5px; font-weight: 600; }
   #mkt-ai { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 4px 24px 24px; }
   .mk-ai-card-unused { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
   .mk-ai-card.all { background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; }
@@ -2068,6 +2071,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
         <div class="mk-sec">AI stack <span>add-on · needs that cloud's simulator in Spaces</span></div>
         <div id="mkt-ai" role="list"></div>
+        <div class="mk-sec">Dev &amp; DevOps packs <span>coming soon</span></div>
+        <div id="mkt-packs" role="list"></div>
       </div>
     </div>
   </div>
@@ -3644,6 +3649,21 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                  licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: [{ kind: 'simulator', price_usd: sim.price, per: '/ month', url: _buyUrl(sim.id) }] };
       }) };
     }
+    // Dev / DevOps environment packs (not on sale yet: no price, no Buy). Contents are the planned scope.
+    const VY_PACKS = [
+      { id: 'containers', icon: 'widgets', name: 'Containers & Kubernetes', sub: 'Run your app like production', inc: ['Real container and Kubernetes runtime', 'Registries and image pulls', 'EKS, GKE and AKS APIs'] },
+      { id: 'cicd', icon: 'sync_alt', name: 'CI/CD & delivery', sub: 'Test your build and deploy pipeline', inc: ['Build and pipeline services', 'Artifact registries', 'Deploy to your simulator spaces'] },
+      { id: 'cost', icon: 'payments', name: 'Cost forecast', sub: 'Know your bill before you go live', inc: ['Cost meter per service', 'Simulated monthly invoices', 'Capacity advisor'] },
+      { id: 'failure', icon: 'bolt', name: 'Failure testing', sub: 'What breaks when the cloud fails', inc: ['Throttling and no-capacity errors', 'Outage scenarios', 'Fault injection'] },
+      { id: 'security', icon: 'verified_user', name: 'Security readiness', sub: 'Would your setup pass a review?', inc: ['Posture scans', 'IAM and policy checks', 'Findings you can fix and re-run'] },
+      { id: 'iot', icon: 'sensors', name: 'IoT', sub: 'Build device-connected apps', inc: ['Device fleets and MQTT', 'Device shadows', 'Rules and routing'] }
+    ];
+    function _packSoon(p) {
+      return _packCard({ id: 'pack-' + p.id, logo: 'pack-' + p.icon, title: p.name, sub: p.sub, ribbon: 'Soon', ribbonCls: 'free',
+        status: '<div class="mk-free no">' + _CHECK + '<span><b>Coming soon</b><small>Not on sale yet</small></span></div>',
+        included: _pcIncluded('Planned scope', p.inc, false),
+        foot: '<div class="mk-buy"><span class="mk-buy-p"><span>Pricing soon</span></span><span class="mk-buy-b off">Coming soon</span></div>' });
+    }
     function _aiLocal(added) {
       const u = id => (VY_PORTAL.replace(/\/$/, '')) + '/checkout?product=ai_stack&scope=' + id + '&period=monthly';
       return VY_SIMULATORS.map(s => ({ id: s.id, name: s.name, enabled: false, price_usd: 12, per: '/ month', product: VY_AI[s.id].product, includes: VY_AI[s.id].includes,
@@ -3656,6 +3676,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         (more > 0 ? '<li class="mk-more">+' + more + ' more</li>' : '') + '</ul></div>';
     }
     function _pcLogo(id) {
+      if (id.indexOf('pack-') === 0) return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">' + id.slice(5) + '</span></span>';
       if (id === 'plan-pro') return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">cloud</span></span>';
       if (id === 'plan-max') id = 'all';
       if (id !== 'all') return '<span class="mk-logo ' + id + '">' + (SPACE_LOGOS[id] || '').replace(/sp-az-g/g, 'mk-az-g' + id) + '</span>';
@@ -3728,6 +3749,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     async function loadMarketplace() {
       const g = document.getElementById('mkt-grid'); if (!g) return;
       const mc = await _mktCards(), cards = mc.cards;
+      const pk = document.getElementById('mkt-packs'); if (pk) pk.innerHTML = VY_PACKS.map(_packSoon).join('');
       const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
       const st = document.getElementById('mkt-plan'); if (st) st.innerHTML = _mktPlanHtml(mc.licence);
       document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => {
