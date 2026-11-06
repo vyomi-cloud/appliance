@@ -3835,8 +3835,25 @@
       }
     }
 
+    // Clouds the active VYOMI_PROFILE allows (an aws-full sandbox -> ['aws']);
+    // all three when unrestricted. Cached: the profile doesn't change at runtime.
+    let _pieCloudsP = null;
+    function _pieClouds() {
+      if (!_pieCloudsP) {
+        _pieCloudsP = fetch('/api/runtime/profile', {cache: 'no-store'})
+          .then(r => r.ok ? r.json() : null)
+          .then(j => {
+            const a = (j && j.restricted && j.allowed_clouds) ? ['aws','gcp','azure'].filter(c => j.allowed_clouds.includes(c)) : [];
+            return a.length ? a : ['aws','gcp','azure'];
+          })
+          .catch(() => ['aws','gcp','azure']);
+      }
+      return _pieCloudsP;
+    }
+
     async function refreshProviderPies() {
       try {
+        const PIE_CLOUDS = await _pieClouds();
         const r = await fetch('/api/runtime/host-distribution');
         if (!r.ok) return;
         const d = await r.json();
@@ -3862,7 +3879,7 @@
             pcVal.textContent = '0';
             pcSub.textContent = metric === 'cpu' ? 'vCPU' : metric === 'ram' ? 'GiB' : 'GB';
             // Still name the three clouds (logo + swatch), each at 0, then the hint.
-            legend.innerHTML = ['aws', 'gcp', 'azure'].map(p =>
+            legend.innerHTML = PIE_CLOUDS.map(p =>
               '<div class="pie-legend-item"><span class="ll"><span class="swatch" style="background:' + PROV_PALETTE[p] + '"></span>' +
                 _pieLogo(p) + PROV_LABEL[p] + '</span><span class="lv">0.0%</span></div>').join('') +
               '<div class="pie-legend-item" style="justify-content:flex-start;color:#5f6b7a;margin-top:4px">' +
@@ -3874,11 +3891,11 @@
           const key = metric === 'cpu' ? 'vcpus' : metric === 'ram' ? 'ram_mb' : 'disk_mb';
           let total = 0;
           const vals = {};
-          ['aws','gcp','azure'].forEach(p => {
+          PIE_CLOUDS.forEach(p => {
             vals[p] = (provs[p] || {})[key] || 0;
             total += vals[p];
           });
-          const segments = ['aws','gcp','azure'].map(p => ({
+          const segments = PIE_CLOUDS.map(p => ({
             key: p, label: PROV_LABEL[p], color: PROV_PALETTE[p],
             value: vals[p],
             pct: total ? (100 * vals[p] / total) : 0,
