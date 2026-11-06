@@ -65,11 +65,13 @@ _BACKENDS: list[tuple[str, str, str, int, str, int]] = [
     ("gateway",         "Caddy gateway (API Gateway V2)", "vyomi-gateway",  2019, "aws",       45),
     ("valkey",          "Valkey (Memorystore)", "vyomi-valkey",             6379, "gcp",       40),
     ("registry",        "OCI registry (Artifact Registry)", "vyomi-registry", 5000, "gcp",     25),
+    ("coredns",         "CoreDNS (Route 53 / Cloud DNS)", "vyomi-coredns",   53, "aws",       30),
+    ("mailpit",         "Mailpit (SES)",       "vyomi-mailpit",             8025, "aws",       25),
     ("azurite",         "Azurite (Blob / Queue)", "vyomi-azurite",          10000, "azure",   250),
 ]
 
 # Tracked only when their env var is set (see above).
-_OPTIONAL = {"victoriametrics", "gateway", "valkey", "registry", "azurite"}
+_OPTIONAL = {"victoriametrics", "gateway", "valkey", "registry", "azurite", "coredns", "mailpit"}
 
 # Canonical env vars the simulator already sets for each backend (URL,
 # host:port, or bare host). The prober prefers these so it always probes
@@ -93,6 +95,8 @@ _CANONICAL_ENV: dict[str, str] = {
     "valkey":    "CLOUDLEARN_VALKEY_HOST",
     "registry":  "CLOUDLEARN_REGISTRY_HOST",
     "azurite":   "CLOUDLEARN_AZURITE_URL",
+    "coredns":   "VYOMI_COREDNS_HOST",
+    "mailpit":   "VYOMI_MAILPIT_HOST",
 }
 
 
