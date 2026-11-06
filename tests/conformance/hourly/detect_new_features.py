@@ -133,7 +133,17 @@ def _ops_in(path: str) -> set[str]:
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
             ops.discard(fn_ops[fname])
+    # A core with a real dispatch table (>=10 SDK operation names) exposes exactly those
+    # operations: its private `_verb_*` functions that no table entry points to are
+    # internal helpers (comparison operators, _get_archive, _run_state...), not API operations.
+    if len(keys_all) >= 10:
+        for fname, opname in fn_ops.items():
+            if fname.startswith("_") and fname not in dispatched and opname not in keys_all:
+                ops.discard(opname)
     return ops
+
+
+ASL_COMPARATOR_RE = re.compile(r"^(?:(?:String|Numeric|Timestamp|Boolean)(?:Equals|(?:Less|Greater)Than(?:Equals)?|Matches)|Is(?:Null|Present|Numeric|String|Boolean|Timestamp))$")
 
 
 def _cloud_of(core_file: str) -> str:
@@ -147,6 +157,10 @@ def operations(target: str) -> list[dict]:
     for f in sorted(glob.glob(os.path.join(ROOT, pattern))):
         engine = os.path.basename(f)[:-3]
         for op in sorted(_ops_in(f)):
+            # ASL Choice-state comparators (StringEquals, IsNull...) are state-language
+            # syntax matched via `op == ...`, not Step Functions API operations.
+            if engine == "stepfunctions_core" and ASL_COMPARATOR_RE.match(op):
+                continue
             feats.append({"target": target, "cloud": _cloud_of(f), "service": engine, "kind": "operation", "name": op})
     return feats
 
