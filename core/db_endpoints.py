@@ -53,8 +53,8 @@ def list_endpoints(stores: dict | None = None) -> list[dict]:
                 user, name, label = "postgres" if fam == "postgres" else "root", "", db_id.split(":", 1)[-1]
             if not fam:
                 continue
-            if fam == "postgres" and not hasattr(st, "_aopen"):
-                continue    # the Postgres wire needs a real Postgres engine (PGlite); a sqlite-backed store has nothing to serve
+            if fam == "postgres":
+                continue    # Postgres is published by the PGlite store itself over the tunnel /vm bridge (PGliteSqlStore.ensure_bridges); only MySQL-family uses /db
             out.append({"key": f"{key}:{db_id}", "label": label, "engine": fam, "user": user, "database": name,
                         "version": str(rec.get("engine_version") or rec.get("databaseVersion") or "")})
     return out

@@ -166,6 +166,31 @@ func main() {
 	_, err = ipc.Disable(ctx, rg, ws, "LogManagement", nil)
 	check("disabling LogManagement → 400", status(err) == 400, fmt.Sprint(err))
 
+	// ── KQL query (data plane, official azquery client; engine op RunKql / run_kql) ──
+	wsID := ""
+	if w.Properties != nil && w.Properties.CustomerID != nil {
+		wsID = *w.Properties.CustomerID
+	}
+	lc, lerr := azquery.NewLogsClient(fakeCred{}, &azquery.LogsClientOptions{ClientOptions: azcore.ClientOptions{
+		Cloud: cloud.Configuration{Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
+			azquery.ServiceNameLogs: {Endpoint: "https://" + strings.TrimPrefix(ep, "http://") + "/azure-data/loganalytics", Audience: ep}}},
+		Transport: plainHTTP{}}})
+	if lerr != nil {
+		check("azquery client", false, fmt.Sprint(lerr))
+	} else {
+		_, err = lc.QueryWorkspace(ctx, wsID, azquery.Body{Query: to.Ptr("GoApp_CL | count")}, nil)
+		check("Logs.QueryWorkspace on an unknown table → 400", status(err) == 400, fmt.Sprint(err))
+		ing, ierr := http.Post(ep+"/azure-data/loganalytics/"+wsID+"/api/logs?logType=GoApp",
+			"application/json", strings.NewReader(`[{"level":"error"},{"level":"info"},{"level":"info"}]`))
+		if ierr == nil {
+			ing.Body.Close()
+		}
+		check("HTTP Data Collector ingest accepted", ierr == nil && ing.StatusCode == 200, fmt.Sprint(ierr))
+		qr, err := lc.QueryWorkspace(ctx, wsID, azquery.Body{Query: to.Ptr("GoApp_CL | count")}, nil)
+		ok := err == nil && len(qr.Tables) == 1 && len(qr.Tables[0].Rows) == 1 && fmt.Sprint(qr.Tables[0].Rows[0][0]) == "3"
+		check("Logs.QueryWorkspace counts the ingested rows", ok, fmt.Sprint(err, qr.Tables))
+	}
+
 	// ── saved searches ──
 	ss, err := ssc.CreateOrUpdate(ctx, rg, ws, "top-computers", oi.SavedSearch{Properties: &oi.SavedSearchProperties{
 		Category: to.Ptr("General"), DisplayName: to.Ptr("Top computers"), Query: to.Ptr("Heartbeat | summarize count() by Computer"), Version: to.Ptr[int64](2)}}, nil)

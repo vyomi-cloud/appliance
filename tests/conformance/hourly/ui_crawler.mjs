@@ -653,6 +653,12 @@ async function crawlConsole(browser, base, con, needsSW) {
       }
       row.status = row.findings.length ? "broken" : "ok";
       rows.push(row);
+      // Checkpoint after every service: a console with many tabs can outlast the suite timeout,
+      // and a kill must still leave what was crawled (reporting only; findings are unchanged).
+      try {
+        mkdirSync(dirname(OUT), { recursive: true });
+        writeFileSync(OUT, JSON.stringify({ target: TARGET, at: new Date().toISOString(), services: [...all, ...rows], partial: true }, null, 1));
+      } catch {}
     }
   } catch (e) {
     rows.push({ target: TARGET, cloud: con.cloud, service: "(console boot)", tabs: [], status: "broken",

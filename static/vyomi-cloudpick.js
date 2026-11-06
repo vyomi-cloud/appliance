@@ -59,8 +59,22 @@
   }
 
   // Entry page (clouds.html, no #view, not embedded): no valid default → forced chooser; otherwise straight into it.
+  // Enterprise dashboard -> simulator (clouds.html?from=dashboard&open=<view>): no standalone Spaces page and no forced picker.
+  // Go to a console (the default space's, else the first usable space, else AWS) and let the drawer open the SAME modal there.
+  function viaDash(view) {
+    try { if (view !== 'console') sessionStorage.setItem('vyomi.openView', view); } catch (e) {}   // 'console' = just enter it, no dialog
+    enter().catch(function () {
+      return Promise.all([jget('/api/spaces'), jget('/api/runtime/tier')]).then(function (r) {
+        var sp = ((r[0] && r[0].spaces) || []).filter(function (x) { return canUse(provOf(x), r[1]); })[0];
+        if (sp) return go(sp.space_id, provOf(sp));
+        (window.top || window).location.href = consolePath('aws');
+      });
+    });
+  }
   function entry() {
     var de = document.documentElement;
+    var od = /[?&]open=(spaces|workspace|kc|usage|api|disk|console)\b/.exec(location.search);
+    if (od && !/[?&]embed=1/.test(location.search)) { viaDash(od[1]); return; }
     if (/[?&]embed=1/.test(location.search) || (window.__vyHash !== undefined ? window.__vyHash : location.hash)) { de.classList.remove('vy-entering'); return; }
     if (!getDefault()) { open(); return; }
     enter().catch(function () { open(); });

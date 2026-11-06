@@ -461,8 +461,34 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 }
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
   .vy-co{display:inline-flex;align-items:center;flex:none;text-decoration:none}.vy-co img{height:20px;width:auto;display:block}.vy-co-sep{width:1px;height:24px;background:rgba(255,255,255,.35);flex:none;margin:0 -2px}
+
+  /* ── Small screens: compact header strip + off-canvas navigation drawer ── */
+  @media (max-width: 900px){
+    header{gap:8px;padding:0 10px}
+    header .subchip{display:none}
+    header .hicons button[title="Settings"],header .hicons a[title="All consoles"]{display:none}
+    header .search{min-width:0}
+    header .search input{min-width:0;width:100%}
+  }
+  @media (max-width: 760px){
+    header{height:48px;gap:6px;padding:0 6px}
+    header .vy-co-sep{display:none}
+    .vy-co img{height:16px}
+    header a.logo{font-size:0;gap:0}                 /* keep the Azure mark, drop the wordmark */
+    header a.logo svg{width:24px;height:24px}
+    header .hicons button[title="Cloud Shell"]{display:none}
+    .body{height:calc(100vh - 48px)}
+    nav#rail{position:fixed;left:0;top:48px;bottom:0;width:270px;z-index:70;transform:translateX(-102%);transition:transform .22s ease}
+    nav#rail.m-open{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.4)}
+    nav#rail.collapsed{width:270px}
+    nav#rail.collapsed .navitem span.lbl,nav#rail.collapsed .navhead{display:revert}
+  }
 </style>
   <script type="module" src="./nano-boot.js?v=4"></script>
+  <script src="./nano-disclaimer.js"></script>
+  <script src="./nano-back.js"></script>
+  <script src="./nano-connect.js"></script>
+  <script src="./vyomi-dl-card.js"></script>
 <script src="./service-icons.js"></script>
 </head>
 <body>
@@ -569,6 +595,22 @@ function el(tag, attrs={}, ...kids){
   return e;
 }
 function icon(name){ return el("span",{class:"material-symbols-outlined"},name); }
+function uniqDefault(f, dv){
+  // Identity fields (name/id) get a unique suffix so repeated creates never collide on the same default.
+  try {
+    if (typeof dv !== "string" || !dv || dv === "default" || dv.length > 40) return dv;
+    if (f.type && f.type !== "text") return dv;
+    if (!/(^|[._])name$/i.test(f.name || "")) return dv;
+    // sku.name / tier / nested rule names are catalog values, not resource identities.
+    if (/(^|\.)sku\.name$|\.\d+\.name$/i.test(f.name || "")) return dv;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(dv)) return dv;
+    const r = Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    // Honour the field's own validation (storage accounts: lowercase alphanumerics only, no "-").
+    const rx = f.validate && f.validate.regex ? new RegExp(f.validate.regex) : null;
+    for (const cand of [dv + "-" + r, dv + r]) if (!rx || rx.test(cand)) return cand;
+    return dv;
+  } catch(e){ return dv; }
+}
 function uuid(){ return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)); }
 function toast(msg, kind="ok"){
   const t=el("div",{class:"toast "+kind}, msg);
@@ -915,7 +957,11 @@ async function boot(){
       INSTANCE_CATALOG = Array.isArray(id.instances) ? id.instances : [];
     }catch(_){ INSTANCE_CATALOG = []; }
     renderRail();
-    selectHome();
+    let _sv = {}; try{ if((performance.getEntriesByType("navigation")[0]||{}).type==="reload") _sv = JSON.parse(sessionStorage.getItem('vy_view_azure')||'{}'); }catch(_){}
+    if (_sv.cur === "__rg__") selectRG();
+    else if (_sv.cur && svcByKey(_sv.cur)) selectService(_sv.cur);
+    else selectHome();
+    if (_sv.blade && svcByKey(_sv.blade.svcKey)) setTimeout(()=>{ try{ openDetail(svcByKey(_sv.blade.svcKey), _sv.blade.item); }catch(_){} }, 600);
     refreshBudgetChip();
     setInterval(refreshBudgetChip, 10000);
   }catch(e){
@@ -932,7 +978,7 @@ function renderRail(){
   c.append(mk("folder","Resource groups",selectRG,"__rg__"));
   for(const s of CATALOG.services){ c.append(mk(s.icon,s.label,()=>selectService(s.key),s.key)); }
 }
-function markActive(key){ CURRENT=key; document.querySelectorAll(".navitem").forEach(n=>n.classList.toggle("active",n.dataset.key===key)); }
+function markActive(key){ CURRENT=key; try{ sessionStorage.setItem("vy_view_azure", JSON.stringify({cur:key})); }catch(_){} document.querySelectorAll(".navitem").forEach(n=>n.classList.toggle("active",n.dataset.key===key)); }
 
 // Cost savings card — computes from the LIVE in-browser resource census
 // (/api/runtime/host-distribution → providers[cloud].by_service) using rates
@@ -1154,7 +1200,7 @@ function buildSavingsCard(provider, cloud, accent){
 function buildConnectCard(){
   var card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
   card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI"));
-  card.append(vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"#0078d4", tabs: vyConnectTabs({cloud:"azure", ep: nanoTunnelEp(), sub: SUB, nano:true})}));
+  card.append(vyConnectSwitch({accent:"#0078d4", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
   return card;
 }
 
@@ -1280,6 +1326,16 @@ function pageHead(ic,title,meta){
   return el("div",{class:"pagehd"}, el("div",{class:"ic"},icon(ic)),
     el("div",{}, el("h1",{},title), meta?el("div",{class:"meta"},meta):null));
 }
+// A VM changed power state (booting -> running): repaint the open list / blade so the state flips without a manual Refresh.
+addEventListener("nano-vm-power", () => {
+  try {
+    const ae = document.activeElement;
+    if (ae && ae.closest && ae.closest(".vy-term")) return;                  // never yank the shell away while typing
+    const isVm = (k) => { const v = svcByKey(k); return !!(v && /virtualMachines$/i.test(v.type || "")); };
+    if (BLADE_OPEN) { const d = window.__azLastDetail; if (d && isVm(d.svc.key)) openDetail(d.svc, d.item); }
+    if (CURRENT && isVm(CURRENT)) selectService(CURRENT);
+  } catch (_) {}
+});
 async function selectService(key){
   markActive(key);
   const svc=svcByKey(key);
@@ -1308,6 +1364,10 @@ async function selectService(key){
 }
 function fmtCell(item, col){
   const v=getPath(item, col[0]);
+  if(col[0]==="properties.powerState"){   // VM power state: live pulse while running, spinner while transitioning (vm/nano-vm-host.js)
+    const p=String(v||"PowerState/running").replace(/^PowerState\//i,"");
+    return el("span",{class:"badge"+(/^(running)$/i.test(p)?"":" warn")}, p);
+  }
   if(col[0].endsWith("provisioningState")||col[0].endsWith(".state")||col[0].endsWith(".status")){
     const ok=/(succeeded|ready|running|online|active|enabled)/i.test(String(v||""));
     return el("span",{class:"badge"+(ok?"":" warn")}, v||"—");
@@ -1317,6 +1377,7 @@ function fmtCell(item, col){
   return document.createTextNode(String(v));
 }
 function renderGrid(svc, items){
+  if(/virtualMachines$/i.test(svc.type||"") && !svc.columns.some(c=>c[0]==="properties.powerState")) svc.columns.push(["properties.powerState","Power state"]);
   const wrap=document.getElementById("gridWrap"); wrap.innerHTML="";
   // Filter + sort state (per-render, persisted via closure).
   const state = wrap._gridState = wrap._gridState || {filter:"", sortBy: null, sortDir: 1};
@@ -1391,6 +1452,7 @@ function openBlade(){ BLADE_OPEN=true; document.getElementById("scrim").classLis
 // rather than inheriting the previous blade's modal state.
 function closeBlade(){
   BLADE_OPEN=false;
+  try{ const sv=JSON.parse(sessionStorage.getItem('vy_view_azure')||'{}'); delete sv.blade; sessionStorage.setItem('vy_view_azure', JSON.stringify(sv)); }catch(_){}
   const sc=document.getElementById("scrim"), bl=document.getElementById("blade");
   sc.classList.remove("open","is-modal");
   bl.classList.remove("open","is-modal");
@@ -1399,6 +1461,8 @@ document.getElementById("scrim").addEventListener("click",closeBlade);
 document.getElementById("bladeClose").addEventListener("click",closeBlade);
 
 async function openDetail(svc, item){
+  window.__azLastDetail = {svc, item};
+  try{ const sv=JSON.parse(sessionStorage.getItem('vy_view_azure')||'{}'); sv.blade={svcKey:svc.key,item}; sessionStorage.setItem('vy_view_azure', JSON.stringify(sv)); }catch(_){}
   document.getElementById("bladeIcon").textContent=svc.icon;
   document.getElementById("bladeTitle").textContent=item.name;
   const body=document.getElementById("bladeBody"); body.innerHTML="";
@@ -5990,7 +6054,7 @@ function openWizard(svc, body){
   tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f=>{
     if (f.type === "help" || f.type === "info") return;
     let dv = f.default;
-    if (dv === "__UUID__") dv = uuid();
+    if (dv === "__UUID__") dv = uuid(); else dv = uniqDefault(f, dv);
     if (dv !== undefined) state.values[f.name] = dv;
   })));
 
@@ -6284,7 +6348,7 @@ function openFlatCreate(svc, body){
   const form=el("div",{});
   const inputs={};
   svc.createFields.forEach(f=>{
-    let dv=f.default||""; if(dv==="__UUID__") dv=uuid();
+    let dv=f.default||""; if(dv==="__UUID__") dv=uuid(); else dv=uniqDefault(f, dv);
     let inp;
     if (f.name && f.name.endsWith(".vmSize") && INSTANCE_CATALOG.length) {
       inp = el("select",{});
@@ -6417,7 +6481,14 @@ async function confirmDelete(svc, item, fromBlade){
 }
 
 // ---------- misc ----------
-document.getElementById("menuBtn").addEventListener("click",()=>document.getElementById("rail").classList.toggle("collapsed"));
+document.getElementById("menuBtn").addEventListener("click",()=>{
+  const r=document.getElementById("rail");
+  if(window.matchMedia("(max-width: 760px)").matches) r.classList.toggle("m-open"); else r.classList.toggle("collapsed");
+});
+document.addEventListener("click",(e)=>{
+  const r=document.getElementById("rail");
+  if(r&&r.classList.contains("m-open")&&!e.target.closest("#menuBtn")&&(!r.contains(e.target)||e.target.closest(".navitem"))) r.classList.remove("m-open");
+});
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
 // Renders into #disk-widget-slot. Auto-refreshes every 30s. See
@@ -6490,7 +6561,7 @@ function renderDiskWidget(d) {
         '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
           '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
         '</div>'+
-        '<div style="font-size:11px;color:#6b7280;margin-top:6px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+        '<div style="font-size:11px;color:#6b7280;margin-top:6px">'+(+disk.used_gb).toFixed(2)+' / '+(+disk.total_gb).toFixed(2)+' GB · '+(+disk.avail_gb).toFixed(2)+' GB free</div>'+
       '</div>'+
       '<div style="display:flex;gap:8px">'+
         '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space →</button>'+
@@ -6709,7 +6780,7 @@ boot();
     epEl.title = external || "";
     // Persist the live endpoint so other views (e.g. the /docs/*/usage per-service
     // samples) can show the SAME relay URL even before their own channel connects.
-    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); }catch(_){} }
+    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); if(mode) localStorage.setItem(mode==="local"?"nano_local_ext":"nano_relay_cloud_ext", external); }catch(_){} }
     // Gentle GitHub-star nudge at natural moments: the first relayed request (a
     // "win") or the 30-min idle pause. Once per browser, dismissable, never blocks.
     if(served!=null && served>=1 && _prevServed<1) maybeNudge();
@@ -6785,5 +6856,6 @@ boot();
   }
 })();
 </script><script src="./vyomi-appbar.js" data-cloud="azure" data-clouds="clouds.html" defer></script>
+<script src="./nano-tunnel-tabs.js" defer></script>
 </body>
 </html>

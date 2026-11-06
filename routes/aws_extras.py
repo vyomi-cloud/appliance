@@ -272,6 +272,9 @@ def register(app: FastAPI) -> None:
             else:
                 payload[col_path] = "\u2014"
         slot = _aws_extras_state(stub_path)
+        _aws_extras_seed_if_needed(stub_path)
+        if name in slot["items"]:
+            raise HTTPException(status_code=409, detail=f"'{name}' already exists. Choose a different name.")
         slot["items"][name] = payload
         slot["seeded"] = True
         _persist_state()

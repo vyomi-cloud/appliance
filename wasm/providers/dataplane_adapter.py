@@ -570,6 +570,9 @@ def extras_create(p):
         # a new rule's target count is what was attached (none yet unless a target was given)
         if item.get("target_count") in (None, "", "\u2014"):
             item["target_count"] = 1 if item.get("target_arn") else 0
+    if name in _EXTRAS.get(key, {}):
+        return {"ok": False, "__http": {"status": 409, "headers": {}, "body": {
+            "detail": f"'{name}' already exists. Choose a different name."}}}
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 

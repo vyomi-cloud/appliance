@@ -41,6 +41,8 @@ class SpaceKinesisStore:
 
 
 STORE = SpaceKinesisStore()
+from core import eventbridge_core as _eb  # noqa: E402
+_eb.set_target_store("kinesis", STORE)  # EventBridge rule targets
 
 # Control-plane writes move the space's resource graph + cost-savings metrics; the data
 # plane (PutRecord/GetRecords) does not, so it skips the (heavier) inventory refresh.

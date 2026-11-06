@@ -7,7 +7,7 @@
       "cloud": "all",
       "kind": "ui",
       "cmd": "TARGET=offline OUT=tests/conformance/hourly/out/ui-offline.json node tests/conformance/hourly/ui_crawler.mjs",
-      "timeout": 1500
+      "timeout": 3600
     },
     {
       "id": "offline-console-actions",
@@ -39,6 +39,14 @@
       "cloud": "azure",
       "kind": "sdk-python",
       "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_sdk_python_ops.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-azure-new-api-versions",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_new_api_versions.py",
       "timeout": 120
     },
     {
@@ -1065,6 +1073,14 @@
       "timeout": 600
     },
     {
+      "id": "aws-dynamodb-bulk-ops-core",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_dynamodb_bulk_ops_core.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-core-triggers",
       "target": "nano",
       "cloud": "gcp",
@@ -2054,6 +2070,15 @@
       "cwd": "tests/conformance/gcp-sdk-java",
       "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=MonitoringConformance",
       "timeout": 900
+    },
+    {
+      "id": "offline-sdk-go-gcp-sqladmin",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "sdk-go",
+      "cwd": "tests/conformance/gcp-sdk-go-sqladmin",
+      "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .",
+      "timeout": 600
     },
     {
       "id": "offline-sdk-go-gcp-monitoring",

@@ -17,12 +17,13 @@ const open = (name) => page.evaluate(([sel, n]) => {
 }, [RAIL_SEL, name]);
 try {
   if (offline) {
-    // Re-runs against the same stack: the form's default names ((default) database, my-topic)
+    // Re-runs against the same stack: the form's default names ((default) database, my-topic, my-trigger)
     // already exist from the previous run and the real clouds answer 409, so start clean.
     const api = new URL(offline).origin + "/api/gcp";
     for (const u of ["/firestore/v1/projects/123456789012/databases/(default)", "/pubsub/v1/projects/123456789012/topics/my-topic"]) {
       await fetch(api + u, { method: "DELETE" }).catch(() => {});
     }
+    await fetch(api + "/extras/eventarc/triggers/my-trigger", { method: "DELETE" }).catch(() => {});
     await page.goto(offline, { waitUntil: "domcontentloaded" });
     await page.waitForFunction((s) => document.querySelectorAll(s).length > 0, RAIL_SEL, { timeout: 60000 });
   } else {

@@ -956,6 +956,13 @@
     @media (max-width: 600px) { #view-usage .u-cloud-tab { font-size: 15px; padding: 0 8px 10px; gap: 7px; } }
     #view-usage .u-tunnel .sc-desc code { background: #f2f4f7; padding: 1px 5px; border-radius: 4px; }
     #view-usage .u-tunnel-card pre.u-code { min-height: 0; }
+    @keyframes u-tun { 0% { box-shadow: 0 0 0 0 rgba(37,99,235,.55); } 70% { box-shadow: 0 0 0 12px rgba(37,99,235,0); } 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); } }
+    #view-usage .u-tunnel-card.u-tun { border-color: #2563eb; animation: u-tun 1.6s ease-out infinite; }
+    /* notification dot: install-the-tunnel nudge on the SDK & CLI usage drawer item and the tunnel card */
+    #view-usage .u-tunnel-card { position: relative; }
+    #view-usage .u-tunnel-card.u-tun::after, .side-item.vy-tun .side-ic::after { content: ""; position: absolute; top: -5px; right: -5px; width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 2px #fff; }
+    .side-item.vy-tun .side-ic { position: relative; }
+    .side-item.vy-tun .side-ic::after { top: -3px; right: -3px; width: 9px; height: 9px; }
     #view-usage .u-panel > .sc-desc { margin: 12px 0 16px; font-size: 13px; color: #a1a1aa; }
     #view-usage .u-card { background: #1f2937; border-radius: 14px; padding: 16px 18px 18px; min-width: 0; display: flex; flex-direction: column; }
     #view-usage .u-card .u-head { margin-bottom: 4px; }
@@ -1336,7 +1343,36 @@
     html.vy-acct #activate-modal.am-overlay { background: transparent; padding-top: 12px; }
 
     html.vy-entering body { visibility: hidden; }   /* default cloud set: no flash of the appliance page before redirecting */
-</style>
+
+    /* vy-embed black-white: drawer views (Spaces, Health, Knowledge Center, SDK & CLI usage, API) in the standard black & white
+       theme. White background throughout, thin borders, no shadows, black buttons, no blue. */
+    html.vy-embed, html.vy-embed body { background: #fff !important; color: #18181b !important; background-image: none !important; }
+    html.vy-embed #app-main { background: transparent !important; }
+    html.vy-embed #app-main .surface-card, html.vy-embed #app-main .kc-panel, html.vy-embed #app-main .u-panel, html.vy-embed #app-main .u-panel, html.vy-embed #app-main .kc-panel {
+      background: #fafafa !important; border: 1px solid #e4e4e7 !important; border-radius: 8px !important; box-shadow: none !important; }
+    html.vy-embed #app-main .space-card, html.vy-embed #app-main .stat-card, html.vy-embed #app-main .pie-card, html.vy-embed #app-main .kct, html.vy-embed #app-main .u-card, html.vy-embed #app-main .u-tunnel-card {
+      background: #fff !important; border: 1px solid #e4e4e7 !important; border-radius: 8px !important; box-shadow: none !important; }
+    html.vy-embed #app-main .space-card:hover, html.vy-embed #app-main .kct:hover, html.vy-embed #app-main .u-card:hover { border-color: #000 !important; box-shadow: none !important; }
+    html.vy-embed #app-main .space-card.active { border: 1px solid #000 !important; box-shadow: none !important; }
+    html.vy-embed #app-main .sc-title, html.vy-embed #app-main .sc-title h2 { color: #000 !important; border-bottom-color: #000 !important; }
+    html.vy-embed #app-main .sc-title h2 .material-icons, html.vy-embed #app-main .material-icons[style*="2563eb"] { color: #000 !important; }
+    html.vy-embed #app-main .sc-desc, html.vy-embed #app-main .sc-head + .sc-desc { color: #52525b !important; }
+    html.vy-embed #app-main .btn-create-space { background: #000 !important; border-color: #000 !important; color: #fff !important; border-radius: 6px !important; box-shadow: none !important; }
+    html.vy-embed #app-main .btn-create-space:hover { background: #27272a !important; }
+    html.vy-embed #app-main .prov-filter button, html.vy-embed #app-main select { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; box-shadow: none !important; background: #fff !important; color: #18181b !important; }
+    html.vy-embed #app-main .kc-open { color: #fff !important; background: #000 !important; border-color: #000 !important; border-radius: 6px !important; }
+    html.vy-embed #app-main .kct-open { color: #000 !important; }
+    html.vy-embed #app-main .kc-open:hover { background: #27272a !important; }
+    html.vy-embed #app-main .u-cloud-tab, html.vy-embed #app-main .u-tab { color: #71717a !important; }
+    html.vy-embed #app-main .u-cloud-tab:hover, html.vy-embed #app-main .u-tab:hover { color: #000 !important; }
+    html.vy-embed #app-main .u-cloud-tab.on { color: #000 !important; border-bottom-color: #000 !important; }
+    html.vy-embed #app-main .u-tab[aria-selected="true"] { color: #000 !important; box-shadow: inset 0 -2px 0 #000 !important; }
+    html.vy-embed #app-main .u-code, html.vy-embed #app-main .u-code { background: #fff !important; border: 1px solid #e4e4e7 !important; border-radius: 6px !important; color: #18181b !important; }
+    html.vy-embed #app-main .u-ibtn, html.vy-embed #app-main .u-ibtn { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; box-shadow: none !important; color: #3f3f46 !important; }
+    html.vy-embed #app-main a { color: #000; }
+    html.vy-embed #app-main .kct-open, html.vy-embed #app-main .kct a, html.vy-embed #app-main .u-card a { color: #000 !important; }
+    html.vy-embed #app-main .stat-card .stat-actions button { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; background: #fff !important; color: #18181b !important; }
+  </style>
   <style>#host-util-card .stat-actions{display:none!important}</style>   <!-- Free up space / Grow disk are appliance-only -->
   <script src="./nano-sw.js" defer></script>
   <style id="vy-light-theme">
@@ -2198,7 +2234,6 @@
     <div id="usage-cards"></div>
 
     <p style="text-align:center;margin:2px 0 34px">
-      <a class="kc-open" id="u-fulldoc" href="/docs/aws/usage?nano=1" target="_blank" rel="noopener">Full per-service reference <span class="material-icons" style="font-size:16px;vertical-align:-3px">open_in_new</span></a>
     </p>
     </div>
   </div>
@@ -2632,6 +2667,14 @@
       }
       function wireTunnel(){
         var card = grid.querySelector('.u-tunnel-card'); if(!card) return;
+        (function pulse(){
+          var seen = function(){ try{ return localStorage.getItem('vyomi.tunnel.seen')==='1'; }catch(_){ return false; } };
+          if(seen()){ card.classList.remove('u-tun'); return; }
+          card.classList.add('u-tun');
+          fetch('http://127.0.0.1:8090/health',{mode:'no-cors',cache:'no-store'}).then(function(){
+            try{ localStorage.setItem('vyomi.tunnel.seen','1'); }catch(_){} card.classList.remove('u-tun');
+          }).catch(function(){ if(card.isConnected) setTimeout(pulse, 6000); });
+        })();
         var codeEl = card.querySelector('pre.u-code code'), cp = card.querySelector('.u-cp');
         card.querySelectorAll('.u-tab').forEach(function(t){
           t.onclick = function(){
@@ -2710,7 +2753,6 @@
       }
       var epc = document.getElementById('u-ep-copy');
       if(epc) epc.onclick = function(){ if(navigator.clipboard) navigator.clipboard.writeText(endpoint).then(function(){ epc.textContent='Copied'; setTimeout(function(){ epc.textContent='Copy'; },1200); }); };
-      var fd = document.getElementById('u-fulldoc'); if(fd && !isNano) fd.setAttribute('href','/docs/aws/usage');
       if(isNano){ try{ var chn = new BroadcastChannel('nano-relay');
         chn.onmessage = function(ev){ var m = ev.data || {};
           if(m.type==='status' && m.state==='connected' && m.external){ endpoint = m.external; live = true; try{ localStorage.setItem('nano_relay_external', endpoint); }catch(_){} render(); } };
@@ -4570,5 +4612,15 @@ function nanoLogout(){
 })();
 </script>
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
+<script src="./nano-tunnel-tabs.js" defer></script>
+<script>
+/* Nano: dot on the SDK & CLI usage drawer item until the local vyomi-tunnel has been seen running */
+(function(){ var it=document.querySelector('.side-item[data-view="usage"]'); if(!it) return;
+  function seen(){ try{ return localStorage.getItem('vyomi.tunnel.seen')==='1'; }catch(_){ return false; } }
+  function probe(){ if(seen()){ it.classList.remove('vy-tun'); return; } it.classList.add('vy-tun');
+    fetch('http://127.0.0.1:8090/health',{mode:'no-cors',cache:'no-store'}).then(function(){ try{ localStorage.setItem('vyomi.tunnel.seen','1'); }catch(_){} it.classList.remove('vy-tun'); }).catch(function(){}); }
+  probe(); setInterval(probe,6000); })();
+</script>
+<script src="./nano-back.js"></script>
 </body>
 </html>

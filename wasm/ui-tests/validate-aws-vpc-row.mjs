@@ -19,14 +19,14 @@ try {
   await page.locator("#main button").filter({ hasText: /Create resource/ }).first().click();
   await sleep(3000);
   const cells = await page.locator("#main table tr").evaluateAll((trs) => trs.map((tr) => [...tr.children].map((c) => c.innerText.trim())));
-  const row = cells.find((r) => r.includes("my-vpc"));
+  const row = cells.find((r) => r.some((c) => c.startsWith("my-vpc")));
   check("created VPC is listed by name", !!row, JSON.stringify(cells.slice(-2)));
   check("no placeholder cells in the row", !!row && row.slice(1).every((c) => c && !/^[-—]$/.test(c)), JSON.stringify(row));
   await sleep(1500);   // let the store snapshot persist
   await page.goto(base + "/aws-console.html");
   await sleep(6000);
   const names = await page.evaluate(async () => { const j = await (await fetch("/api/vpc/vpcs")).json(); return (j.items || j.vpcs || []).map((f) => f.name); });
-  check("VPC survives a console reload", names.includes("my-vpc"), JSON.stringify(names));
+  check("VPC survives a console reload", names.some((n) => n.startsWith("my-vpc")), JSON.stringify(names));
   const lists = await page.evaluate(async () => {
     const o = {};
     for (const k of ["subnets", "route-tables", "internet-gateways"]) { const r = await fetch("/api/vpc/" + k); o[k] = [r.status, r.ok ? await r.json() : null]; }

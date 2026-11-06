@@ -81,6 +81,8 @@ class SpaceLogsStore(logs_core.LogsStore):
 
 
 STORE = SpaceLogsStore()
+from core import eventbridge_core as _eb  # noqa: E402
+_eb.set_target_store("logs", STORE)  # EventBridge rule targets
 
 _READ_ONLY = ("Describe", "Get", "List", "Filter", "Test")
 

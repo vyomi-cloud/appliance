@@ -182,7 +182,9 @@ def _instance_view(rec: dict) -> dict:
                 "startTime": backup_config.get("startTime", "03:00"),
             },
         },
-        "ipAddresses": _ip_addresses(ip_config),
+        "ipAddresses": ([{"type": "PRIMARY", "ipAddress": rec["endpoint_address"]}] if rec.get("endpoint_port") else _ip_addresses(ip_config)),
+        **({"connection": {"host": rec["endpoint_address"], "port": rec["endpoint_port"],
+                           "engine": "POSTGRES", "via": "vyomi-tunnel"}} if rec.get("endpoint_port") else {}),
         "serverCaCert": rec.get("serverCaCert") or _ca_cert(project, name),
         "createTime": rec.get("createTime", ""),
         "etag": rec.get("etag", ""),
@@ -387,6 +389,8 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
     store.put_instance(_key(project, name), rec)
     if master:
         _mirror_to_replicas(store, project, master)  # seed the new replica from the primary's current state
+    if hasattr(store, "mirror_create_instance") and not rec.get("masterInstanceName"):
+        store.mirror_create_instance(_key(project, name), rec)   # PGlite store: publish a host port via the tunnel
     store.persist()
     return _json(200, _operation_view(op, project, name))   # native instances.insert → Operation
 
@@ -1166,6 +1170,57 @@ def _get_metrics(store: SqlStore, project: str, instance: str) -> CloudSqlRespon
 # ── native-wire dispatcher (REST path + method → operation) ────────────────
 # Single routing point for the native Cloud SQL Admin REST API — what an
 # unmodified google-cloud-sql-admin / gcloud sql client speaks.
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _workload_captures(store, project, instance, method, verb, workload_id, payload) -> CloudSqlResponse:
+    """sql.workloadCaptures.{start,stop,startReplay,stopReplay,list} (v1beta4, preview).
+    Discovery for these has flapped between request shapes, so the body is read
+    leniently; startReplay takes the workloadId in the path (or body)."""
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    caps = rec.setdefault("workloadCaptures", [])
+    if verb is None and method == "GET":
+        return _json(200, {"kind": "sql#workloadCapturesList", **({"items": list(caps)} if caps else {})})
+    if method != "POST":
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on workloadCaptures")
+    now = _now_iso()
+    if verb == "start":
+        if any(c.get("state") == "RUNNING" for c in caps):
+            return _err(400, "FAILED_PRECONDITION", "A workload capture is already running on this instance.")
+        wid = str(payload.get("workloadId") or payload.get("name") or uuid.uuid4().hex[:12])
+        caps.insert(0, {"kind": "sql#workloadCapture", "workloadId": wid, "instance": instance,
+                        "state": "RUNNING", "startTime": now})
+        op_type = "START_WORKLOAD_CAPTURE"
+    elif verb == "stop":
+        cap = next((c for c in caps if c.get("state") == "RUNNING"), None)
+        if cap is None:
+            return _err(400, "FAILED_PRECONDITION", "No workload capture is running on this instance.")
+        cap.update(state="COMPLETED", endTime=now)
+        op_type = "STOP_WORKLOAD_CAPTURE"
+    elif verb == "startReplay":
+        wid = str(workload_id or payload.get("workloadId") or "")
+        cap = next((c for c in caps if c.get("workloadId") == wid), None)
+        if cap is None:
+            return _not_found(f"The workload capture does not exist. Workload: {wid}")
+        cap.update(replayState="RUNNING", replayStartTime=now)
+        op_type = "START_WORKLOAD_REPLAY"
+    elif verb == "stopReplay":
+        cap = next((c for c in caps if c.get("replayState") == "RUNNING"), None)
+        if cap is None:
+            return _err(400, "FAILED_PRECONDITION", "No workload replay is running on this instance.")
+        cap.update(replayState="COMPLETED", replayEndTime=now)
+        op_type = "STOP_WORKLOAD_REPLAY"
+    else:
+        return _not_found(f"Unknown workloadCaptures method: {verb}")
+    store.put_instance(_key(project, instance), rec)
+    store.persist()
+    return _json(200, _operation_view(_log_op(rec, op_type), project, instance))
+
+
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"", gcs_store=None) -> CloudSqlResponse:
@@ -1268,6 +1323,13 @@ def dispatch(store: SqlStore, method: str, path: str,
                     return _not_found(f"The database does not exist. Database: {database}")
                 return _json(200, _database_view(project, instance, dbs[database]))
             return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on database")
+
+    if segs[4].split(":")[0] == "workloadCaptures" and len(segs) in (5, 6):
+        verb = segs[4].partition(":")[2]
+        wid = None
+        if len(segs) == 6:
+            wid, _, verb = segs[5].partition(":")
+        return _workload_captures(store, project, instance, method, verb or None, wid, payload)
 
     # /projects/{p}/instances/{i}/users  (name + host are query params, not path segments)
     if segs[4] == "users" and len(segs) == 5:
