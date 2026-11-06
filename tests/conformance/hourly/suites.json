@@ -857,6 +857,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-runtime-cloudsim-routes",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_runtime_cloudsim_routes_api.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-ui-azure-tabs",
       "target": "nano",
       "cloud": "azure",
