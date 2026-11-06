@@ -280,3 +280,24 @@ Decisions taken after the sections above were written. Design only; items marked
 ## 14. Release interaction
 - v4.0.0 is **not** cut until booster is finished (owner's call, 2026-11-06). Nothing is tagged, merged to
   `main`, deployed or published without an explicit prod-ready from the owner.
+
+## 15. Build status (2026-11-06, end of day)
+
+| Piece | State |
+|---|---|
+| One-cloud gating, account link, Nano link | built, tested |
+| Capacity: real memory, atomic reservation, REST/Azure pre-checks (`core/booster.py`) | built, tested (44 checks) |
+| Signed session token + in-booster enforcement + hard expiry (`core/booster_session.py`) | built, tested (31 checks) |
+| Outbound relay link (`wasm/relay/booster-{hub,dial,session}.mjs`) | built, tested over ws:// only |
+| Portal service (GitHub App flow, encrypted tokens, ledger, worker, token minting) | built in portal worktree, uncommitted, 22 tests vs a fake GitHub |
+| 64-bit language image (`docker/booster-lang`) | arm64 smokes green; amd64 pending |
+| 2-core devcontainer + `boot-booster.sh` | written; never booted on a real Codespace |
+
+Token model: the portal holds `BOOSTER_SESSION_KEY`; the Codespace gets only a per-session derived key from
+`GET /api/booster/session/token` (authorised by GitHub reporting that Codespace Available for the owner). A
+compromised Codespace can forge tokens only for its own session; Ed25519 (public key on the booster) is the follow-up.
+
+Needs a human: register the production GitHub App + env vars (`GITHUB_APP_CLIENT_ID/SECRET`, `BOOSTER_TOKEN_KEY`,
+`BOOSTER_SESSION_KEY`); install the App on `vyomi-cloud` to answer open question #1; real Codespace boot test on a
+plain personal account (2-core accepted, readiness, token fetch, wss link); wss:// termination in front of the relay.
+Not started: signed images, compute IAM, certs/hostname, VPN, purchase flow + price.
