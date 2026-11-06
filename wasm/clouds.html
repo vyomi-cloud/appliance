@@ -1953,6 +1953,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-inc-l li.mk-more, .mk-inc-l.chips li.mk-more { padding-left: 22px; border: 0; background: none; color: #71717a; font-weight: 600; }
   .mk-card .mk-cta { padding-top: 2px; color: #000; font-weight: 600; }
   .mk-card .mk-foot { padding: 12px 18px 16px; gap: 10px; border-top: 1px solid #f0f0f2; margin-top: 8px; }
+  .mk-pick { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 12.5px; color: #52525b; margin-bottom: 8px; }
+  .mk-pick select { flex: 1; border: 1px solid #d4d4d8; border-radius: 8px; padding: 6px 8px; font: inherit; background: #fff; color: #000; }
   .mk-buy { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
   .mk-buy-p { display: flex; flex-direction: column; font-size: 12.5px; color: #52525b; line-height: 1.25; }
   .mk-buy-p b { font-size: 20px; letter-spacing: -.02em; color: #000; display: inline; }
@@ -3719,7 +3721,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         ? '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>' + (k === 'pro' && l && l.detail ? _esc(l.detail) : 'Active on your licence') + '</small></span></div>'
         : '<div class="mk-free no">' + _CHECK + '<span><b>Billed over a minimum of ' + mn + ' months</b></span></div>';
       let foot;
-      if (!cur) foot = _buyBtn(base + '/checkout?tier=' + k + '&period=monthly', 'Pay', price, '/ month', 'Pay for ' + name + ', $' + price + ' per month', 'Pay', 'Min. ' + mn + ' months');
+      if (!cur) {
+        // Pro is one cloud: pick it here so Pay goes STRAIGHT to the payment page (no bounce through /pricing).
+        const pick = k === 'pro'
+          ? '<label class="mk-pick"><span>Cloud</span><select aria-label="Cloud for Pro" onchange="var a=this.closest(\'.mk-card\').querySelector(\'.mk-buy-b\');a.href=a.href.replace(/primary_cloud=[a-z]+/,\'primary_cloud=\'+this.value)"><option value="aws">AWS</option><option value="gcp">Google Cloud</option><option value="azure">Azure</option></select></label>'
+          : '';
+        foot = pick + _buyBtn(base + '/checkout?tier=' + k + '&period=monthly' + (k === 'pro' ? '&primary_cloud=aws' : ''), 'Pay', price, '/ month', 'Pay for ' + name + ', $' + price + ' per month', 'Pay', 'Min. ' + mn + ' months');
+      }
       else if (k === 'pro') { const mx = P.max || VY_PLANS.max; foot = _buyBtn(base + '/dashboard', 'Upgrade', mx.price_usd || mx.price, '/ month', 'Upgrade to Max', 'Upgrade', 'Pro → Max is pro-rated'); }
       else foot = '<span class="mk-note">You have everything this plan includes.</span>';
       return _packCard({ id: 'plan-' + k, logo: 'plan-' + k, title: name, sub: k === 'max' ? 'All clouds' : 'One cloud', ribbon: cur ? 'Yours' : name, ribbonCls: cur ? 'pro' : 'free',
