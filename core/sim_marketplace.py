@@ -153,6 +153,20 @@ def entitlements_from_claims(*sources: Any, sims: Iterable[dict] | None = None) 
     return owned, (set(ids) if all_on else (singles & ids))
 
 
+# DEV & DEVOPS PACKS (monthly, USD; portal owns checkout): each pack bundles services from the existing 56 across ALL clouds,
+# $9 / month, cancel any month. Ids match the UI pack list (static/clouds.html VY_PACKS). Owned packs come from the
+# licence claim `packs: ["serverless", ...]`.
+PACK_PRICE_USD = 9
+PACK_IDS = ("serverless", "containers", "data", "network", "security", "ops")
+
+
+def packs_owned(*sources: Any) -> list[str]:
+    for src in sources:
+        if isinstance(src, dict) and src.get("packs"):
+            return [str(x).lower() for x in src["packs"] if str(x).lower() in PACK_IDS]
+    return []
+
+
 _NOT_LICENSED_TIERS = ("free", "nano")
 
 

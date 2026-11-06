@@ -2072,7 +2072,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
         <div class="mk-sec">AI stack <span>add-on · needs that cloud's simulator in Spaces</span></div>
         <div id="mkt-ai" role="list"></div>
-        <div class="mk-sec">Dev &amp; DevOps packs <span>coming soon</span></div>
+        <div class="mk-sec">Dev &amp; DevOps packs <span>all clouds · $9 / month each · cancel any month</span></div>
         <div id="mkt-packs" role="list"></div>
       </div>
     </div>
@@ -3640,27 +3640,32 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     function _buyUrl(id, base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/checkout?product=simulator&simulator=' + id + '&period=monthly'; }
     async function _mktCards() {
       if (!VY_NANO) {
-        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) { const d = await r.json(); return { cards: d.simulators, licence: d.licence, ai: d.ai_stack }; } } catch (_) {}
+        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) { const d = await r.json(); return { cards: d.simulators, licence: d.licence, ai: d.ai_stack, packs: d.packs }; } } catch (_) {}
       }
       let sp = []; try { sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || []; } catch (_) {}
       const addedIds = sp.map(x => String(x.provider || x.provider_id).toLowerCase());
-      return { ai: _aiLocal(addedIds), licence: { tier: 'free', detail: 'Free plan', plans: VY_PLANS, pricing_url: _pricingUrl() }, cards: VY_SIMULATORS.map(sim => {
+      return { packs: { price_usd: 9, per: '/ month', owned: [] }, ai: _aiLocal(addedIds), licence: { tier: 'free', detail: 'Free plan', plans: VY_PLANS, pricing_url: _pricingUrl() }, cards: VY_SIMULATORS.map(sim => {
         const s = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === sim.id)[0];
         return { id: sim.id, name: sim.name, free_tier: sim.free_tier, added: !!s, space_id: s && s.space_id, tier: (s && s.tier) || 'free', price_usd: sim.price,
                  licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: [{ kind: 'simulator', price_usd: sim.price, per: '/ month', url: _buyUrl(sim.id) }] };
       }) };
     }
-    // Dev / DevOps environment packs (not on sale yet: no price, no Buy). Contents are the planned scope.
+    // Dev / DevOps packs: $9 / month each, all clouds; services are drawn only from the 56 in the Full Cloud stack.
     const VY_PACKS = [{"id": "serverless", "icon": "bolt", "name": "Serverless apps", "sub": "Functions, APIs and events", "by": {"AWS": ["Lambda", "API Gateway", "API Gateway V2", "Step Functions", "EventBridge", "SQS", "SNS"], "Google Cloud": ["Cloud Functions", "API Gateway", "Pub/Sub", "Eventarc", "Cloud Scheduler"], "Azure": ["Function apps", "API Management", "Event Grid topics", "Service Bus"]}}, {"id": "containers", "icon": "widgets", "name": "Containers & compute", "sub": "Run workloads like production", "by": {"AWS": ["EC2", "Elastic Load Balancing", "VPC"], "Google Cloud": ["Compute Engine", "Kubernetes Engine", "Artifact Registry"], "Azure": ["Virtual Machines", "Container Apps", "Virtual networks"]}}, {"id": "data", "icon": "database", "name": "Data & storage", "sub": "Databases, caches and streams", "by": {"AWS": ["S3", "RDS", "DynamoDB", "Kinesis"], "Google Cloud": ["Cloud Storage", "Cloud SQL", "Firestore", "Memorystore for Redis"], "Azure": ["Storage accounts", "SQL servers", "Cosmos DB"]}}, {"id": "network", "icon": "lan", "name": "Networking", "sub": "Networks, load balancing and DNS", "by": {"AWS": ["VPC", "Elastic Load Balancing"], "Google Cloud": ["VPC Network"], "Azure": ["Virtual networks", "Network Security Group", "DNS zones"]}}, {"id": "security", "icon": "verified_user", "name": "Security & identity", "sub": "Identity, secrets and keys", "by": {"AWS": ["IAM", "Secrets Manager", "KMS"], "Google Cloud": ["IAM & Admin", "IAM Service Account Credentials", "Secret Manager", "Cloud KMS"], "Azure": ["Key vaults", "Entra ID / RBAC", "Network Security Group"]}}, {"id": "ops", "icon": "monitoring", "name": "Observability & ops", "sub": "Logs, metrics and configuration", "by": {"AWS": ["CloudWatch", "CloudWatch Logs", "Systems Manager"], "Google Cloud": ["Cloud Monitoring"], "Azure": ["Monitor alerts", "Log Analytics", "App Configuration"]}}];
-    function _packSoon(p) {
+    function _packSale(p, pk) {
+      const price = (pk && pk.price_usd) || 9, per = (pk && pk.per) || '/ month', owned = ((pk && pk.owned) || []).indexOf(p.id) >= 0;
       const rows = Object.keys(p.by).map(c => { const L = p.by[c], v = L.slice(0, 2).join(', '), m = L.length - 2;
         return '<b>' + _esc(c === 'Google Cloud' ? 'GCP' : c) + '</b> ' + _esc(v) + (m > 0 ? ' +' + m + ' more' : ''); });
       const n = Object.keys(p.by).reduce((a, c) => a + p.by[c].length, 0);
-      return _packCard({ id: 'pack-' + p.id, logo: 'pack-' + p.icon, title: p.name, sub: p.sub, ribbon: 'Soon', ribbonCls: 'free',
-        status: '<div class="mk-free no">' + _CHECK + '<span><b>Coming soon</b><small>Existing services</small></span></div>',
+      const base = (((pk && pk.portal) || VY_PORTAL) + '').replace(/\/$/, '');
+      const status = owned
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>Pack enabled</b><small>Active on your licence</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>All clouds</b><small>One price for AWS, GCP and Azure</small></span></div>';
+      const foot = owned ? '<span class="mk-pill">' + _CHECK + 'Enabled</span>'
+        : _buyBtn(base + '/checkout?product=pack&pack=' + p.id + '&period=monthly', 'Buy', price, per, 'Buy the ' + p.name + ' pack, $' + price + ' ' + per);
+      return _packCard({ id: 'pack-' + p.id, logo: 'pack-' + p.icon, title: p.name, sub: p.sub, ribbon: 'Pack', ribbonCls: owned ? 'pro' : 'free', status: status,
         included: '<div class="mk-inc"><div class="mk-inc-h">' + n + ' services included</div><ul class="mk-inc-l">' +
-          '<li>' + _CHECK + 'SDK, CLI & API for all ' + n + ' services</li>' + rows.map(r => '<li>' + _CHECK + r + '</li>').join('') + '</ul></div>',
-        foot: '<div class="mk-buy"><span class="mk-buy-p"><span>Pricing soon</span></span><span class="mk-buy-b off">Coming soon</span></div>' });
+          '<li>' + _CHECK + 'SDK, CLI & API for all ' + n + ' services</li>' + rows.map(r => '<li>' + _CHECK + r + '</li>').join('') + '</ul></div>', foot: foot });
     }
     function _aiLocal(added) {
       const u = id => (VY_PORTAL.replace(/\/$/, '')) + '/checkout?product=ai_stack&scope=' + id + '&period=monthly';
@@ -3747,7 +3752,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     async function loadMarketplace() {
       const g = document.getElementById('mkt-grid'); if (!g) return;
       const mc = await _mktCards(), cards = mc.cards;
-      const pk = document.getElementById('mkt-packs'); if (pk) pk.innerHTML = VY_PACKS.map(_packSoon).join('');
+      const pk = document.getElementById('mkt-packs'); if (pk) pk.innerHTML = VY_PACKS.map(p => _packSale(p, mc.packs)).join('');
       const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
       const st = document.getElementById('mkt-plan'); if (st) st.innerHTML = _mktPlanHtml(mc.licence);
       document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => {

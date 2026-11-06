@@ -38,7 +38,7 @@ def _license_ctx() -> dict:
     portal = (os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL") or _lr.DEFAULT_BACKEND_URL).rstrip("/")
     owned = [str(x).lower() for x in (claims.get("simulators") or lic.get("simulators") or []) if x]
     ai = claims.get("ai_stack") or lic.get("ai_stack") or []
-    return {"ai": ai, "owned": owned, "tier": tier, "primary": primary, "licensed_by": by, "email": sub,
+    return {"packs": mk.packs_owned(claims, lic), "ai": ai, "owned": owned, "tier": tier, "primary": primary, "licensed_by": by, "email": sub,
             "upgrade_url": portal + "/pricing", "portal": portal}
 
 
@@ -96,6 +96,7 @@ def register(app: FastAPI) -> None:
             c["owned"] = sim["id"] in (lc.get("owned") or []) and not mk.licensed_tier(sim["id"], lc["tier"], lc["primary"])
             cards.append(c)
         return {"simulators": cards, "upgrade_url": lc["upgrade_url"],
+                "packs": {"price_usd": mk.PACK_PRICE_USD, "per": "/ month", "owned": lc.get("packs") or [], "portal": lc["portal"]},
                 "ai_stack": mk.ai_stack_cards(lc.get("ai"), [p for p in mine], lc["portal"]),
                 "licence": mk.licence_summary(lc["tier"], lc["primary"], lc.get("owned") or (), lc["portal"])}
 

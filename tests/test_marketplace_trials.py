@@ -55,6 +55,10 @@ own, ai = mk.entitlements_from_claims({"simulators": ["aws", "bogus"], "ai_stack
 check("claims -> entitlements", own == {"aws"} and ai == {"gcp"})
 check("ai_stack 'all' -> every cloud", mk.entitlements_from_claims({"ai_stack": "all"})[1] == {"aws", "gcp", "azure"})
 
+# ---- packs
+check("pack price $9, six packs", mk.PACK_PRICE_USD == 9 and len(mk.PACK_IDS) == 6)
+check("packs claim parsed, unknown ids dropped", mk.packs_owned({"packs": ["data", "bogus", "ops"]}) == ["data", "ops"] and mk.packs_owned({}) == [])
+
 # ---- start / countdown
 sp = {"space_id": "s1", "provider": "aws"}
 check("no trial -> free", mk.effective(sp, None, now)["tier"] == "free")
