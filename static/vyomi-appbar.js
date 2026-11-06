@@ -97,7 +97,7 @@
     '#vy-acct-menu.vy-azure .vy-wt b{font-size:16px;font-weight:600}#vy-acct-menu.vy-azure a{padding:10px 20px;border-radius:0;font-size:14px;color:#323130}#vy-acct-menu.vy-azure a:hover{background:#f3f2f1}' +
     '#vy-acct-menu.vy-azure .vy-hr{display:none}#vy-acct-menu.vy-azure a[data-act=signout]{position:absolute;top:14px;right:14px;padding:4px 8px;color:#0078d4;font-size:13px}#vy-acct-menu.vy-azure a[data-act=signout]:hover{background:transparent;text-decoration:underline}#vy-acct-menu.vy-azure a[data-act=signout] svg{display:none}' +
     '#vy-so.vy-azure .dlg{border-radius:2px;padding:24px;font-family:"Segoe UI",system-ui,sans-serif;color:#323130}#vy-so.vy-azure h4{font-weight:600}#vy-so.vy-azure button{border-radius:2px;padding:6px 20px;font-weight:600}#vy-so.vy-azure .go{background:#0078d4;color:#fff;border:1px solid #0078d4}#vy-so.vy-azure .no{background:#fff;color:#323130;border:1px solid #8a8886}' +
-    '#vy-appbar .vy-notch button.vy-exp{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-left:2px;padding:0;border:0;border-radius:8px;background:none;color:#b4b8cc;cursor:pointer}' +
+    '#vy-appbar .vy-notch button.vy-exp{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:56px;height:38px;margin-left:2px;padding:0 6px;border:0;border-radius:8px;background:none;color:#b4b8cc;cursor:pointer}#vy-appbar .vy-notch button.vy-exp .vy-exp-l{font:600 9.5px/1 Inter,system-ui,sans-serif;letter-spacing:.02em}' +
     '#vy-appbar .vy-notch button.vy-exp:hover,#vy-appbar .vy-notch button.vy-exp[aria-expanded=true]{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){order:9}' +   /* expand = always the last icon; the info/download icons (order 2,3) sit before it */
     '#vy-appbar .vy-notch button.vy-exp svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
@@ -137,7 +137,7 @@
     document.body.appendChild(cap);
     var capFr = cap.querySelector('iframe');
     var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'Marketplace'; expBtn.setAttribute('aria-label', 'Marketplace'); expBtn.setAttribute('aria-expanded', 'false');
-    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>';
+    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg><span class="vy-exp-l">Marketplace</span>';
     bar.querySelector('.vy-notch').appendChild(expBtn);
     function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); capFr.removeAttribute('src'); }
     function openCap() { capFr.src = CL + '?embed=1#marketplace'; cap.querySelectorAll('.ctab').forEach(function (x, i) { x.classList.toggle('on', i === 0); x.setAttribute('aria-selected', i === 0); }); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { expBtn.blur(); capFr.focus(); }, 60); }
