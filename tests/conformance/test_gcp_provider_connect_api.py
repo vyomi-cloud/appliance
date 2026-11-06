@@ -16,8 +16,14 @@ def check(name, ok):
 
 # Literal route paths (not built from f-strings) so the route-coverage detector sees them:
 # /api/providers/gcp/gcloud, /api/providers/gcp/gcutil, /api/providers/gcp/gcloud/resolve,
-# /api/providers/gcp/gcutil/resolve, /api/providers/gcp/sdk/{java,go,python,nodejs}[/snippet]
+# /api/providers/gcp/gcutil/resolve, and the per-language SDK guides + snippets below.
 P = "/api/providers/gcp/"
+SDK_ROUTES = {
+    "java": ("/api/providers/gcp/sdk/java", "/api/providers/gcp/sdk/java/snippet"),
+    "go": ("/api/providers/gcp/sdk/go", "/api/providers/gcp/sdk/go/snippet"),
+    "python": ("/api/providers/gcp/sdk/python", "/api/providers/gcp/sdk/python/snippet"),
+    "nodejs": ("/api/providers/gcp/sdk/nodejs", "/api/providers/gcp/sdk/nodejs/snippet"),
+}
 
 
 def get(path):
@@ -35,9 +41,10 @@ def main():
               g.get("provider") == "gcp" and g.get("tool") == tool and str(g.get("endpoint", "")).startswith("http"))
     for lang, tool in (("java", "google-cloud-java"), ("go", "google-cloud-go"),
                        ("python", "google-cloud-python"), ("nodejs", "google-cloud-nodejs")):
-        g = get(f"sdk/{lang}")
+        guide_path, snippet_path = SDK_ROUTES[lang]
+        g = requests.get(BASE + guide_path, timeout=30).json()
         check(f"sdk/{lang} guide is {tool} with an endpoint", g.get("tool") == tool and bool(g.get("endpoint")))
-        s = get(f"sdk/{lang}/snippet")
+        s = requests.get(BASE + snippet_path, timeout=30).json()
         check(f"sdk/{lang} snippet is non-empty, names the endpoint",
               s.get("language") == lang and bool(s.get("snippet")) and s.get("endpoint", "x") in s["snippet"])
     r = post("gcloud/resolve", "gcloud compute instances list")
