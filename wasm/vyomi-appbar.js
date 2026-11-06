@@ -104,7 +104,7 @@
     /* Expanded drawer = Vyomi Marketplace: standard black & white, landing-page grid field, thin borders, no shadows */
     '#vy-cap{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}#vy-cap.open{display:flex}' +
     '#vy-cap .cbox{width:min(1120px,96vw);height:min(720px,90vh);display:flex;flex-direction:column;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden}' +
-    '#vy-cap .chd{display:flex;align-items:center;gap:16px;padding:12px 20px;background:#fff;border-bottom:1px solid #e4e4e7}' +
+    '#vy-cap .chd{display:flex;align-items:center;gap:16px;padding:12px 20px;background-color:#eef0eb;background-image:linear-gradient(rgba(0,0,0,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.035) 1px,transparent 1px);background-size:32px 32px;border-bottom:1px solid #e4e4e7}' +
     '#vy-cap .cbrand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:-.01em;color:#000;white-space:nowrap}' +
     '#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
     '#vy-cap .cx svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
