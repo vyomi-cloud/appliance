@@ -1,6 +1,7 @@
 {
  "$doc": "Vyomi capability registry \u2014 Defender for Storage malware scanning (core/malware_scan_core.py). See aws/s3.json for the contract.",
  "azure.defender.storage_malware": {
+  "tier": "pro",
   "title": "Defender for Storage \u2014 on-upload malware scanning: StorageAccounts plan extensions, per-account DefenderForStorageSettings, blob index tags, Storage.Blob_AM.MalwareFound alert",
   "level": {
    "nano": "limited",

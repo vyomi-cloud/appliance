@@ -1,6 +1,7 @@
 {
  "$doc": "Vyomi capability registry — AWS Cost Explorer. See s3.json for the contract.",
  "cost-explorer.cost-and-usage": {
+  "tier": "pro",
   "title": "Cost and usage (GetCostAndUsage, GetCostForecast, GetDimensionValues) over the real EC2/EBS/RDS inventory",
   "level": {
    "nano": "limited",

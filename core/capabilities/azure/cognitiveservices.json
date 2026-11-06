@@ -38,6 +38,7 @@
   "tests": ["tests/conformance/test_local_llm_seam.py"]
  },
  "azure.cognitiveservices.quotas": {
+  "tier": "pro",
   "title": "Quotas (usages: per-model Tokens-Per-Minute for OpenAI/AIServices, TotalCalls for every other kind)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],

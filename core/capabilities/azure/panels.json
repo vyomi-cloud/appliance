@@ -1,5 +1,6 @@
 {
   "azure.aks.backup": {
+    "tier": "pro",
     "title": "Azure Backup for AKS",
     "level": {
       "nano": "not_simulated",

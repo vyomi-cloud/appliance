@@ -797,3 +797,60 @@ def _next_tier(tier: str) -> str:
         return order[min(i + 1, len(order) - 1)]
     except ValueError:
         return "pro"
+
+
+# ---------------------------------------------------------------------------
+# v4 booster-era gating (V4-BOOSTER-DESIGN-DISCUSSION.md sections 2 + 11).
+#   Free = browser-only, all 3 clouds visible but strategic features disabled.
+#   Pro  = ONE cloud (primary_cloud) in full, browser or booster.
+#   Max  = all 3 clouds in full.
+# Capability-registry entries carry optional `tier` (free|pro|max) and
+# `booster` (bool); unset = free. Source of truth for the values:
+# core/capabilities/_tiers.json (see scripts/gen_tier_pills.py).
+# ---------------------------------------------------------------------------
+_TIER_RANK = {"free": 0, "nano": 0, "micro": 0, "lite": 0, "pro": 1, "max": 2, "enterprise": 2}
+ENTRY_TIERS = ("free", "pro", "max")
+# Clouds a tier gets in FULL (Pro = the one chosen as primary_cloud).
+FULL_CLOUDS = {"free": 0, "pro": 1, "max": 3, "enterprise": 3}
+
+
+def validate_entry_gating(fid: str, entry: dict[str, Any]) -> list[str]:
+    """Registry-schema check for the optional `tier` / `booster` fields."""
+    errs = []
+    if "tier" in entry and entry["tier"] not in ENTRY_TIERS:
+        errs.append(f"{fid}: tier must be one of {ENTRY_TIERS}, got {entry['tier']!r}")
+    if "booster" in entry and not isinstance(entry["booster"], bool):
+        errs.append(f"{fid}: booster must be a bool, got {entry['booster']!r}")
+    return errs
+
+
+def pill_for(entry: dict[str, Any] | None) -> str | None:
+    """Console pill for a capability entry: 'Booster' | 'Pro' | 'Max' | None.
+    Booster wins (it is the upsell for Free; booster licences are Pro/Max anyway)."""
+    if not entry:
+        return None
+    if entry.get("booster") is True:
+        return "Booster"
+    return {"pro": "Pro", "max": "Max"}.get(entry.get("tier") or "free")
+
+
+def feature_allowed(tier: str | None, cloud: str | None, service: str | None = None, *,
+                    entry: dict[str, Any] | None = None, primary_cloud: str | None = None,
+                    booster_available: bool = False) -> bool:
+    """May this account use the capability on `cloud`?
+
+    `service` is informational (cloud/service-level gating stays in check_service);
+    the per-feature gate comes from `entry` (a registry entry). No entry or an
+    ungated entry => allowed (Free completes the core loop). Pro: gated features
+    only on `primary_cloud` (skipped when primary_cloud is None). Booster
+    features need `booster_available` (Pro/Max licence + reachable booster)."""
+    t = normalize_tier(tier)
+    rank = _TIER_RANK[t]
+    need = (entry or {}).get("tier") or "free"
+    if need not in ENTRY_TIERS or rank < _TIER_RANK[need]:
+        return False
+    if (entry or {}).get("booster") is True and not (booster_available and rank >= 1):
+        return False
+    if need != "free" and t == "pro" and cloud and primary_cloud and cloud != primary_cloud:
+        return False
+    return True

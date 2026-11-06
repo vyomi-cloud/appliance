@@ -59,6 +59,7 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.cosmos.backup_restore": {
+  "tier": "pro",
   "title": "Backup & Restore policy",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [

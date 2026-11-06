@@ -169,6 +169,7 @@
   ]
  },
  "ec2.snapshots": {
+  "tier": "pro",
   "title": "EBS snapshots (create, copy, delete)",
   "level": {
    "nano": "full",
@@ -619,6 +620,7 @@
   ]
  },
  "ec2.purchasing.capacity-reservations": {
+  "tier": "pro",
   "title": "Capacity Reservations",
   "level": {
    "nano": "limited",
@@ -693,6 +695,7 @@
   ]
  },
  "ec2.purchasing.capacity-manager": {
+  "tier": "pro",
   "title": "Capacity Manager",
   "level": {
    "nano": "limited",

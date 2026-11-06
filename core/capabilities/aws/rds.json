@@ -59,6 +59,7 @@
   ]
  },
  "rds.snapshot.restore": {
+  "tier": "pro",
   "title": "Restore DB instance from snapshot",
   "level": {
    "nano": "full",
@@ -164,6 +165,7 @@
   ]
  },
  "rds.automated-backups": {
+  "tier": "pro",
   "title": "Automated backups",
   "level": {
    "nano": "limited",
@@ -233,6 +235,7 @@
   ]
  },
  "rds.capacity-reservations": {
+  "tier": "pro",
   "title": "Capacity reservations (reservation records + real utilization)",
   "level": {
    "nano": "limited",
@@ -287,6 +290,7 @@
   ]
  },
  "rds.exports-to-s3": {
+  "tier": "pro",
   "title": "Exports to Amazon S3",
   "level": {
    "nano": "full",
@@ -344,6 +348,7 @@
   ]
  },
  "rds.service-quotas": {
+  "tier": "pro",
   "title": "Dashboard and Service quotas pages (DescribeAccountAttributes: default quotas + live usage)",
   "level": {
    "nano": "limited",

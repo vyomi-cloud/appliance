@@ -1,6 +1,7 @@
 {
  "$doc": "Vyomi capability registry — Cloud Scheduler. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
  "gcp.cloudscheduler.jobs.crud": {
+  "tier": "pro",
   "title": "Jobs (create, list, get, update, delete)",
   "level": {
    "nano": "full",
@@ -20,6 +21,7 @@
   ]
  },
  "gcp.cloudscheduler.jobs.schedule": {
+  "tier": "pro",
   "title": "Pause, resume and force run",
   "level": {
    "nano": "full",
@@ -39,6 +41,7 @@
   ]
  },
  "gcp.cloudscheduler.jobs.targets": {
+  "tier": "pro",
   "title": "HTTP, Pub/Sub and App Engine HTTP targets",
   "level": {
    "nano": "limited",
@@ -60,6 +63,7 @@
   ]
  },
  "gcp.cloudscheduler.cron-jobs": {
+  "tier": "pro",
   "title": "App Engine cron jobs (legacy cron.yaml)",
   "level": {
    "nano": "limited",

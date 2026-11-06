@@ -89,6 +89,7 @@
     ]
   },
   "eventbridge.scheduler.schedule": {
+    "tier": "pro",
     "title": "Scheduler: schedules (one-time at(), rate(), cron()) and schedule groups",
     "level": {
       "nano": "full",
@@ -100,6 +101,7 @@
     ]
   },
   "eventbridge.scheduler.firing": {
+    "tier": "pro",
     "title": "Scheduler: target delivery (SQS, SNS, Lambda, Step Functions, Kinesis) when a schedule's time arrives",
     "level": {
       "nano": "limited",

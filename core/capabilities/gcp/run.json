@@ -261,6 +261,7 @@
   ]
  },
  "gcp.run.template.autoscaling": {
+  "tier": "pro",
   "title": "Autoscaling factors (target utilization, concurrency)",
   "level": {
    "nano": "limited",

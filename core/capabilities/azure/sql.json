@@ -114,6 +114,7 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.export_import": {
+  "tier": "pro",
   "title": "Database export / import (.bacpac to and from Blob storage)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [

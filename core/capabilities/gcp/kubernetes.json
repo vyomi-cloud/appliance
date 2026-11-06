@@ -1,6 +1,7 @@
 {
  "$doc": "Vyomi capability registry — GKE (Kubernetes Engine). One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py. GCP ids carry no AWS-shaped probe, so every supported level lists 'tests' instead.",
  "gcp.kubernetes.cluster.crud": {
+  "booster": true,
   "title": "Clusters (create, list, get, delete)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
@@ -8,6 +9,7 @@
   "tests": ["tests/conformance/test_gcp_container_core.py"]
  },
  "gcp.kubernetes.cluster.autopilot-create": {
+  "booster": true,
   "title": "Create an Autopilot cluster",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
@@ -22,6 +24,7 @@
   "tests": ["tests/conformance/test_gcp_container_core.py"]
  },
  "gcp.kubernetes.nodepool.crud": {
+  "booster": true,
   "title": "Node pools (add, resize, autoscaling, delete)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
@@ -55,6 +58,7 @@
   "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.workloads": {
+  "booster": true,
   "title": "Workloads (Deployments, StatefulSets, Pods, Jobs)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
@@ -92,6 +96,7 @@
   "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.backup": {
+  "tier": "pro",
   "title": "Backup for GKE",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [

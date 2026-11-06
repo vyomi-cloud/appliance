@@ -24,6 +24,7 @@
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
   "gcp.sql.backups": {
+    "tier": "pro",
     "title": "Backups (on-demand backupRuns: create, list, delete, restore)",
     "level": { "nano": "full", "offline": "full" },
     "limitations": [
@@ -76,6 +77,7 @@
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
   "gcp.sql.export-import": {
+    "tier": "pro",
     "title": "Export / import (instances.export, instances.import — SQL and CSV files in Cloud Storage)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
@@ -124,5 +126,5 @@
    "tests/conformance/test_gcp_sql_config.py"
   ]
  },
- "gcp.sql.backup_restore_clone": {"title": "Backup runs with data, restoreBackup, clone and point-in-time recovery", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup runs capture the instance's row data; restoreBackup rewinds data on the same or another same-engine instance; instances.clone copies metadata+data and supports pointInTime via a base snapshot + write log of statements run through the query endpoint (in process memory).", "Automated daily backups are not scheduled; backups are not written to a Cloud Storage bucket; cross-project restore and binlog coordinates are not modelled."], "tests": ["tests/conformance/test_gcp_cloudsql_backup.py"]}
+ "gcp.sql.backup_restore_clone": {"tier": "pro", "title": "Backup runs with data, restoreBackup, clone and point-in-time recovery", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup runs capture the instance's row data; restoreBackup rewinds data on the same or another same-engine instance; instances.clone copies metadata+data and supports pointInTime via a base snapshot + write log of statements run through the query endpoint (in process memory).", "Automated daily backups are not scheduled; backups are not written to a Cloud Storage bucket; cross-project restore and binlog coordinates are not modelled."], "tests": ["tests/conformance/test_gcp_cloudsql_backup.py"]}
 }

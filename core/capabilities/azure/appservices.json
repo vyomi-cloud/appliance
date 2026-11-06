@@ -309,6 +309,7 @@
   "api": []
  },
  "azure.appservices.defender": {
+  "tier": "pro",
   "title": "Microsoft Defender for Cloud (this web app's recommendations)",
   "level": {
    "nano": "full",
@@ -388,6 +389,7 @@
   ]
  },
  "azure.appservices.webapp.quotas": {
+  "tier": "pro",
   "title": "Quotas",
   "level": {
    "nano": "limited",
@@ -423,6 +425,7 @@
   ]
  },
  "azure.appservices.webapp.autoscale": {
+  "tier": "pro",
   "title": "Autoscale",
   "level": {
    "nano": "config_only",

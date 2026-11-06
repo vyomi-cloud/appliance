@@ -204,6 +204,7 @@
   ]
  },
  "lambda.microvms": {
+  "booster": true,
   "title": "MicroVM Images and MicroVMs",
   "level": {
    "nano": "limited",

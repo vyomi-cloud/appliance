@@ -35,8 +35,10 @@ BASE = os.environ.get("CAP_BASE", "").rstrip("/")
 SUBSTRATE = "offline" if BASE else "nano"
 AUTH = "AWS4-HMAC-SHA256 Credential=CAP/20261030/us-east-1/{svc}/aws4_request, SignedHeaders=host, Signature=0"
 
+sys.path.insert(0, str(ROOT))
+from core.tier_policy import validate_entry_gating  # noqa: E402
+
 if not BASE:
-    sys.path.insert(0, str(ROOT))
     from core.aws_wire_router import AwsWireRouter  # noqa: E402
     ROUTER = AwsWireRouter()
 
@@ -158,12 +160,18 @@ def main() -> int:
     failures, total = [], 0
     tested_files: dict[str, tuple[bool, str]] = {}
     for f in sorted(REG.rglob("*.json")):
-        if f.name == "schema.json":
+        if f.name == "schema.json" or f.name.startswith("_"):
             continue
         reg = json.loads(f.read_text())
         for fid, ent in reg.items():
             if fid.startswith("$"):
                 continue
+            # Optional v4 gating fields (tier: free|pro|max, booster: bool) are validated
+            # here but never change which claims pass.
+            gating_errs = validate_entry_gating(fid, ent)
+            if gating_errs:
+                print("FAIL [schema]", "; ".join(gating_errs))
+                failures.append(fid)
             level = ent["level"][SUBSTRATE]
             total += 1
             ok, why = probe(fid, ent.get("probe") or {}, level, ctx)

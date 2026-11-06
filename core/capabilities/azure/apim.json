@@ -258,6 +258,7 @@
   ]
  },
  "azure.apim.defender": {
+  "tier": "pro",
   "title": "Microsoft Defender for Cloud (this API Management service's recommendations)",
   "level": {
    "nano": "full",
