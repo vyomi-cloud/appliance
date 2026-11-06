@@ -447,6 +447,13 @@
    "name": "Managed Identities",
    "upstream": "msi",
    "status": "pending-release"
+  },
+  {
+   "cloud": "azure",
+   "key": "containerregistry",
+   "name": "Container Registry",
+   "upstream": "containerregistry",
+   "status": "pending-release"
   }
  ]
 }

@@ -397,6 +397,24 @@ _MSI_SUB = [
     ]},
 ]
 
+_ACR_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Services", "items": [
+        {"key": "repositories",  "label": "Repositories",           "icon": "folder_open", "type": "acrRepositories"},
+        {"key": "webhooks",      "label": "Webhooks",               "icon": "webhook",     "type": "acrWebhooks"},
+        {"key": "replications",  "label": "Geo-replications",       "icon": "public",      "type": "acrReplications"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "accessKeys",    "label": "Access keys",            "icon": "vpn_key",     "type": "acrAccess"},
+        {"key": "identity",      "label": "Identity",               "icon": "badge",       "type": "identity"},
+        {"key": "networking",    "label": "Networking",             "icon": "lan",         "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -423,6 +441,7 @@ SUB_BLADES: dict[str, list] = {
     "operationalinsights": _OI_SUB,
     "monitor":     _MONITOR_SUB,
     "msi":         _MSI_SUB,
+    "containerregistry": _ACR_SUB,
     "rbac":        _RBAC_SUB,
     "nsg":         _NSG_SUB,
     "role_definition": _ROLEDEF_SUB,

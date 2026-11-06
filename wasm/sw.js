@@ -206,6 +206,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
 NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 NANO_RATE['microsoft.managedidentity/userassignedidentities'] = 0.01;   // core/cost_model.py azure.msi (nominal)
+NANO_RATE['microsoft.containerregistry/registries'] = 5.08;   // core/cost_model.py azure.containerregistry (Basic)
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -1006,6 +1007,9 @@ self.addEventListener("fetch", (event) => {
   const inApi = url.pathname.startsWith(BASE + "/api/");
   const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname === BASE + "/subscriptions" ||
                 url.pathname === BASE + "/tenants" || url.pathname.startsWith(BASE + "/azure-data/keyvault/");
+  // ACR image data plane: Nano is control-plane only, so answer the console's catalog probe.
+  const inAcr = /^\/azure-data\/acr\/[^/]+\/v2\/_catalog$/.test(url.pathname.slice(BASE.length));
+  if (url.origin === self.location.origin && inAcr) { event.respondWith(json({ repositories: [] })); return; }
   if (url.origin !== self.location.origin || !(inApi || inArm)) return;
   // Strip the mount prefix so all routing below is written against "/api/..."
   // or "/subscriptions/...".
