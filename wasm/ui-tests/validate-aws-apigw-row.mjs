@@ -20,17 +20,17 @@ try {
   await page.locator("#main button").filter({ hasText: /Create resource|^\s*(rocket_launch)?\s*Create\s*$/ }).first().click();
   await sleep(3000);
   const cells = await page.locator("#main table tr").evaluateAll((trs) => trs.map((tr) => [...tr.children].map((c) => c.innerText.trim())));
-  const row = cells.find((r) => r.includes("MyApi"));
+  const row = cells.find((r) => r.some((c) => c.startsWith("MyApi")));
   check("created API is listed by name", !!row, JSON.stringify(cells.slice(-2)));
   check("no placeholder cells in the row", !!row && row.slice(1).every((c) => c && !/^[-—]$/.test(c)), JSON.stringify(row));
   await sleep(1500);   // let the store snapshot persist
   await page.goto(base + "/aws-console.html");
   await sleep(6000);
   const names = await page.evaluate(async () => (await (await fetch("/api/apigateway/apis")).json()).apis.map((f) => f.name));
-  check("API survives a console reload", names.includes("MyApi"), JSON.stringify(names));
+  check("API survives a console reload", names.some((n) => n.startsWith("MyApi")), JSON.stringify(names));
   const sub = await page.evaluate(async () => {
     const apis = (await (await fetch("/api/apigateway/apis")).json()).apis;
-    const id = (apis.find((f) => f.name === "MyApi") || {}).id;
+    const id = (apis.find((f) => f.name.startsWith("MyApi")) || {}).id;
     const out = {};
     for (const k of ["resources", "stages"]) { const r = await fetch(`/api/apigateway/apis/${id}/${k}`); out[k] = [r.status, r.ok ? await r.json() : null]; }
     return out;

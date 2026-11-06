@@ -92,7 +92,7 @@ try {
   }
   check(/--[0-9a-f]{7}/.test(content["Revisions and replicas"] || "") && /Yes/.test(content["Revisions and replicas"] || ""), "Revisions tab lists the active revision", (content["Revisions and replicas"] || "").slice(0, 200));
   check(/quickstart/.test(content["Containers"] || ""), "Containers tab shows the image", (content["Containers"] || "").slice(0, 200));
-  check(/https:\/\/ca-cloudlearn\.\S+azurecontainerapps\.io/.test(content["Ingress"] || ""), "Ingress tab shows the application URL", (content["Ingress"] || "").slice(0, 200));
+  check(/https:\/\/ca-cloudlearn(-[0-9a-f]{4})?\.\S+azurecontainerapps\.io/.test(content["Ingress"] || ""), "Ingress tab shows the application URL", (content["Ingress"] || "").slice(0, 400));
 
   await page.locator(".sub-nav-item").first().click({ timeout: 3000 });
   await sleep(500);

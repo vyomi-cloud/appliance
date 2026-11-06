@@ -166,21 +166,19 @@ func main() {
 	_, err = ipc.Disable(ctx, rg, ws, "LogManagement", nil)
 	check("disabling LogManagement → 400", status(err) == 400, fmt.Sprint(err))
 
-	// ── KQL query (data plane, official azlogs client; engine op RunKql / run_kql) ──
+	// ── KQL query (data plane, official azquery client; engine op RunKql / run_kql) ──
 	wsID := ""
 	if w.Properties != nil && w.Properties.CustomerID != nil {
 		wsID = *w.Properties.CustomerID
 	}
-	lc, lerr := azlogs.NewClient(fakeCred{}, &azlogs.ClientOptions{ClientOptions: azcore.ClientOptions{
+	lc, lerr := azquery.NewLogsClient(fakeCred{}, &azquery.LogsClientOptions{ClientOptions: azcore.ClientOptions{
 		Cloud: cloud.Configuration{Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
-			azlogs.ServiceName: {Endpoint: "https://vyomi.invalid/azure-data/loganalytics", Audience: ep}}},
-		// azlogs builds its bearer policy without the insecure-HTTP switch, so the SDK is pointed at an
-		// https name and the transport maps it to the plain-HTTP appliance.
-		Transport: rewriteTransport{ep}}})
+			azquery.ServiceNameLogs: {Endpoint: "https://" + strings.TrimPrefix(ep, "http://") + "/azure-data/loganalytics", Audience: ep}}},
+		Transport: plainHTTP{}}})
 	if lerr != nil {
-		check("azlogs client", false, fmt.Sprint(lerr))
+		check("azquery client", false, fmt.Sprint(lerr))
 	} else {
-		_, err = lc.QueryWorkspace(ctx, wsID, azlogs.QueryBody{Query: to.Ptr("GoApp_CL | count")}, nil)
+		_, err = lc.QueryWorkspace(ctx, wsID, azquery.Body{Query: to.Ptr("GoApp_CL | count")}, nil)
 		check("Logs.QueryWorkspace on an unknown table → 400", status(err) == 400, fmt.Sprint(err))
 		ing, ierr := http.Post(ep+"/azure-data/loganalytics/"+wsID+"/api/logs?logType=GoApp",
 			"application/json", strings.NewReader(`[{"level":"error"},{"level":"info"},{"level":"info"}]`))
@@ -188,7 +186,7 @@ func main() {
 			ing.Body.Close()
 		}
 		check("HTTP Data Collector ingest accepted", ierr == nil && ing.StatusCode == 200, fmt.Sprint(ierr))
-		qr, err := lc.QueryWorkspace(ctx, wsID, azlogs.QueryBody{Query: to.Ptr("GoApp_CL | count")}, nil)
+		qr, err := lc.QueryWorkspace(ctx, wsID, azquery.Body{Query: to.Ptr("GoApp_CL | count")}, nil)
 		ok := err == nil && len(qr.Tables) == 1 && len(qr.Tables[0].Rows) == 1 && fmt.Sprint(qr.Tables[0].Rows[0][0]) == "3"
 		check("Logs.QueryWorkspace counts the ingested rows", ok, fmt.Sprint(err, qr.Tables))
 	}

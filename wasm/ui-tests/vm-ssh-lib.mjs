@@ -112,14 +112,19 @@ export async function probeVm(nano, cfg, check) {
         await cfg.openConnect(page);
         await page.waitForFunction(() => document.querySelectorAll(".nano-vm-connect [data-nano-cmd]").length >= 2, null, { timeout: 30000 });
         shown = await page.evaluate(() => [...document.querySelectorAll(".nano-vm-connect [data-nano-cmd]")].map((e) => e.textContent.trim()));
-        await page.locator(".nano-vm-connect [data-nano-term-input]").first().fill("whoami; uname -m");
-        await page.locator(".nano-vm-connect [data-nano-term-run]").first().click();
-        await page.waitForFunction((u) => (document.querySelector(".nano-vm-connect [data-nano-term]") || {}).textContent?.includes(u), cfg.user, { timeout: 20000 });
-        term = await page.evaluate(() => document.querySelector(".nano-vm-connect [data-nano-term]").textContent);
+        // The Connect tab's Shell is an xterm.js terminal on the VM serial console (root): click it,
+        // type a command whose output differs from its echo ($((6*7)) -> 42), read the xterm rows.
+        const xt = ".nano-vm-connect [data-nano-shell] .xterm";
+        await page.waitForSelector(xt, { timeout: 60000 });
+        await page.locator(xt).first().click();
+        await sleep(1000);
+        await page.keyboard.type("echo vy-$((6*7)); uname -m\n", { delay: 30 });
+        await page.waitForFunction(() => /vy-42[\s\S]*i686/.test((document.querySelector(".nano-vm-connect [data-nano-shell] .xterm-rows") || {}).textContent || ""), null, { timeout: 30000 });
+        term = await page.evaluate(() => document.querySelector(".nano-vm-connect [data-nano-shell] .xterm-rows").textContent);
         if (process.env.VM_SHOT) await page.screenshot({ path: `${process.env.VM_SHOT}/connect-${cfg.cloud}.png`, fullPage: false });
       } catch (e) { term = term || String(e).split("\n")[0]; }
       check("Connect tab shows the working ssh command", shown.includes(cmd), JSON.stringify(shown).slice(0, 240));
-      check("Connect tab's browser terminal runs in the VM", term.includes(cfg.user) && term.includes("i686"), term.slice(-160));
+      check("Connect tab's browser terminal runs in the VM", term.includes("vy-42") && term.includes("i686"), term.slice(-160));
     }
 
     // Stop → no ssh; Start → same disk (the file survives).

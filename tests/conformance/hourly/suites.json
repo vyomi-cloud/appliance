@@ -1073,6 +1073,14 @@
       "timeout": 600
     },
     {
+      "id": "aws-dynamodb-bulk-ops-core",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_dynamodb_bulk_ops_core.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-core-triggers",
       "target": "nano",
       "cloud": "gcp",

@@ -37,7 +37,7 @@ try {
   const addBtn = page.locator("#main button").filter({ hasText: /Add|Create|New/i }).first();
   check("API Gateway: Configs tab offers an Add action", (await addBtn.count()) > 0);
   await addBtn.click({ timeout: 5000 });
-  const nameIn = page.locator("#main input, .modal input, [role=dialog] input").first();
+  const nameIn = page.locator("#main input:visible, .modal input:visible, [role=dialog] input:visible").first();
   await nameIn.fill("cfg-validate-1");
   await page.locator("button.primary").filter({ hasText: /Add|Create|Save/ }).last().click({ timeout: 5000 });
   await sleep(1200);

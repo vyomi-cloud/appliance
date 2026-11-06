@@ -603,9 +603,14 @@ function uniqDefault(f, dv){
     if (typeof dv !== "string" || !dv || dv === "default" || dv.length > 40) return dv;
     if (f.type && f.type !== "text") return dv;
     if (!/(^|[._])name$/i.test(f.name || "")) return dv;
+    // sku.name / tier / nested rule names are catalog values, not resource identities.
+    if (/(^|\.)sku\.name$|\.\d+\.name$/i.test(f.name || "")) return dv;
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(dv)) return dv;
     const r = Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b=>b.toString(16).padStart(2,"0")).join("");
-    return dv + "-" + r;
+    // Honour the field's own validation (storage accounts: lowercase alphanumerics only, no "-").
+    const rx = f.validate && f.validate.regex ? new RegExp(f.validate.regex) : null;
+    for (const cand of [dv + "-" + r, dv + r]) if (!rx || rx.test(cand)) return cand;
+    return dv;
   } catch(e){ return dv; }
 }
 function uuid(){ return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)); }
