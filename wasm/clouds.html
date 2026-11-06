@@ -1884,6 +1884,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .mk-strip-plans { color: #71717a; font-size: 12.5px; }
   .mk-strip-cta { margin-left: auto; font-weight: 600; color: #000; text-decoration: none; }
   .mk-strip-cta:hover { text-decoration: underline; }
+  #mkt-ai { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 4px 24px 24px; }
+  .mk-ai-card { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
+  .mk-ai-card.all { background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; }
+  .mk-ai-t b { display: block; font-size: 15px; color: #000; }
+  .mk-ai-t span { font-size: 12.5px; color: #71717a; }
+  .mk-ai-card .mk-offer { flex: none; width: 100%; }
+  html.vy-embed #app-main #mkt-card .mk-ai-head { margin: 8px 0 0; padding: 20px 24px 0; border-bottom: 1px solid #e4e4e7; }
+  html.vy-embed #app-main #mkt-card .mk-ai-desc { margin: 14px 24px 12px; }
   /* card header = landing-page grid field */
   .mk-head { margin: -16px -16px 0; padding: 16px 52px 14px 16px; background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; border-bottom: 1px solid #ececef; }
   .mk-main { gap: 12px; }
@@ -1982,6 +1990,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       <p class="sc-desc">Pick a simulator to add it to your Spaces. Each one gets a single space; you can open it from Spaces any time.</p>
       <div id="mkt-licence"></div>
       <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
+      <div class="sc-head mk-ai-head"><div class="sc-title"><h2><span class="material-icons">auto_awesome</span>AI stack</h2></div></div>
+      <p class="sc-desc mk-ai-desc">Bedrock, Vertex AI and Azure OpenAI backed by a local model, with agents and knowledge bases. An add-on to the simulator: it runs on top of any plan and needs that cloud's simulator in Spaces.</p>
+      <div id="mkt-ai" role="list"></div>
     </div>
   </div>
   </div><!-- /view-marketplace -->
@@ -3547,14 +3558,30 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     function _buyUrl(id, base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/checkout?product=simulator&simulator=' + id + '&period=monthly'; }
     async function _mktCards() {
       if (!VY_NANO) {
-        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) { const d = await r.json(); return { cards: d.simulators, licence: d.licence }; } } catch (_) {}
+        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) { const d = await r.json(); return { cards: d.simulators, licence: d.licence, ai: d.ai_stack }; } } catch (_) {}
       }
       let sp = []; try { sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || []; } catch (_) {}
-      return { licence: { tier: 'free', detail: 'Free plan', plans: VY_PLANS, pricing_url: _pricingUrl() }, cards: VY_SIMULATORS.map(sim => {
+      const addedIds = sp.map(x => String(x.provider || x.provider_id).toLowerCase());
+      return { ai: _aiLocal(addedIds), licence: { tier: 'free', detail: 'Free plan', plans: VY_PLANS, pricing_url: _pricingUrl() }, cards: VY_SIMULATORS.map(sim => {
         const s = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === sim.id)[0];
         return { id: sim.id, name: sim.name, free_tier: sim.free_tier, added: !!s, space_id: s && s.space_id, tier: (s && s.tier) || 'free', price_usd: sim.price,
                  licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: [{ kind: 'simulator', price_usd: sim.price, per: '/ month', url: _buyUrl(sim.id) }] };
       }) };
+    }
+    function _aiLocal(added) {
+      const u = id => (VY_PORTAL.replace(/\/$/, '')) + '/checkout?product=ai_stack&scope=' + id + '&period=monthly';
+      return VY_SIMULATORS.map(s => ({ id: s.id, name: s.name, enabled: false, price_usd: 12, per: '/ month', requires_simulator: added.indexOf(s.id) < 0, url: u(s.id) }))
+        .concat([{ id: 'all', name: 'All clouds', enabled: false, price_usd: 19, per: '/ month', requires_simulator: !added.length, url: u('all') }]);
+    }
+    function _aiHtml(c) {
+      const all = c.id === 'all';
+      const body = c.enabled
+        ? '<span class="mk-pill">' + _CHECK + 'AI enabled' + (c.via === 'all' && !all ? ' \u00b7 all clouds' : '') + '</span>'
+        : (c.requires_simulator
+            ? '<span class="mk-note">Add ' + (all ? 'a simulator' : _esc(c.name)) + ' to Spaces first</span>'
+            : '<a class="mk-offer" href="' + _esc(c.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Buy AI stack for ' + _esc(c.name) + ', $' + c.price_usd + ' ' + _esc(c.per) + '">Buy AI stack<small>$' + c.price_usd + ' ' + _esc(c.per) + ' \u00b7 cancel any month</small></a>');
+      return '<div class="mk-ai-card' + (all ? ' all' : '') + '" role="listitem"><div class="mk-ai-t"><b>' + (all ? 'All clouds' : _esc(c.name)) + '</b><span>' +
+             (all ? 'AWS + Google Cloud + Azure' : 'AI services for this cloud only') + '</span></div>' + body + '</div>';
     }
     function _mktStripHtml(l) {
       const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS, url = (l && l.pricing_url) || _pricingUrl();
@@ -3590,6 +3617,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     async function loadMarketplace() {
       const g = document.getElementById('mkt-grid'); if (!g) return;
       const mc = await _mktCards(), cards = mc.cards;
+      const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
       const st = document.getElementById('mkt-licence'); if (st) st.innerHTML = _mktStripHtml(mc.licence);
       g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
       g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));

@@ -80,6 +80,44 @@ def licence_summary(tier: str | None, primary: str = "", owned: Iterable[str] = 
     return out
 
 
+# AI STACK add-on (monthly, USD; portal owns checkout): $12 for ONE cloud's AI services (Bedrock / Vertex / Azure OpenAI
+# + that cloud's agent/knowledge-base plumbing), $19 for all clouds. It is an ADD-ON to the simulator (independent of
+# Pro/Max, runs on top of any tier) and needs that cloud's simulator in Spaces. No MySQL/RDS dependency of its own.
+AI_STACK = {"per_cloud_usd": 12, "all_usd": 19, "per": "/ month"}
+
+
+def _ai_set(ai: Any) -> tuple[bool, set]:
+    """licence claim -> (all_clouds, {cloud ids}); accepts "all", ["aws", ...] or {"all": true}."""
+    if ai in ("all", True) or (isinstance(ai, dict) and ai.get("all")):
+        return True, set()
+    if isinstance(ai, (list, tuple, set)):
+        return ("all" in ai), {str(x).lower() for x in ai if x and x != "all"}
+    return False, set()
+
+
+def ai_stack_cards(ai: Any, added: Iterable[str] = (), portal: str = "https://vyomi.cloud",
+                   sims: Iterable[dict] | None = None) -> list[dict]:
+    """AI-stack cards: one per cloud + one 'all clouds'. `ai` = licence claim, `added` = simulator ids in Spaces."""
+    portal = portal.rstrip("/")
+    all_on, owned = _ai_set(ai)
+    added = set(added)
+    sims = list(sims if sims is not None else SIMULATORS)
+    url = lambda scope: f"{portal}/checkout?product=ai_stack&scope={scope}&period=monthly"
+    cards = []
+    for sim in sims:
+        on = all_on or sim["id"] in owned
+        cards.append({"id": sim["id"], "name": sim["name"], "scope": sim["id"], "enabled": on,
+                      "via": "all" if all_on else ("single" if on else ""),
+                      "price_usd": AI_STACK["per_cloud_usd"], "per": AI_STACK["per"],
+                      "requires_simulator": sim["id"] not in added and not on,
+                      "url": "" if on else url(sim["id"])})
+    cards.append({"id": "all", "name": "All clouds", "scope": "all", "enabled": all_on, "via": "all" if all_on else "",
+                  "price_usd": AI_STACK["all_usd"], "per": AI_STACK["per"],
+                  "requires_simulator": not all_on and not added,
+                  "url": "" if all_on else url("all")})
+    return cards
+
+
 _NOT_LICENSED_TIERS = ("free", "nano")
 
 
