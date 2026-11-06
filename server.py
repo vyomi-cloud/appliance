@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager
+from routes import gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache, aws_sesv2, aws_cloudformation
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager]:
+            gcp_resourcemanager, aws_sts, aws_route53, aws_ecr, aws_elasticache, aws_sesv2, aws_cloudformation]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2640,6 +2640,17 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
 
+    aws_ses = _cloudsim_service_state(space, "sesv2")
+    for ident_name, ident in aws_ses.get("identities", {}).items():
+        if isinstance(ident, dict):
+            add("aws", "sesv2", "identity", ident_name,
+                {**ident, "name": ident_name, "state": "active", "created": ident.get("created", "")})
+    try:   # CloudFormation stacks (durable store owned by routes/aws_cloudformation.py)
+        from routes.aws_cloudformation import console_rows as _cfn_rows
+        for _row in _cfn_rows():
+            add("aws", "cloudformation", "stack", _row["stack_id"], _row)
+    except Exception:
+        pass
     aws_elbv2 = _cloudsim_service_state(space, "elbv2")
     for lb_arn, lb in aws_elbv2.get("load_balancers", {}).items():
         if isinstance(lb, dict):
@@ -2657,6 +2668,29 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(topic, dict):
             add("aws", "sns", "topic", topic.get("name", topic_arn),
                 {**topic, "state": "active", "created": topic.get("created", "")})
+    aws_sts = _cloudsim_service_state(space, "sts")
+    for akid, sess in aws_sts.get("sessions", {}).items():
+        if isinstance(sess, dict) and sess.get("origin") == "console":
+            add("aws", "sts", "session", akid, sess)
+    aws_r53 = _cloudsim_service_state(space, "route53")
+    for zone_id, zone in aws_r53.get("hosted_zones", {}).items():
+        if isinstance(zone, dict):
+            add("aws", "route53", "hosted_zone", zone.get("Name", zone_id).rstrip("."),
+                {**zone, "name": zone.get("Name", zone_id).rstrip("."), "state": "active", "created": zone.get("created", "")})
+    for hc_id, hc in aws_r53.get("health_checks", {}).items():
+        if isinstance(hc, dict):
+            add("aws", "route53", "health_check", hc_id, {**hc, "name": hc_id, "state": "active", "created": hc.get("created", "")})
+    aws_ecr_state = _cloudsim_service_state(space, "ecr")
+    for repo_name, repo in aws_ecr_state.get("repositories", {}).items():
+        if isinstance(repo, dict):
+            add("aws", "ecr", "repository", repo_name, repo)
+    aws_ec = _cloudsim_service_state(space, "elasticache")
+    for cache_id, cache in aws_ec.get("clusters", {}).items():
+        if isinstance(cache, dict):
+            add("aws", "elasticache", "cache_cluster", cache_id,
+                {**cache, "name": cache_id, "instance_type": cache.get("CacheNodeType", ""),
+                 "state": cache.get("CacheClusterStatus", "available"),
+                 "created": cache.get("CacheClusterCreateTime", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
@@ -2667,10 +2701,18 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for stream_name, stream in aws_kinesis.get("streams", {}).items():
         if isinstance(stream, dict):
             add("aws", "kinesis", "stream", stream_name, stream)
+    aws_ecs = _cloudsim_service_state(space, "ecs")
+    for cluster_name, cluster in aws_ecs.get("clusters", {}).items():
+        if isinstance(cluster, dict):
+            add("aws", "ecs", "cluster", cluster_name, cluster)
     aws_logs = _cloudsim_service_state(space, "logs")
     for group_name, group in aws_logs.get("log_groups", {}).items():
         if isinstance(group, dict):
             add("aws", "logs", "log_group", group_name, group)
+    aws_cognito = _cloudsim_service_state(space, "cognito-idp")
+    for pool_id, pool in aws_cognito.get("user_pools", {}).items():
+        if isinstance(pool, dict):
+            add("aws", "cognito-idp", "user_pool", pool_id, pool)
 
     gcp_compute = _cloudsim_service_state(space, "gcp_compute")
     for instance_id, instance in gcp_compute.get("instances", {}).items():
@@ -2899,6 +2941,40 @@ def _cloudsim_attach_storage_usage(nodes: list[dict], space: dict) -> None:
             elif prov == "azure" and svc == "storage" and not azure_done:
                 azure_done = True
                 node["stored_bytes"], node["write_requests"] = _azurite_usage()
+    except Exception:
+        pass
+
+
+def _ecs_mirror_state(ecs_store) -> None:
+    """Mirror ECS clusters (held in the SDK/console store) into the active space's
+    service state so the space's cost-savings metrics count them."""
+    clusters = {n: {"name": n, "created": ecs_store.meta.get(c["clusterArn"], {}).get("created")}
+                for n, c in ecs_store.clusters.items() if c.get("status") != "INACTIVE"}
+    with STATE_LOCK:
+        spaces_state = _spaces_state()
+        active = spaces_state.get("spaces", {}).get(spaces_state.get("active_space_id", ""))
+        for st in ([active.setdefault("service_states", {})] if isinstance(active, dict) else []) + [STATE]:
+            if isinstance(st, dict):
+                st["ecs"] = {"clusters": clusters}
+    try:
+        _cloudsim_refresh_bridge("ecs.mirror")
+    except Exception:
+        pass
+
+
+
+def _cognito_mirror_state(cog_store) -> None:
+    """Mirror Cognito user pools (held in the SDK/console store) into the active
+    space's service state so the space's cost-savings metrics count them."""
+    pools = {pid: {"name": p["Name"], "created": p["CreationDate"]} for pid, p in cog_store.pools.items()}
+    with STATE_LOCK:
+        spaces_state = _spaces_state()
+        active = spaces_state.get("spaces", {}).get(spaces_state.get("active_space_id", ""))
+        for st in ([active.setdefault("service_states", {})] if isinstance(active, dict) else []) + [STATE]:
+            if isinstance(st, dict):
+                st["cognito-idp"] = {"user_pools": pools}
+    try:
+        _cloudsim_refresh_bridge("cognito-idp.mirror")
     except Exception:
         pass
 
@@ -22165,25 +22241,12 @@ async def api_iam_query(request: Request) -> Response:
 
 
 async def api_sts_query(request: Request) -> Response:
+    """STS Query wire — served by core/sts_core.py (shared with Nano)."""
+    from routes.aws_sts import get_store
+    from core import sts_core
     params = await _ec2_query_params(request)
-    action = str(params.get("Action", "")).strip()
-    if action == "GetCallerIdentity":
-        body = (
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            f'<GetCallerIdentityResponse xmlns="{STS_XML_NS}"><GetCallerIdentityResult>'
-            f"<Arn>{_iam_root_principal()}</Arn><UserId>AIDACLOUDLEARNSIMULATOR</UserId>"
-            f"<Account>{AWS_ACCOUNT_ID}</Account></GetCallerIdentityResult>"
-            f"<ResponseMetadata><RequestId>{_iam_request_id()}</RequestId></ResponseMetadata>"
-            "</GetCallerIdentityResponse>"
-        )
-        return _xml_response(body)
-    return _xml_response(
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<ErrorResponse xmlns="{STS_XML_NS}"><Error><Type>Sender</Type><Code>InvalidAction</Code>'
-        f"<Message>Unsupported STS action '{xml_escape(action)}'.</Message></Error>"
-        f"<RequestId>{_iam_request_id()}</RequestId></ErrorResponse>",
-        400,
-    )
+    r = sts_core.dispatch(get_store(), params, dict(request.headers))
+    return _xml_response(r.body, r.status)
 
 
 _EC2_VPC_ACTIONS = {
@@ -22219,6 +22282,10 @@ def _ssm_usage(target: str, payload: dict, resp) -> None:
 async def aws_query_root(request: Request) -> Response:
     """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
     service = _aws_query_target_service(request)
+    if not service and request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+        # STS ops the SDKs send unsigned (no SigV4 credential scope to route on).
+        if str((await _ec2_query_params(request)).get("Action", "")) in ("AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return await api_sts_query(request)
     if service == "ec2":
         # VPC/networking actions sign under the ec2 service scope but are served
         # by the dedicated VPC query handler.
@@ -24165,6 +24232,16 @@ if not _UNIFIED_INGRESS:
         _mount_new_services(app)
     except Exception as _e:   # never let this break appliance boot
         print(f"[wire_ingress] net-new service mount skipped: {_e}")
+    try:
+        from core import ecs_routes as _ecs_routes
+        _ecs_routes.register(app, mirror=_ecs_mirror_state)
+    except Exception as _e:
+        print(f"[ecs] routes skipped: {_e}")
+    try:
+        from core import cognito_idp_routes as _cognito_routes
+        _cognito_routes.register(app, mirror=_cognito_mirror_state)
+    except Exception as _e:
+        print(f"[cognito-idp] routes skipped: {_e}")
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)

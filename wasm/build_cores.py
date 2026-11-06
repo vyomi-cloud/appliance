@@ -34,6 +34,8 @@ CORES = [
     "sql_store.py", "rds_core.py",                  # RDS
     "iam_store.py", "iam_core.py",                  # IAM
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
+    "ecs_core.py", "console_ecs.py",                # Amazon ECS (engine, byte-identical; console REST facade)
+    "cognito_idp_core.py", "console_cognito_idp.py",      # Amazon Cognito user pools (engine, byte-identical; console REST facade)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
     "gcp_project.py",                               # GCP: the one project (ID + number), request normalization + Resource Manager
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
@@ -55,13 +57,16 @@ CORES = [
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
     "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
+    "ecr_core.py",                                  # AWS: Elastic Container Registry (repos, images, layer upload, policies, scans)
     "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
+    "sesv2_core.py",                                # AWS: SES v2 identities / templates / sending — native REST-JSON wire + console REST
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
+    "cloudformation_core.py",                      # AWS CloudFormation: stacks / change sets / events / exports (native Query wire)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
     "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)
@@ -72,6 +77,9 @@ CORES = [
     "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
+    "sts_core.py",                                  # AWS: STS (AssumeRole / GetCallerIdentity / session tokens)
+    "route53_core.py",                              # AWS: Route 53 hosted zones / records / health checks — native REST-XML wire + console REST
+    "elasticache_core.py",                          # AWS: ElastiCache (Valkey/Redis/Memcached) control plane — native Query wire + console REST
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
     "aws_console_detail.py",                       # AWS console resource-detail tab model (shared with offline routes/aws_console_detail.py)
     "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM

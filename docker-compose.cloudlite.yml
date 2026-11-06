@@ -41,6 +41,8 @@ services:
     user: "0:0"
     ports:
       - "${VYOMI_SIMULATOR_PORT:-9000}:9000"
+      - "2587:2587"   # SES SMTP interface (STARTTLS, SES SMTP credentials)
+      - "2525:2525"   # SES inbound SMTP (receipt rules)
     networks: [vyomi-net]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -84,6 +86,9 @@ services:
       CLOUDLEARN_VALKEY_HOST: vyomi-valkey
       CLOUDLEARN_REGISTRY_HOST: vyomi-registry
       VYOMI_GATEWAY_ADMIN: http://vyomi-gateway:2019
+      VYOMI_MAILPIT_HOST: vyomi-mailpit
+      VYOMI_COREDNS_HOST: vyomi-coredns
+      VYOMI_MAILPIT_UI: http://localhost:8025
       CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
       # Published loopback ports the user's machine reaches (Memorystore / Artifact Registry show these).
@@ -94,6 +99,11 @@ services:
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
       CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
       CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
+      # Route 53: hosted zones are rendered as zone files for CoreDNS.
+      VYOMI_DNS_ZONES_DIR: /zones
+      # ECR: mirror images docker-pushed to the shared registry (best effort).
+      VYOMI_ECR_REGISTRY_URL: http://vyomi-registry:5000
+      VYOMI_ECR_REGISTRY_HOST: localhost:${VYOMI_REGISTRY_PORT:-15000}
       CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
       CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
       PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
@@ -102,6 +112,7 @@ services:
       CLOUDLEARN_FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
     volumes:
       - vyomi-data:/data
+      - vyomi-dns-zones:/zones
       # Docker compute backend + lazy backend provisioner drive the host daemon.
       - /var/run/docker.sock:/var/run/docker.sock
     # Give the non-root `cloudlearn` user access to the docker socket (owned by
@@ -204,6 +215,26 @@ services:
       retries: 5
     restart: unless-stopped
 
+  vyomi-mailpit:
+    profiles: ["full"]
+    # Shared SMTP data plane for Amazon SES (SendEmail, the SES SMTP interface, the optional
+    # relay and inbound mail all land here). Mailpit (MIT); web inbox on the host at :8025.
+    image: axllent/mailpit:v1.20
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "8025:8025"
+    networks: [vyomi-net]
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   vyomi-valkey:
     profiles: ["full"]
     # Shared Redis-protocol data plane for Memorystore (and, later, ElastiCache / Azure Cache).
@@ -230,6 +261,10 @@ services:
     networks: [vyomi-net]
     ports:
       - "127.0.0.1:${VYOMI_REGISTRY_PORT:-15000}:5000"
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"   # ECR BatchDeleteImage / DeleteRepository
+    volumes:
+      - vyomi-registry:/var/lib/registry
     mem_limit: 64m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
@@ -257,6 +292,27 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+
+  # Route 53 DNS data plane — CoreDNS (Apache-2.0), shared by Route 53, Cloud DNS
+  # and Azure DNS. The appliance writes zone files into the vyomi-dns-zones volume.
+  vyomi-coredns:
+    profiles: ["full"]
+    image: coredns/coredns:1.11.3
+    command: ["-conf", "/etc/coredns/Corefile"]
+    networks: [vyomi-net]
+    ports:
+      - "1053:53/udp"
+      - "1053:53/tcp"
+    volumes:
+      - ./deployments/coredns/Corefile:/etc/coredns/Corefile:ro
+      - vyomi-dns-zones:/zones:ro
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "/coredns", "-version"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
   vyomi-minio:
@@ -307,6 +363,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  vyomi-dns-zones:
+  vyomi-registry:
   vyomi-data:
   cloudsim-data:
   vyomi-sql-pg:

@@ -34,6 +34,8 @@ from __future__ import annotations
 # A bare entry {group:"<heading>"} renders as a section header.
 # rail_items is preferred over the legacy `children` list when both exist.
 
+from core.cloudformation_core import DEFAULT_CONSOLE_TEMPLATE as DEFAULT_CFN_TEMPLATE
+
 RESOURCE_CATALOG_AWS = [
     {
         "key": "ec2", "label": "EC2", "icon": "computer",
@@ -727,6 +729,44 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     # ========================================================================
+    # ECR — private container registry. Repositories are the primary entity;
+    # served by core/ecr_core.py (routes/aws_ecr.py offline, the Nano adapter in
+    # the browser). Native wire: X-Amz-Target AmazonEC2ContainerRegistry_V20150921.
+    # ========================================================================
+    {
+        "key": "ecr", "label": "ECR", "icon": "deployed_code",
+        "namespace": "AWS/ECR", "service": "ecr",
+        "collection_path": "/api/aws/ecr/repositories",
+        "resource_path":   "/api/aws/ecr/repositories/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "repositories": {"method": "GET",  "path": "/api/aws/ecr/repositories"},
+            "images":       {"method": "GET",  "path": "/api/aws/ecr/repositories/{name}/images"},
+            "delete":       {"method": "DELETE", "path": "/api/aws/ecr/repositories/{name}"},
+        },
+        "rail_items": [
+            {"key": "repositories", "label": "Private repositories", "icon": "deployed_code", "type": "primary"},
+        ],
+        "columns": [
+            ["name",           "Repository name"],
+            ["uri",            "URI"],
+            ["created",        "Created at"],
+            ["tag_mutability", "Tag immutability"],
+            ["scan_on_push",   "Scan on push"],
+            ["encryption",     "Encryption"],
+            ["image_count",    "Images"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Repository name", "default": "my-app/web"},
+            {"name": "tag_mutability", "label": "Tag immutability (MUTABLE or IMMUTABLE)", "default": "MUTABLE"},
+            {"name": "scan_on_push", "label": "Scan on push (true or false)", "default": "true"},
+            {"name": "encryption", "label": "Encryption (AES256 or KMS)", "default": "AES256"},
+        ],
+        "editable": False,
+        "endpoints": {},
+    },
+    # ========================================================================
     # Secrets Manager — secrets + rotation + replication
     # ========================================================================
     {
@@ -810,6 +850,47 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },    # ========================================================================
+    # Amazon ECS (clusters) — engine core/ecs_core.py; the console REST facade is
+    # core/console_ecs.py (same code offline and in Nano). Tasks run on the Docker
+    # substrate on Pro/Max; below that the service is a control plane only.
+    # ========================================================================
+    {
+        "key": "ecs", "label": "ECS", "icon": "deployed_code",
+        "namespace": "AWS/ECS", "service": "ecs",
+        "collection_path": "/api/ecs/clusters",
+        "resource_path":   "/api/ecs/clusters/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"group": "Amazon Elastic Container Service"},
+            {"key": "clusters", "label": "Clusters", "icon": "deployed_code", "type": "primary"},
+        ],
+        "api_paths": {
+            "services":  {"method": "GET",    "path": "/api/ecs/clusters/{name}/services"},
+            "tasks":     {"method": "GET",    "path": "/api/ecs/clusters/{name}/tasks"},
+            "taskdefs":  {"method": "GET",    "path": "/api/ecs/task-definitions"},
+            "instances": {"method": "GET",    "path": "/api/ecs/clusters/{name}/instances"},
+            "providers": {"method": "GET",    "path": "/api/ecs/clusters/{name}/capacity-providers"},
+            "delete":    {"method": "DELETE", "path": "/api/ecs/clusters/{name}"},
+        },
+        "columns": [
+            ["name",               "Cluster"],
+            ["status",             "Status"],
+            ["services",           "Services"],
+            ["tasks",              "Running tasks"],
+            ["instances",          "Container instances"],
+            ["container_insights", "Container Insights"],
+            ["capacity_providers", "Capacity providers"],
+            ["created",            "Created time"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Cluster name", "default": "my-cluster"},
+            {"name": "capacity_providers", "label": "Capacity providers (comma-separated)", "default": "FARGATE,FARGATE_SPOT"},
+            {"name": "container_insights", "label": "Container Insights (disabled, enabled or enhanced)", "default": "disabled"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
     # Elastic Load Balancing — application / network / gateway load balancers.
     # Engine: core/elbv2_core.py (native Query wire + this console REST).
     # ========================================================================
@@ -924,6 +1005,274 @@ RESOURCE_CATALOG_AWS = [
             {"name": "capacity_mode", "label": "Capacity mode", "default": "Provisioned"},
             {"name": "shard_count", "label": "Provisioned shards", "default": "1"},
             {"name": "retention_hours", "label": "Data retention (hours)", "default": "24"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # STS — temporary security credentials. The console resource is a Session:
+    # "Assume role" issues one (core/sts_core.py, same engine the native
+    # Query-protocol wire serves); deleting revokes it in the simulator.
+    # ========================================================================
+    {
+        "key": "sts", "label": "STS", "icon": "badge",
+        "namespace": "AWS/STS", "service": "sts",
+        "collection_path": "/api/sts/sessions",
+        "resource_path":   "/api/sts/sessions/{name}",
+        "name_field":      "access_key_id",
+        "create_method":   "POST",
+        "api_paths": {
+            "sessions": {"method": "GET",    "path": "/api/sts/sessions"},
+            "create":   {"method": "POST",   "path": "/api/sts/sessions"},
+            "delete":   {"method": "DELETE", "path": "/api/sts/sessions/{name}"},
+        },
+        "rail_items": [
+            {"key": "sessions", "label": "Sessions", "icon": "badge", "type": "primary"},
+        ],
+        "columns": [
+            ["access_key_id", "Access key ID"],
+            ["session_name",  "Session name"],
+            ["role_name",     "Role"],
+            ["type",          "Type"],
+            ["expiration",    "Expires"],
+            ["status",        "Status"],
+        ],
+        "createFields": [
+            {"name": "name",             "label": "Session name",     "default": "console-session"},
+            {"name": "role_name",        "label": "Role name",        "default": "my-role"},
+            {"name": "duration_seconds", "label": "Duration (seconds)", "default": "3600"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # Amazon Route 53 — hosted zones + records, health checks.
+    # Engine: core/route53_core.py (native REST-XML wire + this console REST);
+    # records resolve through the shared CoreDNS container offline.
+    # ========================================================================
+    {
+        "key": "route53", "label": "Route 53", "icon": "dns",
+        "namespace": "AWS/Route53", "service": "route53",
+        "collection_path": "/api/aws/route53/hosted-zones",
+        "resource_path":   "/api/aws/route53/hosted-zones/{name}",
+        "name_field":      "zone_id",
+        "create_method":   "POST",
+        "api_paths": {
+            "hostedZones":  {"method": "GET",  "path": "/api/aws/route53/hosted-zones"},
+            "healthChecks": {"method": "GET",  "path": "/api/aws/route53/health-checks"},
+            "records":      {"method": "POST", "path": "/api/aws/route53/hosted-zones/{name}/records"},
+            "delete":       {"method": "DELETE", "path": "/api/aws/route53/hosted-zones/{name}"},
+        },
+        "rail_items": [
+            {"key": "hosted-zones", "label": "Hosted zones", "icon": "dns", "type": "primary"},
+            {"group": "Monitoring"},
+            {"key": "health-checks", "label": "Health checks", "icon": "monitor_heart",
+                "type": "child", "child_key": "health-checks"},
+            {"key": "delegation-sets", "label": "Reusable delegation sets", "icon": "lan",
+                "type": "child", "child_key": "delegation-sets"},
+        ],
+        "children": [
+            {"type": "health-checks", "label": "Health checks", "icon": "monitor_heart"},
+            {"type": "delegation-sets", "label": "Reusable delegation sets", "icon": "lan"},
+        ],
+        "columns": [
+            ["name",         "Hosted zone name"],
+            ["type",         "Type"],
+            ["created_by",   "Created by"],
+            ["record_count", "Record count"],
+            ["comment",      "Description"],
+            ["zone_id",      "Hosted zone ID"],
+        ],
+        "createFields": [
+            {"name": "name",    "label": "Domain name", "default": "demo.example.com"},
+            {"name": "comment", "label": "Description", "default": "Managed by Vyomi"},
+            {"name": "type",    "label": "Type (public, private)", "default": "public"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # ElastiCache — Valkey / Redis OSS / Memcached caches. Engine:
+    # core/elasticache_core.py (native Query wire + this console REST).
+    # ========================================================================
+    {
+        "key": "elasticache", "label": "ElastiCache", "icon": "memory",
+        "namespace": "AWS/ElastiCache", "service": "elasticache",
+        "collection_path": "/api/aws/elasticache/clusters",
+        "resource_path":   "/api/aws/elasticache/clusters/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "clusters":         {"method": "GET",  "path": "/api/aws/elasticache/clusters"},
+            "subnetGroups":     {"method": "GET",  "path": "/api/aws/elasticache/subnet-groups"},
+            "parameterGroups":  {"method": "GET",  "path": "/api/aws/elasticache/parameter-groups"},
+            "snapshots":        {"method": "GET",  "path": "/api/aws/elasticache/snapshots"},
+            "delete":           {"method": "DELETE", "path": "/api/aws/elasticache/clusters/{name}"},
+        },
+        "rail_items": [
+            {"key": "caches",           "label": "Caches",           "icon": "memory",        "type": "primary"},
+            {"group": "Configuration"},
+            {"key": "subnet-groups",    "label": "Subnet groups",    "icon": "view_module",
+                "type": "child", "child_key": "subnet-groups"},
+            {"key": "parameter-groups", "label": "Parameter groups", "icon": "settings",
+                "type": "child", "child_key": "parameter-groups"},
+            {"group": "Backup"},
+            {"key": "snapshots",        "label": "Snapshots",        "icon": "photo_camera",
+                "type": "child", "child_key": "snapshots"},
+        ],
+        "children": [
+            {"type": "subnet-groups", "label": "Subnet groups", "icon": "view_module"},
+            {"type": "parameter-groups", "label": "Parameter groups", "icon": "settings"},
+            {"type": "snapshots", "label": "Snapshots", "icon": "photo_camera"},
+        ],
+        "columns": [
+            ["name",           "Name"],
+            ["engine",         "Engine"],
+            ["engine_version", "Engine version"],
+            ["node_type",      "Node type"],
+            ["status",         "Status"],
+            ["endpoint",       "Endpoint"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Cache name", "default": "my-cache"},
+            {"name": "engine", "label": "Engine (valkey, redis, memcached)", "default": "valkey"},
+            {"name": "node_type", "label": "Node type", "default": "cache.t3.micro"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # Amazon Cognito (user pools) — engine core/cognito_idp_core.py; the console
+    # REST facade is core/console_cognito_idp.py (same code offline and in Nano).
+    # ========================================================================
+    {
+        "key": "cognito-idp", "label": "Amazon Cognito", "icon": "badge",
+        "namespace": "AWS/Cognito", "service": "cognito-idp",
+        "collection_path": "/api/cognito-idp/user-pools",
+        "resource_path":   "/api/cognito-idp/user-pools/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "rail_items": [
+            {"group": "User pools"},
+            {"key": "user-pools", "label": "User pools", "icon": "badge", "type": "primary"},
+        ],
+        "api_paths": {
+            "users":   {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/users"},
+            "groups":  {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/groups"},
+            "clients": {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/clients"},
+            "domain":  {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/domain"},
+            "delete":  {"method": "DELETE", "path": "/api/cognito-idp/user-pools/{name}"},
+        },
+        "columns": [
+            ["name",    "User pool name"],
+            ["id",      "User pool ID"],
+            ["users",   "Users"],
+            ["sign_in", "Sign-in"],
+            ["mfa",     "MFA"],
+            ["tier",    "Feature plan"],
+            ["created", "Created time"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "User pool name", "default": "my-user-pool"},
+            {"name": "sign_in", "label": "Sign-in identifier (username, email or phone_number)", "default": "username"},
+            {"name": "min_password_length", "label": "Minimum password length", "type": "number", "default": 8},
+            {"name": "auto_verified", "label": "Auto-verify attribute (email or phone_number)", "default": "email"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # Amazon SES (v2) — verified identities, configuration sets, templates,
+    # contact lists, suppression list. Engine: core/sesv2_core.py (native
+    # REST-JSON wire + this console REST); mail is really delivered to Mailpit offline.
+    # ========================================================================
+    {
+        "key": "sesv2", "label": "Amazon SES", "icon": "mail",
+        "namespace": "AWS/SES", "service": "sesv2",
+        "collection_path": "/api/aws/sesv2/identities",
+        "resource_path":   "/api/aws/sesv2/identities/{name}",
+        "name_field":      "identity",
+        "create_method":   "POST",
+        "api_paths": {
+            "identities":         {"method": "GET",  "path": "/api/aws/sesv2/identities"},
+            "configuration-sets": {"method": "GET",  "path": "/api/aws/sesv2/configuration-sets"},
+            "templates":          {"method": "GET",  "path": "/api/aws/sesv2/templates"},
+            "contact-lists":      {"method": "GET",  "path": "/api/aws/sesv2/contact-lists"},
+            "suppression":        {"method": "GET",  "path": "/api/aws/sesv2/suppression"},
+            "sent-emails":        {"method": "GET",  "path": "/api/aws/sesv2/sent-emails"},
+            "received-emails":    {"method": "GET",  "path": "/api/aws/sesv2/received-emails"},
+            "mail-settings":      {"method": "GET",  "path": "/api/aws/sesv2/mail-settings"},
+            "delete":             {"method": "DELETE", "path": "/api/aws/sesv2/identities/{name}"},
+        },
+        "rail_items": [
+            {"key": "identities", "label": "Verified identities", "icon": "verified_user", "type": "primary"},
+            {"group": "Configuration"},
+            {"key": "configuration-sets", "label": "Configuration sets", "icon": "tune",
+                "type": "child", "child_key": "configuration-sets"},
+            {"key": "templates", "label": "Email templates", "icon": "article",
+                "type": "child", "child_key": "templates"},
+            {"key": "contact-lists", "label": "Contact lists", "icon": "contacts",
+                "type": "child", "child_key": "contact-lists"},
+            {"group": "Reputation & activity"},
+            {"key": "suppression", "label": "Suppression list", "icon": "block",
+                "type": "child", "child_key": "suppression"},
+            {"key": "sent-emails", "label": "Sent emails", "icon": "outbox",
+                "type": "child", "child_key": "sent-emails"},
+            {"key": "received-emails", "label": "Received emails", "icon": "move_to_inbox",
+                "type": "child", "child_key": "received-emails"},
+            {"group": "Mail delivery"},
+            {"key": "mail-settings", "label": "Delivery settings", "icon": "settings_ethernet",
+                "type": "child", "child_key": "mail-settings"},
+        ],
+        "children": [
+            {"type": "configuration-sets", "label": "Configuration sets", "icon": "tune"},
+            {"type": "templates", "label": "Email templates", "icon": "article"},
+            {"type": "contact-lists", "label": "Contact lists", "icon": "contacts"},
+            {"type": "suppression", "label": "Suppression list", "icon": "block"},
+            {"type": "sent-emails", "label": "Sent emails", "icon": "outbox"},
+            {"type": "received-emails", "label": "Received emails", "icon": "move_to_inbox"},
+            {"type": "mail-settings", "label": "Delivery settings", "icon": "settings_ethernet"},
+        ],
+        "columns": [
+            ["identity",   "Identity"],
+            ["type",       "Identity type"],
+            ["status",     "Identity status"],
+            ["sending",    "Sending status"],
+            ["dkim",       "DKIM"],
+            ["mail_from",  "Custom MAIL FROM domain"],
+            ["config_set", "Default configuration set"],
+            ["region",     "Region"],
+        ],
+        "createFields": [
+            {"name": "name",       "label": "Identity (domain or email address)", "default": "noreply@vyomi.example.com"},
+            {"name": "config_set", "label": "Default configuration set",          "default": "Not set"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # CloudFormation — stacks, events, resources, outputs, change sets
+    # ========================================================================
+    {
+        "key": "cloudformation", "label": "CloudFormation", "icon": "deployed_code",
+        "namespace": "AWS/CloudFormation", "service": "cloudformation",
+        "collection_path": "/api/aws/cloudformation/stacks",
+        "resource_path":   "/api/aws/cloudformation/stacks/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "stacks": {"method": "GET",    "path": "/api/aws/cloudformation/stacks"},
+            "delete": {"method": "DELETE", "path": "/api/aws/cloudformation/stacks/{name}"},
+        },
+        "rail_items": [
+            {"key": "stacks", "label": "Stacks", "icon": "deployed_code", "type": "primary"},
+        ],
+        "columns": [
+            ["name",           "Stack name"],
+            ["status",         "Status"],
+            ["created",        "Created time"],
+            ["updated",        "Last updated"],
+            ["description",    "Description"],
+            ["resource_count", "Resources"],
+            ["output_count",   "Outputs"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Stack name", "default": "my-stack"},
+            {"name": "template", "label": "Template (JSON or YAML)", "default": DEFAULT_CFN_TEMPLATE},
         ],
         "endpoints": {},
     },

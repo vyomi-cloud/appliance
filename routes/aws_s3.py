@@ -1056,6 +1056,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "events"
     if target.startswith("Kinesis_20131202."):
         return "kinesis"
+    if target.startswith("AmazonEC2ContainerServiceV20141113."):
+        return "ecs"
     if target.startswith("Logs_20140328."):
         return "logs"
     if target.startswith("AmazonSSM."):
@@ -1064,6 +1066,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "states"
     if target.startswith("AmazonSQS."):
         return "sqs"
+    if target.startswith("AWSCognitoIdentityProviderService."):
+        return "cognito-idp"
     return ""
 
 
@@ -1092,6 +1096,12 @@ _UNSIGNED_QUERY_ACTION = {
     # EC2 (compute; VPC actions are matched via _EC2_VPC_ACTIONS in register())
     "RunInstances": "ec2", "DescribeInstances": "ec2", "TerminateInstances": "ec2",
     "StartInstances": "ec2", "StopInstances": "ec2", "DescribeImages": "ec2",
+    # SES v1 (receipt rules, identity verification)
+    "CreateReceiptRuleSet": "ses", "CloneReceiptRuleSet": "ses", "DeleteReceiptRuleSet": "ses",
+    "ListReceiptRuleSets": "ses", "DescribeReceiptRuleSet": "ses", "DescribeActiveReceiptRuleSet": "ses",
+    "SetActiveReceiptRuleSet": "ses", "CreateReceiptRule": "ses", "UpdateReceiptRule": "ses",
+    "DescribeReceiptRule": "ses", "DeleteReceiptRule": "ses", "ReorderReceiptRuleSet": "ses",
+    "VerifyEmailIdentity": "ses", "VerifyDomainIdentity": "ses",
 }
 
 
@@ -1154,6 +1164,15 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "kinesis":
             from routes.aws_kinesis import handle_wire as _kinesis_wire
             return await _kinesis_wire(request)
+        if service == "ses":
+            # SES v1 Query protocol (receipt rules, identity verification) on the SES v2 engine.
+            from core import sesv2_core as _ses
+            from routes.aws_sesv2 import STORE as _ses_store
+            _ses_r = _ses.dispatch_query(_ses_store, await _srv()._ec2_query_params(request))
+            return Response(content=_ses_r.body, status_code=_ses_r.status, media_type="text/xml")
+        if service == "cloudformation":
+            from routes.aws_cloudformation import handle as _cfn_handle
+            return await _cfn_handle(request)
         if service == "logs":
             from routes import aws_logs as _aws_logs
             return await _aws_logs.wire(request)
@@ -1162,6 +1181,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _cw_handle(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "ecs":
+            from core import ecs_routes as _ecs_routes
+            return await _ecs_routes.root_dispatch(request)
         if service == "elasticloadbalancing":
             from core import elbv2_core as _elb
             from routes.aws_elbv2 import STORE as _elb_store
@@ -1170,6 +1192,17 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "sns":
             from routes.aws_sns import sns_query as _sns_wire
             return await _sns_wire(request)
+        if service == "ecr":
+            from routes.aws_ecr import wire as _ecr_wire
+            return await _ecr_wire(request)
+        if service == "elasticache":
+            from core import elasticache_core as _ec
+            from routes.aws_elasticache import STORE as _ec_store
+            _ec_r = _ec.dispatch(_ec_store, await _srv()._ec2_query_params(request))
+            return Response(content=_ec_r.body, status_code=_ec_r.status, media_type="text/xml")
+        if service == "cognito-idp":
+            from core import cognito_idp_routes as _cognito_routes
+            return await _cognito_routes.root_dispatch(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
@@ -1219,6 +1252,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                             status_code=400 if isinstance(resp, dict) and "__type" in resp else 200)
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
+        if not service and action in ("AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return await _srv().api_sts_query(request)   # STS ops the SDKs send unsigned
         hint = "" if service else (
             " Request is unsigned and the Action is not in the unsigned-routing table;"
             " sign it (any AWS SDK/CLI with dummy creds) or add an Authorization header"

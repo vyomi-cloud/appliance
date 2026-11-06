@@ -35,6 +35,11 @@
   "category": "aws"
  },
  {
+  "name": "sts",
+  "label": "StsStore",
+  "category": "aws"
+ },
+ {
   "name": "msg",
   "label": "InMemoryMessagingStore",
   "category": "aws"
@@ -42,6 +47,16 @@
  {
   "name": "kinesis",
   "label": "KinesisStore",
+  "category": "aws"
+ },
+ {
+  "name": "ecs",
+  "label": "InMemoryEcsStore",
+  "category": "aws"
+ },
+ {
+  "name": "sesv2",
+  "label": "SesV2Store",
   "category": "aws"
  },
  {
@@ -67,6 +82,26 @@
  {
   "name": "sfn",
   "label": "StepFunctionsStore",
+  "category": "aws"
+ },
+ {
+  "name": "route53",
+  "label": "Route53Store",
+  "category": "aws"
+ },
+ {
+  "name": "ecr",
+  "label": "EcrStore",
+  "category": "aws"
+ },
+ {
+  "name": "elasticache",
+  "label": "ElastiCacheStore",
+  "category": "aws"
+ },
+ {
+  "name": "cognito",
+  "label": "InMemoryCognitoIdpStore",
   "category": "aws"
  },
  {
@@ -177,6 +212,11 @@
  {
   "name": "cw",
   "label": "CloudWatchStore",
+  "category": "aws"
+ },
+ {
+  "name": "cfn",
+  "label": "CfnStore",
   "category": "aws"
  }
 ]

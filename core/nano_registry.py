@@ -21,7 +21,10 @@ from core.kms_keystore import InMemoryKeyStore
 from core.kv_store import InMemoryKvStore
 from core.sql_store import InMemorySqlStore
 from core.iam_store import InMemoryIamStore
+from core.sts_core import StsStore
 from core.messaging_store import InMemoryMessagingStore
+from core.ecs_core import InMemoryEcsStore
+from core.cognito_idp_core import InMemoryCognitoIdpStore
 from core.gcp_firestore_core import FirestoreStore
 from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
@@ -29,7 +32,9 @@ from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
 from core.kinesis_core import KinesisStore
+from core.sesv2_core import SesV2Store
 from core.apigatewayv2_core import ApiGwV2Store
+from core.cloudformation_core import CfnStore
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
@@ -43,6 +48,9 @@ from core.azure_arm_core import AzureArm
 import types
 from core.cloudwatch_core import CloudWatchStore
 from core.gcp_monitoring_core import MonitoringStore
+from core.route53_core import Route53Store
+from core.ecr_core import EcrStore
+from core.elasticache_core import ElastiCacheStore
 
 _REG: dict | None = None
 
@@ -61,8 +69,11 @@ def get() -> dict:
             "sec": InMemoryKvStore(),
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
+            "sts": StsStore(),                 # STS sessions (temporary credentials issued)
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
+            "ecs": InMemoryEcsStore(),   # Amazon ECS
+            "sesv2": SesV2Store(),             # SES v2 identities / templates / sent mailbox (control plane)
             "apigwv2": ApiGwV2Store(),
             # Console compute/network models: Lambda + API Gateway share ONE namespace
             # (AWS_PROXY reaches the registered functions); VPC has its own. They
@@ -74,6 +85,10 @@ def get() -> dict:
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
             "sfn": StepFunctionsStore(),
+            "route53": Route53Store(),         # Route 53 hosted zones / records / health checks (control plane)
+            "ecr": EcrStore(),                 # Elastic Container Registry
+            "elasticache": ElastiCacheStore(),  # ElastiCache clusters / groups / snapshots (control plane)
+            "cognito": InMemoryCognitoIdpStore(),   # Cognito user pools
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
@@ -101,5 +116,6 @@ def get() -> dict:
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
             "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
+            "cfn": CfnStore(),    # CloudFormation (stacks / change sets / stack sets)
         }
     return _REG

@@ -14,3 +14,5 @@ vyomi-valkey
 vyomi-gateway
 vyomi-victoriametrics
 vyomi-registry
+vyomi-coredns
+vyomi-mailpit

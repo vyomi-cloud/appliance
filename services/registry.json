@@ -440,6 +440,62 @@
    "upstream": "monitoring/v3",
    "status": "released",
    "released_in": "3.0.30"
+  },
+  {
+   "cloud": "aws",
+   "key": "sts",
+   "name": "STS",
+   "upstream": "sts",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "route53",
+   "name": "Amazon Route 53",
+   "upstream": "route53",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "ecr",
+   "name": "Amazon ECR",
+   "upstream": "ecr",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "ecs",
+   "name": "Amazon ECS",
+   "upstream": "ecs",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "elasticache",
+   "name": "Amazon ElastiCache",
+   "upstream": "elasticache",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "cognito-idp",
+   "name": "Amazon Cognito",
+   "upstream": "cognito-idp",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "sesv2",
+   "name": "Amazon SES",
+   "upstream": "sesv2",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "cloudformation",
+   "name": "AWS CloudFormation",
+   "upstream": "cloudformation",
+   "status": "pending-release"
   }
  ]
 }

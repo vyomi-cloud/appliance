@@ -9,7 +9,7 @@ work in the console exactly as they do over the wire:
   - Service Bus topics live in the shared messaging store.
   - API Gateway AWS_PROXY integrations invoke functions from the SAME Lambda registry.
 
-Services covered: lambda, apigateway, vpc, eventbridge (AWS) + servicebus, azuresql,
+Services covered: lambda, apigateway, vpc, eventbridge, ecr (AWS) + servicebus, azuresql,
 azurerbac (Azure). Pure core calls, no fastapi/boto3 — loads under Pyodide.
 """
 from __future__ import annotations
@@ -17,9 +17,13 @@ from __future__ import annotations
 import json
 import types
 
-from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import lambda_core, apigateway_core, vpc_core, eventbridge_core, sts_core
 from core import elbv2_core
+from core import route53_core
 from core import ssm_core
+from core import ecr_core
+from core import elasticache_core
+from core import sesv2_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from core import kinesis_core
 from core import apigatewayv2_core
@@ -340,6 +344,31 @@ def vpc_analyze(p):
     return {"ok": True, **res}
 
 
+# ── STS (sessions = temporary credentials) ─────────────────────────────────
+def _sts_store():
+    from core import nano_registry
+    return nano_registry.get()["sts"]
+
+
+def sts_list(p=None):
+    return {"ok": True, "items": sts_core.list_sessions(_sts_store())}
+
+
+def sts_create(p):
+    return sts_core.console_create(_sts_store(), p)
+
+
+def sts_get(p):
+    s = _sts_store().sessions.get(str(p.get("name") or ""))
+    if not s:
+        return {"ok": False, "code": "NotFound", "name": p.get("name")}
+    return {"ok": True, **sts_core.session_row(s)}
+
+
+def sts_delete(p):
+    return sts_core.console_delete(_sts_store(), str(p.get("name") or ""))
+
+
 # ── EventBridge (rules → SQS delivery) ─────────────────────────────────────
 def _eb(action, body):
     return eventbridge_core.dispatch(MSG, "AWSEvents." + action, body, lambda_store=_COMPUTE)
@@ -415,6 +444,35 @@ def kinesis_put(p):
             "Data": __import__("base64").b64encode(str(p.get("data") or "").encode()).decode()}
     r = kinesis_core.dispatch(KIN, "Kinesis_20131202.PutRecord", body)
     return {"ok": r.status < 400, **r.body}
+# ── ECR (repositories + images, via core/ecr_core.py) ──────────────────────
+# One EcrStore, shared with the native-wire relay through the nano_registry
+# singleton, so an `aws ecr` call and the console see the same repositories.
+from core import nano_registry as _nreg
+ECR = _nreg.get()["ecr"]
+
+
+def ecr_list(p=None):
+    return ecr_core.console_list(ECR)
+
+
+def ecr_create(p):
+    return ecr_core.console_create(ECR, p or {})
+
+
+def ecr_get(p):
+    return ecr_core.console_get(ECR, str(p.get("name") or ""))
+
+
+def ecr_update(p):
+    return ecr_core.console_update(ECR, str(p.get("name") or ""), p or {})
+
+
+def ecr_delete(p):
+    return ecr_core.console_delete(ECR, str(p.get("name") or ""))
+
+
+def ecr_images(p):
+    return ecr_core.console_images(ECR, str(p.get("name") or ""))
 
 
 # ── Azure Service Bus (topics + subscriptions + send/receive) ──────────────
@@ -592,6 +650,16 @@ def extras_config_put(p):
     return {"ok": True}
 
 
+# ── Amazon SES v2 (core/sesv2_core.py) — shared store with the native wire ──
+def ses_console(p):
+    from core import nano_registry
+    store = nano_registry.get()["sesv2"]
+    status, out = sesv2_core.console_dispatch(store, str(p.get("method") or "GET"), str(p.get("path") or ""),
+                                              dict(p.get("query") or {}), dict(p.get("body") or {}))
+    if status >= 400:
+        return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
+    store.persist()
+    return out
 # ── API Gateway V2 (HTTP/WebSocket APIs) — core/apigatewayv2_core.py ────────
 # Store = the shared registry's `apigwv2`, the SAME one the native /v2 relay wire
 # reads/writes, so console-created APIs are visible to the CLI/SDK and vice-versa.
@@ -869,3 +937,104 @@ def sns_console(p):
     if status >= 400:
         return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
     return out
+# ── Route 53 (core/route53_core.py) — shared store with the native wire ─────
+def _r53_store():
+    from core import nano_registry
+    return nano_registry.get()["route53"]
+
+
+def _r53_call(fn, *a):
+    try:
+        out = fn(_r53_store(), *a)
+        _r53_store().persist()
+        return out
+    except route53_core.Route53Error as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+
+
+def r53_list(p=None):
+    return _r53_call(route53_core.console_list)
+
+
+def r53_create(p):
+    return _r53_call(route53_core.console_create, dict(p or {}))
+
+
+def r53_get(p):
+    return _r53_call(route53_core.console_get, str(p.get("name") or ""))
+
+
+def r53_delete(p):
+    return _r53_call(route53_core.console_delete, str(p.get("name") or ""))
+
+
+def r53_tags(p):
+    return _r53_call(route53_core.console_set_tags, str(p.get("name") or ""), p.get("tags") or {})
+
+
+def r53_record_upsert(p):
+    body = dict(p)
+    body["name"] = p.get("record")   # `name` is the zone key; the record name rides in `record`
+    return _r53_call(route53_core.console_record_upsert, str(p.get("name") or ""), body)
+
+
+def r53_record_delete(p):
+    return _r53_call(route53_core.console_record_delete, str(p.get("name") or ""),
+                     str(p.get("record") or ""), str(p.get("rtype") or "A"))
+
+
+def r53_children(p):
+    return _r53_call(route53_core.console_children, str(p.get("kind") or ""))
+
+
+def r53_child_create(p):
+    return _r53_call(route53_core.console_child_create, str(p.get("kind") or ""), dict(p))
+
+
+def r53_child_delete(p):
+    return _r53_call(route53_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))
+# ── ElastiCache (core/elasticache_core.py) — shared store with the native wire ─
+def _ec_store():
+    from core import nano_registry
+    return nano_registry.get()["elasticache"]
+
+
+def _ec_call(fn, *a):
+    st = _ec_store()
+    try:
+        elasticache_core._ensure_defaults(st)
+        return fn(st, *a)
+    except elasticache_core.ElastiCacheError as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+
+
+def ec_list(p=None):
+    return _ec_call(elasticache_core.console_list)
+
+
+def ec_create(p):
+    return _ec_call(elasticache_core.console_create, dict(p or {}))
+
+
+def ec_get(p):
+    return _ec_call(elasticache_core.console_get, str(p.get("name") or ""))
+
+
+def ec_delete(p):
+    return _ec_call(elasticache_core.console_delete, str(p.get("name") or ""))
+
+
+def ec_tags(p):
+    return _ec_call(elasticache_core.console_set_tags, str(p.get("name") or ""), p.get("tags") or {})
+
+
+def ec_children(p):
+    return _ec_call(elasticache_core.console_children, str(p.get("kind") or ""))
+
+
+def ec_child_create(p):
+    return _ec_call(elasticache_core.console_child_create, str(p.get("kind") or ""), dict(p))
+
+
+def ec_child_delete(p):
+    return _ec_call(elasticache_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))

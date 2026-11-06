@@ -52,6 +52,11 @@ class Aws(CloudProvider):
             ("cloudwatch", "CreateAlarm"): lambda b, a, p: A.cw_create(p),
             ("cloudwatch", "GetAlarm"):    lambda b, a, p: A.cw_get(p),
             ("cloudwatch", "DeleteAlarm"): lambda b, a, p: A.cw_delete(p),
+            # CloudFormation — stacks, via core/cloudformation_core.py
+            ("cloudformation", "ListStacks"):  lambda b, a, p: A.cfn_list(p),
+            ("cloudformation", "CreateStack"): lambda b, a, p: A.cfn_create(p),
+            ("cloudformation", "GetStack"):    lambda b, a, p: A.cfn_get(p),
+            ("cloudformation", "DeleteStack"): lambda b, a, p: A.cfn_delete(p),
             # Secrets Manager — via core/secrets_core.py
             ("secrets", "ListSecrets"):  lambda b, a, p: A.secrets_list(p),
             ("secrets", "CreateSecret"): lambda b, a, p: A.secrets_create(p),
@@ -65,6 +70,10 @@ class Aws(CloudProvider):
             ("sqs", "Send"):        lambda b, a, p: A.sqs_send(p),
             ("sqs", "Receive"):     lambda b, a, p: A.sqs_receive(p),
             ("sqs", "Purge"):       lambda b, a, p: A.sqs_purge(p),
+            # Amazon ECS — console REST facade over core/ecs_core.py
+            ("ecs", "Api"): lambda b, a, p: A.ecs_api(p),
+            # Cognito user pools — console REST facade over core/cognito_idp_core.py
+            ("cognito-idp", "Api"): lambda b, a, p: A.cognito_api(p),
             # IAM — users/roles/policies/groups, via core/iam_core.py
             ("iam", "ListUsers"):       lambda b, a, p: A.iam_list_users(p),
             ("iam", "ListRoles"):       lambda b, a, p: A.iam_list_roles(p),
@@ -153,6 +162,10 @@ class Aws(CloudProvider):
             ("kinesis", "UpdateStream"): lambda b, a, p: D.kinesis_update(p),
             ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
             ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
+            # Amazon SES v2 — identities, templates, contact lists (core/sesv2_core.py)
+            ("sesv2", "GetSesResource"):    lambda b, a, p: D.ses_console(p),
+            ("sesv2", "CreateSesResource"): lambda b, a, p: D.ses_console(p),
+            ("sesv2", "DeleteSesResource"): lambda b, a, p: D.ses_console(p),
             # Elastic Load Balancing — LBs, target groups, listeners (core/elbv2_core.py)
             ("elbv2", "ListLoadBalancers"):  lambda b, a, p: D.elb_list(p),
             ("elbv2", "CreateLoadBalancer"): lambda b, a, p: D.elb_create(p),
@@ -165,6 +178,33 @@ class Aws(CloudProvider):
             # Amazon SNS — topics, subscriptions, platform applications (core/sns_core.py)
             ("sns", "GetSnsResource"):   lambda b, a, p: D.sns_console(p),
             ("sns", "WriteSnsResource"): lambda b, a, p: D.sns_console(p),
+            # Route 53 — hosted zones, records, health checks (core/route53_core.py)
+            ("route53", "ListHostedZones"):  lambda b, a, p: D.r53_list(p),
+            ("route53", "CreateHostedZone"): lambda b, a, p: D.r53_create(p),
+            ("route53", "GetHostedZone"):    lambda b, a, p: D.r53_get(p),
+            ("route53", "DeleteHostedZone"): lambda b, a, p: D.r53_delete(p),
+            ("route53", "SetTags"):          lambda b, a, p: D.r53_tags(p),
+            ("route53", "UpsertRecord"):     lambda b, a, p: D.r53_record_upsert(p),
+            ("route53", "DeleteRecord"):     lambda b, a, p: D.r53_record_delete(p),
+            ("route53", "ListChildren"):     lambda b, a, p: D.r53_children(p),
+            ("route53", "CreateChild"):      lambda b, a, p: D.r53_child_create(p),
+            ("route53", "DeleteChild"):      lambda b, a, p: D.r53_child_delete(p),
+            # ECR — repositories + images, via core/ecr_core.py
+            ("ecr", "List"):   lambda b, a, p: D.ecr_list(p),
+            ("ecr", "Create"): lambda b, a, p: D.ecr_create(p),
+            ("ecr", "Get"):    lambda b, a, p: D.ecr_get(p),
+            ("ecr", "Update"): lambda b, a, p: D.ecr_update(p),
+            ("ecr", "Delete"): lambda b, a, p: D.ecr_delete(p),
+            ("ecr", "Images"): lambda b, a, p: D.ecr_images(p),
+            # ElastiCache — caches, subnet/parameter groups, snapshots (core/elasticache_core.py)
+            ("elasticache", "ListClusters"):   lambda b, a, p: D.ec_list(p),
+            ("elasticache", "CreateCluster"):  lambda b, a, p: D.ec_create(p),
+            ("elasticache", "GetCluster"):     lambda b, a, p: D.ec_get(p),
+            ("elasticache", "DeleteCluster"):  lambda b, a, p: D.ec_delete(p),
+            ("elasticache", "SetTags"):        lambda b, a, p: D.ec_tags(p),
+            ("elasticache", "ListChildren"):   lambda b, a, p: D.ec_children(p),
+            ("elasticache", "CreateChild"):    lambda b, a, p: D.ec_child_create(p),
+            ("elasticache", "DeleteChild"):    lambda b, a, p: D.ec_child_delete(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),
@@ -210,6 +250,11 @@ class Aws(CloudProvider):
             ("s3", "ListObjectVersions"):       lambda b, a, p: A.s3_list_versions(p),
             ("s3", "GetBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
             ("s3", "PutBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
+            # STS — sessions (temporary credentials), via core/sts_core.py
+            ("sts", "ListSessions"):  lambda b, a, p: D.sts_list(p),
+            ("sts", "CreateSession"): lambda b, a, p: D.sts_create(p),
+            ("sts", "GetSession"):    lambda b, a, p: D.sts_get(p),
+            ("sts", "DeleteSession"): lambda b, a, p: D.sts_delete(p),
         }
 
 

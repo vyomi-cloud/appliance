@@ -40,6 +40,13 @@ AWS_ELBV2_HOURLY: dict[str, float] = {   # us-east-1 on-demand, per load balance
     "application": 0.0225, "network": 0.0225, "gateway": 0.0125,
 }
 
+AWS_ELASTICACHE_HOURLY: dict[str, float] = {   # us-east-1 on-demand, per node
+    "cache.t3.micro": 0.017, "cache.t3.small": 0.034, "cache.t3.medium": 0.068,
+    "cache.t4g.micro": 0.016, "cache.t4g.small": 0.032, "cache.t4g.medium": 0.065,
+    "cache.m5.large": 0.156, "cache.m6g.large": 0.149, "cache.m7g.large": 0.157,
+    "cache.r5.large": 0.216, "cache.r6g.large": 0.206, "cache.r7g.large": 0.219,
+}
+
 GCP_VM_HOURLY: dict[str, float] = {
     "e2-micro": 0.0084, "e2-small": 0.0168, "e2-medium": 0.0336,
     "e2-standard-2": 0.067, "e2-standard-4": 0.134, "e2-standard-8": 0.268,
@@ -88,13 +95,20 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.apigatewayv2": 1.00, # HTTP API $1.00/M requests (~1M calls)
     "aws.stepfunctions": 2.50, # Standard workflow: $0.025/1K state transitions (~100K/month)
+    "aws.ecr": 0.10,          # $0.10/GB-month private repository storage (~1 GB baseline)
     "aws.vpc": 0.00,          # free (NAT GW extra)
+    "aws.ecs": 9.01,          # per cluster: baseline of one Fargate task, 0.25 vCPU / 0.5 GB, 730h
+    "aws.sesv2": 0.10,        # per verified identity: ~1,000 emails/month at $0.10 per 1,000
+    "aws.cloudformation": 0.90,  # native AWS:: stacks are free; ~1,000 third-party handler ops @ $0.0009
     "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
     "aws.secretsmanager": 0.40,  # $0.40 per secret per month
     "aws.kms": 1.00,             # $1.00 per customer-managed key per month
     "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
     "aws.ssm": 0.05,          # Parameter Store advanced-tier parameter $0.05/mo (standard tier is free)
     "aws.cloudwatch": 0.10,   # standard-resolution metric alarm, per alarm-month
+    "aws.sts": 0.05,          # STS itself is free; nominal per-session figure so console sessions register in savings
+    "aws.route53": 0.50,      # hosted zone / health check, per month
+    "aws.cognito-idp": 15.00, # Essentials $0.015/MAU x 1,000 MAU baseline (user pool)
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
@@ -210,6 +224,17 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
     # ELBv2 load balancers — per-hour pricing by load balancer type
     if provider == "aws" and service == "elbv2":
         rate = AWS_ELBV2_HOURLY.get(instance_type, 0.0225)
+        return {
+            "hourly_usd": round(rate, 4),
+            "monthly_usd": round(rate * HOURS_PER_MONTH, 2),
+            "uptime_cost_usd": round(rate * uptime_hours, 2),
+            "uptime_hours": uptime_hours,
+            "source": "on-demand",
+        }
+
+    # ElastiCache nodes — per-node-hour pricing by cache node type
+    if provider == "aws" and service == "elasticache":
+        rate = AWS_ELASTICACHE_HOURLY.get(instance_type, 0.017)
         return {
             "hourly_usd": round(rate, 4),
             "monthly_usd": round(rate * HOURS_PER_MONTH, 2),

@@ -105,6 +105,18 @@ _S3_SUB = [
 
 
 # ===========================================================================
+# ECR — repository detail
+# ===========================================================================
+_ECR_SUB = [
+    {"key": "overview",   "label": "Overview",   "icon": "dashboard",  "type": "overview"},
+    {"key": "images",     "label": "Images",     "icon": "deployed_code", "type": "ecrImages"},
+    {"key": "properties", "label": "Properties", "icon": "info",       "type": "properties"},
+    {"key": "tags",       "label": "Tags",       "icon": "sell",       "type": "tags"},
+    {"key": "activityLog", "label": "Activity",  "icon": "list_alt",   "type": "activityLog"},
+]
+
+
+# ===========================================================================
 # IAM — composite (users / groups / roles / policies)
 # ===========================================================================
 _IAM_SUB = [
@@ -425,6 +437,17 @@ _ELBV2_SUB = [
 
 
 # ===========================================================================
+# Amazon SES — verified identity detail
+# ===========================================================================
+_SESV2_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Identity", "items": [
+        {"key": "details",       "label": "Details",        "icon": "info",   "type": "properties"},
+    ]},
+]
+
+
+# ===========================================================================
 # CloudWatch Logs — log group detail
 # ===========================================================================
 _LOGS_SUB = [
@@ -494,6 +517,174 @@ _CLOUDWATCH_SUB = [
 ]
 
 
+# ===========================================================================
+# STS — session detail
+# ===========================================================================
+_STS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Session", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},
+    ]},
+]
+
+
+# ===========================================================================
+# Route 53 — hosted zone detail
+# ===========================================================================
+_ROUTE53_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Hosted zone", "items": [
+        {"key": "records",     "label": "Records",       "icon": "list",        "type": "r53Records"},
+        {"key": "details",     "label": "Details",       "icon": "info",        "type": "properties"},
+    ]},
+]
+
+
+# ===========================================================================
+# ECS — cluster detail (data-driven `subgrid` tabs: list + create + row actions)
+# ===========================================================================
+_EC = "/api/ecs/clusters/{name}"
+_ECS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Cluster", "items": [
+        {"key": "services", "label": "Services", "icon": "dns", "type": "subgrid",
+         "path": _EC + "/services", "arrayKey": "services", "idField": "name", "empty": "No services in this cluster yet.",
+         "columns": [["name", "Service name"], ["status", "Status"], ["task_definition", "Task definition"], ["desired", "Desired tasks"],
+                     ["running", "Running tasks"], ["launch_type", "Launch type"], ["deployment", "Deployment status"], ["created", "Created time"]],
+         "create": {"label": "Create service", "path": _EC + "/services", "fields": [
+             {"name": "service_name", "label": "Service name", "default": "web-service"},
+             {"name": "task_definition", "label": "Task definition family", "default": "web"},
+             {"name": "desired_count", "label": "Desired tasks", "default": "1"}]},
+         "rowActions": [
+             {"label": "Scale up", "method": "POST", "path": _EC + "/services/{id}/scale-up"},
+             {"label": "Scale down", "method": "POST", "path": _EC + "/services/{id}/scale-down"},
+             {"label": "Force deploy", "method": "POST", "path": _EC + "/services/{id}/restart"},
+             {"label": "Delete", "method": "DELETE", "path": _EC + "/services/{id}", "danger": True}]},
+        {"key": "tasks", "label": "Tasks", "icon": "memory", "type": "subgrid",
+         "path": _EC + "/tasks", "arrayKey": "tasks", "idField": "id", "empty": "No running tasks in this cluster yet. Tasks run as real containers on Pro and Max; Free, Lite and Nano are control-plane only.",
+         "columns": [["task_id", "Task"], ["status", "Last status"], ["desired_status", "Desired status"], ["task_definition", "Task definition"],
+                     ["launch_type", "Launch type"], ["group", "Group"], ["private_ip", "Private IP"], ["started", "Started at"]],
+         "create": {"label": "Run new task", "path": _EC + "/tasks", "fields": [
+             {"name": "task_definition", "label": "Task definition family", "default": "web"},
+             {"name": "count", "label": "Number of tasks", "default": "1"}]},
+         "rowActions": [{"label": "Stop", "method": "POST", "path": _EC + "/tasks/{id}/stop", "danger": True}]},
+        {"key": "taskdefs", "label": "Task definitions", "icon": "description", "type": "subgrid",
+         "path": "/api/ecs/task-definitions", "arrayKey": "task_definitions", "idField": "id", "empty": "No task definitions yet.",
+         "columns": [["id", "Task definition"], ["status", "Status"], ["cpu", "Task CPU"], ["memory", "Task memory"], ["network_mode", "Network mode"],
+                     ["compatibility", "Compatibility"], ["image", "Image"], ["registered", "Registered at"]],
+         "create": {"label": "Create task definition", "path": "/api/ecs/task-definitions", "fields": [
+             {"name": "family", "label": "Task definition family", "default": "web"},
+             {"name": "image", "label": "Container image", "default": "nginx:latest"},
+             {"name": "container_port", "label": "Container port", "default": "80"},
+             {"name": "cpu", "label": "CPU units (256, 512, 1024...)", "default": "256"},
+             {"name": "memory", "label": "Memory (MiB)", "default": "512"}]},
+         "rowActions": [{"label": "Deregister", "method": "POST", "path": "/api/ecs/task-definitions/{id}/deregister"},
+                        {"label": "Delete", "method": "DELETE", "path": "/api/ecs/task-definitions/{id}", "danger": True}]},
+        {"key": "instances", "label": "Infrastructure", "icon": "developer_board", "type": "subgrid",
+         "path": _EC + "/instances", "arrayKey": "instances", "idField": "id", "empty": "No container instances registered (Fargate capacity needs none).",
+         "columns": [["id", "Container instance"], ["ec2_instance", "EC2 instance"], ["status", "Status"], ["agent_connected", "Agent connected"],
+                     ["running_tasks", "Running tasks"], ["cpu_available", "CPU available"], ["memory_available", "Memory available"],
+                     ["registered", "Registered at"]],
+         "create": {"label": "Register container instance", "path": _EC + "/instances", "fields": []},
+         "rowActions": [{"label": "Drain", "method": "POST", "path": _EC + "/instances/{id}/drain"},
+                        {"label": "Activate", "method": "POST", "path": _EC + "/instances/{id}/activate"},
+                        {"label": "Deregister", "method": "DELETE", "path": _EC + "/instances/{id}", "danger": True}]},
+        {"key": "providers", "label": "Capacity providers", "icon": "tune", "type": "subgrid",
+         "path": _EC + "/capacity-providers", "arrayKey": "capacity_providers", "idField": "id", "empty": "No capacity providers on this cluster.",
+         "columns": [["name", "Capacity provider"], ["status", "Status"], ["type", "Type"], ["arn", "ARN"]]},
+    ]},
+    *_settings_props_locks(),
+]
+
+
+# ===========================================================================
+# ElastiCache — cache detail
+# ===========================================================================
+_ELASTICACHE_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Cache", "items": [
+        {"key": "details",     "label": "Details",     "icon": "info",   "type": "properties"},
+        {"key": "config",      "label": "Configuration", "icon": "data_object", "type": "json"},
+    ]},
+]
+
+
+# ===========================================================================
+# Cognito — user pool detail (data-driven `subgrid` tabs: list + create + row actions)
+# ===========================================================================
+_CG = "/api/cognito-idp/user-pools/{name}"
+_COGNITO_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "User pool", "items": [
+        {"key": "users", "label": "Users", "icon": "group", "type": "subgrid",
+         "path": _CG + "/users", "arrayKey": "users", "idField": "username", "empty": "No users in this user pool yet.",
+         "columns": [["username", "User name"], ["email", "Email address"], ["email_verified", "Email verified"],
+                     ["status", "Confirmation status"], ["enabled", "Status"], ["groups", "Groups"],
+                     ["created", "Created time"]],
+         "create": {"label": "Create user", "path": _CG + "/users", "fields": [
+             {"name": "username", "label": "User name", "default": "user1"},
+             {"name": "email", "label": "Email address", "default": "user1@example.com"},
+             {"name": "password", "label": "Temporary password", "default": "Temp#Pass123"}]},
+         "rowActions": [
+             {"label": "Disable", "method": "POST", "path": _CG + "/users/{id}/disable"},
+             {"label": "Enable", "method": "POST", "path": _CG + "/users/{id}/enable"},
+             {"label": "Confirm", "method": "POST", "path": _CG + "/users/{id}/confirm"},
+             {"label": "Delete", "method": "DELETE", "path": _CG + "/users/{id}", "danger": True}]},
+        {"key": "groups", "label": "Groups", "icon": "groups", "type": "subgrid",
+         "path": _CG + "/groups", "arrayKey": "groups", "idField": "group_name", "empty": "No groups in this user pool yet.",
+         "columns": [["group_name", "Group name"], ["description", "Description"], ["precedence", "Precedence"],
+                     ["members", "Users"], ["created", "Created time"]],
+         "create": {"label": "Create group", "path": _CG + "/groups", "fields": [
+             {"name": "group_name", "label": "Group name", "default": "admins"},
+             {"name": "description", "label": "Description", "default": "Administrators"},
+             {"name": "precedence", "label": "Precedence", "default": "1"}]},
+         "rowActions": [{"label": "Delete", "method": "DELETE", "path": _CG + "/groups/{id}", "danger": True}]},
+        {"key": "clients", "label": "App clients", "icon": "apps", "type": "subgrid",
+         "path": _CG + "/clients", "arrayKey": "clients", "idField": "client_id", "empty": "No app clients in this user pool yet.",
+         "columns": [["name", "App client name"], ["client_id", "Client ID"], ["secret", "Client secret"],
+                     ["auth_flows", "Authentication flows"], ["access_token_validity", "Access token expiration"],
+                     ["created", "Created time"]],
+         "create": {"label": "Create app client", "path": _CG + "/clients", "fields": [
+             {"name": "name", "label": "App client name", "default": "web-client"}]},
+         "rowActions": [{"label": "Delete", "method": "DELETE", "path": _CG + "/clients/{id}", "danger": True}]},
+        {"key": "domain", "label": "Domain", "icon": "language", "type": "subgrid",
+         "path": _CG + "/domain", "arrayKey": "domains", "idField": "domain", "empty": "No domain configured for this user pool.",
+         "columns": [["domain", "Domain prefix"], ["url", "Domain URL"], ["status", "Status"], ["cloudfront", "CloudFront distribution"]],
+         "create": {"label": "Create Cognito domain", "path": _CG + "/domain", "fields": [
+             {"name": "domain", "label": "Domain prefix", "default": "my-app-auth"}]},
+         "rowActions": [{"label": "Delete", "method": "DELETE", "path": _CG + "/domain/{id}", "danger": True}]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+    ]},
+]
+
+
+# ===========================================================================
+# CloudFormation — stack detail (tables read `full[field]` from the stack GET)
+# ===========================================================================
+_CLOUDFORMATION_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Stack", "items": [
+        {"key": "resources", "label": "Resources", "icon": "category", "type": "listtable", "field": "resources",
+         "columns": [["logical_id", "Logical ID"], ["physical_id", "Physical ID"], ["type", "Type"], ["status", "Status"]]},
+        {"key": "events",    "label": "Events",    "icon": "event",    "type": "listtable", "field": "events",
+         "columns": [["timestamp", "Timestamp"], ["logical_id", "Logical ID"], ["status", "Status"], ["reason", "Status reason"]]},
+        {"key": "outputs",   "label": "Outputs",   "icon": "output",   "type": "listtable", "field": "outputs",
+         "columns": [["key", "Key"], ["value", "Value"], ["description", "Description"], ["export_name", "Export name"]]},
+        {"key": "parameters","label": "Parameters","icon": "tune",     "type": "listtable", "field": "parameters",
+         "columns": [["key", "Key"], ["value", "Value"]]},
+        {"key": "template",  "label": "Template",  "icon": "code",     "type": "listtable", "field": "template", "mode": "text"},
+        {"key": "changesets","label": "Change sets","icon": "difference","type": "listtable", "field": "change_sets",
+         "columns": [["name", "Name"], ["status", "Status"], ["execution_status", "Execution status"], ["created", "Created"]]},
+    ]},
+    {"group": "Settings", "items": [*_settings_props_locks()]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -513,10 +704,18 @@ SUB_BLADES: dict[str, list] = {
     "stepfunctions":  _SFN_SUB,
     "vpc":            _VPC_SUB,
     "eventbridge":    _EVENTBRIDGE_SUB,
+    "ecr":            _ECR_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
     "kinesis":        _KINESIS_SUB,
+    "ecs":            _ECS_SUB,
+    "sesv2":          _SESV2_SUB,
+    "cloudformation": _CLOUDFORMATION_SUB,
     "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
     "cloudwatch":     _CLOUDWATCH_SUB,
+    "sts":            _STS_SUB,
+    "route53":        _ROUTE53_SUB,
+    "elasticache":    _ELASTICACHE_SUB,
+    "cognito-idp":    _COGNITO_SUB,
 }

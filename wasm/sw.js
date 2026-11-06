@@ -203,7 +203,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
+const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sts:0.05,route53:0.50,ecr:0.10,ecs:9.01,elasticache:12.41,"cognito-idp":15.00,sesv2:0.10,cloudformation:0.90,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
 NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 async function nanoCostSavings() {
   const now = Date.now();
@@ -433,6 +433,18 @@ async function route(method, path, body, query) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null, origin: self.location.origin + BASE }] };
   }
 
+  // Amazon ECS (core/ecs_core.py via console_ecs) — one generic passthrough: the
+  // facade owns the whole /api/ecs/* REST surface.
+  if (path.startsWith("/api/ecs/")) {
+    return { tuple: ["aws", "ecs", "Api", { method, path: path.slice("/api/ecs".length), query: query || {}, body: body || {} }] };
+  }
+
+  // Cognito user pools (core/cognito_idp_core.py via console_cognito_idp) — one generic
+  // passthrough: the facade owns the whole /api/cognito-idp/* REST surface.
+  if (path.startsWith("/api/cognito-idp/")) {
+    return { tuple: ["aws", "cognito-idp", "Api", { method, path: path.slice("/api/cognito-idp".length), query: query || {}, body: body || {} }] };
+  }
+
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
   let am;
   // Key Vault data plane for the console (secrets + keys CRUD). Offline serves this
@@ -632,6 +644,14 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/aws\/cloudwatch\/alarms\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "cloudwatch", "GetAlarm", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "cloudwatch", "DeleteAlarm", { name: dec(m[1]) }] };
+  // ── CloudFormation (core/cloudformation_core.py) ────────────────────
+  if (path === "/api/aws/cloudformation/stacks") {
+    if (method === "GET")  return { tuple: ["aws", "cloudformation", "ListStacks", {}] };
+    if (method === "POST") return { tuple: ["aws", "cloudformation", "CreateStack", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/cloudformation\/stacks\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "cloudformation", "GetStack", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "cloudformation", "DeleteStack", { name: dec(m[1]) }] };
   // ── KMS (core/kms_core.py) ──────────────────────────────────────────
   if (path === "/api/aws/kms/keys") {
     if (method === "GET")  return { tuple: ["aws", "kms", "ListKeys", {}] };
@@ -798,6 +818,11 @@ async function route(method, path, body, query) {
   if (m && method === "GET")    return { tuple: ["aws", "kinesis", "GetStream", { name: dec(m[1]) }] };
   if (m && (method === "PUT" || method === "PATCH")) return { tuple: ["aws", "kinesis", "UpdateStream", { name: dec(m[1]), body: body || {} }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kinesis", "DeleteStream", { name: dec(m[1]) }] };
+  // Amazon SES v2 (core/sesv2_core.py) — identities, configuration sets, templates, contact lists
+  if (path.startsWith("/api/aws/sesv2/") && (method === "GET" || method === "POST" || method === "DELETE"))
+    return { tuple: ["aws", "sesv2", method === "POST" ? "CreateSesResource" : method === "DELETE" ? "DeleteSesResource" : "GetSesResource",
+                     { method, path, query: query || {}, body: body || {},
+                       name: (body && (body.identity || body.name)) || decodeURIComponent(path.split("/").pop()) }] };
   // CloudWatch Logs (core/logs_core.py) — the console REST under /api/logs/*
   m = path.match(/^\/api\/logs\/(.+)$/);
   if (m) return { tuple: ["aws", "logs", "Console", { method, path: m[1], query: query || {}, body: body || {} }] };
@@ -819,6 +844,48 @@ async function route(method, path, body, query) {
   if (path.startsWith("/api/aws/sns/") && (method === "GET" || method === "POST" || method === "DELETE" || method === "PATCH"))
     return { tuple: ["aws", "sns", method === "GET" ? "GetSnsResource" : "WriteSnsResource",
                      { method, path, query: query || {}, body: body || {} }] };
+  // Route 53 (core/route53_core.py) — hosted zones + records, health checks, delegation sets
+  if (path === "/api/aws/route53/hosted-zones") {
+    if (method === "GET")  return { tuple: ["aws", "route53", "ListHostedZones", {}] };
+    if (method === "POST") return { tuple: ["aws", "route53", "CreateHostedZone", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/route53\/hosted-zones\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "route53", "GetHostedZone", { name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "route53", "SetTags", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "route53", "DeleteHostedZone", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/route53\/hosted-zones\/([^/]+)\/records$/);
+  if (m && method === "POST")   return { tuple: ["aws", "route53", "UpsertRecord", { ...(body || {}), name: dec(m[1]), record: (body || {}).name }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "route53", "DeleteRecord", { name: dec(m[1]), record: (query || {}).name, rtype: (query || {}).type }] };
+  m = path.match(/^\/api\/aws\/route53\/(health-checks|delegation-sets)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "route53", "ListChildren", { kind: m[1] }] };
+  if (m && method === "POST") return { tuple: ["aws", "route53", "CreateChild", { ...(body || {}), kind: m[1] }] };
+  m = path.match(/^\/api\/aws\/route53\/(health-checks|delegation-sets)\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "route53", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
+  // ECR (core/ecr_core.py) — repositories + images
+  if (path === "/api/aws/ecr/repositories") {
+    if (method === "GET")  return { tuple: ["aws", "ecr", "List", {}] };
+    if (method === "POST") return { tuple: ["aws", "ecr", "Create", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/ecr\/repositories\/(.+)\/images$/);
+  if (m && method === "GET") return { tuple: ["aws", "ecr", "Images", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/ecr\/repositories\/(.+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "ecr", "Get", { name: dec(m[1]) }] };
+  if (m && (method === "PATCH" || method === "PUT")) return { tuple: ["aws", "ecr", "Update", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "ecr", "Delete", { name: dec(m[1]) }] };
+  // ElastiCache (core/elasticache_core.py) — caches + subnet/parameter groups + snapshots
+  if (path === "/api/aws/elasticache/clusters") {
+    if (method === "GET")  return { tuple: ["aws", "elasticache", "ListClusters", {}] };
+    if (method === "POST") return { tuple: ["aws", "elasticache", "CreateCluster", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/elasticache\/clusters\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "elasticache", "GetCluster", { name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "elasticache", "SetTags", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "elasticache", "DeleteCluster", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/elasticache\/(subnet-groups|parameter-groups|snapshots)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "elasticache", "ListChildren", { kind: m[1] }] };
+  if (m && method === "POST") return { tuple: ["aws", "elasticache", "CreateChild", { ...(body || {}), kind: m[1] }] };
+  m = path.match(/^\/api\/aws\/elasticache\/(subnet-groups|parameter-groups|snapshots)\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "elasticache", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
@@ -827,6 +894,15 @@ async function route(method, path, body, query) {
   if (path === "/api/eventbridge/put-event" && method === "POST") return { tuple: ["aws", "eventbridge", "PutEvent", body || {}] };
   m = path.match(/^\/api\/eventbridge\/rules\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "eventbridge", "DeleteRule", { name: dec(m[1]) }] };
+
+  // STS (core/sts_core.py) — sessions = temporary credentials issued by AssumeRole
+  if (path === "/api/sts/sessions") {
+    if (method === "GET")  return { tuple: ["aws", "sts", "ListSessions", {}] };
+    if (method === "POST") return { tuple: ["aws", "sts", "CreateSession", body || {}] };
+  }
+  m = path.match(/^\/api\/sts\/sessions\/([^/]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "sts", "GetSession", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "sts", "DeleteSession", { name: dec(m[1]) }] };
 
   // 3. generic catalog-driven CRUD, from the route table
   for (const r of await routes()) {
@@ -1077,12 +1153,13 @@ self.addEventListener("fetch", (event) => {
         const seen = new Set(), spaces = [];
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
+        for (const s of spaces) if (s.provider) s.cost_savings = await nanoCostSavings(s.provider);
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
         // Every space reports the same cost_savings shape the appliance's core/cost_model
         // produces, from the live census of the one shared in-browser substrate.
         const cs = await nanoCostSavings();
         for (const s of spaces) s.cost_savings = cs;
-        return json({ spaces, active_space_id: active });
+        return json({ spaces, active_space_id: active, active_space: spaces.find((x) => x.space_id === active) });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources

@@ -23,13 +23,13 @@ const CORES = [
   "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
-  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "sesv2_core.py", "cognito_idp_core.py", "elasticache_core.py", "ecs_core.py", "console_ecs.py", "route53_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
   "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
-  "gcp_compute_core.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "kinesis_core.py", "cloudwatch_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "gcp_compute_core.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "ecr_core.py", "cloudformation_core.py", "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "sts_core.py", "kinesis_core.py", "cloudwatch_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
   "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it

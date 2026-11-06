@@ -397,6 +397,9 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _ses_census():
+    from core import nano_registry
+    return list(nano_registry.get()["sesv2"].identities)
 def _logs_group_count() -> int:
     """CloudWatch Logs groups held by the shared in-browser store (core/logs_core.py)."""
     try:
@@ -409,6 +412,13 @@ def _logs_group_count() -> int:
 def _elb_census():
     from core import nano_registry
     return nano_registry.get()["elbv2"].load_balancers
+def _r53_census():
+    from core import nano_registry
+    st = nano_registry.get()["route53"]
+    return list(st.hosted_zones) + list(st.health_checks)
+def _ec_census():
+    from core import nano_registry
+    return nano_registry.get()["elasticache"].clusters
 
 
 def _census_dispatch(backends: Backends, provider: str) -> dict:
@@ -425,6 +435,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # them via the same list handlers the console uses.
         if provider == "aws":
             from . import aws_core_adapter as A
+            from . import dataplane_adapter as D
             aws_counts = {
                 "s3":             len(A.s3_list_buckets().get("buckets", [])),
                 "dynamodb":       len(A.ddb_list_tables().get("tables", [])),
@@ -432,14 +443,21 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "secretsmanager": len(A.secrets_list().get("value", [])),
                 "sqs":            len(A.sqs_list_queues().get("queues", [])),
                 "cloudwatch":     len(A.cw_list().get("items", [])),
+                "cloudformation": len(A.cfn_list().get("items", [])),
                 "iam": (len(A.iam_list_users().get("users", [])) +
                         len(A.iam_list_roles().get("roles", [])) +
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "sesv2":          len(_ses_census()),
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
                 "sns":            len(A.MSG.topics),
+                "sts":            len(D.sts_list().get("items", [])),
+                "route53":        len(_r53_census()),
+                "ecs":            sum(1 for c in A.ECS.clusters.values() if c.get("status") != "INACTIVE"),
+                "elasticache":    len(_ec_census()),
+                "cognito-idp":    len(A.COG.pools),
             }
             try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
                 from core import nano_registry
@@ -467,6 +485,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
             try:   # Kinesis Data Streams live in the shared registry store (console + relay wire)
                 from core import nano_registry
                 aws_counts["kinesis"] = len(nano_registry.get()["kinesis"].streams)
+            except Exception:
+                pass
+            try:
+                from . import dataplane_adapter as _D
+                aws_counts["ecr"] = len(_D.ecr_list().get("repositories", []))
             except Exception:
                 pass
             for svc, n in aws_counts.items():

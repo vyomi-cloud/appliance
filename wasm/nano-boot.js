@@ -88,7 +88,7 @@ const CORES = [
   "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
-  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "sesv2_core.py", "elasticache_core.py", "route53_core.py", "elbv2_core.py",
   "aws_console_detail.py",   // AWS resource-detail tab model (EC2 placement/ENI/volumes/attributes, IAM resource access)
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
@@ -98,6 +98,8 @@ const CORES = [
   "azure_keyvault_certificates_core.py",   // Azure Key Vault certificates (self-signed X.509) — imported by the Azure adapter
   "azure_arm_ext_core.py",   // Azure ARM locks / identity / health / NICs / run commands — loaded before azure_arm_core which delegates to it
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
+  "ecs_core.py", "console_ecs.py",   // Amazon ECS (engine + console REST facade)
+  "cognito_idp_core.py", "console_cognito_idp.py",   // Amazon Cognito user pools (engine + console REST facade)
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
@@ -115,7 +117,7 @@ const CORES = [
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
   "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "sts_core.py", "cloudformation_core.py", "ecr_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",

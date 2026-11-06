@@ -46,10 +46,20 @@ from core.sql_store import InMemorySqlStore
 from core import rds_core as rds
 from core.iam_store import InMemoryIamStore
 from core import iam_core as iam
+from core.sts_core import StsStore
+from core import sts_core as sts
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
+from core import ecs_core as ecs
+from core.ecs_core import InMemoryEcsStore
+from core import sesv2_core as sesv2
 from core import elbv2_core as elbv2
+from core import route53_core as route53
+from core import ecr_core as ecr
+from core import elasticache_core as elasticache
+from core import cognito_idp_core as cognito
+from core.cognito_idp_core import CognitoIdpStore, InMemoryCognitoIdpStore
 from core import rds_data_core as rds_data
 from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
@@ -130,6 +140,7 @@ from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
+from core import cloudformation_core as cfn
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 from core.azure_arm_core import AzureArm
@@ -193,11 +204,17 @@ _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
 _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
+    "route53": "route53",
+    "ses": "sesv2",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "ecr": "ecr", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
     "sts": "sts",
+    "ecs": "ecs",
+    "elasticache": "elasticache",
+    "cognito-idp": "cognito-idp",
+    "cloudformation": "cloudformation",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -205,10 +222,16 @@ _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
     "Kinesis_20131202": "kinesis",
+    "AmazonEC2ContainerServiceV20141113": "ecs",
+    "AWSCognitoIdentityProviderService": "cognito-idp",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
+    "AmazonEC2ContainerRegistry_": "ecr",
 }
+
+# Cognito's public OIDC discovery documents: /<poolId>/.well-known/{jwks.json,openid-configuration}
+_COGNITO_WELLKNOWN = re.compile(r"^/([a-z]{2}(?:-[a-z]+)+-\d_[A-Za-z0-9]+)/\.well-known/(jwks\.json|openid-configuration)$")
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
@@ -217,6 +240,9 @@ _JSON_CT = {
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
+    "ecr": "application/x-amz-json-1.1",
+    "ecs": "application/x-amz-json-1.1",
+    "cognito-idp": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -249,7 +275,29 @@ _QUERY_ACTION = {
     "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
     "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "DescribeNetworkAcls": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
+    # STS (unsigned query requests; signed ones route by credential scope)
+    "AssumeRole": "sts", "AssumeRoleWithWebIdentity": "sts", "AssumeRoleWithSAML": "sts",
+    "GetCallerIdentity": "sts", "GetSessionToken": "sts", "GetFederationToken": "sts",
+    "GetAccessKeyInfo": "sts", "DecodeAuthorizationMessage": "sts",
+    # CloudFormation
+    "CreateStack": "cloudformation", "UpdateStack": "cloudformation", "DeleteStack": "cloudformation",
+    "DescribeStacks": "cloudformation", "ListStacks": "cloudformation",
+    "DescribeStackEvents": "cloudformation", "DescribeStackResources": "cloudformation",
+    "DescribeStackResource": "cloudformation", "ListStackResources": "cloudformation",
+    "GetTemplate": "cloudformation", "GetTemplateSummary": "cloudformation",
+    "ValidateTemplate": "cloudformation", "ListExports": "cloudformation",
+    "CreateChangeSet": "cloudformation", "DescribeChangeSet": "cloudformation",
+    "ExecuteChangeSet": "cloudformation", "DeleteChangeSet": "cloudformation",
+    "ListChangeSets": "cloudformation",
 }
+
+# ElastiCache (Query protocol; signs as `elasticache`). Verbs shared with other
+# Query services (tags, events) only route here when signed.
+_AMBIGUOUS = {"AddTagsToResource", "RemoveTagsFromResource", "ListTagsForResource",
+              "DescribeEvents", "DescribeSnapshots", "CreateSnapshot", "DeleteSnapshot"}
+for _a in elasticache.OPERATIONS:
+    if _a not in _AMBIGUOUS:
+        _QUERY_ACTION.setdefault(_a, "elasticache")
 
 
 # ELBv2 (Query protocol; signs as `elasticloadbalancing`). Tag / limit verbs are
@@ -258,6 +306,8 @@ _AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimit
 for _a in elbv2.OPERATIONS:
     if _a not in _AMBIGUOUS_ELB:
         _QUERY_ACTION.setdefault(_a, "elbv2")
+for _a in sesv2.V1_ACTIONS:   # SES v1 (receipt rules, identity verification); signs as `ses`
+    _QUERY_ACTION.setdefault(_a, "sesv2")
 # CloudWatch actions whose names other Query services also use — routed by SigV4 scope only.
 _GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
@@ -326,6 +376,7 @@ class AwsWireRouter:
         self.sec = s.get("sec") or InMemoryKvStore()
         self.rds = s.get("rds") or sql_store or InMemorySqlStore()
         self.iam = s.get("iam") or InMemoryIamStore()
+        self.sts = s.get("sts") or StsStore()
         self.msg = s.get("msg") or InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
         # GCP services — each its own store instance (namespaced from AWS).
         self.gcs = s.get("gcs") or InMemoryObjectStore()
@@ -366,6 +417,11 @@ class AwsWireRouter:
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.cognito = s.get("cognito") or InMemoryCognitoIdpStore()   # Cognito user pools
+        self.elasticache = s.get("elasticache") or elasticache.ElastiCacheStore()
+        self.sesv2 = s.get("sesv2") or sesv2.SesV2Store()
+        self.ecs = s.get("ecs") or InMemoryEcsStore()   # Amazon ECS clusters/services/tasks
+        self.cfn = s.get("cfn") or cfn.CfnStore()             # CloudFormation stacks / change sets
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         events.set_target_store("kinesis", self.kinesis)       # EventBridge Kinesis / Logs rule targets
         events.set_target_store("logs", self.logs)
@@ -384,6 +440,8 @@ class AwsWireRouter:
             except Exception:
                 pass
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
+        self.route53 = s.get("route53") or route53.Route53Store()
+        self.ecr = s.get("ecr") or ecr.EcrStore()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
 
     def _iamc_resolve(self, ident):
@@ -447,6 +505,10 @@ class AwsWireRouter:
             return "az-servicebus"
         if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
             return "apigw-invoke"
+        if route53.is_route53_path(path):     # Route 53 REST-XML (/2013-04-01/…)
+            return "route53"
+        if sesv2.is_sesv2_path(path):         # SES v2 REST-JSON (/v2/email/…)
+            return "sesv2"
         if "/2015-03-31/functions" in path or "/2021-10-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if path.startswith("/lambda-url/"):   # a Function URL's public invoke path
@@ -468,6 +530,8 @@ class AwsWireRouter:
             return "azure-sql"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
             return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
+        if _COGNITO_WELLKNOWN.match(path):    # Cognito OIDC discovery (public, unsigned GET)
+            return "cognito-wellknown"
         target = lheaders.get("x-amz-target", "") or ""
         if target.startswith(cw.TARGET_PREFIX + "."):
             return "cloudwatch"            # CloudWatch JSON 1.0
@@ -641,6 +705,13 @@ class AwsWireRouter:
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
                     "body": b'{"message":"RDS Data API requires the async dispatch path"}'}
 
+        if svc == "cognito-wellknown":
+            m = _COGNITO_WELLKNOWN.match(path)
+            doc = (cognito.jwks if m.group(2) == "jwks.json" else cognito.openid_configuration)(self.cognito, m.group(1))
+            if doc is None:
+                return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"message":"Not Found"}'}
+            return {"status": 200, "headers": {"content-type": "application/json"}, "body": json.dumps(doc).encode()}
+
         if svc == "s3":
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
@@ -658,6 +729,21 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "sesv2":   # native SES v2 REST-JSON (identities, templates, sending) + SES v1 Query (receipt rules)
+            if not sesv2.is_sesv2_path(path) and "Action=" in (self._text(body) or ""):
+                r = sesv2.dispatch_query(self.sesv2, self._query_params(query, body))
+            else:
+                r = sesv2.dispatch(self.sesv2, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", r.media_type)
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "route53":   # native Route 53 REST-XML (hosted zones, records, health checks)
+            r = route53.dispatch(self.route53, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "apigw-invoke":   # an HTTP API's invoke URL → the shared gateway engine
@@ -833,12 +919,18 @@ class AwsWireRouter:
                 r = events.dispatch(self.events, target, payload, lambda_store=self.lam)
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
+            elif svc == "ecs":
+                r = ecs.dispatch(self.ecs, target, payload)
+            elif svc == "cognito-idp":
+                r = cognito.dispatch(self.cognito, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
             elif svc == "ssm":
                 r = ssm.dispatch(self.ssm, target, payload)
             elif svc == "stepfunctions":
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
+            elif svc == "ecr":
+                r = ecr.dispatch(self.ecr, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})
@@ -854,12 +946,18 @@ class AwsWireRouter:
             return self._ec2_describe_instances(params)
         if svc == "iam":
             r = iam.dispatch(self.iam, params)
+        elif svc == "sts":
+            r = sts.dispatch(self.sts, params, lheaders)
         elif svc == "rds":
             r = rds.dispatch(self.rds, params)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
+        elif svc == "cloudformation":
+            r = cfn.dispatch(self.cfn, params)
         elif svc == "elbv2":
             r = elbv2.dispatch(self.elbv2, params)
+        elif svc == "elasticache":
+            r = elasticache.dispatch(self.elasticache, params)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
