@@ -165,6 +165,16 @@ function decodeJwt(token) {
     return JSON.parse(decodeURIComponent(escape(atob(p))));
   } catch (_) { return null; }
 }
+// Portal account tier (Nano is served by the portal, same origin): a signed-in Pro/Max account with no activated licence still gets its plan.
+async function accountClaims() {
+  try {
+    const r = await fetch("/api/booster/status", { credentials: "same-origin", cache: "no-store" });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j && (j.tier === "pro" || j.tier === "max")) return { tier: j.tier, primary_cloud: j.primary_cloud || "", sub: j.email || "" };
+  } catch (_) { /* offline / not signed in -> Free */ }
+  return null;
+}
 function licenseClaims(jwt) {
   const c = jwt ? decodeJwt(jwt) : null;
   if (!c) return null;
@@ -1291,7 +1301,7 @@ self.addEventListener("fetch", (event) => {
       // proxies the REAL portal device-flow (same origin — Nano is served by the
       // control-plane portal). The license JWT the portal issues drives the tier.
       if (apiPath === "/api/runtime/tier" && method === "GET") {
-        const c = licenseClaims(await metaGet("license_jwt"));
+        const c = licenseClaims(await metaGet("license_jwt")) || await accountClaims();
         const t = (c && c.tier) || "free";
         // Pro = ONE cloud: same shape the appliance's /api/runtime/tier returns, so clouds.html / the cloud picker lock the other two.
         return json({ active_tier: t,
@@ -1300,7 +1310,7 @@ self.addEventListener("fetch", (event) => {
                       active_policy: { providers: t === "pro" && c && c.primary_cloud ? "primary_cloud_only" : "all" } });   // a Pro licence with no cloud yet is pinned on first use (booster-link.js)
       }
       if (apiPath === "/api/license/status" && method === "GET") {
-        const c = licenseClaims(await metaGet("license_jwt"));
+        const c = licenseClaims(await metaGet("license_jwt")) || await accountClaims();
         if (!c) return json({ license: null, active: false, active_tier: "free" });
         return json({ license: c, active: true, active_tier: c.tier || "free",
                       tier: c.tier || "free", issued_to: c.sub || c.issued_to || "" });
