@@ -1047,6 +1047,15 @@ function vyCodeTabs(o){
     style:"margin-left:auto;align-self:center;display:flex;align-items:center;justify-content:center;width:28px;height:28px;"
       + "border:none;border-radius:4px;background:transparent;color:var(--sub);cursor:pointer"}, copyIc);
   root.append(strip, el("div",{style:"margin-top:12px"}, code));
+  // Run the tab underline edge to edge of the card: pull the strip out by the nearest padded ancestor's inset.
+  requestAnimationFrame(function bleed(){
+    let p = root.parentElement;
+    while (p && !(parseFloat(getComputedStyle(p).paddingLeft) > 0)) p = p.parentElement;
+    if (!p) return;
+    const cs = getComputedStyle(p), l = parseFloat(cs.paddingLeft), r = parseFloat(cs.paddingRight);
+    strip.style.marginLeft = "-" + l + "px"; strip.style.marginRight = "-" + r + "px";
+    strip.style.paddingLeft = l + "px"; strip.style.paddingRight = r + "px";
+  });
   if (o.note) root.append(el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub);line-height:1.5"}, o.note));
   let cur = 0;
   const btns = o.tabs.map((t, i) => el("button",{type:"button",role:"tab",
@@ -1192,8 +1201,9 @@ function buildSavingsCard(provider, cloud, accent){
 
 function buildConnectCard(){
   var card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
-  card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI"));
-  card.append(vyConnectSwitch({accent:"#0078d4", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
+  const head = el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI");
+  card.append(head);
+  card.append(vyConnectSwitch({slot: head, accent:"#0078d4", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
   return card;
 }
 
