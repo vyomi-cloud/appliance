@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-06 12:09 UTC · refreshes after every pipeline run_
+_Updated 2026-11-06 12:18 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,15 +8,15 @@ _Updated 2026-11-06 12:09 UTC · refreshes after every pipeline run_
 - **Building now:** nothing
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
-- **Consoles really implemented:** offline 97% · Nano 98%
-- **Hourly tests:** 289 of 290 suites passing (run 10:15 UTC)
+- **Consoles really implemented:** offline 97% · Nano 97%
+- **Hourly tests:** 289 of 290 suites passing (run 12:02 UTC)
 - **Upstream watch:** 13 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 19 | 0 | 9 | 17 | 93% · 94% |
+| AWS | 19 | 0 | 9 | 17 | 93% · 93% |
 | GCP | 18 | 0 | 6 | 12 | 100% · 100% |
 | Azure | 18 | 0 | 6 | 12 | 100% · 100% |
 
@@ -855,7 +855,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — AWS (34)</summary>
+<details><summary>Console parts not live yet — AWS (35)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -887,6 +887,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | API Gateway V2 | nano | tab: Tags | static |
 | EventBridge | nano | tab: Tags | static |
 | Step Functions | nano | tab: Tags | static |
+| Kinesis | nano | tab: Tags | static |
 | Elastic Load Balancing | nano | tab: Tags | static |
 | Secrets Manager | nano | tab: Tags | static |
 | KMS | nano | tab: Tags | static |
@@ -937,7 +938,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
 | nano-ui-crawl | ✅ | 63/63 |
-| nano-cores | ✅ | 347/347 |
+| nano-cores | ✅ | 350/350 |
 | nano-gcp-kms-core | ✅ | 35/35 |
 | nano-gcp-cloudsql-core | ✅ | 43/43 |
 | nano-gcp-compute-core | ✅ | 18/18 |
