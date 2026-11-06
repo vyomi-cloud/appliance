@@ -1170,6 +1170,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             from routes.aws_sesv2 import STORE as _ses_store
             _ses_r = _ses.dispatch_query(_ses_store, await _srv()._ec2_query_params(request))
             return Response(content=_ses_r.body, status_code=_ses_r.status, media_type="text/xml")
+        if service == "cloudformation":
+            from routes.aws_cloudformation import handle as _cfn_handle
+            return await _cfn_handle(request)
         if service == "logs":
             from routes import aws_logs as _aws_logs
             return await _aws_logs.wire(request)

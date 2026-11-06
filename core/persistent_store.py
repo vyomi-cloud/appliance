@@ -36,6 +36,7 @@ from core.gcp_firestore_core import FirestoreStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore, _Message
 from core.cloudwatch_core import CloudWatchStore
+from core.cloudformation_core import CfnStore
 from datetime import datetime
 
 
@@ -143,6 +144,14 @@ class PersistentCloudWatchStore(_PersistentMixin, CloudWatchStore):
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "cloudwatch"):
         CloudWatchStore.__init__(self)
+        self._pinit(backend, store_id)
+
+
+class PersistentCfnStore(_PersistentMixin, CfnStore):
+    _STATE_ATTRS = ("stacks", "change_sets", "stack_sets")
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "cfn"):
+        CfnStore.__init__(self)
         self._pinit(backend, store_id)
 
 

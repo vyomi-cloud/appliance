@@ -34,6 +34,7 @@ from core.nano_events import EventStore
 from core.kinesis_core import KinesisStore
 from core.sesv2_core import SesV2Store
 from core.apigatewayv2_core import ApiGwV2Store
+from core.cloudformation_core import CfnStore
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
@@ -115,5 +116,6 @@ def get() -> dict:
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
             "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
+            "cfn": CfnStore(),    # CloudFormation (stacks / change sets / stack sets)
         }
     return _REG

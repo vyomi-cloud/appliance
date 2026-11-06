@@ -52,6 +52,11 @@ class Aws(CloudProvider):
             ("cloudwatch", "CreateAlarm"): lambda b, a, p: A.cw_create(p),
             ("cloudwatch", "GetAlarm"):    lambda b, a, p: A.cw_get(p),
             ("cloudwatch", "DeleteAlarm"): lambda b, a, p: A.cw_delete(p),
+            # CloudFormation — stacks, via core/cloudformation_core.py
+            ("cloudformation", "ListStacks"):  lambda b, a, p: A.cfn_list(p),
+            ("cloudformation", "CreateStack"): lambda b, a, p: A.cfn_create(p),
+            ("cloudformation", "GetStack"):    lambda b, a, p: A.cfn_get(p),
+            ("cloudformation", "DeleteStack"): lambda b, a, p: A.cfn_delete(p),
             # Secrets Manager — via core/secrets_core.py
             ("secrets", "ListSecrets"):  lambda b, a, p: A.secrets_list(p),
             ("secrets", "CreateSecret"): lambda b, a, p: A.secrets_create(p),

@@ -74,6 +74,10 @@
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
+      <artifactId>cloudformation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
       <artifactId>cloudwatchlogs</artifactId>
     </dependency>
     <dependency>

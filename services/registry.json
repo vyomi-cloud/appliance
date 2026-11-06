@@ -489,6 +489,13 @@
    "name": "Amazon SES",
    "upstream": "sesv2",
    "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
+   "key": "cloudformation",
+   "name": "AWS CloudFormation",
+   "upstream": "cloudformation",
+   "status": "pending-release"
   }
  ]
 }

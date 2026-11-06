@@ -443,6 +443,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "secretsmanager": len(A.secrets_list().get("value", [])),
                 "sqs":            len(A.sqs_list_queues().get("queues", [])),
                 "cloudwatch":     len(A.cw_list().get("items", [])),
+                "cloudformation": len(A.cfn_list().get("items", [])),
                 "iam": (len(A.iam_list_users().get("users", [])) +
                         len(A.iam_list_roles().get("roles", [])) +
                         len(A.iam_list_policies().get("policies", [])) +

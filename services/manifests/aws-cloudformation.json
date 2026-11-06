@@ -1,0 +1,62 @@
+{
+  "cloud": "aws",
+  "key": "cloudformation",
+  "name": "AWS CloudFormation",
+  "upstream": "cloudformation",
+  "issue": 51,
+  "core": "core/cloudformation_core.py",
+  "operations": [
+    "CancelUpdateStack",
+    "CreateChangeSet",
+    "CreateStack",
+    "CreateStackSet",
+    "DeleteChangeSet",
+    "DeleteStack",
+    "DeleteStackSet",
+    "DescribeAccountLimits",
+    "DescribeChangeSet",
+    "DescribeStackEvents",
+    "DescribeStackResource",
+    "DescribeStackResources",
+    "DescribeStackSet",
+    "DescribeStacks",
+    "ExecuteChangeSet",
+    "GetStackPolicy",
+    "GetTemplate",
+    "GetTemplateSummary",
+    "ListChangeSets",
+    "ListExports",
+    "ListImports",
+    "ListStackResources",
+    "ListStackSets",
+    "ListStacks",
+    "SetStackPolicy",
+    "UpdateStack",
+    "UpdateTerminationProtection",
+    "ValidateTemplate"
+  ],
+  "backend": {
+    "kind": "in-process",
+    "name": "iac-engine"
+  },
+  "suites": [
+    "offline-sdk-java-aws-cloudformation",
+    "offline-sdk-go-aws-cloudformation",
+    "offline-cli-aws-cloudformation",
+    "offline-ui-aws-cloudformation",
+    "nano-ui-aws-cloudformation"
+  ],
+  "status": "ready",
+  "blank_like_real_console": [
+    {
+      "tab": "Events",
+      "column": "Status reason",
+      "why": "AWS console shows - for the Status reason of successful stack events"
+    },
+    {
+      "tab": "Outputs",
+      "column": "Export name",
+      "why": "AWS console shows - for an output that declares no Export"
+    }
+  ]
+}

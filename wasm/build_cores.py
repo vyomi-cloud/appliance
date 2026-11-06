@@ -66,6 +66,7 @@ CORES = [
     "sesv2_core.py",                                # AWS: SES v2 identities / templates / sending — native REST-JSON wire + console REST
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
+    "cloudformation_core.py",                      # AWS CloudFormation: stacks / change sets / events / exports (native Query wire)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
     "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)

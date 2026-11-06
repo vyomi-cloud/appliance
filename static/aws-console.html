@@ -835,7 +835,7 @@ function renderRail(){
       ["Networking & Content Delivery", ["vpc", "elbv2", "route53"]],
       ["Business Applications", ["sesv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms", "sts", "cognito-idp"]],
-      ["Management & Governance", ["logs", "ssm", "cloudwatch"]],
+      ["Management & Governance", ["cloudformation", "logs", "ssm", "cloudwatch"]],
     ];
     groups.forEach(([label, keys]) => {
       section(label);

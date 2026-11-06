@@ -47,6 +47,7 @@ from core import sqs_core as sqs
 from core import cloudwatch_core as cw
 from core import console_ecs as _ecs_console
 from core import console_cognito_idp as _cog_console
+from core import cloudformation_core as cfn
 
 # Shared registry (Fix #2): the console adapter and the native-wire relay
 # (AwsWireRouter via stores=) draw from ONE store set, so console-created resources
@@ -63,6 +64,7 @@ MSG = _R["msg"]
 CW = _R["cw"]
 ECS = _R["ecs"]
 COG = _R["cognito"]
+CFN = _R["cfn"]
 REGION = "us-east-1"
 
 _CODE_RE = re.compile(rb"<Code>([^<]+)</Code>")
@@ -1277,3 +1279,20 @@ def ssm_describe(p):
     from . import dataplane_adapter as _D
     r = _D.ssm_get(p)
     return {k: v for k, v in r.items() if k != "value"}
+
+
+# ── CloudFormation (Query wire — core/cloudformation_core.py) ───────────────
+def cfn_list(p=None):
+    return cfn.console_list(CFN)
+
+
+def cfn_create(p):
+    return cfn.console_create(CFN, p or {})
+
+
+def cfn_get(p):
+    return cfn.console_get(CFN, str(p.get("name") or ""))
+
+
+def cfn_delete(p):
+    return cfn.console_delete(CFN, str(p.get("name") or ""))

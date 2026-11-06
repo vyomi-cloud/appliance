@@ -142,6 +142,7 @@ from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
+from core import cloudformation_core as cfn
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 from core.azure_arm_core import AzureArm
@@ -215,6 +216,7 @@ _SIGNING = {
     "ecs": "ecs",
     "elasticache": "elasticache",
     "cognito-idp": "cognito-idp",
+    "cloudformation": "cloudformation",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -279,6 +281,16 @@ _QUERY_ACTION = {
     "AssumeRole": "sts", "AssumeRoleWithWebIdentity": "sts", "AssumeRoleWithSAML": "sts",
     "GetCallerIdentity": "sts", "GetSessionToken": "sts", "GetFederationToken": "sts",
     "GetAccessKeyInfo": "sts", "DecodeAuthorizationMessage": "sts",
+    # CloudFormation
+    "CreateStack": "cloudformation", "UpdateStack": "cloudformation", "DeleteStack": "cloudformation",
+    "DescribeStacks": "cloudformation", "ListStacks": "cloudformation",
+    "DescribeStackEvents": "cloudformation", "DescribeStackResources": "cloudformation",
+    "DescribeStackResource": "cloudformation", "ListStackResources": "cloudformation",
+    "GetTemplate": "cloudformation", "GetTemplateSummary": "cloudformation",
+    "ValidateTemplate": "cloudformation", "ListExports": "cloudformation",
+    "CreateChangeSet": "cloudformation", "DescribeChangeSet": "cloudformation",
+    "ExecuteChangeSet": "cloudformation", "DeleteChangeSet": "cloudformation",
+    "ListChangeSets": "cloudformation",
 }
 
 # ElastiCache (Query protocol; signs as `elasticache`). Verbs shared with other
@@ -411,6 +423,7 @@ class AwsWireRouter:
         self.elasticache = s.get("elasticache") or elasticache.ElastiCacheStore()
         self.sesv2 = s.get("sesv2") or sesv2.SesV2Store()
         self.ecs = s.get("ecs") or InMemoryEcsStore()   # Amazon ECS clusters/services/tasks
+        self.cfn = s.get("cfn") or cfn.CfnStore()             # CloudFormation stacks / change sets
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         events.set_target_store("kinesis", self.kinesis)       # EventBridge Kinesis / Logs rule targets
         events.set_target_store("logs", self.logs)
@@ -941,6 +954,8 @@ class AwsWireRouter:
             r = rds.dispatch(self.rds, params)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
+        elif svc == "cloudformation":
+            r = cfn.dispatch(self.cfn, params)
         elif svc == "elbv2":
             r = elbv2.dispatch(self.elbv2, params)
         elif svc == "elasticache":

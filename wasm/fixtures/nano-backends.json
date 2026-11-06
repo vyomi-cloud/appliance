@@ -213,5 +213,10 @@
   "name": "cw",
   "label": "CloudWatchStore",
   "category": "aws"
+ },
+ {
+  "name": "cfn",
+  "label": "CfnStore",
+  "category": "aws"
  }
 ]
