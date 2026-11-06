@@ -1192,8 +1192,9 @@ function buildSavingsCard(provider, cloud, accent){
 
 function buildConnectCard(){
   var card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
-  card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI"));
-  card.append(vyConnectSwitch({accent:"#0078d4", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
+  const head = el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI");
+  card.append(head);
+  card.append(vyConnectSwitch({slot: head, accent:"#0078d4", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
   return card;
 }
 

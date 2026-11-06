@@ -21,9 +21,17 @@
   /* o: {note, accent, build(ep) -> tabs} */
   window.vyConnectSwitch = function (o) {
     var root = document.createElement("div");
-    var bar = document.createElement("div"); bar.style.cssText = "display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:12px";
+    var bar = document.createElement("div");
     var body = document.createElement("div");
-    root.appendChild(bar); root.appendChild(body);
+    if (o.slot) {   // the toggle lives in the card header, right aligned (before the Info link when there is one)
+      bar.style.cssText = "display:flex;align-items:center;margin-left:auto;margin-right:10px;font-weight:400";
+      var info = o.slot.querySelector(".info");
+      if (info) o.slot.insertBefore(bar, info); else o.slot.appendChild(bar);
+    } else {
+      bar.style.cssText = "display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:12px";
+      root.appendChild(bar);
+    }
+    root.appendChild(body);
     var sel = (ls("nano_relay_mode") === "local") ? "local" : "cloud", local = false, drawn = "";
     function pill(id, label, on, dot, disabled) {   // segmented toggle switch: one rounded track, active segment filled
       var b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "switch"); b.setAttribute("aria-checked", String(on));

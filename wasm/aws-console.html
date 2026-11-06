@@ -1330,9 +1330,10 @@ function renderHome(main){
   nanoLoadSavings("aws", "var(--orange,#ec7211)", "AWS", {body:savings});
 
   const conn = el("div",{class:"widget"});
-  conn.append(el("div",{class:"wh"}, icon("terminal"), "Connect your SDK or CLI",
-    el("a",{class:"info",onclick:()=>toast("The real AWS CLI and SDKs reach this in-browser cloud through the Nano tunnel, with only the endpoint changed.","ok")}, "Info")));
-  conn.append(el("div",{class:"wb"}, vyConnectSwitch({accent:"var(--link)", build:(ep)=>vyConnectTabs({cloud:"aws", ep, region: REGION, nano:true})})));
+  const connHead = el("div",{class:"wh"}, icon("terminal"), "Connect your SDK or CLI",
+    el("a",{class:"info",onclick:()=>toast("The real AWS CLI and SDKs reach this in-browser cloud through the Nano tunnel, with only the endpoint changed.","ok")}, "Info"));
+  conn.append(connHead);
+  conn.append(el("div",{class:"wb"}, vyConnectSwitch({slot: connHead, accent:"var(--link)", build:(ep)=>vyConnectTabs({cloud:"aws", ep, region: REGION, nano:true})})));
   grid.append(conn);
 
 
