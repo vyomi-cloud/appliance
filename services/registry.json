@@ -440,6 +440,13 @@
    "upstream": "monitoring/v3",
    "status": "released",
    "released_in": "3.0.30"
+  },
+  {
+   "cloud": "azure",
+   "key": "msi",
+   "name": "Managed Identities",
+   "upstream": "msi",
+   "status": "pending-release"
   }
  ]
 }
