@@ -1,0 +1,495 @@
+{
+  "_comment": [
+    "Hand-curated client wiring for the `vyomi mcp` server. Merged into cmd/vyomi/mcp_matrix.json by scripts/gen_mcp_matrix.py.",
+    "Everything here is client-side knowledge that is NOT derivable from providers/*.py: which env vars real SDKs honor,",
+    "which data planes need TLS (:9443 via caddy), and which backends are separate emulator containers.",
+    "Primary sources: README.md 'Using your existing cloud SDKs', samples/java/cloud-probe/.../ProbeEnv.java,",
+    "providers/azure_services.py (Service Bus REST-only), docker-compose.appliance.yml (host ports).",
+    "Placeholders rendered by the Go server: {sim} = http://<host>:<sim_port>, {sim_hostport} = <host>:<sim_port>,",
+    "{host} = <host>, {tls_hostport} = <host>:<tls_port>, {account} = Azure storage/cosmos account name."
+  ],
+  "clouds": {
+    "aws": {
+      "env": [
+        {
+          "name": "AWS_ENDPOINT_URL",
+          "value": "{sim}",
+          "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code."
+        },
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "value": "test"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "value": "test"
+        },
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "AWS_PAGER",
+          "value": "",
+          "note": "Stops AWS CLI v2's pager swallowing short output."
+        }
+      ],
+      "notes": [
+        "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
+        "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+        "SNS->SQS fan-out works natively (shared MessagingStore)."
+      ],
+      "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}"
+    },
+    "gcp": {
+      "env": [
+        {
+          "name": "STORAGE_EMULATOR_HOST",
+          "value": "{sim}",
+          "note": "GCS rides the simulator endpoint."
+        },
+        {
+          "name": "PUBSUB_EMULATOR_HOST",
+          "value": "{host}:8085",
+          "note": "Separate gRPC emulator container, NOT the simulator port."
+        },
+        {
+          "name": "FIRESTORE_EMULATOR_HOST",
+          "value": "{host}:8080",
+          "note": "Separate gRPC emulator container, NOT the simulator port."
+        },
+        {
+          "name": "GOOGLE_CLOUD_PROJECT",
+          "value": "cloudlearn",
+          "note": "Use your active space's project id if it differs."
+        }
+      ],
+      "notes": [
+        "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
+        "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://{tls_hostport} (caddy) and trust its certificate.",
+        "gcloud command adapters are partial; prefer client libraries."
+      ],
+      "terraform": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+      "terraform_note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
+    },
+    "azure": {
+      "env": [
+        {
+          "name": "AZURE_STORAGE_CONNECTION_STRING",
+          "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};",
+          "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1."
+        },
+        {
+          "name": "AZURE_STORAGE_ACCOUNT",
+          "value": "{account}"
+        },
+        {
+          "name": "AZURE_SUBSCRIPTION_ID",
+          "value": "00000000-0000-0000-0000-cloudlearn01",
+          "note": "The only subscription a space has; any other id returns SubscriptionNotFound."
+        },
+        {
+          "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+          "value": "{sim}",
+          "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted."
+        },
+        {
+          "name": "AZURE_COSMOS_ENDPOINT",
+          "value": "https://{tls_hostport}/azure-data/cosmos/{account}",
+          "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate."
+        },
+        {
+          "name": "AZURE_COSMOS_KEY",
+          "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+        },
+        {
+          "name": "AZURE_KEYVAULT_URL",
+          "value": "https://cloudlearn.vault.localtest.me:{tls_port}",
+          "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form."
+        }
+      ],
+      "notes": [
+        "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+        "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
+      ],
+      "terraform": "",
+      "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
+    }
+  },
+  "scan": {
+    "skip_dirs": [
+      ".git",
+      "node_modules",
+      "vendor",
+      ".venv",
+      "venv",
+      "env",
+      "dist",
+      "build",
+      "target",
+      "__pycache__",
+      ".terraform",
+      ".next",
+      ".idea",
+      ".vscode",
+      "coverage"
+    ],
+    "extensions": [
+      ".py",
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".ts",
+      ".tsx",
+      ".jsx",
+      ".go",
+      ".java",
+      ".kt",
+      ".tf",
+      ".txt",
+      ".toml",
+      ".json",
+      ".xml",
+      ".gradle",
+      ".kts",
+      ".mod",
+      ".yml",
+      ".yaml",
+      ".env"
+    ],
+    "rules": [
+      {
+        "cloud": "aws",
+        "lang": "python",
+        "pattern": "boto3\\.(?:client|resource)\\(\\s*['\"]([a-z0-9-]+)['\"]"
+      },
+      {
+        "cloud": "aws",
+        "lang": "nodejs",
+        "pattern": "@aws-sdk/client-([a-z0-9-]+)"
+      },
+      {
+        "cloud": "aws",
+        "lang": "java",
+        "pattern": "software\\.amazon\\.awssdk\\.services\\.([a-z0-9]+)"
+      },
+      {
+        "cloud": "aws",
+        "lang": "go",
+        "pattern": "github\\.com/aws/aws-sdk-go-v2/service/([a-z0-9]+)"
+      },
+      {
+        "cloud": "aws",
+        "lang": "terraform",
+        "pattern": "resource\\s+\"aws_([a-z0-9]+)_"
+      },
+      {
+        "cloud": "gcp",
+        "lang": "python",
+        "pattern": "google\\.cloud(?:\\.|\\s+import\\s+)([a-z_]+)"
+      },
+      {
+        "cloud": "gcp",
+        "lang": "python",
+        "pattern": "\\bgoogle-cloud-([a-z-]+)"
+      },
+      {
+        "cloud": "gcp",
+        "lang": "nodejs",
+        "pattern": "@google-cloud/([a-z-]+)"
+      },
+      {
+        "cloud": "gcp",
+        "lang": "go",
+        "pattern": "cloud\\.google\\.com/go/([a-z]+)"
+      },
+      {
+        "cloud": "gcp",
+        "lang": "java",
+        "pattern": "com\\.google\\.cloud\\.([a-z]+)"
+      },
+      {
+        "cloud": "gcp",
+        "lang": "terraform",
+        "pattern": "resource\\s+\"google_([a-z0-9_]+)\""
+      },
+      {
+        "cloud": "azure",
+        "lang": "python",
+        "pattern": "\\b(AsyncAzureOpenAI|AzureOpenAI|AzureChatOpenAI|AzureOpenAIEmbeddings)\\b"
+      },
+      {
+        "cloud": "azure",
+        "lang": "nodejs",
+        "pattern": "\\b(AzureOpenAI|AzureChatOpenAI|AzureOpenAIEmbeddings)\\b"
+      },
+      {
+        "cloud": "azure",
+        "lang": "python",
+        "pattern": "(?:^|\\s)(?:from|import)\\s+azure\\.([a-z_]+(?:\\.[a-z_]+)?)"
+      },
+      {
+        "cloud": "azure",
+        "lang": "python",
+        "pattern": "\\bazure-(storage-blob|storage-queue|servicebus|cosmos|keyvault-[a-z]+|eventgrid|mgmt-[a-z]+)"
+      },
+      {
+        "cloud": "azure",
+        "lang": "nodejs",
+        "pattern": "@azure/([a-z-]+)"
+      },
+      {
+        "cloud": "azure",
+        "lang": "java",
+        "pattern": "com\\.azure\\.(messaging\\.servicebus|messaging\\.eventgrid|storage\\.blob|storage\\.queue|cosmos|security\\.keyvault|resourcemanager\\.[a-z]+)"
+      },
+      {
+        "cloud": "azure",
+        "lang": "go",
+        "pattern": "github\\.com/Azure/azure-sdk-for-go/sdk/(messaging/azservicebus|storage/azblob|storage/azqueue|data/azcosmos|security/keyvault|resourcemanager/[a-z]+/arm[a-z]+)"
+      },
+      {
+        "cloud": "azure",
+        "lang": "terraform",
+        "pattern": "resource\\s+\"azurerm_([a-z_]+?)(?:_[a-z]+)*\""
+      }
+    ],
+    "already_wired": "(endpoint_url|endpointOverride|AWS_ENDPOINT_URL|forcePathStyle|STORAGE_EMULATOR_HOST|PUBSUB_EMULATOR_HOST|FIRESTORE_EMULATOR_HOST|apiEndpoint|BlobEndpoint=|localtest\\.me|localhost:9000|127\\.0\\.0\\.1:9000)",
+    "aliases": {
+      "aws": {
+        "s3": "s3",
+        "s3control": "s3",
+        "sqs": "sqs",
+        "sns": "sns",
+        "dynamodb": "dynamodb",
+        "lambda": "lambda",
+        "iam": "iam",
+        "ec2": "ec2",
+        "vpc": "vpc",
+        "rds": "rds",
+        "rdsdata": "rds",
+        "rds-data": "rds",
+        "kms": "kms",
+        "secretsmanager": "secretsmanager",
+        "secrets-manager": "secretsmanager",
+        "events": "eventbridge",
+        "eventbridge": "eventbridge",
+        "cloudwatch": "cloudwatch",
+        "logs": "logs",
+        "cloudwatchlogs": "logs",
+        "apigateway": "apigateway",
+        "api-gateway": "apigateway",
+        "apigatewayv2": "apigatewayv2",
+        "kinesis": "kinesis",
+        "sfn": "stepfunctions",
+        "ssm": "ssm",
+        "elbv2": "elbv2",
+        "lb": "elbv2",
+        "security": "vpc",
+        "subnet": "vpc",
+        "internet": "vpc",
+        "route": "vpc",
+        "nat": "vpc",
+        "instance": "ec2",
+        "db": "rds",
+        "cloudwatchevent": "eventbridge",
+        "api": "apigateway",
+        "eip": "vpc",
+        "alb": "elbv2",
+        "states": "stepfunctions",
+        "ses": "ses",
+        "sesv2": "ses",
+        "email": "ses"
+      },
+      "gcp": {
+        "storage": "storage",
+        "pubsub": "pubsub",
+        "pubsub_v1": "pubsub",
+        "firestore": "firestore",
+        "firestore_v1": "firestore",
+        "secretmanager": "secretmanager",
+        "secret": "secretmanager",
+        "secret-manager": "secretmanager",
+        "kms": "kms",
+        "kms_v1": "kms",
+        "functions": "functions",
+        "functions_v1": "functions",
+        "functions_v2": "functions",
+        "cloudfunctions": "functions",
+        "cloudfunctions2": "functions",
+        "compute": "compute",
+        "compute_v1": "compute",
+        "sql": "cloudsql",
+        "cloudsql": "cloudsql",
+        "eventarc": "eventarc",
+        "iam": "iam",
+        "project": "iam",
+        "api": "apigateway",
+        "apigateway": "apigateway",
+        "monitoring": "monitoring",
+        "redis": "redis",
+        "scheduler": "cloudscheduler",
+        "cloud": "_ignore",
+        "run": "run",
+        "container": "container",
+        "artifactregistry": "artifactregistry",
+        "exceptions": "_ignore",
+        "api_core": "_ignore",
+        "client": "_ignore",
+        "core": "_ignore",
+        "secret_manager": "secretmanager",
+        "bigquery": "bigquery",
+        "logging": "logging",
+        "tasks": "tasks",
+        "spanner": "spanner",
+        "cloud_scheduler_job": "cloudscheduler",
+        "cloud_run_service": "run",
+        "cloud_run_v2_service": "run",
+        "cloud_tasks_queue": "tasks",
+        "sql_database_instance": "cloudsql",
+        "sql_database": "cloudsql",
+        "artifact": "artifactregistry",
+        "service_account": "iam",
+        "iamcredentials": "iamcredentials"
+      },
+      "azure": {
+        "storage.blob": "storage",
+        "storage.queue": "storage",
+        "storage-blob": "storage",
+        "storage-queue": "storage",
+        "storage/azblob": "storage",
+        "storage/azqueue": "storage",
+        "storage_account": "storage",
+        "storage_container": "storage",
+        "storage_queue": "storage",
+        "storage": "storage",
+        "servicebus": "servicebus",
+        "service-bus": "servicebus",
+        "messaging.servicebus": "servicebus",
+        "messaging/azservicebus": "servicebus",
+        "servicebus_namespace": "servicebus",
+        "servicebus_queue": "servicebus",
+        "servicebus_topic": "servicebus",
+        "cosmos": "cosmos",
+        "data/azcosmos": "cosmos",
+        "cosmosdb": "cosmos",
+        "cosmosdb_account": "cosmos",
+        "keyvault": "keyvault",
+        "security.keyvault": "keyvault",
+        "security/keyvault": "keyvault",
+        "key_vault": "keyvault",
+        "key": "keyvault",
+        "eventgrid": "eventgrid",
+        "messaging.eventgrid": "eventgrid",
+        "functions": "functionapp",
+        "function_app": "functionapp",
+        "linux_function_app": "functionapp",
+        "windows_function_app": "functionapp",
+        "linux": "functionapp",
+        "windows": "functionapp",
+        "virtual": "vm",
+        "linux_virtual_machine": "vm",
+        "windows_virtual_machine": "vm",
+        "virtual_network": "vnet",
+        "subnet": "vnet",
+        "network": "vnet",
+        "mssql": "sql",
+        "sql": "sql",
+        "api_management": "apim",
+        "api": "apim",
+        "role_assignment": "rbac",
+        "role": "rbac",
+        "resource_group": "_core",
+        "resource": "_core",
+        "compute": "vm",
+        "armcompute": "vm",
+        "armnetwork": "vnet",
+        "armstorage": "storage",
+        "armsql": "sql",
+        "armservicebus": "servicebus",
+        "armcosmos": "cosmos",
+        "armkeyvault": "keyvault",
+        "armappservice": "functionapp",
+        "armresources": "_core",
+        "armauthorization": "rbac",
+        "armapimanagement": "apim",
+        "armeventgrid": "eventgrid",
+        "appservice": "functionapp",
+        "web": "functionapp",
+        "resources": "_core",
+        "authorization": "rbac",
+        "apimanagement": "apim",
+        "resourcemanager": "_core",
+        "keyvault-secrets": "keyvault",
+        "keyvault-keys": "keyvault",
+        "keyvault-certificates": "keyvault",
+        "secrets": "keyvault",
+        "keys": "keyvault",
+        "certificates": "keyvault",
+        "blob": "storage",
+        "queue": "storage",
+        "azblob": "storage",
+        "azqueue": "storage",
+        "azservicebus": "servicebus",
+        "azcosmos": "cosmos",
+        "identity": "_ignore",
+        "core": "_ignore",
+        "monitor": "monitor",
+        "appconfiguration": "appconfiguration",
+        "app-configuration": "appconfiguration",
+        "azureopenai": "cognitiveservices",
+        "asyncazureopenai": "cognitiveservices",
+        "azurechatopenai": "cognitiveservices",
+        "azureopenaiembeddings": "cognitiveservices",
+        "openai": "cognitiveservices",
+        "ai": "cognitiveservices",
+        "cognitiveservices": "cognitiveservices",
+        "search": "search",
+        "search-documents": "search",
+        "search.documents": "search",
+        "eventhub": "eventhubs",
+        "event-hubs": "eventhubs",
+        "eventhubs": "eventhubs",
+        "monitor-opentelemetry": "_ignore",
+        "opentelemetry": "_ignore",
+        "common": "_ignore",
+        "logger": "_ignore",
+        "abort-controller": "_ignore",
+        "msal-node": "_ignore",
+        "msal-browser": "_ignore",
+        "data": "_ignore",
+        "data.tables": "tables",
+        "tables": "tables",
+        "data-tables": "tables",
+        "loganalytics": "operationalinsights",
+        "log_analytics_workspace": "operationalinsights",
+        "operationalinsights": "operationalinsights",
+        "network_security_group": "nsg",
+        "app_service": "app",
+        "linux_web_app": "app",
+        "windows_web_app": "app",
+        "service_plan": "app"
+      }
+    },
+    "warnings": {
+      "azure/servicebus": "Service Bus SDKs default to AMQP, which the simulator does not support. Use the Service Bus REST protocol ({sim}/azure-data/servicebus) or Azure Storage Queues.",
+      "azure/cosmos": "Cosmos SDKs require TLS: point them at https://{tls_hostport}/azure-data/cosmos/<account> and trust the caddy certificate.",
+      "azure/keyvault": "Key Vault SDKs require TLS and host-based URLs: https://<vault>.vault.localtest.me:{tls_port}.",
+      "gcp/secretmanager": "No Google emulator exists: use the REST/HttpJson transport against https://{tls_hostport}.",
+      "gcp/kms": "No Google emulator exists: use the REST/HttpJson transport against https://{tls_hostport}.",
+      "gcp/pubsub": "Pub/Sub is a separate emulator: set PUBSUB_EMULATOR_HOST={host}:8085 (not the simulator port).",
+      "gcp/firestore": "Firestore is a separate emulator: set FIRESTORE_EMULATOR_HOST={host}:8080 (not the simulator port).",
+      "azure/cognitiveservices": "Azure OpenAI in Vyomi is SIMULATED (deterministic, labelled output, no real model): AzureOpenAI(azure_endpoint={sim}/azure-data/openai/<account>, api_key=<account key>). Good for wiring and tests, not for judging model quality."
+    }
+  },
+  "id_aliases": {
+    "gcp": {
+      "sql": "cloudsql"
+    }
+  },
+  "_id_aliases_comment": "capabilities.py / pack ids that differ from the services/registry.json key."
+}

@@ -1,0 +1,1629 @@
+{
+ "appliance_version": "3.0.45",
+ "clouds": {
+  "aws": {
+   "display_name": "AWS",
+   "native_services": [
+    "S3",
+    "IAM",
+    "EC2",
+    "Lambda",
+    "RDS",
+    "SQS",
+    "DynamoDB",
+    "API Gateway",
+    "VPC"
+   ],
+   "services": [
+    {
+     "actions": [
+      "CreateRestApi",
+      "CreateResource",
+      "PutMethod",
+      "PutIntegration",
+      "CreateDeployment",
+      "CreateStage"
+     ],
+     "id": "apigateway",
+     "name": "API Gateway",
+     "pack_id": "cloudlearn.apigateway.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "APIs, resources, methods, integrations, deployments, stages, and invoke routes are available."
+    },
+    {
+     "id": "apigatewayv2",
+     "name": "API Gateway V2",
+     "released_in": "3.0.25",
+     "status": "released"
+    },
+    {
+     "id": "cloudwatch",
+     "name": "Amazon CloudWatch",
+     "released_in": "3.0.26",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "CreateTable",
+      "ListTables",
+      "DescribeTable",
+      "PutItem",
+      "GetItem",
+      "UpdateItem",
+      "DeleteItem",
+      "Query",
+      "Scan",
+      "BatchGetItem",
+      "BatchWriteItem"
+     ],
+     "id": "dynamodb",
+     "name": "DynamoDB",
+     "pack_id": "cloudlearn.dynamodb.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Tables, items, query, scan, and tag management are available."
+    },
+    {
+     "actions": [
+      "RunInstances",
+      "StartInstances",
+      "StopInstances",
+      "TerminateInstances"
+     ],
+     "id": "ec2",
+     "name": "EC2",
+     "pack_id": "cloudlearn.ec2.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Instances, runtime bootstrap, and console access are available."
+    },
+    {
+     "id": "elbv2",
+     "name": "Elastic Load Balancing",
+     "released_in": "3.0.10",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "PutEvents",
+      "PutRule",
+      "DeleteRule",
+      "ListRules",
+      "PutTargets",
+      "RemoveTargets",
+      "CreateEventBus",
+      "DeleteEventBus"
+     ],
+     "data_plane": "NATS (cloudlearn-nats:4222) — PutEvents publishes to aws.eventbridge.<bus>.<source> subjects",
+     "id": "eventbridge",
+     "name": "EventBridge",
+     "pack_id": "cloudlearn.eventbridge.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "CreateUser",
+      "CreateRole",
+      "CreatePolicy",
+      "AttachPolicy"
+     ],
+     "id": "iam",
+     "name": "IAM",
+     "pack_id": "cloudlearn.iam.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Users, groups, roles, policies, attachments, identity providers, and account settings are available."
+    },
+    {
+     "actions": [
+      "CreateKey",
+      "Encrypt",
+      "Decrypt",
+      "GenerateDataKey",
+      "DescribeKey",
+      "ListKeys",
+      "CreateAlias",
+      "DeleteAlias",
+      "ScheduleKeyDeletion"
+     ],
+     "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit engine; X-Amz-Target=TrentService.* dispatch via vault_routes._aws_kms_dispatch",
+     "id": "kms",
+     "name": "KMS",
+     "pack_id": "cloudlearn.kms.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "CreateFunction",
+      "ListFunctions",
+      "Invoke",
+      "UpdateFunctionCode",
+      "UpdateFunctionConfiguration",
+      "PublishVersion",
+      "AddPermission",
+      "RemovePermission",
+      "GetPolicy"
+     ],
+     "id": "lambda",
+     "name": "Lambda",
+     "pack_id": "cloudlearn.lambda.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Functions, code/config updates, permissions, versions, and invoke flows are available."
+    },
+    {
+     "id": "logs",
+     "name": "CloudWatch Logs",
+     "released_in": "3.0.11",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "CreateDBInstance",
+      "DescribeDBInstances",
+      "ModifyDBInstance",
+      "DeleteDBInstance",
+      "CreateDBSnapshot",
+      "RestoreDBInstanceFromDBSnapshot",
+      "CreateDBSubnetGroup",
+      "CreateDBParameterGroup"
+     ],
+     "data_plane": "metadata-only (Postgres engine reuse for real connections is post-MVP — see [[mvp-backend-stack-shipped]])",
+     "id": "rds",
+     "name": "RDS",
+     "pack_id": "cloudlearn.rds.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Databases, subnet groups, parameter groups, snapshots, and tag management are available."
+    },
+    {
+     "actions": [
+      "CreateBucket",
+      "PutObject",
+      "GetObject",
+      "DeleteObject",
+      "ListObjects"
+     ],
+     "id": "s3",
+     "name": "S3",
+     "pack_id": "cloudlearn.s3.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Path-style S3 REST and console flows are available locally."
+    },
+    {
+     "actions": [
+      "CreateSecret",
+      "GetSecretValue",
+      "PutSecretValue",
+      "UpdateSecret",
+      "DeleteSecret",
+      "ListSecrets",
+      "ListSecretVersionIds",
+      "RotateSecret"
+     ],
+     "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — KV v2 backed; X-Amz-Target dispatch via vault_routes._aws_secrets_dispatch",
+     "id": "secretsmanager",
+     "name": "Secrets Manager",
+     "pack_id": "cloudlearn.secretsmanager.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "id": "sns",
+     "name": "Amazon SNS",
+     "released_in": "3.0.28",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "CreateQueue",
+      "ListQueues",
+      "GetQueueUrl",
+      "GetQueueAttributes",
+      "SetQueueAttributes",
+      "SendMessage",
+      "ReceiveMessage",
+      "DeleteMessage",
+      "ChangeMessageVisibility",
+      "PurgeQueue",
+      "TagQueue",
+      "UntagQueue",
+      "ListQueueTags"
+     ],
+     "id": "sqs",
+     "name": "SQS",
+     "pack_id": "cloudlearn.sqs.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Queues, message delivery, visibility, purge, and tags are available."
+    },
+    {
+     "id": "ssm",
+     "name": "Systems Manager",
+     "released_in": "3.0.12",
+     "status": "released"
+    },
+    {
+     "id": "stepfunctions",
+     "name": "Step Functions",
+     "released_in": "3.0.13",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "CreateVpc",
+      "CreateSubnet",
+      "CreateSecurityGroup",
+      "CreateRouteTable"
+     ],
+     "id": "vpc",
+     "name": "VPC",
+     "pack_id": "cloudlearn.vpc.basic",
+     "protocol": "aws-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "VPCs, subnets, route tables, security groups, and internet gateways are available."
+    }
+   ],
+   "tools": {
+    "cli": {
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "aws s3 ls --endpoint-url http://127.0.0.1:9000",
+      "aws ec2 describe-instances --endpoint-url http://127.0.0.1:9000",
+      "aws iam list-users --endpoint-url http://127.0.0.1:9000",
+      "aws sqs list-queues --endpoint-url http://127.0.0.1:9000",
+      "aws dynamodb list-tables --endpoint-url http://127.0.0.1:9000",
+      "aws lambda list-functions --endpoint-url http://127.0.0.1:9000",
+      "aws apigateway get-rest-apis --endpoint-url http://127.0.0.1:9000"
+     ],
+     "notes": "This simulator accepts AWS-style request/response shapes locally across S3, IAM, EC2, Lambda, VPC, RDS, SQS, DynamoDB, and API Gateway.",
+     "status": "integrated",
+     "tool": "awscli"
+    },
+    "go": {
+     "config": {
+      "baseEndpoint": "http://127.0.0.1:9000",
+      "credentials": "test/test",
+      "region": "us-east-1"
+     },
+     "dependency": "github.com/aws/aws-sdk-go-v2",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Use BaseEndpoint to point the client at the simulator.",
+      "Service request/response bodies stay AWS-shaped."
+     ],
+     "status": "partial",
+     "tool": "aws-sdk-go"
+    },
+    "java": {
+     "config": {
+      "credentials": "test/test",
+      "endpointOverride": "http://127.0.0.1:9000",
+      "region": "us-east-1"
+     },
+     "dependency": "software.amazon.awssdk:*",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Configure the SDK client with endpointOverride=http://127.0.0.1:9000",
+      "Use the same service names and request models as AWS SDK v2."
+     ],
+     "status": "partial",
+     "tool": "aws-sdk-java"
+    },
+    "nodejs": {
+     "config": {
+      "credentials": "test/test",
+      "endpoint": "http://127.0.0.1:9000",
+      "forcePathStyle": true,
+      "region": "us-east-1"
+     },
+     "dependency": "@aws-sdk/client-*",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Pass endpoint to each service client constructor.",
+      "Use forcePathStyle for S3."
+     ],
+     "status": "partial",
+     "tool": "aws-sdk-js-v3"
+    },
+    "python": {
+     "config": {
+      "credentials": "test/test",
+      "endpoint_url": "http://127.0.0.1:9000",
+      "region_name": "us-east-1"
+     },
+     "dependency": "boto3",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Use endpoint_url to point boto3 clients at the simulator.",
+      "All standard boto3 service clients work with the simulator endpoint."
+     ],
+     "status": "partial",
+     "tool": "boto3"
+    }
+   },
+   "wiring": {
+    "env": [
+     {
+      "name": "AWS_ENDPOINT_URL",
+      "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code.",
+      "value": "{sim}"
+     },
+     {
+      "name": "AWS_ACCESS_KEY_ID",
+      "value": "test"
+     },
+     {
+      "name": "AWS_SECRET_ACCESS_KEY",
+      "value": "test"
+     },
+     {
+      "name": "AWS_DEFAULT_REGION",
+      "value": "us-east-1"
+     },
+     {
+      "name": "AWS_REGION",
+      "value": "us-east-1"
+     },
+     {
+      "name": "AWS_PAGER",
+      "note": "Stops AWS CLI v2's pager swallowing short output.",
+      "value": ""
+     }
+    ],
+    "notes": [
+     "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
+     "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+     "SNS->SQS fan-out works natively (shared MessagingStore)."
+    ],
+    "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}"
+   }
+  },
+  "azure": {
+   "display_name": "Azure",
+   "native_services": [
+    "Virtual Machines",
+    "Functions",
+    "SQL Database",
+    "Service Bus",
+    "Cosmos DB"
+   ],
+   "services": [
+    {
+     "actions": [
+      "ApiManagementService_CreateOrUpdate",
+      "ApiManagementService_Get",
+      "ApiManagementService_Delete",
+      "ApiManagementService_List",
+      "Api_CreateOrUpdate",
+      "Product_CreateOrUpdate",
+      "Subscription_CreateOrUpdate",
+      "Policy_CreateOrUpdate"
+     ],
+     "data_plane": "metadata-only (policy XML stored; not enforced)",
+     "id": "apim",
+     "name": "API Management",
+     "pack_id": "cloudlearn.azure.apim.basic",
+     "protocol": "azure-arm",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "API Management service CRUD via ARM (LRO)."
+    },
+    {
+     "id": "app",
+     "name": "Container Apps",
+     "released_in": "3.0.18",
+     "status": "released"
+    },
+    {
+     "id": "appconfiguration",
+     "name": "App Configuration",
+     "released_in": "3.0.19",
+     "status": "released"
+    },
+    {
+     "id": "cognitiveservices",
+     "name": "Azure AI services",
+     "released_in": "3.0.20",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "DatabaseAccounts_CreateOrUpdate",
+      "DatabaseAccounts_Get",
+      "DatabaseAccounts_Delete",
+      "DatabaseAccounts_List",
+      "DatabaseAccounts_ListKeys",
+      "SqlResources_CreateUpdateSqlDatabase",
+      "SqlResources_CreateUpdateSqlContainer",
+      "Docs_Create",
+      "Docs_Query"
+     ],
+     "data_plane": "in-process SQL API subset under /azure-data/cosmos/{account}/dbs/{db}/colls/{coll}/docs",
+     "id": "cosmos",
+     "name": "Cosmos DB",
+     "pack_id": "cloudlearn.azure.cosmos.basic",
+     "protocol": "azure-arm+rest",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Account CRUD + sim-native Cosmos SQL REST (dbs/colls/docs) under /azure-data/cosmos."
+    },
+    {
+     "id": "dns",
+     "name": "DNS zones",
+     "released_in": "3.0.21",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "Topics_CreateOrUpdate",
+      "Topics_Get",
+      "Topics_Delete",
+      "Topics_List",
+      "EventSubscriptions_CreateOrUpdate",
+      "Events_Publish"
+     ],
+     "data_plane": "NATS (cloudlearn-nats:4222) — events publish to azure.eventgrid.<topic> subjects",
+     "id": "eventgrid",
+     "name": "Event Grid topics",
+     "pack_id": "cloudlearn.azure.eventgrid.basic",
+     "protocol": "azure-arm+rest",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "WebApps_CreateOrUpdate",
+      "WebApps_Get",
+      "WebApps_Delete",
+      "WebApps_List",
+      "WebApps_Start",
+      "WebApps_Stop",
+      "WebApps_Restart",
+      "WebApps_ListFunctions",
+      "WebApps_CreateOrUpdateSlot"
+     ],
+     "data_plane": "metadata only (function exec not yet wired; see post-MVP roadmap)",
+     "id": "functionapp",
+     "name": "Function apps",
+     "pack_id": "cloudlearn.azure.functionapp.basic",
+     "protocol": "azure-arm",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Function app (site) CRUD via ARM."
+    },
+    {
+     "actions": [
+      "Vaults_CreateOrUpdate",
+      "Vaults_Get",
+      "Vaults_Delete",
+      "Vaults_List",
+      "Keys_Encrypt",
+      "Keys_Decrypt",
+      "Secrets_Get",
+      "Secrets_Put"
+     ],
+     "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit for keys, KV v2 for secrets",
+     "id": "keyvault",
+     "name": "Key vaults",
+     "pack_id": "cloudlearn.azure.keyvault.basic",
+     "protocol": "azure-arm+rest",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "id": "monitor",
+     "name": "Monitor alerts",
+     "released_in": "3.0.22",
+     "status": "released"
+    },
+    {
+     "id": "nsg",
+     "name": "Network Security Group",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "id": "operationalinsights",
+     "name": "Log Analytics",
+     "released_in": "3.0.23",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "RoleAssignments_Create",
+      "RoleAssignments_Get",
+      "RoleAssignments_Delete",
+      "RoleAssignments_List",
+      "RoleDefinitions_List"
+     ],
+     "data_plane": "Cedar policy engine (compiles RBAC assignments → Cedar permit rules; evaluated via /api/iam/evaluate)",
+     "id": "rbac",
+     "name": "Entra ID / RBAC",
+     "pack_id": "cloudlearn.azure.rbac.basic",
+     "protocol": "azure-arm",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Role assignment CRUD (synchronous)."
+    },
+    {
+     "actions": [
+      "Namespaces_CreateOrUpdate",
+      "Namespaces_Get",
+      "Namespaces_Delete",
+      "Namespaces_List",
+      "Queues_CreateOrUpdate",
+      "Queues_Send",
+      "Queues_Receive",
+      "Topics_CreateOrUpdate",
+      "Subscriptions_CreateOrUpdate"
+     ],
+     "data_plane": "in-process broker under /azure-data/servicebus/{namespace}/{entity}/messages",
+     "id": "servicebus",
+     "name": "Service Bus",
+     "pack_id": "cloudlearn.azure.servicebus.basic",
+     "protocol": "azure-arm+rest",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Namespace/queue/topic CRUD + REST send/receive broker under /azure-data/servicebus."
+    },
+    {
+     "actions": [
+      "Servers_CreateOrUpdate",
+      "Servers_Get",
+      "Servers_Delete",
+      "Servers_List",
+      "Databases_CreateOrUpdate",
+      "Databases_Get",
+      "Databases_Delete",
+      "Databases_List",
+      "FirewallRules_CreateOrUpdate"
+     ],
+     "data_plane": "postgres:16-alpine (each Microsoft.Sql/servers/databases backed by a real Postgres DB via gcp_sql_engine)",
+     "id": "sql",
+     "name": "SQL servers",
+     "pack_id": "cloudlearn.azure.sql.basic",
+     "protocol": "azure-arm",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "SQL server/database CRUD; each database is backed by a real Postgres database."
+    },
+    {
+     "actions": [
+      "StorageAccounts_Create",
+      "StorageAccounts_Get",
+      "StorageAccounts_Delete",
+      "StorageAccounts_List",
+      "StorageAccounts_ListKeys",
+      "BlobContainers_Create",
+      "BlobContainers_Get",
+      "BlobContainers_Delete",
+      "Blob_Put",
+      "Blob_Get",
+      "Blob_Delete"
+     ],
+     "data_plane": "fake-gcs-server (Blob bytes shared with GCP storage layer)",
+     "id": "storage",
+     "name": "Storage accounts",
+     "pack_id": "cloudlearn.azure.storage.basic",
+     "protocol": "azure-arm+blob",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Storage account CRUD + real Blob data plane (containers/blobs) under /azure-data/blob."
+    },
+    {
+     "actions": [
+      "VirtualMachines_CreateOrUpdate",
+      "VirtualMachines_Get",
+      "VirtualMachines_Delete",
+      "VirtualMachines_List",
+      "VirtualMachines_Start",
+      "VirtualMachines_PowerOff",
+      "VirtualMachines_Restart",
+      "VirtualMachines_Deallocate"
+     ],
+     "data_plane": "lxd/multipass (LXD-backed VMs with tier-mapped limits)",
+     "id": "vm",
+     "name": "Virtual Machines",
+     "pack_id": "cloudlearn.azure.vm.basic",
+     "protocol": "azure-arm",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "VM CRUD via ARM with Azure-AsyncOperation (LRO) polling."
+    },
+    {
+     "actions": [
+      "VirtualNetworks_CreateOrUpdate",
+      "VirtualNetworks_Get",
+      "VirtualNetworks_Delete",
+      "VirtualNetworks_List",
+      "Subnets_CreateOrUpdate",
+      "VirtualNetworkPeerings_CreateOrUpdate",
+      "NetworkSecurityGroups_CreateOrUpdate"
+     ],
+     "data_plane": "topology metadata only (no real packet flow)",
+     "id": "vnet",
+     "name": "Virtual networks",
+     "pack_id": "cloudlearn.azure.vnet.basic",
+     "protocol": "azure-arm",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "VNet + subnet CRUD via ARM."
+    }
+   ],
+   "tools": {
+    "cli": {
+     "config": {
+      "ARM endpoint": "set AZURE_RESOURCE_MANAGER_HOSTNAME to the simulator host (e.g. 192.168.252.7:9000) — the simulator serves /subscriptions/... ARM routes",
+      "subscription": "the space has one subscription, 00000000-0000-0000-0000-cloudlearn01 (GET /subscriptions returns it, as `az login` reads it); any other id is SubscriptionNotFound, as in Azure"
+     },
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "az vm list --resource-group rg-demo",
+      "az storage account list --resource-group rg-demo",
+      "az sql server list --resource-group rg-demo",
+      "az servicebus namespace list --resource-group rg-demo",
+      "az cosmosdb list --resource-group rg-demo",
+      "az functionapp list --resource-group rg-demo",
+      "az apim list --resource-group rg-demo",
+      "az network vnet list --resource-group rg-demo",
+      "az eventgrid topic list --resource-group rg-demo",
+      "az keyvault list --resource-group rg-demo",
+      "az role assignment list"
+     ],
+     "notes": "Azure CLI dev usage in the simulator: point ARM at the simulator host. Real az CLI binaries work for any service whose ARM operation is implemented (covered by the 11 service packs in packs/azure/).",
+     "status": "partial",
+     "tool": "az"
+    },
+    "go": {
+     "config": {
+      "ARM endpoint": "http://127.0.0.1:9000",
+      "ClientOptions": "arm.ClientOptions{ClientOptions: azcore.ClientOptions{Cloud: cloud.Configuration{Services: map[cloud.ServiceName]cloud.ServiceConfiguration{cloud.ResourceManager: {Endpoint: endpoint, Audience: endpoint}}}}}",
+      "credentials": "azidentity.NewDefaultAzureCredential — simulator accepts any token"
+     },
+     "dependency": "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/* (armcompute, armstorage, armsql, armservicebus, armcosmos, armappservice, armapimanagement, armnetwork, armeventgrid, armkeyvault, armauthorization)",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Configure cloud.Configuration to point ResourceManager at the simulator base URL.",
+      "Real conformance test in tests/conformance/azure-sdk-go/ proves armcompute/armstorage/armsql/armservicebus/armcosmos round-trip."
+     ],
+     "status": "integrated",
+     "tool": "azure-sdk-for-go"
+    },
+    "java": {
+     "config": {
+      "ARM endpoint": "http://127.0.0.1:9000",
+      "AzureProfile": "AzureProfile(AzureEnvironment.AZURE).withSubscription('00000000-0000-0000-0000-cloudlearn01')",
+      "credentials": "AzureCliCredential or DefaultAzureCredential — simulator accepts any"
+     },
+     "dependency": "com.azure:azure-resourcemanager-* (com.azure:azure-resourcemanager-compute, -storage, -sql, -servicebus, -cosmos, -appservice, -apimanagement, -network, -eventgrid, -keyvault, -authorization)",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Use AzureResourceManager.authenticate() with a profile that points HttpClient at the simulator.",
+      "Real conformance test in tests/conformance/azure-sdk-java/ proves armcompute/armstorage/armsql/armservicebus/armcosmos round-trip."
+     ],
+     "status": "integrated",
+     "tool": "azure-sdk-for-java"
+    },
+    "nodejs": {
+     "config": {
+      "$host": "http://127.0.0.1:9000",
+      "credentials": "DefaultAzureCredential",
+      "subscriptionId": "00000000-0000-0000-0000-cloudlearn01"
+     },
+     "dependency": "@azure/arm-compute (and other @azure/arm-* packages)",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Pass $host option to each management client constructor.",
+      "Use DefaultAzureCredential — simulator accepts any token."
+     ],
+     "status": "partial",
+     "tool": "azure-sdk-for-js"
+    },
+    "python": {
+     "config": {
+      "base_url": "http://127.0.0.1:9000",
+      "credentials": "DefaultAzureCredential",
+      "subscription_id": "00000000-0000-0000-0000-cloudlearn01"
+     },
+     "dependency": "azure-mgmt-compute (and other azure-mgmt-* packages)",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Pass base_url to each management client constructor.",
+      "Use DefaultAzureCredential — simulator accepts any token."
+     ],
+     "status": "partial",
+     "tool": "azure-sdk-for-python"
+    }
+   },
+   "wiring": {
+    "env": [
+     {
+      "name": "AZURE_STORAGE_CONNECTION_STRING",
+      "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1.",
+      "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};"
+     },
+     {
+      "name": "AZURE_STORAGE_ACCOUNT",
+      "value": "{account}"
+     },
+     {
+      "name": "AZURE_SUBSCRIPTION_ID",
+      "note": "The only subscription a space has; any other id returns SubscriptionNotFound.",
+      "value": "00000000-0000-0000-0000-cloudlearn01"
+     },
+     {
+      "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+      "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted.",
+      "value": "{sim}"
+     },
+     {
+      "name": "AZURE_COSMOS_ENDPOINT",
+      "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate.",
+      "value": "https://{tls_hostport}/azure-data/cosmos/{account}"
+     },
+     {
+      "name": "AZURE_COSMOS_KEY",
+      "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+     },
+     {
+      "name": "AZURE_KEYVAULT_URL",
+      "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form.",
+      "value": "https://cloudlearn.vault.localtest.me:{tls_port}"
+     }
+    ],
+    "notes": [
+     "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+     "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
+    ],
+    "terraform": "",
+    "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
+   }
+  },
+  "gcp": {
+   "display_name": "GCP",
+   "native_services": [
+    "Compute Engine",
+    "Cloud Storage",
+    "Cloud SQL",
+    "Pub/Sub",
+    "Firestore",
+    "Cloud Functions",
+    "API Gateway",
+    "VPC Network",
+    "IAM"
+   ],
+   "services": [
+    {
+     "actions": [
+      "Apis.list",
+      "Apis.create",
+      "Apis.get",
+      "Apis.delete",
+      "Apis.deploy",
+      "Apis.stages"
+     ],
+     "id": "apigateway",
+     "name": "API Gateway",
+     "pack_id": "cloudlearn.gcp.apigateway.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "APIs, configs, and gateways are available."
+    },
+    {
+     "id": "artifactregistry",
+     "name": "Artifact Registry",
+     "released_in": "3.0.29",
+     "status": "released"
+    },
+    {
+     "id": "cloudscheduler",
+     "name": "Cloud Scheduler",
+     "released_in": "3.0.14",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "Instances.list",
+      "Instances.insert",
+      "Instances.get",
+      "Instances.delete",
+      "Instances.start",
+      "Instances.stop",
+      "Instances.restart"
+     ],
+     "id": "cloudsql",
+     "name": "Cloud SQL",
+     "pack_id": "cloudlearn.gcp.cloudsql.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Instances, restarts, and lifecycle operations are available."
+    },
+    {
+     "actions": [
+      "Instances.list",
+      "Instances.get",
+      "Instances.insert",
+      "Instances.delete",
+      "Instances.start",
+      "Instances.stop",
+      "Instances.reset"
+     ],
+     "id": "compute",
+     "name": "Compute Engine",
+     "pack_id": "cloudlearn.gcp.compute.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Instances, project/zone routing, start/stop/reset, and delete flows are available."
+    },
+    {
+     "id": "container",
+     "name": "Kubernetes Engine",
+     "released_in": "3.0.15",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "projects.locations.triggers.create",
+      "projects.locations.triggers.get",
+      "projects.locations.triggers.delete",
+      "projects.locations.triggers.list",
+      "projects.locations.channels.create",
+      "projects.locations.channels.publish"
+     ],
+     "data_plane": "NATS (cloudlearn-nats:4222) — trigger.fire and channels:publish push to gcp.eventarc.<trigger> subjects",
+     "id": "eventarc",
+     "name": "Eventarc",
+     "pack_id": "cloudlearn.gcp.eventarc.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "Documents.list",
+      "Documents.create",
+      "Documents.get",
+      "Documents.update",
+      "Documents.delete",
+      "Documents.query"
+     ],
+     "id": "firestore",
+     "name": "Firestore",
+     "pack_id": "cloudlearn.gcp.firestore.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Documents, collection listing, and query endpoints are available."
+    },
+    {
+     "actions": [
+      "Functions.list",
+      "Functions.create",
+      "Functions.get",
+      "Functions.update",
+      "Functions.delete",
+      "Functions.invoke"
+     ],
+     "id": "functions",
+     "name": "Cloud Functions",
+     "pack_id": "cloudlearn.gcp.functions.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Functions, IAM policy, invocations, and call flows are available."
+    },
+    {
+     "actions": [
+      "ListUsers",
+      "ListGroups",
+      "ListRoles",
+      "ListPolicies",
+      "AttachPolicy",
+      "DetachPolicy"
+     ],
+     "id": "iam",
+     "name": "IAM & Admin",
+     "pack_id": "cloudlearn.gcp.iam.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Project IAM policy, test permissions, service accounts, and account settings are available."
+    },
+    {
+     "id": "iamcredentials",
+     "name": "IAM Service Account Credentials",
+     "released_in": "3.0.16",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "projects.locations.keyRings.create",
+      "projects.locations.keyRings.cryptoKeys.create",
+      "projects.locations.keyRings.cryptoKeys.encrypt",
+      "projects.locations.keyRings.cryptoKeys.decrypt",
+      "projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.list",
+      "projects.locations.keyRings.list"
+     ],
+     "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit engine; routed via core/vault_routes._register_gcp",
+     "id": "kms",
+     "name": "Cloud KMS",
+     "pack_id": "cloudlearn.gcp.kms.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "id": "monitoring",
+     "name": "Cloud Monitoring",
+     "released_in": "3.0.30",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "Topics.list",
+      "Topics.insert",
+      "Subscriptions.list",
+      "Subscriptions.insert",
+      "Topics.publish",
+      "Subscriptions.pull"
+     ],
+     "id": "pubsub",
+     "name": "Pub/Sub",
+     "pack_id": "cloudlearn.gcp.pubsub.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Topics, subscriptions, publish, pull, acknowledge, and ack deadline changes are available."
+    },
+    {
+     "id": "redis",
+     "name": "Memorystore for Redis",
+     "released_in": "3.0.17",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "projects.secrets.create",
+      "projects.secrets.get",
+      "projects.secrets.delete",
+      "projects.secrets.list",
+      "projects.secrets.addVersion",
+      "projects.secrets.versions.access",
+      "projects.secrets.versions.list",
+      "projects.secrets.versions.disable"
+     ],
+     "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — KV v2 backed; routed via core/vault_routes._register_gcp",
+     "id": "secretmanager",
+     "name": "Secret Manager",
+     "pack_id": "cloudlearn.gcp.secretmanager.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released"
+    },
+    {
+     "actions": [
+      "Buckets.list",
+      "Buckets.insert",
+      "Buckets.get",
+      "Buckets.delete",
+      "Objects.list",
+      "Objects.insert",
+      "Objects.delete"
+     ],
+     "id": "storage",
+     "name": "Cloud Storage",
+     "pack_id": "cloudlearn.gcp.storage.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Buckets and object CRUD are available through Google-style REST endpoints."
+    },
+    {
+     "actions": [
+      "Networks.list",
+      "Networks.insert",
+      "Subnetworks.list",
+      "Subnetworks.insert",
+      "FirewallRules.list",
+      "FirewallRules.insert"
+     ],
+     "id": "vpc",
+     "name": "VPC Network",
+     "pack_id": "cloudlearn.gcp.vpc.basic",
+     "protocol": "gcp-like",
+     "released_in": "<=3.0.8",
+     "status": "released",
+     "summary": "Networks, subnetworks, and firewall rules are available."
+    }
+   ],
+   "tools": {
+    "cli": {
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Simulated gcloud will point at local Google-style endpoints.",
+      "Commands currently translate to compute, storage, sql, pubsub, firestore, functions, api gateway, VPC, and IAM routes."
+     ],
+     "notes": "gcloud command-shape adapters are partially implemented and expanding toward full provider coverage.",
+     "status": "partial",
+     "tool": "gcloud"
+    },
+    "go": {
+     "dependency": "cloud.google.com/go",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Use the simulator endpoint with Google Cloud Go clients.",
+      "Client wrappers are partial, so transport and request shape glue is still expanding."
+     ],
+     "status": "partial",
+     "tool": "google-cloud-go"
+    },
+    "java": {
+     "dependency": "com.google.cloud:*",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Use the simulator endpoint with Google Cloud Java clients.",
+      "Client wrappers are partial, so transport and request shape glue is still expanding."
+     ],
+     "status": "partial",
+     "tool": "google-cloud-java"
+    },
+    "nodejs": {
+     "config": {
+      "apiEndpoint": "http://127.0.0.1:9000",
+      "projectId": "cloudlearn"
+     },
+     "dependency": "@google-cloud/storage (and other @google-cloud/* packages)",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Pass apiEndpoint to each client constructor.",
+      "Client wrappers are partial, so transport and request shape glue is still expanding."
+     ],
+     "status": "partial",
+     "tool": "google-cloud-nodejs"
+    },
+    "python": {
+     "config": {
+      "STORAGE_EMULATOR_HOST": "http://127.0.0.1:9000",
+      "project": "cloudlearn"
+     },
+     "dependency": "google-cloud-storage (and other google-cloud-* packages)",
+     "endpoint": "http://127.0.0.1:9000",
+     "help": [
+      "Set STORAGE_EMULATOR_HOST env var to point Python clients at the simulator.",
+      "Client wrappers are partial, so transport and request shape glue is still expanding."
+     ],
+     "status": "partial",
+     "tool": "google-cloud-python"
+    }
+   },
+   "wiring": {
+    "env": [
+     {
+      "name": "STORAGE_EMULATOR_HOST",
+      "note": "GCS rides the simulator endpoint.",
+      "value": "{sim}"
+     },
+     {
+      "name": "PUBSUB_EMULATOR_HOST",
+      "note": "Separate gRPC emulator container, NOT the simulator port.",
+      "value": "{host}:8085"
+     },
+     {
+      "name": "FIRESTORE_EMULATOR_HOST",
+      "note": "Separate gRPC emulator container, NOT the simulator port.",
+      "value": "{host}:8080"
+     },
+     {
+      "name": "GOOGLE_CLOUD_PROJECT",
+      "note": "Use your active space's project id if it differs.",
+      "value": "cloudlearn"
+     }
+    ],
+    "notes": [
+     "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
+     "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://{tls_hostport} (caddy) and trust its certificate.",
+     "gcloud command adapters are partial; prefer client libraries."
+    ],
+    "terraform": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+    "terraform_note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
+   }
+  }
+ },
+ "defaults": {
+  "azure_account": "devstoreaccount1",
+  "host": "127.0.0.1",
+  "sim_port": 9000,
+  "tls_port": 9443
+ },
+ "generated_by": "scripts/gen_mcp_matrix.py",
+ "host_ports": {
+  "caddy": [
+   "9443:9443"
+  ],
+  "cloudlearn-elasticmq": [
+   "9324:9324",
+   "9325:9325"
+  ],
+  "cloudlearn-firestore": [
+   "8080:8080"
+  ],
+  "cloudlearn-pubsub": [
+   "8085:8085"
+  ],
+  "cloudlearn-sql-postgres": [
+   "5432:5432"
+  ],
+  "cloudlearn-vault": [
+   "8200:8200"
+  ],
+  "cloudsim": [
+   "9010:9010"
+  ],
+  "simulator": [
+   "9000:9000"
+  ],
+  "vyomi-azurite": [
+   "10000:10000",
+   "10001:10001"
+  ],
+  "vyomi-dynamodb": [
+   "8000:8000"
+  ],
+  "vyomi-gcs": [
+   "4443:4443"
+  ],
+  "vyomi-minio": [
+   "9100:9000"
+  ],
+  "vyomi-nats": [
+   "4222:4222",
+   "8222:8222"
+  ],
+  "vyomi-sql-mysql": [
+   "3306:3306"
+  ]
+ },
+ "scan": {
+  "aliases": {
+   "aws": {
+    "alb": "elbv2",
+    "api": "apigateway",
+    "api-gateway": "apigateway",
+    "apigateway": "apigateway",
+    "apigatewayv2": "apigatewayv2",
+    "cloudwatch": "cloudwatch",
+    "cloudwatchevent": "eventbridge",
+    "cloudwatchlogs": "logs",
+    "db": "rds",
+    "dynamodb": "dynamodb",
+    "ec2": "ec2",
+    "eip": "vpc",
+    "elbv2": "elbv2",
+    "email": "ses",
+    "eventbridge": "eventbridge",
+    "events": "eventbridge",
+    "iam": "iam",
+    "instance": "ec2",
+    "internet": "vpc",
+    "kinesis": "kinesis",
+    "kms": "kms",
+    "lambda": "lambda",
+    "lb": "elbv2",
+    "logs": "logs",
+    "nat": "vpc",
+    "rds": "rds",
+    "rds-data": "rds",
+    "rdsdata": "rds",
+    "route": "vpc",
+    "s3": "s3",
+    "s3control": "s3",
+    "secrets-manager": "secretsmanager",
+    "secretsmanager": "secretsmanager",
+    "security": "vpc",
+    "ses": "ses",
+    "sesv2": "ses",
+    "sfn": "stepfunctions",
+    "sns": "sns",
+    "sqs": "sqs",
+    "ssm": "ssm",
+    "states": "stepfunctions",
+    "subnet": "vpc",
+    "vpc": "vpc"
+   },
+   "azure": {
+    "abort-controller": "_ignore",
+    "ai": "cognitiveservices",
+    "api": "apim",
+    "api_management": "apim",
+    "apimanagement": "apim",
+    "app-configuration": "appconfiguration",
+    "app_service": "app",
+    "appconfiguration": "appconfiguration",
+    "appservice": "functionapp",
+    "armapimanagement": "apim",
+    "armappservice": "functionapp",
+    "armauthorization": "rbac",
+    "armcompute": "vm",
+    "armcosmos": "cosmos",
+    "armeventgrid": "eventgrid",
+    "armkeyvault": "keyvault",
+    "armnetwork": "vnet",
+    "armresources": "_core",
+    "armservicebus": "servicebus",
+    "armsql": "sql",
+    "armstorage": "storage",
+    "asyncazureopenai": "cognitiveservices",
+    "authorization": "rbac",
+    "azblob": "storage",
+    "azcosmos": "cosmos",
+    "azqueue": "storage",
+    "azservicebus": "servicebus",
+    "azurechatopenai": "cognitiveservices",
+    "azureopenai": "cognitiveservices",
+    "azureopenaiembeddings": "cognitiveservices",
+    "blob": "storage",
+    "certificates": "keyvault",
+    "cognitiveservices": "cognitiveservices",
+    "common": "_ignore",
+    "compute": "vm",
+    "core": "_ignore",
+    "cosmos": "cosmos",
+    "cosmosdb": "cosmos",
+    "cosmosdb_account": "cosmos",
+    "data": "_ignore",
+    "data-tables": "tables",
+    "data.tables": "tables",
+    "data/azcosmos": "cosmos",
+    "event-hubs": "eventhubs",
+    "eventgrid": "eventgrid",
+    "eventhub": "eventhubs",
+    "eventhubs": "eventhubs",
+    "function_app": "functionapp",
+    "functions": "functionapp",
+    "identity": "_ignore",
+    "key": "keyvault",
+    "key_vault": "keyvault",
+    "keys": "keyvault",
+    "keyvault": "keyvault",
+    "keyvault-certificates": "keyvault",
+    "keyvault-keys": "keyvault",
+    "keyvault-secrets": "keyvault",
+    "linux": "functionapp",
+    "linux_function_app": "functionapp",
+    "linux_virtual_machine": "vm",
+    "linux_web_app": "app",
+    "log_analytics_workspace": "operationalinsights",
+    "loganalytics": "operationalinsights",
+    "logger": "_ignore",
+    "messaging.eventgrid": "eventgrid",
+    "messaging.servicebus": "servicebus",
+    "messaging/azservicebus": "servicebus",
+    "monitor": "monitor",
+    "monitor-opentelemetry": "_ignore",
+    "msal-browser": "_ignore",
+    "msal-node": "_ignore",
+    "mssql": "sql",
+    "network": "vnet",
+    "network_security_group": "nsg",
+    "openai": "cognitiveservices",
+    "opentelemetry": "_ignore",
+    "operationalinsights": "operationalinsights",
+    "queue": "storage",
+    "resource": "_core",
+    "resource_group": "_core",
+    "resourcemanager": "_core",
+    "resources": "_core",
+    "role": "rbac",
+    "role_assignment": "rbac",
+    "search": "search",
+    "search-documents": "search",
+    "search.documents": "search",
+    "secrets": "keyvault",
+    "security.keyvault": "keyvault",
+    "security/keyvault": "keyvault",
+    "service-bus": "servicebus",
+    "service_plan": "app",
+    "servicebus": "servicebus",
+    "servicebus_namespace": "servicebus",
+    "servicebus_queue": "servicebus",
+    "servicebus_topic": "servicebus",
+    "sql": "sql",
+    "storage": "storage",
+    "storage-blob": "storage",
+    "storage-queue": "storage",
+    "storage.blob": "storage",
+    "storage.queue": "storage",
+    "storage/azblob": "storage",
+    "storage/azqueue": "storage",
+    "storage_account": "storage",
+    "storage_container": "storage",
+    "storage_queue": "storage",
+    "subnet": "vnet",
+    "tables": "tables",
+    "virtual": "vm",
+    "virtual_network": "vnet",
+    "web": "functionapp",
+    "windows": "functionapp",
+    "windows_function_app": "functionapp",
+    "windows_virtual_machine": "vm",
+    "windows_web_app": "app"
+   },
+   "gcp": {
+    "api": "apigateway",
+    "api_core": "_ignore",
+    "apigateway": "apigateway",
+    "artifact": "artifactregistry",
+    "artifactregistry": "artifactregistry",
+    "bigquery": "bigquery",
+    "client": "_ignore",
+    "cloud": "_ignore",
+    "cloud_run_service": "run",
+    "cloud_run_v2_service": "run",
+    "cloud_scheduler_job": "cloudscheduler",
+    "cloud_tasks_queue": "tasks",
+    "cloudfunctions": "functions",
+    "cloudfunctions2": "functions",
+    "cloudsql": "cloudsql",
+    "compute": "compute",
+    "compute_v1": "compute",
+    "container": "container",
+    "core": "_ignore",
+    "eventarc": "eventarc",
+    "exceptions": "_ignore",
+    "firestore": "firestore",
+    "firestore_v1": "firestore",
+    "functions": "functions",
+    "functions_v1": "functions",
+    "functions_v2": "functions",
+    "iam": "iam",
+    "iamcredentials": "iamcredentials",
+    "kms": "kms",
+    "kms_v1": "kms",
+    "logging": "logging",
+    "monitoring": "monitoring",
+    "project": "iam",
+    "pubsub": "pubsub",
+    "pubsub_v1": "pubsub",
+    "redis": "redis",
+    "run": "run",
+    "scheduler": "cloudscheduler",
+    "secret": "secretmanager",
+    "secret-manager": "secretmanager",
+    "secret_manager": "secretmanager",
+    "secretmanager": "secretmanager",
+    "service_account": "iam",
+    "spanner": "spanner",
+    "sql": "cloudsql",
+    "sql_database": "cloudsql",
+    "sql_database_instance": "cloudsql",
+    "storage": "storage",
+    "tasks": "tasks"
+   }
+  },
+  "already_wired": "(endpoint_url|endpointOverride|AWS_ENDPOINT_URL|forcePathStyle|STORAGE_EMULATOR_HOST|PUBSUB_EMULATOR_HOST|FIRESTORE_EMULATOR_HOST|apiEndpoint|BlobEndpoint=|localtest\\.me|localhost:9000|127\\.0\\.0\\.1:9000)",
+  "extensions": [
+   ".py",
+   ".js",
+   ".mjs",
+   ".cjs",
+   ".ts",
+   ".tsx",
+   ".jsx",
+   ".go",
+   ".java",
+   ".kt",
+   ".tf",
+   ".txt",
+   ".toml",
+   ".json",
+   ".xml",
+   ".gradle",
+   ".kts",
+   ".mod",
+   ".yml",
+   ".yaml",
+   ".env"
+  ],
+  "rules": [
+   {
+    "cloud": "aws",
+    "lang": "python",
+    "pattern": "boto3\\.(?:client|resource)\\(\\s*['\"]([a-z0-9-]+)['\"]"
+   },
+   {
+    "cloud": "aws",
+    "lang": "nodejs",
+    "pattern": "@aws-sdk/client-([a-z0-9-]+)"
+   },
+   {
+    "cloud": "aws",
+    "lang": "java",
+    "pattern": "software\\.amazon\\.awssdk\\.services\\.([a-z0-9]+)"
+   },
+   {
+    "cloud": "aws",
+    "lang": "go",
+    "pattern": "github\\.com/aws/aws-sdk-go-v2/service/([a-z0-9]+)"
+   },
+   {
+    "cloud": "aws",
+    "lang": "terraform",
+    "pattern": "resource\\s+\"aws_([a-z0-9]+)_"
+   },
+   {
+    "cloud": "gcp",
+    "lang": "python",
+    "pattern": "google\\.cloud(?:\\.|\\s+import\\s+)([a-z_]+)"
+   },
+   {
+    "cloud": "gcp",
+    "lang": "python",
+    "pattern": "\\bgoogle-cloud-([a-z-]+)"
+   },
+   {
+    "cloud": "gcp",
+    "lang": "nodejs",
+    "pattern": "@google-cloud/([a-z-]+)"
+   },
+   {
+    "cloud": "gcp",
+    "lang": "go",
+    "pattern": "cloud\\.google\\.com/go/([a-z]+)"
+   },
+   {
+    "cloud": "gcp",
+    "lang": "java",
+    "pattern": "com\\.google\\.cloud\\.([a-z]+)"
+   },
+   {
+    "cloud": "gcp",
+    "lang": "terraform",
+    "pattern": "resource\\s+\"google_([a-z0-9_]+)\""
+   },
+   {
+    "cloud": "azure",
+    "lang": "python",
+    "pattern": "\\b(AsyncAzureOpenAI|AzureOpenAI|AzureChatOpenAI|AzureOpenAIEmbeddings)\\b"
+   },
+   {
+    "cloud": "azure",
+    "lang": "nodejs",
+    "pattern": "\\b(AzureOpenAI|AzureChatOpenAI|AzureOpenAIEmbeddings)\\b"
+   },
+   {
+    "cloud": "azure",
+    "lang": "python",
+    "pattern": "(?:^|\\s)(?:from|import)\\s+azure\\.([a-z_]+(?:\\.[a-z_]+)?)"
+   },
+   {
+    "cloud": "azure",
+    "lang": "python",
+    "pattern": "\\bazure-(storage-blob|storage-queue|servicebus|cosmos|keyvault-[a-z]+|eventgrid|mgmt-[a-z]+)"
+   },
+   {
+    "cloud": "azure",
+    "lang": "nodejs",
+    "pattern": "@azure/([a-z-]+)"
+   },
+   {
+    "cloud": "azure",
+    "lang": "java",
+    "pattern": "com\\.azure\\.(messaging\\.servicebus|messaging\\.eventgrid|storage\\.blob|storage\\.queue|cosmos|security\\.keyvault|resourcemanager\\.[a-z]+)"
+   },
+   {
+    "cloud": "azure",
+    "lang": "go",
+    "pattern": "github\\.com/Azure/azure-sdk-for-go/sdk/(messaging/azservicebus|storage/azblob|storage/azqueue|data/azcosmos|security/keyvault|resourcemanager/[a-z]+/arm[a-z]+)"
+   },
+   {
+    "cloud": "azure",
+    "lang": "terraform",
+    "pattern": "resource\\s+\"azurerm_([a-z_]+?)(?:_[a-z]+)*\""
+   }
+  ],
+  "skip_dirs": [
+   ".git",
+   "node_modules",
+   "vendor",
+   ".venv",
+   "venv",
+   "env",
+   "dist",
+   "build",
+   "target",
+   "__pycache__",
+   ".terraform",
+   ".next",
+   ".idea",
+   ".vscode",
+   "coverage"
+  ],
+  "warnings": {
+   "azure/cognitiveservices": "Azure OpenAI in Vyomi is SIMULATED (deterministic, labelled output, no real model): AzureOpenAI(azure_endpoint={sim}/azure-data/openai/<account>, api_key=<account key>). Good for wiring and tests, not for judging model quality.",
+   "azure/cosmos": "Cosmos SDKs require TLS: point them at https://{tls_hostport}/azure-data/cosmos/<account> and trust the caddy certificate.",
+   "azure/keyvault": "Key Vault SDKs require TLS and host-based URLs: https://<vault>.vault.localtest.me:{tls_port}.",
+   "azure/servicebus": "Service Bus SDKs default to AMQP, which the simulator does not support. Use the Service Bus REST protocol ({sim}/azure-data/servicebus) or Azure Storage Queues.",
+   "gcp/firestore": "Firestore is a separate emulator: set FIRESTORE_EMULATOR_HOST={host}:8080 (not the simulator port).",
+   "gcp/kms": "No Google emulator exists: use the REST/HttpJson transport against https://{tls_hostport}.",
+   "gcp/pubsub": "Pub/Sub is a separate emulator: set PUBSUB_EMULATOR_HOST={host}:8085 (not the simulator port).",
+   "gcp/secretmanager": "No Google emulator exists: use the REST/HttpJson transport against https://{tls_hostport}."
+  }
+ },
+ "schema": 1,
+ "settings": [
+  {
+   "commented_out": true,
+   "default": "vyomi/appliance:2.0.8",
+   "doc": "Published multi-arch (amd64+arm64) on Docker Hub + GHCR. By DEFAULT the compose files resolve these to `:latest`, so a fresh `docker compose pull` always gets the current release — and this file stays correct even when it's copied from an old git tag (the previous hard-pin silently shipped a stale version to anyone curl-ing it from a tag). To PIN specific versions for reproducible installs, uncomment + set explicit tags below. Leave them commented to build locally from source instead (dev clone).",
+   "name": "VYOMI_SIMULATOR_IMAGE"
+  },
+  {
+   "commented_out": true,
+   "default": "vyomi/cloudsim:2.0.8",
+   "doc": "Published multi-arch (amd64+arm64) on Docker Hub + GHCR. By DEFAULT the compose files resolve these to `:latest`, so a fresh `docker compose pull` always gets the current release — and this file stays correct even when it's copied from an old git tag (the previous hard-pin silently shipped a stale version to anyone curl-ing it from a tag). To PIN specific versions for reproducible installs, uncomment + set explicit tags below. Leave them commented to build locally from source instead (dev clone).",
+   "name": "VYOMI_CLOUDSIM_IMAGE"
+  },
+  {
+   "commented_out": false,
+   "default": "9000",
+   "doc": "Host port for the simulator (default 9000)",
+   "name": "VYOMI_SIMULATOR_PORT"
+  },
+  {
+   "commented_out": true,
+   "default": "enterprise",
+   "doc": "Pre-seed a license tier (free | pro | max | enterprise). Leave unset to start on Free tier (default).",
+   "name": "VYOMI_LICENSE_TIER"
+  },
+  {
+   "commented_out": true,
+   "default": "1",
+   "doc": "Disable the host-budget gate (allows large VMs in dev/test environments).",
+   "name": "VYOMI_BUDGET_BYPASS"
+  },
+  {
+   "commented_out": false,
+   "default": "cloudlearn-dev-token",
+   "doc": "Vault root token (DEV ONLY — production uses file backend + init/unseal; see docs/PRODUCTION_DEPLOYMENT.md)",
+   "name": "VYOMI_VAULT_TOKEN"
+  },
+  {
+   "commented_out": true,
+   "default": "developer",
+   "doc": "Override only if you know what you're doing.",
+   "name": "VYOMI_DISTRIBUTION_MODE"
+  },
+  {
+   "commented_out": true,
+   "default": "linux",
+   "doc": "Override only if you know what you're doing.",
+   "name": "VYOMI_PARENT_OS"
+  },
+  {
+   "commented_out": true,
+   "default": "http://host.docker.internal:9171",
+   "doc": "Override only if you know what you're doing.",
+   "name": "VYOMI_RUNTIME_BRIDGE_URL"
+  }
+ ]
+}
