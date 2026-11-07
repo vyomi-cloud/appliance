@@ -285,7 +285,16 @@ def op_tested(op: str, corpus: str) -> bool:
 
 def route_tested(path: str, corpus: str) -> bool:
     stem = path.split("{")[0].rstrip("/")
-    return bool(stem) and re.search(re.escape(stem) + r"(?![A-Za-z0-9_-])", corpus) is not None
+    if stem and re.search(re.escape(stem) + r"(?![A-Za-z0-9_-])", corpus) is not None:
+        return True
+    # Tests often build the path from an f-string/template (f"/api/x/{tool}/resolve"):
+    # a templated segment in the test stands for any literal segment of the route.
+    segs = [x for x in path.split("/") if x]
+    if not segs or any("{" in x for x in segs):
+        return False
+    tpl = r"(?:\$?\{[A-Za-z_][\w.\[\]'\"()+ ]*\}|%s|\+\s*\w+\s*\+)"
+    pat = "/" + "/".join("(?:%s|%s)" % (re.escape(x), tpl) for x in segs)
+    return re.search(pat + r"(?![A-Za-z0-9_-])", corpus) is not None
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
