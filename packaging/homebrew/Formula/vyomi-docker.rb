@@ -30,6 +30,10 @@ class VyomiDocker < Formula
     # share/ layout works without extra config.
     bin.install "packaging/docker/vyomi" => "vyomi"
     (share/"vyomi-docker").install "docker-compose.cloudlite.yml"
+    # `vyomi mcp` (MCP server for AI coding agents): compiled per OS/arch by
+    # release.yml into packaging/docker/mcp/<os>-<arch>/vyomi-mcp. The wrapper
+    # picks the right one at runtime. Absent from tarballs older than v3.0.46.
+    (share/"vyomi-docker").install "packaging/docker/mcp" if File.directory?("packaging/docker/mcp")
   end
 
   def caveats
@@ -40,6 +44,9 @@ class VyomiDocker < Formula
       Then:
         vyomi up      # docker compose up → http://localhost:9000
         vyomi down
+
+      AI coding agents (Claude Code):
+        claude mcp add --scope user vyomi -- vyomi mcp
 
       Free/Lite = full API/SDK conformance (no compute); Pro unlocks EC2-on-Docker
       with SSH. For real VMs (Max tier), use the `vyomi` formula.

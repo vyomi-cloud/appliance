@@ -61,18 +61,22 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_brew:   ${{ steps.check.outputs.has_brew }}
+      has_plugins: ${{ steps.check.outputs.has_plugins }}
     steps:
       - id: check
         env:
           BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          PLUGINS: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
         run: |
           mask() { [ -n "$1" ] && echo true || echo false; }
           {
             echo "has_brew=$(mask "$BREW")"
+            echo "has_plugins=$(mask "$PLUGINS")"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Downstream targets"
             echo "- Homebrew tap : $(mask "$BREW")"
+            echo "- Claude Code plugins : $(mask "$PLUGINS")"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── source tarball + deb + rpm ──────────────────────────────────────────
@@ -132,6 +136,35 @@ jobs:
           json.dump(out, open("dist/services.json", "w"), indent=1)
           print(f"services.json: {out['total']} services {counts}")
           PY
+
+      # `vyomi mcp` (MCP server for AI coding agents) is the compiled cmd/vyomi
+      # binary. Windows gets it inside vyomi.exe (MSI); macOS/Linux packages run
+      # the bash launcher, so ship the binary per OS/arch under
+      # packaging/docker/mcp/ (picked up by the tarball, the Homebrew formulas
+      # and the .deb/.rpm builds below) and as standalone release assets.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - name: Build vyomi-mcp (macOS/Linux/Windows)
+        # Never let this block the release: packaging tolerates missing binaries
+        # (formula + .deb/.rpm skip them; `vyomi mcp` then prints a clear error).
+        continue-on-error: true
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          # Embed THIS release's version + service registry in the MCP knowledge.
+          python3 scripts/gen_mcp_matrix.py
+          mkdir -p dist
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
+            os="${target%/*}"; arch="${target#*/}"; ext=""
+            [ "$os" = windows ] && ext=".exe"
+            out="packaging/docker/mcp/$os-$arch/vyomi-mcp$ext"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+              go -C cmd/vyomi build -trimpath -ldflags "-s -w" -o "../../$out" .
+            cp "$out" "dist/vyomi-mcp-$VER-$os-$arch$ext"
+          done
+          rm -rf packaging/docker/mcp/windows-amd64   # Windows ships vyomi.exe in the MSI
+          ls -l packaging/docker/mcp/*/ dist/vyomi-mcp-*
 
       - name: Build source tarball
         run: |
@@ -423,6 +456,54 @@ jobs:
           git config user.name  "Vyomi Release Bot"
           git add Formula/vyomi.rb Formula/vyomi-docker.rb
           git commit -m "vyomi ${VER} (vyomi + vyomi-docker)"
+          git push
+
+  # ── Claude Code plugin marketplace sync ─────────────────────────────────
+  # integrations/claude-plugins/ is the source of truth for the public
+  # marketplace repo vyomi-cloud/claude-plugins (users run
+  # `/plugin marketplace add vyomi-cloud/claude-plugins`). Kept in its own small
+  # repo because adding a marketplace clones it. Each release stamps the release
+  # version into the manifests and mirrors the folder. Skipped (not failed)
+  # until the CLAUDE_PLUGINS_TOKEN secret exists. Pre-releases are not synced.
+  plugins-sync:
+    needs: [preflight, build]
+    if: needs.preflight.outputs.has_plugins == 'true' && !contains(needs.build.outputs.version, '-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          path: src
+      - name: Checkout plugins repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GH_OWNER }}/claude-plugins
+          token: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
+          path: plugins
+      - name: Mirror + stamp version
+        run: |
+          VER="${{ needs.build.outputs.version }}"
+          find plugins -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a src/integrations/claude-plugins/. plugins/
+          python3 - "$VER" plugins <<'PY'
+          import json, pathlib, sys
+          ver, root = sys.argv[1], pathlib.Path(sys.argv[2])
+          mp = root / ".claude-plugin" / "marketplace.json"
+          m = json.loads(mp.read_text())
+          m.setdefault("metadata", {})["version"] = ver
+          for p in m["plugins"]:
+              p["version"] = ver
+          mp.write_text(json.dumps(m, indent=2) + "\n")
+          for pj in root.glob("plugins/*/.claude-plugin/plugin.json"):
+              d = json.loads(pj.read_text()); d["version"] = ver
+              pj.write_text(json.dumps(d, indent=2) + "\n")
+          PY
+          cd plugins
+          git config user.email "bot@vyomi.cloud"
+          git config user.name  "Vyomi Release Bot"
+          git add -A
+          if git diff --cached --quiet; then echo "plugins unchanged"; exit 0; fi
+          git commit -m "vyomi plugins ${VER}"
           git push
 
   # ── Snap Store publish — REMOVED ────────────────────────────────────────
