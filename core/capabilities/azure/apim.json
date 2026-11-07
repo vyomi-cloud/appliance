@@ -385,13 +385,15 @@
  "azure.apim.gateway_apis": {
   "title": "API to self-hosted gateway association (service/gateways/{gw}/apis/{api})",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The association is a validated ARM resource (gateway and API must exist) listed on the gateway. No self-hosted gateway process exists to serve or withhold the API."
+   "service/gateways/{gw}/apis/{api} associations are ENFORCED by the gateway data plane: a request that selects a self-hosted gateway (header x-vyomi-apim-gateway: {gw}) is served only for APIs associated with it (others 404, unknown gateway 404); the managed gateway serves every API. There is no separate self-hosted gateway process to deploy; the gateway name is selected per request."
   ],
   "tests": [
+   "tests/conformance/test_azure_webhost_autoscale_apim.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py",
    "tests/conformance/test_azure_cfgext_core.py"
   ]
  },

@@ -18,6 +18,7 @@ import { Essentials, ErrorBar, Glyph, Loading, fmtDate } from "../../kit/common.
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import * as Tools from "./Tools.jsx";
 import { AccessControlIam, ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
 
 export const MENU = [
@@ -54,7 +55,8 @@ export default function JobBlade({ params }) {
   else {
     const a = job.data, reload = job.reload;
     const P = {
-      diagnose: () => <Diagnose id={a.id} name={a.name} />,
+      diagnose: () => <Tools.Diagnose path={resPath} cap="azure.containerapps.job.tools" />,
+      logstream: () => <JobLogs rg={rg} name={a.name} resPath={resPath} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog resPath={resPath} name={a.name} />,
       iam: () => <AccessControlIam resPath={resPath} name={a.name} capId="azure.containerapps.iam" />,
@@ -270,6 +272,24 @@ function ExecutionHistory({ rg, name }) {
         </Table>
       )}
       {!loading && !(data || []).length && <p className="vy-muted" style={{ fontSize: 13 }}>No executions yet.</p>}
+    </>
+  );
+}
+
+/* Log stream of a job: pick an execution, show its container's real output (exit code decides Succeeded/Failed). */
+function JobLogs({ rg, name, resPath }) {
+  const ex = useAsync(async () => (await api.listExecutions(rg, name)) || [], [rg, name]);
+  const [sel, setSel] = useState("");
+  const list = ex.data || [];
+  const cur = sel || (list[0] && list[0].name) || "";
+  if (ex.loading && !ex.data) return <Loading />;
+  return (
+    <>
+      <select aria-label="Execution" value={cur} onChange={(e) => setSel(e.target.value)} style={{ margin: "0 0 8px" }}>
+        {list.map((e) => <option key={e.name} value={e.name}>{e.name} ({e.properties?.status})</option>)}
+      </select>
+      {cur ? <Tools.LogStream path={resPath} execution={cur} cap="azure.containerapps.job.tools" title="Log stream" />
+        : <p>No executions yet. Start the job from Overview.</p>}
     </>
   );
 }

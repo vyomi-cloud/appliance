@@ -49,6 +49,10 @@ try:
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import azure_monitor_core as mon  # type: ignore
     import azure_operationalinsights_core as oi  # type: ignore
+try:
+    from core import azure_promql as pql
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import azure_promql as pql  # type: ignore
 
 NAMESPACE = "Microsoft.AlertsManagement"
 API_VERSIONS = {"alerts": "2019-03-01", "alertssummary": "2019-03-01", "actionrules": "2021-08-08", "prometheusrulegroups": "2023-03-01"}
@@ -239,6 +243,11 @@ def _prom_props(props, old=None):
         if bool(r.get("record")) == bool(r.get("alert")):
             raise _bad(f"rules[{i}] must set exactly one of 'record' (recording rule) or 'alert' (alerting rule).")
         expr = str(r["expression"])
+        try:
+            pql.parse(expr)
+        except pql.PromError as e:
+            if "not supported" not in str(e):          # unsupported-but-valid PromQL is stored; syntax errors are rejected like the service
+                raise _bad(f"rules[{i}].expression is not a valid PromQL expression: {e}")
         if expr.count("(") != expr.count(")") or expr.count("{") != expr.count("}") or expr.count("[") != expr.count("]"):
             raise _bad(f"rules[{i}].expression has unbalanced brackets.")
         r = dict(r)
@@ -618,13 +627,124 @@ def evaluate(state, sub, blob_store=None, force=False, now=None):
                     ev["resolved"] += 1
         except Exception as e:  # noqa: BLE001 - one broken rule must not stop the others
             ev["errors"].append(f"{rule['name']}: {type(e).__name__}: {e}")
+    prom_evaluate(state, sub, now, ev, force)
     return ev
+
+
+# ═══════════════════════════ Prometheus rule groups: stored samples + PromQL evaluation ═══════════════
+_PROM_TYPE = "vyomi/promstore"
+
+
+def _iso_s(v, default=0.0):
+    m = re.fullmatch(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", str(v or ""))
+    if not m or not any(m.groups()):
+        return default
+    d, h, mi, se = (int(x or 0) for x in m.groups())
+    return d * 86400 + h * 3600 + mi * 60 + se
+
+
+def prom_store(state, sub, scope, create=True):
+    """The sample store of one Azure Monitor workspace (scope id) -- real stored series the rule groups evaluate over."""
+    key = f"{_PROM_TYPE}:{str(scope).lower()}"
+    rec = state.get(key)
+    if rec is None and create:
+        rec = state[key] = {"id": key, "name": "promstore", "_type": _PROM_TYPE, "_sub": sub, "_rg": None, "store": {"series": {}}}
+    return rec["store"] if rec else None
+
+
+def prom_ingest(state, sub, scope, samples, now=None):
+    """samples: [{"labels": {"__name__": "m", ...}, "value": v, "timestamp": epoch-seconds (default now)}] (also {"metric": name, ...})."""
+    now = now or datetime.now(timezone.utc)
+    st = prom_store(state, sub, scope)
+    n = 0
+    for smp in samples or []:
+        labels = dict(smp.get("labels") or {})
+        if smp.get("metric"):
+            labels["__name__"] = smp["metric"]
+        if not labels.get("__name__"):
+            raise _bad("every sample needs labels.__name__ (or 'metric').")
+        pql.add_sample(st, {k: str(v) for k, v in labels.items()}, float(smp.get("timestamp") or now.timestamp()), float(smp["value"]))
+        n += 1
+    return n
+
+
+def prom_query(state, sub, scope, expr, t=None):
+    st = prom_store(state, sub, scope, create=False) or {"series": {}}
+    try:
+        res = pql.query(st, expr, float(t) if t else datetime.now(timezone.utc).timestamp())
+    except pql.PromError as e:
+        raise _bad(f"PromQL: {e}")
+    if isinstance(res, float):
+        return {"resultType": "scalar", "result": [res, str(res)]}
+    return {"resultType": "vector", "result": [{"metric": l, "value": [t or 0, repr(v)]} for l, v in res]}
+
+
+def prom_evaluate(state, sub, now, ev, force=False):
+    """Evaluate every enabled Prometheus rule group: recording rules append new series to the workspace store; alert rules
+    fire (after their ``for`` duration) / resolve alerts exactly like the other alert types."""
+    t = now.timestamp()
+    groups = [r for r in list(state.values()) if r.get("_sub") == sub and str(r.get("_type", "")).lower() == "microsoft.alertsmanagement/prometheusrulegroups"]
+    for g in groups:
+        gp = g["properties"]
+        if not gp.get("enabled", True):
+            continue
+        st = g.setdefault("_eval", {})
+        if not force and st.get("last") is not None and t - st["last"] < _iso_s(gp.get("interval"), 60):
+            continue
+        st["last"] = t
+        ev["evaluated"] += 1
+        store = prom_store(state, sub, gp["scopes"][0])
+        for i, rule in enumerate(gp["rules"]):
+            if rule.get("enabled") is False:
+                continue
+            rs = st.setdefault("rules", {}).setdefault(str(i), {"pending": {}, "firing": []})
+            try:
+                res = pql.query(store, rule["expression"], t)
+            except pql.PromError as e:
+                ev["errors"].append(f"{g['name']}[{i}]: {e}")
+                continue
+            vec = [({}, res)] if isinstance(res, float) else res
+            if rule.get("record"):
+                for lab, val in vec:
+                    lab = dict(lab, **{k: str(v) for k, v in (rule.get("labels") or {}).items()})
+                    lab["__name__"] = rule["record"]
+                    if val == val:
+                        pql.add_sample(store, lab, t, val)
+                continue
+            pseudo = {"id": f"{g['id']}/rules/{rule['alert']}", "name": rule["alert"], "_rg": g.get("_rg"),
+                      "properties": {"actions": rule.get("actions") or []}}
+            key = pseudo["id"].lower()
+            seen = set()
+            for lab, val in vec:
+                lab = dict(lab, **{k: str(v) for k, v in (rule.get("labels") or {}).items()})
+                sig = ",".join(f"{k}={v}" for k, v in sorted(lab.items()) if k != "__name__")
+                seen.add(sig)
+                since = rs["pending"].setdefault(sig, t)
+                if t - since + 1e-6 < _iso_s(rule.get("for"), 0):
+                    continue
+                tgt = (gp["scopes"][0] + "#" + sig)
+                if _open_alert(state, key, tgt) is None:
+                    ann = rule.get("annotations") or {}
+                    rec = _new_alert(state, sub, pseudo, gp["scopes"][0], "Metric", "Prometheus",
+                                     ann.get("description") or ann.get("summary") or rule["alert"],
+                                     {"conditionType": "PrometheusRule", "expression": rule["expression"], "labels": lab, "annotations": ann,
+                                      "value": val, "evaluatedAt": _now(now)}, rule.get("severity", 3), now)
+                    rec["_target"] = tgt.lower()
+                    ev["fired"] += 1
+            for sig in list(rs["pending"]):
+                if sig not in seen:
+                    rs["pending"].pop(sig)
+            for a in [x for x in state.values() if x.get("_type") == ALERT_TYPE.lower() and x.get("_rule") == key
+                      and x["properties"]["essentials"]["monitorCondition"] == "Fired"]:
+                if a["_target"].split("#", 1)[-1] not in {x.lower() for x in seen}:
+                    _resolve(state, sub, a, now, "expression no longer returns this series")
+                    ev["resolved"] += 1
 
 
 # ═══════════════════════════ ARM surface ════════════════════════════════════════
 def handles(namespace, chain):
     return str(namespace).lower() == "microsoft.alertsmanagement" and bool(chain) and chain[0].lower() in (
-        "alerts", "alertssummary", "actionrules", "prometheusrulegroups", "evaluate")
+        "alerts", "alertssummary", "actionrules", "prometheusrulegroups", "evaluate", "vyomiprom")
 
 
 def _alerts_of(state, sub):
@@ -695,6 +815,16 @@ def _dispatch(state, method, sub, rg, chain, payload, query, blob_store):
         if method != "POST":
             return _err(405, "MethodNotAllowed", "POST required.")
         return _ok(evaluate(state, sub, blob_store, force=True))
+    if low == "vyomiprom":     # Vyomi extension: remote-write-style ingest + instant query over a workspace's stored series
+        op = chain[1].lower() if len(chain) > 1 else ""
+        scope = payload.get("scope") or query.get("scope")
+        if not scope:
+            raise _bad("'scope' (the Azure Monitor workspace resource id) is required.")
+        if op == "ingest" and method == "POST":
+            return _ok({"ingested": prom_ingest(state, sub, scope, payload.get("samples"))})
+        if op == "query":
+            return _ok(prom_query(state, sub, scope, payload.get("query") or query.get("query") or "", payload.get("time") or query.get("time")))
+        return _err(404, "ResourceTypeNotSupported", "vyomiProm supports POST ingest and GET/POST query.")
     if low in ("alerts", "alertssummary"):
         evaluate(state, sub, blob_store)                     # alerts are evaluated when they are read
         items = _alerts_of(state, sub)

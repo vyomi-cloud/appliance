@@ -55,6 +55,7 @@ Azure-AsyncOperation headers when ``lro`` is true.
 from __future__ import annotations
 
 import hashlib
+import types
 import itertools
 import json
 import re
@@ -718,6 +719,13 @@ def _site_subresource(state, rec, rest, method, payload):
         resp = _config_ops(rec, rest[1:], method, payload)
         if len(rest) >= 2 and rest[1].lower() == "web" and method in ("PUT", "PATCH") and resp["status"] < 300:
             _webnet().after_site(state, rec)
+            try:
+                from core import azure_webhost_core as _wh
+            except ImportError:
+                import azure_webhost_core as _wh           # type: ignore
+            _apim_err = _wh.apim_link(state, rec)         # apiManagementConfig -> the app's API is imported into the gateway
+            if _apim_err:
+                return _err(400, "ResourceNotFound", _apim_err)
             resp = _ok({"properties": rec["properties"]["siteConfig"]})
         return resp
     if r0 == "locks":
@@ -725,7 +733,14 @@ def _site_subresource(state, rec, rest, method, payload):
     if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.authorization" and rest[2].lower() == "locks":
         return _lock_ops(state, rec, rest[3:], method, payload)
     if r0 == "functions":
-        return _functions_ops(rec, rest[1:], method, payload)
+        _fr = _functions_ops(rec, rest[1:], method, payload)
+        if method in ("PUT", "PATCH", "DELETE") and rec.get("_apim_import") and _fr["status"] < 300:   # keep the imported APIM API in step with the functions
+            try:
+                from core import azure_webhost_core as _wh
+            except ImportError:
+                import azure_webhost_core as _wh           # type: ignore
+            _wh.apim_link(state, rec)
+        return _fr
     if r0 == "host":
         return _host_ops(rec, rest[1:], method, payload)
     if r0 == "slots":
@@ -1145,6 +1160,9 @@ def _invoke_function(rec, fn, req):
                       "error": f"{_den[1]}: {_den[2]}" + (" -- send 'Authorization: Bearer <token>' (the token from the Authentication panel, or an Entra JWT for the configured app)"
                                                         if _den[0] == 401 else "")})
     sandbox = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
+    # the app's settings ARE the function's environment (os.environ / os.getenv), like App Service app settings -> env vars
+    _env = {str(k): str(v) for k, v in (rec.get("_appsettings") or {}).items()}
+    sandbox["os"] = types.SimpleNamespace(environ=_env, getenv=lambda k, d=None: _env.get(k, d))
     try:
         exec(compile(fn["_code"], f"<function:{fn['name']}>", "exec"), sandbox)
         handler = sandbox.get(fn.get("_entry", "main"))

@@ -355,10 +355,20 @@
  },
  "azure.functionapp.apimanagement": {
   "title": "API Management integration",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["The link to an API Management instance is recorded on the app (siteConfig.apiManagementConfig); Vyomi does not import the function's API into the gateway."],
-  "api": ["sites/config/web CreateOrUpdate"],
-  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Linking an API Management instance (siteConfig.apiManagementConfig.id = the service or .../apis/{api}) IMPORTS the Function App's API into that gateway: an API with one GET and one POST operation per function whose backend is the app (resolved in-process), kept in step when functions are added or removed; unlinking removes it. Requests through the gateway (subscription key, policies, rate limits) are really forwarded to the function and its output returned. Web Apps import a wildcard API. OpenAPI/Swagger definition import is not performed."
+  ],
+  "api": [
+   "sites/config/web CreateOrUpdate"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_webhost_autoscale_apim.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py"
+  ]
  },
  "azure.functionapp.kudu": {
   "title": "Advanced Tools (Kudu): environment, settings, deployments, tool links",

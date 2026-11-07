@@ -135,6 +135,7 @@ CORES = [
     "azure_sqlbackup_core.py",
     "azure_dpbackup_core.py",
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
+    "azure_promql.py",                              # v4: PromQL-subset evaluator behind Prometheus rule groups + KEDA prometheus trigger — before azure_alerts_core
     "azure_alerts_core.py",                         # v4: Azure Monitor alert evaluation + processing rules (Microsoft.AlertsManagement) — after monitor/operationalinsights, before azure_arm_core
     "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",
@@ -145,6 +146,8 @@ CORES = [
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
+    "azure_aks_ext_core.py",                        # v4: AKS extensions + KEDA add-on/operator over the object store — before azure_cfgext_core/azure_arm_core
+    "azure_webhost_core.py", "azure_autoscale_core.py",   # v4: App Service front door/app host + autoscale engine — after azure_webapp_core/kudu/webnet
     "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
     "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
     "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)

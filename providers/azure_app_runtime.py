@@ -88,5 +88,49 @@ def _stop(handle) -> None:
         subprocess.run(["docker", "rm", "-f", handle["id"]], capture_output=True, timeout=60)
 
 
+def _logs(handle, tail=200) -> str:
+    p = subprocess.run(["docker", "logs", "--tail", str(int(tail)), handle["id"]], capture_output=True, text=True, timeout=30)
+    return (p.stdout or "") + (p.stderr or "")
+
+
+def _exec(handle, argv, timeout=20):
+    """`docker exec` into the replica's container; returns (exit code, combined output)."""
+    try:
+        p = subprocess.run(["docker", "exec", handle["id"], *[str(a) for a in argv]], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, f"command timed out after {timeout}s"
+    return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+
+def _restart(handle) -> None:
+    p = subprocess.run(["docker", "restart", handle["id"]], capture_output=True, text=True, timeout=60)
+    if p.returncode:
+        raise RuntimeError((p.stderr or p.stdout).strip()[-200:])
+
+
+def _stats(handle) -> dict:
+    p = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{json .}}", handle["id"]], capture_output=True, text=True, timeout=30)
+    import json
+    d = json.loads(p.stdout.strip().splitlines()[0]) if p.stdout.strip() else {}
+    return {"cpuPercent": d.get("CPUPerc"), "memoryUsage": d.get("MemUsage"), "memoryPercent": d.get("MemPerc"), "netIO": d.get("NetIO"), "pids": d.get("PIDs")}
+
+
+def _run_once(image, argv, env, timeout=1800):
+    """A one-shot container for a Container Apps Job execution (docker run --rm)."""
+    if not _enabled():
+        raise RuntimeError("container runtime disabled")
+    cmd = ["docker", "run", "--rm", "--memory", "512m", "--label", "vyomi.azure.job=1"]
+    for k, v in (env or {}).items():
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
+            cmd += ["-e", f"{k}={v if v is not None else ''}"]
+    cmd.append(image)
+    cmd += [str(a) for a in (argv or [])]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=min(int(timeout), 600))
+    except subprocess.TimeoutExpired:
+        return 124, "execution timed out"
+    return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+
 def attach() -> None:
-    core.configure_runtime(_start, _stop, _status)
+    core.configure_runtime(_start, _stop, _status, logs=_logs, exec=_exec, restart=_restart, stats=_stats, run_once=_run_once)

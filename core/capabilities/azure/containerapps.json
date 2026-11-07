@@ -16,9 +16,17 @@
  },
  "azure.containerapps.environment.tools": {
   "title": "Diagnose and solve problems, Logs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No diagnostics engine or Log Analytics query pipeline for this environment."],
-  "api": []
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Logs (POST managedEnvironments/{env}/logs) aggregates the real console logs of every app container in the environment with a substring filter -- not a Log Analytics/KQL pipeline; Diagnose runs the per-app detectors. Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab)."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+  ]
  },
  "azure.containerapps.app.crud": {
   "title": "Container Apps (create, list, get, delete, start/stop)",
@@ -86,17 +94,31 @@
  },
  "azure.containerapps.app.monitoring": {
   "title": "Log stream",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No live log streaming behind a Container App (Metrics and Alerts are real, see azure.common.resource_monitoring; Diagnostic settings are real too, via the generic ARM extension-resource engine)."],
-  "api": []
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Log stream (GET/POST containerApps/{app}/logstream) returns the app container's real stdout/stderr (docker logs) and Console (POST .../exec) runs commands in it (docker exec); metrics come from docker stats (GET .../vyomiMetrics). Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab). Log lines are a snapshot tail, not a websocket stream."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+  ]
  },
  "azure.containerapps.app.tools": {
   "title": "Diagnose and solve problems, Events",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
   "limitations": [
-   "No diagnostics engine or Event Grid wiring for Container Apps. Resource health (azure.common.resource_health) and New support request (azure.common.support) are the shared panels and are not part of this gap."
+   "Events lists the app's system events (container started/stopped/restarted, console commands); Diagnose and solve problems runs detectors over the REAL container state and recent log errors; revision Restart really restarts the container. Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab)."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+  ]
  },
  "azure.containerapps.job.crud": {
   "booster": true,
@@ -108,9 +130,17 @@
  },
  "azure.containerapps.job.tools": {
   "title": "Diagnose and solve problems, Identity, Log stream",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No diagnostics engine, managed identity (jobs don't model the identity field) or live log streaming for a Container Apps Job."],
-  "api": []
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Job executions run as REAL one-shot containers (docker run): the exit code decides Succeeded/Failed and the container output is the execution's log (GET jobs/{job}/executions/{e}/logs); Diagnose and Events reflect those runs; the job resource stores a system/user-assigned identity over ARM (the console Identity blade for jobs is not built). Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab). Without a runtime an execution is only recorded (no log)."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+  ]
  },
  "azure.containerapps.iam": {
   "title": "Access control (IAM): role assignments and built-in role definitions over ARM",

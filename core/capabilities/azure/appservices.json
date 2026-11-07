@@ -352,17 +352,19 @@
  "azure.appservices.webapp.siteconfigpanels": {
   "title": "Default documents, Path mappings, Error pages, Health check, API definition, API Management link",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored on the site configuration and returned by the API exactly as set; Vyomi runs no web server, so documents are not served, mappings/error pages/health probes are not applied and the API Management link imports nothing."
+   "The app host (core/azure_webhost_core.py, served at /azure-data/site/{app}/...) APPLIES the site configuration: default documents (in order), path mappings (virtualApplications serve their own physical directory of the app's file system), custom error pages (403/404/500), HTTPS only (301), minimum TLS version (from the declared x-vyomi-tls-version header; no real TLS terminates), client certificate required, IP access restrictions, stopped app, health check probe (reported in x-vyomi-health), Always On (cold start on the first request after 20 idle minutes), and app settings are the environment (os.environ) of Python Function code. A Web App serves static content from its file system; handler mappings are stored but not executed (reported in x-vyomi-skipped) and no language runtime runs server-side Web App code."
   ],
   "api": [
    "sites/config/web CreateOrUpdate",
    "sites/config/web Get"
   ],
   "tests": [
+   "tests/conformance/test_azure_webhost_autoscale_apim.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py",
    "tests/conformance/test_azure_webapp_ops.py"
   ]
  },
@@ -441,17 +443,18 @@
   "tier": "pro",
   "title": "Autoscale",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored as a Microsoft.Insights/autoscaleSettings resource on the plan; Vyomi runs no instances, so profiles and rules are never evaluated and the instance count does not change."
+   "Autoscale settings targeting an App Service plan are evaluated (core/azure_autoscale_core.py) against the REAL request series the app host records (Requests, Http2xx/4xx/5xx, AverageResponseTime per site; CpuPercentage/MemoryPercentage are a load gauge = requests per second per instance against a nominal 20 rps, not measured CPU): scale-out if any rule triggers, scale-in only if all do, ChangeCount/PercentChangeCount/ExactCount, profile min/max clamp, cooldown, fixedDate profiles. The plan's instance count (sku.capacity) really changes and every action is recorded in the Run history (GET autoscaleSettings/{n}/vyomiHistory) and the Activity log. recurrence profiles, predictive autoscale and metrics other than those above are not evaluated; no instances are started (the app host is one in-process worker)."
   ],
   "api": [
    "autoscaleSettings CreateOrUpdate/Get/Delete"
   ],
   "tests": [
-   "tests/conformance/test_azure_webapp_ops.py"
+   "tests/conformance/test_azure_webhost_autoscale_apim.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py"
   ]
  },
  "azure.appservices.webapp.certificates": {

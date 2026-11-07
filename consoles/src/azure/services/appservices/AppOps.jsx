@@ -131,7 +131,7 @@ export function ApiManagement({ a, rg, name, reload, cap = CFG }) {
     <>
       {title(name, "API Management")}
       <CapabilityContainer id={cap} title="API Management">
-        <p style={{ fontSize: 13 }}>Link this app to an API Management instance. The link is recorded on the app; Vyomi does not import the API into the gateway for you.</p>
+        <p style={{ fontSize: 13 }}>Link this app to an API Management instance. Saving imports this app's API into the gateway (one operation per function for a Function App, a wildcard API for a Web App); unlinking removes it. Open the API in API Management to add policies such as rate limits.</p>
         {svc.loading ? <Loading /> : (
           <Field label="API Management instance">
             <Select value={sel} onChange={(_, d) => setSel(d.value)} aria-label="API Management instance">
@@ -208,7 +208,15 @@ export function Autoscale({ a, rg, name, reload }) {
   const [f, setF] = useState(null);
   const [busy, save] = useSave(cur.reload);
   const s = cur.data;
-  const v = f || (s ? { min: s.properties.profiles[0].capacity.minimum, max: s.properties.profiles[0].capacity.maximum, def: s.properties.profiles[0].capacity.default } : { min: 1, max: 3, def: 1 });
+  const p0 = s?.properties?.profiles?.[0];
+  const outR = (p0?.rules || []).find((r) => r.scaleAction.direction === "Increase");
+  const inR = (p0?.rules || []).find((r) => r.scaleAction.direction === "Decrease");
+  const v = f || (s ? { min: p0.capacity.minimum, max: p0.capacity.maximum, def: p0.capacity.default, metric: outR?.metricTrigger.metricName || "Requests", out: outR?.metricTrigger.threshold ?? "", inn: inR?.metricTrigger.threshold ?? "" }
+    : { min: 1, max: 3, def: 1, metric: "Requests", out: "", inn: "" });
+  const history = useAsync(async () => (s ? (await restJson("GET", `${s.id}/vyomiHistory`, { query: { "api-version": "2022-10-01" } })).value || [] : []), [s?.id, cur.data]);
+  const mkRule = (dir, op, thr) => ({ metricTrigger: { metricName: v.metric, metricResourceUri: planId, timeGrain: "PT1M", statistic: "Average", timeWindow: "PT5M", timeAggregation: "Average", operator: op, threshold: Number(thr) },
+    scaleAction: { direction: dir, type: "ChangeCount", value: "1", cooldown: "PT5M" } });
+  const rules = [v.out !== "" && mkRule("Increase", "GreaterThan", v.out), v.inn !== "" && mkRule("Decrease", "LessThan", v.inn)].filter(Boolean);
   const AID = "azure.appservices.webapp.autoscale";
   return (
     <>
@@ -218,10 +226,18 @@ export function Autoscale({ a, rg, name, reload }) {
           <>
             <p style={{ fontSize: 13 }}>{s ? `Custom autoscale is configured (${s.name}).` : "Autoscale is not configured: the plan uses manual scale."}</p>
             {["min", "max", "def"].map((k) => <Field key={k} label={{ min: "Minimum", max: "Maximum", def: "Default" }[k]}><Input type="number" style={{ width: 120 }} value={String(v[k])} aria-label={{ min: "Autoscale minimum", max: "Autoscale maximum", def: "Autoscale default" }[k]} onChange={(_, d) => setF({ ...v, [k]: d.value })} /></Field>)}
+            <Field label="Scale on metric"><Select value={v.metric} aria-label="Autoscale metric" onChange={(_, d) => setF({ ...v, metric: d.value })}><option>Requests</option><option>CpuPercentage</option><option>Http5xx</option><option>AverageResponseTime</option></Select></Field>
+            <Field label="Scale out by 1 when the 5-minute average is above"><Input type="number" style={{ width: 120 }} value={String(v.out)} aria-label="Scale out threshold" onChange={(_, d) => setF({ ...v, out: d.value })} /></Field>
+            <Field label="Scale in by 1 when the 5-minute average is below"><Input type="number" style={{ width: 120 }} value={String(v.inn)} aria-label="Scale in threshold" onChange={(_, d) => setF({ ...v, inn: d.value })} /></Field>
+            <p style={{ fontSize: 12 }}>Evaluated against the request series the app host really recorded (CpuPercentage is a load gauge derived from requests per second per instance).</p>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <Button appearance="primary" disabled={busy} onClick={() => save(() => putAutoscaleSetting(parseId(planId).resourceGroup, s?.name || `${parseId(planId).name}-autoscale`, { location: a.location, properties: { targetResourceUri: planId, enabled: true, profiles: [{ name: "default", capacity: { minimum: String(v.min), maximum: String(v.max), default: String(v.def) }, rules: [] }] } }), "Autoscale setting was saved.", AID)}>Save autoscale</Button>
+              <Button appearance="primary" disabled={busy} onClick={() => save(() => putAutoscaleSetting(parseId(planId).resourceGroup, s?.name || `${parseId(planId).name}-autoscale`, { location: a.location, properties: { targetResourceUri: planId, enabled: true, profiles: [{ name: "default", capacity: { minimum: String(v.min), maximum: String(v.max), default: String(v.def) }, rules }] } }), "Autoscale setting was saved.", AID)}>Save autoscale</Button>
               {s && <Button disabled={busy} onClick={() => save(() => deleteAutoscaleSetting(s.resourceGroup, s.name), "Autoscale setting was deleted.")}>Switch to manual scale</Button>}
             </div>
+            {s && <><h4 style={{ marginTop: 16 }}>Run history</h4>
+              <table className="vy-table" aria-label="Autoscale run history"><thead><tr><th>Time</th><th>From</th><th>To</th><th>Reason</th></tr></thead>
+                <tbody>{(history.data || []).filter((h) => h.from !== undefined).slice().reverse().map((h, i) => <tr key={i}><td>{new Date(h.time * 1000).toLocaleString()}</td><td>{h.from}</td><td>{h.to}</td><td>{h.reason}</td></tr>)}
+                  {!(history.data || []).some((h) => h.from !== undefined) && <tr><td colSpan={4}>No scale actions yet.</td></tr>}</tbody></table></>}
           </>)}
       </CapabilityContainer>
     </>
