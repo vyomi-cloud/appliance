@@ -19,6 +19,16 @@ mkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/vyomi-docker" "$STAGE/usr/share/doc/
 
 install -m 0755 "$ROOT/packaging/docker/vyomi"              "$STAGE/usr/bin/vyomi"
 install -m 0644 "$ROOT/docker-compose.cloudlite.yml"        "$STAGE/usr/share/vyomi-docker/docker-compose.cloudlite.yml"
+# `vyomi mcp`: the compiled MCP server for both Linux arches (release.yml builds
+# them first). The package stays noarch; the wrapper picks the binary by uname -m.
+for _arch in amd64 arm64; do
+  _bin="$ROOT/packaging/docker/mcp/linux-$_arch/vyomi-mcp"
+  if [ -f "$_bin" ]; then
+    install -D -m 0755 "$_bin" "$STAGE/usr/share/vyomi-docker/mcp/linux-$_arch/vyomi-mcp"
+  else
+    echo "==> note: $_bin not built; package ships without \`vyomi mcp\` for linux-$_arch" >&2
+  fi
+done
 install -m 0644 "$ROOT/README.md" "$ROOT/LICENSE"           "$STAGE/usr/share/doc/vyomi-docker/"
 
 mkdir -p "$ROOT/dist"
