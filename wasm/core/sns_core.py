@@ -1110,10 +1110,73 @@ def _publish_to_endpoint(store, endpoint_arn: str, msg: dict) -> str:
     if str(ep["attributes"].get("Enabled", "true")).lower() != "true":
         raise SnsError("EndpointDisabled", "Endpoint is disabled", 400)
     message_id = str(uuid.uuid4())
-    _log_delivery(store, kind="Notification", topic_arn="", protocol="application", endpoint=endpoint_arn,
-                  subscription_arn="", subject=msg.get("Subject") or "",
-                  message=_message_for_protocol(msg, "application", ep["endpoint_platform"]), message_id=message_id)
+    text = _message_for_protocol(msg, "application", ep["endpoint_platform"])
+    payload = _push_payload(ep["endpoint_platform"], text, msg)
+    rec = _log_delivery(store, kind="Notification", topic_arn="", protocol="application", endpoint=endpoint_arn,
+                        subscription_arn="", subject=msg.get("Subject") or "", message=text, message_id=message_id,
+                        payload=payload, platform=ep["endpoint_platform"])
+    _push_gateway_deliver(store, ep, rec, payload)
     return message_id
+
+
+# ── push gateway stub (APNS / FCM / ADM ...) ───────────────────────────────
+# Vyomi has no Apple/Google account, so there is no real device to reach. What IS real: the platform-specific payload SNS
+# builds from a plain message (APNS aps.alert, GCM/FCM data, ADM data), and a gateway that delivers it to the endpoint's
+# registered "device": always the readable push inbox (VyomiListPushInbox), plus an HTTP POST to the endpoint's
+# VyomiPushWebhook attribute when set (offline appliance; Nano has no sockets). A 404/410 from the webhook is the gateway's
+# "token unregistered" answer and disables the endpoint exactly as SNS does after APNS/FCM reject a token.
+def _push_payload(platform: str, text: str, msg: dict) -> str:
+    if msg.get("MessageStructure") == "json":
+        return text    # the caller already supplied the platform-native body
+    if platform.startswith("APNS"):
+        return json.dumps({"aps": {"alert": text}})
+    if platform in ("GCM", "FCM", "ADM"):
+        return json.dumps({"data": {"message": text}})
+    return json.dumps({"default": text})
+
+
+def _push_gateway_deliver(store, ep: dict, rec: dict, payload: str) -> None:
+    url = str(ep["attributes"].get("VyomiPushWebhook") or "")
+    rec["delivery"] = "inbox"
+    if not url:
+        return
+    import sys
+    if not url.startswith(("http://", "https://")):
+        rec["error"] = "VyomiPushWebhook must be an http(s) URL; delivered to the inbox only"
+        return
+    if sys.platform == "emscripten":
+        rec["error"] = "webhook delivery needs sockets, which the browser (Nano) does not have; delivered to the inbox only"
+        return
+    import urllib.request, urllib.error
+    try:
+        doc = json.loads(payload)
+    except Exception:
+        doc = payload
+    body = json.dumps({"platform": ep["endpoint_platform"], "endpointArn": ep["arn"], "token": ep["attributes"].get("Token"),
+                       "messageId": rec["message_id"], "payload": doc}).encode()
+    req = urllib.request.Request(url, data=body, method="POST", headers={"content-type": "application/json", "x-vyomi-push-platform": ep["endpoint_platform"]})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            rec["delivery"], rec["webhook_status"] = "webhook", r.status
+    except urllib.error.HTTPError as e:
+        rec["delivery"], rec["webhook_status"], rec["error"] = "webhook-failed", e.code, f"HTTP {e.code} from {url}"
+        if e.code in (404, 410):    # token no longer registered with the gateway
+            ep["attributes"]["Enabled"] = "false"
+    except Exception as e:
+        rec["delivery"], rec["error"] = "webhook-failed", f"{type(e).__name__}: {e}"
+
+
+def _vyomi_list_push_inbox(store, params):
+    """Vyomi extension (no AWS equivalent): the simulated device inbox for mobile push - every payload the push gateway
+    delivered to a platform endpoint, newest first, optionally filtered by EndpointArn."""
+    arn = _p(params, "EndpointArn")
+    msgs = [d for d in reversed(_state(store)["deliveries"])
+            if d.get("protocol") == "application" and (not arn or d.get("endpoint") == arn)]
+    members = "".join("<member>" + _el("MessageId", d.get("message_id", "")) + _el("EndpointArn", d.get("endpoint", ""))
+                      + _el("Platform", d.get("platform", "")) + _el("Payload", d.get("payload", d.get("message", "")))
+                      + _el("Delivery", d.get("delivery", "inbox")) + _el("WebhookStatus", str(d.get("webhook_status", "")))
+                      + _el("Error", d.get("error", "")) + _el("Timestamp", d.get("timestamp", "")) + "</member>" for d in msgs[:100])
+    return _envelope("VyomiListPushInbox", f"<Messages>{members}</Messages>")
 
 
 def _publish_to_phone(store, phone: str, msg: dict) -> str:
@@ -1519,6 +1582,7 @@ _OPS = {
     "CreateSMSSandboxPhoneNumber": _create_sms_sandbox_phone_number,
     "VerifySMSSandboxPhoneNumber": _verify_sms_sandbox_phone_number,
     "VyomiListSimulatedSMS": _vyomi_list_simulated_sms,
+    "VyomiListPushInbox": _vyomi_list_push_inbox,
     "DeleteSMSSandboxPhoneNumber": _delete_sms_sandbox_phone_number,
     "ListSMSSandboxPhoneNumbers": _list_sms_sandbox_phone_numbers,
     "GetSMSSandboxAccountStatus": _get_sms_sandbox_account_status,

@@ -11,6 +11,7 @@ import Container from "@cloudscape-design/components/container";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, fmtDate, KeyValue } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const execArn = (sm, exec) => `arn:aws:states:us-east-1:000000000000:execution:${sm}:${exec}`;
@@ -52,6 +53,8 @@ export default function ExecutionDetail({ params }) {
   const t = useAsync(() => api.describeExecution(arn), [arn]);
   const h = useAsync(() => api.getExecutionHistory(arn), [arn]);
   const sm = useAsync(() => api.describeStateMachineForExecution(arn), [arn]);
+  const traceId = (t.data?.traceHeader || "").match(/Root=([^;]+)/)?.[1];
+  const trace = useAsync(() => (traceId ? api.getTrace(traceId) : Promise.resolve(null)), [traceId, t.data?.status]);
   const [busy, setBusy] = useState(false);
   if (t.loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (t.error) return <ErrorAlert error={t.error} />;
@@ -86,6 +89,23 @@ export default function ExecutionDetail({ params }) {
         <Container header={<Header variant="h2">Graph view</Header>}>
           <GraphView definitionText={sm.data?.definition} history={h.data || []} />
         </Container>
+
+        {traceId && (
+          <CapabilityContainer id="aws.states.state-machine.tracing" title="X-Ray trace">
+            {trace.data ? (
+              <SpaceBetween size="xs">
+                <Box>Trace <code>{trace.data.id}</code> - {Number(trace.data.duration).toFixed(3)} s</Box>
+                <Table variant="embedded" items={trace.data.segments.flatMap((sg) => [{ n: sg.name, kind: "segment", s: sg, d: sg.end_time - sg.start_time }, ...(sg.subsegments || []).map((x) => ({ n: x.name, kind: x.annotations?.StateType || "subsegment", s: x, d: x.end_time - x.start_time }))])}
+                  trackBy="n" columnDefinitions={[
+                    { id: "n", header: "Segment", cell: (r) => (r.kind === "segment" ? <b>{r.n}</b> : <span style={{ paddingLeft: 16 }}>{r.n}</span>) },
+                    { id: "k", header: "Type", cell: (r) => r.kind },
+                    { id: "d", header: "Duration", cell: (r) => `${(r.d * 1000).toFixed(1)} ms` },
+                    { id: "f", header: "Result", cell: (r) => <StatusIndicator type={r.s.fault ? "error" : "success"}>{r.s.fault ? "Fault" : "OK"}</StatusIndicator> },
+                  ]} />
+              </SpaceBetween>
+            ) : <Box>{trace.loading ? "Loading trace..." : "The trace is recorded when the execution finishes."}</Box>}
+          </CapabilityContainer>
+        )}
 
         <Table
           variant="container"

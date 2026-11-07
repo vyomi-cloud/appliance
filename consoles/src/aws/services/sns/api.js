@@ -179,6 +179,10 @@ export async function listSimulatedSms(phone) {
   const r = result(await call("VyomiListSimulatedSMS", phone ? { PhoneNumber: phone } : {}), "VyomiListSimulatedSMS");
   return asList(r.Messages?.member).map((m) => ({ id: m.MessageId, phone: m.PhoneNumber, kind: m.Kind, message: m.Message, at: m.Timestamp }));
 }
+export async function listPushInbox(endpointArn) {
+  const r = result(await call("VyomiListPushInbox", endpointArn ? { EndpointArn: endpointArn } : {}), "VyomiListPushInbox");
+  return asList(r.Messages?.member).map((m) => ({ id: m.MessageId, endpoint: m.EndpointArn, platform: m.Platform, payload: m.Payload, delivery: m.Delivery, webhook: m.WebhookStatus, error: m.Error, at: m.Timestamp }));
+}
 export const deleteSmsSandboxPhoneNumber = (phone) => call("DeleteSMSSandboxPhoneNumber", { PhoneNumber: phone });
 export async function listSmsSandboxPhoneNumbers() {
   const out = [];

@@ -1,6 +1,6 @@
 /* Step Functions over the native JSON wire (X-Amz-Target AWSStepFunctions.*),
  * core/stepfunctions_core.py. */
-import { awsJson } from "../../../common/wire.js";
+import { awsJson, awsRest } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("stepfunctions", `AWSStepFunctions.${op}`, body);
 
@@ -48,3 +48,10 @@ export const untagResource = (resourceArn, tagKeys) => call("UntagResource", { r
 
 /** `arn:aws:states:region:acct:stateMachine:name` -> `name` (strips a version/alias qualifier). */
 export const nameFromArn = (arn) => (arn || "").split(":")[6];
+
+/** X-Ray trace of an execution (core/xray_core.py): the segment documents for the execution's trace id. */
+export async function getTrace(traceId) {
+  const r = await awsRest("xray", "POST", "/Traces", { body: { TraceIds: [traceId] } });
+  const t = (r.Traces || [])[0];
+  return t ? { id: t.Id, duration: t.Duration, segments: t.Segments.map((s) => JSON.parse(s.Document)) } : null;
+}

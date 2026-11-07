@@ -433,6 +433,7 @@ _SIGNING = {
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "mgn": "mgn",   # Application Migration Service (rest-json POST /<Operation>) -> core/mgn_core over the shared EC2 model
+    "xray": "xray",   # AWS X-Ray (rest-json /TraceSegments, /Traces, /TraceSummaries, /ServiceGraph) -> core/xray_core over the Step Functions store's trace bag
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "securityhub": "securityhub", "guardduty": "guardduty",   # Security Hub + GuardDuty (rest-json) -> core/secscan_core over the S3 store's persisted account bag
     "codeconnections": "codeconnections", "codestar-connections": "codeconnections",   # CodeConnections-lite + CloudFormation Git sync (JSON 1.0) -> core/aws_codeconn_core over the S3 store's account bag + the CFN core
@@ -1642,6 +1643,9 @@ class AwsWireRouter:
         if svc == "mgn":
             from core import mgn_core
             return mgn_core.dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
+        if svc == "xray":
+            from core import xray_core
+            return xray_core.dispatch(self.sfn, method, path, query or {}, headers or {}, bytes(body))
         if svc == "rbin":
             from core import ec2_ops_core
             r = ec2_ops_core.rbin_dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
