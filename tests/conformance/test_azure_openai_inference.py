@@ -1,10 +1,14 @@
-"""Simulated Azure OpenAI inference through the ARM entrypoint (offline + Nano share it)
+"""Azure OpenAI inference through the ARM entrypoint (offline + Nano share it). It is the SAME implementation as /openai/... and
+/azure-data/openai/... (core/ai_models_core over the llm seam): a stub model answers, and with no model it is an honest 503.
 (run: python3 tests/conformance/test_azure_openai_inference.py)."""
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from core import llm_core  # noqa: E402
 from core.azure_arm_core import AzureArm  # noqa: E402
+
+llm_core.set_backend(lambda m, sy, mt, t, st: {"text": "echo:" + [x for x in m if x["role"] == "user"][-1]["content"]})
 
 PASS = FAIL = 0
 
@@ -36,8 +40,12 @@ r1 = arm.handle("POST", A + "/openai/deployments/chat/chat/completions", P, req)
 b = r1["body"]
 check("chat/completions shape: id, choices[0].message.content, usage", r1["status"] == 200 and b["id"].startswith("chatcmpl-")
       and b["choices"][0]["message"]["role"] == "assistant" and b["usage"]["total_tokens"] == b["usage"]["prompt_tokens"] + b["usage"]["completion_tokens"], b)
-check("output is clearly labelled simulated and echoes the prompt", "SIMULATED" in b["choices"][0]["message"]["content"] and "hello azure" in b["choices"][0]["message"]["content"])
-check("deterministic", arm.handle("POST", A + "/openai/deployments/chat/chat/completions", P, req)["body"]["choices"] == b["choices"])
+check("answered by the seam model (no canned text)", b["choices"][0]["message"]["content"] == "echo:hello azure" and "SIMULATED" not in str(b))
+llm_core.set_backend(None)
+os.environ["VYOMI_LLM_DISABLE"] = "1"
+nb = arm.handle("POST", A + "/openai/deployments/chat/chat/completions", P, req)
+check("no model running -> 503 ServiceUnavailable, never a canned answer", nb["status"] == 503 and nb["body"]["error"]["code"] == "ServiceUnavailable", nb)
+check("stream=true via the ARM proxy is refused clearly", arm.handle("POST", A + "/openai/deployments/chat/chat/completions", P, dict(req, stream=True))["status"] == 400)
 e = arm.handle("POST", A + "/openai/deployments/emb/embeddings", P, {"input": ["a", "b"]})["body"]
 check("embeddings: 2 vectors x 1536, unit norm, deterministic", len(e["data"]) == 2 and len(e["data"][0]["embedding"]) == 1536
       and abs(sum(x * x for x in e["data"][0]["embedding"]) - 1) < 1e-3 and e["data"][0]["embedding"] != e["data"][1]["embedding"])

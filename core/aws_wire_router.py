@@ -1483,7 +1483,8 @@ class AwsWireRouter:
             r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
             return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
-        if svc in ("bedrock", "gcp-aiplatform", "az-openai"):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
+        if svc in ("bedrock", "gcp-aiplatform", "az-openai") or (svc == "azure-arm" and re.search(
+                r"/providers/microsoft\.cognitiveservices/accounts/[^/]+/openai/", path.lower())):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
             from core import llm_core
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
         return self.handle(method, path, query, headers, body)

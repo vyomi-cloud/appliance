@@ -58,6 +58,20 @@ async def main():
     llm.set_async_backend(boom)
     out = await r.ahandle("POST", path, {}, h, body)
     _check("engine failure -> ModelNotReady, no canned text", out["status"] == 429 and b"webgpu lost" in out["body"])
+    # tools over the async (WebLLM) bridge: prompt translation + a corrective retry = two engine calls replayed by arun
+    replies = iter(["I would call the tool", '{"tool_calls":[{"name":"get_weather","arguments":{"city":"Paris"}}]}'])
+    n = []
+
+    async def scripted(msgs, system, max_tokens, temperature, stop):
+        n.append(1)
+        return {"text": next(replies)}
+    llm.set_async_backend(scripted)
+    tb = json.dumps({"messages": [{"role": "user", "content": [{"text": "weather?"}]}], "toolConfig": {"tools": [{"toolSpec": {
+        "name": "get_weather", "inputSchema": {"json": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}}]}}).encode()
+    out = await r.ahandle("POST", path, {}, h, tb)
+    doc = json.loads(out["body"])
+    _check("Converse toolUse over the async bridge (retry replayed through arun)", out["status"] == 200 and doc["stopReason"] == "tool_use"
+           and doc["output"]["message"]["content"][0]["toolUse"]["input"] == {"city": "Paris"} and len(n) == 2)
     llm.set_async_backend()
     del os.environ["VYOMI_LLM_DISABLE"]
     print("OK")

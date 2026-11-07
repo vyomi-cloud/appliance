@@ -253,6 +253,10 @@ def to_response(out: dict):
     """Router output {status, headers, body} → a Starlette Response."""
     from fastapi import Response
     hdrs = {k: v for k, v in (out.get("headers") or {}).items()}
+    if out.get("stream") is not None:        # model inference: forward the seam's generator as it produces (core/ai_models_core)
+        from fastapi.responses import StreamingResponse
+        ct = next((hdrs.pop(k) for k in list(hdrs) if k.lower() == "content-type"), None)
+        return StreamingResponse(out["stream"], status_code=out["status"], headers=hdrs, media_type=ct)
     return Response(content=out.get("body") or b"", status_code=out["status"], headers=hdrs)
 
 
@@ -264,8 +268,13 @@ async def serve(router: AwsWireRouter, request, path: str | None = None, body: b
     keys = request.query_params.getlist("tagKeys")       # S3 Tables / S3 Control UntagResource: repeated tagKeys=a&tagKeys=b
     if len(keys) > 1:
         query["tagKeys"] = ",".join(keys)
-    out = await router.ahandle(request.method, path or request.url.path,
-                               query, dict(request.headers), body)
+    from core import ai_models_core
+    tok = ai_models_core.STREAM_OK.set(True)       # the generator is consumed by StreamingResponse, not drained into `body`
+    try:
+        out = await router.ahandle(request.method, path or request.url.path,
+                                   query, dict(request.headers), body)
+    finally:
+        ai_models_core.STREAM_OK.reset(tok)
     return to_response(out)
 
 
