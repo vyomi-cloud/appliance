@@ -4561,6 +4561,8 @@ from core import vpc_extras_core as _extras_core   # noqa: E402
 _OPS.update(_extras_core.OPS)
 from core import ec2_ops_core as _ec2ops   # noqa: E402  (events, zones, spot, RIs, capacity reservations, hosts, Recycle Bin)
 _ec2ops.install(_OPS)
+from core import ec2_gap_core as _ec2gap   # noqa: E402  (wire-gap sweep: attributes, AMI/volume/snapshot/ENI extras, fleets, IAM profile assocs)
+_ec2gap.install(_OPS)
 from core import vpc_encryption_core as _vpcenc   # noqa: E402  (VPC Encryption Controls: monitor/enforce + audit)
 _vpcenc.install(_OPS)
 

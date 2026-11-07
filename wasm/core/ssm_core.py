@@ -1192,3 +1192,11 @@ def _wrap_session(fn_name: str):
 _OPS.update({"StartSession": _wrap_session("start_session"), "ResumeSession": _wrap_session("resume_session"),
              "TerminateSession": _wrap_session("terminate_session"), "DescribeSessions": _wrap_session("describe_sessions")})
 OPERATIONS = sorted(_OPS)
+
+
+try:   # wire-gap sweep: service settings, inventory, OpsCenter, activations, compliance, patch groups, window tasks, automation, ...
+    from core import ssm_gap_core as _gap
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import ssm_gap_core as _gap  # type: ignore
+_OPS.update(_gap.OPS)
+OPERATIONS = sorted(_OPS)

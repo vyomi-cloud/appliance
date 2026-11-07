@@ -451,6 +451,14 @@ def dispatch(s3_store, method: str, path: str, query: dict, headers: dict, body:
                     s3_store.persist()
                 return _jr(200, out)
             raise _Err(404, "NoSuchResource", "Unknown Vyomi CloudFront extension.")
+        if not _PK.match(path) and not _KG.match(path):
+            try:
+                from core import cloudfront_dist_core as _dist
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import cloudfront_dist_core as _dist  # type: ignore
+            ext = _dist.dispatch(s3_store, method, path, query, h, body)
+            if ext is not None:
+                return ext
         m = _PK.match(path)
         if m:
             kid, cfg = m.groups()

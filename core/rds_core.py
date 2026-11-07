@@ -123,9 +123,20 @@ def _members(params: dict, prefix: str) -> list:
     or `{prefix}.member.{i}.{field}` (structured, e.g. Tags.member.1.Key). Returns
     a list of strings for a scalar list, dicts for a structured one."""
     out: list = []
+    # boto3/aws-cli name the element after the shape (`SubnetIds.SubnetIdentifier.1`, `Tags.Tag.1.Key`); hand-written
+    # callers use `.member.`. Accept whichever element name the request actually carries.
+    elem = "member"
+    if f"{prefix}.member.1" not in params and not any(k.startswith(f"{prefix}.member.1.") for k in params):
+        for k in params:
+            parts = k.split(".")
+            if k.startswith(prefix + ".") and len(parts) >= len(prefix.split(".")) + 2 and parts[len(prefix.split("."))] != "member":
+                cand = parts[len(prefix.split("."))]
+                if parts[len(prefix.split(".")) + 1].isdigit():
+                    elem = cand
+                    break
     i = 1
     while True:
-        scalar_key = f"{prefix}.member.{i}"
+        scalar_key = f"{prefix}.{elem}.{i}"
         if scalar_key in params:
             out.append(params[scalar_key])
             i += 1
@@ -218,6 +229,7 @@ def _db_instance_xml(db: dict) -> str:
         _el("Engine", db.get("engine", "postgres")),
         _el("EngineVersion", db.get("engine_version", "16.4")),
         _el("DBInstanceStatus", db.get("db_instance_status", "available")),
+        (_el("DBClusterIdentifier", db["db_cluster_identifier"]) if db.get("db_cluster_identifier") else ""),
         _el("MasterUsername", db.get("master_username", "admin")),
         _el("AllocatedStorage", db.get("allocated_storage", 20)),
         _el("StorageType", db.get("storage_type", "gp3")),
@@ -702,6 +714,10 @@ def _describe_db_instances(store: SqlStore, params: dict) -> RdsResponse:
             raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
     else:
         ids = store.instance_ids()
+        want = {v.lower().rsplit(":", 1)[-1] for k in ("Filters.Filter.1", "Filters.member.1") if params.get(k + ".Name") == "db-cluster-id"
+                for v in [params.get(k + ".Values.Value.1") or params.get(k + ".Values.member.1") or ""]}
+        if want:
+            ids = [i for i in ids if (store.get_instance(i) or {}).get("db_cluster_identifier") in want]
     inner = "<DBInstances>" + "".join(_db_instance_xml(store.get_instance(i)) for i in ids) + "</DBInstances>"
     return _success("DescribeDBInstances", inner)
 
@@ -1204,16 +1220,12 @@ def _create_db_proxy(store: SqlStore, params: dict) -> RdsResponse:
     family = str(params.get("EngineFamily", "POSTGRESQL")).upper()
     if family not in ("MYSQL", "POSTGRESQL", "SQLSERVER"):
         raise RdsError("InvalidParameterValue", "EngineFamily must be MYSQL, POSTGRESQL or SQLSERVER.", 400)
-    auth = []
-    i = 1
-    while f"Auth.member.{i}.SecretArn" in params or f"Auth.member.{i}.AuthScheme" in params:
-        auth.append({"AuthScheme": params.get(f"Auth.member.{i}.AuthScheme", "SECRETS"), "SecretArn": params.get(f"Auth.member.{i}.SecretArn", ""),
-                     "IAMAuth": params.get(f"Auth.member.{i}.IAMAuth", "DISABLED")})
-        i += 1
+    auth = [{"AuthScheme": a.get("AuthScheme", "SECRETS"), "SecretArn": a.get("SecretArn", ""), "IAMAuth": a.get("IAMAuth", "DISABLED")}
+            for a in _members(params, "Auth")]
     subnets = _members(params, "VpcSubnetIds")
     if params.get("RoleArn") is not None and not str(params.get("RoleArn")).startswith("arn:aws:iam::"):
         raise RdsError("InvalidParameterValue", "RoleArn must be an IAM role ARN.", 400)
-    if "VpcSubnetIds.member.1" in params and len(subnets) < 2:
+    if subnets and len(subnets) < 2:
         raise RdsError("InvalidParameterValue", "An RDS Proxy needs at least two subnets (in different Availability Zones).", 400)
     record = {
         "db_proxy_name": name,
@@ -1971,6 +1983,14 @@ def _promote_read_replica(store: SqlStore, params: dict, msg_store=None) -> RdsR
 # The single routing point for the native AWS RDS Query protocol — what an
 # unmodified aws-cli / boto3 RDS client speaks. `params` is the parsed
 # form-encoded body ({"Action": "CreateDBInstance", "DBInstanceIdentifier": ...}).
+def _gap():
+    try:
+        from core import rds_gap_core as g
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import rds_gap_core as g  # type: ignore
+    return g
+
+
 def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_store=None,
              _internal: bool = False) -> RdsResponse:
     """`msg_store` (the shared SNS/SQS store) delivers real event-subscription
@@ -1986,7 +2006,13 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
         return _error("MissingAction", "The request must include an Action.", 400)
     try:
         if action == "CreateDBInstance":
-            return _create_db_instance(store, params, msg_store)
+            gap = _gap()
+            cl = gap.pre_create_instance(store, params)
+            r = _create_db_instance(store, params, msg_store)
+            if cl is not None:
+                gap.post_create_instance(store, params, cl)
+                r = _success("CreateDBInstance", _db_instance_xml(store.get_instance(str(params.get("DBInstanceIdentifier", "")).strip())))
+            return r
         if action == "DescribeDBInstances":
             return _describe_db_instances(store, params)
         if action == "AddRoleToDBInstance":
@@ -1998,7 +2024,14 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
         if action == "ModifyDBInstance":
             return _modify_db_instance(store, params, msg_store)
         if action == "DeleteDBInstance":
-            return _delete_db_instance(store, params, msg_store)
+            gap = _gap()
+            _d = store.get_instance(str(params.get("DBInstanceIdentifier", "")).strip())
+            if _d:
+                gap.check_delete_instance(store, _d)
+            r = _delete_db_instance(store, params, msg_store)
+            if _d:
+                gap.post_delete_instance(store, _d)
+            return r
         if action == "StartDBInstance":
             return _set_status(store, params, "StartDBInstance", "available", msg_store)
         if action == "StopDBInstance":
@@ -2099,6 +2132,9 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _create_db_instance_read_replica(store, params, msg_store)
         if action == "PromoteReadReplica":
             return _promote_read_replica(store, params, msg_store)
+        _fn = _gap().OPS.get(action)
+        if _fn is not None:
+            return _fn(store, params, msg_store)
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     except RdsError as e:
         return _error(e.code, e.message, e.status)
