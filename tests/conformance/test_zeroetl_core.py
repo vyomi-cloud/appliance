@@ -67,7 +67,8 @@ def main():
     _check("ListDatabases", "zdb" in J(r, "redshift-data", "RedshiftData.ListDatabases", {})[1]["Databases"])
     _check("unknown statement 404", J(r, "redshift-data", "RedshiftData.DescribeStatement", {"Id": "nope"})[0] == 404)
     _check("no workgroup 400", J(r, "redshift-data", "RedshiftData.ExecuteStatement", {"Sql": "select 1"})[0] == 400)
-    _check("other Glue ops honestly unsupported", J(r, "glue", "AWSGlue.GetDatabases", {})[0] == 400)
+    # (the Glue Data Catalog / crawlers / jobs are real since glue_catalog_core; an op outside all of those stays honestly unsupported)
+    _check("other Glue ops honestly unsupported", J(r, "glue", "AWSGlue.GetMLTransforms", {})[0] == 400)
 
     # ---- RDS source (sqlite engine): rows replicate too
     q = lambda **p: r.handle("POST", "/", {}, {**H("rds"), "content-type": "application/x-www-form-urlencoded"}, "&".join(f"{k}={v}" for k, v in p.items()).encode())

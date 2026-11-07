@@ -98,7 +98,7 @@ def pre(router, method, path, query, headers, body):
         r = gcp_functions_core.dispatch(bag, method, pp, _normq(router, p, query), headers, bytes(body), ctx)
         _persist(router)
         return {"status": r.status, "headers": dict(r.headers or {}, **{"content-type": r.media_type}), "body": r.body}
-    if method.upper() == "GET" and re.match(r"^/v1/projects(?:/[^/]+)?$", p):   # Cloud Resource Manager v1 projects.get/list (gcloud resolves the project number with it)
+    if method.upper() == "GET" and re.match(r"^/v1/projects(?:/[^/:]+)?$", p):   # Cloud Resource Manager v1 projects.get/list (gcloud resolves the project number with it)
         from core import gcp_project as _gp
         proj = router.gcp_project() if callable(router.gcp_project) else router.gcp_project
         if not getattr(router, "STRICT_GCP_PROJECT", False):

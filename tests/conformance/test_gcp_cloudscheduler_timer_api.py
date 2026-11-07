@@ -40,6 +40,7 @@ def main():
     check("create job to pause", r.status_code < 300, r.text[:160])
     r = requests.post(f"{jobs}/off-{tag}:pause", json={}, timeout=60)
     check("pause job", r.status_code < 300 and r.json().get("state") == "PAUSED", r.text[:160])
+    paused_at = r.json().get("userUpdateTime", "")
 
     # no scheduler calls while we wait for the minute boundary + a tick
     msgs, end = [], time.time() + 85
@@ -54,7 +55,10 @@ def main():
     on = requests.get(f"{jobs}/on-{tag}", timeout=60).json()
     check("lastAttemptTime stamped", bool(on.get("lastAttemptTime")), on)
     off = requests.get(f"{jobs}/off-{tag}", timeout=60).json()
-    check("paused job did not fire", not off.get("lastAttemptTime"), off)
+    # (create+pause are two calls: if they straddle a minute boundary the job legitimately fired
+    # once BEFORE it was paused -- only an attempt stamped after the pause is a failure)
+    la = off.get("lastAttemptTime")
+    check("paused job did not fire", not la or (bool(paused_at) and la <= paused_at), off)
     for j in (f"on-{tag}", f"off-{tag}"):
         requests.delete(f"{jobs}/{j}", timeout=60)
     requests.delete(f"{ps}/subscriptions/{sub}", timeout=60)

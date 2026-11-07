@@ -152,6 +152,7 @@
   ]
  },
  "azure.defender.attack_paths": {
+  "tier": "pro",
   "title": "Attack path analysis and Cloud Security Explorer (Defender CSPM)",
   "level": {
    "nano": "limited",

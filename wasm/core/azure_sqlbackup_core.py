@@ -572,7 +572,7 @@ def dispatch(state, method, sub, rg, chain, payload, query, sql_store=None, blob
                                  "type": "Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies",
                                  "properties": {"retentionDays": 7, "diffBackupIntervalInHours": 12}}
         if method == "GET":
-            return _ok(_view(cur))
+            return _ok({"value": [_view(cur)]} if len(chain) == 5 else _view(cur))   # collection GET = list (real ARM)
         if method in ("PUT", "PATCH"):
             p = dict(cur["properties"])
             p.update((payload or {}).get("properties") or {})
