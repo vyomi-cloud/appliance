@@ -182,6 +182,11 @@ try:                                              # Network Watcher packet captu
 except ImportError:
     import azure_pcap_core as pcap_engine          # type: ignore
 
+try:                                              # Resource group tools: force delete + Insights
+    from core import azure_rgtools_core as rgtools_engine
+except ImportError:
+    import azure_rgtools_core as rgtools_engine   # type: ignore
+
 try:                                              # Workbooks renderer (serializedData -> KQL tables over the Log Analytics subset)
     from core import azure_workbooks_core as workbooks_engine
 except ImportError:
@@ -1386,7 +1391,14 @@ class AzureArm:
                 kids = [r for r in list(self.state.values()) if isinstance(r, dict)
                         and (r.get("_rg") or "").lower() == rest_segs[1].lower()
                         and r.get("type") != "Microsoft.Resources/resourceGroups"]
+            _forced, _ferr = rgtools_engine.parse_force((query or {}).get("forceDeletionTypes")) if method == "DELETE" else (set(), None)
+            if _ferr:
+                return _err(_ferr["status"], _ferr["body"]["error"]["code"], _ferr["body"]["error"]["message"])
+            _rows = rgtools_engine.prepare_delete(self.state, sub, rest_segs[1], _forced) if method == "DELETE" else []
             out = self._resource_group_item(method, sub, rest_segs[1], payload)
+            if out["status"] < 300:
+                for _rid, _op, _txt in _rows:
+                    web_engine._record_event(self.state, sub, rest_segs[1], _rid, _op, _txt, "Succeeded")
             for _r in kids:   # after removal, so "last vault gone" checks see the final state
                 self._child_deleted(_r)
             return out
@@ -1398,6 +1410,11 @@ class AzureArm:
                 return _err(400, "BadRequest", "Missing resource group name.")
             rg = rest_segs[1]
             idx = 2
+
+        # GET .../resourceGroups/{rg}/providers/Microsoft.Vyomi/insights -- the group's "Insights (preview)" page (core/azure_rgtools_core.py)
+        if (rg is not None and method == "GET" and [x.lower() for x in rest_segs[idx:]] == ["providers", "microsoft.vyomi", "insights"]):
+            r = rgtools_engine.insights(self.state, sub, rg, health_engine)
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
 
         # POST .../resourceGroups/{rg}/exportTemplate — every blade's "Export template" (ARM tab
         # + Bicep/Terraform renderings), core/azure_templates_core.py.

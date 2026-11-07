@@ -19,7 +19,8 @@ export { listResourceGroups as listGroups };
 export const getGroup = (name) => restJson("GET", rgPath(name), { query: armQ });
 export const createGroup = (name, body) => restJson("PUT", rgPath(name), { query: armQ, body });
 export const updateGroup = (name, body) => restJson("PATCH", rgPath(name), { query: armQ, body });
-export const deleteGroup = (name) => restJson("DELETE", rgPath(name), { query: armQ });
+export const deleteGroup = (name, forceTypes) => restJson("DELETE", rgPath(name), { query: forceTypes && forceTypes.length ? { ...armQ, forceDeletionTypes: forceTypes.join(",") } : armQ });
+export const getInsights = (name) => restJson("GET", `${rgPath(name)}/providers/Microsoft.Vyomi/insights`, { query: { "api-version": "2024-01-01" } });
 
 export const listResources = async (name) => (await restJson("GET", `${rgPath(name)}/resources`, { query: armQ })).value || [];
 // A resource's own `id` is already the full ARM path; the api-version query param is unused

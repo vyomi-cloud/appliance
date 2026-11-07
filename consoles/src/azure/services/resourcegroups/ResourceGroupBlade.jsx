@@ -24,6 +24,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import Insights from "./Insights.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
@@ -128,6 +129,7 @@ export default function ResourceGroupBlade({ params }) {
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,
       budgets: () => <Budgets name={name} />,
+      insightspreview: () => <Insights name={name} />,
     }[panel];
     body = P ? P() : (
       <>

@@ -325,11 +325,24 @@ function Locks({ a }) {
         <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>
+            <DialogContent>{gap === "Feedback" ? <NotSimulated feature="Sending product feedback" /> : <ScopeLocks scope={gap} rg={a.resourceGroup} />}</DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
+    </>
+  );
+}
+
+function ScopeLocks({ scope, rg }) {
+  const { data, loading, error } = useAsync(() => (scope ? api.listScopeLocks(scope, rg) : Promise.resolve([])), [scope, rg]);
+  if (loading) return <Loading />;
+  return (
+    <>
+      <ErrorBar error={error} />
+      <p style={{ fontSize: 12 }}>Locks in effect at the {scope.toLowerCase()} scope (resource group locks include the subscription's). Manage them from the {scope.toLowerCase()}'s own Locks page.</p>
+      <MiniTable columns={["Lock name", "Lock type", "Scope"]} empty={`No locks at the ${scope.toLowerCase()} scope`}
+        rows={(data || []).map((l) => <tr key={l.id}><td>{l.name}</td><td>{l.properties?.level === "ReadOnly" ? "Read-only" : "Delete"}</td><td>{l.id.split("/providers/")[0] || "/"}</td></tr>)} />
     </>
   );
 }

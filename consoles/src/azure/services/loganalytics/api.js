@@ -114,3 +114,9 @@ const cgPath = (rg, name, id) => `${ARM.path(rg, name)}/computerGroups${id ? `/$
 export const listComputerGroups = async (rg, name) => (await restJson("GET", cgPath(rg, name), { query: q })).value || [];
 export const putComputerGroup = (rg, name, id, body) => restJson("PUT", cgPath(rg, name, id), { query: q, body });
 export const deleteComputerGroup = (rg, name, id) => restJson("DELETE", cgPath(rg, name, id), { query: q });
+
+// Locks at the workspace's resource group / subscription scope (what the Locks blade's Subscription / Resource group buttons show).
+export const listScopeLocks = async (scope, rg) => {
+  const base = scope === "Subscription" ? `/subscriptions/${getSubscription()}` : `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}`;
+  return (await restJson("GET", `${base}/providers/Microsoft.Authorization/locks`, { query: { "api-version": LOCK_API_VERSION } })).value || [];
+};

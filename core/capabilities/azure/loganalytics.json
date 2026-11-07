@@ -139,15 +139,14 @@
   ]
  },
  "azure.loganalytics.workspace.listactions": {
-  "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Export Activity Logs, and Locks' Subscription/Resource group scope + Feedback",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
+  "title": "Toolbar actions on a workspace: Activity log's Export Activity Logs and Locks' Subscription / Resource group scope views; Feedback is not built",
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "'Export Activity Logs' configures the SUBSCRIPTION's Activity Log export (a Microsoft.Insights/diagnosticSettings at subscription scope, a different resource from the workspace's own Diagnostic settings and Data export); the per-event Activity detail flyout and portal Feedback are not modeled. Honest gap, not faked.",
-   "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) \u2014 this entry covers only the actions listed above."
-  ]
+   "'Export Activity Logs' is real: it configures the SUBSCRIPTION's Activity Log export (a Microsoft.Insights/diagnosticSettings at subscription scope, with the real Activity-log categories) and, once saved, delivers each ARM write as a row of AzureDiagnostics in the chosen Log Analytics workspace and as JSON lines in insights-activity-logs of the chosen storage account (core/azure_diag_pipeline.py); deleting the setting stops delivery. It is a different resource from the workspace's own Diagnostic settings and Data export. Event Hub destinations and the partner-solution destination are not delivered.",
+   "The Locks page's Subscription / Resource group buttons list the locks really in effect at those scopes (ARM locks API at subscription and resource group scope, the group list including inherited subscription locks); creating or deleting them is done from the group's or subscription's own Locks page. The portal's Feedback button sends nothing (there is no Microsoft feedback service) and says so.",
+   "Column customization, one-time CSV export, filtering, the per-event detail dialog and 'Reset to default' on both the Activity log and Locks panels are real (consoles/src/azure/kit/ActivityLog.jsx, BrowseGrid.jsx, client-side over the real rows)."
+  ],
+  "tests": ["tests/conformance/test_azure_activity_log_export.py", "tests/conformance/test_azure_sdk_defender_automation_export.py", "tests/cli/azure-defender-automation-cli-smoke.sh", "tests/conformance/test_azure_activity_log_core.py"]
  },
  "azure.loganalytics.workspace.properties": {
   "title": "Properties (read-only resource summary)",
