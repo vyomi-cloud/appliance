@@ -393,7 +393,7 @@ def _azure_service(path, lheaders, query):
     # Front Door / CDN edge (core/azure_cdn_edge_core via the blob core) and the Cosmos Data Migration extension.
     if p.startswith("/_edge/"):
         return "az-blob"
-    if p.startswith("/vyomi/migrations"):
+    if p.startswith("/vyomi/migrations") or p.startswith("/vyomi/dedicatedgateway"):
         return "az-cosmos"
     # Cosmos DB: /dbs path or the documentdb headers.
     if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
@@ -406,6 +406,14 @@ def _azure_service(path, lheaders, query):
     tsegs = [s for s in p.split("/") if s]
     if "odata" in accept.lower() or (tsegs and (tsegs[0] == "Tables" or tsegs[0].startswith("Tables(") or "(" in tsegs[0])):
         return "az-table"
+    # Queue / Table SERVICE-level requests (service properties, stats, CORS preflight) share the root path with Blob: a
+    # distinct host (<acct>.queue|table.core.windows.net) or x-vyomi-service tells them apart.
+    _svc_hint = (lheaders.get("x-vyomi-service") or "").lower()
+    _hm = re.match(r"^[a-z0-9]+\.(queue|table)\.core\.windows\.net$", str(lheaders.get("host", "")).split(":")[0].lower())
+    _svc_hint = _svc_hint or (_hm.group(1) if _hm else "")
+    if _svc_hint in ("queue", "table") and (lheaders.get("x-vyomi-service") or query.get("restype") == "service"
+                                           or "origin" in lheaders or "access-control-request-method" in lheaders):
+        return "az-queue" if _svc_hint == "queue" else "az-table"
     # Blob / Queue: identified by the x-ms-* storage headers.
     if "x-ms-version" in lheaders or "x-ms-blob-type" in lheaders:
         if "/messages" in p:
@@ -2230,6 +2238,9 @@ class AwsWireRouter:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
             elif svc == "az-cosmos":   # account network rules + provisioned/autoscale RU/s (429), from the ARM state
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state, kv_store=self.az_kvkeys)
+            elif svc in ("az-queue", "az-table"):   # service properties / CORS / logging / metrics / retention (azure_storage_svc_core)
+                from core import azure_storage_svc_core as _svcc
+                r = _svcc.serve(svc[3:], mod, store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
             elif svc == "az-servicebus":   # Premium-namespace customer-managed key: bodies sealed at rest
                 _ns = az_sb.cmk_namespace(self.az_arm.state, headers)
                 try:
