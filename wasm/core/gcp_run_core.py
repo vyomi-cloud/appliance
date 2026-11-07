@@ -685,6 +685,13 @@ def _run_function_source(annotations, event):
         return {"ok": None}
     source = (annotations or {}).get(_FN_ANN_SOURCE) or ""
     entry = (annotations or {}).get(_FN_ANN_ENTRY) or "handler"
+    if "import " in source:   # sources that import (functions_framework / flask / json / math ...) run in the function sandbox with its shims
+        try:
+            from core import gcp_console_tabs as _T
+            r = _T.run_python_function(source, entry, event, {})
+            return {"ok": True, "result": r.get("result")} if r.get("status") == "SUCCESS" else {"ok": False, "error": r.get("error") or "function failed"}
+        except ImportError:
+            pass
     sandbox = {"__builtins__": dict(_INVOKE_BUILTINS), "json": json}
     try:
         exec(compile(source, "<function:%s>" % entry, "exec"), sandbox)

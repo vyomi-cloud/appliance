@@ -1396,6 +1396,10 @@ def _dispatch(store, method, path, query, headers, body):
     ext_resp = _ext.handle(store, method, project, rest, verb, payload, query)
     if ext_resp is not None:
         return ext_resp
+    from core import gcp_compute_fill_core as _fill   # disks.resize/IAM, images.deprecate/getFromFamily, instances.attachDisk/...
+    _fr = _fill.handle(store, method, project, rest, verb, payload, query)
+    if _fr is not None:
+        return _fr
 
     if not rest:
         if method == "GET":

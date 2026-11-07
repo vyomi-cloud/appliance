@@ -135,6 +135,15 @@ def _field(f, name):
         return (f.get("sourceProperties") or {}).get(n.split(".", 1)[1])
     if n.startswith("security_marks.marks."):
         return ((f.get("securityMarks") or {}).get("marks") or {}).get(n.split(".", 2)[2])
+    def camel(x):
+        h, *t = x.split("_")
+        return h + "".join(w[:1].upper() + w[1:] for w in t)
+    parts = [camel(x) for x in n.split(".")]
+    if parts[0] in ("securityCenterProperties", "resourceProperties", "securityMarks", "createTime", "updateTime", "iamPolicy", "resourceType"):   # v1 Asset fields
+        cur = f
+        for x in parts:
+            cur = cur.get(x) if isinstance(cur, dict) else None
+        return cur
     raise _bad(f"Invalid filter field '{n}'")
 
 
@@ -231,7 +240,7 @@ def compile_filter(expr):
 # ── assembling the visible finding set ────────────────────────────────────────────────
 def _all_findings(bag, project, generated):
     st = _state(bag)
-    rows = [json.loads(json.dumps(f)) for f in generated] + [json.loads(json.dumps(f)) for f in st["custom"].values() if f["parent"].split("/sources/")[0].endswith(project)]
+    rows = [json.loads(json.dumps(f)) for f in generated] + [json.loads(json.dumps(f)) for f in st["custom"].values() if (lambda sc: sc.endswith("/" + project) or not sc.startswith("projects/"))(f["parent"].split("/sources/")[0])]   # org/folder-scoped custom findings are visible to their own scope
     mutes = [(k, compile_filter(m["filter"])) for k, m in sorted(st["mutes"].items())]
     for f in rows:
         o = st["overlay"].get(f["name"]) or {}
