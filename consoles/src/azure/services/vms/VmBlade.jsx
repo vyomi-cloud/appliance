@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import PacketCapturePanel from "../nsgs/PacketCapture.jsx";
 import { VmDisasterRecovery, VmVaultBackup } from "./RecoveryPanels.jsx";
 import { BootDiagnostics, SerialConsole, BastionConnect, GuestInventory, GuestPerformance, UpdateManager } from "../../kit/VmGuestPages.jsx";
 import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
@@ -70,7 +71,7 @@ export const MENU = [
   ] },
   { group: "Automation", items: [{ id: "tasks", label: "Tasks" }, { id: "exporttemplate", label: "Export template" }] },
   { group: "Help", items: [
-    { id: "resourcehealth", label: "Resource health" }, { id: "bootdiagnostics", label: "Boot diagnostics" },
+    { id: "resourcehealth", label: "Resource health" }, { id: "packetcapture", label: "Packet capture" }, { id: "bootdiagnostics", label: "Boot diagnostics" },
     { id: "perfdiagnostics", label: "Performance diagnostics" }, { id: "resetpassword", label: "Reset password" },
     { id: "redeploy", label: "Redeploy + reapply" }, { id: "serialconsole", label: "Serial console" },
     { id: "support", label: "Support + Troubleshooting" },
@@ -161,6 +162,7 @@ export default function VmBlade({ params }) {
       logs: () => <VmLogs a={a} />,
       connectionmonitor: () => <ConnectionMonitor a={a} />,
       workbooks: () => <VmWorkbooks a={a} />,
+      packetcapture: () => <PacketCapturePanel vm={a} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (

@@ -5,7 +5,7 @@ import { Button, Checkbox, Field, Input, MessageBar, MessageBarBody, MessageBarT
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { Glyph, ErrorBar, Loading, NotSimulated } from "../../kit/common.jsx";
+import { Glyph, ErrorBar, Loading } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { forget } from "../../kit/recent.js";
 import * as api from "./api.js";
@@ -15,6 +15,7 @@ export default function DeleteResourceGroup({ params }) {
   const notify = useNotify();
   const resources = useAsync(() => api.listResources(name), [name]);
   const [typed, setTyped] = useState("");
+  const [force, setForce] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const self = `#/resourcegroups/${encodeURIComponent(name)}`;
@@ -22,7 +23,7 @@ export default function DeleteResourceGroup({ params }) {
   const go = async () => {
     setBusy(true); setError(null);
     try {
-      await api.deleteGroup(name);
+      await api.deleteGroup(name, force ? ["Microsoft.Compute/virtualMachines", "Microsoft.Compute/virtualMachineScaleSets"] : []);
       forget(self);
       notify.success(`Resource group '${name}' was deleted.`, "Delete succeeded");
       navigate("resourcegroups");
@@ -54,8 +55,10 @@ export default function DeleteResourceGroup({ params }) {
         </section>
 
         <section className="vy-form-section">
-          <Checkbox disabled label="Apply force delete for selected Virtual machines and Virtual machine scale sets" />
-          <NotSimulated feature="Force delete" note="Every delete in Vyomi already removes the whole group unconditionally and synchronously, so there is no graceful VM/VMSS deprovisioning sequence to skip." />
+          <Checkbox checked={force} onChange={(_, d) => setForce(!!d.checked)} label="Apply force delete for selected Virtual machines and Virtual machine scale sets" />
+          <p className="vy-muted" style={{ fontSize: 12, margin: "6px 0 0 28px" }}>
+            Without it, running VMs are deallocated gracefully before they are deleted; with it they are deleted directly. Either way the Activity log records each VM's delete.
+          </p>
         </section>
 
         {error && <ErrorBar error={error} title="Delete failed" />}

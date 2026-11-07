@@ -12,6 +12,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import PacketCapturePanel from "./PacketCapture.jsx";
 
 const vmNicIds = (vm) => (vm.properties?.networkProfile?.networkInterfaces || []).map((n) => n.id);
 const nicById = (nics, id) => nics.find((n) => n.id.toLowerCase() === String(id || "").toLowerCase());
@@ -344,8 +345,10 @@ export default function NetworkWatcherTools() {
           <Button onClick={() => setTool("hop")}>Next hop</Button>
           <Button onClick={() => setTool("vmconn")}>VM connectivity issue</Button>
           <Button onClick={() => setTool("ncd")}>Network configuration diagnostics</Button>
+          <Button onClick={() => setTool("pcap")}>Packet capture</Button>
         </div>
       )}
+      {tool === "pcap" && <div style={{ marginTop: 16 }}><PacketCapturePanel /></div>}
       <IpFlowVerifyDialog open={tool === "flow"} onClose={() => setTool(null)} vms={vms.data} nics={nics.data} />
       <NextHopDialog open={tool === "hop"} onClose={() => setTool(null)} vms={vms.data} nics={nics.data} />
       <VmConnectivityDialog open={tool === "vmconn"} onClose={() => setTool(null)} vms={vms.data} />

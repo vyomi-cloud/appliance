@@ -87,7 +87,7 @@ const MODULES = [
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
-  "llm_core.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "agent_spec_core.py", "gcp_agentengine_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -118,7 +118,7 @@ const CORES = [
   "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
   "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
   "azure_security_core.py", "azure_attackpath_core.py", "azure_security_automations_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
-  "azure_diag_pipeline.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webauth_core.py", "azure_aksmon_core.py", "azure_streamanalytics_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_apim_gateway_core.py", "azure_tasks_core.py", "aws_codeconn_core.py", "lambda_cicd_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py", "azure_kudu_core.py", "azure_diagnose_core.py", "azure_nm_engine_core.py", "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "azure_keyvault_x509_core.py", "azure_arm_core.py", "azure_lb_core.py", "azure_disks_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_diag_pipeline.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_pcap_core.py", "azure_workbooks_core.py", "azure_rgtools_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webauth_core.py", "azure_aksmon_core.py", "azure_streamanalytics_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_apim_gateway_core.py", "azure_tasks_core.py", "aws_codeconn_core.py", "lambda_cicd_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py", "azure_kudu_core.py", "azure_diagnose_core.py", "azure_nm_engine_core.py", "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "azure_keyvault_x509_core.py", "azure_arm_core.py", "azure_lb_core.py", "azure_disks_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   "azure_firewall_eval.py",
   "azure_cfgext_core.py",
   "azure_backup_core.py",

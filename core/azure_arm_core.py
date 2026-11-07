@@ -175,6 +175,21 @@ except ImportError:
     import azure_nm_engine_core as nm_engine        # type: ignore
     import azure_diagnose_core as diagnose_engine  # type: ignore
 
+try:                                              # Network Watcher packet capture (flow-derived pcap into storage)
+    from core import azure_pcap_core as pcap_engine
+except ImportError:
+    import azure_pcap_core as pcap_engine          # type: ignore
+
+try:                                              # Resource group tools: force delete + Insights
+    from core import azure_rgtools_core as rgtools_engine
+except ImportError:
+    import azure_rgtools_core as rgtools_engine   # type: ignore
+
+try:                                              # Workbooks renderer (serializedData -> KQL tables over the Log Analytics subset)
+    from core import azure_workbooks_core as workbooks_engine
+except ImportError:
+    import azure_workbooks_core as workbooks_engine   # type: ignore
+
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
 except ImportError:
@@ -1374,7 +1389,14 @@ class AzureArm:
                 kids = [r for r in list(self.state.values()) if isinstance(r, dict)
                         and (r.get("_rg") or "").lower() == rest_segs[1].lower()
                         and r.get("type") != "Microsoft.Resources/resourceGroups"]
+            _forced, _ferr = rgtools_engine.parse_force((query or {}).get("forceDeletionTypes")) if method == "DELETE" else (set(), None)
+            if _ferr:
+                return _err(_ferr["status"], _ferr["body"]["error"]["code"], _ferr["body"]["error"]["message"])
+            _rows = rgtools_engine.prepare_delete(self.state, sub, rest_segs[1], _forced) if method == "DELETE" else []
             out = self._resource_group_item(method, sub, rest_segs[1], payload)
+            if out["status"] < 300:
+                for _rid, _op, _txt in _rows:
+                    web_engine._record_event(self.state, sub, rest_segs[1], _rid, _op, _txt, "Succeeded")
             for _r in kids:   # after removal, so "last vault gone" checks see the final state
                 self._child_deleted(_r)
             return out
@@ -1386,6 +1408,11 @@ class AzureArm:
                 return _err(400, "BadRequest", "Missing resource group name.")
             rg = rest_segs[1]
             idx = 2
+
+        # GET .../resourceGroups/{rg}/providers/Microsoft.Vyomi/insights -- the group's "Insights (preview)" page (core/azure_rgtools_core.py)
+        if (rg is not None and method == "GET" and [x.lower() for x in rest_segs[idx:]] == ["providers", "microsoft.vyomi", "insights"]):
+            r = rgtools_engine.insights(self.state, sub, rg, health_engine)
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
 
         # POST .../resourceGroups/{rg}/exportTemplate — every blade's "Export template" (ARM tab
         # + Bicep/Terraform renderings), core/azure_templates_core.py.
@@ -1908,6 +1935,8 @@ class AzureArm:
             return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
+        if namespace.lower() == "microsoft.insights" and workbooks_engine.handles(chain) and method == "POST" and rg is not None:
+            return workbooks_engine.render(self.state, sub, rg, chain[1], payload)
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
             return self._monitor(method, sub, rg, chain, payload, query)
 
@@ -1985,6 +2014,15 @@ class AzureArm:
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
 
+        # Network Watcher packet capture (core/azure_pcap_core.py): flow-derived libpcap into the target storage account
+        if namespace.lower() == "microsoft.network" and pcap_engine.handles(chain):
+            if rg is not None and self.state.get(_canonical_id(sub, rg, type_chain[:2], names[:1]).lower()) is None and method != "GET":
+                return _err(404, "ResourceNotFound", f"The Resource 'Microsoft.Network/networkWatchers/{names[0]}' under resource group '{rg}' was not found.")
+            try:
+                from core import azure_blob_core as _pcbm
+            except ImportError:
+                import azure_blob_core as _pcbm        # type: ignore
+            return pcap_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, blob_mod=_pcbm)
         # Network Watcher diagnostics → the shared netsim evaluator (same engine as Nano + enforcement)
         if (method == "POST" and namespace.lower() == "microsoft.network" and len(chain) == 3
                 and chain[0].lower() == "networkwatchers" and chain[2].lower() in (
@@ -3978,6 +4016,19 @@ class AzureArm:
             p.setdefault("privateIPAddressVersion", "IPv4")
         return None
 
+    def _pcap_note(self, local_ip, remote_ip, direction, proto, lport, rport, allowed):
+        """Offer a flow the shared evaluator just ruled on to Running Network Watcher packet captures (core/azure_pcap_core.py)."""
+        try:
+            try:
+                from core import azure_blob_core as _pcbm
+            except ImportError:
+                import azure_blob_core as _pcbm        # type: ignore
+            ip_ = lambda v: int(v) if str(v or "").isdigit() else None
+            pcap_engine.record_evaluated(self.state, local_ip, remote_ip, str(direction), str(proto), ip_(lport), ip_(rport), allowed,
+                                         blob_store=self.blob_store, blob_mod=_pcbm)
+        except Exception:
+            pass
+
     def _nw_target_iface(self, topo, payload: dict):
         nic = str(payload.get("targetNicResourceId") or "").lower()
         if nic and nic in topo.interfaces:
@@ -4017,6 +4068,7 @@ class AzureArm:
                 [{"origin": "Outbound", "severity": "Error", "type": h.decision, "context": [{"key": "detail", "value": h.detail}]}]}
                 for h in v.hops]
         reachable = v.reachable
+        self._pcap_note(src_iface.ip, getattr(dst_iface, "ip", None) or str(destination.get("address") or ""), "Outbound", protocol, None, port, reachable)
         return _ok({"hops": hops, "connectionStatus": "Reachable" if reachable else "Unreachable",
                     "avgLatencyInMs": 1 if reachable else 0, "minLatencyInMs": 1 if reachable else 0,
                     "maxLatencyInMs": 1 if reachable else 0, "probesSent": 100, "probesFailed": 0 if reachable else 100})
@@ -4105,6 +4157,7 @@ class AzureArm:
             rule = next((r for r in (rs.rules if rs else []) if r.name == name), None)
             if rule is not None:
                 rule_name = f"{'defaultSecurityRules' if rule.implied else 'securityRules'}/{name}"
+        self._pcap_note(iface.ip, remote, str(payload.get("direction", "Inbound")), proto, lport, rport, ok)
         return _ok({"access": "Allow" if ok else "Deny", "ruleName": rule_name})
 
     def _arm_action(self, action, type_chain, resource_name, parent_rid="", payload=None, sub=None, rg=None):
