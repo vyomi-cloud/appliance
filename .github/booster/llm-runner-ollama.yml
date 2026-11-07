@@ -3,7 +3,7 @@
 # (GitHub Free: 20 concurrent hosted-runner jobs). Open risk: GitHub Actions ToS (owner has accepted it) - see BOOSTER-RUNNER-LLM.md.
 # NOT validated on real Actions (no GitHub calls in the spike): the ollama pin/asset is a placeholder.
 name: vyomi-booster-llm-ollama
-run-name: "vyomi-booster-llm-ollama"
+run-name: "vyomi-booster-llm-ollama ${{ inputs.dispatch_id }}"   # opaque random nonce (no session/user data): lets the portal find + cancel this run
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
       relay_url:    { description: "relay", required: true, type: string }
       model:        { description: "runner id (catalogue)", required: true, type: string }
       ollama_tags:  { description: "comma-separated ollama tags", required: true, type: string }
+      dispatch_id:  { description: "opaque nonce", required: false, default: "", type: string }
       ttl_s:        { required: false, default: "21000", type: string }     # 5h50m; the booster re-dispatches at 5h30m (rotation)
 
 permissions:

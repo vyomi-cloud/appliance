@@ -79,7 +79,9 @@ def attach(hub_url: str, token: Optional[str] = None, *, host: str = "127.0.0.1"
         if pooled:                       # one runner per catalogue model (core/booster_runner_pool.py)
             from core.booster_runner_pool import HttpDispatcher, RunnerPool, window_s_for
             tf = lambda: (_S["token"])  # noqa: E731
-            kw = {"window_s": window_s_for(claims.get("tier", "pro")), "on_destroy": _on_pool_destroy, **(pool_kwargs or {})}
+            # the portal grants the REMAINING running time (persisted per cycle) in the token; the tier window is only the fallback
+            win = float(claims["model_window_s"]) if claims.get("model_window_s") is not None else window_s_for(claims.get("tier", "pro"))
+            kw = {"window_s": win, "on_destroy": _on_pool_destroy, **(pool_kwargs or {})}
             pool = RunnerPool(hub_url.rstrip("/") + "/llm", tf, dispatcher or HttpDispatcher(token_fn=tf), **kw)
             _S["prev_map"] = os.environ.get("VYOMI_LLM_MODEL_MAP")
             os.environ["VYOMI_LLM_MODEL_MAP"] = json.dumps(pool.model_map())
@@ -151,6 +153,26 @@ def detach() -> dict:
         from core import booster_ai
         booster_ai.admit_configured()
     # else: VYOMI_LLM_ENDPOINT keeps naming the (now closed) loopback gateway -> connection refused -> llm_core errors. No silent local model.
+    return info()
+
+
+def pause() -> dict:
+    """Booster pause: cancel EVERY runner and freeze the running-time window (no-op without a pool)."""
+    p = _S["pool"]
+    if p is not None:
+        p.pause("pause")
+    return info()
+
+
+def resume(window_s: Optional[float] = None) -> dict:
+    """Booster resume: restart all runners (cold) with the remaining running time (portal figure if given)."""
+    p = _S["pool"]
+    if p is None:
+        raise RemoteLLMError("no_pool", "no model pool is attached", 409)
+    try:
+        p.resume(window_s)
+    except Exception as e:
+        raise RemoteLLMError(getattr(e, "code", "resume_failed"), getattr(e, "message", str(e)), getattr(e, "status", 409))
     return info()
 
 

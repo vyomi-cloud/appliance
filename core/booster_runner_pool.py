@@ -2,7 +2,9 @@
 
 EAGER model pool: when the booster starts, EVERY catalogue runner (docker/booster-runner-llm/models.json) is dispatched at once,
 one GitHub-hosted runner each (Ollama runtime; a runner may serve several models, e.g. fast = 3B chat + embeddings). The pool lives
-for a fixed WALL-CLOCK window from booster start (Pro 30 h / Max 40 h) regardless of how many runners run - runner minutes are
+for a RUNNING-TIME window (Pro 30 h / Max 40 h; NOT wall-clock) regardless of how many runners run. pause() cancels every runner and
+FREEZES the clock; resume() restarts all of them (cold start) with only the remaining running time. The portal owns the persisted
+per-cycle ledger and passes the REMAINING seconds on start (session-token claim ``model_window_s``) - runner minutes are
 NOT metered against the booster-hours ledger (public-repo runner minutes are free; a private repo would exhaust its 2000 free
 minutes, so the runner repo must be public). Hosted jobs die at 6 h, so each runner is ROTATED at 5h30m: the portal dispatches a
 successor that dials the relay with a fresh token; the relay swaps when it is ready and the old one drains (wasm/relay/runner-llm-hub.mjs).
@@ -93,6 +95,7 @@ class RunnerPool:
         self._lock = threading.RLock()
         self.phase = "new"                      # new | running | destroyed
         self.window_start = self.deadline = self.last_activity = 0.0
+        self.consumed_s = 0.0                   # running seconds banked by earlier run segments (before the last pause)
         self.destroyed_why = ""
         self._rec: dict[str, dict] = {}         # runner id -> {gen_started, was_ready, rotating_since, dispatched_at}
         self._requests: dict[str, int] = {}
@@ -169,19 +172,66 @@ class RunnerPool:
         return now >= self.window_start + int(self.cat["runners"][self._slot_base[sid][0]].get("stage", 0)) * self.stagger_s
 
     # -------------------------------------------------------------------------------------------- lifecycle
-    def start_all(self) -> list:
-        """EAGER: dispatch every runner now and open the wall-clock window. Dispatch failures are recorded, not fatal."""
+    def remaining_s(self) -> float:
+        """Running seconds left in the window (frozen while paused / destroyed)."""
+        with self._lock:
+            if self.phase == "running":
+                return max(0.0, self.deadline - self.clock())
+            return 0.0 if self.phase == "destroyed" else max(0.0, self.window_s - self.consumed_s)
+
+    def start_all(self, window_s: Optional[float] = None) -> list:
+        """EAGER: dispatch every runner now and open the running-time window. ``window_s`` (optional) overrides the window with the
+        REMAINING running time the portal granted. Dispatch failures are recorded, not fatal."""
+        return self._open(window_s)
+
+    def _open(self, window_s: Optional[float] = None) -> list:
         ids = self.runner_ids()
         if len(ids) > HARD_MAX_RUNNERS:
             raise PoolError(400, "TooManyRunners", f"{len(ids)} runners exceed the sanity max {HARD_MAX_RUNNERS}")
         with self._lock:
+            if window_s is not None:
+                self.window_s = float(window_s) + self.consumed_s
+            left = self.window_s - self.consumed_s
+            if left <= 0:
+                raise PoolError(402, "ModelWindowExhausted", "the running-time model window for this cycle is used up")
             now = self.clock()
-            self.phase, self.window_start, self.deadline, self.last_activity = "running", now, now + self.window_s, now
+            self.phase, self.window_start, self.deadline, self.last_activity = "running", now, now + left, now
+            self._warned.clear(); self.destroyed_why = ""
             for rid in ids:
                 if self._due(rid, now):
                     self._dispatch(rid, rotation=False)
             self.invalidate()
         return ids
+
+    def pause(self, why: str = "pause") -> dict:
+        """PAUSE: cancel EVERY runner (via the dispatcher) and freeze the running-time clock. Idempotent. The pool can resume()."""
+        with self._lock:
+            if self.phase != "running":
+                return self.window()
+            self.consumed_s += max(0.0, self.clock() - self.window_start)
+            self.consumed_s = min(self.consumed_s, self.window_s)
+            self.phase, self.destroyed_why = "paused", why
+            for rid in set(self._rec) | set(self.runner_ids()):        # belt and braces: also slots whose dispatch had failed
+                try:
+                    self.dispatcher.stop(rid)
+                except Exception:
+                    pass                                              # the portal also cancels every run when the session ends
+            self._rec.clear()
+            self._event("pool", "paused:" + why)
+            self.invalidate()
+            return self.window()
+
+    def resume(self, window_s: Optional[float] = None) -> list:
+        """RESUME: restart ALL runners (cold start, staggered) with the remaining running time (optionally the portal's figure)."""
+        with self._lock:
+            if self.phase == "destroyed":
+                raise PoolError(409, "ModelPoolDestroyed", f"the model pool was destroyed ({self.destroyed_why}); start a new session")
+            if self.phase == "running":
+                return self.runner_ids()
+            self._rec.clear()
+            ids = self._open(window_s)
+            self._event("pool", "resumed")
+            return ids
 
     def _dispatch(self, rid: str, *, rotation: bool) -> None:
         now = self.clock()
@@ -253,6 +303,8 @@ class RunnerPool:
         with self._lock:
             if self.phase == "destroyed":
                 return
+            if self.phase == "running":
+                self.consumed_s = min(self.window_s, self.consumed_s + max(0.0, self.clock() - self.window_start))
             self.phase, self.destroyed_why = "destroyed", why
             for rid in list(self._rec):
                 try:
@@ -289,7 +341,7 @@ class RunnerPool:
         """starting | ready | rotating | draining | stopped  (per catalogue model)."""
         rid = self._model_runner.get(model)
         with self._lock:
-            if self.phase == "destroyed":
+            if self.phase in ("destroyed", "paused", "new"):
                 return "stopped"
             if rid is None:
                 return "stopped"
@@ -306,12 +358,15 @@ class RunnerPool:
     # -------------------------------------------------------------------------------------------- console data
     def window(self) -> dict:
         now = self.clock()
-        left = max(0.0, self.deadline - now) if self.phase == "running" else 0.0
+        left = max(0.0, self.deadline - now) if self.phase == "running" else (self.remaining_s() if self.phase == "paused" else 0.0)
         warn = next((f"{w // 60}m" for w in sorted(WARN_AT_S) if left <= w), None) if self.phase == "running" else None
         h, m = int(left // 3600), int(left % 3600 // 60)
         return {"phase": self.phase, "start": self.window_start or None, "deadline": self.deadline or None, "left_s": int(left),
                 "window_h": self.window_s / 3600.0, "warning": warn, "destroyed_why": self.destroyed_why or None,
-                "label": f"Models: {h}h {m:02d}m left of {self.window_s / 3600:g}h" if self.phase == "running" else f"Models: stopped ({self.destroyed_why or 'not started'})",
+                "consumed_s": int(self.consumed_s + (max(0.0, now - self.window_start) if self.phase == "running" else 0.0)), "remaining_s": int(left),
+                "label": (f"Models: {h}h {m:02d}m left of {self.window_s / 3600:g}h" if self.phase == "running"
+                          else f"Models: paused - {h}h {m:02d}m running time left of {self.window_s / 3600:g}h" if self.phase == "paused"
+                          else f"Models: stopped ({self.destroyed_why or 'not started'})"),
                 "idle_in_s": max(0, int(self.idle_s - (now - self.last_activity))) if self.phase == "running" else None}
 
     def _endpoints(self, mid: str) -> dict:
@@ -381,6 +436,8 @@ class RunnerPool:
         model = self.resolve(hint, embed=embed)
         self.tick()
         with self._lock:
+            if self.phase == "paused":
+                raise PoolError(503, "ModelPoolPaused", "the model pool is paused (running time is frozen); resume the booster to restart the models", None, "stopped")
             if self.phase != "running":
                 raise PoolError(503, "ModelPoolStopped", f"the model pool is not running ({self.destroyed_why or 'not started'})", None, "stopped")
             st = self.state(model)
