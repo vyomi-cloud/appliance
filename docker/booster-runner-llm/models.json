@@ -1,0 +1,49 @@
+{
+  "_comment": "Runner model catalogue (spike). EAGER: when the booster starts, every non-optional RUNNER below is dispatched at once (one GitHub-hosted 4 vCPU / 16 GB runner each, Ollama runtime). A runner may serve several models (fast = 3B chat + embeddings). ram_mb = weights + KV at the stated ctx (ESTIMATES, unmeasured on a runner). cache_ok=false: too big to share the 10 GB-per-repo actions/cache cap with another model, so it is pulled cold at every start/rotation. Ollama tags were NOT verified against registry.ollama.ai in the spike (no network calls to it); llama3.1:8b-instruct-q4_K_M / qwen2.5(-coder):7b-instruct-q4_K_M / qwen2.5:3b-instruct-q4_K_M / nomic-embed-text are the documented library tags.",
+  "default_chat": "qwen2.5-3b",
+  "default_embed": "nomic-embed-text",
+  "runners": {
+    "fast":    {"role": "fast chat + embeddings", "models": ["qwen2.5-3b", "nomic-embed-text"]},
+    "general": {"role": "general instruct",       "models": ["qwen2.5-7b"]},
+    "coder":   {"role": "code",                    "models": ["qwen2.5-coder-7b"]},
+    "agents":  {"role": "tool use / agents",       "models": ["llama3.1-8b"]},
+    "xl":      {"role": "higher quality (slow)",   "models": ["qwen2.5-14b"], "optional": true}
+  },
+  "models": {
+    "qwen2.5-3b":       {"kind": "chat",  "ollama": "qwen2.5:3b-instruct-q4_K_M",        "size_mb": 1900, "ram_mb": 2800,  "ctx": 4096, "cache_ok": true,  "note": "fast chat; same model as the in-Codespace AI pack"},
+    "nomic-embed-text": {"kind": "embed", "ollama": "nomic-embed-text:latest",            "size_mb": 274,  "ram_mb": 600,   "ctx": 2048, "cache_ok": true,  "dims": 768, "note": "embeddings, shares the fast runner"},
+    "qwen2.5-7b":       {"kind": "chat",  "ollama": "qwen2.5:7b-instruct-q4_K_M",        "size_mb": 4700, "ram_mb": 6200,  "ctx": 8192, "cache_ok": true,  "note": "general instruct"},
+    "qwen2.5-coder-7b": {"kind": "chat",  "ollama": "qwen2.5-coder:7b-instruct-q4_K_M",  "size_mb": 4700, "ram_mb": 6200,  "ctx": 8192, "cache_ok": true,  "note": "code"},
+    "llama3.1-8b":      {"kind": "chat",  "ollama": "llama3.1:8b-instruct-q4_K_M",       "size_mb": 4900, "ram_mb": 6800,  "ctx": 8192, "cache_ok": false, "note": "tool use / agents; 4 big models cannot all share the 10 GB cache, LRU evicts"},
+    "qwen2.5-14b":      {"kind": "chat",  "ollama": "qwen2.5:14b-instruct-q4_K_M",       "size_mb": 9000, "ram_mb": 11500, "ctx": 4096, "cache_ok": false, "note": "largest that fits 16 GB; slow (~2-3 tok/s on 4 vCPU)"}
+  },
+  "aliases": {
+    "_comment": "per-cloud API model id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest matching pattern. Users add more with VYOMI_RUNNER_MODEL_ALIASES (JSON); Azure OpenAI DEPLOYMENT names map the same way (the SDK sends the deployment name).",
+    "aws": {
+      "meta.llama*": "llama3.1-8b",
+      "mistral.*": "qwen2.5-7b",
+      "amazon.nova-micro*": "qwen2.5-3b",
+      "amazon.nova-lite*": "qwen2.5-3b",
+      "amazon.nova-pro*": "qwen2.5-7b",
+      "anthropic.claude*": "qwen2.5-7b",
+      "amazon.titan-embed*": "nomic-embed-text",
+      "cohere.embed*": "nomic-embed-text"
+    },
+    "gcp": {
+      "gemini-*-flash*": "qwen2.5-3b",
+      "gemini-*-pro*": "qwen2.5-7b",
+      "codestral*": "qwen2.5-coder-7b",
+      "gemini-*-code*": "qwen2.5-coder-7b",
+      "text-embedding-*": "nomic-embed-text",
+      "gemini-embedding*": "nomic-embed-text"
+    },
+    "azure": {
+      "gpt-4o-mini*": "qwen2.5-3b",
+      "gpt-4o*": "qwen2.5-7b",
+      "gpt-4*": "qwen2.5-7b",
+      "gpt-35*": "qwen2.5-3b",
+      "o1*": "qwen2.5-14b",
+      "text-embedding-*": "nomic-embed-text"
+    }
+  }
+}

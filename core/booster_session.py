@@ -60,11 +60,15 @@ def _key(key: Optional[str] = None) -> bytes:
 
 
 def mint(account: str, tier: str, session_end: float, *, primary_cloud: str = "", session_id: str = "",
-         key: Optional[str] = None, now: Optional[float] = None) -> str:
+         key: Optional[str] = None, now: Optional[float] = None, role: str = "", model: str = "") -> str:
     """Portal-side minting (also used by tests). `session_end` is epoch seconds."""
     now = time.time() if now is None else now
     payload = {"aud": AUD, "sub": account, "tier": tier, "primary_cloud": primary_cloud, "session_id": session_id,
                "iat": int(now), "session_end": int(session_end)}
+    if role:                    # e.g. "llm-runner": a token that may ONLY dial the LLM plane of the relay (never drive a booster)
+        payload["role"] = role
+    if model:                   # runner pool: the catalogue model this runner serves
+        payload["model"] = model
     body = _b64(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
     sig = hmac.new(_key(key), f"{VERSION}.{body}".encode(), hashlib.sha256).digest()
     return f"{VERSION}.{body}.{_b64(sig)}"
@@ -146,6 +150,8 @@ def authorise(headers: dict, path: str, provider: str, *, now: Optional[float] =
             with _LOCK:
                 _SESSION["end_mono"] = time.monotonic()      # latch: once ended, ended
         return e
+    if claims.get("role"):       # runner-role tokens (remote LLM) never authorise booster API calls
+        return SessionError("BoosterSessionWrongRole", "this token is for the LLM runner only", 403)
     _arm_expiry(claims, now)
     if path in _EXEMPT_PATHS or not provider:
         return None

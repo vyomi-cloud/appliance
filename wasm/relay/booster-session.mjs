@@ -12,8 +12,10 @@ export class SessionError extends Error {
 }
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
 
-export function mint(key, { sub = "acct", tier = "pro", primary_cloud = "", session_id = "s1", session_end, iat }) {
+export function mint(key, { sub = "acct", tier = "pro", primary_cloud = "", session_id = "s1", session_end, iat, role, model }) {
   const payload = { aud: AUD, sub, tier, primary_cloud, session_id, iat: Math.floor(iat ?? Date.now() / 1000), session_end: Math.floor(session_end) };
+  if (role) payload.role = role;
+  if (model) payload.model = model;
   const body = b64(JSON.stringify(payload));
   return `v1.${body}.${b64(crypto.createHmac("sha256", key).update(`v1.${body}`).digest())}`;
 }
