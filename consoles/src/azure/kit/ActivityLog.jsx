@@ -38,6 +38,59 @@ function save(name, text, mime) {
   setTimeout(() => URL.revokeObjectURL(el.href), 1000);
 }
 
+const ARM = (path) => `/subscriptions/${getSubscription()}/providers/${path}`;
+const DIAG = "Microsoft.Insights/diagnosticSettings";
+const DV = { query: { "api-version": "2021-05-01-preview" } };
+const CATS = ["Administrative", "Security", "ServiceHealth", "Alert", "Recommendation", "Policy", "Autoscale", "ResourceHealth"];
+
+/** "Export Activity Logs": download the filtered events, or manage the SUBSCRIPTION's continuous export = a real
+ *  Microsoft.Insights/diagnosticSettings at subscription scope (Administrative events are delivered to the chosen
+ *  Log Analytics workspace / storage account by core/azure_diag_pipeline.py). */
+function ExportDialog({ rows, name, onClose }) {
+  const settings = useAsync(() => restJson("GET", ARM(DIAG), DV).then((r) => (r.data || r).value || []), []);
+  const dests = useAsync(async () => {
+    const list = (p, v) => restJson("GET", ARM(p), { query: { "api-version": v } }).then((r) => (r.data || r).value || []).catch(() => []);
+    return { w: await list("Microsoft.OperationalInsights/workspaces", "2022-10-01"), s: await list("Microsoft.Storage/storageAccounts", "2023-01-01") };
+  }, []);
+  const [nm, setNm] = useState("activity-log-export");
+  const [cats, setCats] = useState(["Administrative"]);
+  const [ws, setWs] = useState("");
+  const [st, setSt] = useState("");
+  const [err, setErr] = useState("");
+  const create = async () => {
+    setErr("");
+    try {
+      await restJson("PUT", `${ARM(DIAG)}/${encodeURIComponent(nm)}`, { ...DV, body: { properties: { ...(ws ? { workspaceId: ws } : {}), ...(st ? { storageAccountId: st } : {}), logs: cats.map((category) => ({ category, enabled: true })) } } });
+      settings.reload();
+    } catch (e) { setErr(e?.message || String(e)); }
+  };
+  const del = async (n) => { await restJson("DELETE", `${ARM(DIAG)}/${encodeURIComponent(n)}`, DV); settings.reload(); };
+  return <>
+    <DialogTitle>Export Activity Logs</DialogTitle>
+    <DialogContent>
+      <p style={{ fontSize: 13 }}>Continuous export is a diagnostic setting on the subscription. New Administrative events are delivered to the destinations below as they happen.</p>
+      <table className="vy-grid" aria-label="Export settings"><thead><tr><th>Name</th><th>Categories</th><th>Destinations</th><th /></tr></thead><tbody>
+        {(settings.data || []).length ? settings.data.map((s) => (
+          <tr key={s.name}><td>{s.name}</td><td>{(s.properties.logs || []).filter((l) => l.enabled).map((l) => l.category).join(", ")}</td>
+            <td>{[s.properties.workspaceId && "Log Analytics", s.properties.storageAccountId && "Storage account"].filter(Boolean).join(", ")}</td>
+            <td><Button size="small" onClick={() => del(s.name)} aria-label={`Delete ${s.name}`}>Delete</Button></td></tr>
+        )) : <tr><td colSpan={4} className="vy-muted">No export settings</td></tr>}
+      </tbody></table>
+      <h4>Add export</h4>
+      <Input size="small" value={nm} onChange={(_, d) => setNm(d.value)} aria-label="Setting name" />
+      <div>{CATS.map((c) => <Checkbox key={c} label={c} checked={cats.includes(c)} onChange={(_, d) => setCats(d.checked ? [...cats, c] : cats.filter((x) => x !== c))} />)}</div>
+      <Select size="small" value={ws} onChange={(_, d) => setWs(d.value)} aria-label="Log Analytics workspace"><option value="">Send to Log Analytics workspace: none</option>{(dests.data?.w || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</Select>
+      <Select size="small" value={st} onChange={(_, d) => setSt(d.value)} aria-label="Storage account"><option value="">Archive to a storage account: none</option>{(dests.data?.s || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</Select>
+      {err && <p role="alert" style={{ color: "#b10e1c" }}>{err}</p>}
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={() => save(`${name || "subscription"}-activity-log.json`, JSON.stringify(rows, null, 2), "application/json")}>Download JSON</Button>
+      <Button appearance="primary" onClick={create}>Save export</Button>
+      <Button onClick={onClose}>Close</Button>
+    </DialogActions>
+  </>;
+}
+
 /** scope: resource / resource-group id ("" = whole subscription). */
 export default function ActivityLog({ scope, name, capId, title }) {
   const [f, setF] = useState(() => store("vyomi.az.activity.pinned") || DEF);
@@ -65,7 +118,7 @@ export default function ActivityLog({ scope, name, capId, title }) {
         <ToolbarButton onClick={() => setDlg(rows[0] || "none")}>Activity</ToolbarButton>
         <ToolbarButton onClick={() => setDlg("columns")}>Edit columns</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => save(`${name || "subscription"}-activity-log.json`, JSON.stringify(rows, null, 2), "application/json")}>Export Activity Logs</ToolbarButton>
+        <ToolbarButton onClick={() => setDlg("export")}>Export Activity Logs</ToolbarButton>
         <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!rows.length} onClick={() => downloadCsv(`${name || "subscription"}-activity-log.csv`, shown.map((c) => ({ label: c.label, csv: c.get })), rows)}>Download as CSV</ToolbarButton>
         <ToolbarButton onClick={() => setDlg("insights")}>Insights</ToolbarButton>
         <ToolbarButton onClick={() => setDlg("feedback")}>Feedback</ToolbarButton>
@@ -115,6 +168,7 @@ export default function ActivityLog({ scope, name, capId, title }) {
               </DialogContent>
               <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
             </>}
+            {dlg === "export" && <ExportDialog rows={rows} name={name} onClose={() => setDlg(null)} />}
             {dlg === "feedback" && <>
               <DialogTitle>Feedback</DialogTitle>
               <DialogContent><NotSimulated feature="Sending product feedback" /></DialogContent>

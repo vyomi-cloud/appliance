@@ -97,6 +97,16 @@ export const listAlerts = async () =>
 export const alertAction = (alertId, action) =>
   restJson("POST", `${alertId}/${action}`, { query: { "api-version": API.alerts } });
 
+// ── Workflow automation (Microsoft.Security/automations, core/azure_security_automations_core.py) ──
+const AUTO_API = "2023-12-01-preview";
+export const listAutomations = async () => (await restJson("GET", `${SEC()}/automations`, { query: { "api-version": AUTO_API } })).value || [];
+export const putAutomation = (rg, name, body) =>
+  restJson("PUT", `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}/providers/Microsoft.Security/automations/${encodeURIComponent(name)}`, { query: { "api-version": AUTO_API }, body });
+export const deleteAutomation = (id) => restJson("DELETE", id, { query: { "api-version": AUTO_API } });
+export const listAutomationRuns = async (id) => (await restJson("GET", `${id}/vyomiRuns`, { query: { "api-version": AUTO_API } })).value || [];
+export const listWorkspaces = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.OperationalInsights/workspaces`, { query: { "api-version": "2022-10-01" } }).catch(() => ({}))).value || [];
+
 // ── Defender CSPM: attack paths + Cloud Security Explorer (core/azure_attackpath_core.py) ──
 const AP = "2022-11-20-preview";
 export const listAttackPaths = async () => (await restJson("GET", `${SEC()}/attackPaths`, { query: { "api-version": AP } })).value || [];

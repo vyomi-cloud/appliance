@@ -48,6 +48,10 @@ export const deleteSibling = (typeKey, rg, name) => SIBLING_TYPES[typeKey].remov
 const lockPath = (rg, topic, name) => `${ARM.path(rg, topic)}/providers/Microsoft.Authorization/locks${name ? `/${encodeURIComponent(name)}` : ""}`;
 const lockQuery = { "api-version": "2016-09-01" };
 export const listLocks = async (rg, topic) => (await restJson("GET", lockPath(rg, topic), { query: lockQuery })).value || [];
+export const listLocksAtSubscription = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/locks`, { query: lockQuery })).value || [];
+export const listLocksAtResourceGroup = async (rg) =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}/providers/Microsoft.Authorization/locks`, { query: lockQuery })).value || [];
 export const createLock = (rg, topic, name, body) => restJson("PUT", lockPath(rg, topic, name), { query: lockQuery, body });
 export const deleteLock = (rg, topic, name) => restJson("DELETE", lockPath(rg, topic, name), { query: lockQuery });
 

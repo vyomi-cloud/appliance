@@ -11,12 +11,13 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Glyph } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
+import { OpenQueryDialog } from "../../kit/GridTools.jsx";
 import { TagRows } from "./TagRows.jsx";
 import * as api from "./api.js";
 
 /** Bulk "Assign tags" dialog — real ARM PATCHes that merge a tag onto every selected topic
  *  (azure.eventgrid.topics.listactions: the bulk-tag half is built; "Open query" — Azure
- *  Resource Graph, a separate query service spanning every resource type — stays honest). */
+ *  Resource Graph — is the shared kit OpenQueryDialog). */
 function AssignTagsDialog({ open, onClose, rows, onDone }) {
   const notify = useNotify();
   const [tags, setTags] = useState([{ name: "", value: "" }]);
@@ -78,7 +79,7 @@ export default function Topics() {
           subscriptionLabel={subName}
           csvName="event-grid-topics.csv"
           extraCommands={(selected) => <>
-            <ToolbarButton icon={<DocumentSearch20Regular />} onClick={() => setDlg("Open query")}>Open query</ToolbarButton>
+            <ToolbarButton icon={<DocumentSearch20Regular />} onClick={() => setDlg(true)}>Open query</ToolbarButton>
             <ToolbarButton icon={<Tag20Regular />} disabled={!selected.length} onClick={() => setAssigning(selected)}>Assign tags</ToolbarButton>
           </>}
           pills={[
@@ -95,13 +96,7 @@ export default function Topics() {
           emptyAction={<Link href="#/eventgrid/topics/create">Create topic</Link>}
         />
       </div>
-      <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
-        <DialogSurface aria-label={dlg || ""}>
-          <DialogBody>
-            <CapabilityContainer id="azure.eventgrid.topics.listactions" title={dlg || ""} />
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      <OpenQueryDialog open={!!dlg} onClose={() => setDlg(null)} type="microsoft.eventgrid/topics" />
       <AssignTagsDialog open={!!assigning} rows={assigning || []} onClose={() => setAssigning(null)} onDone={() => { setAssigning(null); reload(); }} />
     </>
   );

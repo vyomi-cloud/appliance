@@ -468,6 +468,41 @@ function Iam({ name, a }) {
 // ── Locks (resource-scoped Microsoft.Authorization/locks) ─────────────────────────────────
 const LOCK_TYPE_LABEL = { CanNotDelete: "Delete", ReadOnly: "Read-only" };
 
+// Locks' "Subscription" / "Resource group" scope buttons: the real Microsoft.Authorization/locks at that
+// wider scope (read-only here; managed from the Subscription / Resource group blades).
+function ScopeLocksDialog({ scope, rg, onClose }) {
+  const { data, loading, error } = useAsync(
+    () => (scope === "subscription" ? api.listLocksAtSubscription() : scope === "resourcegroup" ? api.listLocksAtResourceGroup(rg) : Promise.resolve([])),
+    [scope, rg],
+  );
+  if (!scope) return null;
+  const title = scope === "subscription" ? "Subscription locks" : "Resource group locks";
+  const rows = data || [];
+  return (
+    <Dialog open onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label={title}>
+        <DialogBody>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogContent>
+            <ErrorBar error={error} />
+            {loading ? <Loading /> : (
+              <table className="vy-grid">
+                <thead><tr><th>Lock name</th><th>Lock type</th><th>Notes</th></tr></thead>
+                <tbody>
+                  {rows.length ? rows.map((r) => (
+                    <tr key={r.id || r.name}><td>{r.name}</td><td>{r.properties?.level === "ReadOnly" ? "Read-only" : "Delete"}</td><td>{r.properties?.notes || "--"}</td></tr>
+                  )) : <tr><td colSpan={3} className="vy-muted">No locks to display</td></tr>}
+                </tbody>
+              </table>
+            )}
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
 function Locks({ rg, topic }) {
   const notify = useNotify();
   const locks = useAsync(() => api.listLocks(rg, topic), [rg, topic]);
@@ -475,6 +510,7 @@ function Locks({ rg, topic }) {
   const [f, setF] = useState({ name: "", type: "Delete", notes: "" });
   const [busy, setBusy] = useState(false);
   const [gap, setGap] = useState(null);
+  const [scopeView, setScopeView] = useState(null); // "subscription" | "resourcegroup" | null
 
   const add = async () => {
     setBusy(true);
@@ -496,8 +532,8 @@ function Locks({ rg, topic }) {
           items={locks.data || []} loading={locks.loading} error={locks.error} onRefresh={locks.reload}
           extraCommands={<>
             <ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Add</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
+            <ToolbarButton onClick={() => setScopeView("subscription")}>Subscription</ToolbarButton>
+            <ToolbarButton onClick={() => setScopeView("resourcegroup")}>Resource group</ToolbarButton>
             <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
           </>}
           onDelete={async (sel) => {
@@ -536,6 +572,7 @@ function Locks({ rg, topic }) {
         </DialogSurface>
       </Dialog>
 
+      <ScopeLocksDialog scope={scopeView} rg={rg} onClose={() => setScopeView(null)} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || ""}>
           <DialogBody><CapabilityContainer id="azure.eventgrid.topic.listactions" title={gap || ""} /></DialogBody>
