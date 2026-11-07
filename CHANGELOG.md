@@ -4,6 +4,150 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] — 2026-11-07
+
+Major release. The first release built from the v4 line: about 1,450 commits on top of v3.0.45 (the per-fix lists below cover only the commits the release tooling could attribute).
+
+### Highlights
+
+- **Native-fidelity consoles for AWS, GCP and Azure.** The three Nano consoles were rebuilt to follow each cloud's own console layout, with 1,415 registered capabilities (AWS 459, GCP 329, Azure 627) each carrying an honest support level; anything not simulated shows a plain "Not simulated in Vyomi" panel, never a fake page.
+- **Headless appliance.** The offline appliance no longer ships its own console UI; Nano is the only UI, and the appliance serves the native API, SDK and CLI endpoints (`vyomi up`, `vyomi update`).
+- **Booster: your own Codespace, AI included.** Pro and Max users can connect a GitHub App and run compute and AI in their own Codespace (2-core, 8 GB RAM, 8 h hard session limit). The AI pack runs a native llama.cpp Qwen2.5-3B (Q4) model behind Bedrock, Vertex AI and Azure OpenAI.
+- **Tiers.** Free runs Nano in the browser; Pro unlocks one cloud's depth features; Max unlocks all three clouds.
+- **Capability badges.** Settings and pages are labelled "Dev Simplified" (works, with the limits listed) or "Config only" (stored and returned like the cloud, not enforced); pages that need a booster show a "Booster" pill.
+- **New engines.** Vertex AI (full section), Binary Authorization, BigQuery, Cloud Functions, Cloud DNS and Security Command Center on GCP; Redshift, X-Ray, CloudFront, Glue, DMS, Systems Manager, EC2 Instance Connect and Application Migration Service on AWS; enforced customer-managed keys, SQL security, storage service properties and Cosmos dedicated-gateway cache, Defender workflow automation, Activity-log export, Event Grid Resource Graph query and network-rule enforcement on Azure.
+- **AI agent lanes.** Bedrock InvokeModel streaming and Guardrails, a Gemini Developer API alias, and Azure OpenAI Responses and Assistants run on the shared local-model seam (tools, structured output and streaming included).
+
+### Fixes — AWS
+
+- **[Nano + offline]** Redshift clusters (Query API) over a real SQL engine behind the Data API, ManageMasterPassword secrets, Secrets Manager Redshift picker
+- **[Nano + offline]** ManageMasterUserPassword creates an RDS-owned Secrets Manager secret (OwningService, owner-only writes, real rotation, lifecycle); managed-external wizard lists them; network-manager registry corrected
+- **[Nano + offline]** Custom key stores really connect (software-HSM cluster / built-in XKS proxy) and hold key material in their own partition; keys unusable while disconnected; console create-key + store pages
+- **[Nano + offline]** Update settings = default settings for new tables (Create table applies them); Nano smokes for DDB defaults, X-Ray traces, SNS push inbox
+- **[Nano + offline]** SNS mobile push gateway stub (inbox+webhook) and X-Ray core with Step Functions active-tracing traces; console panels; wasm rebuild
+- **[offline]** Drop stale panels.json 'not_simulated' duplicates for Image Builder + Application Migration (real cores/consoles exist; ec2.json entries are authoritative)
+- **[Nano + offline]** MySQL-family instances run on a sqlite companion even when the RDS store is PGlite
+- **[offline]** No own footer strip on Nano; it overlapped the bottom drawer
+- **[Nano + offline]** In-browser VM life cycle + browser shell in the v4 EC2 console
+- **[Nano + offline]** Console detail follows the v4 cores (apigateway stage/deployment fields); NACL test crosses a subnet boundary like real AWS
+
+### Fixes — GCP
+
+- **[offline]** V3 projects:search carries parent (Manage resources tree); VLAN attachment dialog reloads Interconnect choices; smoke waits for them
+- **[offline]** In-browser VM life cycle + browser shell in the v4 Compute Engine console
+
+### Fixes — Azure
+
+- **[Nano + offline]** Export Activity Logs dialog, Defender Workflow automation page, Event Grid Open query + scope locks
+- **[Nano + offline]** Subscription Activity-log export, Defender workflow automation, Event Grid Resource Graph query
+- **[Nano + offline]** Enforce network rules (Service Bus, Log Analytics, Azure AI, SQL routing), Cosmos CORS, diagnostic-settings delivery
+- **[offline]** Real instance-type memory, atomic admission reservation, REST + Azure resize pre-checked
+- **[Nano + offline]** Local-model bar on Azure OpenAI + Vertex AI Studio (Nano: enable in-browser model; offline: vyomi llm start); aoai smoke can run with a stand-in browser model
+- **[Nano + offline]** Stream Analytics jobs/inputs/outputs/transformation with Blob->Blob query runner
+- **[Nano + offline]** AKS Container Insights/Prometheus/Grafana toggles create and link DCR + Monitor workspace + Grafana
+- **[Nano + offline]** App Service Entra authsettingsV2 + front-door enforcement, Azure OpenAI hookup, GH Actions workflow in CI repo
+- **[offline]** Container Apps environment wizard creates the Log Analytics workspace it logs to
+- **[offline]** Function App wizard creates the Application Insights component + diagnostic setting; AKS wizard Defender enables the Containers plan
+- **[offline]** APIM create wizard Monitor + secure creates diagnostic setting, App Insights logger and Defender for APIs plan
+- **[offline]** Cosmos change feed (Incremental feed, _lsn continuation) + Functions cosmosDBTrigger
+- **[offline]** Function App Console, Advanced Tools (Kudu), App Service Editor, Process explorer, Log stream over the shared Kudu core
+- **[Nano + offline]** In-browser VM life cycle + browser shell in the v4 Azure VM blade
+- **[offline]** NIC with privateIPAddress and no allocation method is Static (honours the requested IP; fixes VirtualAppliance UDR next-hop)
+- **[Nano + offline]** Reconcile main's ARM ext engine with v4 handlers; both Azure ARM suites green
+
+### Fixes — all clouds
+
+- **[Nano]** Nano: load bedrock_guardrails_core + azure_openai_agents_core; regenerate tier pills after ngai merge
+- **[Nano + offline]** Capability label 'Dev Simplified'
+- **[Nano + offline]** 'Limited in Vyomi' -> 'Dev-ready' (limitations still listed in the popover)
+- **[Nano + offline]** One capability tab per page, on the header's bottom border (all sections)
+- **[Nano + offline]** Model Garden capability tab sits on the page header's bottom border, not the search field
+- **[Nano + offline]** Show the 'Limited in Vyomi' badge once per page (header badge duplicated the per-list badge)
+- **[Nano]** Nano sw: account-tier fallback for paid portal accounts
+- **[Nano]** Nano-disk-chip: send /api/* under the /nano base (portal serves Nano at /nano/; v4 pages have no fetch shim)
+- **[Nano + offline]** Disk chip on the v4 consoles via shared nano-disk-chip.js
+- **[Nano + offline]** 4.0.0: no browser launch from installers (headless); Nano opens v4 consoles via absolute paths
+- **[offline]** Headless appliance — remove the offline console UI; Nano is the only UI
+- **[offline]** Per-instance toolchain=all selects the all-languages image (booster role only)
+- **[offline]** All-languages 64-bit runtime image, pinned versions, refresh script, per-language smoke
+- **[offline]** Boot fetches the signed session token + per-session key from the portal (GitHub-verified by CODESPACE_NAME)
+- **[Nano + offline]** Outbound relay link (booster-dial -> relay hub), token+Origin validated, closes at session_end
+- **[offline]** Signed session token + server-side one-cloud/self-expiry enforcement in VYOMI_ROLE=booster
+- **[offline]** Headless 2-core devcontainer + boot script with hard session TTL
+- **[Nano]** In-browser VMs ship git + Python 3 + pip + apk for every tier (other languages are the booster's); egress upgrades to HTTPS upstream and rewrites PyPI links; pip/git configs; 512 MB default; probe checks the toolchain
+- **[Nano + offline]** Enforce Pro = ONE cloud in the booster and Nano
+- **[Nano + offline]** Pro and Max differ only by clouds (Pro = one primary cloud, Max = all 3); drop the two Max-only feature gates
+- **[Nano + offline]** Nano follows the portal's per-account booster record (enabled -> backend by default, else browser); dialog Turn on/off; smoke
+- **[Nano + offline]** Home health probes wait for the Nano backend and retry failures once (no more HTTP404/405 from calls that beat the service worker)
+- **[Nano + offline]** 'Share feedback' floating button (text + Submit) on all v4 cloud consoles; offline /api/feedback; smoke + test
+- **[offline]** Consoles/tests: smokes wait on __vyomiNanoReady instead of networkidle on Nano
+- **[offline]** Real-booster Nano link smoke (14/14); trial status reads the portal's sub_expires_at+trial claim
+- **[offline]** Enforce the 70% compute cap at instance start (real per-cloud capacity errors), release on stop/terminate; forward real host RAM to the appliance
+- **[Nano + offline]** V4 consoles run RDS/Cloud SQL Postgres on PGlite (host apps reach it via the tunnel); pglite bridge honours nano_local_ext; DB host-access smoke covers PG+MySQL (8/8)
+- **[offline]** /booster/status uses the monotonic trial status (reminder, lock, export_blocked)
+- **[offline]** Bundle the Nano<->host tunnel (relay + /db + /vm bridges) inside the appliance; no separate vyomi-tunnel 1.2.0 release
+- **[offline]** Phase 1 appliance side (headless guard, pairing, 70% cap, /booster API, vyomi booster CLI)
+- **[Nano + offline]** Host access to in-browser databases (psql / mysql / ORMs via vyomi-tunnel)
+- **[Nano + offline]** MySQL SQL on the in-browser engine (MySQL->SQLite dialect translation)
+- **[offline]** Default local model repo -> HuggingFaceTB/SmolLM2-360M-Instruct-GGUF:Q8_0 (ggml-org mirror removed, container crash-looped)
+- **[Nano]** Drawer dialogs (Spaces/Health/Knowledge/Marketplace/account/sign-out) sit above the cloud UI header and stop above the tunnel strip
+- **[Nano + offline]** Relay-tunnel footer strip on all three cloud consoles (Start tunnel, Logs, Local/Cloudflare), embedded from the shared Nano widget
+- **[Nano]** Nano vm: backport the portal's in-browser xterm shell (serial console), animated pending state and nano-vm-power event into the appliance host
+- **[Nano + offline]** Ext core: tolerate ipConfigurations without ids in vnet fill (NIC writes now go through the generic path)
+- **[Nano + offline]** V4-on-main: resolve -X theirs casualties (3-way merge of server.py/AR route/Home/dataplane) and make main's Azure ext core defer to v4 engines (NIC writes, storage failover, security ext, SQL drop, attached disks); new GCP tests opt out of the one-project-per-space rule
+- **[Nano + offline]** Wire the Nano app bar, video banner and cloud-pick redirect into the v4 consoles shell
+- **[Nano + offline]** Reconcile main and v4 core behaviours after the v4 merge
+
+<details><summary>Platform and release pipeline (34)</summary>
+
+- Regenerate tier-pills manifest after merging ngaz+ngfix
+- Resync azure_security_automations_core vendored copy
+- Regenerate Nano API/usage docs after nsaz2 merge
+- Nano-only gap rescan + per-section probe (gap-probe.mjs); settle 339 undeterminable sections
+- Publish.sh ships the booster devcontainer
+- Booster build status + token model
+- Ship booster relay link modules in the appliance image
+- Booster on user's Codespaces via GitHub App — design + v4.0.0 compute/tier addendum
+- Multipass/LXD retired in v4.0.0 - supported substrates are WASM Edge (Nano) and Docker; Pro = one cloud, Max = all three
+- Booster capacity test is hermetic (tier cache pinned to max)
+- Poll for the wizard's created resources instead of a fixed 3s sleep
+- Booster private management interface (control API isolation)
+- Booster pack design decisions (2026-11-06)
+- Regenerate after finalfix merge
+- Regenerate after nanofix1 merge
+- Gcp67 expects real TPUs/Migrate pages + display-name link; vmm-hybrid picks the fresh Interconnect explicitly
+- Regenerate after nanofix2 round 2
+- Honor UI_PATH; on Nano only the render check (no local-LLM stub)
+- Gcp67/obs pass NANO into page.evaluate instead of using process in the browser
+- Regenerate after gcpleft + nanofix2 merges
+- Regenerate after azleft consoles merge
+- Regenerate after awsleft + azleft(backends) merge
+- Allow APIM gateway backend fetch in egress check; attach tests to network-manager capability ids
+- Regenerate after nanoverify merge
+- Auto-shutdown check no longer wraps past midnight UTC; build: regenerate after quality merge
+- Regenerate after gcp2 merge
+- Regenerate after azmisc merge
+- Regenerate after azbackup merge
+- Regenerate after awsmisc3 merge
+- Regenerate after gcpops + azapp merges
+- Regenerate after azdata merge
+- Regenerate after browservm merge
+- Azure engine test uses an ad-hoc subscription id; disable the one-subscription guard like the other engine tests
+- Regenerate wasm/core, wasm/v4 and nano-backends fixture after merge
+
+</details>
+
+<details><summary>Test and harness improvements (1)</summary>
+
+- Lambda undeliverable-destination case uses a non-destination ARN (event buses now deliver)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:4.0.0`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.45] — 2026-11-06
 
 Daily conformance release. **15 product fixes** (AWS 2, all clouds 13); 12 reach Nano and 12 reach the offline appliance.
