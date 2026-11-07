@@ -128,7 +128,9 @@ jobs:
           python3 scripts/release_notes.py --version "$NEW" --prev "${{ steps.changes.outputs.prev }}" \
             --pr-head "refs/remotes/pr/$PR" --kind "$KIND" "${HL[@]}" --new-services /tmp/new-services.md \
             --write-changelog --write-readme
-          git add -A VERSION CHANGELOG.md README.md packaging services
+          # `vyomi mcp` knowledge: new version + services released above.
+          python3 scripts/gen_mcp_matrix.py
+          git add -A VERSION CHANGELOG.md README.md packaging services cmd/vyomi/mcp_matrix.json
           git commit -q -m "release(v$NEW): ${KIND,,} (#$PR)"
           git push -q origin HEAD:main
 

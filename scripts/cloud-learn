@@ -58,6 +58,20 @@ _vyomi_migrate_state_dir
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${CLOUD_LEARN_HOME:-$(cd "${SCRIPT_PATH}/.." && pwd)}"
+
+# `vyomi mcp`: the MCP server for AI coding agents. A compiled helper bundled
+# per OS/arch under packaging/docker/mcp/ (built by release.yml); it speaks
+# JSON-RPC on stdout, so nothing may be printed here except on failure (stderr).
+if [ "${1:-}" = "mcp" ]; then
+  shift
+  case "$(uname -s)" in Darwin) _os=darwin ;; Linux) _os=linux ;; *) _os=unknown ;; esac
+  case "$(uname -m)" in x86_64|amd64) _arch=amd64 ;; arm64|aarch64) _arch=arm64 ;; *) _arch=unknown ;; esac
+  for _m in "${VYOMI_MCP_BIN:-}" "${ROOT_DIR}/packaging/docker/mcp/$_os-$_arch/vyomi-mcp"; do
+    if [ -n "$_m" ] && [ -x "$_m" ]; then exec "$_m" "$@"; fi
+  done
+  echo "vyomi: no MCP server binary for $_os-$_arch in ${ROOT_DIR} (dev clone? build it: go -C cmd/vyomi build -o ../../packaging/docker/mcp/$_os-$_arch/vyomi-mcp . — or set VYOMI_MCP_BIN)." >&2
+  exit 1
+fi
 PROJECT_NAME="${CLOUD_LEARN_PROJECT_NAME:-cloud-learn}"
 RUNTIME_CONTEXT="${CLOUD_LEARN_RUNTIME_CONTEXT:-outer}"
 COMPOSE_FILE="${CLOUD_LEARN_COMPOSE_FILE:-${ROOT_DIR}/docker-compose.appliance.yml}"
@@ -239,6 +253,7 @@ Usage (`cloud-learn` still works as a deprecated alias):
   vyomi upgrade
   vyomi update       Docker tiers: move to the latest release (and this command)
   vyomi version      This command, the running simulator, the latest release
+  vyomi mcp          MCP server (stdio) for AI agents: claude mcp add --scope user vyomi -- vyomi mcp
   vyomi help
 
 Flags:

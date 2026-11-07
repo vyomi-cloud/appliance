@@ -1,0 +1,31 @@
+# repo	tier	sparse paths (blank = whole repo)	why it is in the corpus
+# ── Tier A: already run against an emulator → use for step 2 (do tests pass on Vyomi?) ──
+localstack-samples/sample-serverless-image-resizer-s3-lambda	A		S3, SSM, Lambda, SNS, SES; pytest integration tests built for LocalStack
+localstack-samples/sample-lambda-s3-image-resizer-hot-reload	A		S3 + Lambda with end-to-end integration tests
+fsspec/gcsfs	A		honours STORAGE_EMULATOR_HOST natively; tests run against fake-gcs-server
+fsspec/s3fs	A		S3 test suite runs against a moto server (endpoint override)
+fsspec/adlfs	A		Azure Blob test suite runs against Azurite
+apache/arrow-rs-object-store	A		Rust object_store: S3/Azure/GCS integration tests vs LocalStack/Azurite/fake-gcs (scanner blind spot: Rust)
+# ── Tier B: official samples → scanner breadth, per cloud ──
+awsdocs/aws-doc-sdk-examples	B	python javascriptv3 javav2 gov2	every AWS service x 4 SDKs: best recall test for the AWS rules
+aws-samples/serverless-patterns	B		hundreds of SAM / CDK / Terraform patterns
+aws-samples/aws-cdk-examples	B	python typescript	CDK: expected scanner blind spot (measure it)
+terraform-aws-modules/terraform-aws-lambda	B		Terraform aws_* resources
+terraform-aws-modules/terraform-aws-sqs	B		Terraform aws_sqs_*
+GoogleCloudPlatform/python-docs-samples	B	storage pubsub firestore secretmanager kms functions cloud-sql	GCP Python, services Vyomi claims
+GoogleCloudPlatform/nodejs-docs-samples	B	storage pubsub functions	GCP Node
+GoogleCloudPlatform/golang-samples	B	storage pubsub firestore secretmanager	GCP Go
+GoogleCloudPlatform/microservices-demo	B		real-ish GKE app; few managed services (tests false positives)
+terraform-google-modules/terraform-google-pubsub	B		Terraform google_pubsub_*
+Azure-Samples/cosmos-db-nosql-python-quickstart	B		Cosmos NoSQL + azure-identity (TLS warning should fire)
+Azure-Samples/azure-search-openai-demo	B		Blob + OpenAI + Search: mix of emulated and not-emulated
+Azure-Samples/todo-python-mongo	B		Cosmos via the Mongo API: a gap Vyomi may not cover
+Azure/azure-sdk-for-python	B	sdk/servicebus sdk/storage sdk/cosmos sdk/keyvault sdk/eventgrid	official samples; Service Bus AMQP warning must fire
+Azure/azure-sdk-for-js	B	sdk/servicebus sdk/storage sdk/cosmosdb sdk/keyvault	same for JS
+# ── Tier C: real products (multi-cloud, messy) → the "would people use this" signal ──
+mlflow/mlflow	C		artifact stores on S3, GCS and Azure Blob
+apache/airflow	C	providers/amazon providers/google providers/microsoft	the widest multi-cloud surface in OSS
+rclone/rclone	C	backend/s3 backend/googlecloudstorage backend/azureblob	Go, all three object stores
+thanos-io/objstore	C		Go object-storage abstraction for S3/GCS/Azure
+n8n-io/n8n	C	packages/nodes-base/nodes/Aws packages/nodes-base/nodes/Google packages/nodes-base/nodes/Microsoft	Node; dozens of AWS/GCP/Azure integrations
+outline/outline	C		Node app; S3 uploads

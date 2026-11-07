@@ -29,6 +29,15 @@ jobs:
         run: python tests/launcher/test_launch_view_consistency.py
       - name: Readiness + Nano backend lists are up to date
         run: python tests/launcher/test_backends_up_to_date.py
+      - name: MCP knowledge matrix is up to date (vyomi mcp)
+        # Warning only: release.yml regenerates the matrix for every build and the
+        # release bot commits it, so a stale copy on main never ships.
+        run: python scripts/gen_mcp_matrix.py --check || echo "::warning file=cmd/vyomi/mcp_matrix.json::stale - run python3 scripts/gen_mcp_matrix.py"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+      - name: vyomi launcher + MCP server tests
+        run: go -C cmd/vyomi vet ./... && go -C cmd/vyomi test ./...
 
   # ── Backend stack + conformance (the gate) ──────────────────────────────
   # ── Nano boot screen: once per launch (real browser) ────────────────────
