@@ -143,3 +143,84 @@ export function BastionConnect({ a }) {
     </>
   );
 }
+
+// ── Inventory / Update Manager / Performance diagnostics: read from (or done to) the REAL guest container ──
+// (core/ssh_access_core INVENTORY_CMD / PERF_CMD / updates_command via /api/azure/vm/{id}/guest/*). Offline appliance only;
+// Nano has no guest runtime here and the page says so (host() throws the substrate message).
+const guest = (a, what, init) => host(`/api/azure/vm/${encodeURIComponent(a.name)}/guest/${what}`, init);
+const Tbl = ({ head, rows, empty }) => (
+  <table className="vy-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+    <thead><tr>{head.map((h) => <th key={h} style={{ textAlign: "left" }}>{h}</th>)}</tr></thead>
+    <tbody>{rows.length === 0 ? <tr><td colSpan={head.length}>{empty}</td></tr> : rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody>
+  </table>
+);
+
+export function GuestInventory({ a }) {
+  const d = useAsync(() => guest(a, "inventory"), [a.id]);
+  const [filter, setFilter] = useState("");
+  const x = d.data;
+  const pk = (x?.packages || []).filter((p) => p.name.includes(filter.toLowerCase()));
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Inventory</div>
+      <div className="vy-cmdbar"><Button size="small" onClick={d.reload}>Refresh</Button></div>
+      {d.loading && !x ? <Loading /> : d.error ? <ErrorBar error={d.error} title="Inventory is not available" /> : x && (
+        <>
+          <p>{x.os.name} - kernel {x.os.kernel} - host {x.os.hostname} - {x.packageCount} packages ({x.packageManager}), read from the running guest.</p>
+          <Field label="Filter packages"><Input value={filter} onChange={(_, v) => setFilter(v.value)} /></Field>
+          <Tbl head={["Package", "Version"]} rows={pk.slice(0, 500).map((p) => [p.name, p.version])} empty="No packages match." />
+        </>
+      )}
+    </>
+  );
+}
+
+export function GuestPerformance({ a }) {
+  const d = useAsync(() => guest(a, "performance"), [a.id]);
+  const x = d.data;
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Performance diagnostics</div>
+      <div className="vy-cmdbar"><Button size="small" onClick={d.reload}>Run diagnostics</Button></div>
+      {d.loading && !x ? <Loading /> : d.error ? <ErrorBar error={d.error} title="Performance diagnostics are not available" /> : x && (
+        <>
+          <p>Sampled from the guest's /proc just now: load {x.loadAvg.join(" / ")} on {x.cpus} CPU(s), memory {x.memUsedPercent}% used, root disk {x.diskRootUsedPercent}% full, up {Math.round(x.uptimeSeconds / 60)} min.</p>
+          <h3>Findings</h3>
+          <Tbl head={["Severity", "Finding"]} rows={x.findings.map((f) => [f.severity, f.finding])} empty="No issues found." />
+          <h3>Top processes by memory</h3>
+          <Tbl head={["PID", "RSS (KB)", "Command"]} rows={x.topProcesses.map((p) => [p.pid, p.rssKb, p.command])} empty="No processes." />
+        </>
+      )}
+    </>
+  );
+}
+
+export function UpdateManager({ a }) {
+  const notify = useNotify();
+  const d = useAsync(() => guest(a, "updates"), [a.id]);
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState("");
+  const run = async (body) => {
+    setBusy(true);
+    try {
+      const r = await guest(a, "updates", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      setLog(r.installLog || "");
+      notify.success(body.install ? `Install finished; ${r.pendingCount} update(s) still pending.` : `Package index refreshed: ${r.pendingCount} update(s) pending.`, "Update Manager");
+      d.reload();
+    } catch (e) { notify.error(e, "Update Manager failed"); } finally { setBusy(false); }
+  };
+  const x = d.data;
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Updates</div>
+      <div className="vy-cmdbar"><Button size="small" onClick={d.reload}>Refresh view</Button><Button size="small" disabled={busy} onClick={() => run({ refresh: true })}>Check for updates (refresh package index)</Button><Button size="small" appearance="primary" disabled={busy || !x?.pendingCount} onClick={() => run({ install: true })}>Install all pending updates</Button></div>
+      {d.loading && !x ? <Loading /> : d.error ? <ErrorBar error={d.error} title="Update Manager is not available" /> : x && (
+        <>
+          <p>Package manager: {x.packageManager}. {x.supported ? `${x.pendingCount} update(s) pending (assessed from the guest's package index; refresh it to see newer ones).` : "No supported package manager in this guest."}</p>
+          <Tbl head={["Package", "Installed", "Available"]} rows={x.pending.map((p) => [p.name, p.installed, p.available])} empty="Nothing pending." />
+          {log && <pre>{log}</pre>}
+        </>
+      )}
+    </>
+  );
+}
