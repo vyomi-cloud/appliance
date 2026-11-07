@@ -113,7 +113,9 @@ check("ConverseStream eventstream framing", o["headers"]["content-type"] == "app
       and types[-2:] == ["messageStop", "metadata"] and text == "echo[]:stream this please", types)
 o = bedrock("/model/anthropic.claude-3-haiku-20240307-v1:0/invoke-with-response-stream", {"max_tokens": 9, "messages": [{"role": "user", "content": "s"}]})
 fr = frames(o["body"])
-check("InvokeModelWithResponseStream chunk", json.loads(base64.b64decode(fr[0][1]["bytes"]))["content"][0]["text"] == "echo[]:s")
+_ev = [json.loads(base64.b64decode(p["bytes"])) for h, p in fr]
+check("InvokeModelWithResponseStream chunks (Claude Messages events)", _ev[0]["type"] == "message_start" and _ev[-1]["type"] == "message_stop"
+      and "".join(e["delta"]["text"] for e in _ev if e["type"] == "content_block_delta") == "echo[]:s")
 
 # ── Vertex AI
 G = "/v1/projects/p1/locations/us-central1/publishers/google/models/gemini-2.0-flash"

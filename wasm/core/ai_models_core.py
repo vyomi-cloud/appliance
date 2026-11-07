@@ -38,6 +38,14 @@ try:
 except ImportError:  # Pyodide flat layout
     import llm_core as llm  # type: ignore
 
+def _guardrails():
+    try:
+        from core import bedrock_guardrails_core as g
+    except ImportError:  # Pyodide flat layout
+        import bedrock_guardrails_core as g  # type: ignore
+    return g
+
+
 _ACCT = "123456789012"
 
 # (model id, provider, name, input modalities, output modalities, streaming, customizations)
@@ -218,8 +226,8 @@ def _converse_request(p, mid, max_key="maxTokens"):
     msgs = _converse_messages(p.get("messages"))
     if isinstance(msgs, str):
         return msgs
-    if "guardrailConfig" in p:
-        return "guardrailConfig is not supported by the local model (guardrails are not modelled)"
+    if "guardrailConfig" in p and not isinstance(p["guardrailConfig"], dict):
+        return "guardrailConfig must be a structure"
     ex = {"model": mid}
     ic = p.get("inferenceConfig") or {}
     if ic.get("topP") is not None:
@@ -393,9 +401,9 @@ def _chunks(text, n=12):
     return [text[i:i + n] for i in range(0, len(text), n)] or [""]
 
 
-def _converse_frames(it, t0):
+def _converse_events(it, t0, F):
     """Seam events -> Converse stream frames: text deltas as they arrive; toolUse blocks start/delta(input fragments)/stop."""
-    yield eventstream_frame("messageStart", {"role": "assistant"})
+    yield F("messageStart", {"role": "assistant"})
     idx, text_idx, tool_open, tool_blk, got_args = -1, None, None, {}, set()
     try:
         for ev in it:
@@ -404,38 +412,177 @@ def _converse_frames(it, t0):
                 if text_idx is None:
                     idx += 1
                     text_idx = idx
-                yield eventstream_frame("contentBlockDelta", {"contentBlockIndex": text_idx, "delta": {"text": ev["text"]}})
+                yield F("contentBlockDelta", {"contentBlockIndex": text_idx, "delta": {"text": ev["text"]}})
             elif ty == "tool_start":
                 if text_idx is not None:
-                    yield eventstream_frame("contentBlockStop", {"contentBlockIndex": text_idx})
+                    yield F("contentBlockStop", {"contentBlockIndex": text_idx})
                     text_idx = None
                 if tool_open is not None:
                     if tool_open not in got_args:
-                        yield eventstream_frame("contentBlockDelta", {"contentBlockIndex": tool_blk[tool_open], "delta": {"toolUse": {"input": "{}"}}})
-                    yield eventstream_frame("contentBlockStop", {"contentBlockIndex": tool_blk[tool_open]})
+                        yield F("contentBlockDelta", {"contentBlockIndex": tool_blk[tool_open], "delta": {"toolUse": {"input": "{}"}}})
+                    yield F("contentBlockStop", {"contentBlockIndex": tool_blk[tool_open]})
                 idx += 1
                 tool_blk[ev["index"]], tool_open = idx, ev["index"]
-                yield eventstream_frame("contentBlockStart", {"contentBlockIndex": idx, "start": {"toolUse": {"toolUseId": ev["id"], "name": ev["name"]}}})
+                yield F("contentBlockStart", {"contentBlockIndex": idx, "start": {"toolUse": {"toolUseId": ev["id"], "name": ev["name"]}}})
             elif ty == "tool_args":
                 got_args.add(ev["index"])
-                yield eventstream_frame("contentBlockDelta", {"contentBlockIndex": tool_blk[ev["index"]], "delta": {"toolUse": {"input": ev["fragment"]}}})
+                yield F("contentBlockDelta", {"contentBlockIndex": tool_blk[ev["index"]], "delta": {"toolUse": {"input": ev["fragment"]}}})
             else:
                 if text_idx is not None:
-                    yield eventstream_frame("contentBlockStop", {"contentBlockIndex": text_idx})
+                    yield F("contentBlockStop", {"contentBlockIndex": text_idx})
                 if tool_open is not None:
                     if tool_open not in got_args:
-                        yield eventstream_frame("contentBlockDelta", {"contentBlockIndex": tool_blk[tool_open], "delta": {"toolUse": {"input": "{}"}}})
-                    yield eventstream_frame("contentBlockStop", {"contentBlockIndex": tool_blk[tool_open]})
+                        yield F("contentBlockDelta", {"contentBlockIndex": tool_blk[tool_open], "delta": {"toolUse": {"input": "{}"}}})
+                    yield F("contentBlockStop", {"contentBlockIndex": tool_blk[tool_open]})
                 if idx < 0:
-                    yield eventstream_frame("contentBlockDelta", {"contentBlockIndex": 0, "delta": {"text": ""}})
-                    yield eventstream_frame("contentBlockStop", {"contentBlockIndex": 0})
-                yield eventstream_frame("messageStop", {"stopReason": _stop_reason(ev["finish_reason"])})
-                yield eventstream_frame("metadata", {"usage": {"inputTokens": ev["input_tokens"], "outputTokens": ev["output_tokens"],
+                    yield F("contentBlockDelta", {"contentBlockIndex": 0, "delta": {"text": ""}})
+                    yield F("contentBlockStop", {"contentBlockIndex": 0})
+                yield F("messageStop", {"stopReason": _stop_reason(ev["finish_reason"])})
+                yield F("metadata", {"usage": {"inputTokens": ev["input_tokens"], "outputTokens": ev["output_tokens"],
                                                                 "totalTokens": ev["input_tokens"] + ev["output_tokens"]},
                                                       "metrics": {"latencyMs": int((time.time() - t0) * 1000)}})
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
+        yield F("modelStreamErrorException", {"message": str(e)}, message_type="exception")
+
+
+def _converse_frames(it, t0):
+    return _converse_events(it, t0, eventstream_frame)
+
+
+def _chunk_frame(obj):
+    return eventstream_frame("chunk", {"bytes": base64.b64encode(json.dumps(obj).encode()).decode()})
+
+
+def _invoke_frames(m, it, t0):
+    """InvokeModelWithResponseStream: the model family's own streaming events, each wrapped in a base64 `chunk` frame, emitted as the
+    seam generates them (Claude Messages events, Nova/Converse events, Titan/Llama/Mistral chunks)."""
+    mid = m[0]
+    first = [None]
+
+    def metrics(ev):
+        return {"inputTokenCount": ev["input_tokens"], "outputTokenCount": ev["output_tokens"],
+                "invocationLatency": int((time.time() - t0) * 1000), "firstByteLatency": int(((first[0] or time.time()) - t0) * 1000)}
+    try:
+        if mid.startswith("amazon.nova"):
+            def F(name, payload, message_type="event"):
+                if message_type != "event":
+                    return eventstream_frame(name, payload, message_type=message_type)
+                if name == "metadata":
+                    return b""
+                if name == "messageStop":
+                    payload = dict(payload, **{"amazon-bedrock-invocationMetrics": {"invocationLatency": int((time.time() - t0) * 1000)}})
+                return _chunk_frame({name: payload})
+            for fr in _converse_events(it, t0, F):
+                if fr:
+                    yield fr
+            return
+        if mid.startswith("anthropic."):
+            yield _chunk_frame({"type": "message_start", "message": {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant",
+                                                                    "model": mid, "content": [], "stop_reason": None, "stop_sequence": None,
+                                                                    "usage": {"input_tokens": 0, "output_tokens": 0}}})
+            idx, text_idx, tool_idx, nxt = None, None, {}, 0
+            for ev in it:
+                first[0] = first[0] or time.time()
+                if ev["type"] == "text":
+                    if text_idx is None:
+                        text_idx, nxt = nxt, nxt + 1
+                        yield _chunk_frame({"type": "content_block_start", "index": text_idx, "content_block": {"type": "text", "text": ""}})
+                    yield _chunk_frame({"type": "content_block_delta", "index": text_idx, "delta": {"type": "text_delta", "text": ev["text"]}})
+                elif ev["type"] == "tool_start":
+                    if text_idx is not None:
+                        yield _chunk_frame({"type": "content_block_stop", "index": text_idx})
+                        text_idx = None
+                    tool_idx[ev["index"]], nxt = nxt, nxt + 1
+                    yield _chunk_frame({"type": "content_block_start", "index": tool_idx[ev["index"]],
+                                        "content_block": {"type": "tool_use", "id": ev["id"], "name": ev["name"], "input": {}}})
+                elif ev["type"] == "tool_args":
+                    yield _chunk_frame({"type": "content_block_delta", "index": tool_idx[ev["index"]],
+                                        "delta": {"type": "input_json_delta", "partial_json": ev["fragment"]}})
+                else:
+                    if text_idx is not None:
+                        yield _chunk_frame({"type": "content_block_stop", "index": text_idx})
+                    for k in tool_idx.values():
+                        yield _chunk_frame({"type": "content_block_stop", "index": k})
+                    yield _chunk_frame({"type": "message_delta", "delta": {"stop_reason": "tool_use" if ev["tool_calls"] else
+                                                                        ("max_tokens" if ev["finish_reason"] == "length" else "end_turn"), "stop_sequence": None},
+                                        "usage": {"output_tokens": ev["output_tokens"]}})
+                    yield _chunk_frame({"type": "message_stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
+            return
+        n_out = 0
+        for ev in it:
+            first[0] = first[0] or time.time()
+            if ev["type"] == "text":
+                n_out += 1
+                if mid.startswith("amazon.titan-text"):
+                    yield _chunk_frame({"outputText": ev["text"], "index": 0, "totalOutputTextTokenCount": None, "completionReason": None, "inputTextTokenCount": None})
+                elif mid.startswith("meta."):
+                    yield _chunk_frame({"generation": ev["text"], "prompt_token_count": None, "generation_token_count": n_out, "stop_reason": None})
+                else:
+                    yield _chunk_frame({"outputs": [{"text": ev["text"], "stop_reason": None}]})
+            elif ev["type"] == "done":
+                lim = ev["finish_reason"] == "length"
+                if mid.startswith("amazon.titan-text"):
+                    yield _chunk_frame({"outputText": "", "index": 0, "totalOutputTextTokenCount": ev["output_tokens"], "completionReason": "LENGTH" if lim else "FINISH",
+                                        "inputTextTokenCount": ev["input_tokens"], "amazon-bedrock-invocationMetrics": metrics(ev)})
+                elif mid.startswith("meta."):
+                    yield _chunk_frame({"generation": "", "prompt_token_count": ev["input_tokens"], "generation_token_count": ev["output_tokens"],
+                                        "stop_reason": "length" if lim else "stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
+                else:
+                    yield _chunk_frame({"outputs": [{"text": "", "stop_reason": "length" if lim else "stop"}], "amazon-bedrock-invocationMetrics": metrics(ev)})
+    except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
         yield eventstream_frame("modelStreamErrorException", {"message": str(e)}, message_type="exception")
 
+
+
+def _guard_input(gcfg, msgs):
+    gr = _guardrails()
+    user = [m for m in msgs if m["role"] == "user"]
+    text = user[-1]["content"] if user else ""
+    try:
+        r = gr.converse_check(gcfg, text if isinstance(text, str) else json.dumps(text), "INPUT")
+    except gr.GErr as e:
+        return _b_err(e.code, e.msg, e.status)
+    return None if r is None else (r["text"], r["assessment"], "INPUT")
+
+
+def _guard_trace(gcfg, assessment, kind):
+    if (gcfg.get("trace") or "disabled") == "disabled":
+        return None
+    return {"guardrail": ({"inputAssessment": {gcfg["guardrailIdentifier"]: assessment}} if kind == "INPUT"
+                          else {"outputAssessments": {gcfg["guardrailIdentifier"]: [assessment]}})}
+
+
+def _guard_blocked(op, gi, gcfg, t0, usage=None):
+    text, assessment, kind = gi
+    usage = usage or {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+    trace = _guard_trace(gcfg, assessment, kind)
+    lat = {"latencyMs": int((time.time() - t0) * 1000)}
+    if op == "converse":
+        doc = {"output": {"message": {"role": "assistant", "content": [{"text": text}]}}, "stopReason": "guardrail_intervened",
+               "usage": usage, "metrics": lat}
+        if trace:
+            doc["trace"] = trace
+        return _j(200, doc)
+    frames = [eventstream_frame("messageStart", {"role": "assistant"}),
+              eventstream_frame("contentBlockDelta", {"contentBlockIndex": 0, "delta": {"text": text}}),
+              eventstream_frame("contentBlockStop", {"contentBlockIndex": 0}),
+              eventstream_frame("messageStop", {"stopReason": "guardrail_intervened"}),
+              eventstream_frame("metadata", dict({"usage": usage, "metrics": lat}, **({"trace": trace} if trace else {})))]
+    return _bytes(200, b"".join(frames), "application/vnd.amazon.eventstream")
+
+
+def _guard_output(gcfg, r):
+    gr = _guardrails()
+    if not r.get("text"):
+        return None
+    try:
+        res = gr.converse_check(gcfg, r["text"], "OUTPUT")
+    except gr.GErr as e:
+        return _b_err(e.code, e.msg, e.status)
+    if res is None:
+        return None
+    usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+    return _guard_blocked("converse", (res["text"], res["assessment"], "OUTPUT"), gcfg, time.time(), usage)
 
 
 def bedrock_dispatch(method, path, query, headers, body):
@@ -446,6 +593,9 @@ def bedrock_dispatch(method, path, query, headers, body):
         prov = (query or {}).get("byProvider")
         ms = [m for m in BEDROCK_MODELS if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
         return _j(200, {"modelSummaries": [_summary(m) for m in ms]})
+    _gr = _guardrails()
+    if _gr.handles(path):
+        return _gr.dispatch(method, path, query, body)
     mt = re.match(r"^/foundation-models/(.+)$", path)
     if mt and method == "GET":
         m = _BM.get(mt.group(1))
@@ -472,6 +622,13 @@ def bedrock_dispatch(method, path, query, headers, body):
         req = _converse_request(p, m[0])
         if isinstance(req, str):
             return _b_err("ValidationException", req, 400)
+        gcfg = p.get("guardrailConfig")
+        if gcfg:
+            gi = _guard_input(gcfg, req[0])
+            if isinstance(gi, tuple):
+                return _guard_blocked(op, gi, gcfg, t0)
+            if gi is not None:
+                return gi
         try:
             if op == "converse-stream":
                 it = _prime(llm.chat_stream(*req[:5], **req[5]))
@@ -481,6 +638,10 @@ def bedrock_dispatch(method, path, query, headers, body):
             return _ll_err(e)
         except ValueError as e:
             return _b_err("ValidationException", str(e), 400)
+        if op == "converse" and gcfg:
+            go = _guard_output(gcfg, r)
+            if go is not None:
+                return go
         if op == "converse":
             usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
             return _j(200, {"output": {"message": {"role": "assistant", "content": _converse_content(r)}},
@@ -503,6 +664,15 @@ def bedrock_dispatch(method, path, query, headers, body):
     req = _bedrock_text_request(m, p)
     if isinstance(req, str):
         return _b_err("ValidationException", req, 400)
+    if op == "invoke-with-response-stream":
+        try:
+            it = _prime(llm.chat_stream(*req[:5], **req[5]))
+        except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
+            return _ll_err(e)
+        except ValueError as e:
+            return _b_err("ValidationException", str(e), 400)
+        return _stream_out(200, {"x-amzn-bedrock-content-type": "application/json", "x-vyomi-local-model": llm.resolve_model(m[0])},
+                           _invoke_frames(m, it, t0), "application/vnd.amazon.eventstream")
     try:
         r = _llm_chat(req)
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
@@ -689,7 +859,60 @@ def _gem_stream(model, it, sse):
         yield "[]" if first else "]"
 
 
+def _gdev_dispatch(method, path, query, headers, body):
+    """Gemini Developer API (generativelanguage.googleapis.com /v1beta|/v1 /models/...) over the same seam as Vertex.
+    Differences from Vertex handled here: API-key auth (x-goog-api-key / ?key=), models.list/get, batchEmbedContents,
+    embedContent takes `model` in the body. Everything else is the Vertex publisher-model wire, which google-genai shares."""
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    if not (lh.get("x-goog-api-key") or (query or {}).get("key") or lh.get("authorization")):
+        return _g_err(403, "PERMISSION_DENIED", "Method doesn't allow unregistered callers (callers without established identity). "
+                      "Please use API Key or other form of API consumer identity to call this API.")
+    method = method.upper()
+    mt = re.match(r"^/v1(?:beta)?/models/?$", path)
+    if mt and method == "GET":
+        return _j(200, {"models": [_gdev_model(m) for m in GEMINI_MODELS + GEMINI_EMBED if "@" not in m]})
+    mt = re.match(r"^/v1(?:beta)?/models/([^/:]+)$", path)
+    if mt and method == "GET":
+        m = mt.group(1)
+        if m not in GEMINI_MODELS and m not in GEMINI_EMBED:
+            return _g_err(404, "NOT_FOUND", f"models/{m} is not found for API version v1beta, or is not supported for this method.")
+        return _j(200, _gdev_model(m))
+    mt = re.match(r"^/v1(?:beta)?/models/([^/:]+):([A-Za-z]+)$", path)
+    if not mt or method != "POST":
+        return _g_err(404, "NOT_FOUND", f"Unsupported Gemini API operation: {method} {path}")
+    model, op = mt.groups()
+    if model not in GEMINI_MODELS and model not in GEMINI_EMBED:
+        return _g_err(404, "NOT_FOUND", f"models/{model} is not found for API version v1beta, or is not supported for {op}. "
+                      "Call ListModels to see the list of available models and their supported methods.")
+    p = _body(body)
+    if p is None:
+        return _g_err(400, "INVALID_ARGUMENT", "Invalid JSON payload received.")
+    if op == "batchEmbedContents":
+        reqs = p.get("requests")
+        if not isinstance(reqs, list) or not reqs:
+            return _g_err(400, "INVALID_ARGUMENT", "requests: at least one request is required.")
+        texts = ["".join(x.get("text", "") for x in ((r.get("content") or {}).get("parts") or [])) for r in reqs]
+        if not all(texts):
+            return _g_err(400, "INVALID_ARGUMENT", "content.parts: at least one text part is required in every request.")
+        return _j(200, {"embeddings": [{"values": v} for v in llm.embed(texts)["vectors"]]})
+    if op == "embedContent" and model not in GEMINI_EMBED:
+        return _g_err(400, "INVALID_ARGUMENT", f"models/{model} does not support embedContent.")
+    if op == "generateContent" and model in GEMINI_EMBED:
+        return _g_err(400, "INVALID_ARGUMENT", f"models/{model} does not support generateContent.")
+    r = vertex_dispatch("POST", f"/v1/projects/gemini-api/locations/global/publishers/google/models/{model}:{op}", query, headers, body)
+    return r
+
+
+def _gdev_model(m):
+    emb = m in GEMINI_EMBED
+    return {"name": f"models/{m}", "version": "001", "displayName": m, "description": "Vyomi local-model alias (Dev Simplified)",
+            "inputTokenLimit": 8192 if emb else 1048576, "outputTokenLimit": 1 if emb else 8192,
+            "supportedGenerationMethods": ["embedContent", "batchEmbedContents"] if emb else ["generateContent", "streamGenerateContent", "countTokens"]}
+
+
 def vertex_dispatch(method, path, query, headers, body):
+    if re.match(r"^/v1(?:beta)?/models(?:[/:]|$)", path):
+        return _gdev_dispatch(method, path, query, headers, body)
     mt = re.match(r"^/v1(?:beta1)?/projects/([^/]+)/locations/([^/]+)/publishers/([^/]+)/models/([^/:]+):([A-Za-z]+)$", path)
     if not mt or method.upper() != "POST":
         return _g_err(404, "NOT_FOUND", f"Unsupported Vertex AI operation: {method} {path}")
@@ -883,9 +1106,31 @@ def _fit_dims(v, dims):
     return v + [0.0] * (dims - len(v))
 
 
+def _azure_agents():
+    try:
+        from core import azure_openai_agents_core as a
+    except ImportError:  # Pyodide flat layout
+        import azure_openai_agents_core as a  # type: ignore
+    return a
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
+    ag = _azure_agents()
     mt = re.match(r"^/openai/(?:deployments/([^/]+)/)?(chat/completions|completions|embeddings)$", path) \
-        or re.match(r"^/openai/v1/()(chat/completions|completions|embeddings|responses)$", path)
+        or re.match(r"^/openai/(?:v1/)?()(chat/completions|completions|embeddings|responses)$", path)
+    if mt is None and ag.handles(path):      # Responses get/delete + Assistants/threads/runs (Dev Simplified)
+        lh0 = {k.lower(): v for k, v in (headers or {}).items()}
+        if not (lh0.get("api-key") or lh0.get("authorization")):
+            return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include "
+                                                              "subscription key when making requests to an API."}})
+        p0 = _body(body)
+        if p0 is None:
+            return _a_err(400, "BadRequest", "Invalid JSON body.")
+        rm = re.match(r"^/openai/(?:v1/)?responses/([^/]+)$", path)
+        if rm:
+            return ag.responses_other(method.upper(), rm.group(1))
+        r0 = ag.assistants_dispatch(lambda n: _find_deployment(arm_state, n), method, path, query or {}, p0)
+        return r0 or _a_err(404, "404", "Resource not found")
     if not mt or method.upper() != "POST":
         return _a_err(404, "404", "Resource not found")
     p = _body(body)
@@ -931,6 +1176,13 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         vecs = [llm._renorm(_fit_dims(v, dims)) for v in e["vectors"]]
         return _j(200, {"object": "list", "model": model, "usage": {"prompt_tokens": e["input_tokens"], "total_tokens": e["input_tokens"]},
                         "data": [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vecs)]})
+    if op == "responses":
+        if "embedding" in model:
+            return _a_err(400, "OperationNotSupported", f"The responses operation does not work with the specified model, {model}.")
+        try:
+            return ag.responses_create(None, p, model)
+        except ag.Bad as e:
+            return ag._err(e)
     if "embedding" in model or (caps and "chatCompletion" not in caps):
         return _a_err(400, "OperationNotSupported", f"The {op} operation does not work with the specified model, {model}. "
                       "Please choose different model and try again.")

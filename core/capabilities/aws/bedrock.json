@@ -7,12 +7,14 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Tool use, images, guardrails and prompt caching are rejected with a validation error rather than ignored. Streaming is real event framing over a response generated whole.",
+   "Every model id is answered by one small local model (llama.cpp on the booster/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Images/documents, prompt caching and reasoning content are rejected with a validation error rather than ignored.",
    "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
   ],
   "tests": [
-   "tests/conformance/test_local_llm_seam.py",
-   "tests/conformance/test_llm_async_bridge.py"
+   "tests/conformance/test_ai_agent_lanes.py",
+   "tests/conformance/test_ai_sdk_tools.py",
+   "tests/conformance/test_llm_async_bridge.py",
+   "tests/conformance/test_local_llm_seam.py"
   ]
  },
  "bedrock.knowledge-bases": {
@@ -66,6 +68,19 @@
   ],
   "tests": [
    "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.guardrails": {
+  "title": "Guardrails (CreateGuardrail, versions, ApplyGuardrail, Converse guardrailConfig) - Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified: deterministic simple filters, not Bedrock's classifiers. Word lists (custom + small PROFANITY list), denied topics (name/example phrase match), regex PII (EMAIL, PHONE, US SSN, card, IP, AWS key, URL) with BLOCK/ANONYMIZE, custom regexes, and keyword content filters (HATE, INSULTS, SEXUAL, VIOLENCE, MISCONDUCT, PROMPT_ATTACK). Contextual grounding, automated reasoning and image content are rejected. Converse checks the input and the output; ConverseStream and InvokeModel check input only (stream output is not re-checked). State is process-local."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py"
   ]
  }
 }

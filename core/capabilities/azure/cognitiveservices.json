@@ -34,9 +34,9 @@
   "title": "Chat playground (Azure OpenAI data plane)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Sends chat/completions to the deployment through the real Azure OpenAI wire; the answer comes from one small local model (llama.cpp on the appliance, WebLLM on Nano when the page registers it), so quality is toy-grade and no model running returns the native 503 ServiceUnavailable instead of an answer. No image/audio, function calling, 'On your data', content filters or fine-tuning."
+   "Sends chat/completions to the deployment through the real Azure OpenAI wire; the answer comes from one small local model (llama.cpp on the booster/appliance, WebLLM on Nano when the page registers it), so quality is toy-grade and no model running returns the native 503 ServiceUnavailable instead of an answer. Function calling, json_schema output and streaming (include_usage) work; no image/audio, 'On your data', content filters or fine-tuning."
   ],
-  "tests": ["tests/conformance/test_local_llm_seam.py"]
+  "tests": ["tests/conformance/test_local_llm_seam.py", "tests/conformance/test_ai_sdk_tools.py"]
  },
  "azure.cognitiveservices.quotas": {
   "tier": "pro",
@@ -104,5 +104,18 @@
   ],
   "tests": ["tests/conformance/test_azure_rbac_core.py"]
  },
- "azure.cognitiveservices.tasks": {"title": "Tasks (Logic App-backed task templates)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."], "tests": ["tests/conformance/test_azure_tasks_core.py"]}
+ "azure.cognitiveservices.tasks": {"title": "Tasks (Logic App-backed task templates)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."], "tests": ["tests/conformance/test_azure_tasks_core.py"]},
+  "azure.cognitiveservices.responses-assistants": {
+  "title": "Responses API + Assistants API (threads, runs) - Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Responses: create (string/item input, instructions, function tools, json_schema text.format, previous_response_id chaining, SSE streaming with the canonical event sequence), retrieve, delete; built-in tools (web_search, file_search, code_interpreter, computer, mcp) and reasoning are rejected. Assistants: assistants/threads/messages/runs with function tools and submit_tool_outputs; runs execute synchronously inside the create call (terminal status immediately), run steps are empty, code_interpreter/file_search/vector stores/attachments are rejected. State is process-local."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py"
+  ]
+ }
 }

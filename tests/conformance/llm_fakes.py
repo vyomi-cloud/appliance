@@ -37,7 +37,7 @@ class FakeLLM:
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
                 if self.path.endswith("/embeddings"):
-                    return self._json(200, {"data": [{"embedding": [0.1, 0.2, 0.3], "index": 0}], "usage": {"prompt_tokens": 3}})
+                    return self._json(200, {"data": [{"embedding": [0.1, 0.2, 0.3], "index": i} for i in range(len(body["input"]) if isinstance(body.get("input"), list) else 1)], "usage": {"prompt_tokens": 3}})
                 fake.requests.append(body)
                 if body.get("tools") and not fake.tools_supported:
                     return self._json(400, {"error": {"message": f"{fake.model} does not support tools"}})
