@@ -42,6 +42,13 @@ check(st == 200 and {"CVE-2018-18074", "CVE-2020-14343", "END_OF_LIFE_RUNTIME"} 
 check(all(f["findingClass"] == "VULNERABILITY" for f in d["findings"]), "finding class")
 st, occ = call("GET", f"/v1/projects/{P}/occurrences")
 check(st == 200 and occ["occurrences"][0]["kind"] == "VULNERABILITY" and occ["occurrences"][0]["vulnerability"]["packageIssue"][0]["fixedVersion"]["name"], "Container Analysis occurrences")
+st, vo = call("GET", f"/v1/projects/{P}/occurrences", None, {"filter": 'kind="VULNERABILITY"'})
+check(st == 200 and vo["occurrences"] and all(o["kind"] == "VULNERABILITY" for o in vo["occurrences"]), "kind=VULNERABILITY filter")
+uri = vo["occurrences"][0]["resourceUri"]
+st, one = call("GET", f"/v1/projects/{P}/occurrences", None, {"filter": f'kind="VULNERABILITY" AND resourceUrl="{uri}"'})
+check(st == 200 and one["occurrences"] and all(o["resourceUri"] == uri for o in one["occurrences"]), "resourceUrl filter")
+st, att = call("GET", f"/v1/projects/{P}/occurrences", None, {"filter": 'kind="ATTESTATION"'})
+check(st == 200 and att["occurrences"] == [], "ATTESTATION filter excludes vulnerabilities")
 st, summ = call("GET", f"/v1/projects/{P}/occurrences:vulnerabilitySummary")
 check(st == 200 and summ["counts"], "vulnerability summary")
 # disabling scanning on the repo removes the findings

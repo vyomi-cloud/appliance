@@ -42,9 +42,6 @@ export default function Services() {
         <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
       </>} />
-      <Box sx={{ mb: 1.5 }}>
-        <NotSimulated compact feature="Connect repo" note="Vyomi has no Cloud Build or source-repository integration — continuous deployment from a repository isn't backed by a Vyomi backend yet." />
-      </Box>
       <ResourceTable
         resourceName="services"
         items={rows}

@@ -1043,7 +1043,45 @@ def _insights_datasets(store: ObjectStore) -> dict:
 
 def _insights_dataset_view(ds_id: str, ds: dict) -> dict:
     return {"name": f"insightsDatasets/{ds_id}", "displayName": ds.get("displayName", ds_id),
-            "sourceBucketPrefix": ds.get("sourceBucketPrefix", ""), "state": "ACTIVE", "createTime": ds["createTime"]}
+            "sourceBucketPrefix": ds.get("sourceBucketPrefix", ""), "state": "ACTIVE", "createTime": ds["createTime"],
+            "link": {"dataset": "projects/%s/datasets/%s" % (ds.get("project", "vyomi-project"), ds.get("bigqueryDataset", "")),
+                     "linked": bool(ds.get("bigqueryDataset"))},
+            "lastRefreshTime": ds.get("lastRefreshTime", ""), "tableRowCounts": ds.get("rowCounts", {})}
+
+
+def _insights_refresh(store: ObjectStore, ds: dict) -> None:
+    """The Storage Intelligence export: snapshot buckets + objects of the matching source buckets into the linked
+    BigQuery dataset (core/gcp_bigquery_core) as bucket_/object_/project_attributes_view tables."""
+    from core import gcp_bigquery_core as bq
+    from core import gcp_storageinsights_core as si
+    project, dset = ds.get("project", "vyomi-project"), ds["bigqueryDataset"]
+    snap = _now()
+    brows, orows = [], []
+    for b in sorted(store.buckets):
+        if not b.startswith(ds.get("sourceBucketPrefix", "")):
+            continue
+        meta = store.buckets[b]
+        brows.append({"snapshotTime": snap, "project": meta.get("project") or project, "bucket": b, "location": si._loc(store, b).upper(),
+                      "storageClass": meta.get("storageClass", "STANDARD"), "timeCreated": meta.get("timeCreated", ""),
+                      "versioning": bool((meta.get("versioning") or {}).get("enabled"))})
+        for oname, e in sorted(store.bucket_objects(b).items()):
+            if oname.endswith("/"):
+                continue
+            row = {"snapshotTime": snap}
+            for f in ("project", "bucket", "name", "location", "size", "storageClass", "contentType", "timeCreated", "updated", "generation",
+                      "metageneration", "etag", "md5Hash", "crc32c"):
+                row[f] = si._field_value(store, meta.get("project") or project, b, oname, e, f)
+            row["size"] = int(row["size"] or 0)
+            orows.append(row)
+    S = lambda *n: [{"name": x, "type": "STRING"} for x in n]
+    bq.put_table(store, project, dset, "bucket_attributes_view", S("snapshotTime", "project", "bucket", "location", "storageClass", "timeCreated") + [{"name": "versioning", "type": "BOOLEAN"}], brows)
+    bq.put_table(store, project, dset, "object_attributes_view",
+                 S("snapshotTime", "project", "bucket", "name", "location") + [{"name": "size", "type": "INTEGER"}] + S("storageClass", "contentType", "timeCreated", "updated", "generation", "metageneration", "etag", "md5Hash", "crc32c"), orows)
+    bq.put_table(store, project, dset, "project_attributes_view",
+                 S("snapshotTime", "project") + [{"name": "bucketCount", "type": "INTEGER"}, {"name": "objectCount", "type": "INTEGER"}, {"name": "totalBytes", "type": "INTEGER"}],
+                 [{"snapshotTime": snap, "project": project, "bucketCount": len(brows), "objectCount": len(orows), "totalBytes": sum(r["size"] for r in orows)}])
+    ds["lastRefreshTime"] = snap
+    ds["rowCounts"] = {"bucket_attributes_view": len(brows), "object_attributes_view": len(orows), "project_attributes_view": 1}
 
 
 # ── Long-running bucket operations (Operations tab) ───────────────────────
@@ -1386,19 +1424,34 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                 ds_id = req.get("datasetConfigId") or uuid.uuid4().hex[:12]
                 if ds_id in datasets:
                     return _err(409, "conflict", f"Dataset config {ds_id} already exists.")
-                datasets[ds_id] = {"displayName": req["displayName"], "sourceBucketPrefix": req.get("sourceBucketPrefix", ""), "createTime": _now()}
+                bqd = req.get("bigqueryDataset") or "storage_insights_" + re.sub(r"[^A-Za-z0-9_]", "_", ds_id)
+                if not re.match(r"^[A-Za-z0-9_]{1,1024}$", bqd):
+                    return _err(400, "invalid", "bigqueryDataset must be alphanumeric (plus underscores).")
+                datasets[ds_id] = {"displayName": req["displayName"], "sourceBucketPrefix": req.get("sourceBucketPrefix", ""), "createTime": _now(),
+                                   "project": req.get("project") or "vyomi-project", "bigqueryDataset": bqd}
+                _insights_refresh(store, datasets[ds_id])
                 return _json(200, _insights_dataset_view(ds_id, datasets[ds_id]))
             if method == "GET":
                 return _json(200, {"datasets": [_insights_dataset_view(i, d) for i, d in sorted(datasets.items())]})
             return _err(400, "invalid", f"Unsupported method {method} on insightsDatasets")
         ds_id = unquote(segs[1])
+        refresh = ds_id.endswith(":refresh")      # Vyomi extension: run the export now (the real service refreshes daily)
+        ds_id = ds_id[:-len(":refresh")] if refresh else ds_id
         ds = datasets.get(ds_id)
         if ds is None:
             return _err(404, "notFound", f"No such dataset config: {ds_id}")
+        if refresh and method == "POST":
+            _insights_refresh(store, ds)
+            return _json(200, _insights_dataset_view(ds_id, ds))
         if method == "GET":
             return _json(200, _insights_dataset_view(ds_id, ds))
         if method == "DELETE":
             datasets.pop(ds_id, None)
+            try:
+                from core import gcp_bigquery_core as bq
+                bq.state(store)["datasets"].pop("%s:%s" % (ds.get("project", "vyomi-project"), ds.get("bigqueryDataset", "")), None)
+            except Exception:
+                pass
             return GcsResponse(status=204, body=b"", media_type=None)
         return _err(400, "invalid", f"Unsupported method {method} on a dataset config")
 

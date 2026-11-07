@@ -248,7 +248,27 @@ def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: l
     return n
 
 
-def scan_images(store: ArtifactRegistryStore, project: str) -> list:
+def resolve_image_digest(store: ArtifactRegistryStore, ref: str):
+    """sha256 digest of ``LOC-docker.pkg.dev/PROJECT/REPO/IMAGE[:tag|@digest]`` (also gcr.io/PROJECT/IMAGE) or None."""
+    m = re.match(r"^([a-z0-9-]+)-docker\.pkg\.dev/([^/]+)/([^/]+)/(.+?)(?::([^/:@]+))?(?:@(sha256:[0-9a-f]+))?$", ref or "")
+    if not m:
+        return None
+    loc, proj, rid, img, tag, dg = m.groups()
+    repo = store.repos.get(f"projects/{proj}/locations/{loc}/repositories/{rid}")
+    if not repo:
+        return None
+    for pkg in repo["packages"].values():
+        if pkg["displayName"] != img:
+            continue
+        if dg:
+            return dg if dg in pkg["versions"] else None
+        for d, ver in pkg["versions"].items():
+            if (tag or "latest") in [t["name"].rsplit("/", 1)[-1] for t in ver.get("_tags", [])]:
+                return d
+    return None
+
+
+def scan_images(store: ArtifactRegistryStore, project: str, trivy_reports: dict | None = None) -> list:
     """Vulnerability scan of every tagged Docker image in the project's repositories that has scanning enabled
     (vulnerabilityScanningConfig.enablementConfig != DISABLED). Returns [{resource, repo, image, tag, digest, scan}].
     The scan reads the image config the registry sync stored with the version (core/vuln_scan_core.py)."""
@@ -271,7 +291,7 @@ def scan_images(store: ArtifactRegistryStore, project: str) -> list:
                     continue
                 uri = f"{loc}-docker.pkg.dev/{project}/{rid}/{pkg['displayName']}@{dg}"
                 out.append({"resource": uri, "repo": full, "image": pkg["displayName"], "tag": tags[0], "digest": dg,
-                            "scan": vs.scan_image(ver.get("_config"), pkg["displayName"], tags[0])})
+                            "scan": vs.scan_image(ver.get("_config"), pkg["displayName"], tags[0], (trivy_reports or {}).get(dg))})
     return out
 
 

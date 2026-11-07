@@ -53,7 +53,7 @@ CORES = [
     "gcp_asset_query_core.py",                      # GCP: Cloud Asset Inventory search query language (used by gcp_iam_core)
     "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
     "gcp_trace_core.py",                            # GCP: Cloud Trace spans, Trace scopes, Log scopes
-    "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py",                           # GCP: App Hub applications (Application monitoring)
+    "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py",                           # GCP: App Hub applications (Application monitoring)
     "gcp_capacity_core.py", "gcp_commit_core.py",                   # GCP: simulated zonal capacity pools + Capacity advisor; CUDs, Migrate to VMs, Cloud TPU
     "gcp_osconfig_core.py",                         # GCP: VM Manager (OS Config patch jobs/deployments, OS policy assignments, VM extension policies)
     "gcp_hybrid_core.py",                           # GCP: BYOIP prefixes + Interconnect / VLAN attachments (control plane)

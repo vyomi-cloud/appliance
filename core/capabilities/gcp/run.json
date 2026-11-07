@@ -104,10 +104,18 @@
   "title": "Continuously deploy from a repository (Cloud Build / GitHub) or set up continuous deployment on an existing service",
   "level": {
    "nano": "not_simulated",
-   "offline": "not_simulated"
+   "offline": "limited"
   },
   "limitations": [
-   "Continuous deployment needs a real GitHub/Cloud Source Repository connection and a real container build (Cloud Build). The simulator has no git-hosting service to fetch source from, and shared cores forbid network egress (tests/conformance/test_no_cloud_egress.py) — there is nothing local to connect to or build, unlike a stateful sub-resource this appliance could model on its own."
+   "Offline: \"Continuously deploy from a repository\" creates the same trigger Cloud Run does against a repository on the simulator's built-in git host (the CI seam, the same one `git push` through the vyomi extension or a Gitea-style host feeds): a push to the matching branch runs a Cloud Build whose steps are the standard Build (docker build on the BuildKit builder), Push (into the simulated Artifact Registry) and Deploy (`gcloud run deploy|services update`, executed against the simulated Cloud Run, so validation, Binary Authorization and revision cutting all apply). A failing deploy fails the build and leaves the service on its previous revision.",
+   "Not simulated: GitHub / Cloud Source Repositories / Bitbucket connections (no network egress from the cores; only the built-in git host), buildpacks (a Dockerfile is required), Cloud Build worker pools, and any builder step other than docker build/push and gcloud run deploy/services update. Nano has no container builder, so on Nano the first build fails with that reason."
+  ],
+  "api": [
+   "cloudbuild projects.triggers.create/run (build steps: docker build, docker push, gcloud run deploy|services update)",
+   "(Vyomi) cloudbuild triggers:vyomiPush"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_continuous_deployment.py"
   ]
  },
  "gcp.run.services.triggers": {
@@ -364,17 +372,24 @@
  "gcp.run.binary-authorization": {
   "title": "Binary Authorization",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The setting (default policy or a named policy) is validated and stored, but Vyomi has no attestation service, so images are never blocked at deploy time."
+   "Enforced for real at deploy (core/gcp_binauthz_core.py): a service/patch with binaryAuthorization {useDefault | policy} evaluates every container image against the project policy (projects/P/policy) or a named Cloud Run platform policy: admission allowlist (incl. the global Google-image allowlist), ALWAYS_ALLOW / ALWAYS_DENY / REQUIRE_ATTESTATION, ENFORCED_BLOCK_AND_AUDIT_LOG vs DRYRUN_AUDIT_LOG_ONLY. REQUIRE_ATTESTATION verifies real ECDSA P-256/SHA-256 signatures of Container Analysis ATTESTATION occurrences against the attestor's PKIX keys and the payload's image digest (tags are resolved through the simulated Artifact Registry). A denied deploy fails with FAILED_PRECONDITION and no service/revision is created (real Cloud Run creates the revision and leaves it not-ready).",
+   "Only ECDSA_P256_SHA256 PKIX keys are supported (RSA, other curves and Cloud KMS-backed attestor keys are refused at write time, not faked). GKE/Anthos cluster rules and continuous validation are stored on the policy but not enforced. The admission decision log is a Vyomi extension (GET projects/P/policy:decisions); it is not written to Cloud Audit Logs."
   ],
   "api": [
+   "projects.policy.get/update",
+   "projects.attestors.create/get/list/update/delete/validateAttestationOccurrence",
+   "projects.platforms.policies.create/get/list/replace/delete",
+   "containeranalysis projects.occurrences.create/get/list/delete (ATTESTATION only)",
+   "(Vyomi) projects/P/policy:evaluate, projects/P/policy:decisions",
    "projects.locations.services.create",
    "projects.locations.services.patch"
   ],
   "tests": [
+   "tests/conformance/test_gcp_binauthz.py",
    "tests/conformance/test_gcp_run_ext.py"
   ]
  },

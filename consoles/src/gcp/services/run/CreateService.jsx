@@ -15,6 +15,8 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 import * as runApi from "../run/api.js";
+import * as cbApi from "../cloudbuild/api.js";
+import { getProject } from "../../project.js";
 import ImagePicker from "../run/ImagePicker.jsx";
 import { applyAdvanced, AutoscalingFactors, CloudSqlPanel, CustomUrlsPanel, NetworkingPanel, EphemeralDisk, HealthChecks, SecurityPanel, useAdvanced, VolumesPanel } from "../run/AdvancedSettings.jsx";
 
@@ -57,6 +59,9 @@ export default function CreateService({ query }) {
   const [trigBucket, setTrigBucket] = useState("");
   const [trigBuckets, setTrigBuckets] = useState([]);
   useEffect(() => { runApi.listBucketNames().then(setTrigBuckets).catch(() => {}); }, []);
+  const [repoName, setRepoName] = useState("shop");
+  const [branch, setBranch] = useState("^main$");
+  const [seed, setSeed] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -65,9 +70,10 @@ export default function CreateService({ query }) {
   const submit = async (ev) => {
     ev.preventDefault();
     setTouched(true);
-    if (api.validServiceName(name) || source === "repo") return;
+    if (api.validServiceName(name)) return;
     setBusy(true); setError(null);
     try {
+      if (source === "repo") { await connectRepo(); return; }
       const container = {
         image: source === "function" ? api.functionImage(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "") : image,
         ports: [{ containerPort: Number(port) || 8080 }],
@@ -107,6 +113,26 @@ export default function CreateService({ query }) {
     finally { setBusy(false); }
   };
 
+  /* Continuous deployment = the standard Cloud Run trigger: build the Dockerfile, push to Artifact Registry, `gcloud run deploy`. */
+  const connectRepo = async () => {
+    if (!repoName.trim()) throw new Error("Repository name is required.");
+    const proj = getProject();
+    const img = `${region}-docker.pkg.dev/${proj}/cloud-run-source-deploy/${name}`;
+    if (seed) await cbApi.pushToRepo({ repoName, branch: "main", files: { Dockerfile: "FROM scratch\nCOPY app /app\n", app: "hello from " + name + "\n" }, message: "Initial commit" });
+    const build = { steps: [
+      { id: "Build", name: "gcr.io/cloud-builders/docker", args: ["build", "-t", `${img}:$COMMIT_SHA`, "."] },
+      { id: "Push", name: "gcr.io/cloud-builders/docker", args: ["push", `${img}:$COMMIT_SHA`] },
+      { id: "Deploy", name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim", entrypoint: "gcloud", args: ["run", "deploy", name, "--image", `${img}:$COMMIT_SHA`, "--region", region, "--platform", "managed", "--labels", "managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA", "--quiet"] },
+    ] };
+    const trig = await cbApi.createTrigger({ name: `deploy-${name}`, description: `Continuous deployment of Cloud Run service ${name}`, triggerTemplate: { repoName, branchName: branch }, build });
+    const b = await cbApi.runTrigger(trig.id, "main");
+    const res = b.response || b;
+    if (res.status && res.status !== "SUCCESS") throw new Error(`Trigger created, but the first build ${res.status}: ${res.failureInfo?.detail || "see Cloud Build history"}`);
+    api.setRegion(region);
+    notify.success(`Connected ${repoName}; service "${name}" deployed`);
+    location.hash = `/run/detail/${region}/${name}`;
+  };
+
   return (
     <Box component="form" onSubmit={submit} noValidate sx={{ maxWidth: 880 }}>
       <PageHeader title="Create service" back={<IconButton aria-label="Back" href="#/run/services"><ArrowBackIcon /></IconButton>} />
@@ -119,8 +145,15 @@ export default function CreateService({ query }) {
           <FormControlLabel value="repo" control={<Radio size="small" />} label="Continuously deploy from a repository (source or function)" />
           <FormControlLabel value="function" control={<Radio size="small" />} label="Use an inline editor to create a function" />
         </RadioGroup>
-        {source === "repo" && <NotSimulated compact feature="Continuously deploy from a repository"
-          note="Needs a real GitHub/Cloud Source Repository connection and a real container build (Cloud Build); the simulator has no git-hosting service and forbids network egress from its cores." />}
+        {source === "repo" && (
+          <CapabilityContainer id="gcp.run.services.continuous_deployment" title="Repository">
+            <Stack spacing={2}>
+              <TextField label="Source repository (Vyomi git host)" value={repoName} onChange={(e) => setRepoName(e.target.value.trim())} sx={{ maxWidth: 420 }} inputProps={{ "aria-label": "Source repository" }}
+                helperText="A repository on the simulator's built-in git host; a push to the branch below builds the Dockerfile and deploys a new revision." />
+              <TextField label="Branch (regex)" value={branch} onChange={(e) => setBranch(e.target.value)} sx={{ maxWidth: 420 }} inputProps={{ "aria-label": "Branch regex" }} />
+              <FormControlLabel control={<Checkbox checked={seed} onChange={(e) => setSeed(e.target.checked)} />} label="Seed the repository with a sample Dockerfile" />
+            </Stack>
+          </CapabilityContainer>)}
         {source === "image" && (
           <Stack direction="row" spacing={1} alignItems="flex-start"><TextField label="Container image URL" required value={image} onChange={(e) => setImage(e.target.value)} sx={{ maxWidth: 560 }} /><Button variant="outlined" sx={{ mt: 1 }} onClick={() => setPicker(true)}>Select</Button><ImagePicker open={picker} onClose={() => setPicker(false)} onPick={setImage} /></Stack>
         )}

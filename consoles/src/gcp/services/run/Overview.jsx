@@ -22,7 +22,6 @@ export default function Overview() {
               <Button variant="contained" startIcon={<CloudUploadIcon />} href="#/run/create?source=container">Deploy container</Button>
               <Button href="#/run/create?source=repo">Connect repository</Button>
             </Stack>
-            <NotSimulated compact feature="Connect repository" note="Vyomi has no Cloud Build or source-repository integration — continuous deployment from a repository isn't backed by a Vyomi backend yet." />
           </Stack>
         </Section>
         <Section title="Create a batch job or a background worker pool">
