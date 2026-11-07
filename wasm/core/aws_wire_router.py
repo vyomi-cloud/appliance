@@ -1219,6 +1219,8 @@ class AwsWireRouter:
             return "azure-arm"
         if path.startswith("/azure-data/appconfig/"):   # App Configuration data plane (store endpoint)
             return "azure-appconfig"
+        if path.startswith("/azure-data/site/"):   # App Service front door + app host (/azure-data/site/{app}/...)
+            return "azure-site"
         if path.startswith("/azure-data/apim/"):   # API Management gateway data plane (/azure-data/apim/{service}/{api path}/...)
             return "azure-apim-gw"
         if path.split("?", 1)[0] == "/azure-data/dns/query":   # Azure DNS resolution ("dig" over HTTP)
@@ -1977,8 +1979,26 @@ class AwsWireRouter:
             if svc_rec is None:
                 return {"status": 404, "headers": {"content-type": "application/json"},
                         "body": json.dumps({"statusCode": 404, "message": f"API Management service '{name}' not found."}).encode()}
+            from core import azure_webhost_core as _wh
             r = apim_gw.handle(self.az_arm.state, svc_rec, method, "/" + rest, query or {}, lheaders, bytes(body or b""),
-                               fetch=self._apim_fetch(), ip=lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+                               fetch=_wh.make_fetch(self.az_arm.state, self._apim_fetch()),
+                               ip=lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip(),
+                               gateway=lheaders.get("x-vyomi-apim-gateway") or None)
+            return {"status": r["status"], "headers": r["headers"], "body": r["body"]}
+
+        if svc == "azure-site":   # /azure-data/site/{app}/... : the App Service front door + app host (core/azure_webhost_core.py)
+            from core import azure_webhost_core as _wh
+            from core import azure_autoscale_core as _asc
+            name, _, rest = path.split("?", 1)[0][len("/azure-data/site/"):].partition("/")
+            site = next((r for r in self.az_arm.state.values() if isinstance(r, dict) and str(r.get("type", "")).lower() == "microsoft.web/sites"
+                         and str(r.get("name", "")).lower() == name.lower()), None)
+            if site is None:
+                return {"status": 404, "headers": {"content-type": "text/html"},
+                        "body": f"<html><body><h2>404 Web Site not found: {name}</h2></body></html>".encode()}
+            _asc.evaluate(self.az_arm.state)
+            r = _wh.serve(self.az_arm.state, site, method, "/" + rest, {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
+                          lheaders, bytes(body or b""))
+            _asc.evaluate(self.az_arm.state)
             return {"status": r["status"], "headers": r["headers"], "body": r["body"]}
 
         if svc == "azure-appconfig":   # /azure-data/appconfig/{store}/... over the ARM state's stores

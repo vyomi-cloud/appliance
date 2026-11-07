@@ -106,3 +106,23 @@ def test_prometheus_rule_group_evaluated_via_sdk(env):
     al.prom_ingest(st, SUB, ws, [{"metric": "up", "labels": {"job": "a", "i": "1"}, "value": 1}, {"metric": "up", "labels": {"job": "a", "i": "2"}, "value": 1}])
     al.evaluate(st, SUB, None, force=True)
     assert al.prom_query(st, SUB, ws, 'job:up:sum{job="a"}')["result"][0]["value"][1] == "2.0"
+
+
+def test_aks_keda_and_extension_via_sdk(env):
+    pytest.importorskip("azure.mgmt.containerservice")
+    pytest.importorskip("azure.mgmt.kubernetesconfiguration")
+    from azure.mgmt.containerservice import ContainerServiceClient
+    from azure.mgmt.kubernetesconfiguration import SourceControlConfigurationClient
+    from azure.mgmt.containerservice.models import RunCommandRequest
+    cs = make(ContainerServiceClient, env)
+    env.az_arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/rg1/providers/Microsoft.ContainerService/managedClusters/sdkaks", {"api-version": "2024-05-01"},
+                      {"location": "eastus", "properties": {"kubernetesVersion": "1.29.2", "dnsPrefix": "sdkaks", "workloadAutoScalerProfile": {"keda": {"enabled": True}}}})
+    mc = cs.managed_clusters.get("rg1", "sdkaks")
+    assert mc.workload_auto_scaler_profile.keda.enabled is True
+    res = cs.managed_clusters.begin_run_command("rg1", "sdkaks", RunCommandRequest(command="kubectl get crd")).result()
+    assert res.exit_code == 0 and "scaledobjects.keda.sh" in res.logs                  # KEDA CRDs installed by the add-on
+    kc = make(SourceControlConfigurationClient, env)
+    kc.extensions.begin_create("rg1", "Microsoft.ContainerService", "managedClusters", "sdkaks", "dapr",
+                               {"extension_type": "microsoft.dapr", "auto_upgrade_minor_version": True}).result()
+    res = cs.managed_clusters.begin_run_command("rg1", "sdkaks", RunCommandRequest(command="kubectl get deploy -n dapr-system")).result()
+    assert "dapr-operator" in res.logs

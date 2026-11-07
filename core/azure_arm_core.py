@@ -60,6 +60,11 @@ try:                                              # Azure Monitor alerting (Micr
 except ImportError:
     import azure_alerts_core as alerts_engine      # type: ignore
 
+try:                                              # AKS extensions + KEDA operator over the cluster's k8s object store
+    from core import azure_aks_ext_core as aks_ext_engine
+except ImportError:
+    import azure_aks_ext_core as aks_ext_engine   # type: ignore
+
 try:                                              # autoscale engine (App Service plan instance count driven by real host metrics)
     from core import azure_autoscale_core as autoscale_engine
 except ImportError:
@@ -1179,6 +1184,12 @@ class AzureArm:
                     return _err(404, "ResourceNotFound", "The autoscale setting was not found.")
                 return _ok({"value": autoscale_engine.history(st)})
         out = self._handle_raw(method, path, query, body)
+        if "/managedclusters/" in pl:                  # the KEDA operator loop runs after a kubectl / cluster change
+            try:
+                for c in [r for r in self.state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == "microsoft.containerservice/managedclusters"]:
+                    aks_ext_engine.keda_reconcile(self.state, c)
+            except Exception:
+                pass
         if m != "GET" and isinstance(out, dict):   # security audit feed (core/secscan_core.py classifier)
             sub_m = re.search(r"/subscriptions/([^/]+)", str(path))
             if sub_m:

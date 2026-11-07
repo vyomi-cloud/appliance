@@ -25,6 +25,7 @@ import { Essentials, ErrorBar, Glyph, Loading, NotSimulatedContainer, fmtDate } 
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import * as Tools from "./Tools.jsx";
 import { AccessControlIam, ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
@@ -71,7 +72,7 @@ const CAP = {
   diagnose: "azure.containerapps.app.tools", events: "azure.containerapps.app.tools",
   resourcehealth: "azure.containerapps.app.tools", supportrequest: "azure.containerapps.app.tools",
   networking: "azure.containerapps.app.networking", dapr: "azure.containerapps.app.networking",
-  serviceconnector: "azure.containerapps.app.networking", console: "azure.containerapps.app.networking",
+  serviceconnector: "azure.containerapps.app.networking", 
   continuousdeployment: "azure.containerapps.app.networking",
   metrics: "azure.containerapps.app.monitoring", alerts: "azure.containerapps.app.monitoring", logstream: "azure.containerapps.app.monitoring",
 };
@@ -90,7 +91,10 @@ export default function ContainerAppBlade({ params }) {
   else {
     const a = app.data, reload = app.reload;
     const P = {
-      diagnose: () => <Diagnose id={a.id} name={a.name} />,
+      diagnose: () => <Tools.Diagnose path={resPath} cap="azure.containerapps.app.tools" />,
+      logstream: () => <Tools.LogStream path={resPath} cap="azure.containerapps.app.monitoring" title="Log stream" />,
+      console: () => <Tools.Console path={resPath} cap="azure.containerapps.app.monitoring" />,
+      events: () => <Tools.Events path={resPath} cap="azure.containerapps.app.tools" />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog resPath={resPath} name={a.name} />,
       iam: () => <AccessControlIam resPath={resPath} name={a.name} capId="azure.containerapps.iam" />,

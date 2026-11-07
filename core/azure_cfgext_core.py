@@ -29,6 +29,10 @@ try:
     from core import azure_flux_core as flux
 except ImportError:                                  # Pyodide flat layout
     import azure_flux_core as flux                   # type: ignore
+try:
+    from core import azure_aks_ext_core as aks_ext
+except ImportError:
+    import azure_aks_ext_core as aks_ext             # type: ignore
 import ipaddress
 import re
 import uuid
@@ -603,15 +607,18 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         et = str(p.get("extensionType", "")).lower()
         p.setdefault("autoUpgradeMinorVersion", not p.get("version"))
         p.setdefault("releaseTrain", "Stable")
-        p.setdefault("scope", {"cluster": {"releaseNamespace": et.split(".")[-1]}})
+        p.setdefault("scope", {"cluster": {"releaseNamespace": aks_ext.RELEASE_NS.get(et, et.split(".")[-1])}})
         p["currentVersion"] = p.get("version") or "1.0.0"
         p["installedVersion"] = p["currentVersion"]
         p["provisioningState"] = "Succeeded"
         p["isSystemExtension"] = False
-        p["statuses"] = [{"code": "Recorded", "displayStatus": "Extension recorded", "level": "Information", "message": "Vyomi stores the extension configuration; no workload is installed on the cluster."}]
+        p["statuses"] = [{"code": "Recorded", "displayStatus": "Extension recorded", "level": "Information", "message": "Vyomi stores the extension configuration."}]
         p.setdefault("identity", None)
         rec["type"] = "Microsoft.KubernetesConfiguration/extensions"
         rec["systemData"] = rec.get("systemData") or {"createdByType": "User"}
+        aks_ext.install(state, rec)                       # modelled extension types apply their real workload manifests to the cluster
+    elif ft == AKS:
+        aks_ext.sync_keda(rec)                            # workloadAutoScalerProfile.keda.enabled installs / removes the KEDA add-on
     elif ft == COSMOS_SVC:
         count = int(p.get("instanceCount", 1))
         size = p.get("instanceSize")
@@ -687,6 +694,8 @@ def _asg_users(state: dict, asg_id: str):
 
 def before_delete(state: dict, rec: dict):
     ft = (rec.get("_type") or "").lower()
+    if ft.endswith("/providers/extensions"):
+        aks_ext.uninstall(state, rec)
     if flux.handles(ft):
         return flux.before_delete(state, rec)
     if ft == ASG:

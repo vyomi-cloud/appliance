@@ -300,10 +300,20 @@
   },
   "azure.monitor.prometheus_rule_groups": {
     "title": "Prometheus rule groups (ARM resource + rule validation)",
-    "level": { "nano": "config_only", "offline": "config_only" },
-    "limitations": ["Rules are validated and stored but never evaluated - Vyomi has no Prometheus time-series store or PromQL engine."],
-    "api": ["PrometheusRuleGroups.CreateOrUpdate", "PrometheusRuleGroups.ListByResourceGroup", "PrometheusRuleGroups.Delete"],
-    "tests": ["tests/conformance/test_azure_alerts_core.py"]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Rule groups are validated (PromQL syntax) and EVALUATED (core/azure_promql.py): recording rules append new series to the Azure Monitor workspace's sample store, alert rules fire after their `for` duration through the shared alert pipeline (alerts list, action-group webhooks) and auto-resolve. PromQL subset: selectors with matchers, rate/irate/increase/delta/*_over_time/abs/ceil/floor/round/clamp/vector/absent/scalar, sum/avg/min/max/count/group/stddev/topk/bottomk by/without, binary arithmetic/comparison (bool) and and/or/unless with on/ignoring; no subqueries, histogram_quantile, label_replace or group_left/right. Samples enter through POST providers/Microsoft.AlertsManagement/vyomiProm/ingest (remote-write style) -- nothing scrapes targets."
+    ],
+    "api": [
+      "PrometheusRuleGroups.CreateOrUpdate",
+      "PrometheusRuleGroups.ListByResourceGroup",
+      "PrometheusRuleGroups.Delete"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_prometheus_rules.py",
+      "tests/conformance/test_azure_alerts_core.py",
+      "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py"
+    ]
   },
   "azure.monitor.log_search_alerts": {
     "title": "Log search alert rules (scheduledQueryRules evaluated by the Log Analytics KQL engine)",

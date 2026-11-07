@@ -58,8 +58,64 @@ NO_RUNTIME_NOTE = ("Control plane only: this environment (e.g. Vyomi Nano in the
                    "Use the offline appliance with the Docker compute backend for a real container.")
 
 
-def configure_runtime(start=None, stop=None, status=None):
+def configure_runtime(start=None, stop=None, status=None, **extra):
+    """extra: logs(handle, tail)->str, exec(handle, argv, timeout)->(rc, out), restart(handle), stats(handle)->dict,
+    run_once(image, argv, env, timeout)->(rc, out) -- the real-container operations behind log stream / console / restart / jobs."""
     RUNTIME["start"], RUNTIME["stop"], RUNTIME["status"] = start, stop, status
+    for k in ("logs", "exec", "restart", "stats", "run_once"):
+        RUNTIME[k] = extra.get(k)
+
+
+def _ev(rec, reason, message, kind="Normal"):
+    """System event (the app's/job's Events blade): reason + message + timestamp, newest last, bounded."""
+    lst = rec.setdefault("_events", [])
+    lst.append({"timestamp": _now(), "type": kind, "reason": reason, "message": message})
+    del lst[:-200]
+
+
+def _need_runtime(op):
+    if not RUNTIME.get(op):
+        raise _E(409, "RuntimeUnavailable", NO_RUNTIME_NOTE)
+
+
+def _handle_for(rec, revision=None):
+    hs = rec.get("_runtime") or {}
+    if revision:
+        if revision not in hs:
+            raise _E(404, "ResourceNotFound", f"Revision '{revision}' has no running container.")
+        return revision, hs[revision]
+    if not hs:
+        raise _E(409, "NoRunningReplica", "The app has no running replica (it is stopped, scaled to zero or its container failed to start).")
+    name = rec["properties"].get("latestReadyRevisionName")
+    if name in hs:
+        return name, hs[name]
+    return next(iter(hs.items()))
+
+
+def _diag_app(rec):
+    """Diagnose and solve problems detectors derived from the REAL container state + logs (not canned)."""
+    out = []
+    hs = rec.get("_runtime") or {}
+    run = RUNTIME.get("start") is not None
+    p = rec["properties"]
+    out.append({"name": "Container runtime", "status": "Healthy" if run else "Info",
+                "detail": "Containers run on the Docker backend." if run else NO_RUNTIME_NOTE})
+    if run:
+        for rev, h in hs.items():
+            st = RUNTIME["status"](h) if RUNTIME.get("status") else "Running"
+            out.append({"name": f"Revision {rev} replica", "status": "Healthy" if st == "Running" else "Critical", "detail": f"Container is {st}."})
+            if RUNTIME.get("logs"):
+                try:
+                    errs = [l for l in RUNTIME["logs"](h, 200).splitlines() if re.search(r"\b(error|fatal|panic|exception)\b", l, re.I)]
+                except Exception:
+                    errs = []
+                out.append({"name": f"Revision {rev} application errors", "status": "Warning" if errs else "Healthy",
+                            "detail": f"{len(errs)} error line(s) in the last 200 log lines." + (f" Latest: {errs[-1][:200]}" if errs else "")})
+        if p.get("runningStatus") == "Failed":
+            out.append({"name": "Provisioning", "status": "Critical", "detail": str((p.get("vyomiRuntime") or {}).get("error", "container failed to start"))})
+        if not hs and p.get("runningStatus") != "Stopped":
+            out.append({"name": "Replicas", "status": "Warning", "detail": "No running replica."})
+    return out
 
 
 class _E(Exception):
@@ -353,10 +409,12 @@ def _sync_runtime(app):
                 app["properties"]["vyomiRuntime"] = {"backend": "docker", "error": h["error"]}
             elif h:
                 handles[name] = h
+                _ev(app, "ContainerStarted", f"Container for revision '{name}' started from image {c['image']}")
                 if h.get("port"):                     # real published loopback endpoint (honest, works from the host)
                     app["properties"]["vyomiEndpoint"] = f"http://{h.get('host', '127.0.0.1')}:{h['port']}"
                     app["properties"]["vyomiRuntime"] = {k: v for k, v in {"backend": "docker", "container": h.get("id"), "network": h.get("network")}.items() if v is not None}
         elif not want and name in handles and stp:
+            _ev(app, "ContainerStopped", f"Container for revision '{name}' stopped")
             try:
                 stp(handles.pop(name))
             except Exception:
@@ -547,6 +605,29 @@ def _app_action(state, rec, action, sub, rg, payload, rest, method):
                     "customDomainVerificationTest": "Failed", "conflictingContainerAppResourceId": "",
                     "customDomainVerificationFailureInfo": None, "hasConflictOnManagedEnvironment": False,
                     "cnameRecords": [rec["properties"].get("latestRevisionFqdn", "")], "txtRecords": [], "aRecords": []})
+    if action == "logstream" and method in ("GET", "POST"):          # Vyomi extension: the real container's stdout/stderr (Log stream blade)
+        _need_runtime("logs")
+        rev, h = _handle_for(rec, (payload or {}).get("revision"))
+        tail = int((payload or {}).get("tail") or 200)
+        return _ok({"revision": rev, "source": "docker", "container": h.get("id"), "lines": RUNTIME["logs"](h, tail).splitlines()})
+    if action == "exec" and method == "POST":                          # Vyomi extension: Console blade (real `docker exec`)
+        _need_runtime("exec")
+        rev, h = _handle_for(rec, (payload or {}).get("revision"))
+        cmd = (payload or {}).get("command")
+        argv = cmd if isinstance(cmd, list) else (["sh", "-c", str(cmd)] if cmd else None)
+        if not argv:
+            raise _E(400, "InvalidRequest", "'command' (string or argv list) is required.")
+        rc, out = RUNTIME["exec"](h, argv, int((payload or {}).get("timeoutSeconds") or 20))
+        _ev(rec, "ConsoleExec", f"Command executed in revision '{rev}': {' '.join(map(str, argv))[:120]} (exit {rc})")
+        return _ok({"revision": rev, "container": h.get("id"), "exitCode": rc, "output": out})
+    if action == "vyomimetrics" and method == "GET":
+        _need_runtime("stats")
+        rev, h = _handle_for(rec, None)
+        return _ok(dict(RUNTIME["stats"](h), revision=rev, source="docker stats"))
+    if action == "events" and method == "GET":
+        return _ok({"value": list(reversed(rec.get("_events") or []))})
+    if action == "diagnose" and method in ("GET", "POST"):
+        return _ok({"value": _diag_app(rec)})
     return _err(404, "ResourceTypeNotSupported", f"Action '{action}' is not supported on containerApps.")
 
 
@@ -585,6 +666,15 @@ def _revision_ops(state, rec, rest, method):
         rev["properties"]["active"] = False
     elif sub == "restart":
         rev["properties"]["lastActiveTime"] = _now()
+        h = (rec.get("_runtime") or {}).get(name)
+        if h and RUNTIME.get("restart"):
+            try:
+                RUNTIME["restart"](h)
+                _ev(rec, "ContainerRestarted", f"Revision '{name}' replica container was restarted")
+            except Exception as e:  # noqa: BLE001
+                raise _E(500, "RestartFailed", str(e)[:300])
+        else:
+            _ev(rec, "RevisionRestartRecorded", f"Revision '{name}' restart requested (no running container to restart)", "Warning")
     else:
         return _err(404, "ResourceTypeNotSupported", f"Action '{sub}' is not supported on revisions.")
     _refresh_revisions(rec)
@@ -600,6 +690,8 @@ def _put_job(state, sub, rg, rid, name, payload, method):
             raise _not_found("jobs", name, rg)
         if isinstance(payload.get("tags"), dict):
             existed["tags"] = payload["tags"]
+        if payload.get("identity"):
+            existed["identity"] = _identity(rid, payload["identity"])
         return existed
     loc = payload.get("location") or (existed or {}).get("location")
     if not loc:
@@ -635,6 +727,8 @@ def _put_job(state, sub, rg, rid, name, payload, method):
                          "configuration": cfg, "template": tmpl, "outboundIpAddresses": [env["properties"]["staticIp"]],
                          "eventStreamEndpoint": f"https://{loc}.azurecontainerapps.dev/subscriptions/{sub}/resourceGroups/{rg}/jobs/{name}/eventstream"}
     rec["_secrets"] = {s["name"]: s.get("value", "") for s in cfg["secrets"]}
+    if payload.get("identity"):                            # Identity blade: system / user-assigned identity on the job
+        rec["identity"] = _identity(rid, payload["identity"])
     state[rid.lower()] = rec
     return rec
 
@@ -652,9 +746,26 @@ def _execution(rec, template=None):
     n = len(rec["_executions"]) + 1
     name = f"{rec['name']}-{_h(rec['id'], n, n=7)}"
     now = _now()
+    tmpl = template or rec["properties"]["template"]
     ex = {"id": f"{rec['id']}/executions/{name}", "name": name, "type": f"{NAMESPACE}/jobs/executions",
-          "properties": {"status": "Succeeded", "startTime": now, "endTime": now,
-                         "template": template or rec["properties"]["template"]}}
+          "properties": {"status": "Succeeded", "startTime": now, "endTime": now, "template": tmpl}}
+    ro = RUNTIME.get("run_once")
+    if ro and tmpl.get("containers"):                    # a REAL one-shot container: exit code decides Succeeded/Failed, stdout is the log
+        c = tmpl["containers"][0]
+        argv = list(c.get("command") or []) + list(c.get("args") or [])
+        env = {e.get("name"): e.get("value") for e in c.get("env", []) if e.get("name")}
+        try:
+            rc, out = ro(c["image"], argv, env, int((rec["properties"].get("configuration") or {}).get("replicaTimeout") or 1800))
+        except Exception as e:  # noqa: BLE001
+            rc, out = 125, f"{type(e).__name__}: {e}"
+        ex["properties"]["status"] = "Succeeded" if rc == 0 else "Failed"
+        ex["properties"]["endTime"] = _now()
+        ex["_log"], ex["_rc"] = out, rc
+        _ev(rec, "ExecutionSucceeded" if rc == 0 else "ExecutionFailed", f"Execution '{name}' exited with code {rc}", "Normal" if rc == 0 else "Warning")
+    else:
+        ex["properties"]["status"] = "Succeeded"
+        ex["_log"] = None
+        _ev(rec, "ExecutionRecorded", f"Execution '{name}' recorded (no container runtime: nothing executed)", "Warning")
     rec["_executions"].append(ex)
     return ex
 
@@ -674,13 +785,26 @@ def _job_ops(state, rec, rest, method, payload):
     if a == "executions":
         ex = rec["_executions"]
         if len(rest) == 1:
-            return _ok({"value": ex[::-1]})
+            return _ok({"value": [{k: v for k, v in e.items() if not k.startswith("_")} for e in ex[::-1]]})
         hit = next((e for e in ex if e["name"] == rest[1]), None)
         if hit is None:
             raise _E(404, "ResourceNotFound", f"Job execution '{rest[1]}' was not found.")
         if len(rest) == 3 and rest[2].lower() == "stop" and method == "POST":
             return _ok(None, 202)
-        return _ok(hit)
+        if len(rest) == 3 and rest[2].lower() == "logs":      # Vyomi extension: the execution container's real output
+            if hit.get("_log") is None:
+                raise _E(409, "RuntimeUnavailable", NO_RUNTIME_NOTE)
+            return _ok({"execution": hit["name"], "exitCode": hit.get("_rc"), "lines": str(hit["_log"]).splitlines(), "source": "docker"})
+        return _ok({k: v for k, v in hit.items() if not k.startswith("_")})
+    if a == "events" and method == "GET":
+        return _ok({"value": list(reversed(rec.get("_events") or []))})
+    if a == "diagnose":
+        last = rec["_executions"][-3:]
+        det = [{"name": "Container runtime", "status": "Healthy" if RUNTIME.get("run_once") else "Info",
+                "detail": "Executions run as real containers." if RUNTIME.get("run_once") else NO_RUNTIME_NOTE}]
+        det += [{"name": f"Execution {e['name']}", "status": "Healthy" if e["properties"]["status"] == "Succeeded" else "Critical",
+                 "detail": f"{e['properties']['status']}" + (f", exit code {e.get('_rc')}" if e.get("_rc") is not None else "")} for e in last]
+        return _ok({"value": det})
     return _err(404, "ResourceTypeNotSupported", f"Action '{rest[0]}' is not supported on jobs.")
 
 
@@ -745,6 +869,21 @@ def _env_ops(state, rec, rest, method, payload):
                                "properties": {"minimumCount": 0, "maximumCount": 0, "currentCount": 0}} for w in ws]})
     if sub == "getauthtoken" and method == "POST":
         return _ok({"properties": {"token": _h(rec["id"], _now(), n=40), "expires": _now()}})
+    if sub == "logs" and method in ("GET", "POST"):                  # Vyomi extension: console logs of every app in the environment
+        _need_runtime("logs")
+        rows = []
+        for a in [r for r in state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == f"{NAMESPACE}/containerapps".lower()
+                  and (r.get("properties") or {}).get("environmentId", "").lower() == rec["id"].lower()]:
+            for rev, h in (a.get("_runtime") or {}).items():
+                for line in RUNTIME["logs"](h, int((payload or {}).get("tail") or 100)).splitlines():
+                    rows.append({"app": a["name"], "revision": rev, "log": line})
+        q = str((payload or {}).get("contains") or "")
+        return _ok({"value": [r for r in rows if q in r["log"]], "source": "docker"})
+    if sub == "diagnose":
+        apps = [r for r in state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == f"{NAMESPACE}/containerapps".lower()
+                and (r.get("properties") or {}).get("environmentId", "").lower() == rec["id"].lower()]
+        det = [{"name": f"{a['name']}: {d['name']}", "status": d["status"], "detail": d["detail"]} for a in apps for d in _diag_app(a)]
+        return _ok({"value": det or [{"name": "Apps", "status": "Info", "detail": "The environment hosts no container apps."}]})
     return _err(404, "ResourceTypeNotSupported", f"'{rest[0]}' is not supported on managedEnvironments.")
 
 

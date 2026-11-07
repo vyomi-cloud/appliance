@@ -203,14 +203,16 @@
  "azure.aks.keda": {
   "title": "KEDA-based application scaling (workloadAutoScalerProfile.keda)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The KEDA flag is validated (Kubernetes 1.23 or later) and stored on the managed cluster. Vyomi runs no KEDA operator or scalers: ScaledObjects are stored objects and nothing scales on events."
+   "Enabling workloadAutoScalerProfile.keda installs the KEDA add-on objects (keda-operator, metrics apiserver, admission webhooks and the keda.sh CRDs) in kube-system; disabling removes them. A KEDA operator loop evaluates every ScaledObject and SETS the target Deployment's spec.replicas (min/max, activationThreshold, cooldownPeriod, Ready/Active status conditions, KEDAScaleTargetActivated/Deactivated events). Supported triggers: cron and prometheus (PromQL over the Azure Monitor workspace's stored samples); any other trigger type is reported on the ScaledObject as UnsupportedTrigger. No pod is started or stopped (replicas are the stored spec; readyReplicas stays 0), ScaledJob is stored but not run, and the operator runs when the cluster is touched (kubectl, ARM), not on a background timer."
   ],
   "tests": [
-   "tests/conformance/test_azure_cfgext_core.py"
+   "tests/conformance/test_azure_aks_extensions_keda.py",
+   "tests/conformance/test_azure_cfgext_core.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py"
   ]
  },
  "azure.aks.networking_settings": {
@@ -229,14 +231,16 @@
  "azure.aks.extensions": {
   "title": "Cluster extensions (Microsoft.KubernetesConfiguration/extensions)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Extensions are real ARM child resources validated against the known extension types (single instance per cluster, version XOR auto-upgrade, release train, scope) and cascade-delete with the cluster. Nothing is installed on a node: no Flux, Dapr, Defender or Monitor agent runs."
+   "Extensions of the modelled types (microsoft.dapr, microsoft.azuremonitor.containers, microsoft.azuredefender.kubernetes, microsoft.azurekeyvaultsecretsprovider, microsoft.openservicemesh) install their real workload objects (namespace, Deployments/DaemonSets/StatefulSets/ServiceAccounts with the chart's names and images; configurationSettings such as global.ha.enabled change replicas) into the cluster's Kubernetes object store, and delete removes them (core/azure_aks_ext_core.py). Vyomi runs no kubelet or container runtime inside AKS, so those pods stay Pending and no agent actually runs. Other extension types (flux has its own GitOps controller; the rest) are recorded with a 'Recorded' status that says nothing was installed."
   ],
   "tests": [
-   "tests/conformance/test_azure_cfgext_core.py"
+   "tests/conformance/test_azure_aks_extensions_keda.py",
+   "tests/conformance/test_azure_cfgext_core.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py"
   ]
  },
  "azure.aks.monitoring": {
