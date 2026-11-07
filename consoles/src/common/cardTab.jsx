@@ -1,4 +1,4 @@
-/* "Limited in Vyomi" tab: a gray tab that sits inside the nearest bordered card, flush with its
+/* "Dev-ready" tab: a gray tab that sits inside the nearest bordered card, flush with its
  * bottom-right border. A capability badge renders a hidden marker, finds its card by walking up
  * the DOM (bordered + rounded + wide enough), and portals the tab into a slot on that card.
  * No card found → the caller falls back to its inline pill. Shared by the AWS/GCP/Azure consoles. */
