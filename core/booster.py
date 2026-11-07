@@ -199,6 +199,11 @@ class HeadlessMiddleware:
 
     async def _inner(self, scope, receive, send):
         if scope.get("type") == "http":
+            try:                                   # console / API / VM activity keeps the remote model pool alive (60-min idle rule)
+                from core import booster_remote_llm as _R
+                _R.touch("console")
+            except Exception:
+                pass
             headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                        for k, v in scope.get("headers") or []}
             path = scope.get("path", "")
@@ -788,7 +793,7 @@ def register(app) -> None:
         except Exception:
             body = {}
         try:
-            return _cors(JSONResponse(R.attach(str(body.get("hub_url") or ""), body.get("token") or None)), request)
+            return _cors(JSONResponse(R.attach(str(body.get("hub_url") or ""), body.get("token") or None, pooled=bool(body.get("pooled")))), request)
         except R.RemoteLLMError as e:
             return _deny(request, e.status, e.code, e.message)
 
@@ -799,6 +804,28 @@ def register(app) -> None:
             return g
         from core import booster_remote_llm as R
         return _cors(JSONResponse(R.detach()), request)
+
+    @app.get("/booster/ai/models", include_in_schema=False)
+    @app.get("/api/booster/models", include_in_schema=False)
+    def _models(request: Request):
+        # Nano console 'Models' panel: per model name/role/ollama tag/state/per-cloud API ids/tokens-per-s + the wall-clock window.
+        g = _guard(request)
+        if g:
+            return g
+        from core import booster_remote_llm as R
+        p = R.pool()
+        if p is None:
+            return _cors(JSONResponse({"pool": False, "window": None, "models": []}), request)
+        return _cors(JSONResponse({"pool": True, **p.models_status()}), request)
+
+    @app.post("/booster/ai/activity", include_in_schema=False)
+    def _activity(request: Request):
+        g = _guard(request, loopback_only=True)
+        if g:
+            return g
+        from core import booster_remote_llm as R
+        R.touch("vm")
+        return _cors(JSONResponse({"ok": True}), request)
 
     @app.get("/booster/ai/remote", include_in_schema=False)
     def _remote_info(request: Request):

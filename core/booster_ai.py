@@ -295,6 +295,11 @@ def status(recent: int = 10) -> dict:
         ri = R.info()
         st = ri["runner"]
         u = LEDGER.summary(recent)
+        if st == "pool":
+            pu = ri["pool"]
+            return {"state": "ready" if pu["running"] else "idle", "endpoint": ri["endpoint"], "backend": "remote-runner-pool", "mode": "remote",
+                    "runner": "pool", "label": ri["label"], "models": {}, "errors": {}, "usage": u, "pool": pu,
+                    "chip": f"AI: remote pool - {pu['concurrent']}/{pu['cap']} runners, {pu['runner_hours']:.2f} h"}
         state = {"ready": "ready", "starting": "starting"}.get(st, "unavailable")
         return {"state": state, "endpoint": ri["endpoint"], "backend": "remote-runner", "mode": "remote", "runner": st,
                 "label": ri["label"], "models": {}, "errors": {}, "usage": u,

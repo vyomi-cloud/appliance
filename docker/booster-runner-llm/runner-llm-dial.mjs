@@ -4,14 +4,14 @@
  * or from request bodies. The token is read from the environment (never argv).
  *
  *   env: VYOMI_RELAY_URL (wss://relay/llm-runner)  VYOMI_RUNNER_TOKEN  CHAT_URL (default http://127.0.0.1:8080)
- *        EMBED_URL (default http://127.0.0.1:8081)  TTL_S (default 19800 = 5h30m, hard max)  WS_PKG
+ *        EMBED_URL (default http://127.0.0.1:8081)  TTL_S (default 21000 = 5h50m, hard max)  WS_PKG
  */
 import http from "node:http";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const HOP = new Set(["host", "connection", "content-length", "transfer-encoding", "upgrade", "keep-alive"]);
-const MAX_TTL_S = 19800;
+const MAX_TTL_S = 21000;      // 5h50m: rotation re-dispatches at 5h30m, the old runner overlaps ~20 min and drains; job cap is 6 h
 const peekEnd = (t) => { try { return Number(JSON.parse(Buffer.from(String(t).split(".")[1], "base64url").toString()).session_end); } catch { return NaN; } };
 
 export function runnerDial({ relayUrl, token, chatUrl = "http://127.0.0.1:8080", embedUrl = "http://127.0.0.1:8081", ttlS = MAX_TTL_S,
@@ -19,7 +19,7 @@ export function runnerDial({ relayUrl, token, chatUrl = "http://127.0.0.1:8080",
   const ttl = Math.min(Number(ttlS) || MAX_TTL_S, MAX_TTL_S);
   const sessEnd = peekEnd(token);
   const deadline = Math.min(Date.now() + ttl * 1000, Number.isFinite(sessEnd) ? sessEnd * 1000 : Infinity);
-  let ws = null, stopped = false, resolveDone, backoff = minBackoffMs, retryT = null, hbT = null, readyT = null, endT = null;
+  let ws = null, draining = false, stopped = false, resolveDone, backoff = minBackoffMs, retryT = null, hbT = null, readyT = null, endT = null;
   const state = { linked: false, ready: false, connects: 0, served: 0 };
   const inflight = new Map();     // id -> http.ClientRequest
   const done = new Promise((r) => { resolveDone = r; });
@@ -42,7 +42,7 @@ export function runnerDial({ relayUrl, token, chatUrl = "http://127.0.0.1:8080",
     const isEmbed = m.path.split("?")[0].replace(/\/$/, "") === "/v1/embeddings";
     const base = new URL(m.path, isEmbed ? embedUrl : chatUrl);
     let body = Buffer.from(m.body || "", "base64");
-    if (isEmbed && body.length) { try { const j = JSON.parse(body); j.model = "embed"; body = Buffer.from(JSON.stringify(j)); } catch { /* */ } }
+    if (isEmbed && body.length && embedUrl !== chatUrl) { try { const j = JSON.parse(body); j.model = "embed"; body = Buffer.from(JSON.stringify(j)); } catch { /* */ } }
     const headers = {}; for (const [k, v] of Object.entries(m.headers || {})) if (!HOP.has(k.toLowerCase())) headers[k] = v;
     const rq = http.request(base, { method: m.method, headers: { ...headers, "content-length": body.length } }, (r) => {
       const h = {}; for (const [k, v] of Object.entries(r.headers)) if (!HOP.has(k)) h[k] = v;
@@ -76,10 +76,15 @@ export function runnerDial({ relayUrl, token, chatUrl = "http://127.0.0.1:8080",
         readyT = setInterval(async () => { if (await healthy()) { clearInterval(readyT); state.ready = true; send({ type: "ready" }); log("model ready"); } }, healthMs);
         return;
       }
+      if (m.type === "drain") {           // rotation: the relay moved new requests to my successor; finish in-flight ones, then leave
+        draining = true; clearInterval(readyT);
+        const t = setInterval(() => { if (inflight.size === 0) { clearInterval(t); finish("drained"); } }, 200);
+        return;
+      }
       if (m.type === "cancel") { const rq = inflight.get(m.id); if (rq) { rq.destroy(); inflight.delete(m.id); } return; }
       if (m.id && m.method) serve(m);
     });
-    const retry = () => { state.linked = state.ready = false; clearInterval(hbT); clearInterval(readyT); if (stopped) return; retryT = setTimeout(connect, backoff); backoff = Math.min(maxBackoffMs, backoff * 2); };
+    const retry = () => { state.linked = state.ready = false; clearInterval(hbT); clearInterval(readyT); if (stopped || draining) return; retryT = setTimeout(connect, backoff); backoff = Math.min(maxBackoffMs, backoff * 2); };
     ws.on("close", retry);
     ws.on("error", () => { /* close follows */ });
     ws.on("unexpected-response", (_q, res) => { log(`relay refused the dial: HTTP ${res.statusCode}`); if ([401, 403, 410].includes(res.statusCode)) finish(`refused-${res.statusCode}`); });
@@ -94,5 +99,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   const link = runnerDial({ relayUrl, token, chatUrl: process.env.CHAT_URL, embedUrl: process.env.EMBED_URL, ttlS: process.env.TTL_S, WS, log: (m) => console.log("[runner-dial] " + m) });
   for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => link.stop("cancelled"));
-  link.done.then((why) => { console.log("[runner-dial] ended: " + why); process.exit(["ttl", "cancelled", "stopped"].includes(why) ? 0 : 1); });
+  link.done.then((why) => { console.log("[runner-dial] ended: " + why); process.exit(["ttl", "cancelled", "stopped", "drained"].includes(why) ? 0 : 1); });
 }

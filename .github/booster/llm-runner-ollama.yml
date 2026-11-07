@@ -1,0 +1,62 @@
+# TEMPLATE (spike, OFF by default): one Ollama model per hosted runner. Same masking rules as llm-runner.yml. The portal
+# dispatches this once per catalogue model (docker/booster-runner-llm/models.json); up to the booster's per-user cap run at once
+# (GitHub Free: 20 concurrent hosted-runner jobs). Open risk: GitHub Actions ToS (owner has accepted it) - see BOOSTER-RUNNER-LLM.md.
+# NOT validated on real Actions (no GitHub calls in the spike): the ollama pin/asset is a placeholder.
+name: vyomi-booster-llm-ollama
+run-name: "vyomi-booster-llm-ollama"
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_token: { description: "session token", required: true, type: string }
+      relay_url:    { description: "relay", required: true, type: string }
+      model:        { description: "runner id (catalogue)", required: true, type: string }
+      ollama_tags:  { description: "comma-separated ollama tags", required: true, type: string }
+      ttl_s:        { required: false, default: "21000", type: string }     # 5h50m; the booster re-dispatches at 5h30m (rotation)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vyomi-booster-llm-${{ inputs.model }}-${{ github.run_id }}     # per-run group: a ROTATION dispatch must NOT cancel the old runner (it drains)
+  cancel-in-progress: false
+
+jobs:
+  llm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - name: mask
+        shell: bash
+        env: { T: "${{ inputs.runner_token }}", R: "${{ inputs.relay_url }}" }
+        run: |
+          echo "::add-mask::$T"
+          echo "::add-mask::$R"
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: docker/booster-runner-llm }
+      - name: model cache          # key per ollama tag: 10 GB/repo total => ~2 x 7B models; 14B (9 GB) never fits beside another
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: vyomi-ollama-${{ inputs.ollama_tags }}
+      - name: ollama + ws
+        shell: bash
+        env: { OLLAMA_VERSION: "v0.0.0" }          # PLACEHOLDER: pinned (+ sha256 of the tarball) at template-render time
+        run: |
+          set -e
+          curl -fsSL -o ollama.tgz "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tgz"
+          sudo tar -C /usr/local -xzf ollama.tgz
+          (cd docker/booster-runner-llm && npm i --no-audit --no-fund --silent ws@8.18.0)
+      - name: serve
+        shell: bash
+        env:
+          VYOMI_RUNNER_TOKEN: ${{ inputs.runner_token }}
+          VYOMI_RELAY_URL: ${{ inputs.relay_url }}
+          OLLAMA_TAGS: ${{ inputs.ollama_tags }}
+          TTL_S: ${{ inputs.ttl_s }}
+          WS_PKG: ${{ github.workspace }}/docker/booster-runner-llm/node_modules/ws
+        run: bash docker/booster-runner-llm/entrypoint-ollama.sh
+      - name: cleanup
+        if: always()
+        shell: bash
+        run: pkill ollama || true

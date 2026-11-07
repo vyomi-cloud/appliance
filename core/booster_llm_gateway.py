@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,22 +34,28 @@ class Handler(BaseHTTPRequestHandler):
     # (base_url, token) or None when detached. Relay-generated failures (x-vyomi-hub: 1) and connection errors are an
     # honest 503 - never a silent fallback to a local model.
     remote = None
+    # Pool mode (core/booster_runner_pool.RunnerPool): requests are routed by `model` to that model's runner.
+    pool = None
 
     def log_message(self, *a):  # quiet
         pass
 
-    def _send_json(self, code: int, obj) -> None:
+    def _send_json(self, code: int, obj, headers=None) -> None:
         b = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("content-type", "application/json")
+        for k, v in (headers or {}).items():
+            self.send_header(k, str(v))
         self.send_header("content-length", str(len(b)))
         self.end_headers()
         self.wfile.write(b)
 
     def _unavailable(self, why: str, code: str = "RemoteLLMUnavailable") -> None:
-        self._send_json(503, {"error": {"message": f"remote LLM runner unavailable: {why}", "type": "unavailable", "code": code}})
+        self._send_json(503, {"error": {"message": f"remote LLM runner unavailable: {why}", "type": "unavailable", "code": code}}, {"retry-after": 5})
 
     def _health(self) -> None:
+        if self.pool is not None:
+            return self._send_json(200, {"status": "pool", "models": {d["id"]: d["state"] for d in self.pool.listing()["data"]}})
         if self.remote is not None:
             t = self.remote()
             if not t:
@@ -76,7 +83,19 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("content-length") or 0)
         body = self.rfile.read(n) if n else None
         headers = {"content-type": self.headers.get("content-type", "application/json")}
-        if self.remote is not None:
+        obs = None
+        if self.pool is not None:
+            from core.booster_runner_pool import PoolError
+            try:
+                r = self.pool.route(method, p, body)
+            except PoolError as e:
+                return self._send_json(e.status, e.body(), {"retry-after": e.retry_after} if e.retry_after else None)
+            if r[0] == "json":
+                return self._send_json(r[1], r[2], r[3])
+            _, up, tok, rid, body = r[:5]
+            obs = (r[5], time.time())
+            headers["x-vyomi-session-token"], headers["x-vyomi-llm-model"] = tok, rid
+        elif self.remote is not None:
             t = self.remote()
             if not t:
                 return self._unavailable("no runner is attached", "RemoteLLMDetached")
@@ -84,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
             headers["x-vyomi-session-token"] = t[1]
         else:
             up = route(p, self.chat_url, self.embed_url)
-        if self.remote is None and up == self.embed_url and body:
+        if self.remote is None and self.pool is None and up == self.embed_url and body:
             try:
                 j = json.loads(body)
                 j["model"] = "embed"
@@ -97,14 +116,14 @@ class Handler(BaseHTTPRequestHandler):
             code = r.status
         except urllib.error.HTTPError as e:
             r, code = e, e.code
-            if self.remote is not None and e.headers.get("x-vyomi-hub"):        # the relay says the runner isn't there / ended
+            if (self.remote is not None or self.pool is not None) and e.headers.get("x-vyomi-hub"):        # the relay says the runner isn't there / ended
                 try:
                     c = str(json.loads(e.read()).get("error", {}).get("code", "RunnerUnavailable"))[:60]
                 except Exception:
                     c = "RunnerUnavailable"
                 return self._unavailable(c, c)
         except Exception as e:
-            if self.remote is not None:
+            if self.remote is not None or self.pool is not None:
                 return self._unavailable("relay not reachable")
             return self._send_json(503, {"error": {"message": f"model server not reachable: {type(e).__name__}", "type": "unavailable"}})
         ctype = r.headers.get("content-type", "application/json")
@@ -123,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
             return
         data = r.read()
+        if obs and code == 200:
+            self.pool.observe(obs[0], data, time.time() - obs[1])
         self.send_response(code)
         self.send_header("content-type", ctype)
         self.send_header("content-length", str(len(data)))
@@ -137,9 +158,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 8080, chat_url: str = CHAT_URL, embed_url: str = EMBED_URL, *, remote=None,
-          host: str = "0.0.0.0") -> ThreadingHTTPServer:
+          host: str = "0.0.0.0", pool=None) -> ThreadingHTTPServer:
     h = type("H", (Handler,), {"chat_url": chat_url.rstrip("/"), "embed_url": embed_url.rstrip("/"),
-                               "remote": staticmethod(remote) if remote else None})
+                               "remote": staticmethod(remote) if remote else None, "pool": pool})
     return ThreadingHTTPServer((host, port), h)
 
 
