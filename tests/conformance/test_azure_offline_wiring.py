@@ -226,3 +226,64 @@ def test_cosmos_cmk_encryption_over_offline_wire(base):
     assert ei.value.status_code == 403
     _kvkey("PATCH", "/keys/cmkc", {"attributes": {"enabled": True}})
     assert c.read_item("1", "a")["secret"] == "TOP-SECRET-VALUE"
+
+
+# ───────────────────────────── CMK for App Configuration + Service Bus ─────────────────────────────
+def _cmk_vault(key):
+    _rg()
+    assert _kvkey("POST", f"/keys/{key}/create", {"kty": "RSA"}).status_code == 200
+    arm("PUT", f"{RG}/providers/Microsoft.KeyVault/vaults/owkv2", {"location": "eastus", "properties": {"tenantId": "t", "sku": {"family": "A", "name": "standard"}}}, "2023-07-01")
+    return f"https://owkv2.vault.azure.net/keys/{key}"
+
+
+def test_appconfiguration_cmk_over_offline_wire(base):
+    from azure.appconfiguration import AzureAppConfigurationClient, ConfigurationSetting
+    from azure.core.exceptions import HttpResponseError
+    from providers import azure_services
+    key = _cmk_vault("cmkac")
+    sid = f"{RG}/providers/Microsoft.AppConfiguration/configurationStores/owcfg"
+    arm("PUT", sid, {"location": "eastus", "sku": {"name": "Standard"}, "identity": {"type": "SystemAssigned"},
+                     "properties": {"encryption": {"keyVaultProperties": {"keyIdentifier": key}}}}, "2024-05-01")
+    ac = AzureAppConfigurationClient.from_connection_string(f"Endpoint={base}/azure-data/appconfig/owcfg;Id=cred;Secret=c2VjcmV0")
+    ac.set_configuration_setting(ConfigurationSetting(key="db", value="PRIVATE-CONN-STRING"))
+    assert ac.get_configuration_setting("db").value == "PRIVATE-CONN-STRING"
+    from core import app_context as ctx
+    tok = ctx.REQUEST_PROVIDER.set("azure")
+    try:
+        rec = azure_services._state[sid.lower()]
+        rec = json.loads(json.dumps(rec, default=str))
+    finally:
+        ctx.REQUEST_PROVIDER.reset(tok)
+    assert "_kv" not in rec and "_kv_sealed" in rec and "PRIVATE-CONN-STRING" not in json.dumps(rec, default=str)   # sealed at rest
+    _kvkey("PATCH", "/keys/cmkac", {"attributes": {"enabled": False}})
+    with pytest.raises(HttpResponseError) as ei:
+        ac.get_configuration_setting("db")
+    assert ei.value.status_code == 403
+    _kvkey("PATCH", "/keys/cmkac", {"attributes": {"enabled": True}})
+    assert ac.get_configuration_setting("db").value == "PRIVATE-CONN-STRING"
+
+
+def test_servicebus_namespace_cmk_over_offline_wire():
+    key = _cmk_vault("cmksb")
+    nid = f"{RG}/providers/Microsoft.ServiceBus/namespaces/owns"
+    arm("PUT", nid, {"location": "eastus", "sku": {"name": "Premium"}, "identity": {"type": "SystemAssigned"},
+                     "properties": {"encryption": {"keySource": "Microsoft.KeyVault",
+                                                   "keyVaultProperties": [{"keyName": "cmksb", "keyVaultUri": "https://owkv2.vault.azure.net"}]}}}, "2022-10-01-preview")
+    H = {"x-vyomi-namespace": "owns", "content-type": "application/atom+xml"}
+    assert C.put("/owq1", headers=H, content=b"<entry xmlns='http://www.w3.org/2005/Atom'><content type='application/xml'><QueueDescription xmlns='http://schemas.microsoft.com/netservices/2010/10/servicebus/connect'/></content></entry>").status_code in (200, 201)
+    assert C.post("/owq1/messages", headers={"x-vyomi-namespace": "owns", "content-type": "text/plain"}, content=b"top-secret-payload").status_code in (200, 201)
+    from core import wire_ingress as _wi
+    from core import app_context as ctx
+    tok = ctx.REQUEST_PROVIDER.set("azure")
+    try:
+        sealed = json.dumps(getattr(_wi.appliance_router().az_sb, "_sb_sealed", {}), default=str)
+        raw = [m for t in _wi.appliance_router().az_sb.topics.values() for m in t["messages"]]
+    finally:
+        ctx.REQUEST_PROVIDER.reset(tok)
+    assert sealed and "top-secret-payload" not in sealed and all(m["body"] == b"" for m in raw)      # sealed at rest
+    _kvkey("PATCH", "/keys/cmksb", {"attributes": {"enabled": False}})
+    r = C.get("/owq1/messages", headers={"x-vyomi-namespace": "owns"})
+    assert r.status_code == 403 and "key is disabled" in r.text
+    _kvkey("PATCH", "/keys/cmksb", {"attributes": {"enabled": True}})
+    r = C.get("/owq1/messages", headers={"x-vyomi-namespace": "owns"})
+    assert r.status_code == 200 and b"top-secret-payload" in r.content
