@@ -655,7 +655,8 @@ def _nic_link(state, nic):
     for ipc in nic["properties"].get("ipConfigurations") or []:
         pip_id = ((ipc.get("properties") or {}).get("publicIPAddress") or {}).get("id")
         if pip_id and state.get(pip_id.lower()):
-            state[pip_id.lower()].setdefault("properties", {})["ipConfiguration"] = {"id": ipc["id"]}
+            ipc_id = ipc.get("id") or f"{rid}/ipConfigurations/{ipc.get('name') or 'ipconfig1'}"
+            state[pip_id.lower()].setdefault("properties", {})["ipConfiguration"] = {"id": ipc_id}
 
 
 def _nic_unlink(state, nic):
@@ -1050,6 +1051,8 @@ def after_upsert(state, rec, payload=None) -> None:
     p = rec.setdefault("properties", {})
     if t == VM_T:
         _vm_fill(rec)
+    if t == NIC_T.lower():
+        _nic_link(state, rec)   # v4's generic NIC PUT path: public IP / NSG back-references
     if t == STORAGE_T:
         _storage_fill(rec)
     elif t == SQL_SERVER_T:

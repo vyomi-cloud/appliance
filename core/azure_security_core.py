@@ -648,6 +648,21 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
         return _pricings(state, method, sub, chain[1:], payload)
     if head == "defenderforstoragesettings":
         return _dfs_settings(state, method, sub, chain[1:], payload, scope_rid)
+    if head == "advancedthreatprotectionsettings" and scope_rid:
+        # per-resource Defender (Cosmos DB / SQL / storage) toggle: stored on the account, single "current" setting
+        rid = f"{scope_rid}/providers/{NS}/advancedThreatProtectionSettings/current"
+        cur = state.get(rid.lower()) or {"id": rid, "name": "current", "type": f"{NS}/advancedThreatProtectionSettings",
+                                         "properties": {"isEnabled": False}}
+        if method in ("PUT", "PATCH"):
+            en = ((payload or {}).get("properties") or {}).get("isEnabled")
+            if not isinstance(en, bool):
+                return _err(400, "BadRequest", "properties.isEnabled must be true or false.")
+            cur = dict(cur, properties={"isEnabled": en})
+            state[rid.lower()] = cur
+            return _ok(cur)
+        if method == "GET":
+            return _ok(cur if len(chain) > 1 else {"value": [cur]})
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
     if head in ("alerts", "locations"):
         return _alerts(state, method, sub, rg, chain, ctx)
     if head in ("attackpaths", "cloudsecurityexplorer"):
