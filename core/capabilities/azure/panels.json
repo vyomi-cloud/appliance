@@ -194,23 +194,26 @@
     ]
   },
   "azure.sql.integrations": {
-    "title": "Integrations (Stream Analytics, Data Sync, Fabric mirroring, Power Apps, Power Automate, Power BI)",
+    "title": "Integrations (Stream Analytics, Fabric mirroring, Power Apps, Power Automate, Power BI)",
     "level": {
       "nano": "not_simulated",
       "offline": "not_simulated"
     },
     "limitations": [
-      "These integration pages need separate Azure products (Stream Analytics, SQL Data Sync, Microsoft Fabric, the Power Platform) that Vyomi does not run; the blade shows an honest Not simulated panel for each."
+      "Fabric mirroring and the Power Platform (Power BI, Power Apps, Power Automate) are separate Microsoft SaaS products that Vyomi does not run; the blades say so. Data Sync is real (azure.sql.data_sync) and the connection string on the Connection strings blade is what those tools would use."
     ]
   },
   "azure.sql.database_watcher": {
-    "title": "Database watcher",
+    "title": "Database watcher: live engine sampling",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Database watcher (Microsoft.DatabaseWatcher: continuous collection of database telemetry into Data Explorer) is not modelled."
+      "Samples (size, per-table row counts, measured statement latency/failures) are taken from the real engine each time the console asks and kept in a bounded in-memory ring; there is no background collector, no Data Explorer/Kusto store, no KQL dashboards and no CPU/IO/wait metrics because the engine has no resource governor."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_watcher_sync.py"
     ]
   },
   "azure.sql.tools": {
@@ -310,6 +313,19 @@
     },
     "limitations": [
       "Power BI is a separate Microsoft SaaS product; the blade offers no connector. Use Data Explorer or the SDK."
+    ]
+  },
+  "azure.sql.data_sync": {
+    "title": "Sync to other databases: hub-to-member row sync",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Run on demand (no schedule), one direction per run, primary-key upsert with hub-wins or skip conflict handling and optional delete propagation, between databases of this simulator. Not SQL Data Sync agents: no sync groups on a schedule, no on-premises members, no schema change tracking triggers."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_watcher_sync.py"
     ]
   }
 }

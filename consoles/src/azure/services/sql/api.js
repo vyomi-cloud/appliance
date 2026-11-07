@@ -189,3 +189,10 @@ export function computeStorageBody(f) {
 // ── Measured query telemetry (core/azure_sql_core.query_insights) ──────────────────────
 export const queryInsights = (server, db, windowSeconds = "86400") =>
   sqlWire("GET", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/queryinsights`, { query: { window: windowSeconds } });
+
+// ── Database watcher + Data Sync (core/azure_sql_ext_core.py, run against the real SQL engine) ──
+const dbWire = (server, db) => `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}`;
+export const watcherCollect = (server, db) => sqlWire("POST", `${dbWire(server, db)}/watcher/collect`);
+export const watcherGet = (server, db) => sqlWire("GET", `${dbWire(server, db)}/watcher`);
+export const syncRun = (server, db, body) => sqlWire("POST", `${dbWire(server, db)}/sync`, { body });
+export const syncHistory = async (server, db) => (await sqlWire("GET", `${dbWire(server, db)}/sync`)).syncs || [];

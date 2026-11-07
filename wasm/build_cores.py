@@ -76,7 +76,7 @@ CORES = [
     "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
     "azure_table_core.py",                          # Azure: Table Storage (native azure-data-tables)
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
-    "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
+    "azure_sql_ext_core.py", "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
     "azure_acr_core.py",                            # v4: Container Registry repository data plane (OCI v2 + ACR v1 REST)
     "azure_graph_ext_core.py", "azure_graph_core.py", "azure_cdn_edge_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)

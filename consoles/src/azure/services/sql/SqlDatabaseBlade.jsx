@@ -27,6 +27,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { PerformanceOverview, QueryPerformanceInsight, SqlAuditing } from "./SqlInsights.jsx";
+import { DatabaseWatcher, SyncDatabases } from "./SqlWatcherSync.jsx";
 import ComputeStorageFields from "./ComputeStorageFields.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
@@ -97,6 +98,8 @@ export default function SqlDatabaseBlade({ params }) {
   else {
     const a = dbData.data, reload = dbData.reload;
     const P = {
+      databasewatcher: () => <DatabaseWatcher a={a} />,
+      syncdatabases: () => <SyncDatabases a={a} />,
       tasks: () => <TasksPanel a={a} />,
       diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,

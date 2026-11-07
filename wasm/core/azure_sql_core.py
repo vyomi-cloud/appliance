@@ -43,6 +43,7 @@ import time
 from dataclasses import dataclass, field
 
 from core import azure_keyvault_keys_core as kv_keys
+from core import azure_sql_ext_core as _ext
 from core import azure_netaccess as _netaccess
 from core.sql_store import SqlStore
 
@@ -517,6 +518,29 @@ def dispatch(store: SqlStore, method: str, path: str,
             if out is None:
                 return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
             return _json(200, out)
+        db_id0 = _db_id(server, database)
+        if len(segs) >= 5 and segs[4] in ("watcher", "sync"):
+            if not store.instance_exists(db_id0):
+                return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
+            try:
+                if segs[4] == "watcher" and len(segs) == 6 and segs[5] == "collect" and method == "POST":
+                    return _json(200, _ext.collect(store, db_id0, _qrings(store), _db_size_bytes))
+                if segs[4] == "watcher" and len(segs) == 5 and method == "GET":
+                    return _json(200, _ext.watch(store, db_id0))
+                if segs[4] == "sync" and len(segs) == 5 and method == "GET":
+                    return _json(200, {"syncs": _ext.sync_history(store, db_id0)})
+                if segs[4] == "sync" and len(segs) == 5 and method == "POST":
+                    b = json.loads(body.decode("utf-8")) if body else {}
+                    member = _db_id(b.get("memberServer") or server, b.get("memberDatabase") or "")
+                    if not b.get("memberDatabase") or not store.instance_exists(member):
+                        return _err(404, "ResourceNotFound", "The member database was not found.")
+                    if member == db_id0:
+                        return _err(400, "BadRequest", "The member database must differ from the hub database.")
+                    r = _ext.sync(store, db_id0, member, b.get("tables"), b.get("conflict", "hub-wins"), bool(b.get("deleteMissing")))
+                    return _json(200, r) if r.get("ok") else _err(400, r["code"], r["message"])
+            except Exception as e:                       # noqa: BLE001
+                return _err(500, "InternalError", str(e))
+            return _err(405, "MethodNotAllowed", f"Unsupported {method} on {segs[4]}")
         if len(segs) == 5 and segs[4] == "recommendations" and method == "GET":
             db_id = _db_id(server, database)
             if not store.instance_exists(db_id):
