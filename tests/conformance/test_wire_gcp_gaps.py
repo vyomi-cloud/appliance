@@ -463,3 +463,14 @@ def test_compute_disks_images_snapshots_instances_fill(router):
     assert any(a["name"] == "nvidia-l4" for a in c.acceleratorTypes().list(project=PROJECT, zone=z).execute()["items"])
     c.projects().setDefaultNetworkTier(project=PROJECT, body={"networkTier": "STANDARD"}).execute()
     c.projects().setUsageExportBucket(project=PROJECT, body={}).execute()
+
+
+def test_serviceusage_state_and_deploy_prereqs(router):
+    su = api(router, "serviceusage", "v1")
+    assert su.services().get(name="projects/%s/services/run.googleapis.com" % PROJECT).execute()["state"] == "ENABLED"
+    su.services().disable(name="projects/%s/services/run.googleapis.com" % PROJECT, body={}).execute()
+    assert su.services().get(name="projects/%s/services/run.googleapis.com" % PROJECT).execute()["state"] == "DISABLED"
+    su.services().enable(name="projects/%s/services/run.googleapis.com" % PROJECT, body={}).execute()
+    assert su.services().get(name="projects/%s/services/run.googleapis.com" % PROJECT).execute()["state"] == "ENABLED"
+    resp, out = raw(router, "GET", "https://cloudbuild.googleapis.com/v1/projects/%s/locations/us-central1/defaultServiceAccount" % PROJECT)
+    assert resp.status == 200 and json.loads(out)["serviceAccountEmail"].endswith("-compute@developer.gserviceaccount.com")

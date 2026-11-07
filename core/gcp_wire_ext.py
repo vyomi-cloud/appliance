@@ -96,6 +96,27 @@ def pre(router, method, path, query, headers, body):
         r = gcp_functions_core.dispatch(bag, method, pp, _normq(router, p, query), headers, bytes(body), ctx)
         _persist(router)
         return {"status": r.status, "headers": dict(r.headers or {}, **{"content-type": r.media_type}), "body": r.body}
+    if method.upper() == "GET" and re.match(r"^/v1/projects(?:/[^/]+)?$", p):   # Cloud Resource Manager v1 projects.get/list (gcloud resolves the project number with it)
+        from core import gcp_project as _gp
+        proj = router.gcp_project() if callable(router.gcp_project) else router.gcp_project
+        if not getattr(router, "STRICT_GCP_PROJECT", False):
+            proj = dict(proj, projectId=p.rsplit("/", 1)[-1] if p.count("/") == 3 else proj["projectId"])
+        st_, obj = _gp.crm_dispatch("GET", p, {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()}, proj)
+        return _resp(st_, obj)
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/services/[^/:]+:(?:get|set)IamPolicy$|^/v1/projects/[^/]+/locations/[^/]+/services/[^/:]+:testIamPermissions$", p):
+        from core import gcp_run_core as _R   # Cloud Run Admin v1 IAM verbs (gcloud run / gcloud functions --allow-unauthenticated)
+        r = _R.dispatch(router.gcp_run, method, _norm(router, p), _normq(router, p, query), headers, bytes(body))
+        _persist(router)
+        return {"status": r.status, "headers": {"content-type": "application/json"}, "body": r.body}
+    mdsa = re.match(r"^/v1/projects/([^/]+)/locations/([^/]+)/defaultServiceAccount$", p)
+    if mdsa and method == "GET":   # Cloud Build GetDefaultServiceAccount: `gcloud functions deploy` resolves the build identity first
+        from core import gcp_run_core as _R
+        return _resp(200, {"name": "projects/%s/locations/%s/defaultServiceAccount" % (mdsa.group(1), mdsa.group(2)),
+                           "serviceAccountEmail": "%s-compute@developer.gserviceaccount.com" % _R.project_number(mdsa.group(1))})
+    if _SU.match(p):
+        r = _serviceusage(router.s3.account, method, p, bytes(body))
+        _persist(router)
+        return r
     if gcp_scc_v1_core.handles(p):
         sctx = dict(router.scc_ctx(), instances=router.gcp_compute_vm.instances, buckets=router.gcs.buckets,
                     firewalls=list(router.gcp_compute.firewalls.values()), run_services=router.gcp_run.services)
@@ -504,3 +525,64 @@ def _action(s, api, mid, lk, kind, resp, method, p, verb, q, data, primary_get):
     if kind == "op":
         return _resp(200, _op(s, api, p, None, "update", mid, kind))
     return _resp(200, {})
+
+
+# ── Service Usage v1 (serviceusage.googleapis.com): what `gcloud` consults before deploying -- real enabled-set state ──────────
+_SU = re.compile(r"^/v1/projects/([^/]+)/services(?:/([^/:]+))?(?::([A-Za-z]+))?$")
+_KNOWN_APIS = ("cloudfunctions", "run", "cloudbuild", "artifactregistry", "compute", "storage", "logging", "monitoring", "iam", "iamcredentials",
+               "cloudresourcemanager", "dns", "securitycenter", "pubsub", "secretmanager", "cloudkms", "sqladmin", "container", "eventarc",
+               "cloudscheduler", "firestore", "datastore", "redis", "serviceusage", "cloudtrace", "aiplatform", "networkmanagement", "vpcaccess")
+
+
+def _svc_api(n):
+    return n if "." in n else n + ".googleapis.com"
+
+
+def _serviceusage(bag, method, p, body):
+    from core import gcp_run_core as R
+    m = _SU.match(p)
+    project, name, verb = m.groups()
+    st = bag.setdefault("gcp_serviceusage", {"disabled": []})
+    num = R.project_number(project)
+
+    def view(n):
+        n = _svc_api(n)
+        return {"name": "projects/%s/services/%s" % (num, n), "parent": "projects/" + num,
+                "config": {"name": n, "title": n.split(".")[0].replace("-", " ").title(), "documentation": {"summary": ""}},
+                "state": "DISABLED" if n in st["disabled"] else "ENABLED"}
+    try:
+        data = json.loads(body.decode("utf-8")) if body else {}
+    except ValueError:
+        return _error(400, "INVALID_ARGUMENT", "Invalid JSON payload received.")
+
+    def op(services, kind):
+        return _resp(200, {"name": "operations/acat.%s" % R._h("su", project, kind, str(len(st["disabled"])))[:20], "done": True,
+                           "response": {"@type": "type.googleapis.com/google.api.serviceusage.v1.%sServiceResponse" % kind.capitalize(), "service": services[0] if len(services) == 1 else None,
+                                        "services": services}})
+    if name is None and not verb:
+        if method != "GET":
+            return _error(405, "UNIMPLEMENTED", "Method not allowed")
+        rows = [view(a) for a in _KNOWN_APIS]
+        flt = ""
+        for part in (json.dumps({}),):
+            pass
+        return _resp(200, {"services": rows})
+    if name is None and verb == "batchEnable":
+        ids = [_svc_api(x.rsplit("/", 1)[-1]) for x in data.get("serviceIds") or []]
+        st["disabled"] = [x for x in st["disabled"] if x not in ids]
+        return op([view(x) for x in ids], "batchEnable")
+    if name is None and verb == "batchGet":
+        return _resp(200, {"services": [view(x.rsplit("/", 1)[-1]) for x in (data.get("names") or [])]})
+    if name and not verb and method == "GET":
+        return _resp(200, view(name))
+    if name and verb == "enable" and method == "POST":
+        n = _svc_api(name)
+        if n in st["disabled"]:
+            st["disabled"].remove(n)
+        return op([view(n)], "enable")
+    if name and verb == "disable" and method == "POST":
+        n = _svc_api(name)
+        if n not in st["disabled"]:
+            st["disabled"].append(n)
+        return op([view(n)], "disable")
+    return _error(404, "NOT_FOUND", "Unknown path: %s" % p)

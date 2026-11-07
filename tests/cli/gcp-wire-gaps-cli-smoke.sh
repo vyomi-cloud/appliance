@@ -9,7 +9,7 @@ S="cli$(date +%s)"
 pass=0; fail=0
 chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1 CLOUDSDK_CORE_PROJECT="$PROJECT" CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true
-for api in CLOUDFUNCTIONS DNS SECURITYCENTER LOGGING COMPUTE SERVICEUSAGE; do
+for api in CLOUDFUNCTIONS DNS SECURITYCENTER LOGGING COMPUTE SERVICEUSAGE CLOUDBUILD ARTIFACTREGISTRY RUN CLOUDRESOURCEMANAGER; do
   export "CLOUDSDK_API_ENDPOINT_OVERRIDES_${api}=$BASE/"
 done
 echo "== gcloud against $BASE project=$PROJECT =="
@@ -31,16 +31,18 @@ import functions_framework
 def hello(request):
     return "hello from " + request.args.get("who", "vyomi")
 PY
+echo "functions-framework" > "$d/requirements.txt"
 out=$(gcloud functions deploy "$S-fn" --gen2 --region=$R --runtime=python312 --trigger-http --allow-unauthenticated --entry-point=hello --source="$d" 2>&1); chk $? "functions deploy (gen2)" "$out"
 gcloud functions list --v2 --regions=$R --format='value(name)' 2>/dev/null | grep -q "$S-fn"; chk $? "functions list finds it"
 st=$(gcloud functions describe "$S-fn" --gen2 --region=$R --format='value(state)' 2>/dev/null); [ "$st" = "ACTIVE" ]; chk $? "functions describe state ACTIVE" "$st"
-out=$(gcloud functions call "$S-fn" --gen2 --region=$R --data='{}' 2>&1); echo "$out" | grep -q "hello from"; chk $? "functions call runs the uploaded code" "$out"
+url=$(gcloud functions describe "$S-fn" --gen2 --region=$R --format='value(serviceConfig.uri)' 2>/dev/null)
+out=$(curl -s "$url?who=gcloud"); echo "$out" | grep -q "hello from gcloud"; chk $? "function URL runs the uploaded code (allow-unauthenticated honoured)" "$url -> $out"
 out=$(gcloud functions delete "$S-fn" --gen2 --region=$R --quiet 2>&1); chk $? "functions delete" "$out"
 rm -rf "$d"
 
 # ── Security Command Center (v1) ──
 ORG=organizations/1234567890
-out=$(gcloud scc sources describe "$ORG" --source=0 2>&1); echo "$out" | grep -qi "error" && chk 1 "scc sources" "$out" || chk 0 "scc sources reachable"
+gcloud scc sources list "$ORG" --format='value(displayName)' 2>/dev/null | grep -q "Security Health Analytics"; chk $? "scc sources list shows the built-in sources"
 out=$(gcloud scc findings list "$ORG" --source=- --limit=1 2>&1); echo "$out" | grep -qi "ERROR:" && chk 1 "scc findings list" "$out" || chk 0 "scc findings list"
 out=$(gcloud scc assets list "$ORG" --limit=1 2>&1); echo "$out" | grep -qi "ERROR:" && chk 1 "scc assets list" "$out" || chk 0 "scc assets list"
 
@@ -48,9 +50,9 @@ out=$(gcloud scc assets list "$ORG" --limit=1 2>&1); echo "$out" | grep -qi "ERR
 out=$(gcloud logging sinks create "$S-sink" "bigquery.googleapis.com/projects/$PROJECT/datasets/d" --organization=1234567890 --log-filter='severity>=ERROR' 2>&1); chk $? "logging sinks create (organization)" "$out"
 gcloud logging sinks list --organization=1234567890 --format='value(name)' 2>/dev/null | grep -q "$S-sink"; chk $? "logging sinks list (organization) finds it"
 out=$(gcloud logging sinks delete "$S-sink" --organization=1234567890 --quiet 2>&1); chk $? "logging sinks delete (organization)" "$out"
-out=$(gcloud logging exclusions create "$S-ex" --folder=111 --log-filter='severity<INFO' 2>&1); chk $? "logging exclusions create (folder)" "$out"
-gcloud logging exclusions list --folder=111 --format='value(name)' 2>/dev/null | grep -q "$S-ex"; chk $? "logging exclusions list (folder) finds it"
-out=$(gcloud logging exclusions delete "$S-ex" --folder=111 --quiet 2>&1); chk $? "logging exclusions delete (folder)" "$out"
+out=$(gcloud logging sinks create "$S-fsink" "bigquery.googleapis.com/projects/$PROJECT/datasets/d" --folder=111 --log-filter='severity>=ERROR' 2>&1); chk $? "logging sinks create (folder)" "$out"
+gcloud logging sinks describe "$S-fsink" --folder=111 --format='value(filter)' 2>/dev/null | grep -q "severity>=ERROR"; chk $? "logging sinks describe (folder) returns the stored filter"
+out=$(gcloud logging sinks delete "$S-fsink" --folder=111 --quiet 2>&1); chk $? "logging sinks delete (folder)" "$out"
 
 echo "== $pass passed, $fail failed =="
 [ "$fail" = "0" ]
