@@ -27,6 +27,9 @@ ALLOWED = {("apigateway_core.py", "urllib.request"),   # HTTP integration → th
            ("eventbridge_core.py", "urllib.request"),  # API destination → the user's own endpoint
            ("aws_wire_router.py", "urllib.request"),   # APIM gateway backend fetch → the user's own backend URL; offline only (Nano passes None)
            ("aws_wire_router.py", "socket"),
+           ("azure_alerts_core.py", "urllib.request"),  # action-group webhook receiver → the user's own URL (http/https enforced at PUT)
+           ("kms_core.py", "urllib.request"),          # custom key store XKS proxy health check → the user's own XKS endpoint
+           ("sns_core.py", "urllib.request"),          # mobile-push platform endpoint delivery → the user's own configured endpoint
            ("llm_core.py", "urllib.request")}          # local-LLM seam → the user's own model server (VYOMI_LLM_ENDPOINT); offline only
 
 
