@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-07 01:09 UTC · refreshes after every pipeline run_
+_Updated 2026-11-07 01:23 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-07 01:09 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 288 of 289 suites passing (run 23:15 UTC)
+- **Hourly tests:** 288 of 289 suites passing (run 01:12 UTC)
 - **Upstream watch:** 15 open changes from the real clouds to adopt
 
 ## By cloud
@@ -914,7 +914,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-python-aws-kms-kem | ✅ | 6/6 |
 | offline-sdk-python-aws-ops5 | ✅ | 4/4 |
 | offline-core-aws-vpc-nacl | ✅ | 6/6 |
-| offline-sdk-python-aws-ops4 | ✅ | 15/15 |
+| offline-sdk-python-aws-ops4 | ✅ | 17/17 |
 | offline-sdk-python-aws-ops3 | ✅ | 12/12 |
 | offline-sdk-python-aws-ops2 | ✅ | 20/20 |
 | offline-sdk-python-aws-ops | ✅ | 12/12 |
