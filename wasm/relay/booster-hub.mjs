@@ -55,6 +55,7 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     let claims;
     try { claims = verify(bearer(req), key, nowS()); }
     catch (e) { reject(e instanceof SessionError ? e.status : 401, e.code || "BoosterSessionInvalid"); return true; }
+    if (claims.role) { reject(403, "BoosterSessionWrongRole"); return true; }       // runner-role tokens only dial /llm-runner
     wss.handleUpgrade(req, socket, head, (ws) => {
       const sid = claims.session_id;
       if (boosters.has(sid)) dropBooster(sid, "replaced by a newer dial");
@@ -88,6 +89,7 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     if (!originOk(origin)) return out(403, "OriginNotAllowed", `origin ${origin} is not allowed`);
     let claims;
     try { claims = verify(tok, key, nowS()); } catch (e) { return out(e.status || 401, e.code || "BoosterSessionInvalid", e.message); }
+    if (claims.role) return out(403, "BoosterSessionWrongRole", "runner-role token cannot drive a booster");
     const b = boosters.get(claims.session_id);
     if (!b || b.ws.readyState !== b.ws.OPEN) return out(502, "BoosterNotLinked", "no booster is linked for this session");
     if (b.claims.sub !== claims.sub) return out(403, "BoosterSessionMismatch", "session belongs to another account");
