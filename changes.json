@@ -1,9 +1,8 @@
 {
- "at": "2026-11-07T17:08:37+00:00",
+ "at": "2026-11-07T18:08:40+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
-  "maven/com.azure:azure-storage-blob: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out"
  ]
 }
