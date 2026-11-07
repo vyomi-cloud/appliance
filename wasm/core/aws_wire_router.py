@@ -441,6 +441,7 @@ _SIGNING = {
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
     "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
+    "ec2-instance-connect": "eic",   # EC2 Instance Connect SendSSHPublicKey (JSON 1.1) -> core/ec2_instance_connect_core over the EC2 model
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
@@ -480,6 +481,7 @@ _TARGET_PREFIX = {
     "AWSOrganizationsV20161128": "organizations",
     "AmazonEC2ContainerRegistry_V20150921": "ecr",   # Amazon ECR
     "AWSInsightsIndexService": "ce",   # Cost Explorer
+    "AWSEC2InstanceConnectService": "eic",
     "AnyScaleFrontendService": "appas",   # Application Auto Scaling
     "com.amazonaws.codeconnections.CodeConnections_20231201": "codeconnections",
     "com.amazonaws.codestar.connections.CodeStar_connections_20191201": "codeconnections",
@@ -495,7 +497,7 @@ _JSON_CT = {
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
-    "appas": "application/x-amz-json-1.1",
+    "appas": "application/x-amz-json-1.1", "eic": "application/x-amz-json-1.1",
     "netfw": "application/x-amz-json-1.0", "dnsfw": "application/x-amz-json-1.1",
 }
 
@@ -2189,7 +2191,11 @@ class AwsWireRouter:
                 from core import zeroetl_core
                 import types as _ty
                 _fn = zeroetl_core.dispatch_glue if svc == "glue" else zeroetl_core.dispatch_redshift_data
-                _st, _doc = _fn(self.rds, self.ddb, target, payload)
+                if svc == "glue":   # Data Catalog / crawlers (real S3 reads) / jobs -> core/glue_catalog_core; zero-ETL stays in zeroetl_core
+                    from core import glue_catalog_core
+                    _st, _doc = glue_catalog_core.dispatch(self.rds, self.s3, self.ddb, target, payload, fallback=_fn)
+                else:
+                    _st, _doc = _fn(self.rds, self.ddb, target, payload)
                 r = _ty.SimpleNamespace(status=_st, headers={"x-amzn-errortype": _doc["__type"]} if _st >= 400 else {}, body=_doc)
             elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
                 r = netfw.dispatch(self.vpc, target, payload)
@@ -2200,6 +2206,9 @@ class AwsWireRouter:
             elif svc == "ce":   # Cost Explorer over the EC2/EBS (VPC model) + RDS inventory
                 from core import ce_core
                 r = ce_core.dispatch(self.vpc, self.rds, target, payload)
+            elif svc == "eic":   # EC2 Instance Connect: pushed keys land on the EC2-model instance with a real 60 s validity window
+                from core import ec2_instance_connect_core
+                r = ec2_instance_connect_core.dispatch(self.vpc, target, payload)
             elif svc == "appas":   # Application Auto Scaling for DynamoDB (adjusts the table's real provisioned capacity)
                 from core import appautoscaling_core
                 r = appautoscaling_core.dispatch(self.ddb, target, payload)

@@ -30,6 +30,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import sys
 import uuid
 from dataclasses import dataclass, field
 
@@ -262,15 +263,24 @@ def _put_method(store, api_id, resource_id, http_method, body):
         "authorizationType": str(body.get("authorizationType", "NONE")),
         "apiKeyRequired": bool(body.get("apiKeyRequired", False)),
         "requestParameters": dict(body.get("requestParameters") or {}),
-        "integration": None}
+        "requestModels": dict(body.get("requestModels") or {}),
+        "authorizerId": body.get("authorizerId"), "requestValidatorId": body.get("requestValidatorId"),
+        "operationName": body.get("operationName"), "authorizationScopes": list(body.get("authorizationScopes") or []),
+        "methodResponses": {}, "integration": None}
     return _json(201, _method_view(res["methods"][http_method.upper()]))
 
 
 def _method_view(m):
-    return {"httpMethod": m["httpMethod"], "authorizationType": m["authorizationType"],
-            "apiKeyRequired": m.get("apiKeyRequired", False),
-            "requestParameters": dict(m.get("requestParameters") or {}),
-            "methodIntegration": _integration_view(m["integration"]) if m.get("integration") else None}
+    v = {"httpMethod": m["httpMethod"], "authorizationType": m["authorizationType"],
+         "apiKeyRequired": m.get("apiKeyRequired", False),
+         "requestParameters": dict(m.get("requestParameters") or {}),
+         "methodIntegration": _integration_view(m["integration"]) if m.get("integration") else None}
+    for k in ("requestModels", "authorizerId", "requestValidatorId", "operationName", "authorizationScopes"):
+        if m.get(k):
+            v[k] = m[k]
+    if m.get("methodResponses"):
+        v["methodResponses"] = {c: dict(r) for c, r in m["methodResponses"].items()}
+    return v
 
 
 def _require_method(api, resource_id, http_method):
@@ -295,10 +305,16 @@ def _delete_method(store, api_id, resource_id, http_method):
 
 
 def _integration_view(integ):
-    return {"type": integ["type"], "uri": integ.get("uri", ""),
-            "httpMethod": integ.get("httpMethod"), "timeoutInMillis": integ.get("timeoutInMillis", 29000),
-            "requestTemplates": dict(integ.get("requestTemplates") or {}),
-            "passthroughBehavior": integ.get("passthroughBehavior", "WHEN_NO_MATCH")}
+    v = {"type": integ["type"], "uri": integ.get("uri", ""),
+         "httpMethod": integ.get("httpMethod"), "timeoutInMillis": integ.get("timeoutInMillis", 29000),
+         "requestTemplates": dict(integ.get("requestTemplates") or {}),
+         "passthroughBehavior": integ.get("passthroughBehavior", "WHEN_NO_MATCH")}
+    for k in ("credentials", "cacheNamespace", "cacheKeyParameters", "contentHandling", "requestParameters", "connectionType", "connectionId", "tlsConfig"):
+        if integ.get(k):
+            v[k] = integ[k]
+    if integ.get("integrationResponses"):
+        v["integrationResponses"] = {c: dict(r) for c, r in integ["integrationResponses"].items()}
+    return v
 
 
 def _put_integration(store, api_id, resource_id, http_method, body):
@@ -317,6 +333,10 @@ def _put_integration(store, api_id, resource_id, http_method, body):
         # MOCK convenience: the configured response the mock returns.
         "mockStatus": int(body.get("mockStatus", 200)),
         "mockBody": body.get("mockBody", ""),
+        "credentials": body.get("credentials"), "cacheNamespace": body.get("cacheNamespace"),
+        "cacheKeyParameters": list(body.get("cacheKeyParameters") or []), "contentHandling": body.get("contentHandling"),
+        "requestParameters": dict(body.get("requestParameters") or {}), "connectionType": body.get("connectionType"),
+        "connectionId": body.get("connectionId"), "integrationResponses": {},
     }
     m["integration"] = integ
     return _json(201, _integration_view(integ))
@@ -915,6 +935,17 @@ def _parse(body):
         return {}
 
 
+def _gap_route(store, method, segs, query, payload, path, msg=None, raw=b""):
+    """Operations the base router does not serve (authorizers, models, validators, responses, domain names, VPC links, tags,
+    exports, imports, documentation, ...) live in core/apigateway_gap_core; unknown paths still 404."""
+    try:
+        from core import apigateway_gap_core as gap
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import apigateway_gap_core as gap  # type: ignore
+    r = gap.route(sys.modules[__name__], store, method, segs, query or {}, payload, raw)
+    return r if r is not None else _err(404, "NotFoundException", msg or f"Unknown path: {path}")
+
+
 def dispatch(store, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> ApiGwResponse:
@@ -991,9 +1022,11 @@ def dispatch(store, method: str, path: str,
                     return _delete_client_certificate(store, cid)
 
         if segs[0] != "restapis":
-            return _err(404, "NotFoundException", f"Unknown path: {path}")
+            return _gap_route(store, method, segs, query, payload, path, None, body)
 
         if len(segs) == 1:
+            if method == "POST" and (query or {}).get("mode") in ("import", ["import"]):
+                return _gap_route(store, method, segs, query, payload, path, None, body)
             if method == "POST":
                 return _create_rest_api(store, payload)
             if method == "GET":
@@ -1062,6 +1095,6 @@ def dispatch(store, method: str, path: str,
                 if method == "DELETE":
                     return _delete_stage(store, api_id, name)
 
-        return _err(404, "NotFoundException", f"Unsupported {method} {path}")
+        return _gap_route(store, method, segs, query, payload, path, f"Unsupported {method} {path}", body)
     except _E as e:
         return _err(e.status, e.code, e.message)
