@@ -160,7 +160,48 @@ def probe(fid: str, p: dict, level: str, ctx: dict) -> tuple[bool, str]:
     return True, "no probe (tests only)"
 
 
+_CLI_SRV: dict = {}
+
+
+def _cli_endpoint() -> str:
+    """Start (once) the in-memory dev server on a free port and return its /_wire base URL."""
+    if "ep" in _CLI_SRV:
+        return _CLI_SRV["ep"]
+    import socket
+    import time
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    p = subprocess.Popen([sys.executable, str(ROOT / "consoles/dev_server.py"), "--port", str(port), "-q"], cwd=ROOT,
+                         env={**os.environ, "PYTHONPATH": str(ROOT)}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    import atexit
+    atexit.register(p.terminate)
+    for _ in range(100):
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+            break
+        except OSError:
+            time.sleep(0.1)
+    _CLI_SRV["ep"] = f"http://127.0.0.1:{port}/_wire"
+    return _CLI_SRV["ep"]
+
+
+_FILE_RESULT: dict[str, bool] = {}
+
+
 def run_tests(files: list[str]) -> tuple[bool, str]:
+    """Run each distinct test file once per sweep (a file shared by many claims is not re-run: the CLI smokes
+    share one server, so a second run would see the first run's state)."""
+    bad = []
+    for f in files:
+        if f not in _FILE_RESULT:
+            _FILE_RESULT[f] = _run_files([f])[0]
+        if not _FILE_RESULT[f]:
+            bad.append(f)
+    return not bad, ("failing: " + ", ".join(bad)) if bad else f"{len(files)} test file(s) pass"
+
+
+def _run_files(files: list[str]) -> tuple[bool, str]:
     if BASE:
         return True, "test files run in-process only"
     bad = []
@@ -182,6 +223,15 @@ def run_tests(files: list[str]) -> tuple[bool, str]:
             r = subprocess.run(["node", str(ROOT / "consoles/tests/run-nano-smokes.mjs"), "--only", m.group(1) if m else Path(f).stem,
                                 "--port", str(port)], cwd=ROOT, capture_output=True, text=True, env=env)
             if r.returncode != 0:
+                bad.append(f)
+            continue
+        if f.endswith(".sh"):
+            # Real-CLI smokes (az/aws/gcloud) need an HTTP endpoint: serve the SAME shared core (AwsWireRouter + AzureArm)
+            # over HTTP via consoles/dev_server.py and point the script at /_wire. One server per sweep.
+            ep = _cli_endpoint()
+            r = subprocess.run(["bash", str(ROOT / f)], cwd=ROOT, capture_output=True, text=True,
+                               env={**os.environ, "ENDPOINT": ep})
+            if r.returncode != 0 or "[FAIL]" in r.stdout:
                 bad.append(f)
             continue
         r = subprocess.run([sys.executable, str(ROOT / f)], cwd=ROOT, capture_output=True, text=True,
