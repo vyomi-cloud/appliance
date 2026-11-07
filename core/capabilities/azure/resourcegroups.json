@@ -99,17 +99,45 @@
  },
  "azure.resourcegroups.deploymentstacks": {
   "title": "Deployment stacks (Microsoft.Resources/deploymentStacks)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "A stack evaluates its ARM template through the same bounded template engine as a plain deployment and OWNS the resources it provisions: deleting the stack deletes them (or detaches them with unmanageAction.Resources=detach), and denySettings.mode denyDelete / denyWriteAndDelete really blocks a direct delete (and write) of a managed resource with 403 DenyAssignmentAuthorizationFailed.",
    "Not modelled: resourceGroups/managementGroups unmanage actions (only resources), deny-settings excludedPrincipals/excludedActions/applyToChildScopes, subscription- and management-group-scope stacks, what-if / validate, and template specs. Template functions beyond the bounded evaluator fail the stack."
   ],
-  "tests": ["tests/conformance/test_azure_deploymentstacks_core.py"]
+  "tests": [
+   "tests/conformance/test_azure_deploymentstacks_core.py"
+  ]
  },
  "azure.resourcegroups.marketplace": {
   "title": "Creating a new resource from the Marketplace (Vyomi Marketplace)",
-  "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Vyomi publishes its own SaaS-simulator offers; subscribing creates a real Microsoft.SaaS/resources resource in this resource group. The third-party vendors' APIs are not emulated and nothing is billed."],
-  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi publishes its own SaaS-simulator offers; subscribing creates a real Microsoft.SaaS/resources resource in this resource group. The third-party vendors' APIs are not emulated and nothing is billed."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_billing_ext_core.py"
+  ]
+ },
+ "azure.resourcegroups.tools": {
+  "title": "Resource group tools: Move resources (validate + move) and Export template",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "validateMoveResources / moveResources really re-parent resources inside the one simulated subscription: they check the target group, name clashes, ARM locks, non-movable types and that referenced/referencing resources move together, then rewrite ids and embedded references and re-key state. Moving to another subscription is rejected (Vyomi models one subscription). Real Azure's per-provider move rules (e.g. region/SKU specifics) are approximated by the generic reference-closure check; the call completes synchronously with 204 instead of a 202 long-running operation.",
+   "Export template is generated from live state (azure.common export template); dependency-ordered group delete, tag-governance insights and the Tasks tab are not built (Tasks needs an external automation product).",
+   "Open query (Azure Resource Graph) and Manage view are separate products/portal chrome and stay not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rg_move_resources.py",
+   "tests/conformance/test_azure_templates_core.py"
+  ]
  }
 }

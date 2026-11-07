@@ -1363,6 +1363,21 @@ class AzureArm:
                 return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
             return _ok(r["body"])
 
+        # POST .../resourceGroups/{rg}/validateMoveResources | moveResources — really re-parents resources
+        # (core/azure_templates_core.move_resources): validation + id/reference rewrite.
+        if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() in ("validatemoveresources", "moveresources") and len(rest_segs) == idx + 1:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST.")
+            from core import azure_templates_core as _tpl
+            known = {g["name"].lower() for g in list_resource_groups(self.state)}
+            if rg.lower() not in known:
+                return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
+            r = _tpl.move_resources(self.state, sub, rg, payload or {}, lambda n: n.lower() in known,
+                                    validate_only=rest_segs[idx].lower() == "validatemoveresources")
+            if r["status"] >= 300:
+                return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+            return _ok(None, 204)
+
         # GET .../resourceGroups/{rg}/resources — the generic "resources in this group"
         # list every resource-group blade's Overview/Resources tab and delete confirmation
         # call (az resource list -g / Resources.list_by_resource_group), scoped across every

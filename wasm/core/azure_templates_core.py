@@ -186,3 +186,135 @@ def export_group(state: dict, sub: str, rg: str, resources, api_versions: dict, 
         return {"status": 404, "body": {"error": {"code": "ResourceNotFound", "message": "None of the requested resources are in this resource group."}}}
     tpl = build_template(recs, api_versions, include_params)
     return {"status": 200, "body": {"template": tpl, "bicep": to_bicep(tpl), "terraform": to_terraform(tpl, sub, rg)}}
+
+
+# ═══════════════════════ move resources (validateMoveResources / moveResources) ═════════════
+_NOT_MOVABLE_PREFIX = ("microsoft.resources/", "microsoft.authorization/", "microsoft.security/", "microsoft.insights/eventtypes")
+
+
+def _walk_replace(o, pat, new):
+    if isinstance(o, str):
+        return pat.sub(new, o)
+    if isinstance(o, list):
+        return [_walk_replace(x, pat, new) for x in o]
+    if isinstance(o, dict):
+        return {k: _walk_replace(v, pat, new) for k, v in o.items()}
+    return o
+
+
+def _walk_strings(o, out):
+    if isinstance(o, str):
+        out.append(o.lower())
+    elif isinstance(o, list):
+        for x in o:
+            _walk_strings(x, out)
+    elif isinstance(o, dict):
+        for v in o.values():
+            _walk_strings(v, out)
+
+
+def _is_child(il: str, src_prefix: str) -> bool:
+    """A top-level resource id is providers/<ns>/<type>/<name>; anything deeper is a child/extension resource."""
+    return len(il[len(src_prefix):].split("providers/", 1)[-1].split("/")) > 3
+
+
+def _mv_err(status, code, msg):
+    return {"status": status, "body": {"error": {"code": code, "message": msg}}}
+
+
+def move_resources(state: dict, sub: str, rg: str, payload: dict, rg_exists, validate_only: bool = False) -> dict:
+    """POST …/resourceGroups/{rg}/validateMoveResources | moveResources.
+
+    Validates (target group exists and differs, same subscription, resources exist in the source group and are
+    movable top-level resources, no ARM lock on the resource or either group, no name clash in the target,
+    and every resource that references - or is referenced by - a moved one in the source group moves with it),
+    then really re-parents the resources: state keys, ids, ``_rg`` and every embedded reference are rewritten,
+    child records (ids under the resource) move with their parent. Returns status 204 on success."""
+    ids = (payload or {}).get("resources")
+    target = str((payload or {}).get("targetResourceGroup") or "")
+    if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids):
+        return _mv_err(400, "InvalidRequestContent", "The 'resources' property must be a non-empty list of resource ids.")
+    m = re.match(r"^/subscriptions/([^/]+)/resourcegroups/([^/]+)$", target, re.I)
+    if not m:
+        return _mv_err(400, "InvalidRequestContent", "The 'targetResourceGroup' property must be a resource group id.")
+    if m.group(1).lower() != sub.lower() and not (m.group(1).lower() == sub.lower()):
+        return _mv_err(400, "InvalidMoveRequest", "Moving resources to another subscription is not supported by this simulator (it models one subscription).")
+    trg = m.group(2)
+    if trg.lower() == rg.lower():
+        return _mv_err(400, "InvalidMoveRequest", "The source and target resource groups must be different.")
+    if not rg_exists(trg):
+        return _mv_err(404, "ResourceGroupNotFound", f"Resource group '{trg}' could not be found.")
+    src_prefix = f"/subscriptions/{sub}/resourcegroups/{rg}/".lower()
+    recs = {}
+    for k, r in state.items():
+        if isinstance(r, dict) and r.get("_sub") == sub and (r.get("_rg") or "").lower() == rg.lower():
+            recs[str(r.get("id") or k).lower()] = (k, r)
+    moving = {}
+    for i in ids:
+        il = i.lower()
+        if il not in recs:
+            return _mv_err(400, "ResourceNotFound", f"The resource '{i}' was not found in resource group '{rg}'.")
+        t = str(recs[il][1].get("_type") or "").lower()
+        if t.startswith(_NOT_MOVABLE_PREFIX):
+            return _mv_err(409, "ResourceNotMovable", f"The resource type '{recs[il][1].get('_type')}' does not support move.")
+        if _is_child(il, src_prefix):
+            return _mv_err(409, "ResourceNotMovable", f"'{i}' is a child resource; move its parent instead.")
+        moving[il] = recs[il]
+    # children travel with their parent
+    for il in list(moving):
+        for cl, kr in recs.items():
+            if cl.startswith(il + "/"):
+                moving[cl] = kr
+    top = [il for il in moving if not any(il.startswith(o + "/") for o in moving)]
+    # locks (resource, source group, target group)
+    scopes = set(top) | {f"/subscriptions/{sub}/resourcegroups/{rg}".lower(), target.lower()}
+    for r in state.values():
+        if isinstance(r, dict) and r.get("_lock_scope") in scopes:
+            lvl = (r.get("properties") or {}).get("level", "")
+            return _mv_err(409, "ScopeLocked", f"The scope '{r.get('_lock_scope')}' has a '{lvl}' lock; remove it before moving resources.")
+    # name clash in the target
+    for il in top:
+        r = moving[il][1]
+        for r2 in state.values():
+            if isinstance(r2, dict) and (r2.get("_rg") or "").lower() == trg.lower() and r2.get("_sub") == sub \
+                    and str(r2.get("_type") or "").lower() == str(r.get("_type") or "").lower() \
+                    and str(r2.get("name") or "").lower() == str(r.get("name") or "").lower():
+                return _mv_err(409, "ResourceMoveConflict", f"A resource of type '{r.get('_type')}' named '{r.get('name')}' already exists in resource group '{trg}'.")
+    # dependency closure: references in either direction must be inside the move set
+    top_ids = set(top)
+    ref_ids = {il for il, (_, r) in recs.items() if not _is_child(il, src_prefix)}
+    for il, (_, r) in recs.items():
+        if il not in ref_ids:
+            continue
+        strs = []
+        _walk_strings(r.get("properties"), strs)
+        refs = {x for x in ref_ids if x != il and any(s == x or s.startswith(x + "/") for s in strs)}
+        if il in top_ids:
+            for x in refs - top_ids:
+                return _mv_err(409, "MissingMoveDependentResources", f"The resource '{r.get('id')}' references '{recs[x][1].get('id')}', which must be moved together with it.")
+        else:
+            for x in refs & top_ids:
+                return _mv_err(409, "MissingMoveDependentResources", f"The resource '{recs[x][1].get('id')}' is referenced by '{r.get('id')}', which would be left behind; move both together.")
+    if validate_only:
+        return {"status": 204, "body": None}
+    # apply: rewrite ids/refs and re-key
+    for il in top:
+        old_id = str(moving[il][1].get("id") or "")
+        new_id = f"/subscriptions/{sub}/resourceGroups/{trg}/" + old_id[len(src_prefix):]
+        pat = re.compile(re.escape(old_id), re.I)
+        for cl, (k, r) in list(moving.items()):
+            if cl != il and not cl.startswith(il + "/"):
+                continue
+            state.pop(k, None)
+            r2 = _walk_replace(r, pat, new_id)
+            r2["_rg"] = trg
+            state[str(r2.get("id") or k).lower()] = r2
+            moving[cl] = (str(r2.get("id") or k).lower(), r2)
+        # references among the other moved resources
+        for cl, (k, r) in list(moving.items()):
+            if cl != il and not cl.startswith(il + "/"):
+                r2 = _walk_replace(r, pat, new_id)
+                if r2 is not r:
+                    state[k] = r2
+                    moving[cl] = (k, r2)
+    return {"status": 204, "body": None}
