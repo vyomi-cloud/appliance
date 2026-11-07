@@ -44,6 +44,7 @@ class SsmStore:
         self.associations: dict = {}
         self.windows: dict = {}         # window id -> window (targets inside)
         self.baselines: dict = {}
+        self.host_mgmt: dict = {}       # default host management configuration (RoleArn)
         self._seeded = False
 
 
@@ -1043,6 +1044,20 @@ def _delete_baseline(store: SsmStore, b: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 # dispatch
 # ═══════════════════════════════════════════════════════════════════════════
+def _register_default_host_mgmt(store: SsmStore, b: dict) -> dict:
+    _need(b, "PermissionModel")
+    role = b.get("RoleArn") or f"arn:aws:iam::{ACCOUNT}:role/service-role/AWSSystemsManagerDefaultEC2InstanceManagementRole"
+    if store.host_mgmt.get("RoleArn") and not b.get("Overwrite"):
+        raise SsmError("InvalidParameters", "A default host management configuration is already registered; set Overwrite to replace it.")
+    store.host_mgmt = {"RoleArn": role, "PermissionModel": b["PermissionModel"]}
+    return {"RoleArn": role}
+
+
+def _deregister_default_host_mgmt(store: SsmStore, b: dict) -> dict:
+    store.host_mgmt = {}
+    return {}
+
+
 _OPS = {
     "PutParameter": _put_parameter, "GetParameter": _get_parameter, "GetParameters": _get_parameters,
     "GetParametersByPath": _get_by_path, "DescribeParameters": _describe_parameters, "DeleteParameter": _delete_parameter,
@@ -1063,6 +1078,8 @@ _OPS = {
     "DescribeMaintenanceWindowTargets": _describe_targets, "DeregisterTargetFromMaintenanceWindow": _deregister_target,
     "CreatePatchBaseline": _create_baseline, "GetPatchBaseline": _get_baseline,
     "DescribePatchBaselines": _describe_baselines, "DeletePatchBaseline": _delete_baseline,
+    "RegisterDefaultHostManagementConfiguration": _register_default_host_mgmt,
+    "DeregisterDefaultHostManagementConfiguration": _deregister_default_host_mgmt,
 }
 OPERATIONS = sorted(_OPS)
 

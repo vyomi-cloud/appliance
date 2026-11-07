@@ -138,6 +138,13 @@ def run(store=None):
     st, b = call("Bogus")
     _check("unknown action → UnknownOperationException", b["__type"] == "UnknownOperationException")
     _check("operations list", len(ssm.OPERATIONS) >= 40)
+    st, b = call("RegisterDefaultHostManagementConfiguration", {})
+    _check("RegisterDefaultHostManagementConfiguration needs PermissionModel", st == 400 and b.get("__type") == "ValidationException")
+    st, b = call("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "DefaultRole", "RoleArn": "arn:aws:iam::000000000000:role/r"})
+    _check("RegisterDefaultHostManagementConfiguration → RoleArn", st == 200 and b == {"RoleArn": "arn:aws:iam::000000000000:role/r"})
+    _check("Register again without Overwrite → InvalidParameters", err("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "DefaultRole"}, "InvalidParameters"))
+    _check("Register with Overwrite", call("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "DefaultRole", "Overwrite": True})[0] == 200)
+    _check("DeregisterDefaultHostManagementConfiguration → {}", call("DeregisterDefaultHostManagementConfiguration") == (200, {}))
     return True
 
 
