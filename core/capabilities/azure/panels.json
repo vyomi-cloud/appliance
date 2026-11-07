@@ -245,14 +245,14 @@
       "tests/conformance/test_azure_netsvc_core.py"
     ]
   },
-  "azure.resourcegroups.tools": {
-    "title": "Force delete, Resource group insights, Tasks",
+  "azure.resourcegroups.tasks": {
+    "title": "Resource group Tasks",
     "level": {
       "nano": "not_simulated",
       "offline": "not_simulated"
     },
     "limitations": [
-      "Force delete of VMs and scale sets inside a group, Resource group insights and Tasks (Azure Automation / Logic Apps) are not modelled; plain delete of the group and of its resources is real (azure.resourcegroups.rg.crud)."
+      "Tasks are Azure Automation / Logic Apps task templates run against the group; Vyomi simulates neither product, so there is nothing real to run. Force delete and Resource group insights are real (azure.resourcegroups.tools); plain delete of the group and its resources is real (azure.resourcegroups.rg.crud)."
     ]
   },
   "azure.acr.support_troubleshooting": {
