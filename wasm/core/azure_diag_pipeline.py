@@ -115,6 +115,8 @@ def _deliver_storage(state, dest_id, category, row) -> str | None:
         return f"storage account firewall refused the delivery ({denied[1]}): enable 'Allow trusted Microsoft services' (networkAcls.bypass=AzureServices)"
     name = (acct.get("name") or dest_id.rsplit("/", 1)[-1])
     cont = "insights-logs-" + category.lower() if row.get("Category") != "AllMetrics" else "insights-metrics-pt1m"
+    if re.fullmatch(r"/subscriptions/[^/]+", str(row.get("_ResourceId") or "")):
+        cont = "insights-activity-logs"          # the real container the subscription Activity log export writes to
     now = datetime.datetime.now(datetime.timezone.utc)
     path = f"{cont}/resourceId={row['ResourceId']}/y={now:%Y}/m={now:%m}/d={now:%d}/h={now:%H}/m=00/PT1H.json"
     line = json.dumps({"time": row["TimeGenerated"], "resourceId": row["ResourceId"], "category": row["Category"],

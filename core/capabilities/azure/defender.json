@@ -124,13 +124,13 @@
  },
  "azure.defender.other": {
   "tier": "pro",
-  "title": "Getting started, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions, Workflow automation",
+  "title": "Getting started, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "These pages depend on connected DevOps/data/firewall services or Logic Apps automation, none of which Vyomi simulates (Attack path analysis and Cloud Security Explorer are real; see azure.defender.attack_paths)."
+   "These pages depend on connected DevOps/data/firewall services, none of which Vyomi simulates (Attack path analysis, Cloud Security Explorer and Workflow automation are real; see azure.defender.attack_paths and azure.defender.automation)."
   ]
  },
  "azure.defender.image_vulnerabilities": {
@@ -162,6 +162,23 @@
   ],
   "tests": [
    "tests/conformance/test_azure_attackpath.py"
+  ]
+ },
+ "azure.defender.automation": {
+  "tier": "pro",
+  "title": "Workflow automation (Microsoft.Security/automations)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real ARM resource with the real validation (sources, rule operators, scopes, per-actionType required fields). Security alerts raised by Vyomi's detector are matched against every enabled automation (rules AND-ed inside a ruleSet, ruleSets OR-ed; scope = subscription or resource group); one run is recorded per (automation, alert, action) and shown under Runs (Vyomi extension GET .../vyomiRuns).",
+   "A Workspace action is delivered for real as a row in the Log Analytics workspace (table SecurityAlert, queryable with KQL). Logic App and Event Hub actions fire but are recorded Failed: the simulator has no Logic Apps runtime and no Event Hubs receiver. Only the Alerts event source is evaluated; Assessments, SubAssessments, SecureScores and RegulatoryComplianceAssessment sources are stored as configuration and never fire. Automations are hidden from the generic resource list."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_defender_automations.py",
+   "tests/conformance/test_azure_sdk_defender_automation_export.py",
+   "tests/cli/azure-defender-automation-cli-smoke.sh"
   ]
  }
 }

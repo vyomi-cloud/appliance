@@ -1615,6 +1615,37 @@ class AzureArm:
         if namespace.lower() == "microsoft.billing" and chain and chain[0].lower() == "billingproperties":
             return self._billing_properties(method, payload)
 
+        # Microsoft.Insights/diagnosticSettings AT SUBSCRIPTION SCOPE = the Activity log's
+        # "Export Activity Logs" (continuous export). No "providers" re-entry (the scope is the
+        # subscription itself), so the generic extension marker never sees it. Delivery runs in
+        # core/azure_diag_pipeline.on_activity (Administrative category -> workspace / storage).
+        if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() in ("diagnosticsettings", "diagnosticsettingscategories"):
+            sub_rid = f"/subscriptions/{sub}"
+            if chain[0].lower() == "diagnosticsettingscategories":
+                if method != "GET":
+                    return _err(405, "MethodNotAllowed", "Categories supports GET only.")
+                return _ok({"value": [{"id": f"{sub_rid}/providers/Microsoft.Insights/diagnosticSettingsCategories/{c}", "name": c,
+                                       "type": "Microsoft.Insights/diagnosticSettingsCategories",
+                                       "properties": {"categoryType": "Logs"}} for c in monitor_engine.ACTIVITY_LOG_CATEGORIES]})
+            rest = chain[1:]
+            if not rest:
+                if method != "GET":
+                    return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+                r = monitor_engine.list_diagnostic_settings(self.state, sub_rid)
+            elif method == "GET":
+                r = monitor_engine.get_diagnostic_setting(self.state, sub_rid, rest[0])
+            elif method in ("PUT", "PATCH"):
+                bad = [c.get("category") for c in ((payload or {}).get("properties") or {}).get("logs") or []
+                       if isinstance(c, dict) and c.get("category") and c.get("category") not in monitor_engine.ACTIVITY_LOG_CATEGORIES]
+                if bad:
+                    return _err(400, "BadRequest", f"Category '{bad[0]}' is not an Activity log category. Valid: {', '.join(monitor_engine.ACTIVITY_LOG_CATEGORIES)}.")
+                r = monitor_engine.upsert_diagnostic_setting(self.state, sub_rid, rest[0], payload)
+            elif method == "DELETE":
+                r = monitor_engine.remove_diagnostic_setting(self.state, sub_rid, rest[0])
+            else:
+                return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+            return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
         # Microsoft.Insights/eventtypes/management/values: the subscription-wide ARM activity
         # log read API (not resource-scoped — no "providers" re-entry — so it must be caught
         # before the generic type/name alternation below, which would misparse it).

@@ -23,11 +23,14 @@
   },
   "limitations": [
    "Events are the ARM control-plane mutations Vyomi itself records (write/delete/action on resources); there is no real Azure platform emitting service-health, autoscale, alert or policy events.",
-   "Export Activity Logs downloads the filtered events as a JSON file; continuous export to a storage account / Event Hub / Log Analytics (a diagnostic setting on the subscription) is not performed from this blade.",
-   "Insights shows counts computed from the loaded events, not the portal's Log Analytics-backed Activity log insights workbook; Feedback is not simulated."
+   "Export Activity Logs manages the subscription's continuous export: a real subscription-scope Microsoft.Insights/diagnosticSettings whose Administrative events are delivered to a Log Analytics workspace (AzureDiagnostics) and/or storage account (insights-activity-logs); Event Hub destinations are not served, and only the Administrative category has an event source in Vyomi. Download JSON/CSV of the filtered rows is real too.",
+   "Insights shows counts computed from the loaded events, not the portal's Log Analytics-backed workbook; Pin current filters is a per-browser preference (no Microsoft.Portal/dashboards resource); Feedback is not simulated."
   ],
   "tests": [
-   "tests/conformance/test_azure_activity_log_core.py"
+   "tests/conformance/test_azure_activity_log_core.py",
+   "tests/conformance/test_azure_activity_log_export.py",
+   "tests/conformance/test_azure_sdk_defender_automation_export.py",
+   "tests/cli/azure-defender-automation-cli-smoke.sh"
   ]
  },
  "azure.common.classic_administrators": {

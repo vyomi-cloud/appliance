@@ -116,7 +116,7 @@ const CORES = [
   "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",   // image vulnerability scan + security detection engines (azure_security_core imports them)
   "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
   "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
-  "azure_security_core.py", "azure_attackpath_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
+  "azure_security_core.py", "azure_attackpath_core.py", "azure_security_automations_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
   "azure_diag_pipeline.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webauth_core.py", "azure_aksmon_core.py", "azure_streamanalytics_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_apim_gateway_core.py", "azure_tasks_core.py", "aws_codeconn_core.py", "lambda_cicd_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py", "azure_kudu_core.py", "azure_diagnose_core.py", "azure_nm_engine_core.py", "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "azure_keyvault_x509_core.py", "azure_arm_core.py", "azure_lb_core.py", "azure_disks_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   "azure_firewall_eval.py",
   "azure_cfgext_core.py",

@@ -7,10 +7,16 @@
     "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topics.listactions": {
-    "title": "\"Open query\" (Azure Resource Graph Explorer) on the Topics list",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "\"Open query\" (Azure Resource Graph Explorer) and \"Assign tags\" on the Topics list",
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "Azure Resource Graph is a genuinely separate product from Event Grid: a tenant-wide Kusto query engine that indexes every resource type of every service (VMs, storage, networking, …), not just topics — the 'Open query' button is merely an entry point into it. Building it honestly means a general-purpose KQL engine shared by all 20+ Azure services in this simulator, which is out of a single service agent's scope to introduce unilaterally (every other service's own 'Open query'/'Manage view' entries — core/capabilities/azure/acr.json, servicebus.json, loganalytics.json, … — declare the exact same gap for the exact same reason); it is not treated as a shortcut, it is the one dependency actually external to this service."
+      "\"Open query\" runs a real Azure Resource Graph query (Microsoft.ResourceGraph/resources) over the ARM engine's own resource store: table Resources/ResourceContainers with where/project/limit/order by/count - not a canned response, but not full Kusto either (no joins, summarize or time-series operators; unsupported operators are a 400). \"Assign tags\" PATCHes real ARM tags onto every selected topic."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_resourcegraph_eventgrid.py",
+      "tests/conformance/test_azure_sdk_defender_automation_export.py",
+      "tests/cli/azure-defender-automation-cli-smoke.sh",
+      "tests/conformance/test_azure_arm_core.py"
     ]
   },
   "azure.eventgrid.topics.bulktags": {
@@ -20,11 +26,16 @@
     "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topic.listactions": {
-    "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Edit columns/Insights/Feedback/Pin current filters, and Locks' Subscription/Resource group scope + Feedback",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Toolbar actions of a topic's Activity log and Locks panels: Export Activity Logs, Insights, Pin current filters and the Locks Subscription/Resource group scope buttons (real or local); Feedback (not simulated)",
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Continuous Export Activity Logs (to a workspace/storage/event hub), the Insights workbook, the per-event Activity detail flyout, dashboard-pinning filters, and portal Feedback are not modeled; Locks' Subscription/Resource group scope-switch buttons would navigate to a DIFFERENT resource's lock list, which this entry does not cover.",
-      "Download as CSV and Reset filters on the Activity log ARE real (kit/common.jsx's downloadCsv, client-side over the real rows); column customization, one-time CSV export, filtering and bulk delete on the Locks panel ARE real too (consoles/src/azure/kit/BrowseGrid.jsx) — this entry covers only the actions listed above."
+      "Export Activity Logs is a real subscription-scope Microsoft.Insights/diagnosticSettings: new Administrative events are delivered to the chosen Log Analytics workspace (AzureDiagnostics) and/or storage account (container insights-activity-logs). Event Hub destinations are not served (no Event Hubs receiver). Only the Administrative category has an event source in Vyomi; Security/Policy/Alert/etc. can be enabled but never receive events. The Locks Subscription/Resource group buttons list the real Microsoft.Authorization/locks at that scope.",
+      "Insights shows counts computed from the loaded events (not the Microsoft-authored workbook); Pin current filters is a per-browser preference (it does not write a Microsoft.Portal/dashboards resource); Feedback posts to a Microsoft endpoint outside the simulator and is not simulated."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_activity_log_export.py",
+      "tests/conformance/test_azure_sdk_defender_automation_export.py",
+      "tests/conformance/test_azure_activity_log_core.py"
     ]
   },
   "azure.eventgrid.topics.accesskeys": {

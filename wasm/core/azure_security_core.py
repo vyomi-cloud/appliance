@@ -650,7 +650,14 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
         return _pricings(state, method, sub, chain[1:], payload)
     if head == "defenderforstoragesettings":
         return _dfs_settings(state, method, sub, chain[1:], payload, scope_rid)
+    if head == "automations":
+        try:
+            from core import azure_security_automations_core as auto
+        except ImportError:                                    # Pyodide flat layout
+            import azure_security_automations_core as auto     # type: ignore
+        return auto.dispatch(state, method, sub, rg, chain[1:], payload, lambda: alert_views(state, sub))
     if head in ("alerts", "locations"):
+        _fire_automations(state, sub)
         return _alerts(state, method, sub, rg, chain, ctx)
     if head in ("attackpaths", "cloudsecurityexplorer"):
         if not plan_on(state, sub, "CloudPosture"):
@@ -762,6 +769,25 @@ def threats(state: dict, sub: str) -> list:
         if plan_on(state, sub, _ALERT_PLAN.get(t["rule"], "Arm")):
             out.append(t)
     return out
+
+
+def alert_views(state: dict, sub: str) -> list:
+    """The Microsoft.Security/locations/alerts documents Vyomi's detector currently raises (workflow automations match on these)."""
+    rec = state.get(_feed_key(sub)) or {}
+    states = rec.get("alerts") or {}
+    return [sc.azure_alert_view(t, sub, states.get(t["id"], "Active")) for t in threats(state, sub)]
+
+
+def _fire_automations(state, sub):
+    try:
+        try:
+            from core import azure_security_automations_core as auto
+        except ImportError:                                    # Pyodide flat layout
+            import azure_security_automations_core as auto     # type: ignore
+        if any(isinstance(r, dict) and r.get("_type") == auto.TYPE for r in state.values()):
+            auto.evaluate(state, sub, alert_views(state, sub))
+    except Exception:       # an automation target never breaks reading the alerts
+        pass
 
 
 def _alerts(state, method, sub, rg, chain, ctx):

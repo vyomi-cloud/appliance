@@ -46,11 +46,17 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.listactions": {
-    "title": "Activity log toolbar actions that open a separate Azure product or portal chrome: Activity/Export Activity Logs/Insights/Pin current filters, and Locks'/Activity log's Feedback",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Activity log toolbar: Export Activity Logs, Insights, Pin current filters (real or local) and Feedback (not simulated)",
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "'Activity' (the timespan picker's companion action) and 'Pin current filters' write to the signed-in user's Azure Dashboard, a separate resource type (Microsoft.Portal/dashboards) Vyomi does not model; 'Export Activity Logs' configures the SUBSCRIPTION's own continuous Activity Log export (a Microsoft.Insights/diagnosticSettings extension scoped to '/subscriptions/{sub}', not to this namespace — a different resource than the namespace's own Diagnostic settings page, which IS real, see azure.servicebus.namespace.diagnosticsettings) and is not wired up; 'Insights' opens the Service Bus Insights workbook (Microsoft.Insights/workbooks pre-authored by Microsoft, not user data) which is not modeled; 'Feedback' posts to a real Microsoft telemetry endpoint outside the simulator.",
-      "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) — this entry covers only the actions listed above. The Locks panel's Subscription/Resource group scope buttons are real too (azure.servicebus.namespace.locks)."
+      "'Export Activity Logs' opens the subscription's continuous export: a real subscription-scope Microsoft.Insights/diagnosticSettings (separate from the namespace's own Diagnostic settings page) whose Administrative events are delivered to the chosen Log Analytics workspace and/or storage account (insights-activity-logs). Event Hub destinations are not served; only Administrative has an event source in Vyomi.",
+      "'Insights' shows counts computed from the loaded events, not the Service Bus Insights workbook (Microsoft.Insights/workbooks, Microsoft-authored); 'Pin current filters' is a per-browser preference, it does not write a Microsoft.Portal/dashboards resource; 'Feedback' posts to a real Microsoft telemetry endpoint outside the simulator and is not simulated.",
+      "Column customization, one-time CSV export, filtering and 'Reset to default' on the Activity log and Locks panels, and the Locks Subscription/Resource group scope buttons, are real (client-side over the real rows / the real locks engine)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_activity_log_export.py",
+      "tests/conformance/test_azure_sdk_defender_automation_export.py",
+      "tests/conformance/test_azure_servicebus_core.py"
     ]
   },
   "azure.servicebus.namespace.properties": {

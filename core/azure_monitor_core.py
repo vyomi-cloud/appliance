@@ -705,6 +705,8 @@ def _scoped_resource_ops(state, rec, rest, method, payload):
 # Microsoft.Authorization/locks — so it lives outside the TYPES/_BUILDERS CRUD above and is
 # wired directly by core/azure_arm_core.AzureArm._diagnostic_settings (see find_diagnostic_marker).
 DIAG_API_VERSION = "2021-05-01-preview"
+# Activity log categories a SUBSCRIPTION-scope diagnostic setting may enable ("Export Activity Logs").
+ACTIVITY_LOG_CATEGORIES = ("Administrative", "Security", "ServiceHealth", "Alert", "Recommendation", "Policy", "Autoscale", "ResourceHealth")
 _DIAG_TYPE = f"{NAMESPACE}/diagnosticSettings"
 
 

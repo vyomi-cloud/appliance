@@ -1024,6 +1024,9 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         if _dns_probe.handles(chain):
             return await _handle_dns(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() in ("diagnosticsettings", "diagnosticsettingscategories"):
+        return await _handle_core_arm(request, method, rest, base)   # subscription-scope Activity log export (shared core engine)
+
     if namespace.lower() == "microsoft.insights":
         from core import azure_monitor_core as _mon_probe
         if _mon_probe.handles(chain):
