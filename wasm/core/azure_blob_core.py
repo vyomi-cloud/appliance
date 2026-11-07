@@ -361,6 +361,17 @@ def _reqlog(store: AzureBlobStore, acct: str, category: str, operation: str, sta
     lst.append({"time": _now_http(), "category": category, "operation": operation, "status": status, "uri": uri})
     if len(lst) > _LOG_CAP:
         del lst[: len(lst) - _LOG_CAP]
+    arm = getattr(store, "_arm_ctx", None)
+    if arm and acct:   # diagnostic settings (account scope and .../blobServices/default): REAL delivery to workspace / storage
+        try:
+            from core import azure_diag_pipeline as _dp
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            import azure_diag_pipeline as _dp  # type: ignore
+        rec = _netaccess.find_arm(arm, "microsoft.storage/storageaccounts", f"storageaccounts/{acct}")
+        if rec:
+            _dp.attach_blob_store(store)
+            for scope in (rec["id"] + "/blobServices/default", rec["id"]):
+                _dp.emit_log(arm, scope, category, operation, "Success" if status < 400 else "Failure", {"uri": uri, "statusCode": status})
 
 
 def _replication_targets(arm_state: dict | None, acct: str, container: str, blob: str) -> list:
@@ -669,6 +680,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     p = p.rstrip("/") if p != "/" else p
     segs = [unquote(s) for s in p.split("/") if s != ""]
 
+    store._arm_ctx = arm_state       # lets _reqlog hand the request to the diagnostic-settings pipeline
     # ---- account configuration gates (ENFORCED — see module docstring) ----
     props = _account_properties(arm_state, acct)
     _na_ctx = _netaccess.caller_context(headers)

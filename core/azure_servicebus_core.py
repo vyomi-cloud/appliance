@@ -367,8 +367,10 @@ def _complete_deadletter(store, topic_name: str, seq: str) -> ServiceBusResponse
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: MessagingStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> ServiceBusResponse:
-    """Native Azure Service Bus REST router. Paths:
+             body: bytes = b"", arm_state: dict | None = None) -> ServiceBusResponse:
+    """Native Azure Service Bus REST router. With `arm_state` and an `x-vyomi-namespace` header the namespace's
+    networkRuleSets/default (public access, IP rules, VNet rules + Microsoft.ServiceBus endpoint, trusted services,
+    private endpoint) is ENFORCED against the declared caller (core/azure_netaccess.py). Paths:
         PUT    /{topic}                                        create topic
         GET    /{topic}                                        get topic
         DELETE /{topic}                                        delete topic
@@ -394,6 +396,20 @@ def dispatch(store: MessagingStore, method: str, path: str,
     segs = [s for s in p.split("/") if s != ""]
     if not segs:
         return _error("BadRequest", "Missing entity path.", 400)
+    if arm_state and headers.get("x-vyomi-namespace"):
+        try:
+            from core import azure_netaccess as _na
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            import azure_netaccess as _na  # type: ignore
+        _d = _na.servicebus_denied(arm_state, headers["x-vyomi-namespace"], headers, query)
+        if _d:
+            return _error("Forbidden", _d[2], 403)
+        try:        # diagnostic settings (RuntimeAuditLogs) on the namespace: real delivery (core/azure_diag_pipeline.py)
+            from core import azure_diag_pipeline as _dp
+            _dp.emit_named(arm_state, "microsoft.servicebus/namespaces", f"namespaces/{headers['x-vyomi-namespace']}", "RuntimeAuditLogs",
+                           f"{method} /{p}", 200)
+        except Exception:
+            pass
 
     topic = segs[0]
     try:

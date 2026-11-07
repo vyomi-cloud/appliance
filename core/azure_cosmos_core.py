@@ -679,8 +679,80 @@ def _cosmos_net_denied(arm_state, acct, headers):
                               "Cosmos DB account firewall settings.")
 
 
+def _cors_origin_ok(rule_origins: str, origin: str) -> bool:
+    for o in str(rule_origins or "").split(","):
+        o = o.strip()
+        if o == "*" or o.lower() == origin.lower():
+            return True
+        if o.startswith(("http://*.", "https://*.")):
+            scheme, _, dom = o.partition("://*.")
+            if origin.lower().startswith(scheme + "://") and origin.lower().endswith("." + dom.lower()) and len(origin) > len(scheme) + 3 + len(dom) + 1:
+                return True
+    return False
+
+
+def _cors_rule(acct: dict | None, origin: str, method: str = "", req_headers: str = ""):
+    """The account's first properties.cors rule that admits this Origin (and, when the rule restricts them, the method
+    and request headers) - azure.cosmos.cors."""
+    for rule in ((acct or {}).get("properties") or {}).get("cors") or []:
+        if not isinstance(rule, dict) or not _cors_origin_ok(rule.get("allowedOrigins"), origin):
+            continue
+        ms = [m.strip().upper() for m in str(rule.get("allowedMethods") or "").split(",") if m.strip()]
+        if method and ms and method.upper() not in ms:
+            continue
+        hs = [h.strip().lower() for h in str(rule.get("allowedHeaders") or "").split(",") if h.strip()]
+        if req_headers and hs and "*" not in hs and not all(h.strip().lower() in hs for h in req_headers.split(",") if h.strip()):
+            continue
+        return rule
+    return None
+
+
+def _cors_headers(rule: dict, origin: str, preflight_headers: str = "") -> dict:
+    h = {"access-control-allow-origin": "*" if str(rule.get("allowedOrigins", "")).strip() == "*" else origin, "vary": "Origin"}
+    if preflight_headers:
+        h["access-control-allow-headers"] = preflight_headers
+        h["access-control-allow-methods"] = str(rule.get("allowedMethods") or "GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH").replace(",", ", ").replace(",  ", ", ")
+        h["access-control-max-age"] = str(rule.get("maxAgeInSeconds", 0) or 0)
+    if rule.get("exposedHeaders"):
+        h["access-control-expose-headers"] = str(rule["exposedHeaders"])
+    return h
+
+
 def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
              body: bytes = b"", arm_state: dict | None = None) -> Response:
+    """Cosmos CORS wrapper (azure.cosmos.cors) around the data-plane dispatch: an OPTIONS preflight is answered from the
+    account's properties.cors rules (no matching rule -> 403 and NO Access-Control-* headers, so a browser blocks the call),
+    and a real request carrying an admitted Origin gets Access-Control-Allow-Origin / -Expose-Headers on its response."""
+    hdrs = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    origin = hdrs.get("origin")
+    acct = resolve_account(arm_state, hdrs) if arm_state else None
+    if acct is None or not origin:
+        resp = _dispatch_data(store, method, path, query, headers, body, arm_state)
+        if acct is not None:      # diagnostic settings (DataPlaneRequests): real delivery (core/azure_diag_pipeline.py)
+            try:
+                from core import azure_diag_pipeline as _dp
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_diag_pipeline as _dp  # type: ignore
+            _dp.emit_log(arm_state, acct["id"], "DataPlaneRequests", f"{method.upper()} {path.split('?', 1)[0]}",
+                         "Success" if resp.status < 400 else "Failure", {"statusCode": resp.status})
+        return resp
+    denied = _cosmos_net_denied(arm_state, acct, hdrs)
+    if denied:
+        return _err(*denied)
+    if method.upper() == "OPTIONS":
+        rule = _cors_rule(acct, origin, hdrs.get("access-control-request-method", ""), hdrs.get("access-control-request-headers", ""))
+        if rule is None:
+            return _err(403, "Forbidden", f"CORS preflight rejected: origin '{origin}' is not allowed by the account's CORS rules.")
+        return Response(status=200, headers=_cors_headers(rule, origin, hdrs.get("access-control-request-headers") or "x-ms-version"), body=b"", media_type=None)
+    resp = _dispatch_data(store, method, path, query, headers, body, arm_state)
+    rule = _cors_rule(acct, origin, method)
+    if rule is not None:
+        resp.headers = {**(resp.headers or {}), **_cors_headers(rule, origin)}
+    return resp
+
+
+def _dispatch_data(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+                   body: bytes = b"", arm_state: dict | None = None) -> Response:
     """Data-plane dispatch. With `arm_state` (the Azure ARM state) the target account's network rules and provisioned /
     autoscale throughput are ENFORCED: a denied caller gets 403, a request that would exceed the offer in the trailing
     second gets 429 (RequestRateTooLarge) with x-ms-retry-after-ms; every response carries x-ms-request-charge (modelled RU)."""

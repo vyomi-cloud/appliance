@@ -560,7 +560,7 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         if service in ("azure_acr", "azure_servicebus"):
             from core import azure_acr_core, azure_servicebus_core
             mod, st = (azure_acr_core, r.az_acr) if service == "azure_acr" else (azure_servicebus_core, r.az_sb)
-            kwargs = {}
+            kwargs = {"arm_state": r.az_arm.state} if service == "azure_servicebus" else {}   # namespace network rules
             if service == "azure_acr":
                 # Same per-registry networking/retention enforcement as the Nano router
                 # (aws_wire_router.py) — see azure.acr.networking / azure.acr.retention. The
@@ -619,6 +619,9 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
                            f"{op0[0]} {op0[1]} permission on key vault '{vault0}'."}}).encode()
             return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
         resp = mod.dispatch(st, method, p, query or {}, headers or {}, body or b"")
+        if vault0:     # diagnostic settings (AuditEvent) on the vault: real delivery (core/azure_diag_pipeline.py)
+            from core import azure_diag_pipeline as _dp
+            _dp.emit_named(r.az_arm.state, "microsoft.keyvault/vaults", f"vaults/{vault0}", "AuditEvent", f"{method} {p}", resp.status)
         hdrs = dict(resp.headers or {})
         if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
             hdrs["content-type"] = resp.media_type

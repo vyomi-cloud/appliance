@@ -655,6 +655,15 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
         head = rest[0].lower()
         if head in ("api", "query", "datacollectionrules"):
             _lr = [x.lower() for x in rest]
+            try:
+                from core import azure_netaccess as _na
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_netaccess as _na  # type: ignore
+            # azure.loganalytics.workspace.networking: publicNetworkAccessForQuery / ForIngestion (+ a private endpoint
+            # path) enforced on the data plane against the declared caller (x-vyomi-* headers or same-named query params)
+            _d = _na.loganalytics_denied(state, rec, "query" if _lr in (["api", "query"], ["query"]) else "ingestion", None, query)
+            if _d:
+                return _err(403, "InsufficientAccessError", "The workspace's network configuration blocks this request: " + _d[2])
             if _lr == ["api", "query"] and method != "POST" and not (query or {}).get("query"):
                 return _err(405, "MethodNotAllowed", "POST required.")
             if _lr in (["api", "query"], ["query"]):

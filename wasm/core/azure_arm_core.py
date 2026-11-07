@@ -72,6 +72,11 @@ try:                                              # App Configuration engine (Mi
 except ImportError:
     import azure_appconfiguration_core as appconfig_engine   # type: ignore
 
+try:                                              # diagnostic settings -> workspace / storage log + metric delivery
+    from core import azure_diag_pipeline as diag_pipeline
+except ImportError:
+    import azure_diag_pipeline as diag_pipeline   # type: ignore
+
 try:                                              # Cognitive Services engine (Microsoft.CognitiveServices)
     from core import azure_cognitiveservices_core as cogs_engine
 except ImportError:
@@ -1146,6 +1151,10 @@ class AzureArm:
         except Exception:
             pass
         web_engine._record_event(self.state, sub, _rg_from_id(rid), rid, operation_name, operation_name, status)
+        try:   # diagnostic settings: forward this operation to the workspace / storage destinations (core/azure_diag_pipeline.py)
+            diag_pipeline.on_activity(self.state, getattr(self, "blob_store", None), rid, operation_name, status)
+        except Exception:
+            pass
 
     def _activity_log(self, method: str, query: dict, sub: str = DEFAULT_SUBSCRIPTION):
         if method != "GET":
@@ -2076,6 +2085,8 @@ class AzureArm:
                     rec["properties"]["error"] = {"code": "DeploymentFailed", "details": errors}
                     deployment_failed = True
                 resp["body"] = _view(rec)
+            if full_type.lower() in ("microsoft.servicebus/namespaces/networkrulesets", "microsoft.sql/servers/connectionpolicies") and resp["status"] == 201:
+                resp["status"] = 200      # the published ARM specs answer these singleton PUTs with 200 only (SDKs reject 201)
             if full_type.lower() == "microsoft.keyvault/vaults" and resp["status"] == 201:
                 # azure.keyvaults.access_configuration / azure.keyvaults.access_policies,
                 # ENFORCED by keyvault_access_denied() below: real Azure default-denies a
@@ -3343,9 +3354,10 @@ class AzureArm:
             if method == "GET":
                 r = monitor_engine.get_diagnostic_setting(self.state, scope_rid, name)
             elif method in ("PUT", "PATCH"):
+                _existed = f"{scope_rid}/providers/Microsoft.Insights/diagnosticSettings/{name}".lower() in self.state
                 r = monitor_engine.upsert_diagnostic_setting(self.state, scope_rid, name, payload)
                 if r["status"] in (200, 201):
-                    _record_activity(activity_name, "Create diagnostic setting" if r["status"] == 201 else "Update diagnostic setting", name)
+                    _record_activity(activity_name, "Update diagnostic setting" if _existed else "Create diagnostic setting", name)
             elif method == "DELETE":
                 r = monitor_engine.remove_diagnostic_setting(self.state, scope_rid, name)
                 if r["status"] == 200:

@@ -146,8 +146,12 @@ export function namespaceArmBody(f) {
 // Vyomi's Service Bus data plane (core/azure_servicebus_core.py) is scoped by entity name
 // only, like the AWS lens's shared KMS/Secrets Manager stores — two namespaces sharing a
 // queue name would share its backlog in this simulator. Acceptable for a single-tenant sim.
+// The wire has no namespace identity, so the blade names the namespace it is showing (x-vyomi-namespace) and the
+// data plane enforces that namespace's networkRuleSets/default (public access off => 403) - azure.servicebus.namespace.networking.
+let activeNamespace = "";
+export const setActiveNamespace = (name) => { activeNamespace = name || ""; };
 async function sbFetch(method, path, { headers = {}, body } = {}) {
-  const res = await fetch(`${WIRE_BASE}${path}`, { method, headers, body });
+  const res = await fetch(`${WIRE_BASE}${path}`, { method, headers: activeNamespace ? { ...headers, "x-vyomi-namespace": activeNamespace } : headers, body });
   const text = res.status === 204 ? "" : await res.text();
   if (!res.ok) {
     let detail = text;

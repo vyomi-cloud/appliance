@@ -2223,10 +2223,15 @@ class AwsWireRouter:
                                    f"{op[0]} {op[1]} permission on key vault '{vault}'."}}).encode()
                     return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+                if vault:      # diagnostic settings (AuditEvent) on the vault: real delivery (core/azure_diag_pipeline.py)
+                    from core import azure_diag_pipeline as _dp
+                    _dp.emit_named(self.az_arm.state, "microsoft.keyvault/vaults", f"vaults/{vault}", "AuditEvent", f"{method} {path}", r.status)
             elif svc == "az-blob":   # CORS preflight, lifecycle tiering/expiry and static-website
                 # serving read the storage account's ARM-stored config (blobServices/default,
                 # managementPolicies/default) — the single source of truth the Configuration/
                 # CORS/Lifecycle/Static website panels already write through ARM.
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+            elif svc == "az-servicebus":   # namespace networkRuleSets/default (x-vyomi-namespace) enforced
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
             elif svc == "az-cosmos":   # account network rules + provisioned/autoscale RU/s (429), from the ARM state
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)

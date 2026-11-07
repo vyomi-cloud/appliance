@@ -103,10 +103,19 @@
   "tests": ["tests/conformance/test_azure_rbac_core.py"]
   },
   "azure.loganalytics.workspace.networking": {
-    "title": "Public network access for ingestion/query (set at create time and from Properties)",
-    "level": { "nano": "config_only", "offline": "config_only" },
-    "limitations": ["Vyomi stores publicNetworkAccessForIngestion/Query exactly as configured and returns it from the API, but never actually blocks a query or data-source write based on it."],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+   "title": "Public network access for ingestion/query (set at create time and from Properties)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "publicNetworkAccessForIngestion (Data Collector / DCR ingestion) and publicNetworkAccessForQuery (api/query) are enforced: Disabled returns 403 InsufficientAccessError unless the declared caller arrives through an approved private endpoint that targets the workspace. Diagnostic-settings delivery is a platform path and is not blocked by it, as in Azure.",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "Azure Monitor Private Link Scopes (AMPLS) are not modelled; access modes (Open / PrivateOnly) are not evaluated."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_operationalinsights_core.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
   },
   "azure.loganalytics.workspace.monitoring": {
    "title": "Workbooks on a workspace",

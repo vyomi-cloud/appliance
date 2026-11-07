@@ -71,20 +71,21 @@
   ]
  },
  "azure.common.diagnostic_settings": {
-  "title": "Diagnostic settings on every resource",
-  "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "title": "Diagnostic settings on every resource",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "Settings are validated like the real Microsoft.Insights/diagnosticSettings resource and DELIVER: a resource operation lands as a row in the chosen Log Analytics workspace (AzureDiagnostics, or the resource-specific table for logAnalyticsDestinationType=Dedicated; AzureMetrics for metrics; queryable with KQL) and as a JSON-lines blob in the chosen storage account (insights-logs-<category>/resourceId=.../PT1H.json), honouring that account's firewall (Deny without bypass=AzureServices fails the delivery). A delivery that cannot be made is counted as failed on the setting, never faked.",
+    "What emits: control-plane writes on Key Vault (AuditEvent), Service Bus (OperationalLogs) and Azure AI services (Audit); blob requests (StorageRead/StorageWrite/StorageDelete); Key Vault (AuditEvent), Service Bus (RuntimeAuditLogs), Azure OpenAI (RequestResponse) and Cosmos (DataPlaneRequests) data-plane calls; the one real metric ActivityOperations (AllMetrics); and Administrative Activity Log entries for a subscription-scoped setting. Resource types with no such source (e.g. a VNet's VMProtectionAlerts) produce no log, as in Azure.",
+    "Event Hub and partner-solution destinations are stored but nothing receives them (no Event Hubs service): they count as failed deliveries. Metrics other than ActivityOperations are not forwarded. Service Bus runtime audit entries are logged when the call is received (no result code)."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_monitor_core.py",
+    "tests/conformance/test_azure_arm_core.py",
+    "tests/conformance/test_azure_diag_pipeline.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
   },
-  "limitations": [
-   "Settings are stored and validated exactly as the real Microsoft.Insights/diagnosticSettings resource requires (at least one destination; a storage destination must be a real resource), but logs and metrics are never delivered to the workspace, storage account or event hub \u2014 there is no telemetry pipeline.",
-   "The log-category picker lists the categories Vyomi knows for the common resource types plus the allLogs category group; GET diagnosticSettingsCategories is not modelled."
-  ],
-  "tests": [
-   "tests/conformance/test_azure_monitor_core.py",
-   "tests/conformance/test_azure_arm_core.py"
-  ]
- },
  "azure.common.resource_visualizer": {
   "title": "Resource visualizer (resource group graph)",
   "level": {

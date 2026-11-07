@@ -49,7 +49,7 @@ def register(app) -> None:
         tok = ai_models_core.STREAM_OK.set(True)
         try:
             out = ai_models_core.azure_openai_dispatch({rec.get("id", account): rec}, "POST", f"/openai/deployments/{dep}/{op}",
-                                                       dict(request.query_params), hdrs, body)
+                                                       dict(request.query_params), hdrs, body, net_state=_state())
         finally:
             ai_models_core.STREAM_OK.reset(tok)
         h = dict(out.get("headers") or {})

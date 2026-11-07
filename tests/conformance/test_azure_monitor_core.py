@@ -141,7 +141,7 @@ check("no marker on a plain chain", mo.find_diagnostic_marker(["actionGroups", "
 r = mo.upsert_diagnostic_setting(st, VM2, "toLA", {"properties": {
     "workspaceId": "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1",
     "logs": [{"categoryGroup": "allLogs", "enabled": True}]}})
-check("diagnostic setting create → 201", r["status"] == 201 and r["body"]["properties"]["logs"][0]["enabled"] is True, r["body"])
+check("diagnostic setting create → 200", r["status"] == 200 and r["body"]["properties"]["logs"][0]["enabled"] is True, r["body"])
 r = mo.upsert_diagnostic_setting(st, VM2, "nodest", {"properties": {"logs": [{"category": "x", "enabled": True}]}})
 check("diagnostic setting needs a destination → 400", r["status"] == 400)
 r = mo.upsert_diagnostic_setting(st, VM2, "noneenabled", {"properties": {

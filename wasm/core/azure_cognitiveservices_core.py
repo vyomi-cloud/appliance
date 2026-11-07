@@ -433,7 +433,7 @@ def _tokens(text):
     return max(1, len(str(text).split()))
 
 
-def inference(rec, deployment, op, payload):
+def inference(rec, deployment, op, payload, state=None, query=None):
     """Azure OpenAI data plane for ARM-proxy callers. One implementation: delegates to ``ai_models_core.azure_openai_dispatch``
     (the same code /openai/... and /azure-data/openai/... serve), so a deployment answers identically on every route -
     from the local model through core/llm_core, or 503 ServiceUnavailable when no model is running. Returns (status, body).
@@ -448,12 +448,12 @@ def inference(rec, deployment, op, payload):
         return 400, {"error": {"code": "BadRequest", "message": "stream=true is served by the account endpoint "
                      "(<base>/azure-data/openai/<account>/openai/deployments/<d>/chat/completions), not the ARM proxy.", "param": "stream"}}
     path = {"chat": "chat/completions", "completions": "completions", "embeddings": "embeddings"}[op]
-    out = aim.azure_openai_dispatch({rec.get("id", "acct"): rec}, "POST", f"/openai/deployments/{deployment}/{path}", {},
-                                    {"api-key": "arm"}, json.dumps(payload).encode())
+    out = aim.azure_openai_dispatch({rec.get("id", "acct"): rec}, "POST", f"/openai/deployments/{deployment}/{path}", query or {},
+                                    {"api-key": "arm"}, json.dumps(payload).encode(), net_state=state)
     return out["status"], json.loads(out["body"])
 
 
-def _openai_ops(rec, rest, method, payload):
+def _openai_ops(rec, rest, method, payload, state=None, query=None):
     # rest: ["openai","deployments",dep,"chat","completions"] | [...,"completions"] | [...,"embeddings"]
     low = [x.lower() for x in rest]
     if method != "POST" or len(rest) < 4 or low[1] != "deployments" or rec["kind"] not in MODEL_KINDS:
@@ -462,7 +462,7 @@ def _openai_ops(rec, rest, method, payload):
     op = {"chat/completions": "chat", "completions": "completions", "embeddings": "embeddings"}.get(tail)
     if op is None:
         raise _E(404, "ResourceTypeNotSupported", f"Unsupported inference operation '{tail}'.")
-    st, body = inference(rec, rest[2], op, payload)
+    st, body = inference(rec, rest[2], op, payload, state, query)
     return _ok(body, st)
 
 
@@ -683,7 +683,7 @@ def _account_ops(state, rec, rest, method, payload, query):
             return _ok({"value": []})
         return _ok({"value": [_model_item(m, rec["kind"]) for m in MODELS]})
     if r0 == "openai":
-        return _openai_ops(rec, rest, method, payload)
+        return _openai_ops(rec, rest, method, payload, state, query)
     if r0 == "deployments":
         return _deployment_ops(rec, rest[1:], method, payload)
     if r0 == "commitmentplans":

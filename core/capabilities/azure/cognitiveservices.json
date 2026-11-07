@@ -46,11 +46,21 @@
   "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
  },
  "azure.cognitiveservices.networking": {
-  "title": "Networking (public network access / firewall default action)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["publicNetworkAccess and networkAcls round-trip through ARM exactly as written, but Vyomi does not enforce them against the account's Keys and Endpoint or Model deployments calls — unlike azure.keyvaults.networking, this data plane has no per-account routing signal to check (no x-vyomi-account equivalent is wired into core/aws_wire_router.py for Microsoft.CognitiveServices yet).", "Private endpoint connections are real ARM objects mirrored from Microsoft.Network/privateEndpoints (Pending for manual connections, approve/reject/delete on the account flows back to the endpoint); they do not change how the account's data plane is reached."],
-  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py", "tests/conformance/test_azure_netcfg_core.py"]
- },
+   "title": "Networking (public network access / firewall default action)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "publicNetworkAccess, networkAcls (defaultAction Deny, IP rules, virtual network rules whose subnet carries Microsoft.CognitiveServices) and approved private endpoints are enforced on the Azure OpenAI inference data plane (chat/completions, completions, embeddings - both /openai/deployments/... and the ARM-proxied route): a blocked caller gets 403, an allowed one passes.",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "Only the Azure OpenAI / AIServices inference plane exists as a data plane here; Speech, Vision, Language and Document Intelligence endpoints are not served, so there is nothing to enforce on them."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_cognitiveservices_core.py",
+    "tests/conformance/test_azure_netcfg_core.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
+  },
  "azure.cognitiveservices.identity": {
   "title": "System-assigned managed identity",
   "level": { "nano": "limited", "offline": "limited" },

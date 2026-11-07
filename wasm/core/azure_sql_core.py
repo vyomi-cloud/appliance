@@ -363,7 +363,24 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
     _log_select(store, db_id, sql)
     _auto_tune(store, arm_state, server, database)
     return _json(200, {"columns": result["columns"], "rows": result["rows"],
-                       "rowCount": result["rowCount"]})
+                       "rowCount": result["rowCount"],
+                       "connection": _connection_route(arm_state, server, _na_ctx)})
+
+
+def _connection_route(arm_state: dict | None, server: str, ctx: dict | None) -> dict:
+    """azure.sql.connectivity: how the declared caller reaches the server under connectionPolicies/default. Default = Redirect for a
+    caller INSIDE Azure (declared subnet / private endpoint / trusted service) and Proxy from outside; Proxy always goes through
+    the gateway on 1433; Redirect goes to the node port range 11000-11999 after the gateway login."""
+    srv = _netaccess.find_arm(arm_state, "microsoft.sql/servers", f"servers/{server}")
+    pol = "Default"
+    if srv:
+        rec = (arm_state or {}).get((srv["id"] + "/connectionPolicies/default").lower())
+        pol = ((rec or {}).get("properties") or {}).get("connectionType") or "Default"
+    ctx = ctx or {}
+    inside = bool(ctx.get("source_subnet") or ctx.get("private_endpoint") or ctx.get("trusted_service"))
+    mode = "Redirect" if pol == "Redirect" or (pol == "Default" and inside) else "Proxy"
+    host = f"{server}.database.windows.net"
+    return {"policy": pol, "mode": mode, "endpoint": f"{host}:{'11000' if mode == 'Redirect' else '1433'}", "callerInsideAzure": inside}
 
 
 # ── Performance recommendations (CREATE_INDEX, real EXPLAIN-QUERY-PLAN driven) ─────────

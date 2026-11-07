@@ -19,9 +19,8 @@ the same flat ARM state map as ``azure_arm_core`` (keyed by lower-cased resource
   subnet cannot also carry a private endpoint.
 
 NOT modelled (honest limits, see core/capabilities/azure/*.json): the named Key Vault KEY is not looked up (keys live in the
-Key Vault data plane store, outside ARM state), KEDA / extensions install no workload, CORS rules are not applied to
-a Cosmos data plane response, the dedicated gateway has no cache, Service Bus network rules are not evaluated against
-connections.
+Key Vault data plane store, outside ARM state), KEDA / extensions install no workload, the dedicated gateway has no cache. (Cosmos CORS rules and Service Bus network rules ARE enforced on the data plane - see
+core/azure_cosmos_core.py and core/azure_netaccess.py.)
 """
 from __future__ import annotations
 
@@ -216,7 +215,23 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
             toks = [t.strip() for t in str(bypass).split(",") if t.strip()]
             if not toks or any(t not in ("None", "AzureServices", "Logging", "Metrics") for t in toks) or ("None" in toks and len(toks) > 1):
                 return _err(400, "InvalidNetworkAclsBypass", "networkAcls.bypass must be None or a comma separated combination of AzureServices, Logging and Metrics.")
-        return None
+        return _validate_vnet_rule_endpoints(state, [r.get("id") for r in (props.get("networkAcls") or {}).get("virtualNetworkRules") or []], "Microsoft.Storage")
+    return None
+
+
+def _validate_vnet_rule_endpoints(state: dict, subnet_ids: list, service: str):
+    """A virtual-network firewall rule may only name a subnet that exists and carries the service's endpoint (azure.vnets.subnetservices:
+    the same endpoint list the data planes check when they evaluate the rule)."""
+    for sid in subnet_ids:
+        sid = str(sid or "")
+        vnet_id, _, sname = sid.lower().rpartition("/subnets/")
+        vnet = state.get(vnet_id)
+        sub = next((x for x in ((vnet or {}).get("properties") or {}).get("subnets") or [] if str(x.get("name", "")).lower() == sname), None)
+        if sub is None:
+            return _err(400, "SubnetNotFound", f"The subnet '{sid}' referenced by a virtual network rule does not exist.")
+        eps = [str((e.get("service") if isinstance(e, dict) else e) or "").lower() for e in ((sub.get("properties") or {}).get("serviceEndpoints") or [])]
+        if service.lower() not in eps:
+            return _err(400, "SubnetsHaveNoServiceEndpointsConfigured", f"Subnet '{sub.get('name')}' does not have the {service} service endpoint enabled, so it cannot be used in a virtual network rule.")
     return None
 
 
@@ -450,6 +465,9 @@ def _validate_extension(state: dict, rid: str, payload: dict, existing):
 
 
 def _validate_cosmos(state: dict, props: dict, payload: dict, existing):
+    bad = _validate_vnet_rule_endpoints(state, [r.get("id") for r in props.get("virtualNetworkRules") or [] if isinstance(r, dict)], "Microsoft.AzureCosmosDB")
+    if bad:
+        return bad
     cors = props.get("cors")
     if cors is not None:
         if not isinstance(cors, list):

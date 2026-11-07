@@ -82,17 +82,19 @@
    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.networking": {
-    "title": "Networking (network rule sets)",
-    "level": {
-      "nano": "config_only",
-      "offline": "config_only"
-    },
-    "limitations": [
-      "Premium namespaces only: networkRuleSets/default (public network access, default action, IP rules, virtual network rules whose subnet must exist and carry the Microsoft.ServiceBus service endpoint) is a validated ARM resource. Rules are not evaluated against data-plane connections."
-    ],
-    "tests": [
-      "tests/conformance/test_azure_cfgext_core.py"
-    ]
+   "title": "Networking (network rule sets)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "Premium namespaces: networkRuleSets/default (public network access, default action, IP rules, virtual network rules whose subnet must carry the Microsoft.ServiceBus endpoint, trusted services, private endpoint) is a validated ARM resource AND is enforced on the Service Bus REST data plane: a blocked caller gets 403, an allowed one passes. The namespace is named by the x-vyomi-namespace header (one relay serves every namespace; the queue blade sends it).",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "AMQP connections (azure-servicebus SDK) are not served by the simulator, so enforcement is proven on the REST wire only."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_cfgext_core.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
   },
   "azure.servicebus.namespace.encryption": {
     "title": "Encryption (customer-managed key)",

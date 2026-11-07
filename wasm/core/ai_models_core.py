@@ -883,7 +883,7 @@ def _fit_dims(v, dims):
     return v + [0.0] * (dims - len(v))
 
 
-def azure_openai_dispatch(arm_state, method, path, query, headers, body):
+def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
     mt = re.match(r"^/openai/(?:deployments/([^/]+)/)?(chat/completions|completions|embeddings)$", path) \
         or re.match(r"^/openai/v1/()(chat/completions|completions|embeddings|responses)$", path)
     if not mt or method.upper() != "POST":
@@ -899,6 +899,20 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body):
         return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include "
                                                           "subscription key when making requests to an API."}})
     acct, dep = _find_deployment(arm_state, dep_name)
+    if acct is not None:      # azure.cognitiveservices.networking: the account's public access / firewall / PE, vs the declared caller
+        try:
+            from core import azure_netaccess as _na
+        except ImportError:   # pragma: no cover - Pyodide flat layout
+            import azure_netaccess as _na  # type: ignore
+        _d = _na.cognitive_denied(net_state or arm_state, acct, lh, query)
+        if _d:
+            return _a_err(403, "Forbidden", _d[2])
+        try:      # diagnostic settings (RequestResponse) on the account: real delivery (core/azure_diag_pipeline.py)
+            from core import azure_diag_pipeline as _dp
+        except ImportError:  # pragma: no cover
+            import azure_diag_pipeline as _dp  # type: ignore
+        _dp.emit_log(net_state or arm_state, acct.get("id", ""), "RequestResponse", f"{op}" if not dep_name else f"{op} ({dep_name})",
+                     "Success", {"deployment": dep_name})
     if not dep:
         return _a_err(404, "DeploymentNotFound", "The API deployment for this resource does not exist. If you created the deployment "
                       "within the last 5 minutes, please wait a moment and try again.")

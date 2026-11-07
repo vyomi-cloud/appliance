@@ -21,8 +21,16 @@ import ipaddress
 _HDRS = ("x-vyomi-source-ip", "x-vyomi-source-subnet", "x-vyomi-private-endpoint", "x-vyomi-trusted-service")
 
 
-def caller_context(headers: dict | None):
+def caller_context(headers: dict | None, query: dict | None = None):
+    """The declared caller identity. Read from request headers; the same names are also accepted as query parameters
+    because on Nano the ARM-proxied data planes (Log Analytics, Azure OpenAI) are reached with a URL, not raw headers.
+    HOW THE CALLER IS DETERMINED: neither substrate can see a real client network (offline the TCP peer is the Docker
+    gateway / loopback, on Nano there is no socket at all), so the caller DECLARES the identity it wants to be
+    evaluated as - a simulated client. Nothing is guessed from the peer address."""
     h = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    for k, v in (query or {}).items():
+        if (k or "").lower().startswith("x-vyomi-") and (k or "").lower() not in h:
+            h[(k or "").lower()] = v
     ctx = {k.replace("x-vyomi-", "").replace("-", "_"): str(h[k]).strip() for k in _HDRS if h.get(k)}
     return ctx or None
 
@@ -65,6 +73,52 @@ def _subnet_has_endpoint(state: dict, subnet_id: str, service: str) -> bool:
             eps = (s.get("properties") or {}).get("serviceEndpoints") or []
             return any(str((e.get("service") if isinstance(e, dict) else e) or "").lower() == service.lower() for e in eps)
     return False
+
+
+def _acl_decide(state, ctx, *, ip_rules, subnets, endpoint, default_deny, trusted_ok, what):
+    """Shared firewall verdict: allowed by an IP rule, a VNet rule whose subnet carries the service endpoint, or a
+    trusted-service exception. -> None when allowed else a 403 tuple."""
+    if not default_deny:
+        return None
+    ip, subnet = ctx.get("source_ip"), ctx.get("source_subnet")
+    if ctx.get("trusted_service") and trusted_ok:
+        return None
+    if ip and any(_ip_in_rule(ip, r) for r in ip_rules):
+        return None
+    if subnet and any(str(s).lower() == subnet.lower() for s in subnets) and _subnet_has_endpoint(state, subnet, endpoint):
+        return None
+    return 403, "Forbidden", f"{what} firewall denied the request: client {ip or subnet or 'unknown'} matches no IP rule or virtual network rule (defaultAction=Deny)."
+
+
+def check_service(state: dict, target_id: str, kind: str, props: dict, ctx: dict | None, op: str | None = None):
+    """Network verdict for the services whose rule shapes differ from storage/SQL.
+    kind 'cognitive' (props.networkAcls), 'servicebus' (props = the namespace's networkRuleSets/default properties),
+    'loganalytics' (op 'ingestion' | 'query' picks publicNetworkAccessForIngestion / ForQuery)."""
+    ctx = ctx or {}
+    if kind == "loganalytics":
+        pna = props.get("publicNetworkAccessFor" + ("Query" if op == "query" else "Ingestion"))
+    else:
+        pna = props.get("publicNetworkAccess")
+    if ctx.get("private_endpoint"):
+        ok, why = _pe_reaches(state, ctx["private_endpoint"], target_id)
+        if ok:
+            return None
+        return 403, "Forbidden", f"The request came through a private endpoint that cannot reach this resource: {why}."
+    if pna == "Disabled":
+        return 403, "Forbidden", "Public network access is disabled for this resource; only a private endpoint can reach it."
+    if not ctx or kind == "loganalytics":
+        return None                           # undeclared caller: allow-lists not applied; Log Analytics has only on/off
+    if kind == "cognitive":
+        a = props.get("networkAcls") or {}
+        return _acl_decide(state, ctx, ip_rules=[r.get("value", "") for r in a.get("ipRules") or []],
+                           subnets=[r.get("id", "") for r in a.get("virtualNetworkRules") or []], endpoint="Microsoft.CognitiveServices",
+                           default_deny=a.get("defaultAction") == "Deny", trusted_ok=False, what="The Azure AI services account")
+    if kind == "servicebus":
+        return _acl_decide(state, ctx, ip_rules=[r.get("ipMask", "") for r in props.get("ipRules") or []],
+                           subnets=[(r.get("subnet") or {}).get("id", "") for r in props.get("virtualNetworkRules") or []],
+                           endpoint="Microsoft.ServiceBus", default_deny=props.get("defaultAction") == "Deny",
+                           trusted_ok=bool(props.get("trustedServiceAccessEnabled")), what="The Service Bus namespace")
+    return None
 
 
 def check(state: dict, target_id: str, kind: str, props: dict, ctx: dict | None):
@@ -126,3 +180,28 @@ def find_arm(state: dict | None, full_type: str, id_suffix: str):
         if rid.lower().endswith(want) and (not rec.get("_type") or rec["_type"].lower() == full_type):
             return rec if rec.get("id") else {**rec, "id": key}
     return None
+
+
+def _prop_view(rec: dict) -> dict:
+    return (rec or {}).get("properties") or {}
+
+
+def servicebus_denied(state, namespace: str, headers: dict | None, query: dict | None = None):
+    """Data-plane verdict for a Service Bus namespace's networkRuleSets/default (Premium). No rule set -> allowed.
+    `namespace` is the name the caller addresses (x-vyomi-namespace: one relay serves every namespace)."""
+    ns = find_arm(state, "microsoft.servicebus/namespaces", f"namespaces/{namespace}") if namespace else None
+    if ns is None:
+        return None
+    rs = (state or {}).get((ns["id"] + "/networkRuleSets/default").lower())
+    props = {"publicNetworkAccess": _prop_view(ns).get("publicNetworkAccess"), **_prop_view(rs)}   # rule set overrides the namespace flag
+    if props.get("publicNetworkAccess") in (None, "SecuredByPerimeter"):
+        props.pop("publicNetworkAccess", None)
+    return check_service(state, ns["id"], "servicebus", props, caller_context(headers, query))
+
+
+def cognitive_denied(state, account_rec: dict, headers: dict | None, query: dict | None = None):
+    return check_service(state, account_rec.get("id", ""), "cognitive", _prop_view(account_rec), caller_context(headers, query))
+
+
+def loganalytics_denied(state, workspace_rec: dict, op: str, headers: dict | None, query: dict | None = None):
+    return check_service(state, workspace_rec.get("id", ""), "loganalytics", _prop_view(workspace_rec), caller_context(headers, query), op=op)

@@ -793,7 +793,7 @@ def upsert_diagnostic_setting(state, scope_rid, name, payload):
     rec = {"id": rid, "name": name, "type": _DIAG_TYPE, "properties": props,
            "_type": _DIAG_TYPE.lower(), "_diag_scope": scope_rid.lower()}
     state[key] = rec
-    return _ok(_view(rec), 201 if not existed else 200, rid=rid, verb="put")
+    return _ok(_view(rec), 200, rid=rid, verb="put")      # the published spec answers 200 for create AND update (SDKs reject 201)
 
 
 def remove_diagnostic_setting(state, scope_rid, name):

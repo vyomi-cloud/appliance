@@ -644,7 +644,7 @@ def run() -> int:
     r = arm.handle("PUT", diag_acr, {"api-version": "2021-05-01-preview"},
                    {"properties": {"workspaceId": "/subscriptions/x/resourcegroups/y/providers/microsoft.operationalinsights/workspaces/uicws",
                                     "logs": [{"categoryGroup": "allLogs", "enabled": True}]}})
-    _check("registry diagnostic setting put 201", r["status"] == 201 and r["body"]["name"] == "toLogAnalytics")
+    _check("registry diagnostic setting put 201", r["status"] == 200 and r["body"]["name"] == "toLogAnalytics")
     r = arm.handle("GET", acr + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
     _check("registry diagnostic settings list has item", [x["name"] for x in r["body"]["value"]] == ["toLogAnalytics"])
     r = arm.handle("GET", acr2 + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
@@ -1035,7 +1035,7 @@ def run() -> int:
     r = arm.handle("PUT", diag, {"api-version": "2021-05-01-preview"}, {"properties": {
         "workspaceId": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.OperationalInsights/workspaces/uicdiagws",
         "logs": [{"categoryGroup": "audit", "enabled": True}], "metrics": [{"category": "AllMetrics", "enabled": False}]}})
-    _check("diagnostic setting put 201", r["status"] == 201 and r["body"]["name"] == "toLogAnalytics")
+    _check("diagnostic setting put 201", r["status"] == 200 and r["body"]["name"] == "toLogAnalytics")
     _check("diagnostic setting id canonical", r["body"]["id"].lower() == diag.lower())
     r = arm.handle("PUT", diag, {"api-version": "2021-05-01-preview"}, {"properties": {
         "workspaceId": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.OperationalInsights/workspaces/uicdiagws",

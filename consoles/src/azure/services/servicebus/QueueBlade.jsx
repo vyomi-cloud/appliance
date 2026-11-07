@@ -25,6 +25,7 @@ export default function QueueBlade({ params }) {
   const q = useAsync(() => api.getQueueArm(rg, name, queue), [rg, name, queue]);
   const self = `#/servicebus/${encodeURIComponent(rg)}/${encodeURIComponent(name)}/queues/${encodeURIComponent(queue)}`;
   const nsHref = `#/servicebus/${encodeURIComponent(rg)}/${encodeURIComponent(name)}/queues`;
+  useEffect(() => { api.setActiveNamespace(name); return () => api.setActiveNamespace(""); }, [name]);
   useEffect(() => { if (q.data) remember({ name: queue, type: "Service Bus queue", href: self }); }, [!!q.data, self]);
 
   let body;

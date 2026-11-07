@@ -203,7 +203,7 @@ def run() -> int:
     _check("diagnostic setting rejects a storageAccountId that doesn't exist", bad_dest["status"] == 400)
     good_dest = mo.upsert_diagnostic_setting(arm.state, rid_path, "toReal", {"properties": {
         "storageAccountId": rid_path, "logs": [{"category": "StorageWrite", "enabled": True}]}})
-    _check("diagnostic setting accepts a real storageAccountId", good_dest["status"] == 201)
+    _check("diagnostic setting accepts a real storageAccountId", good_dest["status"] == 200)
 
     # ── Object replication: ENFORCED copy / delete into the destination container ─────
     SRC, DST = "replsrc", "repldst"

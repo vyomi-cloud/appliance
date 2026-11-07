@@ -124,11 +124,20 @@
   "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
  },
  "azure.sql.connectivity": {
-  "title": "Server connection policy (connectionPolicies/default)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["The connection policy (Default / Proxy / Redirect) is stored on the server as a real connectionPolicies/default resource and returned to the SDK / az CLI. Vyomi's SQL front door is always a single endpoint, so Proxy and Redirect behave identically."],
-  "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
- },
+   "title": "Server connection policy (connectionPolicies/default)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "Server firewall rules, the 'Allow Azure services' 0.0.0.0 rule, virtual network rules (subnet must carry Microsoft.Sql), private endpoints and publicNetworkAccess are enforced on the SQL query wire (403 ClientIpNotAllowed / PublicNetworkAccessDisabled). The connection policy (connectionPolicies/default) decides how the declared caller is routed and every query answer reports it: Proxy -> gateway :1433, Redirect -> node port range (:11000), Default -> Redirect for a caller inside Azure (declared subnet / private endpoint / trusted service) and Proxy from outside.",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "The SQL front door is an HTTP query endpoint, not TDS: no real redirect happens on a socket and there is no 11000-11999 listener; the routing decision is computed and reported, not performed by a driver. Minimal TLS version is not enforced."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_sql_ext_core.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
+  },
  "azure.sql.datamasking": {
   "title": "Dynamic Data Masking (dataMaskingPolicies/Default and its rules)",
   "level": { "nano": "config_only", "offline": "config_only" },

@@ -187,18 +187,33 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vnets.subnetservices": {
-  "title": "Subnet service endpoints and delegation (create-subnet dialog)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["Service endpoints and the subnet delegation are stored on the subnet and returned by the API exactly as set; Vyomi does not route service traffic over the endpoint or restrict the delegated subnet to the named service."],
-  "api": ["subnets CreateOrUpdate (serviceEndpoints, delegations)", "subnets Get"],
-  "tests": ["tests/conformance/test_azure_vnets_subnet_services.py"]
- },
+   "title": "Subnet service endpoints and delegation (create-subnet dialog)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "Service endpoints are validated against the supported list and are what the data planes really check: a virtual network rule on Storage, Cosmos DB, Service Bus, Azure AI services and SQL is accepted by ARM only for a subnet that carries the matching endpoint (SubnetsHaveNoServiceEndpointsConfigured otherwise), and a declared caller in that subnet passes the firewall only with both the rule and the endpoint. Delegations are validated (known services, no duplicates, not on a subnet with a private endpoint).",
+    "Vyomi does not route service traffic over the endpoint and does not restrict a delegated subnet to the named service's resources. Removing an endpoint does not revoke existing rules; the data plane simply stops matching them."
+   ],
+   "api": [
+    "subnets CreateOrUpdate (serviceEndpoints, delegations)",
+    "subnets Get"
+   ],
+   "tests": [
+    "tests/conformance/test_azure_vnets_subnet_services.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py"
+   ]
+  },
  "azure.vnets.advertised_prefixes": {
-  "title": "Advertised address prefixes (virtual network)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["advertisedAddressPrefixes are validated (CIDRs, within the address space, no duplicates) and round-trip on the virtual network. Custom BGP advertisement only matters once the network peers with a gateway/ExpressRoute circuit, which does not exist in a local simulator, so nothing is advertised."],
-  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
- },
+   "title": "Advertised address prefixes (virtual network)",
+   "level": { "nano": "config_only", "offline": "config_only" },
+   "limitations": [
+    "advertisedAddressPrefixes are validated (CIDRs, within the address space, no duplicates) and round-trip on the virtual network. Custom BGP advertisement only matters once the network peers with a gateway/ExpressRoute circuit, which does not exist in a local simulator, so nothing is advertised.",
+    "Left config_only on purpose: advertisement needs a Microsoft.Network/virtualNetworkGateways (VPN/ExpressRoute) or Route Server to advertise through, and the simulator does not model those resources (ARM answers ResourceTypeNotSupported), so there is no getAdvertisedRoutes / BGP table to reflect the prefixes into."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_netcfg_core.py"
+   ]
+  },
  "azure.vnets.front_door_cdn": {
   "title": "Front Door / CDN profiles (Microsoft.Cdn/profiles)",
   "level": { "nano": "limited", "offline": "limited" },

@@ -1334,6 +1334,9 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
     from core import azure_operationalinsights_core as _oi
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     q = dict(request.query_params)
+    for hk, hv in request.headers.items():      # simulated-client declaration (core/azure_netaccess.py) reaches the data plane
+        if hk.lower().startswith("x-vyomi-") and hk.lower() not in q:
+            q[hk.lower()] = hv
     if method == "POST" and len(chain) >= 3 and chain[2].lower() in ("api", "datacollectionrules"):
         try:                                  # data plane bodies are JSON arrays; Log-Type is a header
             payload = await request.json()
@@ -1396,7 +1399,11 @@ async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg:
                                     names: list[str], base: str) -> JSONResponse:
     from core import azure_cognitiveservices_core as _cs
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
-    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    _cq = dict(request.query_params)
+    for hk, hv in request.headers.items():      # simulated-client declaration (core/azure_netaccess.py)
+        if hk.lower().startswith("x-vyomi-") and hk.lower() not in _cq:
+            _cq[hk.lower()] = hv
+    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, _cq, base=base)
     api_version = request.query_params.get("api-version") or _cs.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
