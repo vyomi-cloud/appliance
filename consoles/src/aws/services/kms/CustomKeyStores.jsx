@@ -1,6 +1,7 @@
-/* Custom key stores. Metadata CRUD (create/list/connect/disconnect/delete) is real and
- * stateful; connecting always ends FAILED — Vyomi has no real CloudHSM cluster or external
- * XKS proxy to reach (core/capabilities/aws/kms.json: kms.custom-key-stores). */
+/* Custom key stores. CRUD and connect/disconnect are real (core/kms_core.py): a CloudHSM key store connects to Vyomi's
+ * software-HSM cluster, an external key store to Vyomi's built-in XKS proxy (or a reachable proxy's /health on the
+ * offline appliance); keys created in a CONNECTED store keep their material in the store's partition
+ * (core/capabilities/aws/kms.json: kms.custom-key-stores, kms.custom-key-store-keys). */
 import { useState } from "react";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
@@ -15,7 +16,9 @@ import * as api from "./api.js";
 const connState = (s) => <StatusIndicator type={s === "CONNECTED" ? "success" : s === "FAILED" ? "error" : "stopped"}>{s}</StatusIndicator>;
 
 export function AwsCloudHsmKeyStores() {
+  const notify = useNotify();
   const t = useAsync(() => api.describeCustomKeyStores().then((xs) => xs.filter((x) => x.CustomKeyStoreType === "AWS_CLOUDHSM")), []);
+  const [sel, setSel] = useState([]);
   return (
     <ResourceTable
       resourceName="AWS CloudHSM key stores"
@@ -24,13 +27,44 @@ export function AwsCloudHsmKeyStores() {
       error={t.error}
       onRefresh={t.reload}
       trackBy="CustomKeyStoreId"
-      actions={<CapabilityBadge id="kms.custom-key-stores" />}
+      selectionType="single"
+      selectedItems={sel}
+      onSelectionChange={setSel}
+      actions={
+        <>
+          <CapabilityBadge id="kms.custom-key-stores" />{" "}
+          <ButtonDropdown
+            items={[
+              { id: "connect", text: "Connect", disabled: sel.length !== 1 },
+              { id: "disconnect", text: "Disconnect", disabled: sel.length !== 1 },
+              { id: "delete", text: "Delete", disabled: sel.length !== 1 },
+            ]}
+            onItemClick={async ({ detail }) => {
+              const id = sel[0]?.CustomKeyStoreId;
+              try {
+                if (detail.id === "connect") { await api.connectCustomKeyStore(id); notify.info("Connection attempted - see Connection state."); }
+                else if (detail.id === "disconnect") { await api.disconnectCustomKeyStore(id); notify.success("Disconnected."); }
+                else if (detail.id === "delete") { await api.deleteCustomKeyStore(id); notify.success("Deleted."); }
+                setSel([]); t.reload();
+              } catch (e) { notify.error(e); }
+            }}
+          >Key store actions</ButtonDropdown>{" "}
+          <Button variant="primary" onClick={async () => {
+            try {
+              const name = `soft-hsm-${Math.random().toString(36).slice(2, 7)}`;
+              const r = await api.createCustomKeyStore({ CustomKeyStoreName: name, CustomKeyStoreType: "AWS_CLOUDHSM", CloudHsmClusterId: "cluster-vyomisofthsm", TrustAnchorCertificate: "vyomi-soft-hsm-anchor", KeyStorePassword: "vyomi" });
+              await api.connectCustomKeyStore(r.CustomKeyStoreId);
+              notify.success(`Created and connected "${name}" on Vyomi's software HSM cluster.`); t.reload();
+            } catch (e) { notify.error(e); }
+          }}>Create software-HSM key store</Button>
+        </>
+      }
       empty={{ title: "You don't have any custom key stores in your account." }}
       columns={[
         { id: "n", header: "Custom key store name", isRowHeader: true, cell: (x) => x.CustomKeyStoreName },
         { id: "id", header: "Custom key store ID", cell: (x) => x.CustomKeyStoreId },
         { id: "cluster", header: "AWS CloudHSM cluster ID", cell: (x) => x.CloudHsmClusterId || "-" },
-        { id: "conn", header: "Connection state", cell: (x) => connState(x.ConnectionState) },
+        { id: "conn", header: "Connection state", cell: (x) => <>{connState(x.ConnectionState)}{x.ConnectionErrorCode ? ` (${x.ConnectionErrorCode})` : ""}</> },
       ]}
     />
   );
@@ -56,7 +90,7 @@ export function ExternalKeyStores() {
         { id: "n", header: "Custom key store name", isRowHeader: true, cell: (x) => x.CustomKeyStoreName },
         { id: "id", header: "Custom key store ID", cell: (x) => x.CustomKeyStoreId },
         { id: "proxy", header: "Proxy connectivity", cell: (x) => x.XksProxyConfiguration?.Connectivity || "-" },
-        { id: "conn", header: "Connection state", cell: (x) => connState(x.ConnectionState) },
+        { id: "conn", header: "Connection state", cell: (x) => <>{connState(x.ConnectionState)}{x.ConnectionErrorCode ? ` (${x.ConnectionErrorCode})` : ""}</> },
       ]}
       actions={
         <>

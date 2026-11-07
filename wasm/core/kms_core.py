@@ -158,6 +158,9 @@ def _key_metadata(store: KeyStore, key_id: str) -> dict:
         md["KeyMaterialId"] = k["MaterialId"]
     if k.get("LastUsedDate"):
         md["LastUsedDate"] = k["LastUsedDate"]
+    for f in ("CustomKeyStoreId", "CloudHsmClusterId", "XksKeyConfiguration"):
+        if k.get(f):
+            md[f] = k[f]
     if k.get("KeyRotationEnabled"):
         md["RotationPeriodInDays"] = int(k.get("RotationPeriodInDays", 365))
     return md
@@ -188,7 +191,50 @@ def _default_key_policy(store: KeyStore) -> str:
 
 
 # ── operations ──────────────────────────────────────────────────────────────
+def _create_custom_store_key(store: KeyStore, body: dict) -> dict:
+    origin = str(body.get("Origin"))
+    cks_id = body.get("CustomKeyStoreId")
+    if not cks_id:
+        raise KmsError("ValidationException", f"CustomKeyStoreId is required when Origin is {origin}.", 400)
+    rec = _custom_key_stores(store).get(cks_id)
+    if not rec:
+        raise KmsError("CustomKeyStoreNotFoundException", "The request was rejected because the custom key store was not found.", 400)
+    want = {"AWS_CLOUDHSM": "AWS_CLOUDHSM", "EXTERNAL_KEY_STORE": "EXTERNAL_KEY_STORE"}[origin]
+    if rec["CustomKeyStoreType"] != want:
+        raise KmsError("ValidationException", f"Origin {origin} requires a custom key store of type {want}.", 400)
+    if rec["ConnectionState"] != "CONNECTED":
+        raise KmsError("CustomKeyStoreInvalidStateException",
+                       f"The custom key store must be CONNECTED to create a key; it is {rec['ConnectionState']}.", 400)
+    if str(body.get("KeySpec") or body.get("CustomerMasterKeySpec") or "SYMMETRIC_DEFAULT") != "SYMMETRIC_DEFAULT" \
+            or str(body.get("KeyUsage", "ENCRYPT_DECRYPT")) != "ENCRYPT_DECRYPT":
+        raise KmsError("UnsupportedOperationException", "Keys in a custom key store must be SYMMETRIC_DEFAULT ENCRYPT_DECRYPT keys.", 400)
+    key_id = uuid.uuid4().hex
+    meta = {"KeyState": "Enabled", "Description": str(body.get("Description", "")), "KeyUsage": "ENCRYPT_DECRYPT",
+            "KeySpec": "SYMMETRIC_DEFAULT", "Origin": origin, "KeyManager": "CUSTOMER", "CreationDate": time.time(),
+            "MaterialId": uuid.uuid4().hex, "CustomKeyStoreId": cks_id,
+            "Tags": {t["TagKey"]: t.get("TagValue", "") for t in body.get("Tags") or [] if t.get("TagKey")}}
+    if origin == "AWS_CLOUDHSM":
+        meta["CloudHsmClusterId"] = rec.get("CloudHsmClusterId", "")
+    else:
+        xks_id = str(body.get("XksKeyId") or "")
+        if not (1 <= len(xks_id) <= 128):
+            raise KmsError("ValidationException", "XksKeyId (1-128 characters) is required for an external key store key.", 400)
+        if any((k.get("XksKeyConfiguration") or {}).get("Id") == xks_id and k.get("CustomKeyStoreId") == cks_id
+               for k in store.keys.values() if isinstance(k, dict)):
+            raise KmsError("XksKeyAlreadyInUseException", "The external key is already associated with another KMS key.", 400)
+        meta["XksKeyConfiguration"] = {"Id": xks_id}
+    store.put_key(key_id, meta, b"")
+    store.material.pop(key_id, None)          # material lives in the key store's partition, never in the KMS key table
+    rec.setdefault("_partition", {})[key_id] = store.engine.new_key_material().hex()
+    k = store.get_key(key_id)
+    k["Policy"] = str(body.get("Policy") or "") or _default_key_policy(store)
+    store.persist()
+    return {"KeyMetadata": _key_metadata(store, key_id)}
+
+
 def _create_key(store: KeyStore, body: dict) -> dict:
+    if str(body.get("Origin", "AWS_KMS")) in ("AWS_CLOUDHSM", "EXTERNAL_KEY_STORE"):
+        return _create_custom_store_key(store, body)
     key_id = uuid.uuid4().hex
     material_id = uuid.uuid4().hex
     store.put_key(key_id, {
@@ -277,7 +323,7 @@ def _encrypt(store: KeyStore, body: dict) -> dict:
     plaintext = _b64d(body.get("Plaintext", ""))
     if not plaintext:
         raise KmsError("ValidationException", "Plaintext must not be empty.", 400)
-    blob = store.engine.encrypt(store.get_material(key_id), key_id, plaintext)
+    blob = store.engine.encrypt(_material(store, key_id), key_id, plaintext)
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "CiphertextBlob": _b64e(blob),
             "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
@@ -288,7 +334,7 @@ def _decrypt_with_history(store: KeyStore, key_id: str, blob: bytes) -> bytes:
     an earlier backing key still decrypts. Try the current material first, then
     prior versions (newest first)."""
     k = store.get_key(key_id) or {}
-    candidates = [store.get_material(key_id), *reversed(k.get("MaterialHistory", []))]
+    candidates = [_material(store, key_id), *reversed(k.get("MaterialHistory", []))]
     last_exc: Exception | None = None
     for mat in candidates:
         if not mat:
@@ -351,6 +397,8 @@ def _decrypt(store: KeyStore, body: dict) -> dict:
     _require_enabled_state(store, key_id)
     try:
         plaintext = _decrypt_with_history(store, key_id, blob)
+    except KmsError:
+        raise
     except Exception as e:
         raise KmsError("InvalidCiphertextException", str(e), 400)
     _touch_last_used(store, key_id)
@@ -380,7 +428,7 @@ def _encapsulate(store: KeyStore, body: dict) -> dict:
     import os
     key_id = _encapsulation_key(store, body)
     secret = os.urandom(_SHARED_SECRET_BYTES)
-    blob = store.engine.encrypt(store.get_material(key_id), key_id, secret)
+    blob = store.engine.encrypt(_material(store, key_id), key_id, secret)
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "SharedSecret": _b64e(secret),
             "SharedSecretCiphertextBlob": _b64e(blob), "EncapsulationAlgorithm": "ML_KEM"}
@@ -393,7 +441,7 @@ def _decapsulate(store: KeyStore, body: dict) -> dict:
         raise KmsError("IncorrectKeyException",
                        "The key supplied does not match the ciphertext's key.", 400)
     try:
-        secret = store.engine.decrypt(store.get_material(key_id), blob)
+        secret = store.engine.decrypt(_material(store, key_id), blob)
     except Exception as e:
         raise KmsError("InvalidCiphertextException", str(e), 400)
     _touch_last_used(store, key_id)
@@ -432,7 +480,7 @@ def _sign(store: KeyStore, body: dict) -> dict:
     message = _b64d(body.get("Message", ""))
     if not message:
         raise KmsError("ValidationException", "Message must not be empty.", 400)
-    sig = hmac.new(store.get_material(key_id), algo.encode() + b"|" + message, hashlib.sha256).digest()
+    sig = hmac.new(_material(store, key_id), algo.encode() + b"|" + message, hashlib.sha256).digest()
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "Signature": _b64e(sig), "SigningAlgorithm": algo}
 
@@ -444,7 +492,7 @@ def _verify(store: KeyStore, body: dict) -> dict:
     key_id = _require_usage_key(store, body, "SIGN_VERIFY")
     message = _b64d(body.get("Message", ""))
     signature = _b64d(body.get("Signature", ""))
-    expected = hmac.new(store.get_material(key_id), algo.encode() + b"|" + message, hashlib.sha256).digest()
+    expected = hmac.new(_material(store, key_id), algo.encode() + b"|" + message, hashlib.sha256).digest()
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "SignatureValid": hmac.compare_digest(expected, signature),
             "SigningAlgorithm": algo}
@@ -459,7 +507,7 @@ def _generate_mac(store: KeyStore, body: dict) -> dict:
     message = _b64d(body.get("Message", ""))
     if not message:
         raise KmsError("ValidationException", "Message must not be empty.", 400)
-    mac = hmac.new(store.get_material(key_id), message, digest).digest()
+    mac = hmac.new(_material(store, key_id), message, digest).digest()
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "Mac": _b64e(mac), "MacAlgorithm": algo}
 
@@ -472,7 +520,7 @@ def _verify_mac(store: KeyStore, body: dict) -> dict:
     key_id = _require_usage_key(store, body, "GENERATE_VERIFY_MAC")
     message = _b64d(body.get("Message", ""))
     mac = _b64d(body.get("Mac", ""))
-    expected = hmac.new(store.get_material(key_id), message, digest).digest()
+    expected = hmac.new(_material(store, key_id), message, digest).digest()
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "MacValid": hmac.compare_digest(expected, mac), "MacAlgorithm": algo}
 
@@ -485,7 +533,7 @@ def _generate_data_key(store: KeyStore, body: dict, with_plaintext: bool = True)
         raise KmsError("ValidationException", "NumberOfBytes must be 1..1024.", 400)
     import os
     data_key = os.urandom(n)
-    blob = store.engine.encrypt(store.get_material(key_id), key_id, data_key)
+    blob = store.engine.encrypt(_material(store, key_id), key_id, data_key)
     _touch_last_used(store, key_id)
     out = {"KeyId": _key_arn(store, key_id), "CiphertextBlob": _b64e(blob)}
     if with_plaintext:
@@ -553,7 +601,9 @@ def _do_rotate_material(store: KeyStore, key_id: str, rotation_type: str) -> Non
     material, but the key id and all prior ciphertexts stay valid (KMS keeps old
     versions for decrypt — see _decrypt_with_history)."""
     k = store.get_key(key_id)
-    old_material = store.get_material(key_id)
+    if k.get("CustomKeyStoreId"):
+        raise KmsError("UnsupportedOperationException", "Keys in a custom key store do not support key rotation.", 400)
+    old_material = _material(store, key_id)
     if old_material:
         k.setdefault("MaterialHistory", []).append(old_material)
     store.material[key_id] = store.engine.new_key_material()
@@ -772,6 +822,30 @@ def _custom_key_stores(store: KeyStore) -> dict:
     return cks
 
 
+# ── custom key store backing (software HSM partition / built-in XKS proxy) ─────
+# Keys created in a CONNECTED custom key store keep their material OUTSIDE the KMS key table, in the key store's own
+# partition (record["_partition"]). Every crypto operation fetches it through _material(), so - exactly like AWS - a
+# key whose custom key store is not CONNECTED cannot be used. The "HSM" is a software partition inside Vyomi (cluster
+# SOFT_HSM_CLUSTER); the "external key manager" is Vyomi's built-in XKS proxy (host XKS_BUILTIN_HOST). Neither is
+# CloudHSM hardware or a third-party key manager.
+SOFT_HSM_CLUSTER = "cluster-vyomisofthsm"
+XKS_BUILTIN_HOST = "xks.vyomi.local"
+
+
+def _material(store: KeyStore, key_id: str):
+    k = store.get_key(key_id) or {}
+    cks_id = k.get("CustomKeyStoreId")
+    if not cks_id:
+        return store.get_material(key_id)
+    rec = _custom_key_stores(store).get(cks_id)
+    if not rec or rec["ConnectionState"] != "CONNECTED":
+        raise KmsError("KMSInvalidStateException",
+                       f"{_key_arn(store, key_id)} cannot be used: its custom key store {cks_id} is "
+                       f"{(rec or {}).get('ConnectionState', 'deleted')}, not CONNECTED.", 400)
+    h = (rec.get("_partition") or {}).get(key_id)
+    return bytes.fromhex(h) if h else None
+
+
 def _create_custom_key_store(store: KeyStore, body: dict) -> dict:
     name = str(body.get("CustomKeyStoreName") or "")
     if not name:
@@ -798,6 +872,7 @@ def _create_custom_key_store(store: KeyStore, body: dict) -> dict:
     else:
         record["CloudHsmClusterId"] = str(body.get("CloudHsmClusterId") or "")
         record["TrustAnchorCertificate"] = str(body.get("TrustAnchorCertificate") or "")
+        record["_has_password"] = bool(body.get("KeyStorePassword"))
     stores[store_id] = record
     store.persist()
     return {"CustomKeyStoreId": store_id}
@@ -819,7 +894,7 @@ def _describe_custom_key_stores(store: KeyStore, body: dict) -> dict:
             continue
         if want_name and rec["CustomKeyStoreName"] != want_name:
             continue
-        out.append(dict(rec))
+        out.append({k: v for k, v in rec.items() if not k.startswith("_")})
     if (want_id or want_name) and not out:
         raise KmsError("CustomKeyStoreNotFoundException",
                        "The request was rejected because the custom key store was not found.", 400)
@@ -828,10 +903,39 @@ def _describe_custom_key_stores(store: KeyStore, body: dict) -> dict:
 
 def _connect_custom_key_store(store: KeyStore, body: dict) -> dict:
     rec = _require_custom_key_store(store, body)
-    rec["ConnectionState"] = "FAILED"
-    rec["ConnectionErrorCode"] = "NETWORK_ERRORS"
+    rec.pop("ConnectionErrorCode", None)
+    code = ""
+    if rec["CustomKeyStoreType"] == "EXTERNAL_KEY_STORE":
+        code = _xks_connect_error(rec.get("XksProxyConfiguration") or {})
+    else:
+        if rec.get("CloudHsmClusterId") != SOFT_HSM_CLUSTER:
+            code = "CLUSTER_NOT_FOUND"
+        elif not rec.get("_has_password"):
+            code = "INVALID_CREDENTIALS"
+    if code:
+        rec["ConnectionState"], rec["ConnectionErrorCode"] = "FAILED", code
+    else:
+        rec["ConnectionState"] = "CONNECTED"
     store.persist()
     return {}
+
+
+def _xks_connect_error(cfg: dict) -> str:
+    """'' when the proxy is reachable. The built-in Vyomi XKS proxy is always reachable; any other endpoint gets the real
+    health probe (GET <endpoint><path>/health) where sockets exist (the offline appliance), and fails on Nano (no sockets)."""
+    from urllib.parse import urlparse
+    ep = str(cfg.get("UriEndpoint") or "")
+    if (urlparse(ep).hostname or "") == XKS_BUILTIN_HOST:
+        return ""
+    import sys
+    if sys.platform == "emscripten":
+        return "NETWORK_ERRORS"
+    import urllib.request
+    try:
+        with urllib.request.urlopen(ep.rstrip("/") + str(cfg.get("UriPath") or "/kms/xks/v1").rstrip("/") + "/health", timeout=5) as r:
+            return "" if r.status == 200 else "XKS_PROXY_INVALID_RESPONSE"
+    except Exception:
+        return "XKS_PROXY_NOT_REACHABLE"
 
 
 def _disconnect_custom_key_store(store: KeyStore, body: dict) -> dict:
@@ -848,6 +952,8 @@ def _update_custom_key_store(store: KeyStore, body: dict) -> dict:
         rec["CustomKeyStoreName"] = str(body["NewCustomKeyStoreName"])
     if body.get("CloudHsmClusterId"):
         rec["CloudHsmClusterId"] = str(body["CloudHsmClusterId"])
+    if body.get("KeyStorePassword"):
+        rec["_has_password"] = True
     if "XksProxyConfiguration" in rec:
         for field in ("XksProxyUriEndpoint", "XksProxyUriPath"):
             if field in body:
@@ -862,6 +968,8 @@ def _delete_custom_key_store(store: KeyStore, body: dict) -> dict:
     if not rec:
         raise KmsError("CustomKeyStoreNotFoundException",
                        "The request was rejected because the custom key store was not found.", 400)
+    if any(isinstance(k, dict) and k.get("CustomKeyStoreId") == rec["CustomKeyStoreId"] for k in store.keys.values()):
+        raise KmsError("CustomKeyStoreHasCMKsException", "The custom key store still contains KMS keys; delete them first.", 400)
     if rec["ConnectionState"] not in ("DISCONNECTED", "FAILED"):
         raise KmsError("KMSInvalidStateException",
                        "The custom key store must be disconnected before it can be deleted.", 400)

@@ -127,21 +127,23 @@
    "offline": "limited"
   },
   "limitations": [
-   "Creating, listing, updating and deleting a custom key store record is real and stateful. Connecting one is not: Vyomi has no real CloudHSM cluster or external XKS proxy to reach, so ConnectCustomKeyStore always ends in a FAILED connection state, same as AWS would report without reachable backing infrastructure. No key's material is ever stored in a custom key store."
+   "Create/describe/update/connect/disconnect/delete are real and stateful. A CloudHSM-type store connects to Vyomi's software HSM cluster (cluster-vyomisofthsm) when a KeyStorePassword was given - an unknown cluster ends FAILED CLUSTER_NOT_FOUND, a missing password INVALID_CREDENTIALS; there is no CloudHSM hardware. An external key store connects to Vyomi's built-in XKS proxy (https://xks.vyomi.local); any other proxy endpoint gets a real GET <endpoint><path>/health probe on the offline appliance (FAILED XKS_PROXY_NOT_REACHABLE when it does not answer 200) and always fails on Nano (no sockets). Connecting is immediate (no CONNECTING phase). A store that still holds keys cannot be deleted (CustomKeyStoreHasCMKsException)."
   ],
   "tests": [
-   "tests/conformance/test_kms_console_v4_core.py"
+   "tests/conformance/test_kms_console_v4_core.py",
+   "tests/conformance/test_kms_custom_key_store_keys_core.py"
   ]
  },
  "kms.custom-key-store-keys": {
   "title": "Keys backed by a custom key store (CloudHSM / external)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Creating a key with CloudHSM or external key store origin needs a CONNECTED custom key store; the CloudHSM cluster / external key manager proxy does not exist in Vyomi, so ConnectCustomKeyStore always ends FAILED."
+   "CreateKey with Origin AWS_CLOUDHSM / EXTERNAL_KEY_STORE needs a CONNECTED store of the matching type; the key's material is generated into the store's own partition (never the KMS key table) and every Encrypt/Decrypt/GenerateDataKey fetches it from there, so the key is unusable (KMSInvalidStateException) while its store is disconnected and usable again on reconnect. Only SYMMETRIC_DEFAULT ENCRYPT_DECRYPT keys, no rotation (as in AWS). Keys in an external store use Vyomi's built-in XKS proxy for the crypto: pointing a store at a third-party proxy only tests its health - Vyomi does not send crypto requests to external proxies or sign XKS requests. The 'HSM' is software inside Vyomi, not CloudHSM hardware or a FIPS boundary."
   ],
-  "api": []
+  "api": ["CreateKey", "ConnectCustomKeyStore", "Encrypt", "Decrypt"],
+  "tests": ["tests/conformance/test_kms_custom_key_store_keys_core.py", "consoles/tests/smoke-aws-kmscustomstore.mjs"]
  }
 }

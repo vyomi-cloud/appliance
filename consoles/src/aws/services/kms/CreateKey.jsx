@@ -11,6 +11,8 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import RadioGroup from "@cloudscape-design/components/radio-group";
+import Select from "@cloudscape-design/components/select";
+import { useAsync } from "../../../common/useAsync.js";
 import Tiles from "@cloudscape-design/components/tiles";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
@@ -27,6 +29,27 @@ import * as api from "./api.js";
 
 const ASYMMETRIC_SPECS = ["RSA_2048", "RSA_3072", "RSA_4096", "ECC_NIST_P256", "ECC_NIST_P384", "ECC_NIST_P521", "ECC_SECG_P256K1", "ML_DSA_44", "ML_DSA_65", "ML_DSA_87"];
 const HMAC_SPECS = ["HMAC_224", "HMAC_256", "HMAC_384", "HMAC_512"];
+
+function CustomStorePicker({ s, set }) {
+  const type = s.origin === "XKS" ? "EXTERNAL_KEY_STORE" : "AWS_CLOUDHSM";
+  const stores = useAsync(() => api.describeCustomKeyStores().then((xs) => xs.filter((x) => x.CustomKeyStoreType === type && x.ConnectionState === "CONNECTED")), [type]);
+  const opts = (stores.data || []).map((x) => ({ value: x.CustomKeyStoreId, label: x.CustomKeyStoreName, description: x.CustomKeyStoreId }));
+  return (
+    <CapabilityContainer id="kms.custom-key-store-keys" title="Custom key store">
+      <SpaceBetween size="s">
+        <FormField label="Connected custom key store" errorText={!stores.loading && !opts.length ? "No CONNECTED custom key store of this type. Create and connect one from the key store pages first." : null}>
+          <Select selectedOption={opts.find((o) => o.value === s.customKeyStoreId) || null} options={opts} placeholder="Choose a custom key store"
+            onChange={({ detail }) => set({ customKeyStoreId: detail.selectedOption.value })} />
+        </FormField>
+        {s.origin === "XKS" && (
+          <FormField label="External key ID" constraintText="The key's ID at the external key manager (1-128 characters)">
+            <Input value={s.xksKeyId || ""} onChange={({ detail }) => set({ xksKeyId: detail.value })} ariaLabel="External key ID" />
+          </FormField>
+        )}
+      </SpaceBetween>
+    </CapabilityContainer>
+  );
+}
 
 function ConfigureKeyStep({ s, set }) {
   const specOptions = (s.keyType === "Asymmetric" ? ASYMMETRIC_SPECS : s.keyUsageSym === "Generate and verify MAC" ? HMAC_SPECS : null);
@@ -56,10 +79,10 @@ function ConfigureKeyStep({ s, set }) {
             <Tiles value={s.origin} onChange={({ detail }) => set({ origin: detail.value })} columns={1} items={[
               { value: "KMS", label: "KMS - recommended", description: "Vyomi generates and manages the key material." },
               { value: "EXTERNAL", label: "External (Import Key material)", description: "Vyomi stores key material you provide." },
-              { value: "CLOUDHSM", label: "AWS CloudHSM key store", disabled: true, description: "Requires a connected custom key store." },
-              { value: "XKS", label: "External key store", disabled: true, description: "Requires a connected custom key store." },
+              { value: "CLOUDHSM", label: "AWS CloudHSM key store", description: "Material lives in a connected CloudHSM-type custom key store (Vyomi's software HSM)." },
+              { value: "XKS", label: "External key store", description: "Material lives with a connected external key store's proxy (Vyomi's built-in XKS proxy)." },
             ]} />
-            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <CapabilityContainer id="kms.custom-key-store-keys" title="Custom key stores" />}
+            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <CustomStorePicker s={s} set={set} />}
           </FormField>
           <FormField label="Regionality">
             <Tiles value={s.regionality} onChange={({ detail }) => set({ regionality: detail.value })} columns={1} items={[
@@ -145,7 +168,7 @@ function ReviewStep({ s, goto }) {
           <div><Box variant="awsui-key-label">Key type</Box><div>{s.keyType}</div></div>
           <div><Box variant="awsui-key-label">Key spec</Box><div>{s.keySpec || (s.keyType === "Symmetric" ? "SYMMETRIC_DEFAULT" : "-")}</div></div>
           <div><Box variant="awsui-key-label">Key usage</Box><div>{usage}</div></div>
-          <div><Box variant="awsui-key-label">Origin</Box><div>{s.origin === "EXTERNAL" ? "External (Import Key material)" : "KMS - recommended"}</div></div>
+          <div><Box variant="awsui-key-label">Origin</Box><div>{s.origin === "EXTERNAL" ? "External (Import Key material)" : s.origin === "CLOUDHSM" ? "AWS CloudHSM key store" : s.origin === "XKS" ? "External key store" : "KMS - recommended"}</div></div>
           <div><Box variant="awsui-key-label">Regionality</Box><div>Single-Region key</div></div>
         </SpaceBetween>
       </Container>
@@ -199,7 +222,8 @@ export default function CreateKey() {
         : ({ "Encrypt and decrypt": "ENCRYPT_DECRYPT", "Sign and verify": "SIGN_VERIFY", "Key agreement": "KEY_AGREEMENT" }[s.keyUsageAsym]);
       const spec = s.keyType === "Symmetric" ? (s.keyUsageSym === "Generate and verify MAC" ? (s.keySpec || "HMAC_256") : "SYMMETRIC_DEFAULT") : (s.keySpec || "RSA_2048");
       const md = await api.createKey({
-        KeyUsage: usage, KeySpec: spec, Origin: s.origin === "EXTERNAL" ? "EXTERNAL" : "AWS_KMS",
+        KeyUsage: usage, KeySpec: spec, Origin: s.origin === "EXTERNAL" ? "EXTERNAL" : s.origin === "CLOUDHSM" ? "AWS_CLOUDHSM" : s.origin === "XKS" ? "EXTERNAL_KEY_STORE" : "AWS_KMS",
+        ...(s.origin === "CLOUDHSM" || s.origin === "XKS" ? { CustomKeyStoreId: s.customKeyStoreId, ...(s.origin === "XKS" ? { XksKeyId: s.xksKeyId } : {}) } : {}),
         Description: s.description, Policy: s.policy,
         Tags: s.tags.filter((t) => !t.markedForRemoval && t.key).map((t) => ({ TagKey: t.key, TagValue: t.value || "" })),
       });
