@@ -22,6 +22,7 @@ import urllib.request
 from typing import Callable, Optional
 
 CATALOGUE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docker", "booster-runner-llm", "models.json")
+STAGGER_S = 30                      # staggered start: stage N of the catalogue is dispatched N x STAGGER_S after the first
 HARD_MAX_RUNNERS = 20               # sanity bound (GitHub Free: 20 concurrent hosted-runner jobs)
 WINDOW_HOURS = {"pro": 30, "max": 40, "enterprise": 40}      # SINGLE place to change the wall-clock windows
 ROTATE_S = 19800                    # re-dispatch each runner at 5h30m
@@ -81,13 +82,13 @@ class HttpDispatcher:
 class RunnerPool:
     def __init__(self, hub_base: str, token_fn: Callable[[], str], dispatcher, *, catalogue: Optional[dict] = None,
                  window_s: float = window_s_for("pro"), idle_s: Optional[float] = None, rotate_s: float = ROTATE_S,
-                 clock: Callable[[], float] = time.time, runtime: str = "ollama", include_optional: Optional[bool] = None,
+                 clock: Callable[[], float] = time.time, runtime: str = "ollama", stagger_s: Optional[float] = None,
                  on_destroy: Optional[Callable[[str], None]] = None):
         self.hub, self.token_fn, self.dispatcher, self.clock, self.runtime = hub_base.rstrip("/"), token_fn, dispatcher, clock, runtime
         self.cat = catalogue or load_catalogue()
         self.window_s, self.rotate_s = float(window_s), float(rotate_s)
         self.idle_s = float(idle_s if idle_s is not None else os.environ.get("VYOMI_RUNNER_IDLE_S", DEFAULT_IDLE_S))
-        self.include_optional = include_optional if include_optional is not None else os.environ.get("VYOMI_RUNNER_INCLUDE_OPTIONAL") == "1"
+        self.stagger_s = float(stagger_s if stagger_s is not None else os.environ.get("VYOMI_RUNNER_STAGGER_S", STAGGER_S))
         self.on_destroy = on_destroy
         self._lock = threading.RLock()
         self.phase = "new"                      # new | running | destroyed
@@ -100,7 +101,18 @@ class RunnerPool:
         self._events: list = []
         self._hub = {"at": -1e9, "runners": {}, "rotating": {}, "ok": False}
         self._aliases = self._merged_aliases()
-        self._model_runner = {m: rid for rid, r in self.cat["runners"].items() for m in r["models"]}
+        # A catalogue runner with "slots": 2 is a POOLED entry (e.g. qwen3:30b over llama.cpp RPC on the WireGuard mesh): it occupies
+        # 2 hosted-runner slots "<id>#0" (head, serves requests) and "<id>#1" (worker), each rotated / drained / idled like any runner.
+        self._slots: dict[str, list] = {}
+        self._slot_base: dict[str, tuple] = {}
+        for rid, r in self.cat["runners"].items():
+            n = int(r.get("slots", 1))
+            ids = [rid] if n == 1 else [f"{rid}#{i}" for i in range(n)]
+            self._slots[rid] = ids
+            for i, sid in enumerate(ids):
+                self._slot_base[sid] = (rid, i)
+        self._model_runner = {m: self._slots[rid][0] for rid, r in self.cat["runners"].items() for m in r["models"]}
+        self._model_slots = {m: self._slots[rid] for rid, r in self.cat["runners"].items() for m in r["models"]}
 
     # -------------------------------------------------------------------------------------------- catalogue / mapping
     def _merged_aliases(self) -> dict:
@@ -108,11 +120,20 @@ class RunnerPool:
         for cloud, m in self.cat.get("aliases", {}).items():
             if not cloud.startswith("_"):
                 out.update({k: v for k, v in m.items() if not k.startswith("_")})
+        for mid in self.cat["models"]:
+            out.update(self._generated(mid))
         try:
             out.update(json.loads(os.environ.get("VYOMI_RUNNER_MODEL_ALIASES", "{}")))
         except ValueError:
             pass
         return out
+
+    def _generated(self, mid: str) -> dict:
+        """Every model gets a by-name id usable in every lane (Bedrock modelId / Vertex model / Azure deployment):
+        'ollama.<tag>' (e.g. ollama.qwen3:8b), 'ollama.<tag without -instruct-q4...>' and the bare tag."""
+        tag = self.cat["models"][mid]["ollama"]
+        short = tag.split("-instruct")[0].split("-q4")[0]
+        return {k: mid for k in {f"ollama.{tag}", f"ollama.{short}", tag, short, f"vyomi.{mid}"}}
 
     def resolve(self, api_id: Optional[str], *, embed: bool = False) -> str:
         """Cloud API model id / Azure deployment name / catalogue id -> catalogue id (defaults by path kind)."""
@@ -132,11 +153,20 @@ class RunnerPool:
         return {k: v for k, v in self._aliases.items() if "*" not in k or (k.endswith("*") and k.count("*") == 1)}
 
     def runner_ids(self) -> list:
-        return [rid for rid, r in self.cat["runners"].items() if not r.get("optional") or self.include_optional]
+        """Every hosted-runner SLOT (a pooled entry counts its slots)."""
+        return [sid for ids in self._slots.values() for sid in ids]
 
-    def _spec(self, rid: str) -> dict:
+    def _spec(self, sid: str) -> dict:
+        rid, i = self._slot_base[sid]
         r = self.cat["runners"][rid]
-        return {"models": r["models"], "ollama_tags": ",".join(self.cat["models"][m]["ollama"] for m in r["models"])}
+        spec = {"runner": rid, "models": r["models"], "ollama_tags": ",".join(self.cat["models"][m]["ollama"] for m in r["models"])}
+        if len(self._slots[rid]) > 1:      # pooled: placeholder transport until the WireGuard mesh (v4/ngmesh) merges
+            spec.update(pooled=True, slot=i, slots=len(self._slots[rid]), slot_role="head" if i == 0 else "worker", transport="llama.cpp-rpc over WireGuard mesh (placeholder)")
+        return spec
+
+    def _due(self, sid: str, now: float) -> bool:
+        """Staggered start: stage N is due N x stagger_s after the window opened (3B+embed and 7B are stage 0)."""
+        return now >= self.window_start + int(self.cat["runners"][self._slot_base[sid][0]].get("stage", 0)) * self.stagger_s
 
     # -------------------------------------------------------------------------------------------- lifecycle
     def start_all(self) -> list:
@@ -148,7 +178,8 @@ class RunnerPool:
             now = self.clock()
             self.phase, self.window_start, self.deadline, self.last_activity = "running", now, now + self.window_s, now
             for rid in ids:
-                self._dispatch(rid, rotation=False)
+                if self._due(rid, now):
+                    self._dispatch(rid, rotation=False)
             self.invalidate()
         return ids
 
@@ -195,7 +226,8 @@ class RunnerPool:
             for rid in self.runner_ids():
                 rec = self._rec.get(rid)
                 if rec is None:
-                    self._dispatch(rid, rotation=False)
+                    if self._due(rid, now):
+                        self._dispatch(rid, rotation=False)
                     continue
                 st = hub.get(rid, "absent")
                 if st == "ready":
@@ -259,14 +291,17 @@ class RunnerPool:
         with self._lock:
             if self.phase == "destroyed":
                 return "stopped"
-            if rid is None or rid not in self._rec:
+            if rid is None:
                 return "stopped"
+            slots = self._model_slots[model]
+            if any(sl not in self._rec for sl in slots):           # not dispatched yet (staggered) or dispatch failed: still 'starting'
+                return "starting"
             if self.phase == "running" and self.deadline - self.clock() <= 0:
                 return "draining"
-            st = self._hub_states().get(rid, "absent")
-            if st != "ready":
+            hub = self._hub_states()
+            if any(hub.get(sl, "absent") != "ready" for sl in slots):
                 return "starting"
-            return "rotating" if (self._hub["rotating"].get(rid) or self._rec[rid]["rotating_since"] is not None) else "ready"
+            return "rotating" if any(self._hub["rotating"].get(sl) or self._rec[sl]["rotating_since"] is not None for sl in slots) else "ready"
 
     # -------------------------------------------------------------------------------------------- console data
     def window(self) -> dict:
@@ -281,10 +316,11 @@ class RunnerPool:
 
     def _endpoints(self, mid: str) -> dict:
         out: dict = {}
+        gen = set(self._generated(mid))
         for cloud, m in self.cat.get("aliases", {}).items():
             if cloud.startswith("_"):
                 continue
-            ids = sorted(k for k, v in m.items() if v == mid and not k.startswith("_"))
+            ids = sorted({k for k, v in m.items() if v == mid and not k.startswith("_")} | gen)
             if ids:
                 out[cloud] = ids
         return out
@@ -295,10 +331,11 @@ class RunnerPool:
         models = []
         for mid, m in self.cat["models"].items():
             rid = self._model_runner[mid]
-            r = self.cat["runners"][rid]
+            r = self.cat["runners"][self._slot_base[rid][0]]
             tps = self._tps.get(mid)
-            models.append({"id": mid, "runner": rid, "role": r["role"], "kind": m["kind"], "ollama": m["ollama"], "state": self.state(mid),
-                           "optional": bool(r.get("optional")), "ram_mb": m["ram_mb"], "size_mb": m["size_mb"], "endpoints": self._endpoints(mid),
+            models.append({"id": mid, "runner": self._slot_base[rid][0], "role": r["role"], "kind": m["kind"], "ollama": m["ollama"], "state": self.state(mid),
+                           "slots": len(self._model_slots[mid]), "pooled": len(self._model_slots[mid]) > 1, "stage": int(r.get("stage", 0)),
+                           "queued": any(sl not in self._rec for sl in self._model_slots[mid]), "ram_mb": m["ram_mb"], "size_mb": m["size_mb"], "endpoints": self._endpoints(mid),
                            "tokens_per_s": tps["tps"] if tps else None, "requests": self._requests.get(mid, 0)})
         return {"window": self.window(), "models": models, "events": list(self._events[-10:]), "runtime": self.runtime}
 

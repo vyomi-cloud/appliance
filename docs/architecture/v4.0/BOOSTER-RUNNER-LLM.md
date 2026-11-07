@@ -24,26 +24,34 @@ Neither the booster nor a runner accepts an inbound connection from the internet
 * Runner: `docker/booster-runner-llm/` (`entrypoint-ollama.sh` + `runner-llm-dial.mjs` + `models.json`; `entrypoint.sh` is the raw
   llama-server variant with actions/cache + sha256), workflow templates `.github/booster/llm-runner-ollama.yml` / `llm-runner.yml`.
 
-## 2. Model catalogue (`docker/booster-runner-llm/models.json`)
+## 2. Model catalogue (`docker/booster-runner-llm/models.json`): TEN models, 10 runner slots
 
-EAGER: when the booster starts, **every non-optional runner is dispatched at once**. One 4 vCPU / 16 GB runner each.
+EAGER but STAGGERED: every model starts with the booster; stage 0 is dispatched immediately, stage N is dispatched N x 30 s later
+(`VYOMI_RUNNER_STAGGER_S`). Until its runner(s) are ready a model reports `starting` (`queued: true` if not even dispatched yet), so the console shows
+progressive readiness. One 4 vCPU / 16 GB runner per row, Ollama runtime.
 
-| runner | role | models (Ollama tag) | RAM est. |
-|---|---|---|---|
-| fast | fast chat + embeddings | `qwen2.5:3b-instruct-q4_K_M` + `nomic-embed-text` | 2.8 + 0.6 GB |
-| general | general instruct | `qwen2.5:7b-instruct-q4_K_M` | 6.2 GB |
-| coder | code | `qwen2.5-coder:7b-instruct-q4_K_M` | 6.2 GB |
-| agents | tool use / agents | `llama3.1:8b-instruct-q4_K_M` | 6.8 GB |
-| xl (optional, `VYOMI_RUNNER_INCLUDE_OPTIONAL=1`) | higher quality, slow | `qwen2.5:14b-instruct-q4_K_M` | 11.5 GB |
+| stage | runner (slots) | role | models (Ollama tag) | RAM est. |
+|---|---|---|---|---|
+| 0 | fast (1) | fast chat + embeddings | `qwen2.5:3b-instruct-q4_K_M` + `nomic-embed-text` | 2.8 + 0.6 GB |
+| 0 | general (1) | general instruct | `qwen2.5:7b-instruct-q4_K_M` | 6.2 GB |
+| 1 | coder (1) | code | `qwen2.5-coder:7b-instruct-q4_K_M` | 6.2 GB |
+| 1 | agents (1) | tool use / agents | `llama3.1:8b-instruct-q4_K_M` | 6.8 GB |
+| 1 | gemma (1) | general / multilingual | `gemma2:9b-instruct-q4_K_M` | 7.8 GB |
+| 2 | qwen3 (1) | reasoning + tools | `qwen3:8b` | 7.0 GB |
+| 2 | r1 (1) | reasoning | `deepseek-r1:8b` | 7.0 GB |
+| 2 | mistral (1) | general | `mistral:7b-instruct-q4_K_M` | 6.0 GB |
+| 3 | big (2, pooled) | largest | `qwen3:30b` (30B-A3B MoE, ~19 GB Q4) | ~24 GB across 2 runners |
 
-RAM figures are estimates; the Ollama tags were **not** verified against registry.ollama.ai (no network calls to it in the spike).
-Sanity max 20 runners (GitHub Free concurrent-job limit); there is no per-user cap any more.
+8 runners = 10 slots (1+7+2), under the 20 sanity max (GitHub Free concurrent-job limit); no per-user cap, no optional 14B.
+**Pooled entry** (`"slots": 2`): occupies slots `big#0` (head, serves requests) and `big#1` (worker); the intended transport is llama.cpp RPC over the
+WireGuard mesh (branch `v4/ngmesh`, not merged) - the pool only models the 2-slot entry (spec carries `pooled/slot/slot_role/transport` = placeholder).
+It is `ready` only when BOTH slots are ready; each slot rotates / drains / idles by the same rules. No RPC data path exists yet.
+RAM figures are estimates; Ollama tags were **not** verified against registry.ollama.ai (no network calls to it in the spike).
 
-**Cache implication (actions/cache: 10 GB per repo, 7-day idle eviction, LRU).** Key = the runner's tag list. 3B+nomic is ~2.2 GB, each
-7-8B is ~4.7-4.9 GB, 14B is ~9 GB: the four core runners need ~14 GB of weights, so the cache can never hold all of them; LRU evicts
-the least recently restored one and that runner cold-pulls (several minutes on a hosted runner) at its next start/rotation. 14B can't share
-the cache with anything. Mitigation: keep `fast` + two 7-8B models cached, accept cold pulls for the rest; the 503 + Retry-After
-"starting" state covers it. (Not measured here.)
+**Cache implication (actions/cache: 10 GB per repo, 7-day idle eviction).** Ten models are ~45 GB of weights (30B alone ~19 GB), far over the 10 GB cap,
+so **most runners cold-pull from the Ollama registry at every start and at every rotation**; only 1-2 small entries (fast, maybe one 7B) can stay cached.
+Plan for a few minutes of start-up per model (ollama verifies blob sha256 against the manifest) - hence the stagger and the per-model `starting` status. Rotation is
+no-gap only if the successor finishes its cold pull before the old runner's 5h50m end (20 min overlap); otherwise the gap is a 503 + `Retry-After`. Not measured.
 
 ## 3. Cloud API model ids -> catalogue (native SDK agents pick a model by the id they already use)
 
@@ -53,6 +61,9 @@ existing `VYOMI_LLM_MODEL_MAP` is generated from it at attach; the gateway re-re
 * **Bedrock** (`converse`, `invoke_model`): `meta.llama*` -> llama3.1-8b, `mistral.*` -> qwen2.5-7b, `amazon.nova-micro/lite*` -> 3b, `amazon.nova-pro*` / `anthropic.claude*` -> 7b, `amazon.titan-embed*` / `cohere.embed*` -> nomic.
 * **Vertex / Gemini Developer alias lane** (google-genai): `gemini-*-flash*` -> 3b, `gemini-*-pro*` -> 7b, `codestral*` -> coder-7b, `text-embedding-*` / `gemini-embedding*` -> nomic.
 * **Azure OpenAI** (`AzureOpenAI`, the SDK sends the *deployment name*): `gpt-4o-mini*`/`gpt-35*` -> 3b, `gpt-4o*`/`gpt-4*` -> 7b, `o1*` -> 14b, `text-embedding-*` -> nomic; any custom deployment name -> `VYOMI_RUNNER_MODEL_ALIASES={"my-coder":"qwen2.5-coder-7b"}`. Unknown ids fall to the default chat / embed model.
+* **Every model, every lane:** each model also has generated by-name ids `ollama.<tag>` (e.g. `ollama.qwen3:8b`, `ollama.gemma2:9b`), `ollama.<short tag>`, the bare tag and `vyomi.<id>`,
+  so SDK agents can pick any of the ten explicitly (boto3 `modelId="ollama.deepseek-r1:8b"`, google-genai `model="ollama.qwen3:8b"`, `AzureOpenAI(... model="ollama.mistral:7b")`).
+  Family aliases added: Bedrock `google.gemma*`/`deepseek.r1*`/`qwen.qwen3*`, Vertex `gemma*`/`deepseek-r1*`/`mistral-*`/`llama-3*`, Azure `DeepSeek-R1*`/`Mistral*`/`Meta-Llama*`/`Phi-*`/`o1*`/`o3*`/`gpt-oss*`.
 * Direct catalogue ids (`llama3.1-8b`) and the OpenAI/Ollama lanes `/v1/*`, `/api/*` work unmodified.
 
 ## 4. Lifecycle
@@ -69,6 +80,7 @@ existing `VYOMI_LLM_MODEL_MAP` is generated from it at attach; the gateway re-re
   (tested: continuous traffic, 0 failures). If the old runner dies first, requests get `503` + `Retry-After` until the successor is ready (tested).
   The workflow's concurrency group is per run so a rotation dispatch does not cancel its predecessor. Rotation is skipped in the last 10 min of the window.
 * **Self-heal:** a runner that was ready and vanishes from the relay is re-dispatched; a dispatch that never becomes ready is retried after 15 min.
+* **Staggered start:** stage 0 (3B+embed, 7B) at booster start, then +30 s per stage (tick-driven, fake-clock tested).
 * **Per-model state** for the console: `starting | ready | rotating | draining | stopped`. Not-ready model -> `503` + `Retry-After: 15`, body
   `{error:{code:"RunnerStarting", status:"starting"}}`; never blocks, never falls back to a local model.
 
@@ -103,7 +115,7 @@ tok/s, a small test-chat box that POSTs `/v1/chat/completions` through the boost
 
 * `tests/conformance/test_booster_remote_llm.py` (41 checks): single remote runner, attach/detach, capacity not reserving the AI bucket, runner drop -> 503, no local fallback,
   role-scoped token auth on the dial-in, TTL / session_end expiry, no token in logs.
-* `tests/conformance/test_booster_runner_pool.py` (44 checks): eager start, 503 starting, routing + cloud-id mapping, Models data, rotation (no gap; gap with Retry-After), window warnings + expiry, 60-min idle destroy (+ hook), sanity max.
+* `tests/conformance/test_booster_runner_pool.py` (56 checks): eager staggered start of 10 slots, pooled 2-slot model, 503 starting, routing + cloud-id mapping for all models, Models data, rotation (no gap; gap with Retry-After), window warnings + expiry, 60-min idle destroy (+ hook), sanity max.
   Both use the real relay + real runner dialer + a fake Ollama; time rules run on an injected clock.
 * **Measured (relay hop, instant fake model, localhost):** direct vs booster-gateway -> relay -> runner dial: non-streaming 0.61 -> 2.01 ms median (+1.4 ms),
   streaming first chunk 0.34 -> 1.56 ms (+1.2 ms). Real overhead is dominated by the WAN legs (booster->relay, runner->relay), expect +tens to ~150 ms per request

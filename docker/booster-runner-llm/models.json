@@ -1,27 +1,40 @@
 {
-  "_comment": "Runner model catalogue (spike). EAGER: when the booster starts, every non-optional RUNNER below is dispatched at once (one GitHub-hosted 4 vCPU / 16 GB runner each, Ollama runtime). A runner may serve several models (fast = 3B chat + embeddings). ram_mb = weights + KV at the stated ctx (ESTIMATES, unmeasured on a runner). cache_ok=false: too big to share the 10 GB-per-repo actions/cache cap with another model, so it is pulled cold at every start/rotation. Ollama tags were NOT verified against registry.ollama.ai in the spike (no network calls to it); llama3.1:8b-instruct-q4_K_M / qwen2.5(-coder):7b-instruct-q4_K_M / qwen2.5:3b-instruct-q4_K_M / nomic-embed-text are the documented library tags.",
+  "_comment": "Runner model catalogue (spike): TEN models on 10 hosted-runner slots (8 runners; qwen3:30b is a POOLED entry occupying 2 slots). EAGER but STAGGERED: stage 0 (3B+embed, 7B) is dispatched at booster start, stage N is dispatched N x 30 s later (VYOMI_RUNNER_STAGGER_S); the console shows each model 'starting' until its runner(s) are ready. Ten models far exceed the 10 GB-per-repo Actions cache, so most runners COLD-PULL from registry.ollama.ai at every start and rotation (a few minutes each; ollama verifies blob sha256 against the manifest). ram_mb = weights + KV at the stated ctx (ESTIMATES, unmeasured). Ollama tags were NOT verified against the registry in the spike (closest documented library tags used; qwen3:30b is the 30B-A3B MoE, ~19 GB Q4: needs 2 runners).",
   "default_chat": "qwen2.5-3b",
   "default_embed": "nomic-embed-text",
   "runners": {
-    "fast":    {"role": "fast chat + embeddings", "models": ["qwen2.5-3b", "nomic-embed-text"]},
-    "general": {"role": "general instruct",       "models": ["qwen2.5-7b"]},
-    "coder":   {"role": "code",                    "models": ["qwen2.5-coder-7b"]},
-    "agents":  {"role": "tool use / agents",       "models": ["llama3.1-8b"]},
-    "xl":      {"role": "higher quality (slow)",   "models": ["qwen2.5-14b"], "optional": true}
+    "fast":    {"role": "fast chat + embeddings",        "stage": 0, "models": ["qwen2.5-3b", "nomic-embed-text"]},
+    "general": {"role": "general instruct",              "stage": 0, "models": ["qwen2.5-7b"]},
+    "coder":   {"role": "code",                          "stage": 1, "models": ["qwen2.5-coder-7b"]},
+    "agents":  {"role": "tool use / agents",             "stage": 1, "models": ["llama3.1-8b"]},
+    "gemma":   {"role": "general / multilingual",        "stage": 1, "models": ["gemma2-9b"]},
+    "qwen3":   {"role": "reasoning + tools (hybrid)",    "stage": 2, "models": ["qwen3-8b"]},
+    "r1":      {"role": "reasoning (chain of thought)",  "stage": 2, "models": ["deepseek-r1-8b"]},
+    "mistral": {"role": "general (European lab)",        "stage": 2, "models": ["mistral-7b"]},
+    "big":     {"role": "largest: 30B MoE, pooled over 2 runners", "stage": 3, "slots": 2, "models": ["qwen3-30b"]}
   },
   "models": {
-    "qwen2.5-3b":       {"kind": "chat",  "ollama": "qwen2.5:3b-instruct-q4_K_M",        "size_mb": 1900, "ram_mb": 2800,  "ctx": 4096, "cache_ok": true,  "note": "fast chat; same model as the in-Codespace AI pack"},
-    "nomic-embed-text": {"kind": "embed", "ollama": "nomic-embed-text:latest",            "size_mb": 274,  "ram_mb": 600,   "ctx": 2048, "cache_ok": true,  "dims": 768, "note": "embeddings, shares the fast runner"},
-    "qwen2.5-7b":       {"kind": "chat",  "ollama": "qwen2.5:7b-instruct-q4_K_M",        "size_mb": 4700, "ram_mb": 6200,  "ctx": 8192, "cache_ok": true,  "note": "general instruct"},
-    "qwen2.5-coder-7b": {"kind": "chat",  "ollama": "qwen2.5-coder:7b-instruct-q4_K_M",  "size_mb": 4700, "ram_mb": 6200,  "ctx": 8192, "cache_ok": true,  "note": "code"},
-    "llama3.1-8b":      {"kind": "chat",  "ollama": "llama3.1:8b-instruct-q4_K_M",       "size_mb": 4900, "ram_mb": 6800,  "ctx": 8192, "cache_ok": false, "note": "tool use / agents; 4 big models cannot all share the 10 GB cache, LRU evicts"},
-    "qwen2.5-14b":      {"kind": "chat",  "ollama": "qwen2.5:14b-instruct-q4_K_M",       "size_mb": 9000, "ram_mb": 11500, "ctx": 4096, "cache_ok": false, "note": "largest that fits 16 GB; slow (~2-3 tok/s on 4 vCPU)"}
+    "qwen2.5-3b":       {"kind": "chat",  "ollama": "qwen2.5:3b-instruct-q4_K_M",        "size_mb": 1900,  "ram_mb": 2800,  "ctx": 4096, "note": "fast chat; same model as the in-Codespace AI pack"},
+    "nomic-embed-text": {"kind": "embed", "ollama": "nomic-embed-text:latest",            "size_mb": 274,   "ram_mb": 600,   "ctx": 2048, "dims": 768, "note": "embeddings, shares the fast runner"},
+    "qwen2.5-7b":       {"kind": "chat",  "ollama": "qwen2.5:7b-instruct-q4_K_M",        "size_mb": 4700,  "ram_mb": 6200,  "ctx": 8192, "note": "general instruct"},
+    "qwen2.5-coder-7b": {"kind": "chat",  "ollama": "qwen2.5-coder:7b-instruct-q4_K_M",  "size_mb": 4700,  "ram_mb": 6200,  "ctx": 8192, "note": "code"},
+    "llama3.1-8b":      {"kind": "chat",  "ollama": "llama3.1:8b-instruct-q4_K_M",       "size_mb": 4900,  "ram_mb": 6800,  "ctx": 8192, "note": "tool use / agents"},
+    "gemma2-9b":        {"kind": "chat",  "ollama": "gemma2:9b-instruct-q4_K_M",         "size_mb": 5800,  "ram_mb": 7800,  "ctx": 8192, "note": "no native tool calling"},
+    "qwen3-8b":         {"kind": "chat",  "ollama": "qwen3:8b",                           "size_mb": 5200,  "ram_mb": 7000,  "ctx": 8192, "note": "thinking / non-thinking, tool use"},
+    "deepseek-r1-8b":   {"kind": "chat",  "ollama": "deepseek-r1:8b",                     "size_mb": 5200,  "ram_mb": 7000,  "ctx": 8192, "note": "emits <think> reasoning; slow first answer"},
+    "mistral-7b":       {"kind": "chat",  "ollama": "mistral:7b-instruct-q4_K_M",        "size_mb": 4400,  "ram_mb": 6000,  "ctx": 8192, "note": "general"},
+    "qwen3-30b":        {"kind": "chat",  "ollama": "qwen3:30b",                          "size_mb": 19000, "ram_mb": 24000, "ctx": 4096, "pooled": true, "note": "30B-A3B MoE, ~19 GB Q4 does not fit one 16 GB runner: split across 2 runners via llama.cpp RPC over the WireGuard mesh (PLACEHOLDER transport until v4/ngmesh merges); ~3B active params so decode is usable"}
   },
   "aliases": {
-    "_comment": "per-cloud API model id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest matching pattern. Users add more with VYOMI_RUNNER_MODEL_ALIASES (JSON); Azure OpenAI DEPLOYMENT names map the same way (the SDK sends the deployment name).",
+    "_comment": "per-cloud API model id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest matching pattern. Every model ALSO gets generated by-name ids in every lane: 'ollama.<tag>', 'ollama.<short tag>', '<tag>', 'vyomi.<id>' (e.g. ollama.qwen3:8b). Users add more with VYOMI_RUNNER_MODEL_ALIASES (JSON); Azure OpenAI DEPLOYMENT names map the same way (the SDK sends the deployment name).",
     "aws": {
       "meta.llama*": "llama3.1-8b",
-      "mistral.*": "qwen2.5-7b",
+      "mistral.*": "mistral-7b",
+      "mistral.mistral-large*": "qwen2.5-7b",
+      "google.gemma*": "gemma2-9b",
+      "deepseek.r1*": "deepseek-r1-8b",
+      "qwen.qwen3-30b*": "qwen3-30b",
+      "qwen.qwen3*": "qwen3-8b",
       "amazon.nova-micro*": "qwen2.5-3b",
       "amazon.nova-lite*": "qwen2.5-3b",
       "amazon.nova-pro*": "qwen2.5-7b",
@@ -32,8 +45,14 @@
     "gcp": {
       "gemini-*-flash*": "qwen2.5-3b",
       "gemini-*-pro*": "qwen2.5-7b",
+      "gemma-2*": "gemma2-9b",
+      "gemma*": "gemma2-9b",
       "codestral*": "qwen2.5-coder-7b",
       "gemini-*-code*": "qwen2.5-coder-7b",
+      "deepseek-r1*": "deepseek-r1-8b",
+      "qwen3-235b*": "qwen3-30b",
+      "mistral-*": "mistral-7b",
+      "llama-3*": "llama3.1-8b",
       "text-embedding-*": "nomic-embed-text",
       "gemini-embedding*": "nomic-embed-text"
     },
@@ -42,7 +61,13 @@
       "gpt-4o*": "qwen2.5-7b",
       "gpt-4*": "qwen2.5-7b",
       "gpt-35*": "qwen2.5-3b",
-      "o1*": "qwen2.5-14b",
+      "o1*": "deepseek-r1-8b",
+      "o3*": "qwen3-8b",
+      "DeepSeek-R1*": "deepseek-r1-8b",
+      "Mistral*": "mistral-7b",
+      "Meta-Llama*": "llama3.1-8b",
+      "Phi-*": "gemma2-9b",
+      "gpt-oss*": "qwen3-30b",
       "text-embedding-*": "nomic-embed-text"
     }
   }
