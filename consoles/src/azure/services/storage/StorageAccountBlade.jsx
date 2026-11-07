@@ -40,6 +40,7 @@ import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
 import { FileServiceSettings, FileShares, ServiceCors } from "./FileShares.jsx";
 import { DataMigration, StorageMover } from "./StorageMover.jsx";
+import StorageEdge from "./StorageEdge.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -97,6 +98,7 @@ export default function StorageAccountBlade({ params, query }) {
   else {
     const a = acct.data, reload = acct.reload;
     const P = {
+      frontdoorcdn: () => <StorageEdge a={a} />,
       tasks: () => <TasksPanel a={a} />,
       diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,

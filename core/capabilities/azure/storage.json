@@ -173,10 +173,17 @@
   "tests": ["tests/conformance/test_azure_table_core.py"]
  },
  "azure.storage.frontdoorcdn": {
-  "title": "Front Door and CDN",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["A real CDN's value proposition is real global edge Points of Presence caching content close to real end users on the real Internet — a local simulator has exactly one place anything runs, so there is no second, distinct edge location for traffic to actually be routed through or cached at. A link-out to create/manage a genuinely separate Microsoft.Cdn/Microsoft.Network front-door resource, same reasoning as Storage Mover."],
-  "tests": []
+  "title": "Front Door and CDN: caching reverse proxy in front of Blob",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A real caching edge (core/azure_cdn_edge_core.py): route matching, origin selection, per-endpoint cache with TTL from the rule set's CacheExpiration action or Cache-Control, query-string caching modes, 304 revalidation, ModifyResponseHeader, purge and hit/miss statistics, over Blob origins. There is exactly one edge location (no PoPs/geo), no WAF, no TLS termination, custom domains stay Pending, origin health probes are not run, and only storage-account Blob origins are reachable (others return 502). Reached at /_edge/{endpoint host}/... (offline: /azure-data/blob/_edge/...) rather than by DNS name."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_cdn_edge.py"
+  ]
  },
  "azure.storage.sas": {
   "title": "Shared access signature (SAS) generation",

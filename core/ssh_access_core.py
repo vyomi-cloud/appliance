@@ -247,3 +247,112 @@ def parse_os_info(out: str) -> dict:
             k, v = line.split("=", 1)
             d[k.strip().lower()] = v.strip().strip('"')
     return d
+
+
+# ── Azure VM guest views: Inventory / Update Manager / Performance diagnostics ───────────────────────────────
+# Real reach-in through the same injected `run(instance_id, sh) -> (rc, out)` as the shell features: offline it is
+# `docker exec` in the VM's container, so everything below is read from (or done to) the running guest.  Nano has no
+# guest runtime here (run is None): the callers say so instead of inventing data.
+INVENTORY_CMD = (
+    "echo '##os'; cat /etc/os-release 2>/dev/null; echo '##kernel'; uname -sr; echo '##host'; hostname; "
+    "echo '##pkgfmt'; "
+    "if command -v dpkg-query >/dev/null 2>&1; then echo dpkg; echo '##pkgs'; dpkg-query -W -f='${Package}\\t${Version}\\n' 2>/dev/null; "
+    "elif command -v apk >/dev/null 2>&1; then echo apk; echo '##pkgs'; apk info -v 2>/dev/null; "
+    "elif command -v rpm >/dev/null 2>&1; then echo rpm; echo '##pkgs'; rpm -qa --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\n' 2>/dev/null; "
+    "else echo none; echo '##pkgs'; fi; echo '##end'")
+
+PERF_CMD = (
+    "echo '##load'; cat /proc/loadavg; echo '##cpus'; nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo; "
+    "echo '##mem'; grep -E '^(MemTotal|MemAvailable|MemFree|SwapTotal|SwapFree):' /proc/meminfo; "
+    "echo '##uptime'; cat /proc/uptime; echo '##disk'; df -Pk / | tail -n 1; "
+    "echo '##procs'; for d in /proc/[0-9]*; do p=${d#/proc/}; c=$(cat $d/comm 2>/dev/null); r=$(awk '/VmRSS/{print $2}' $d/status 2>/dev/null); echo \"$p ${r:-0} $c\"; done | sort -k2 -nr | head -n 8; echo '##end'")
+
+
+def _sections(out: str) -> dict:
+    cur, sec = None, {}
+    for line in out.splitlines():
+        if line.startswith("##"):
+            cur = line[2:].strip()
+            sec[cur] = []
+        elif cur is not None:
+            sec[cur].append(line)
+    return sec
+
+
+def parse_inventory(out: str) -> dict:
+    s = _sections(out)
+    osr = {}
+    for ln in s.get("os", []):
+        if "=" in ln:
+            k, _, v = ln.partition("=")
+            osr[k.strip()] = v.strip().strip('"')
+    fmt = (s.get("pkgfmt") or ["none"])[0].strip()
+    pkgs = []
+    for ln in s.get("pkgs", []):
+        ln = ln.strip()
+        if not ln:
+            continue
+        if fmt == "apk":
+            m = re.match(r"^(.+?)-(\d[^-]*(?:-r\d+)?)$", ln)
+            pkgs.append({"name": m.group(1), "version": m.group(2)} if m else {"name": ln, "version": ""})
+        else:
+            name, _, ver = ln.partition("\t")
+            pkgs.append({"name": name, "version": ver})
+    pkgs.sort(key=lambda p: p["name"])
+    return {"os": {"name": osr.get("PRETTY_NAME") or osr.get("NAME"), "id": osr.get("ID"), "version": osr.get("VERSION_ID"),
+                   "kernel": (s.get("kernel") or [""])[0].strip(), "hostname": (s.get("host") or [""])[0].strip()},
+            "packageManager": fmt, "packageCount": len(pkgs), "packages": pkgs}
+
+
+def parse_perf(out: str) -> dict:
+    s = _sections(out)
+    la = (s.get("load") or ["0 0 0"])[0].split()
+    cpus = int(((s.get("cpus") or ["1"])[0] or "1").strip() or 1)
+    mem = {}
+    for ln in s.get("mem", []):
+        m = re.match(r"^(\w+):\s+(\d+)", ln)
+        if m:
+            mem[m.group(1)] = int(m.group(2)) * 1024
+    total = mem.get("MemTotal", 0)
+    avail = mem.get("MemAvailable", mem.get("MemFree", 0))
+    disk = (s.get("disk") or [""])[0].split()
+    disk_pct = int(disk[4].rstrip("%")) if len(disk) >= 5 and disk[4].rstrip("%").isdigit() else None
+    procs = [ln.split(None, 2) for ln in (s.get("procs") or []) if ln.strip()]
+    up = float((s.get("uptime") or ["0 0"])[0].split()[0] or 0)
+    perf = {"loadAvg": [float(x) for x in la[:3]], "cpus": cpus, "memTotalBytes": total, "memAvailableBytes": avail,
+            "memUsedPercent": round(100 * (total - avail) / total, 1) if total else None, "diskRootUsedPercent": disk_pct,
+            "uptimeSeconds": int(up), "topProcesses": [{"pid": p[0], "rssKb": int(p[1]) if p[1].isdigit() else 0, "command": p[2]} for p in procs if len(p) == 3]}
+    findings = []
+    if perf["loadAvg"][0] > cpus:
+        findings.append({"severity": "Warning", "finding": f"1-minute load average {perf['loadAvg'][0]} exceeds the {cpus} CPU(s)."})
+    if perf["memUsedPercent"] is not None and perf["memUsedPercent"] > 90:
+        findings.append({"severity": "Warning", "finding": f"{perf['memUsedPercent']}% of memory is in use."})
+    if disk_pct is not None and disk_pct > 90:
+        findings.append({"severity": "Critical", "finding": f"Root filesystem is {disk_pct}% full."})
+    perf["findings"] = findings
+    return perf
+
+
+def updates_command(refresh: bool, install: bool) -> str:
+    pre = ("if command -v apt-get >/dev/null 2>&1; then PM=apt; elif command -v apk >/dev/null 2>&1; then PM=apk; "
+           "elif command -v dnf >/dev/null 2>&1; then PM=dnf; else PM=none; fi; echo '##pm'; echo $PM; ")
+    ref = ("if [ $PM = apt ]; then apt-get update -qq >/dev/null 2>&1; elif [ $PM = apk ]; then apk update >/dev/null 2>&1; fi; " if (refresh or install) else "")
+    inst = ("echo '##install'; if [ $PM = apt ]; then DEBIAN_FRONTEND=noninteractive apt-get -y -qq upgrade 2>&1 | tail -n 15; "
+            "elif [ $PM = apk ]; then apk upgrade 2>&1 | tail -n 15; fi; echo \"exit=$?\"; " if install else "")
+    lst = ("echo '##pending'; if [ $PM = apt ]; then apt-get -s upgrade 2>/dev/null | grep '^Inst' | sed -E 's/^Inst ([^ ]+) \\[([^]]+)\\] \\(([^ ]+).*/\\1\\t\\2\\t\\3/'; "
+           "elif [ $PM = apk ]; then apk version -l '<' 2>/dev/null | tail -n +2 | sed -E 's/^(.+)-([0-9][^ ]*) +< +(.+)$/\\1\\t\\2\\t\\3/'; fi; echo '##end'")
+    return pre + ref + inst + lst
+
+
+def parse_updates(out: str) -> dict:
+    s = _sections(out)
+    pm = (s.get("pm") or ["none"])[0].strip()
+    pend = []
+    for ln in s.get("pending", []):
+        parts = ln.split("\t")
+        if len(parts) == 3:
+            pend.append({"name": parts[0], "installed": parts[1], "available": parts[2]})
+    res = {"packageManager": pm, "pendingCount": len(pend), "pending": pend, "supported": pm != "none"}
+    if "install" in s:
+        res["installLog"] = "\n".join(s["install"])
+    return res

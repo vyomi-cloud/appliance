@@ -11,6 +11,7 @@ import ArmChildren from "../../kit/ArmChildren.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import ResourceBlade, { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Essentials, Glyph, InfoBar, Loading } from "../../kit/common.jsx";
+import Deployments from "./Deployments.jsx";
 import { remember } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 
@@ -63,9 +64,9 @@ export function Managers() {
 
 export const MENU = [
   { id: "overview", label: "Overview" },
-  { group: "Settings", items: [{ id: "groups", label: "Network groups" }, { id: "securityadmin", label: "Security admin configurations" }, { id: "connectivity", label: "Connectivity configurations" }] },
+  { group: "Settings", items: [{ id: "groups", label: "Network groups" }, { id: "securityadmin", label: "Security admin configurations" }, { id: "connectivity", label: "Connectivity configurations" }, { id: "deployments", label: "Deployments" }] },
 ];
-const DEPLOY_NOTE = "Configurations are stored and validated like Azure's, but there is no Deploy step: Vyomi does not push peerings or security admin rules onto virtual networks or evaluate them against traffic.";
+const DEPLOY_NOTE = "Configurations take effect only when deployed from the Deployments blade: connectivity commits write real peerings into the member virtual networks; security admin rules are evaluated on demand and are not yet applied to live container traffic.";
 
 export function ManagerBlade({ params }) {
   const { rg, name } = params;
@@ -86,7 +87,7 @@ export function ManagerBlade({ params }) {
       overview: () => (<>
         <div className="vy-panel-title">{name}</div>
         <Essentials left={[["Resource group", rgOf(mgr.data.id)], ["Location", locationLabel(mgr.data.location)]]} right={[["Features", (p.networkManagerScopeAccesses || []).join(", ")], ["Scope", (p.networkManagerScopes?.subscriptions || []).join(", ")]]} />
-        <InfoBar title="Control plane only">{DEPLOY_NOTE}</InfoBar>
+        <InfoBar title="Deployments">{DEPLOY_NOTE}</InfoBar>
       </>),
       groups: () => (<>
         <div className="vy-panel-title">{name} | Network groups</div>
@@ -99,7 +100,7 @@ export function ManagerBlade({ params }) {
       </>),
       securityadmin: () => (<>
         <div className="vy-panel-title">{name} | Security admin configurations</div>
-        <InfoBar title="Not deployed">{DEPLOY_NOTE}</InfoBar>
+        <InfoBar title="Deploy to take effect">{DEPLOY_NOTE}</InfoBar>
         <ArmChildren title="Security admin configurations" noun="security admin configuration" path={`${base}/securityAdminConfigurations`} version={V} onSelect={(n) => { setCfg(n); setCol(null); }} selectedName={cfg}
           fields={[{ key: "name", label: "Configuration name", required: true }, { key: "desc", label: "Description" }]} build={(v) => ({ name: v.name, body: { properties: { description: v.desc, applyOnNetworkIntentPolicyBasedServices: ["None"] } } })}
           columns={[{ label: "Description", value: (r) => r.properties?.description }, { label: "State", value: (r) => r.properties?.provisioningState }]} />
@@ -111,6 +112,10 @@ export function ManagerBlade({ params }) {
           fields={[{ key: "name", label: "Rule name", required: true }, { key: "priority", label: "Priority (1-4096)", type: "number", def: "100" }, { key: "access", label: "Action", options: ["Deny", "Allow", "AlwaysAllow"] }, { key: "direction", label: "Direction", options: ["Inbound", "Outbound"] }, { key: "protocol", label: "Protocol", options: ["Tcp", "Udp", "Icmp", "Esp", "Ah", "Any"] }, { key: "src", label: "Source address prefix", def: "*" }, { key: "dst", label: "Destination address prefix", def: "*" }, { key: "ports", label: "Destination ports", def: "22", type: "csv" }]}
           build={(v) => ({ name: v.name, body: { kind: "Custom", properties: { priority: v.priority, access: v.access, direction: v.direction, protocol: v.protocol, sources: [{ addressPrefixType: "IPPrefix", addressPrefix: v.src }], destinations: [{ addressPrefixType: "IPPrefix", addressPrefix: v.dst }], destinationPortRanges: v.ports } } })}
           columns={[{ label: "Priority", value: (r) => r.properties?.priority }, { label: "Action", value: (r) => r.properties?.access }, { label: "Direction", value: (r) => r.properties?.direction }, { label: "Protocol", value: (r) => r.properties?.protocol }, { label: "Ports", value: (r) => (r.properties?.destinationPortRanges || []).join(", ") }]} /> : null}
+      </>),
+      deployments: () => (<>
+        <div className="vy-panel-title">{name} | Deployments</div>
+        <Deployments base={base} />
       </>),
       connectivity: () => (<>
         <div className="vy-panel-title">{name} | Connectivity configurations</div>

@@ -10,7 +10,7 @@
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
 import { VmDisasterRecovery, VmVaultBackup } from "./RecoveryPanels.jsx";
-import { BootDiagnostics, SerialConsole, BastionConnect } from "../../kit/VmGuestPages.jsx";
+import { BootDiagnostics, SerialConsole, BastionConnect, GuestInventory, GuestPerformance, UpdateManager } from "../../kit/VmGuestPages.jsx";
 import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -133,6 +133,9 @@ export default function VmBlade({ params }) {
       bootdiagnostics: () => <BootDiagnostics a={a} />,
       serialconsole: () => (isNano() ? <NanoShell a={a} /> : <SerialConsole a={a} />),
       bastion: () => <BastionConnect a={a} />,
+      inventory: () => <GuestInventory a={a} />,
+      perfdiagnostics: () => <GuestPerformance a={a} />,
+      updates: () => <UpdateManager a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
       loadbalancing: () => <CapabilityContainer id="azure.vms.loadbalancing" title={`${a.name} | Load balancing`}><VmLoadBalancing a={a} /></CapabilityContainer>,
       asgs: () => <CapabilityContainer id="azure.vms.asgs" title={`${a.name} | Application security groups`}><VmAsgs a={a} /></CapabilityContainer>,

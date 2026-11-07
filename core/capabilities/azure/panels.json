@@ -112,16 +112,6 @@
       "tests/conformance/test_azure_services_depth.py"
     ]
   },
-  "azure.cosmos.integrations": {
-    "title": "Azure Function, Power BI and Data Migration tool integrations",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "These integration pages (Azure Function trigger wizard, Power BI, Azure Data Migration Service) need separate Azure products that Vyomi does not run; the blade shows an honest Not simulated panel for each. Use Data Explorer and the native Cosmos SDK instead."
-    ]
-  },
   "azure.cosmos.container_blades": {
     "title": "Browse and Scale blades for a single container",
     "level": {
@@ -136,23 +126,29 @@
     ]
   },
   "azure.entra.bitlocker_keys": {
-    "title": "BitLocker keys",
+    "title": "BitLocker recovery-key escrow (informationProtection/bitlocker/recoveryKeys)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "BitLocker recovery key escrow needs real disk encryption on real hardware, which Vyomi's software simulation does not have."
+      "Escrow store only: keys are generated in the real recovery-password format and each read is audited, but no disk is encrypted and nothing is unlocked by a key. Escrow is triggered through a Vyomi-specific POST, because real escrow comes from the Windows OS client."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_graph_ext.py"
     ]
   },
   "azure.entra.toolbar_actions": {
-    "title": "Entra grid toolbar actions (bulk operations, per-user MFA, columns, export settings, preview features, troubleshoot, feedback)",
+    "title": "Entra grid toolbar actions",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Toolbar actions on the Entra user, group, application, role and device grids that are not modelled: inline bulk edit, CSV bulk operations, per-user MFA, Export Data Settings, Troubleshoot / Diagnose and solve problems, Columns, Download (Export), Preview features and info, and Got feedback. Delete custom role is available from the grid's Delete command."
+      "Bulk operations run on the real Graph $batch endpoint and per-user MFA state is stored and enforced by the password grant; Export Data Settings, Columns, Preview features and Got feedback remain unmodelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_graph_ext.py"
     ]
   },
   "azure.keyvaults.tools": {
@@ -198,23 +194,26 @@
     ]
   },
   "azure.sql.integrations": {
-    "title": "Integrations (Stream Analytics, Data Sync, Fabric mirroring, Power Apps, Power Automate, Power BI)",
+    "title": "Integrations (Stream Analytics, Fabric mirroring, Power Apps, Power Automate, Power BI)",
     "level": {
       "nano": "not_simulated",
       "offline": "not_simulated"
     },
     "limitations": [
-      "These integration pages need separate Azure products (Stream Analytics, SQL Data Sync, Microsoft Fabric, the Power Platform) that Vyomi does not run; the blade shows an honest Not simulated panel for each."
+      "Fabric mirroring and the Power Platform (Power BI, Power Apps, Power Automate) are separate Microsoft SaaS products that Vyomi does not run; the blades say so. Data Sync is real (azure.sql.data_sync) and the connection string on the Connection strings blade is what those tools would use."
     ]
   },
   "azure.sql.database_watcher": {
-    "title": "Database watcher",
+    "title": "Database watcher: live engine sampling",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Database watcher (Microsoft.DatabaseWatcher: continuous collection of database telemetry into Data Explorer) is not modelled."
+      "Samples (size, per-table row counts, measured statement latency/failures) are taken from the real engine each time the console asks and kept in a bounded in-memory ring; there is no background collector, no Data Explorer/Kusto store, no KQL dashboards and no CPU/IO/wait metrics because the engine has no resource governor."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_watcher_sync.py"
     ]
   },
   "azure.sql.tools": {
@@ -277,6 +276,56 @@
     ],
     "tests": [
       "tests/conformance/test_azure_services_depth.py"
+    ]
+  },
+  "azure.cosmos.data_migration": {
+    "title": "Data Migration: real container-to-container and JSON-to-container copy",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Copies documents through the data-plane write path (system properties regenerated, change feed and cosmosDBTrigger functions see every row) with query filter, field rename/drop/set, conflict policy and dry run. It is not the Azure Database Migration Service: no external sources (MongoDB, SQL Server, CSV files from disk) and no live/continuous sync.",
+      "Throughput (RU/s) limits are not applied to the copy."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_migration.py"
+    ]
+  },
+  "azure.cosmos.add_function": {
+    "title": "Add Azure Function: creates a real cosmosDBTrigger function in a Function App",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The function runs through the Function App's sandboxed Python invoke path on each data-plane write; the template handler is fixed and other languages/runtimes are not executed."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_changefeed.py"
+    ]
+  },
+  "azure.cosmos.powerbi": {
+    "title": "Power BI integration",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Power BI is a separate Microsoft SaaS product; the blade offers no connector. Use Data Explorer or the SDK."
+    ]
+  },
+  "azure.sql.data_sync": {
+    "title": "Sync to other databases: hub-to-member row sync",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Run on demand (no schedule), one direction per run, primary-key upsert with hub-wins or skip conflict handling and optional delete propagation, between databases of this simulator. Not SQL Data Sync agents: no sync groups on a schedule, no on-premises members, no schema change tracking triggers."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_watcher_sync.py"
     ]
   }
 }

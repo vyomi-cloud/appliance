@@ -652,6 +652,23 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
         return _dfs_settings(state, method, sub, chain[1:], payload, scope_rid)
     if head in ("alerts", "locations"):
         return _alerts(state, method, sub, rg, chain, ctx)
+    if head in ("attackpaths", "cloudsecurityexplorer"):
+        if not plan_on(state, sub, "CloudPosture"):
+            return _err(403, "PlanNotEnabled", "Attack path analysis and the Cloud Security Explorer need the Defender CSPM plan (Microsoft.Security/pricings/CloudPosture = Standard).")
+        try:
+            from core import azure_attackpath_core as ap
+        except ImportError:                                    # Pyodide flat layout
+            import azure_attackpath_core as ap                 # type: ignore
+        if head == "attackpaths" and method == "GET":
+            paths = ap.attack_paths(state, sub)
+            if len(chain) > 1:
+                hit = next((p for p in paths if p["id"] == low[1]), None)
+                return _ok(hit) if hit else _err(404, "NotFound", f"Attack path '{chain[1]}' not found.")
+            return _ok({"value": paths})
+        if head == "cloudsecurityexplorer" and method == "POST":
+            r = ap.explore(state, sub, payload or {})
+            return _err(400, "BadRequest", r["error"]) if "error" in r else _ok(r)
+        return _err(405, "MethodNotAllowed", f"{NS}/{chain[0]} does not support {method}.")
     if method != "GET":
         return _err(405, "MethodNotAllowed", f"{NS}/{chain[0]} supports GET only in Vyomi.")
     if head == "assessmentmetadata":

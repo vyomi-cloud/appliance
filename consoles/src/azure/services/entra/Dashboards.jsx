@@ -7,6 +7,7 @@
  * hardware the simulator doesn't have, so that one action stays an honest declared gap. */
 import { useState } from "react";
 import { Button, Tab, TabList } from "@fluentui/react-components";
+import { BitlockerKeys } from "./EntraExtras.jsx";
 import EntraShell from "./EntraShell.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { NotSimulated } from "../../kit/common.jsx";
@@ -188,7 +189,7 @@ export function DevicesOverview() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button onClick={() => downloadDevicesCsv(devices)}>Download devices</Button>
               </div>
-              <NotSimulated feature="BitLocker keys" note="BitLocker recovery key escrow needs real disk encryption on real hardware, which Vyomi's software simulator cannot provide." />
+              <BitlockerKeys devices={devices} />
             </CapabilityContainer>
           </>
         )}

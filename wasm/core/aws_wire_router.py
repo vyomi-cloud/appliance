@@ -391,6 +391,11 @@ def _azure_service(path, lheaders, query):
             return "az-kv-certs"
         if s0 in ("kv", "labels", "locks", "revisions", "snapshots", "operations"):
             return "az-appconfig"
+    # Front Door / CDN edge (core/azure_cdn_edge_core via the blob core) and the Cosmos Data Migration extension.
+    if p.startswith("/_edge/"):
+        return "az-blob"
+    if p.startswith("/vyomi/migrations"):
+        return "az-cosmos"
     # Cosmos DB: /dbs path or the documentdb headers.
     if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
         return "az-cosmos"

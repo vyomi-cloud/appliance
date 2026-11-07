@@ -197,5 +197,18 @@
   "limitations": ["Extensions are real ARM child resources of the VM (create, list, get, delete with publisher/type/typeHandlerVersion/settings), listed and installed from the console; the extension package is not downloaded and its code is not run inside a guest, so provisioningState is Succeeded without a guest agent. VM applications (gallery applications) are not modelled."],
   "api": ["VirtualMachineExtensions_CreateOrUpdate", "VirtualMachineExtensions_List", "VirtualMachineExtensions_Delete"],
   "tests": ["tests/conformance/test_azure_services_depth.py"]
+ },
+ "azure.vms.guest_views": {
+  "title": "Inventory, Update Manager and Performance diagnostics read from the running guest",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Offline appliance: scripts run in the VM's real container via docker exec (GET /api/azure/vm/{id}/guest/inventory|performance|updates, POST .../updates to refresh the package index or install pending updates): the installed packages come from dpkg/apk/rpm, counters from /proc, pending updates from apt/apk against the guest's own index. Installing updates needs the container to have network access to its mirrors. Windows guests, Update Manager schedules/maintenance configurations and per-update classification (security/critical) are not modelled. Nano has no guest runtime on these pages (the v86 shell is separate), so they say so instead of inventing data."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_vm_guest_views.py"
+  ]
  }
 }

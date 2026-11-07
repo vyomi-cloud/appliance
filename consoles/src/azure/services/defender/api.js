@@ -96,3 +96,8 @@ export const listAlerts = async () =>
   (await restJson("GET", `${SEC()}/alerts`, { query: { "api-version": API.alerts } })).value || [];
 export const alertAction = (alertId, action) =>
   restJson("POST", `${alertId}/${action}`, { query: { "api-version": API.alerts } });
+
+// ── Defender CSPM: attack paths + Cloud Security Explorer (core/azure_attackpath_core.py) ──
+const AP = "2022-11-20-preview";
+export const listAttackPaths = async () => (await restJson("GET", `${SEC()}/attackPaths`, { query: { "api-version": AP } })).value || [];
+export const exploreGraph = (body) => restJson("POST", `${SEC()}/cloudSecurityExplorer`, { query: { "api-version": AP }, body });

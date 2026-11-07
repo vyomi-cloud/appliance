@@ -158,5 +158,83 @@
   "tests": [
    "tests/conformance/test_azure_graph_core.py"
   ]
+ },
+ "azure.entra.licenses": {
+  "title": "Licenses: subscribedSkus, assignLicense, licenseDetails",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Fixed three-SKU catalogue (Entra ID P1, P2, Office 365 E3) with prepaid unit counts; no billing, no group-based licensing, service-plan toggles are stored only."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_ext.py"
+  ]
+ },
+ "azure.entra.conditional_access": {
+  "title": "Conditional Access policies, named locations and What If evaluation",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Evaluated for users/groups, applications, IP locations, platform, risk levels and client app types; enforced only on the password (ROPC) token grant, as there is no interactive sign-in. Device-compliance, session controls and authentication strengths are stored but not evaluated against a real device."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_ext.py"
+  ]
+ },
+ "azure.entra.custom_security_attributes": {
+  "title": "Custom security attributes: attribute sets, definitions, user assignment",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Assignment on users is validated against definitions; service-principal assignment and attribute-based access conditions in RBAC are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_ext.py"
+  ]
+ },
+ "azure.entra.administrative_unit_members": {
+  "title": "Administrative unit members (users, groups, devices)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Membership is stored and listed; scoped role assignments over an AU are not enforced."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_ext.py"
+  ]
+ },
+ "azure.entra.per_user_mfa": {
+  "title": "Per-user MFA state",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Enforced state makes the password grant fail with AADSTS50076; no authenticator enrolment exists."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_ext.py"
+  ]
+ },
+ "azure.entra.batch": {
+  "title": "Graph JSON batch ($batch)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Up to 20 requests per batch, executed sequentially; dependsOn is ignored."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_ext.py"
+  ]
  }
 }

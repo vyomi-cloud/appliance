@@ -24943,6 +24943,42 @@ async def api_azure_bastion_connect(instance_id: str, request: Request):
             "ssh_command": ((info.get("ssh") if isinstance(info, dict) else None) or {}).get("command", "")}
 
 
+def _azure_guest_run(instance_id: str, command: str, timeout_hint: str = ""):
+    """Azure VM guest views (Inventory / Update Manager / Performance diagnostics): run a read/maintenance script in the VM's container."""
+    inst = _ssh_flat("azure", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if str(inst.get("state") or "").lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    rc, out = _ssh_run("azure")(inst["instance_id"], command)
+    if rc is None or (rc != 0 and not out):
+        raise HTTPException(502, detail="GuestUnreachable")
+    return out
+
+
+@app.get("/api/azure/vm/{instance_id}/guest/inventory", include_in_schema=False)
+def api_azure_vm_guest_inventory(instance_id: str):
+    return {"ok": True, "source": "guest (docker exec)", **_sa.parse_inventory(_azure_guest_run(instance_id, _sa.INVENTORY_CMD))}
+
+
+@app.get("/api/azure/vm/{instance_id}/guest/performance", include_in_schema=False)
+def api_azure_vm_guest_performance(instance_id: str):
+    return {"ok": True, "source": "guest (docker exec)", "sampledAt": time.time(), **_sa.parse_perf(_azure_guest_run(instance_id, _sa.PERF_CMD))}
+
+
+@app.get("/api/azure/vm/{instance_id}/guest/updates", include_in_schema=False)
+def api_azure_vm_guest_updates(instance_id: str):
+    return {"ok": True, "source": "guest (docker exec)", **_sa.parse_updates(_azure_guest_run(instance_id, _sa.updates_command(False, False)))}
+
+
+@app.post("/api/azure/vm/{instance_id}/guest/updates", include_in_schema=False)
+async def api_azure_vm_guest_updates_run(instance_id: str, request: Request):
+    """Update Manager: {"refresh": bool, "install": bool} -> refreshes the package index and/or installs every pending update in the guest."""
+    p = await request.json()
+    out = _azure_guest_run(instance_id, _sa.updates_command(bool(p.get("refresh")), bool(p.get("install"))))
+    return {"ok": True, "source": "guest (docker exec)", **_sa.parse_updates(out)}
+
+
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by
 # the ONE aws_wire_router on real backends (MinIO/Postgres/Vault/NATS) — the

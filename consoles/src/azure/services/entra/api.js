@@ -123,3 +123,28 @@ export const DEFAULT_DOMAIN = "vyomilearn.onmicrosoft.com";
 export const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-cloudlearn01";   // core/azure_graph_core.py's GraphStore.organization id
 export const genPassword = () => `Vy${Math.random().toString(36).slice(2, 8)}!${Math.random().toString(36).slice(2, 6)}A1`;
 export const fmtDateTime = (v) => (v ? new Date(v).toLocaleString() : "--");
+
+// ── Licenses, Conditional Access, custom security attributes, BitLocker (core/azure_graph_ext_core.py) ──
+export const listSkus = async () => (await graph("GET", "/subscribedSkus")).value || [];
+export const assignLicense = (userId, add, remove) => graph("POST", `/users/${encodeURIComponent(userId)}/assignLicense`, { body: { addLicenses: add.map((skuId) => ({ skuId })), removeLicenses: remove } });
+export const licenseDetails = async (userId) => (await graph("GET", `/users/${encodeURIComponent(userId)}/licenseDetails`)).value || [];
+export const listCaPolicies = async () => (await graph("GET", "/identity/conditionalAccess/policies")).value || [];
+export const createCaPolicy = (body) => graph("POST", "/identity/conditionalAccess/policies", { body });
+export const updateCaPolicy = (id, body) => graph("PATCH", `/identity/conditionalAccess/policies/${id}`, { body });
+export const deleteCaPolicy = (id) => graph("DELETE", `/identity/conditionalAccess/policies/${id}`);
+export const listNamedLocations = async () => (await graph("GET", "/identity/conditionalAccess/namedLocations")).value || [];
+export const createNamedLocation = (body) => graph("POST", "/identity/conditionalAccess/namedLocations", { body });
+export const whatIf = (body) => graph("POST", "/identity/conditionalAccess/evaluate", { body });
+export const listAttributeSets = async () => (await graph("GET", "/directory/attributeSets")).value || [];
+export const createAttributeSet = (body) => graph("POST", "/directory/attributeSets", { body });
+export const listAttributeDefs = async () => (await graph("GET", "/directory/customSecurityAttributeDefinitions")).value || [];
+export const createAttributeDef = (body) => graph("POST", "/directory/customSecurityAttributeDefinitions", { body });
+export const listBitlockerKeys = async () => (await graph("GET", "/informationProtection/bitlocker/recoveryKeys")).value || [];
+export const escrowBitlockerKey = (deviceObjectId) => graph("POST", "/informationProtection/bitlocker/recoveryKeys", { body: { deviceObjectId } });
+export const readBitlockerKey = (id) => graph("GET", `/informationProtection/bitlocker/recoveryKeys/${id}`, { query: { "$select": "key" } });
+export const deleteBitlockerKey = (id) => graph("DELETE", `/informationProtection/bitlocker/recoveryKeys/${id}`);
+export const listAuMembers = async (id) => (await graph("GET", `/directory/administrativeUnits/${id}/members`)).value || [];
+export const addAuMember = (id, memberId) => graph("POST", `/directory/administrativeUnits/${id}/members/$ref`, { body: { "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${memberId}` } });
+export const removeAuMember = (id, memberId) => graph("DELETE", `/directory/administrativeUnits/${id}/members/${memberId}/$ref`);
+export const setUserMfa = (id, perUserMfaState) => graph("PATCH", `/users/${encodeURIComponent(id)}/authentication/requirements`, { body: { perUserMfaState } });
+export const getUserMfa = async (id) => (await graph("GET", `/users/${encodeURIComponent(id)}/authentication/requirements`)).perUserMfaState;

@@ -70,6 +70,9 @@ async function send(method, path, { headers = {}, body, query } = {}) {
   return { status: res.status, headers: res.headers, text, ok: res.ok };
 }
 
+/** Raw fetch over the wire (status, headers, text) - for data-plane probes that are not JSON/XML APIs (CDN edge). */
+export const sendRaw = send;
+
 // ── XML helpers (S3 REST + Query protocol responses) ────────────────────────────────────
 export function xmlToObj(node) {
   const kids = [...node.children];

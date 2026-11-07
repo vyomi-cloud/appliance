@@ -154,8 +154,10 @@ except ImportError:
     import azure_billing_ext_core as billing_ext   # type: ignore
 
 try:                                              # "Diagnose and solve problems" detector engine (resource-scoped, any type)
+    from core import azure_nm_engine_core as nm_engine
     from core import azure_diagnose_core as diagnose_engine
 except ImportError:
+    import azure_nm_engine_core as nm_engine        # type: ignore
     import azure_diagnose_core as diagnose_engine  # type: ignore
 
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
@@ -1679,6 +1681,13 @@ class AzureArm:
             scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else None
             r = health_engine.health(self.state, sub, scope_rid, False)
             return _ok(r["body"], r["status"])
+        nme_m = nm_engine.find_marker(chain)
+        if nme_m is not None:
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:nme_m]):
+                (stc if n % 2 == 0 else snames).append(token)
+            r = nm_engine.handle(self.state, method, _canonical_id(sub, rg, stc, snames), chain[nme_m + 3:], payload or {})
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
         diag_m = diagnose_engine.find_marker(chain)
         if diag_m is not None:
             stc, snames = [namespace], []
