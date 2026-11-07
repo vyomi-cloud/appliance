@@ -244,6 +244,7 @@ export function meshAgent({ relayUrl, token, WS, iface = "wgvyomi", run = sh, lo
       while (Date.now() - t0 < directWaitMs) { await new Promise((r) => setTimeout(r, 500)); if (await handshook(j)) { ok = true; break; } }
       if (ok) { state.path = "direct-udp"; return; }
       log("direct UDP failed, using the WebSocket bridge");
+      await run("wg", ["set", iface, "peer", j.hub_pubkey, "remove"]);      // reset the half-open handshake (otherwise the old endpoint is retried for ~5 s)
     }
     await run("wg", peerArgs(bridgeEp));
   }
