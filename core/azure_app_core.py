@@ -62,8 +62,19 @@ def configure_runtime(start=None, stop=None, status=None, **extra):
     """extra: logs(handle, tail)->str, exec(handle, argv, timeout)->(rc, out), restart(handle), stats(handle)->dict,
     run_once(image, argv, env, timeout)->(rc, out) -- the real-container operations behind log stream / console / restart / jobs."""
     RUNTIME["start"], RUNTIME["stop"], RUNTIME["status"] = start, stop, status
-    for k in ("logs", "exec", "restart", "stats", "run_once"):
+    for k in ("logs", "exec", "restart", "stats", "run_once", "ready"):
         RUNTIME[k] = extra.get(k)
+    RUNTIME["source"] = extra.get("source") or "docker"      # what the log/metrics responses name as their origin
+    RUNTIME["note"] = extra.get("note") or NO_RUNTIME_NOTE   # honest reason shown when the runtime is configured but not usable now
+
+
+def _ready():
+    """A configured runtime may be unusable right now (Nano: in-browser VMs off / none running): then it is control-plane only."""
+    r = RUNTIME.get("ready")
+    try:
+        return True if r is None else bool(r())
+    except Exception:
+        return False
 
 
 def _ev(rec, reason, message, kind="Normal"):
@@ -74,8 +85,8 @@ def _ev(rec, reason, message, kind="Normal"):
 
 
 def _need_runtime(op):
-    if not RUNTIME.get(op):
-        raise _E(409, "RuntimeUnavailable", NO_RUNTIME_NOTE)
+    if not RUNTIME.get(op) or not _ready():
+        raise _E(409, "RuntimeUnavailable", RUNTIME.get("note") or NO_RUNTIME_NOTE)
 
 
 def _handle_for(rec, revision=None):
@@ -96,10 +107,10 @@ def _diag_app(rec):
     """Diagnose and solve problems detectors derived from the REAL container state + logs (not canned)."""
     out = []
     hs = rec.get("_runtime") or {}
-    run = RUNTIME.get("start") is not None
+    run = RUNTIME.get("start") is not None and _ready()
     p = rec["properties"]
     out.append({"name": "Container runtime", "status": "Healthy" if run else "Info",
-                "detail": "Containers run on the Docker backend." if run else NO_RUNTIME_NOTE})
+                "detail": f"Containers run on the {RUNTIME.get('source', 'docker')} backend." if run else (RUNTIME.get("note") or NO_RUNTIME_NOTE)})
     if run:
         for rev, h in hs.items():
             st = RUNTIME["status"](h) if RUNTIME.get("status") else "Running"
@@ -393,6 +404,9 @@ def _sync_runtime(app):
     if not st:
         app["properties"]["vyomiRuntime"] = {"backend": "none", "note": NO_RUNTIME_NOTE}
         return
+    if not _ready():
+        app["properties"]["vyomiRuntime"] = {"backend": "none", "note": RUNTIME.get("note") or NO_RUNTIME_NOTE}
+        return
     handles = app.setdefault("_runtime", {})
     for name, rev in app["_revisions"].items():
         want = rev["properties"]["replicas"] > 0
@@ -400,13 +414,14 @@ def _sync_runtime(app):
             tmpl = rev["properties"]["template"]
             c = tmpl["containers"][0]
             port = ((app["properties"].get("configuration") or {}).get("ingress") or {}).get("targetPort")
+            kw = {"command": list(c.get("command") or []) + list(c.get("args") or [])} if getattr(st, "wants_command", False) else {}
             try:
-                h = st(app["id"], name, c["image"], {e.get("name"): e.get("value") for e in c.get("env", []) if e.get("name")}, port)
+                h = st(app["id"], name, c["image"], {e.get("name"): e.get("value") for e in c.get("env", []) if e.get("name")}, port, **kw)
             except Exception:
                 h = None
             if h and h.get("error"):                  # runtime is on but the container did not start: say so
                 app["properties"]["runningStatus"] = "Failed"
-                app["properties"]["vyomiRuntime"] = {"backend": "docker", "error": h["error"]}
+                app["properties"]["vyomiRuntime"] = {"backend": RUNTIME.get("source", "docker"), "error": h["error"]}
             elif h:
                 handles[name] = h
                 _ev(app, "ContainerStarted", f"Container for revision '{name}' started from image {c['image']}")
@@ -572,8 +587,8 @@ def _replicas(rec, rev_name):
     real = RUNTIME.get("status")
     st = "Running"
     detail = ""
-    if not RUNTIME.get("start"):
-        detail = NO_RUNTIME_NOTE
+    if not RUNTIME.get("start") or not _ready():
+        detail = RUNTIME.get("note") or NO_RUNTIME_NOTE
     if h and real:
         try:
             st = real(h) or "Running"
@@ -609,7 +624,7 @@ def _app_action(state, rec, action, sub, rg, payload, rest, method):
         _need_runtime("logs")
         rev, h = _handle_for(rec, (payload or {}).get("revision"))
         tail = int((payload or {}).get("tail") or 200)
-        return _ok({"revision": rev, "source": "docker", "container": h.get("id"), "lines": RUNTIME["logs"](h, tail).splitlines()})
+        return _ok({"revision": rev, "source": RUNTIME.get("source", "docker"), "container": h.get("id"), "lines": RUNTIME["logs"](h, tail).splitlines()})
     if action == "exec" and method == "POST":                          # Vyomi extension: Console blade (real `docker exec`)
         _need_runtime("exec")
         rev, h = _handle_for(rec, (payload or {}).get("revision"))
@@ -623,7 +638,7 @@ def _app_action(state, rec, action, sub, rg, payload, rest, method):
     if action == "vyomimetrics" and method == "GET":
         _need_runtime("stats")
         rev, h = _handle_for(rec, None)
-        return _ok(dict(RUNTIME["stats"](h), revision=rev, source="docker stats"))
+        return _ok(dict(RUNTIME["stats"](h), revision=rev, source=RUNTIME.get("source", "docker") + " stats"))
     if action == "events" and method == "GET":
         return _ok({"value": list(reversed(rec.get("_events") or []))})
     if action == "diagnose" and method in ("GET", "POST"):
@@ -749,7 +764,7 @@ def _execution(rec, template=None):
     tmpl = template or rec["properties"]["template"]
     ex = {"id": f"{rec['id']}/executions/{name}", "name": name, "type": f"{NAMESPACE}/jobs/executions",
           "properties": {"status": "Succeeded", "startTime": now, "endTime": now, "template": tmpl}}
-    ro = RUNTIME.get("run_once")
+    ro = RUNTIME.get("run_once") if _ready() else None
     if ro and tmpl.get("containers"):                    # a REAL one-shot container: exit code decides Succeeded/Failed, stdout is the log
         c = tmpl["containers"][0]
         argv = list(c.get("command") or []) + list(c.get("args") or [])
@@ -794,7 +809,7 @@ def _job_ops(state, rec, rest, method, payload):
         if len(rest) == 3 and rest[2].lower() == "logs":      # Vyomi extension: the execution container's real output
             if hit.get("_log") is None:
                 raise _E(409, "RuntimeUnavailable", NO_RUNTIME_NOTE)
-            return _ok({"execution": hit["name"], "exitCode": hit.get("_rc"), "lines": str(hit["_log"]).splitlines(), "source": "docker"})
+            return _ok({"execution": hit["name"], "exitCode": hit.get("_rc"), "lines": str(hit["_log"]).splitlines(), "source": RUNTIME.get("source", "docker")})
         return _ok({k: v for k, v in hit.items() if not k.startswith("_")})
     if a == "events" and method == "GET":
         return _ok({"value": list(reversed(rec.get("_events") or []))})
@@ -878,7 +893,7 @@ def _env_ops(state, rec, rest, method, payload):
                 for line in RUNTIME["logs"](h, int((payload or {}).get("tail") or 100)).splitlines():
                     rows.append({"app": a["name"], "revision": rev, "log": line})
         q = str((payload or {}).get("contains") or "")
-        return _ok({"value": [r for r in rows if q in r["log"]], "source": "docker"})
+        return _ok({"value": [r for r in rows if q in r["log"]], "source": RUNTIME.get("source", "docker")})
     if sub == "diagnose":
         apps = [r for r in state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == f"{NAMESPACE}/containerapps".lower()
                 and (r.get("properties") or {}).get("environmentId", "").lower() == rec["id"].lower()]

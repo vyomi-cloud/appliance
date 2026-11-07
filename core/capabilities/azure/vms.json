@@ -206,14 +206,15 @@
  "azure.vms.guest_views": {
   "title": "Inventory, Update Manager and Performance diagnostics read from the running guest",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Offline appliance: scripts run in the VM's real container via docker exec (GET /api/azure/vm/{id}/guest/inventory|performance|updates, POST .../updates to refresh the package index or install pending updates): the installed packages come from dpkg/apk/rpm, counters from /proc, pending updates from apt/apk against the guest's own index. Installing updates needs the container to have network access to its mirrors. Windows guests, Update Manager schedules/maintenance configurations and per-update classification (security/critical) are not modelled. Nano has no guest runtime on these pages (the v86 shell is separate), so they say so instead of inventing data."
+   "Offline appliance: scripts run in the VM's real container via docker exec (GET /api/azure/vm/{id}/guest/inventory|performance|updates, POST .../updates to refresh the package index or install pending updates): the installed packages come from dpkg/apk/rpm, counters from /proc, pending updates from apt/apk against the guest's own index. Installing updates needs the container to have network access to its mirrors. Windows guests, Update Manager schedules/maintenance configurations and per-update classification (security/critical) are not modelled. Nano (v4): with in-browser VMs on and the VM running, the same scripts run in the v86 Alpine guest over the VM host's exec channel (apk package list, /proc counters, apk upgrade candidates; core/nano_vm_runtime_core.py) -- a 32-bit Alpine guest, not the VM size/OS image you picked, with apk (not apt/dnf), and installing updates needs the tunnel's allow-listed egress. A VM that is not running, or in-browser VMs being off, answers an honest error instead of data."
   ],
   "tests": [
-   "tests/conformance/test_azure_vm_guest_views.py"
+   "tests/conformance/test_azure_vm_guest_views.py",
+   "tests/conformance/test_nano_vm_runtime.py"
   ]
  }
 }

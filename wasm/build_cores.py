@@ -122,6 +122,7 @@ CORES = [
     "azure_operationalinsights_core.py",          # expansion Azure: Log Analytics (Microsoft.OperationalInsights workspaces, saved searches, tables) — vendored VERBATIM
     "azure_appconfiguration_core.py",             # expansion Azure: App Configuration (stores, key-values, snapshots) — vendored VERBATIM
     "azure_app_core.py",                            # expansion Azure: Container Apps (Microsoft.App: environments, apps, revisions, jobs) — vendored VERBATIM
+    "nano_vm_runtime_core.py",                      # Nano: Container Apps replicas / guest views / SSM sessions as processes + scripts in the in-browser VM — VERBATIM
     "azure_cost_core.py",                          # expansion Azure: Cost Management + Consumption (query/alerts/exports/budgets over real inventory) — vendored VERBATIM
     "azure_webapp_core.py",                         # Azure: App Service (Microsoft.Web: web apps + function apps by kind, serverfarms) — vendored VERBATIM
     "azure_eventgrid_core.py",                      # v4: Azure Event Grid event subscriptions (topic-scoped extension resource)
@@ -167,7 +168,7 @@ CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'net
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"ssh_access_core.py", "gcp_vertex_core.py", "gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_alerts_core.py", "azure_cost_core.py", "azure_webapp_core.py"}
+VERBATIM = {"ssh_access_core.py", "gcp_vertex_core.py", "gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "nano_vm_runtime_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_alerts_core.py", "azure_cost_core.py", "azure_webapp_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")

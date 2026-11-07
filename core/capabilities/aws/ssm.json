@@ -86,11 +86,11 @@
  "ssm.session-manager": {
   "title": "Session Manager (StartSession, ResumeSession, TerminateSession, DescribeSessions)",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Offline, running Docker instances register as Online managed nodes (DescribeInstanceInformation) and sessions open a command-at-a-time shell in the instance container. The ssmmessages data-channel websocket is not served, so the AWS CLI session-manager-plugin cannot attach; use the console session or ssh. Nano has no instance runtime, so every target answers TargetNotConnected."
+   "Offline, running Docker instances register as Online managed nodes (DescribeInstanceInformation) and sessions open a command-at-a-time shell in the instance container. The ssmmessages data-channel websocket is not served, so the AWS CLI session-manager-plugin cannot attach; use the console session or ssh. Nano (v4): a running in-browser EC2 VM (nano_vm_compute on) registers as an Online managed node in the console's page and sessions run a command-at-a-time shell in that v86 Alpine VM (the console Connect > Session Manager tab); an instance without a running VM, or the SDK/CLI relay worker (which has no VM host), answers TargetNotConnected. No ssmmessages data channel, so the CLI session-manager-plugin cannot attach."
   ],
   "api": [
    "AmazonSSM.StartSession",
@@ -100,7 +100,8 @@
    "AmazonSSM.DescribeInstanceInformation"
   ],
   "tests": [
-   "tests/conformance/test_ssh_access.py"
+   "tests/conformance/test_ssh_access.py",
+   "tests/conformance/test_nano_vm_runtime.py"
   ]
  }
 }

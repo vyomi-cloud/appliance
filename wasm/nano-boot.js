@@ -100,6 +100,7 @@ const CORES = [
   "azure_appconfiguration_core.py",   // Azure App Configuration engine — loaded before azure_arm_core which delegates to it
   "azure_keyvault_certificates_core.py",   // Azure Key Vault certificates (self-signed X.509) — imported by the Azure adapter
   "azure_arm_ext_core.py",   // Azure ARM locks / identity / health / NICs / run commands — loaded before azure_arm_core which delegates to it
+  "nano_vm_runtime_core.py",   // Container Apps replicas / guest views / SSM sessions on the in-browser VM (imports its engines lazily)
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
   "azure_cost_core.py",   // Azure Cost Management + Consumption engine — loaded before azure_arm_core which delegates to it
   "azure_acr_core.py",   // Azure Container Registry engine (registries, repositories, webhooks) — loaded before azure_arm_core which delegates to it
@@ -244,6 +245,19 @@ def _disp(payload_json):
     # objects survive — embedding JSON.stringify(params) as Python source would
     # turn true/false/null into NameErrors. (Same pattern as relay/nano-endpoint.)
     d = json.loads(payload_json)
+    from core import nano_vm_runtime_core as _nvr
+    try:
+        out = _disp0(d)
+    except _nvr.NeedVm:       # a hook needs the in-browser VM: the page runs the queued scripts and replays this request
+        return json.dumps({"__need_vm": True})
+    post = _nvr.take_post()   # fire-and-forget scripts (launch/stop a replica process), run by the page after the response
+    if post:
+        o = json.loads(out)
+        if isinstance(o, dict):
+            o["__vm_post"] = post
+            out = json.dumps(o)
+    return out
+def _disp0(d):
     prov = d["provider"]
     # console-next SPA (slice 1): the "_console" pseudo-provider is NOT a cloud in
     # the registry — it serves /api/console/* (capabilities now; facade data plane
@@ -264,6 +278,20 @@ async def _adisp(payload_json):
         return json.dumps(await _W.ahandle(d.get("params") or {}))
     return _disp(payload_json)
 import builtins; builtins._disp = _disp; builtins._adisp = _adisp
+# In-browser VM runtime for Container Apps / Azure VM guest views / SSM sessions (core/nano_vm_runtime_core.py).
+try:
+    import js
+    from core import nano_vm_runtime_core as _nvr
+    def _nvr_host():
+        nv = getattr(js.globalThis, "NanoVM", None)
+        return json.loads(str(nv.hostVm())) if nv is not None else None
+    def _nvr_running(cloud):
+        nv = getattr(js.globalThis, "NanoVM", None)
+        return json.loads(str(nv.runningOf(cloud))) if nv is not None else []
+    _nvr.attach(_nvr_host, _nvr_running)
+    builtins._nvr = _nvr
+except Exception as _e:
+    print("[nano] VM runtime not attached:", _e)
 `);
   st.ok();
   // ── Local-LLM bridge (WebLLM) ───────────────────────────────────────
@@ -340,9 +368,28 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
   // `_wire` (v4 native-wire consoles) runs on the async router so awaiting engines
   // (PGlite snapshots, the Parquet writer for RDS exports) work from the console too.
-  const adispatch = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
+  const adispatch0 = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
     : JSON.parse(await py.runPythonAsync(
       `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
+  // VM-backed data planes (Container Apps replicas, job executions, SSM targets): the Python engine asks for scripts to run
+  // in the in-browser VM (it cannot await the VM mid-request), the page runs them and replays the SAME request; scripts the
+  // engine queued for after the response (launch / stop a replica process) run once it has answered.
+  const vmScripts = (list) => Promise.all((list || []).map((r) => window.NanoVM.runScript(r.vm, r.script, r.timeout_ms)));
+  const adispatch = async (prov, svc, op, params) => {
+    if (prov === "_wire" || !window.NanoVM || !window.NanoVM.enabled()) return adispatch0(prov, svc, op, params);
+    try { py.runPython("_nvr.begin()"); } catch (_) { return adispatch0(prov, svc, op, params); }   // runtime not attached
+    let out = null;
+    for (let i = 0; i < 16; i++) {
+      out = await adispatch0(prov, svc, op, params);
+      if (!out || !out.__need_vm) break;
+      const need = JSON.parse(py.runPython("import json as _j; _j.dumps(_nvr.take_need())"));
+      const res = await vmScripts(need);
+      need.forEach((r, k) => py.runPython(`_nvr.set_result(${JSON.stringify(r.key)}, ${JSON.stringify(JSON.stringify(res[k]))})`));
+    }
+    if (out && out.__need_vm) return { ok: false, error: "The in-browser VM did not answer in time." };
+    if (out && out.__vm_post) { const post = out.__vm_post; delete out.__vm_post; await vmScripts(post); }
+    return out;
+  };
 
   // ── Live resource census ──────────────────────────────────────────
   // The dashboard page has no Pyodide, so it can't see the resources THIS
@@ -442,6 +489,25 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
   st = K.step("store", "restoring your resources from IndexedDB");
   try { restoreStores(await nbMetaGet(STORE_KEY)); st.ok(); } catch (e) { st.ok("starting fresh"); }
 
+  // AWS Systems Manager Session Manager (console endpoints /api/ssm/sessions*): sessions live in the shared ssh_access store
+  // (Python); a session's commands run in the target EC2 instance's in-browser VM through the VM host's exec.
+  const ssmSession = async (op, params) => {
+    const body = params.body || {};
+    const hostErr = (status, detail) => ({ __http: { status, body: { detail }, headers: {} } });
+    const ssm = (o, b) => JSON.parse(py.runPython(`_nvr.ssm_op(${JSON.stringify(o)}, ${JSON.stringify(JSON.stringify(b))})`));
+    if (op === "SsmStart") {
+      const r = ssm("Start", body);
+      return r.ok ? r : { __http: { status: r.status || 400, body: { __type: r.code, message: r.message + (r.code === "TargetNotConnected"
+        ? " In Nano an instance is a managed node only while its in-browser VM is running (turn on in-browser VMs, then launch it)." : "") }, headers: {} } };
+    }
+    if (op === "SsmList") return ssm("List", body);
+    if (op === "SsmTerminate") { const r = ssm("Terminate", { session_id: params.ref }); return r.ok ? r : hostErr(r.status || 400, r.message || r.code); }
+    const t = ssm("Target", { session_id: params.ref });          // SsmExec
+    if (!t.ok) return hostErr(t.status || 404, t.detail || "SessionNotFound");
+    const r = await window.NanoVM.handle("aws", "Exec", { ref: t.target, body: { command: String(body.command || "") } });
+    return r && r.__http ? r : { session_id: params.ref, ...r };
+  };
+
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", async (ev) => {
     // A restarted service worker has forgotten who is ready; this page still is.
@@ -471,7 +537,7 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
       // the VM host; any other mutating op may have created/stopped/deleted an
       // instance, so the host reconciles its VMs against the stores right after.
       const out = svc === "_vm"
-        ? (window.NanoVM ? await window.NanoVM.handle(prov, op, params || {})
+        ? (window.NanoVM ? await (/^Ssm/.test(op) ? ssmSession(op, params || {}) : window.NanoVM.handle(prov, op, params || {}))
                          : { __http: { status: 409, body: { detail: { error: "NoRuntime", hint: "In-browser VM compute is not loaded in this view." } } } })
         : await adispatch(prov, svc, op, params || {});
       if (window.NanoVM && svc !== "_vm" && !/^(GET|HEAD|List|Get|Describe|Query|Scan)/.test(op)) window.NanoVM.kick();
@@ -491,6 +557,10 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
     const sc = document.createElement("script");
     sc.src = BASE + "/vm/nano-vm-host.js"; sc.onload = res; sc.onerror = res;
     document.head.appendChild(sc);
+  });
+  if (window.NanoVM) window.NanoVM.setPyHooks({
+    guestCommand: (kind, body) => String(py.runPython(`_nvr.guest_command(${JSON.stringify(kind)}, ${JSON.stringify(body)})`)),
+    guestParse: (kind, out) => String(py.runPython(`_nvr.guest_parse(${JSON.stringify(kind)}, ${JSON.stringify(out)})`)),
   });
   if (window.NanoVM) window.NanoVM.init({
     listDesired: async () => {

@@ -11,13 +11,14 @@ import { useAsync } from "../../common/useAsync.js";
 import { restJson } from "../../common/wire.js";
 import { getSubscription, parseId } from "./arm.js";
 import { ErrorBar, InfoBar, Loading } from "./common.jsx";
+import { CapabilityContainer } from "./Capability.jsx";
 
 async function host(path, init) {
   const r = await fetch(path, init);
   const t = await r.text();
   let j = null; try { j = JSON.parse(t); } catch { /* HTML or empty: the appliance routes are not served on this substrate */ }
   if (!j) throw new Error("This substrate has no guest runtime: the appliance's /api/azure routes are not served here (offline appliance only).");
-  if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : j.detail?.reason || `HTTP ${r.status}`);
+  if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : j.detail?.hint || j.detail?.reason || j.detail?.error || `HTTP ${r.status}`);
   return j;
 }
 const GUEST_ERR = { NoSuchInstance: "No running guest container backs this VM.", InstanceNotRunning: "The VM is not running." };
@@ -161,7 +162,7 @@ export function GuestInventory({ a }) {
   const x = d.data;
   const pk = (x?.packages || []).filter((p) => p.name.includes(filter.toLowerCase()));
   return (
-    <>
+    <CapabilityContainer id="azure.vms.guest_views" title="Inventory">
       <div className="vy-panel-title">{a.name} | Inventory</div>
       <div className="vy-cmdbar"><Button size="small" onClick={d.reload}>Refresh</Button></div>
       {d.loading && !x ? <Loading /> : d.error ? <ErrorBar error={d.error} title="Inventory is not available" /> : x && (
@@ -171,7 +172,7 @@ export function GuestInventory({ a }) {
           <Tbl head={["Package", "Version"]} rows={pk.slice(0, 500).map((p) => [p.name, p.version])} empty="No packages match." />
         </>
       )}
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -179,7 +180,7 @@ export function GuestPerformance({ a }) {
   const d = useAsync(() => guest(a, "performance"), [a.id]);
   const x = d.data;
   return (
-    <>
+    <CapabilityContainer id="azure.vms.guest_views" title="Performance diagnostics">
       <div className="vy-panel-title">{a.name} | Performance diagnostics</div>
       <div className="vy-cmdbar"><Button size="small" onClick={d.reload}>Run diagnostics</Button></div>
       {d.loading && !x ? <Loading /> : d.error ? <ErrorBar error={d.error} title="Performance diagnostics are not available" /> : x && (
@@ -191,7 +192,7 @@ export function GuestPerformance({ a }) {
           <Tbl head={["PID", "RSS (KB)", "Command"]} rows={x.topProcesses.map((p) => [p.pid, p.rssKb, p.command])} empty="No processes." />
         </>
       )}
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -211,7 +212,7 @@ export function UpdateManager({ a }) {
   };
   const x = d.data;
   return (
-    <>
+    <CapabilityContainer id="azure.vms.guest_views" title="Updates">
       <div className="vy-panel-title">{a.name} | Updates</div>
       <div className="vy-cmdbar"><Button size="small" onClick={d.reload}>Refresh view</Button><Button size="small" disabled={busy} onClick={() => run({ refresh: true })}>Check for updates (refresh package index)</Button><Button size="small" appearance="primary" disabled={busy || !x?.pendingCount} onClick={() => run({ install: true })}>Install all pending updates</Button></div>
       {d.loading && !x ? <Loading /> : d.error ? <ErrorBar error={d.error} title="Update Manager is not available" /> : x && (
@@ -221,6 +222,6 @@ export function UpdateManager({ a }) {
           {log && <pre>{log}</pre>}
         </>
       )}
-    </>
+    </CapabilityContainer>
   );
 }
