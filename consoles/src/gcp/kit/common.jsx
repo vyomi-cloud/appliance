@@ -62,7 +62,7 @@ export function Section({ title, description, actions, children, className, data
 /** The console's page header: title row with action buttons, a divider under it. */
 export function PageHeader({ title, back, actions, children }) {
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 2 }} data-vyomi-header="">
       <Stack useFlexGap direction="row" alignItems="center" spacing={2} sx={{ minHeight: 56, flexWrap: "wrap", rowGap: 1 }}>
         {back}
         <Typography variant="h1" component="h1" sx={{ mr: 2 }}>{title}</Typography>

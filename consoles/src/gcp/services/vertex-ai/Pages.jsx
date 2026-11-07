@@ -68,7 +68,7 @@ export function ModelGarden() {
   const shown = data.filter((m) => (!pub || m.name.split("/")[1] === pub) && (!q || `${m.displayName} ${m.description} ${m.name}`.toLowerCase().includes(q.toLowerCase())));
   return (
     <>
-      <PageHeader title="Model Garden" actions={<CapabilityBadge id="gcp.vertex-ai.model-garden" />} />
+      <PageHeader title="Model Garden" actions={<CapabilityBadge id="gcp.vertex-ai.model-garden" host="[data-vyomi-header]" />} />
       <Stack spacing={2}>
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }} alignItems="center">
           <TextField size="small" label="Search models" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 280 }} />

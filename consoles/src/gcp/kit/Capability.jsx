@@ -57,9 +57,9 @@ const DEFAULT_NOTE = {
   config_only: "Vyomi stores this setting and returns it from the API exactly as configured, but does not enforce it.",
 };
 
-export function CapabilityBadge({ id }) {
+export function CapabilityBadge({ id, host }) {
   const [anchor, setAnchor] = useState(null);
-  const [markerRef, slot] = useCardSlot();
+  const [markerRef, slot] = useCardSlot(host);
   const c = capability(id);
   if (!c || c.level === "full" || c.level === "not_simulated") return null;
   const attrs = { "data-vyomi-capability": c.level, "data-vyomi-capability-id": id };

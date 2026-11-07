@@ -30,11 +30,11 @@ function findCard(start) {
 }
 
 /** [markerRef, slotElement|null] — put markerRef on a hidden span inside the card. */
-export function useCardSlot() {
+export function useCardSlot(hostSelector) {
   const ref = useRef(null);
   const [slot, setSlot] = useState(null);
   useLayoutEffect(() => {
-    const card = ref.current && findCard(ref.current);
+    const card = ref.current && (hostSelector ? ref.current.closest(hostSelector) : findCard(ref.current));
     if (!card) return undefined;
     const cs = getComputedStyle(card);
     let el = card.querySelector(":scope > [data-vyomi-tab-slot]");
@@ -45,12 +45,13 @@ export function useCardSlot() {
       const rw = clipped ? 0 : parseFloat(cs.borderRightWidth);
       el = document.createElement("div");
       el.setAttribute("data-vyomi-tab-slot", "");
-      Object.assign(el.style, { position: "absolute", right: `-${rw}px`, bottom: `-${bw}px`, display: "flex", gap: "4px", zIndex: "1" });
+      // hostSelector = a page header: the tab sits on the divider under the title, at the far right (the divider bleeds 24px past the content)
+      Object.assign(el.style, { position: "absolute", right: hostSelector ? "-24px" : `-${rw}px`, bottom: hostSelector ? "0px" : `-${bw}px`, display: "flex", gap: "4px", zIndex: "1" });
       el.dataset.radius = cs.borderBottomRightRadius;
       el.dataset.border = cs.borderBottomColor;
       el.dataset.clipped = clipped ? "1" : "";
       card.appendChild(el);
-      card.style.paddingBottom = `${parseFloat(cs.paddingBottom) + TAB_GAP}px`; // room so the tab never covers content
+      if (!hostSelector) card.style.paddingBottom = `${parseFloat(cs.paddingBottom) + TAB_GAP}px`; // room so the tab never covers content
     }
     setSlot(el);
     return undefined;
