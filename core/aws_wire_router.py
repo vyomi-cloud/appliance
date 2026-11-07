@@ -89,6 +89,7 @@ from core import gcp_clouddeploy_core as gcp_clouddeploy
 from core import gcp_backupdr_core as gcp_backupdr
 from core import gcp_cloudbuild_core as gcp_cloudbuild
 from core import gcp_posture_core as gcp_posture
+from core import gcp_wire_ext   # GCP wire gap-filler: Functions v1/v2, Cloud DNS, SCC v1 + schema-driven store for the rest
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
 # (the job-trigger binding the Cloud Run console's Triggers tab shows and creates).
@@ -1592,6 +1593,13 @@ class AwsWireRouter:
     def _handle_inner(self, method, path, query, headers, body):
         """Route ONE native-wire request, then record it in the security audit feed."""
         r = self._handle_raw(method, path, query, headers, body)
+        if r.get("status", 200) >= 400 and gcp_wire_ext.looks_unwired(r):   # a Google API method no dedicated core answers: the schema-driven store
+            try:
+                _fb = gcp_wire_ext.fallback(self, method, path, query, headers, bytes(body) if isinstance(body, (bytes, bytearray)) else (body or "").encode(), r)
+            except Exception:   # never let the gap-filler turn an honest "unknown route" into a 500
+                _fb = None
+            if _fb is not None:
+                r = _fb
         try:
             lh = _lower_headers(headers)
             svc = self.service_of(method, path, lh, body if isinstance(body, (bytes, bytearray)) else (body or b""), query)
@@ -1614,6 +1622,9 @@ class AwsWireRouter:
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
+        _gx = gcp_wire_ext.pre(self, method, path, query, lheaders, bytes(body))   # Functions v1/v2, Cloud DNS, SCC v1, /gcf HTTPS URL
+        if _gx is not None:
+            return _gx
         _tr = nano_triggers.route(self, method, path, query, lheaders, bytes(body))   # /gcf, Event Grid publish, function apps
         if _tr is not None:
             return _tr

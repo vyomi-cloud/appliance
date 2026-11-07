@@ -60,7 +60,7 @@ CORES = [
     "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code
     "gcp_console_tabs.py",                          # GCP console resource-detail tabs (validation + records no engine models)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
-    "gcp_posture_core.py", "gcp_scc_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "gcp_posture_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
     "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
     "gcp_compute_ext_core.py",                      # GCP Compute extensions: resource policies/schedulers, reservations, sole-tenant, storage pools, NEGs, Recommender
