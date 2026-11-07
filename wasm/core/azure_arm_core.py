@@ -2201,6 +2201,13 @@ class AzureArm:
                 blocked = lbcore.before_delete(self.state, _net_rec) or diskcore.before_delete(self.state, _net_rec)
                 if blocked:
                     return blocked
+                if str(_net_rec.get("_type") or "").lower() == ext_engine.NIC_T.lower():
+                    _vmref = (_net_rec.get("properties") or {}).get("virtualMachine")
+                    if _vmref:
+                        return _err(400, "NicInUse",
+                                    f"Network Interface {rid} is used by existing resource {_vmref.get('id')}. "
+                                    "In order to delete the network interface, it must be dissociated from the resource.")
+                    ext_engine._nic_unlink(self.state, _net_rec)
                 if cfgext.handles(_net_rec.get("_type") or ""):
                     blocked = cfgext.before_delete(self.state, _net_rec)
                     if blocked:
@@ -3905,8 +3912,15 @@ class AzureArm:
                 used.setdefault(str((p.get("subnet") or {}).get("id", "")).lower(), set()).add(p.get("privateIPAddress"))
         for ipc in (rec.get("properties") or {}).get("ipConfigurations") or []:
             p = ipc.setdefault("properties", {})
+            if rec.get("id") and ipc.get("name"):   # real ARM stamps each ipConfiguration with its own id
+                ipc.setdefault("id", f"{rec['id']}/ipConfigurations/{ipc['name']}")
+                ipc.setdefault("type", "Microsoft.Network/networkInterfaces/ipConfigurations")
             sid = str((p.get("subnet") or {}).get("id", "")).lower()
             prefix = self._subnet_prefix(sid) if sid else None
+            if sid and not prefix:
+                return _err(400, "InvalidResourceReference",
+                            f"Resource {(p.get('subnet') or {}).get('id')} referenced by resource {key} was not found. "
+                            "Please make sure that the referenced resource exists, and that both resources are in the same region.")
             if not prefix:
                 continue
             net = ipaddress.ip_network(prefix, strict=False)
