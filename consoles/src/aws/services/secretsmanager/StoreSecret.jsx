@@ -75,7 +75,7 @@ function ManagedSecretsPanel() {
   );
 }
 
-function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) {
+function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading, rsClusters = [], rsLoading = false }) {
   const isDb = DB_TYPES.includes(s.secretType);
   const isOtherDb = s.secretType === "Credentials for other database";
   const isRds = s.secretType === "Credentials for Amazon RDS database";
@@ -136,7 +136,22 @@ function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) 
             empty={<Box textAlign="center" color="inherit"><b>No databases</b></Box>} />
         </CapabilityContainer>
       )}
-      {isDb && !isOtherDb && !isRds && (
+      {s.secretType === "Credentials for Amazon Redshift data warehouse" && (
+        <CapabilityContainer id="secretsmanager.secret.docdb-redshift-picker" title="Database">
+          <Table variant="embedded" loading={rsLoading} loadingText="Loading clusters"
+            selectionType="single" selectedItems={s.selectedRs ? [s.selectedRs] : []}
+            onSelectionChange={({ detail }) => set({ selectedRs: detail.selectedItems[0] || null })}
+            items={rsClusters} trackBy="ClusterIdentifier"
+            columnDefinitions={[
+              { id: "id", header: "Cluster", cell: (r) => r.ClusterIdentifier },
+              { id: "node", header: "Node type", cell: (r) => r.NodeType },
+              { id: "status", header: "Status", cell: (r) => r.ClusterStatus },
+              { id: "created", header: "Creation date (UTC)", cell: (r) => fmtDate(r.ClusterCreateTime) },
+            ]}
+            empty={<Box textAlign="center" color="inherit"><b>No Redshift clusters</b></Box>} />
+        </CapabilityContainer>
+      )}
+      {s.secretType === "Credentials for Amazon DocumentDB database" && (
         <CapabilityContainer id="secretsmanager.secret.docdb-redshift-picker" title="Database" />
       )}
       <CapabilityContainer id="secretsmanager.secret.encryption" title="Encryption key">
@@ -270,10 +285,12 @@ export default function StoreSecret() {
   const [dbAliases, setDbAliases] = useState([]);
   const [dbInstances, setDbInstances] = useState([]);
   const [dbInstancesLoading, setDbInstancesLoading] = useState(true);
+  const [rsClusters, setRsClusters] = useState([]);
+  const [rsLoading, setRsLoading] = useState(true);
   const [s, setS] = useState({
     secretType: "Credentials for Amazon RDS database",
     username: "", password: "", showPassword: false,
-    dbEngine: "MySQL", serverAddress: "", dbName: "", port: "", selectedDb: null,
+    dbEngine: "MySQL", serverAddress: "", dbName: "", port: "", selectedDb: null, selectedRs: null,
     valueTab: "keyvalue", kvPairs: [{ key: "", value: "" }], plaintext: "",
     kmsKeyId: "aws/secretsmanager",
     name: "", description: "", tags: [], resourcePolicy: "", editPolicy: false,
@@ -286,6 +303,7 @@ export default function StoreSecret() {
   useEffect(() => {
     api.listKmsAliases().then((aliases) => setDbAliases(aliases.filter((a) => a !== "aws/secretsmanager"))).catch(() => {});
     api.listDbInstances().then(setDbInstances).catch(() => {}).finally(() => setDbInstancesLoading(false));
+    api.listRedshiftClusters().then(setRsClusters).catch(() => {}).finally(() => setRsLoading(false));
   }, []);
 
   const secretValue = () => {
@@ -294,6 +312,10 @@ export default function StoreSecret() {
     if (isDb) {
       const v = { username: s.username, password: s.password };
       if (isOtherDb) Object.assign(v, { engine: s.dbEngine, host: s.serverAddress, dbname: s.dbName, port: s.port });
+      else if (s.secretType === "Credentials for Amazon Redshift data warehouse" && s.selectedRs) Object.assign(v, {
+        engine: "redshift", host: s.selectedRs.Endpoint?.Address, port: s.selectedRs.Endpoint?.Port,
+        dbClusterIdentifier: s.selectedRs.ClusterIdentifier, dbname: s.selectedRs.DBName,
+      });
       else if (s.selectedDb) Object.assign(v, {
         engine: s.selectedDb.Engine, host: s.selectedDb.Endpoint?.Address,
         port: s.selectedDb.Endpoint?.Port, dbInstanceIdentifier: s.selectedDb.DBInstanceIdentifier,
@@ -337,7 +359,7 @@ export default function StoreSecret() {
   };
 
   const steps = [
-    { title: "Choose secret type", content: <SecretTypeStep s={s} set={set} dbAliases={dbAliases} dbInstances={dbInstances} dbInstancesLoading={dbInstancesLoading} /> },
+    { title: "Choose secret type", content: <SecretTypeStep s={s} set={set} dbAliases={dbAliases} dbInstances={dbInstances} dbInstancesLoading={dbInstancesLoading} rsClusters={rsClusters} rsLoading={rsLoading} /> },
     { title: "Configure secret", content: <ConfigureSecretStep s={s} set={set} nameErr={nameErr} dbAliases={dbAliases} /> },
     { title: "Configure rotation", content: <ConfigureRotationStep s={s} set={set} /> },
     { title: "Review", content: <ReviewStep s={s} goto={setIdx} name={s.name} /> },

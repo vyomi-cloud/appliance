@@ -52,6 +52,12 @@ export const listDbInstances = async () => {
   return asList(r.DescribeDBInstancesResponse?.DescribeDBInstancesResult?.DBInstances?.DBInstance);
 };
 
+/** Redshift clusters for the "Credentials for Amazon Redshift data warehouse" picker (core/redshift_core.py). */
+export const listRedshiftClusters = async () => {
+  const r = await awsQuery("redshift", "DescribeClusters", {}, { version: "2012-12-01" });
+  return asList(r.DescribeClustersResponse?.DescribeClustersResult?.Clusters?.Cluster);
+};
+
 export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
 export const unb64 = (s) => decodeURIComponent(escape(atob(s)));
 

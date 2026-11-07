@@ -425,7 +425,7 @@ _AKID_RE = re.compile(r"Credential=([^/]+)/")
 # AWS signing-name → our core key. (S3 falls through as the default.)
 _SIGNING = {
     "dynamodb": "dynamodb", "dax": "dax", "kms": "kms", "secretsmanager": "secretsmanager",
-    "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
+    "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "redshift": "redshift", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "autoscaling": "asg",
@@ -851,7 +851,7 @@ class AwsWireRouter:
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
         self.rds.managed_secret_hook = self._rds_managed_secret   # RDS ManageMasterUserPassword -> a Secrets Manager secret OWNED by RDS
-        self.sec.owner_hooks = {"rds": self._rds_secret_rotated}
+        self.sec.owner_hooks = {"rds": self._rds_secret_rotated, "redshift": self._redshift_secret_rotated}
         self.rds.iam_store = self.iam             # RDS IAM role association validates the role + its trust policy
         self.iam.role_usage_probe = self._role_usage_refs   # IAM Role manager: Lambda execution roles + EC2 instance profiles
         self.lam.role_use_hook = lambda role, svc, act: iam.record_role_use(self.iam, role, svc, act)   # Lambda invoke -> role last-used
@@ -1366,9 +1366,9 @@ class AwsWireRouter:
             params.update(dict(parse_qsl(txt, keep_blank_values=True)))
         return params
 
-    def _rds_managed_secret(self, action: str, db: dict, kms_key_id: str = ""):
+    def _rds_managed_secret(self, action: str, db: dict, kms_key_id: str = "", owner: str = "rds"):
         rid = db.get("dbi_resource_id") or db.setdefault("dbi_resource_id", "db-" + "".join(c for c in db["db_instance_identifier"].upper() if c.isalnum())[:26].ljust(26, "X"))
-        name = f"rds!{rid.lower()}"
+        name = f"rds!{rid.lower()}" if owner == "rds" else f"{owner}!{db['db_instance_identifier']}"
         if action == "delete":
             secrets.delete_managed_secret(self.sec, name)
             return None
@@ -1380,9 +1380,19 @@ class AwsWireRouter:
                "host": db.get("endpoint_address", ""), "port": db.get("endpoint_port", 5432), "dbname": db.get("db_name", ""),
                "dbInstanceIdentifier": db["db_instance_identifier"]}
         db["master_user_password"] = pw
-        out = secrets.create_managed_secret(self.sec, name, "rds", doc, self.kms, kms_key_id or None,
-                                            f"Secret associated with primary RDS DB instance: {db.get('db_instance_arn', '')}")
+        if owner == "redshift":
+            doc["dbClusterIdentifier"] = db["db_instance_identifier"]
+            doc.pop("dbInstanceIdentifier", None)
+        out = secrets.create_managed_secret(self.sec, name, owner, doc, self.kms, kms_key_id or None,
+                                            f"Secret associated with primary {owner.upper() if owner == 'rds' else 'Redshift'} resource: {db.get('db_instance_arn', '')}")
         return {"SecretArn": out["ARN"], "SecretStatus": "active", "KmsKeyId": kms_key_id or "aws/secretsmanager"}
+
+    def _redshift_secret_rotated(self, event: str, secret: dict, doc: dict) -> None:
+        try:
+            from core import redshift_core
+            redshift_core._get(self.rds, doc.get("dbClusterIdentifier", ""))["master_password"] = doc["password"]
+        except Exception:
+            pass
 
     def _rds_secret_rotated(self, event: str, secret: dict, doc: dict) -> None:
         """Secrets Manager rotated an RDS-owned secret: apply the new password to the instance (the owning service's job)."""
@@ -2254,6 +2264,10 @@ class AwsWireRouter:
             r = iam.dispatch(self.iam, params, s3_store=self.s3)
         elif svc == "rds":
             r = rds.dispatch(self.rds, params, msg_store=self.msg, s3_store=self.s3)
+        elif svc == "redshift":   # Redshift clusters (Query API) over the Redshift-lite SQL engine, state on the RDS store
+            from core import redshift_core
+            _st, _xml = redshift_core.dispatch(self.rds, params)
+            return {"status": _st, "headers": {"content-type": "text/xml"}, "body": _xml.encode()}
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
         elif svc == "asg":

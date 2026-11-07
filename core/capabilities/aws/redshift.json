@@ -1,0 +1,22 @@
+{
+ "$doc": "Vyomi capability registry - Redshift. See s3.json for the contract.",
+ "redshift.cluster": {
+  "title": "Redshift clusters + SQL through the Redshift Data API",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Clusters (Query API 2012-12-01: CreateCluster/DescribeClusters/ModifyCluster/DeleteCluster/RebootCluster) are real with AWS validation, including ManageMasterPassword (a Secrets Manager secret owned by redshift, rotated and deleted with the cluster). The Redshift Data API runs ANY SQL (CREATE/INSERT/UPDATE/DELETE/SELECT, joins, aggregates) on the cluster's own SQLite engine; writes are kept as a statement log and replayed after a reboot/reload. The SQL dialect is SQLite's, not Redshift's: no distkey/sortkey semantics, COPY/UNLOAD, Spectrum, stored procedures or columnar storage; node types and counts are metadata; no snapshots, resize or WLM. No Redshift console page yet - use the CLI/SDK (aws redshift, aws redshift-data) or pick the cluster when storing a Secrets Manager Redshift credential."
+  ],
+  "api": [
+   "CreateCluster",
+   "DescribeClusters",
+   "ExecuteStatement"
+  ],
+  "tests": [
+   "tests/conformance/test_redshift_cluster_core.py",
+   "consoles/tests/smoke-aws-redshiftcluster.mjs"
+  ]
+ }
+}

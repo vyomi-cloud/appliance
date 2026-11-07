@@ -233,6 +233,18 @@ def _exec(rds, ddb, st, p):
     rec = {"Id": sid, "CreatedAt": _ts(), "UpdatedAt": _ts(), "Database": p.get("Database", "dev"), "QueryString": sql, "Status": "FINISHED",
            "HasResultSet": False, "ResultRows": -1, "ResultSize": -1, "Duration": 0, "_cols": [], "_rows": []}
     t0 = time.time()
+    from core import redshift_core as _rs
+    if _rs.has_cluster(rds, p.get("ClusterIdentifier") or ""):      # a real Redshift cluster: full SQL on its own engine
+        try:
+            cols, rows, n = _rs.run_sql(rds, p["ClusterIdentifier"], sql)
+            rec["_cols"], rec["_rows"] = cols, rows
+            rec.update(HasResultSet=bool(cols), ResultRows=len(rows) if cols else n,
+                       ResultSize=len(json.dumps(rows, default=str)))
+        except _rs.RsError as e:
+            rec.update(Status="FAILED", Error=e.message)
+        rec["Duration"] = int((time.time() - t0) * 1e9)
+        st["statements"][sid] = rec
+        return {"Id": sid, "CreatedAt": rec["CreatedAt"], "Database": rec["Database"], "WorkgroupName": p.get("WorkgroupName"), "ClusterIdentifier": p.get("ClusterIdentifier")}
     m = re.match(r"^create\s+database\s+([A-Za-z_][A-Za-z0-9_]*)\s+from\s+integration\s+'([^']+)'(\s+database\s+'[^']*')?$", sql, re.I)
     try:
         if m:
@@ -298,6 +310,14 @@ def dispatch_redshift_data(rds, ddb, target, p):
                 raise ZErr("ResourceNotFoundException", "Query did not finish successfully.", 404)
             return 200, {"ColumnMetadata": [{"name": c, "label": c, "typeName": "varchar"} for c in s["_cols"]],
                          "Records": [[_typ(v) for v in r] for r in s["_rows"]], "TotalNumRows": len(s["_rows"])}
+        from core import redshift_core as _rs
+        if op in ("ListDatabases", "ListSchemas", "ListTables") and _rs.has_cluster(rds, p.get("ClusterIdentifier") or ""):
+            cl = _rs._get(rds, p["ClusterIdentifier"])
+            if op == "ListDatabases":
+                return 200, {"Databases": [cl["db_name"]]}
+            if op == "ListSchemas":
+                return 200, {"Schemas": ["public"]}
+            return 200, {"Tables": [{"name": t, "schema": "public", "type": "TABLE"} for t in _rs.list_tables(rds, cl["id"])]}
         if op == "ListDatabases":
             return 200, {"Databases": ["dev"] + sorted(st["databases"])}
         if op == "ListSchemas":
