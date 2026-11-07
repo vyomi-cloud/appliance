@@ -120,6 +120,8 @@ check("genuine Max header token: GCP served", r.status_code != 401 and code(r) !
 # Pro with no cloud chosen: first use pins
 os.environ["VYOMI_BOOSTER_SESSION_TOKEN"] = tok("pro", "")
 S.reset_for_tests()
+for _t_ in (ctx.tenants_state().get("tenants") or {}).values():      # the app mirrors the session tier now, so forget the earlier aws pin
+    _t_.pop("primary_cloud", None)
 check("Pro unset: first cloud (GCP) allowed", gcp().status_code != 403)
 r = aws()
 check("Pro unset: then AWS locked", r.status_code == 403 and code(r) == "tier_provider_locked", f"{r.status_code} {r.text[:150]}")
