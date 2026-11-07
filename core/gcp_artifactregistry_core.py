@@ -268,7 +268,7 @@ def resolve_image_digest(store: ArtifactRegistryStore, ref: str):
     return None
 
 
-def scan_images(store: ArtifactRegistryStore, project: str) -> list:
+def scan_images(store: ArtifactRegistryStore, project: str, trivy_reports: dict | None = None) -> list:
     """Vulnerability scan of every tagged Docker image in the project's repositories that has scanning enabled
     (vulnerabilityScanningConfig.enablementConfig != DISABLED). Returns [{resource, repo, image, tag, digest, scan}].
     The scan reads the image config the registry sync stored with the version (core/vuln_scan_core.py)."""
@@ -291,7 +291,7 @@ def scan_images(store: ArtifactRegistryStore, project: str) -> list:
                     continue
                 uri = f"{loc}-docker.pkg.dev/{project}/{rid}/{pkg['displayName']}@{dg}"
                 out.append({"resource": uri, "repo": full, "image": pkg["displayName"], "tag": tags[0], "digest": dg,
-                            "scan": vs.scan_image(ver.get("_config"), pkg["displayName"], tags[0])})
+                            "scan": vs.scan_image(ver.get("_config"), pkg["displayName"], tags[0], (trivy_reports or {}).get(dg))})
     return out
 
 

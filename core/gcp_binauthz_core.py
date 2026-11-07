@@ -443,9 +443,10 @@ def _err(e):
     return _json(e.status, {"error": {"code": e.status, "message": e.message, "status": e.gstatus}})
 
 
-def dispatch(store, method, path, query=None, headers=None, body=b"", resolver=None):
+def dispatch(store, method, path, query=None, headers=None, body=b"", resolver=None, vuln=None):
+    """``vuln(project)`` -> Container Analysis VULNERABILITY occurrences from the Artifact Registry image scans."""
     try:
-        return _dispatch(store, method.upper(), path, query or {}, body, resolver)
+        return _dispatch(store, method.upper(), path, query or {}, body, resolver, vuln)
     except BaError as e:
         return _err(e)
 
@@ -460,7 +461,7 @@ def _body(body):
     return v if isinstance(v, dict) else {}
 
 
-def _dispatch(store, method, path, query, body, resolver):
+def _dispatch(store, method, path, query, body, resolver, vuln=None):
     st = state(store)
     m = re.match(r"^/v1/projects/([^/]+)/(.*)$", path)
     project, rest = m.group(1), m.group(2)
@@ -586,7 +587,25 @@ def _dispatch(store, method, path, query, body, resolver):
             return _json(200, st["occurrences"][name])
         if method == "GET":
             pre = "projects/%s/occurrences/" % project
-            return _json(200, {"occurrences": [v for k, v in sorted(st["occurrences"].items()) if k.startswith(pre)]})
+            flt = str(query.get("filter") or "")
+            kind = (re.search(r'kind\s*=\s*"?(\w+)"?', flt) or [None, ""])[1]
+            res = (re.search(r'resource_?[uU](?:rl|ri)\s*=\s*"([^"]+)"', flt) or [None, ""])[1].replace("https://", "")
+            occs = []
+            if kind in ("", "ATTESTATION"):
+                occs += [v for k, v in sorted(st["occurrences"].items()) if k.startswith(pre)]
+            if kind in ("", "VULNERABILITY") and callable(vuln):
+                occs += vuln(project)
+            if res:
+                occs = [o for o in occs if o.get("resourceUri", "").replace("https://", "") == res]
+            if verb == "vulnerabilitySummary":
+                by = {}
+                for o in occs:
+                    if o.get("kind") == "VULNERABILITY":
+                        c = by.setdefault(o["vulnerability"]["severity"], [0, 0])
+                        c[0] += 1
+                        c[1] += 1 if o["vulnerability"]["packageIssue"][0].get("fixAvailable") else 0
+                return _json(200, {"counts": [{"severity": k, "totalCount": str(n), "fixableCount": str(f)} for k, (n, f) in by.items()]})
+            return _json(200, {"occurrences": occs})
     om = re.match(r"^occurrences/([^/]+)$", rest)
     if om:
         name = "projects/%s/occurrences/%s" % (project, om.group(1))

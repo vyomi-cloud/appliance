@@ -135,13 +135,14 @@
  "gcp.artifacts.vulnerability-scanning": {
   "title": "Vulnerability scanning (Artifact Analysis)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The vulnerability-scanning setting is stored on the repository and returned by the API; Vyomi does not scan images or report findings."
+   "Tagged Docker images in repositories with scanning enabled are really scanned (core/vuln_scan_core.py): the package inventory is read from the image's stored config (pinned install commands, runtime Env, SBOM label) and matched against a BUNDLED advisory snapshot (a few dozen well-known CVEs plus an end-of-life table, not a live feed) on both Nano and the appliance; findings are served as Container Analysis VULNERABILITY occurrences (occurrences list with kind/resourceUrl filters, :vulnerabilitySummary), shown in the repository's Vulnerabilities section and fed to Security Command Center. Layer tarballs are not unpacked, so an image with no pinned installs/SBOM yields base-image-only results.",
+   "The real Trivy engine takes over per image digest only when the offline appliance's Trivy container has produced a report for that digest (providers/trivy_runner.py); the Artifact Registry control plane here stores no layer blobs, so Trivy cannot scan an AR image on its own yet. enablementConfig DISABLED turns scanning off per repository."
   ],
-  "api": [
+"api": [
    "repositories.patch (vulnerabilityScanningConfig)"
   ],
   "tests": [

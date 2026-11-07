@@ -22,6 +22,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import Vulnerabilities from "./Vulnerabilities.jsx";
 import { CleanupPolicyDialog, describeCleanupPolicy } from "./CreateRepository.jsx";
 
 export default function RepositoryDetail({ params }) {
@@ -100,6 +101,7 @@ export default function RepositoryDetail({ params }) {
             ]}
             empty={<Typography variant="body2" color="text.secondary">No {repo.data.format === "DOCKER" ? "images" : "packages"} in this repository yet.</Typography>}
           />
+          {repo.data.format === "DOCKER" && <Box sx={{ mt: 3 }}><Vulnerabilities location={location} name={name} repo={repo.data} /></Box>}
         </>
       )}
 

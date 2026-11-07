@@ -140,7 +140,7 @@ def _gcp_service(path):
             or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/instances/[^/]+/inventor(y|ies)$", path) \
             or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/osPolicyAssignments([/:]|$)", path):
         return "gcp-osconfig"   # VM Manager: OS Config patch jobs/deployments + OS policy assignments (core/gcp_osconfig_core, state on the VM store)
-    if re.match(r"^/v1/projects/[^/]+/(securityPosture/(compute|storage|threats|vulnerabilities|all)|occurrences(:vulnerabilitySummary)?)$", path):
+    if re.match(r"^/v1/projects/[^/]+/(securityPosture/(compute|storage|threats|vulnerabilities|all))$", path):
         return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
@@ -1510,6 +1510,22 @@ class AwsWireRouter:
         gcp_cloudbuild.push_to_ar(self.gcp_ar, project, ref, tag)
         return ref
 
+    def _ca_vuln_occurrences(self, project):
+        """Container Analysis VULNERABILITY occurrences of the project's scanned Artifact Registry images."""
+        try:
+            scans = gcp_ar.scan_images(self.gcp_ar, project, self._trivy_reports())
+        except Exception:
+            return []
+        return [gcp_posture.occurrence(project, sc, v) for sc in scans for v in sc["scan"]["findings"]]
+
+    def _trivy_reports(self):
+        """Real Trivy reports by image digest (offline appliance, when the Trivy container has scanned the image)."""
+        try:
+            from providers import trivy_runner
+            return trivy_runner.cached_reports()
+        except Exception:
+            return None
+
     def _gcs_read_object(self, bucket, obj):
         """Bytes of a simulated GCS object (Cloud Build storageSource), or None."""
         from urllib.parse import quote
@@ -2034,7 +2050,8 @@ class AwsWireRouter:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), on_publish=self._eventarc_deliver)
             elif svc == "gcp-binauthz":   # tags resolve to digests through the simulated Artifact Registry
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
-                                  resolver=lambda ref: gcp_ar.resolve_image_digest(self.gcp_ar, ref))
+                                  resolver=lambda ref: gcp_ar.resolve_image_digest(self.gcp_ar, ref),
+                                  vuln=self._ca_vuln_occurrences)
             elif svc == "gcp-run":   # real mutations + Eventarc deliveries -> real Cloud Logging entries
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   log_fn=self._run_log, topic_exists=self._run_topic_exists)

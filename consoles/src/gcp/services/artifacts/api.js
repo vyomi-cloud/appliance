@@ -88,3 +88,11 @@ export const validRepoId = (id) => {
   if (!/^[a-z][a-z0-9-]{0,62}$/.test(id) || id.endsWith("-")) return "Use 1-63 lowercase letters, numbers or hyphens, starting with a letter.";
   return null;
 };
+
+/* Artifact Analysis: Container Analysis VULNERABILITY occurrences (core/vuln_scan_core over the stored image config; the real
+ * Trivy engine replaces it per digest on the offline appliance). Filtered to one repository client-side by resourceUri. */
+export async function listVulnerabilities(location, id) {
+  const r = await restJson("GET", `${base()}/occurrences`, { query: { filter: 'kind="VULNERABILITY"' } });
+  const pre = `https://${location}-docker.pkg.dev/${getProject()}/${id}/`;
+  return (r.occurrences || []).filter((o) => o.resourceUri.startsWith(pre));
+}
