@@ -337,3 +337,9 @@ func TestMCPAliasName(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPInstructionsSteerAwayFromRealCloud(t *testing.T) {
+	if !strings.Contains(mcpInstructions, "aws-mcp") || !strings.Contains(mcpInstructions, "real cloud") {
+		t.Error("server instructions must steer local-dev work away from real-cloud MCP servers")
+	}
+}

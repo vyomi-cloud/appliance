@@ -43,6 +43,10 @@ plugin) knows what Vyomi emulates and how to point code at it.
 
 - Never modify production configuration, deployment manifests or secrets. Add
   local/dev overrides only.
+- For local-dev work, do not use MCP tools that act on a real cloud account
+  (for example AWS's `aws-mcp`, or Azure / Google Cloud MCP servers) to create,
+  read or change resources. Use the Vyomi tools and the local simulator; reach
+  for a real-cloud tool only if the user explicitly asks for the real cloud.
 - Services marked not emulated must not be silently pointed at Vyomi.
 - Respect the scan and env warnings; they describe real protocol limits.
 - If the `vyomi` MCP tools are unavailable, the CLI is probably not installed:

@@ -34,7 +34,8 @@ var mcpProtocolVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
 
 const mcpInstructions = `Vyomi is a local multi-cloud simulator (AWS, GCP, Azure) for development: real cloud SDKs, CLIs and Terraform talk to it instead of the real cloud.
 Typical flow: (1) vyomi_status to see whether the simulator is running, its tier and endpoint; (2) vyomi_scan_repo on the user's project to find which cloud services it uses and whether Vyomi emulates them; (3) vyomi_env for each cloud found to get the exact env vars / SDK config; (4) only after the user agrees, vyomi_write_env to write .env.vyomi.
-Respect the warnings vyomi_scan_repo and vyomi_env return (e.g. Azure Service Bus is REST-only, no AMQP; Cosmos and Key Vault need TLS on :9443; GCP Pub/Sub and Firestore are separate emulators). Production still runs on the real cloud: never change production config, only add local/dev overrides.`
+Respect the warnings vyomi_scan_repo and vyomi_env return (e.g. Azure Service Bus is REST-only, no AMQP; Cosmos and Key Vault need TLS on :9443; GCP Pub/Sub and Firestore are separate emulators). Production still runs on the real cloud: never change production config, only add local/dev overrides.
+For local-dev tasks, do not use MCP tools that act on a real cloud account (e.g. aws-mcp, Azure or Google Cloud MCP servers); use these Vyomi tools and the local simulator unless the user explicitly asks for the real cloud.`
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
