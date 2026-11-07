@@ -215,13 +215,13 @@
  },
  "azure.loganalytics.workspace.tools": {
   "title": "Diagnose and solve problems, Computer groups (classic), Linked storage accounts",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Portal troubleshooting, agent-based computer grouping and linked-storage-account configuration are not modeled (Data export is real: azure.loganalytics.workspace.dataexport). Resource health (azure.common.resource_health) and Support + Troubleshooting (azure.common.support) are the shared panels and are not part of this gap."
-  ]
+   "Linked storage accounts are real Microsoft.OperationalInsights/workspaces/{ws}/linkedStorageAccounts/{CustomLogs|AzureWatson|Query|Ingestion|Alerts} resources (CRUD, list, validation: known data source type, 1-5 distinct existing storage accounts, same region as the workspace). The link is CONFIGURATION only: custom-log ingestion, saved queries, alert rules and Watson dumps are not re-routed through or stored in the linked account (they stay in the simulator's workspace store).",
+   "Computer groups (classic) are saved searches (category 'Computer Groups', functionAlias = the group name) whose query returns a Computer column, exposed through a Vyomi view (workspaces/{ws}/computerGroups[/{name}][/members]); members are the distinct Computer values of the query evaluated live over the workspace's data, and a group works in KQL as `Computer in (GroupName)`. Active Directory and WSUS group imports (agent-driven), group-based Update Management scoping and the legacy OMS portal sync are not modelled.",
+   "Diagnose and solve problems runs the shared resource-scoped detectors (retention, daily cap, public network access, provisioning state, recent failed operations) computed from the workspace's live record and Activity log; there is no platform telemetry, guided troubleshooter or auto-remediation. Resource health (azure.common.resource_health) and Support + Troubleshooting (azure.common.support) are the shared panels and are not part of this entry. Data export is real: azure.loganalytics.workspace.dataexport."
+  ],
+  "tests": ["tests/conformance/test_azure_loganalytics_tools.py", "tests/conformance/test_azure_loganalytics_tools_sdk.py", "tests/cli/azure-loganalytics-tools-cli-smoke.sh", "tests/conformance/test_azure_kudu_diagnose.py"]
  },
  "azure.loganalytics.workspace.dataexport": {
   "title": "Data export rules (to a storage account) and the Purge API",

@@ -30,6 +30,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import WorkbooksPanel from "../../kit/Workbooks.jsx";
+import SharedDiagnose from "../../kit/Diagnose.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -112,6 +113,9 @@ export default function WorkspaceBlade({ params }) {
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
       workbooks: () => <WorkbooksPanel workspace={a} />,
+      diagnose: () => <SharedDiagnose id={a.id} name={a.name} />,
+      linkedstorage: () => <LinkedStorage a={a} />,
+      computergroups: () => <ComputerGroups a={a} />,
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];
@@ -645,6 +649,107 @@ function DataExport({ a }) {
         <Input placeholder="Value" value={pg.value} onChange={(_, d) => setPg({ ...pg, value: d.value })} aria-label="Purge value" />
         <Button appearance="primary" disabled={busy || !pg.table || !pg.column} onClick={doPurge}>Purge</Button>
       </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── Linked storage accounts: one row per data source type (bring-your-own-storage config) ──
+function LinkedStorage({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listLinkedStorage(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const accts = useAsync(() => api.listStorageAccounts(), []);
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const linked = Object.fromEntries((data || []).map((r) => [r.name, r]));
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.putLinkedStorage(a.resourceGroup, a.name, form.kind, form.ids);
+      notify.success(`Linked ${form.ids.length} storage account(s) for ${form.kind}.`, "Saved"); setForm(null); reload();
+    } catch (e) { notify.error(e, "Linking the storage account failed"); }
+    finally { setBusy(false); }
+  };
+  const here = (accts.data || []).filter((s) => String(s.location).toLowerCase() === String(a.location).toLowerCase());
+  return (
+    <CapabilityContainer id="azure.loganalytics.workspace.tools" title="Linked storage accounts">
+      <p style={{ fontSize: 13, marginTop: 0 }}>Storage accounts you own, linked to this workspace per data source type. Accounts must be in the workspace's region ({locationLabel(a.location)}).</p>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <table className="vy-grid">
+          <thead><tr><th>Data source type</th><th>Storage accounts</th><th /></tr></thead>
+          <tbody>
+            {api.LINKED_TYPES.map((k) => (
+              <tr key={k}>
+                <td>{k}</td>
+                <td>{linked[k] ? linked[k].properties.storageAccountIds.map((i) => i.split("/").pop()).join(", ") : <span className="vy-muted">Not linked</span>}</td>
+                <td>
+                  <Button size="small" onClick={() => setForm({ kind: k, ids: linked[k]?.properties.storageAccountIds || [] })}>{linked[k] ? "Edit" : "Link"}</Button>
+                  {linked[k] && <Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Unlink ${k}`}
+                    onClick={async () => { try { await api.deleteLinkedStorage(a.resourceGroup, a.name, k); reload(); } catch (e) { notify.error(e, "Unlink failed"); } }} />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {form && (
+        <div style={{ marginTop: 12, maxWidth: 480 }}>
+          <b>{form.kind}</b>
+          {here.length ? here.map((s) => (
+            <Checkbox key={s.id} label={s.name} checked={form.ids.some((i) => i.toLowerCase() === s.id.toLowerCase())}
+              onChange={(_, d) => setForm({ ...form, ids: d.checked ? [...form.ids, s.id] : form.ids.filter((i) => i.toLowerCase() !== s.id.toLowerCase()) })} />
+          )) : <p className="vy-muted">No storage accounts in {locationLabel(a.location)}.</p>}
+          <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={busy || !form.ids.length} onClick={save}>Save</Button> <Button onClick={() => setForm(null)}>Cancel</Button></div>
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Computer groups (classic): saved searches returning a Computer column; members evaluated live ──
+function ComputerGroups({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listComputerGroups(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.putComputerGroup(a.resourceGroup, a.name, form.name, { properties: { displayName: form.name, query: form.query } });
+      notify.success(`Computer group '${form.name}' was saved.`, "Saved"); setForm(null); reload();
+    } catch (e) { notify.error(e, "Saving the computer group failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.loganalytics.workspace.tools" title="Computer groups (classic)">
+      <div className="vy-cmdbar" role="toolbar" aria-label="Computer group commands">
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setForm({ name: "", query: "Heartbeat | distinct Computer" })}>New computer group</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>
+      <p style={{ fontSize: 12 }}>A group is a saved search that returns a Computer column; use it in a query as <code>Computer in (GroupName)</code>. Active Directory and WSUS imports need agents Vyomi does not run.</p>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <table className="vy-grid">
+          <thead><tr><th>Group</th><th>Query</th><th>Members</th><th /></tr></thead>
+          <tbody>
+            {(data || []).length ? data.map((g) => (
+              <tr key={g.name}>
+                <td>{g.name}</td><td><code>{g.properties.query}</code></td>
+                <td title={g.properties.members.join(", ")}>{g.properties.memberCount}{g.properties.memberCount ? ` (${g.properties.members.slice(0, 3).join(", ")}${g.properties.memberCount > 3 ? ", ..." : ""})` : ""}</td>
+                <td><Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Delete ${g.name}`}
+                  onClick={async () => { try { await api.deleteComputerGroup(a.resourceGroup, a.name, g.name); reload(); } catch (e) { notify.error(e, "Delete failed"); } }} /></td>
+              </tr>
+            )) : <tr><td colSpan={4} className="vy-muted">No computer groups</td></tr>}
+          </tbody>
+        </table>
+      )}
+      {form && (
+        <div style={{ marginTop: 12, maxWidth: 560 }}>
+          <Field label="Group name (a KQL function alias)" required><Input value={form.name} onChange={(_, d) => setForm({ ...form, name: d.value })} aria-label="Group name" /></Field>
+          <Field label="Search query (must return a Computer column)" required><Textarea value={form.query} onChange={(_, d) => setForm({ ...form, query: d.value })} rows={3} aria-label="Search query" /></Field>
+          <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={busy || !form.name || !form.query} onClick={save}>Save</Button> <Button onClick={() => setForm(null)}>Cancel</Button></div>
+        </div>
+      )}
     </CapabilityContainer>
   );
 }

@@ -103,3 +103,14 @@ export const listStorageAccounts = async () => (await armType("Microsoft.Storage
 // ── Purge (really deletes the matching rows) ─────────────────────────────────────────────
 export const purge = (rg, name, body) => restJson("POST", `${ARM.path(rg, name)}/purge`, { query: q, body });
 export const purgeStatus = (rg, name, id) => restJson("GET", `${ARM.path(rg, name)}/operations/${encodeURIComponent(id)}`, { query: q });
+
+// ── Linked storage accounts + Computer groups (classic) (core/azure_operationalinsights_core.py) ──
+export const LINKED_TYPES = ["CustomLogs", "AzureWatson", "Query", "Ingestion", "Alerts"];
+const linkPath = (rg, name, kind) => `${ARM.path(rg, name)}/linkedStorageAccounts${kind ? `/${encodeURIComponent(kind)}` : ""}`;
+export const listLinkedStorage = async (rg, name) => (await restJson("GET", linkPath(rg, name), { query: q })).value || [];
+export const putLinkedStorage = (rg, name, kind, ids) => restJson("PUT", linkPath(rg, name, kind), { query: q, body: { properties: { storageAccountIds: ids } } });
+export const deleteLinkedStorage = (rg, name, kind) => restJson("DELETE", linkPath(rg, name, kind), { query: q });
+const cgPath = (rg, name, id) => `${ARM.path(rg, name)}/computerGroups${id ? `/${encodeURIComponent(id)}` : ""}`;
+export const listComputerGroups = async (rg, name) => (await restJson("GET", cgPath(rg, name), { query: q })).value || [];
+export const putComputerGroup = (rg, name, id, body) => restJson("PUT", cgPath(rg, name, id), { query: q, body });
+export const deleteComputerGroup = (rg, name, id) => restJson("DELETE", cgPath(rg, name, id), { query: q });
