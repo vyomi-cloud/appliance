@@ -378,10 +378,21 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
       if (r.status() < 400 || !["POST", "PUT"].includes(r.request().method())) return;
       if (r.status() === 409 || TAKEN.test(await r.text().catch(() => ""))) taken = true;
     };
+    // Multi-request creates (an Azure VM PUTs vnet, public IP, NSG, NIC and only then the VM,
+    // ~0.5s each) outlast a fixed 3s wait; navigating back to the list then aborts the chain
+    // and reports CREATE_NO_ROW for a resource the user would have got. Wait until every
+    // write the submit started has finished (quiet for 1.5s, at most 30s).
+    let inflight = 0, lastWrite = Date.now();
+    const isWrite = (rq) => ["POST", "PUT", "PATCH"].includes(rq.method());
+    const onReq = (rq) => { if (isWrite(rq)) { inflight++; lastWrite = Date.now(); } };
+    const onDone = (rq) => { if (isWrite(rq)) { inflight = Math.max(0, inflight - 1); lastWrite = Date.now(); } };
+    page.on("request", onReq); page.on("requestfinished", onDone); page.on("requestfailed", onDone);
     page.on("response", onResp);
     await submit.click({ timeout: 3000 });
     await sleep(3000);
+    for (const t0 = Date.now(); Date.now() - t0 < 30000 && (inflight > 0 || Date.now() - lastWrite < 1500);) await sleep(250);
     page.off("response", onResp);
+    page.off("request", onReq); page.off("requestfinished", onDone); page.off("requestfailed", onDone);
     // The list only shows its first page, so a default name left by an earlier crawl can be
     // taken without being visible above (DynamoDB "Music" behind 10+ tables). The cloud then
     // rightly refuses it ("already exists"): as a user would, rename it once and resubmit.
