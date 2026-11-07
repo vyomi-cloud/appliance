@@ -55,7 +55,7 @@ def start(run=None, disk=free_disk_gb, network: str | None = None) -> dict:
         args = ["run", "-d", "--name", NAME, "--restart", "unless-stopped", "-v", f"{VOLUME}:/root/.cache", "-p", "127.0.0.1:18080:8080"]
         if network:
             args += ["--network", network]
-        args += [IMAGE, "-hf", HF_MODEL, "--host", "0.0.0.0", "--port", "8080", "-c", "2048", "--embeddings"]
+        args += [IMAGE, "-hf", HF_MODEL, "--host", "0.0.0.0", "--port", "8080", "-c", "4096", "--embeddings", "--jinja"]
         rc, _, err = _run(args, run)
     if rc != 0:
         raise RuntimeError_(f"docker could not start {NAME}: {err}")

@@ -433,7 +433,8 @@ def _tool_prompt(tools, choice):
     lines.append("Reply with ONLY one JSON object and no other text.")
     if choice == "auto":
         lines.append('To call tool(s): {"tool_calls":[{"name":"<tool name>","arguments":{...}}]}\n'
-                     'To answer without a tool: {"content":"<your answer>"}')
+                     'To answer without a tool: {"content":"<your answer>"}\n'
+                     "If a tool can supply what the user asks for (live data, actions, lookups), you MUST call it instead of answering from memory.")
     else:
         pick = f" You MUST call the tool '{choice['name']}'." if isinstance(choice, dict) else " You MUST call at least one tool."
         lines.append('Format: {"tool_calls":[{"name":"<tool name>","arguments":{...}}]}.' + pick)
