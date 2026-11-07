@@ -361,12 +361,60 @@
     return m;
   }
 
+
+  // ── interactive shell into a Docker VM on the Codespace booster (relay stream path; see wasm/relay/booster-hub.mjs) ─────────────
+  // shellTarget: is this instance a VM on the running booster that can be shelled into?  openShell: attach a terminal to it.
+  // Uses the portal-session booster only (the relay plane); paired direct boosters have no stream path.
+  function shellBooster() { return vboost && vboost.token ? vboost : null; }
+  function shellTarget(cloud, ref) {   // -> Promise<{ok, container} | {ok:false, code, reason, down?, none?}>
+    var b = shellBooster();
+    if (!b) return Promise.resolve({ ok: false, none: true, code: "NoBooster", reason: "no booster session is running" });
+    var st = stateOf(SESSION_ID);
+    if (st === "unreachable" || st === "unauthorized") return Promise.resolve({ ok: false, down: true, code: "BoosterDown", reason: "The Codespace booster is not reachable right now." });
+    var base = (state[SESSION_ID] || {}).base || b.base;
+    return timed(base + "/booster/shell/target?cloud=" + encodeURIComponent(cloud) + "&ref=" + encodeURIComponent(ref), { headers: { "x-vyomi-session-token": b.token } })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) {
+        if (r.status === 502 || r.status === 504) return { ok: false, down: true, code: "BoosterDown", reason: "The Codespace booster is not reachable right now." };
+        if (r.status === 404) return { ok: false, none: true, code: "NoShellSupport", reason: "this booster has no shell support (update the booster image)" };
+        if (j && j.error) return { ok: false, down: r.status >= 500, code: j.error.code || "Error", reason: j.error.reason || j.error.message || "refused" };
+        return j && typeof j.ok === "boolean" ? j : { ok: false, code: "BadAnswer", reason: "unexpected answer from the booster" };
+      }); }, function () { return { ok: false, down: true, code: "BoosterDown", reason: "The Codespace booster is not reachable right now." }; });
+  }
+  // opts: {cols, rows, onOpen(container), onData(Uint8Array), onClose({code, reason, message})}. Returns {send(str|Uint8Array), resize(c, r), close(), state()}.
+  function openShell(cloud, ref, opts) {
+    opts = opts || {};
+    var b = shellBooster(), enc = new TextEncoder(), ws = null, done = false, open = false;
+    function end(info) { if (done) return; done = true; try { opts.onClose && opts.onClose(info); } catch (_) {} }
+    if (!b) { setTimeout(function () { end({ code: "NoBooster", message: "no booster session is running" }); }, 0); return { send: function () {}, resize: function () {}, close: function () {}, state: function () { return "closed"; } }; }
+    var url = ((state[SESSION_ID] || {}).base || b.base).replace(/^http/i, "ws") + "/shell";
+    try { ws = new WebSocket(url); } catch (e) { setTimeout(function () { end({ code: "BoosterDown", message: String(e && e.message || e) }); }, 0); return { send: function () {}, resize: function () {}, close: function () {}, state: function () { return "closed"; } }; }
+    ws.binaryType = "arraybuffer";
+    var err = null;
+    ws.onopen = function () { ws.send(JSON.stringify({ type: "auth", token: b.token, cloud: cloud, ref: ref, cols: opts.cols || 110, rows: opts.rows || 22 })); };
+    ws.onmessage = function (e) {
+      if (typeof e.data !== "string") { try { opts.onData && opts.onData(new Uint8Array(e.data)); } catch (_) {} return; }
+      var c; try { c = JSON.parse(e.data); } catch (_) { return; }
+      if (c.t === "opened") { open = true; try { opts.onOpen && opts.onOpen(c.container); } catch (_) {} }
+      else if (c.t === "error") err = c;
+    };
+    ws.onclose = function (e) { end({ code: (err && err.code) || (open ? "Closed" : "BoosterDown"), message: (err && err.message) || (open ? "" : "could not reach the booster"), wsCode: e.code, wasOpen: open }); };
+    ws.onerror = function () {};
+    return {
+      send: function (d) { if (ws.readyState === 1 && open) ws.send(typeof d === "string" ? enc.encode(d) : d); },
+      resize: function (c, r) { if (ws.readyState === 1 && open) ws.send(JSON.stringify({ t: "resize", cols: c, rows: r })); },
+      close: function () { try { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "close" })); ws.close(); } catch (_) {} },
+      state: function () { return done ? "closed" : open ? "open" : "connecting"; },
+    };
+  }
+  function sessionLive() { return !!shellBooster(); }
+
   window.VyomiBooster = {
     list: list, get: function (id) { var b = get(id); return b && Object.assign({}, b, { token: undefined }); }, pair: pair, unpair: unpair,
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
     homeOptions: homeOptions, defaultHome: defaultHome, cloudAllowed: cloudAllowed, planCloud: planCloud, pinCloud: pinCloud, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
     session: function () { return sess; }, sessionBooster: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall, aiChip: aiChip,
+    shellTarget: shellTarget, openShell: openShell, sessionLive: sessionLive,
     isBlocked: blocked, candidates: function (id) { var b = get(id); return b ? candidates(b) : []; },
   };
 

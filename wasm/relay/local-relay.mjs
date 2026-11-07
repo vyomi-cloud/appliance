@@ -98,8 +98,9 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(hub.enabled() ? ["booster-link"] : [])],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(hub.enabled() ? ["booster-link", "booster-shell"] : [])],
       booster_sessions: hub.enabled() ? hub.linked().length : undefined,
+      booster_streams: hub.enabled() ? hub.streams() : undefined,
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
       dbs: [...vmHosts.values()].filter((v) => v.db).map((v) => ({ db: v.vm, engine: v.engine, host_port: v.hostPort })),
     }));
@@ -174,6 +175,7 @@ const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/booster") { hub.upgrade(req, socket, head); return; }
+  if (p === "/shell") { hub.shellUpgrade(req, socket, head); return; }
   if (p === "/mesh" && meshHub) { meshHub.upgrade(req, socket, head); return; }
   if (p === "/llm-runner") { llmHub.upgrade(req, socket, head); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;

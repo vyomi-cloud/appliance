@@ -5,6 +5,9 @@
  *        VYOMI_BOOSTER_SESSION_TOKEN  the portal-signed session token (required)
  *        VYOMI_BOOSTER_LOCAL_URL      the local simulator (default http://127.0.0.1:9000)
  *        WS_PKG                       path to the `ws` package (default "ws")
+ * Streams: the relay multiplexes interactive shells over this same link ({type:"stream",op,sid}, see booster-hub.mjs). Each
+ * stream is bridged to the LOCAL simulator's  ws://.../booster/shell?cloud=&ref=  (which does the container check and owns the PTY),
+ * presenting the same session token. This agent never names a container and holds no Docker access.
  * The process exits 0 at the token's session_end (the relay closes its side at the same moment). It reconnects with
  * backoff until then, and never after.
  */
@@ -33,6 +36,11 @@ function localRequest(base, token, m) {
   });
 }
 
+const MAX_STREAMS = Number(process.env.VYOMI_SHELL_MAX_PER_SESSION || 4);
+const HIGH = 1024 * 1024, CHUNK = 48 * 1024, MAX_IN = 64 * 1024;
+
+function wsBase(base) { const u = new URL(base); u.protocol = u.protocol === "https:" ? "wss:" : "ws:"; u.pathname = ""; u.search = ""; return u.toString().replace(/\/+$/, ""); }
+
 /** Start the link. Returns {stop(), done: Promise<"session_end"|"stopped">, state}. */
 export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000 }) {
   const end = peekSessionEnd(token);
@@ -43,23 +51,61 @@ export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, 
   const finish = (why) => {
     if (stopped) return; stopped = true; clearTimeout(timer); clearTimeout(endTimer);
     try { ws && ws.close(1000, why); } catch { /* */ }
-    state.linked = false; resolveDone(why);
+    state.linked = false; closeStreams(); resolveDone(why);
   };
   if (Number.isFinite(end)) endTimer = setTimeout(() => finish("session_end"), Math.max(0, end * 1000 - Date.now()));
+  const streams = new Map();                       // sid -> local WebSocket to the simulator's PTY endpoint
+  const closeStreams = () => { for (const [sid, lw] of [...streams]) { streams.delete(sid); try { lw.close(1001, "link closed"); } catch { /* */ } } };
   const connect = () => {
     if (stopped) return;
     if (Number.isFinite(end) && Date.now() >= end * 1000) return finish("session_end");
     state.connects++;
     ws = new WS(url, { headers: { authorization: `Bearer ${token}` } });
     ws.on("open", () => { backoff = minBackoffMs; });
+    const out = (o) => { try { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(o)); } catch { /* */ } };
+    const onStream = (m) => {
+      const sid = String(m.sid || ""); if (!sid) return;
+      const lw = streams.get(sid);
+      if (m.op === "open") {
+        if (lw) return;
+        if (streams.size >= MAX_STREAMS) return out({ type: "stream", op: "error", sid, code: "TooManyShells", message: "too many shells" });
+        const cloud = String(m.cloud || ""), ref = String(m.ref || "");
+        if (!/^(aws|gcp|azure)$/.test(cloud) || !ref || ref.length > 200) return out({ type: "stream", op: "error", sid, code: "BadRequest", message: "cloud/ref" });
+        const q = new URLSearchParams({ cloud, ref, cols: String(m.cols ?? ""), rows: String(m.rows ?? "") });
+        const l = new WS(`${wsBase(localUrl)}/booster/shell?${q}`, { headers: { "x-vyomi-session-token": token }, maxPayload: 1024 * 1024 });
+        streams.set(sid, l);
+        let drain = null;
+        l.on("message", (d, isBin) => {
+          if (isBin) {
+            for (let i = 0; i < d.length; i += CHUNK) out({ type: "stream", op: "data", sid, d: Buffer.from(d.subarray(i, i + CHUNK)).toString("base64") });
+            if (ws.bufferedAmount > HIGH && !drain) {          // the relay link is slow: stop reading the PTY until it drains
+              l.pause(); drain = setInterval(() => { if (ws.bufferedAmount < HIGH / 4 || ws.readyState !== ws.OPEN) { clearInterval(drain); drain = null; l.resume(); } }, 50);
+            }
+            return;
+          }
+          let c; try { c = JSON.parse(d.toString()); } catch { return; }
+          if (c.t === "opened") out({ type: "stream", op: "opened", sid, container: c.container });
+          else if (c.t === "error") { streams.delete(sid); out({ type: "stream", op: "error", sid, code: c.code, message: c.message }); try { l.close(); } catch { /* */ } }
+        });
+        l.on("close", (code) => { clearInterval(drain); if (streams.get(sid) === l) { streams.delete(sid); out({ type: "stream", op: "close", sid, reason: code === 1000 ? "exit" : "closed" }); } });
+        l.on("unexpected-response", (_q, res) => { if (streams.get(sid) === l) { streams.delete(sid); out({ type: "stream", op: "error", sid, code: "LocalRefused", message: "simulator refused the shell: HTTP " + res.statusCode }); } });
+        l.on("error", () => { /* 'close' follows */ });
+      } else if (!lw) return;
+      else if (m.op === "data") { const b = Buffer.from(String(m.d || ""), "base64"); if (b.length <= MAX_IN && lw.readyState === lw.OPEN) lw.send(b); }
+      else if (m.op === "resize") { if (lw.readyState === lw.OPEN) lw.send(JSON.stringify({ t: "resize", cols: m.cols, rows: m.rows })); }
+      else if (m.op === "pause") lw.pause();
+      else if (m.op === "resume") lw.resume();
+      else if (m.op === "close") { streams.delete(sid); try { lw.close(1000, "closed by tab"); } catch { /* */ } }
+    };
     ws.on("message", async (data) => {
       let m; try { m = JSON.parse(data.toString()); } catch { return; }
+      if (m.type === "stream") { onStream(m); return; }
       if (m.type === "linked") { state.linked = true; log("linked to relay"); return; }
       if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
       if (m.id && m.method) ws.send(JSON.stringify(await localRequest(localUrl, token, m)));
     });
     const retry = () => {
-      state.linked = false;
+      state.linked = false; closeStreams();
       if (stopped) return;
       timer = setTimeout(connect, backoff); backoff = Math.min(maxBackoffMs, backoff * 2);
     };

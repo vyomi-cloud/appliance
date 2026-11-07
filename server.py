@@ -279,6 +279,9 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
 # Booster pack (headless Pro/Max appliance): /booster/* status + pairing routes.
 from core import booster as _booster
 _booster.register(app)
+# Booster shell routes registered here (before the wire catch-all); the resolver is defined further down.
+from core import booster_shell as _booster_shell
+_booster_shell.register(app, lambda cloud, ref: _shell_container(cloud, ref))
 from core import feedback as _feedback
 _feedback.register(app)
 
@@ -25216,6 +25219,22 @@ def _migrate_dynamodb_local_once():
         _ddb_mig.start_at_boot()
     except Exception as _e:
         print(f"[ddb-migrate] skipped: {_e}")
+
+
+# Booster shell: PTY into a Docker VM (vyomi-i-* on vyomi-net) for the Nano console's "Open shell" (core/booster_shell.py).
+def _shell_container(cloud: str, ref: str):
+    """Resolve an instance id / VM name from THIS appliance's records to its Docker container name (never trust a client-sent name)."""
+    inst, _ = _find_instance_across_spaces(cloud, ref)
+    if not inst:
+        return None
+    if cloud == "azure":
+        _rt = (inst.get("properties") or {}).get("runtime") or {}
+        if not isinstance(_rt, dict) or _rt.get("backend") != "docker":
+            return None
+        return str(_rt.get("containerName") or "") or None
+    if not _docker_backed(inst):
+        return None
+    return str(inst.get("container_name") or inst.get("container_id") or "") or None
 
 
 # Booster pack: headless guard (404 JSON for UI paths when booster mode is on). Added before the

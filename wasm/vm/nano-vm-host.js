@@ -350,6 +350,25 @@
     const userHint = { aws: "ec2-user (Amazon Linux AMIs) or ubuntu (Ubuntu AMIs)", gcp: "the user from your ssh-keys metadata (default gcpuser)", azure: "the VM's adminUsername (default azureuser)" }[cloud];
     async function paint() {
       wrap.innerHTML = "";
+      // Booster first: with a running Codespace booster, compute lives there as Docker VMs and "Open shell" must reach THAT VM, never the in-browser one.
+      const VB = window.VyomiBooster;
+      if (VB && VB.sessionLive && VB.sessionLive() && !readReg()[vmId(cloud, ref)]) {
+        const t = await VB.shellTarget(cloud, ref);
+        if (!wrap.isConnected) return;
+        if (t.ok) { wrap.append(boosterShellBox(cloud, ref, t.container)); return; }
+        if (t.down || t.code === "InstanceNotRunning") {
+          const down = !!t.down;
+          const box = h("div", { style: S.box + ";" + S.warn, "data-nano-booster-msg": down ? "down" : "stopped" },
+            h("div", { style: S.title }, down ? "Codespace booster unreachable" : "VM is not running"),
+            h("div", { style: S.sub }, down ? "Your shell opens in the Docker VM inside your Codespace, which cannot be reached right now. The in-browser VM is not used for booster instances. Retrying automatically."
+                                            : "Start the instance, then open the shell again (it opens inside your Codespace VM)."),
+            h("button", { style: S.btn, onclick: paint }, "Retry now"));
+          wrap.append(box);
+          setTimeout(() => { if (wrap.isConnected && box.isConnected) paint(); }, 5000);
+          return;
+        }
+        // not on the booster (InstanceNotFound / ContainerNotAllowed / no shell support): fall through to the in-browser VM
+      }
       wrap.append(h("div", { style: S.box },
         h("div", { style: S.title }, "In-browser VM"),
         h("div", { style: S.sub }, { aws: "Instance ID", gcp: "Instance", azure: "Virtual machine" }[cloud] + ": " + ref),
@@ -443,6 +462,73 @@
     return box;
   }
 
+  // ── Codespace shell: xterm.js attached to a PTY in the booster's Docker VM (stream path via the relay; wasm/booster-link.js openShell) ──
+  const bshells = new Map();   // vm id -> {conn, term, el}: survives console re-renders like the in-browser terminals
+  function boosterShellBox(cloud, ref, container) {
+    const id = vmId(cloud, ref);
+    const status = h("div", { style: S.sub + ";font-weight:600", "data-nano-booster-status": "1" }, "Connecting to your Codespace VM " + container + "...");
+    const holder = h("div", { "data-nano-shell": "1", "data-nano-shell-kind": "booster", style: "background:#0c0c0c;border-radius:6px;padding:6px;min-height:120px" });
+    const reBtn = h("button", { style: S.btn + ";display:none;margin-top:6px", "data-nano-booster-reconnect": "1" }, "Reconnect");
+    const fsBtn = h("button", { style: S.btn + ";float:right", title: "Full screen (Esc to exit)", "data-nano-shell-fs": "1" }, "Full screen");
+    const box = h("div", { style: S.box + ";" + S.ok, "data-nano-booster-shell": container },
+      h("div", { style: S.title }, "Shell", fsBtn),
+      status,
+      h("div", { style: S.sub }, "A real terminal inside the Docker VM on your Codespace (" + { aws: "EC2 instance ", gcp: "Compute Engine instance ", azure: "Azure VM " }[cloud] + ref + ", container " + container + "). Not the in-browser VM. Click inside and type."),
+      holder, reBtn);
+    const fit = () => {
+      const t = bshells.get(id); if (!t) return;
+      try {
+        if (document.fullscreenElement !== holder) { t.term.resize(110, 22); return; }
+        const d = t.term._core._renderService.dimensions.css.cell;
+        t.term.resize(Math.max(40, Math.floor((holder.clientWidth - 16) / d.width)), Math.max(10, Math.floor((holder.clientHeight - 16) / d.height))); t.term.focus();
+      } catch (_) {}
+    };
+    fsBtn.onclick = () => { if (document.fullscreenElement === holder) document.exitFullscreen(); else if (holder.requestFullscreen) holder.requestFullscreen(); };
+    const onFs = () => { if (!holder.isConnected) { document.removeEventListener("fullscreenchange", onFs); return; } setTimeout(fit, 80); };
+    document.addEventListener("fullscreenchange", onFs);
+    const setStatus = (text, ok) => { status.textContent = text; status.style.color = ok === false ? "#d13212" : ok ? "#1d8102" : ""; };
+    const MSG = { BoosterDown: "The Codespace booster is not reachable. Your VM keeps running there; reconnect when the booster is back.",
+                  BoosterSessionExpired: "The booster session has ended, so the shell was closed.", IdleTimeout: "Shell closed after being idle.",
+                  InstanceNotRunning: "The VM is not running. Start it, then reconnect.", BoosterLinkClosed: "The booster link dropped. Reconnect when it is back." };
+    function connect(t) {
+      t.term.write("\r\n\x1b[90m[connecting to " + container + " in your Codespace...]\x1b[0m\r\n");
+      setStatus("Connecting to your Codespace VM " + container + "...");
+      reBtn.style.display = "none";
+      t.conn = window.VyomiBooster.openShell(cloud, ref, {
+        cols: t.term.cols, rows: t.term.rows,
+        onOpen: (c) => setStatus("Connected to your Codespace VM " + (c || container), true),
+        onData: (u8) => t.term.write(u8),
+        onClose: (info) => {
+          const m = MSG[info.code] || info.message || "The shell closed.";
+          setStatus(info.wasOpen && info.code === "Closed" ? "Shell ended (the VM keeps running in your Codespace)." : m, info.wasOpen && info.code === "Closed" ? undefined : false);
+          t.term.write("\r\n\x1b[31m[" + (info.wasOpen && info.code === "Closed" ? "shell closed" : m) + "]\x1b[0m\r\n");
+          reBtn.style.display = ""; t.conn = null;
+        },
+      });
+    }
+    reBtn.onclick = () => { const t = bshells.get(id); if (t && !t.conn) connect(t); };
+    loadXterm().then((T) => {
+      if (!holder.isConnected) return;
+      if (!T) { holder.textContent = "Terminal failed to load."; return; }
+      let t = bshells.get(id);
+      if (t) {
+        holder.append(t.el); try { t.term.refresh(0, t.term.rows - 1); } catch (_) {}
+        if (t.conn) setStatus("Connected to your Codespace VM " + container, true); else { setStatus("Disconnected from your Codespace VM " + container, false); reBtn.style.display = ""; }
+        return;
+      }
+      const el = h("div", { class: "vy-term" });
+      holder.append(el);
+      const term = new T({ cols: 110, rows: 22, cursorBlink: true, fontSize: 13, fontFamily: "ui-monospace,Menlo,Consolas,monospace", theme: { background: "#0c0c0c" }, scrollback: 3000 });
+      term.open(el);
+      t = { term, el, conn: null };
+      bshells.set(id, t);
+      term.onData((d) => { if (t.conn) t.conn.send(d); });
+      term.onResize((sz) => { if (t.conn) t.conn.resize(sz.cols, sz.rows); });
+      connect(t);
+    });
+    return box;
+  }
+
   // ── animated pending state ───────────────────────────────────────────
   (function () {
     const st = document.createElement("style");
@@ -477,6 +563,8 @@
   // rewritten to "stopped" (VM compute off / VM not running: start it manually from Connect) or "pending" (booting).
   // The SDK/CLI/service-worker paths never go through this fetch, so their instance states are unchanged.
   const vmPower = (cloud, ref) => {
+    // A running Codespace booster owns compute: its instances are Docker VMs there, not in-browser VMs, so the store's state stands.
+    if (window.VyomiBooster && window.VyomiBooster.sessionLive && window.VyomiBooster.sessionLive() && !readReg()[vmId(cloud, ref)]) return "running";
     if (!enabled()) return "stopped";
     const s = (handles.get(vmId(cloud, ref)) || {}).status;
     const st = s && s.state;
