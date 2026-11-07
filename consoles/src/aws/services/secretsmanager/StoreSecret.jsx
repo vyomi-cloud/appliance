@@ -25,6 +25,7 @@ import Modal from "@cloudscape-design/components/modal";
 import Button from "@cloudscape-design/components/button";
 import Table from "@cloudscape-design/components/table";
 import { useNotify } from "../../../common/notify.jsx";
+import { useAsync } from "../../../common/useAsync.js";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
@@ -54,6 +55,26 @@ const SAMPLE = (name) => ({
   Rust: `let resp = client.get_secret_value().secret_id("${name}").send().await?;`,
 });
 
+/* Managed secrets are created and owned by another service (RDS "Manage master credentials in Secrets Manager"); you
+ * don't create them here - this lists the ones that exist and where they come from. */
+function ManagedSecretsPanel() {
+  const t = useAsync(async () => (await api.listSecrets()).filter((x) => x.OwningService), []);
+  return (
+    <CapabilityContainer id="secretsmanager.secret.managed-external" title="Managed external secrets">
+      <SpaceBetween size="s">
+        <Box>Managed secrets are created by the service that owns them. Turn on <b>Manage master credentials in AWS Secrets Manager</b> when you create or modify an RDS database and the secret appears here, rotated by that service.</Box>
+        <Table variant="embedded" loading={t.loading} items={t.data || []} trackBy="ARN"
+          columnDefinitions={[
+            { id: "n", header: "Secret name", cell: (r) => r.Name },
+            { id: "o", header: "Managed by", cell: (r) => r.OwningService },
+            { id: "r", header: "Next rotation", cell: (r) => (r.NextRotationDate ? fmtDate(r.NextRotationDate) : "-") },
+          ]}
+          empty={<Box textAlign="center" color="inherit"><b>No managed secrets</b></Box>} />
+      </SpaceBetween>
+    </CapabilityContainer>
+  );
+}
+
 function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) {
   const isDb = DB_TYPES.includes(s.secretType);
   const isOtherDb = s.secretType === "Credentials for other database";
@@ -68,7 +89,7 @@ function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) 
             items={SECRET_TYPES.map((v) => ({ value: v, label: v }))} />
         </FormField>
       </Container>
-      {isManaged && <CapabilityContainer id="secretsmanager.secret.managed-external" title="Managed external secret" />}
+      {isManaged && <ManagedSecretsPanel />}
       {(isDb || isOther) && (
         <Container header={<Header variant="h2">{isOther ? "Key/value pairs" : "Credentials"}</Header>}>
           {isOther ? (

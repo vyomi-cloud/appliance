@@ -501,7 +501,7 @@
    "offline": "not_simulated"
   },
   "limitations": [
-   "Container associations attach Network Firewall to container platforms (EKS/ECS) through firewall endpoints on real node networking; Vyomi has no inline firewall data path for them."
+   "Container associations would attach Network Firewall to ECS/EKS node networking. Vyomi has no ECS or EKS compute for AWS, so there are no container ENIs to associate. Firewalls themselves are inspected inline in the netsim path (see aws.vpc.network-firewall); that applies to EC2 instances, not containers."
   ]
  },
  "aws.vpc.multi-subnet-create": {

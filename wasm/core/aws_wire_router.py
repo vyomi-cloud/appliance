@@ -852,6 +852,8 @@ class AwsWireRouter:
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        self.rds.managed_secret_hook = self._rds_managed_secret   # RDS ManageMasterUserPassword -> a Secrets Manager secret OWNED by RDS
+        self.sec.owner_hooks = {"rds": self._rds_secret_rotated}
         self.rds.iam_store = self.iam             # RDS IAM role association validates the role + its trust policy
         self.iam.role_usage_probe = self._role_usage_refs   # IAM Role manager: Lambda execution roles + EC2 instance profiles
         self.lam.role_use_hook = lambda role, svc, act: iam.record_role_use(self.iam, role, svc, act)   # Lambda invoke -> role last-used
@@ -1365,6 +1367,33 @@ class AwsWireRouter:
         if txt:
             params.update(dict(parse_qsl(txt, keep_blank_values=True)))
         return params
+
+    def _rds_managed_secret(self, action: str, db: dict, kms_key_id: str = ""):
+        rid = db.get("dbi_resource_id") or db.setdefault("dbi_resource_id", "db-" + "".join(c for c in db["db_instance_identifier"].upper() if c.isalnum())[:26].ljust(26, "X"))
+        name = f"rds!{rid.lower()}"
+        if action == "delete":
+            secrets.delete_managed_secret(self.sec, name)
+            return None
+        if action == "rotate":
+            secrets._rotate_secret(self.sec, {"SecretId": name}, self.kms)
+            return None
+        pw = secrets._gen_password()
+        doc = {"username": db.get("master_username", "admin"), "password": pw, "engine": db.get("engine", "postgres"),
+               "host": db.get("endpoint_address", ""), "port": db.get("endpoint_port", 5432), "dbname": db.get("db_name", ""),
+               "dbInstanceIdentifier": db["db_instance_identifier"]}
+        db["master_user_password"] = pw
+        out = secrets.create_managed_secret(self.sec, name, "rds", doc, self.kms, kms_key_id or None,
+                                            f"Secret associated with primary RDS DB instance: {db.get('db_instance_arn', '')}")
+        return {"SecretArn": out["ARN"], "SecretStatus": "active", "KmsKeyId": kms_key_id or "aws/secretsmanager"}
+
+    def _rds_secret_rotated(self, event: str, secret: dict, doc: dict) -> None:
+        """Secrets Manager rotated an RDS-owned secret: apply the new password to the instance (the owning service's job)."""
+        try:
+            inst = self.rds.get_instance(doc.get("dbInstanceIdentifier", ""))
+            if inst is not None:
+                inst["master_user_password"] = doc["password"]
+        except Exception:
+            pass
 
     def _role_usage_refs(self, role: dict) -> list:
         """Live resources that still depend on an IAM role (IAM Role manager delete checks)."""

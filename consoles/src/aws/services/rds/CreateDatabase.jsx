@@ -101,7 +101,7 @@ export default function CreateDatabase() {
         EngineVersion: f.engineVersion,
         DBInstanceClass: f.instanceClass,
         MasterUsername: f.masterUsername,
-        MasterUserPassword: f.credMgmt === "Self managed" ? f.masterPw : "managed-by-secrets-manager",
+        ...(f.credMgmt === "Self managed" ? { MasterUserPassword: f.masterPw } : { ManageMasterUserPassword: "true" }),
         AllocatedStorage: f.allocatedStorage,
         StorageType: f.storageType,
         MultiAZ: String(f.multiAzDeployment.startsWith("Create") || f.deployment.startsWith("Multi")),

@@ -338,8 +338,20 @@ def _create_secret(store: KvStore, body: dict, kms_store=None) -> dict:
     return out
 
 
+def _block_managed(secret: dict, what: str) -> None:
+    """A secret created and owned by another AWS service (RDS master user password) is changed only through that
+    service: user Put/Update/Delete calls are rejected like AWS does."""
+    owner = secret.get("owning_service")
+    if owner:
+        raise SecretsError("InvalidRequestException",
+                           f"The operation failed because the secret {secret['name']} is managed by the service {owner}. "
+                           f"{what} must go through {owner}.", 400)
+
+
 def _put_value(store: KvStore, body: dict, update: bool = False, kms_store=None) -> dict:
     secret = _require_writable(store, body.get("SecretId") or body.get("Name") or "")
+    if not body.get("__owner_write"):
+        _block_managed(secret, "Changing the secret value")
     if secret.get("deleted_date"):
         raise SecretsError("InvalidRequestException",
                            "You can't perform this operation on the secret because it was marked for deletion.", 400)
@@ -409,6 +421,34 @@ def _rotation_interval_seconds(rules: dict) -> float | None:
     return n * (3600 if unit.startswith("hour") else 86400)
 
 
+def _gen_password(n: int = 24) -> str:
+    import secrets as _sec
+    alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-+=!#%^*"
+    return "".join(_sec.choice(alphabet) for _ in range(n))
+
+
+def create_managed_secret(store: KvStore, name: str, owning_service: str, doc: dict, kms_store=None,
+                          kms_key_id: str | None = None, description: str = "") -> dict:
+    """Called by the owning service (RDS ManageMasterUserPassword): a real secret whose lifecycle that service controls."""
+    out = _create_secret(store, {"Name": name, "SecretString": json.dumps(doc), "Description": description,
+                                 **({"KmsKeyId": kms_key_id} if kms_key_id else {})}, kms_store)
+    secret = store.get_secret(name)
+    secret["owning_service"] = owning_service
+    secret["rotation_enabled"] = True
+    secret["rotation_rules"] = {"AutomaticallyAfterDays": 7}
+    secret["last_rotated_date"] = secret["created"]
+    store.mirror_put(name, secret)
+    store.persist()
+    return out
+
+
+def delete_managed_secret(store: KvStore, name: str) -> None:
+    if store.secret_exists(name):
+        store.drop_secret(name)
+        store.mirror_delete(name)
+        store.persist()
+
+
 def _carry_forward_rotation(store: KvStore, secret: dict, kms_store=None) -> str:
     """The shared 'rotate without a Lambda' step: carry the current value into a
     fresh AWSCURRENT version (old → AWSPREVIOUS), used by both RotateImmediately
@@ -416,7 +456,15 @@ def _carry_forward_rotation(store: KvStore, secret: dict, kms_store=None) -> str
     vid = _stage_to_version(secret, CURRENT)
     cur = secret["versions"].get(vid, {}) if vid else {}
     s_str, s_bin = _version_plaintext(kms_store, cur)
-    res = _put_value(store, {"SecretId": secret["name"],
+    owner = secret.get("owning_service")
+    if owner:      # the owning service (RDS) rotates its master password: new credential, applied to the resource
+        hook = (getattr(store, "owner_hooks", None) or {}).get(owner)
+        doc = json.loads(s_str or "{}")
+        doc["password"] = _gen_password()
+        s_str = json.dumps(doc)
+        if hook:
+            hook("rotate", secret, doc)
+    res = _put_value(store, {"SecretId": secret["name"], "__owner_write": True,
                              "SecretString": s_str, "SecretBinary": s_bin}, kms_store=kms_store)
     secret["last_rotated_date"] = time.time()
     return res["VersionId"]
@@ -605,6 +653,7 @@ def _get_secret_value(store: KvStore, body: dict, kms_store=None) -> dict:
 
 def _common_fields(secret: dict) -> dict:
     out = {"Description": secret.get("description", ""), "CreatedDate": secret.get("created"),
+           **({"OwningService": secret["owning_service"]} if secret.get("owning_service") else {}),
            "LastChangedDate": secret.get("last_changed"), "RotationEnabled": bool(secret.get("rotation_enabled", False))}
     if secret.get("last_accessed"):
         out["LastAccessedDate"] = secret["last_accessed"]
@@ -685,6 +734,7 @@ def _list_secret_version_ids(store: KvStore, body: dict) -> dict:
 
 def _delete_secret(store: KvStore, body: dict) -> dict:
     secret = _require_writable(store, body.get("SecretId") or "")
+    _block_managed(secret, "Deleting the secret")
     if secret.get("replicas"):
         raise SecretsError("InvalidParameterException",
                            "You can't delete a secret that still has replicas. Remove every "

@@ -228,6 +228,7 @@ def _db_instance_xml(db: dict) -> str:
         (_el("SecondaryAvailabilityZone", db["secondary_availability_zone"]) if db.get("secondary_availability_zone") else ""),
         _el("PubliclyAccessible", str(db.get("publicly_accessible", False)).lower()),
         _el("DBInstanceArn", db.get("db_instance_arn", "")),
+        (_el("DbiResourceId", db["dbi_resource_id"]) if db.get("dbi_resource_id") else ""),
         _el("InstanceCreateTime", db.get("created", "")),
         _el("DbInstancePort", db.get("endpoint_port", 5432)),
         _el("BackupRetentionPeriod", db.get("backup_retention_period", 7)),
@@ -259,9 +260,25 @@ def _db_instance_xml(db: dict) -> str:
         "".join(f"<DBInstanceRole>{_el('RoleArn', r['RoleArn'])}{_el('FeatureName', r['FeatureName'])}{_el('Status', r.get('Status', 'ACTIVE'))}</DBInstanceRole>"
                 for r in db.get("associated_roles", [])),
         "</AssociatedRoles>",
+        ("<MasterUserSecret>" + _el("SecretArn", db["master_user_secret"]["SecretArn"]) + _el("SecretStatus", "active")
+         + _el("KmsKeyId", db["master_user_secret"].get("KmsKeyId", "")) + "</MasterUserSecret>" if db.get("master_user_secret") else ""),
         "</DBInstance>",
     ]
     return "".join(parts)
+
+
+# ── ManageMasterUserPassword: the master credential lives in a Secrets Manager secret OWNED by RDS ─────────
+# store.managed_secret_hook (set by the wire router, which holds both stores) creates/rotates/deletes the real secret
+# `rds!db-<resource id>` (OwningService=rds); user Put/Update/Delete on it are rejected by Secrets Manager.
+def _managed_secret(store, action: str, db: dict, **kw):
+    hook = getattr(store, "managed_secret_hook", None)
+    if hook is None:
+        raise RdsError("InvalidParameterCombination", "ManageMasterUserPassword needs Secrets Manager, which is not wired on this substrate.", 400)
+    return hook(action, db, **kw)
+
+
+def _is_true(v) -> bool:
+    return str(v).lower() == "true"
 
 
 def _db_snapshot_xml(snap: dict) -> str:
@@ -584,6 +601,10 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         "updated": _now(),
         "runtime_backend": "sqlite",  # Nano data-plane engine
     }
+    if _is_true(params.get("ManageMasterUserPassword")):
+        if str(params.get("MasterUserPassword", "")).strip():
+            raise RdsError("InvalidParameterCombination", "Cannot specify both MasterUserPassword and ManageMasterUserPassword.", 400)
+        record["master_user_secret"] = _managed_secret(store, "create", record, kms_key_id=str(params.get("MasterUserSecretKmsKeyId") or ""))
     store.put_instance(db_id, record)
     tags = _tags_from_params(params)
     if tags:
@@ -704,6 +725,19 @@ def _modify_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
                 db[field_name] = caster(params[param])
             except (TypeError, ValueError):
                 pass
+    if params.get("ManageMasterUserPassword") is not None:
+        if _is_true(params["ManageMasterUserPassword"]):
+            if params.get("MasterUserPassword"):
+                raise RdsError("InvalidParameterCombination", "Cannot specify both MasterUserPassword and ManageMasterUserPassword.", 400)
+            if not db.get("master_user_secret"):
+                db["master_user_secret"] = _managed_secret(store, "create", db, kms_key_id=str(params.get("MasterUserSecretKmsKeyId") or ""))
+        elif db.get("master_user_secret"):
+            _managed_secret(store, "delete", db)
+            db.pop("master_user_secret", None)
+    if _is_true(params.get("RotateMasterUserPassword")):
+        if not db.get("master_user_secret"):
+            raise RdsError("InvalidParameterCombination", "RotateMasterUserPassword requires ManageMasterUserPassword to be on.", 400)
+        _managed_secret(store, "rotate", db)
     if params.get("MultiAZ") is not None:
         multi_az = str(params["MultiAZ"]).lower() == "true"
         db["multi_az"] = multi_az
@@ -760,6 +794,8 @@ def _delete_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
             source["read_replica_db_instance_identifiers"] = [
                 r for r in source.get("read_replica_db_instance_identifiers", []) if r != db_id]
     db = dict(db)
+    if db.get("master_user_secret"):
+        _managed_secret(store, "delete", db)
     db["db_instance_status"] = "deleting"
     store.drop_instance(db_id)
     store.mirror_delete_instance(db_id)

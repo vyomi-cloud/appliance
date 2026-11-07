@@ -1,12 +1,22 @@
 {
   "aws.vpc.network-manager": {
-    "title": "AWS Network Manager",
+    "title": "AWS Network Manager (global networks, sites, devices, links, transit gateway registrations)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Network Manager is a separate, external AWS console (global networks, Transit Gateway registrations); it is not part of the VPC simulation."
+      "The inventory/registration control plane is real (core/networkmanager_core.py): global networks, sites, devices, links, link associations and transit gateway registrations with the real dependency errors; a registered transit gateway must exist in the account's EC2/VPC model and can be registered to one global network only. No topology telemetry, events, route analysis, Connect attachments or Direct Connect/customer-gateway associations."
+    ],
+    "api": [
+      "CreateGlobalNetwork",
+      "RegisterTransitGateway",
+      "CreateSite",
+      "CreateDevice",
+      "CreateLink"
+    ],
+    "tests": [
+      "tests/conformance/test_networkmanager_core.py"
     ]
   }
 }
