@@ -1,6 +1,9 @@
 {
- "at": "2026-11-07T11:08:34+00:00",
+ "at": "2026-11-07T12:08:32+00:00",
  "baseline": false,
  "changes": [],
- "errors": []
+ "errors": [
+  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
+ ]
 }
