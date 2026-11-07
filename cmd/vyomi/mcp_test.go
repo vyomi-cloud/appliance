@@ -191,7 +191,7 @@ func TestMCPScanRepo(t *testing.T) {
 	writeFile(t, filepath.Join(root, "app", "store.py"), "import boto3\ns3 = boto3.client('s3')\nsns = boto3.client(\"sns\")\nbq = boto3.client('appflow')\n")
 	writeFile(t, filepath.Join(root, "app", "worker.py"), "from azure.servicebus import ServiceBusClient\nfrom google.cloud import pubsub_v1\n")
 	// Siftly-shaped: Azure OpenAI via the openai package, AI Search, SES, identity noise.
-	writeFile(t, filepath.Join(root, "app", "llm.py"), "from openai import AzureOpenAI\nfrom azure.identity import DefaultAzureCredential\nfrom azure.search.documents import SearchClient\nses = boto3.client('ses')\n")
+	writeFile(t, filepath.Join(root, "app", "llm.py"), "from openai import AzureOpenAI\nfrom azure.identity import DefaultAzureCredential\nfrom azure.search.documents import SearchClient\nfrom azure.communication.email import EmailClient\nses = boto3.client('ses')\n")
 	writeFile(t, filepath.Join(root, "infra", "main.tf"), "resource \"aws_sqs_queue\" \"jobs\" {}\nresource \"azurerm_storage_account\" \"sa\" {}\n")
 	writeFile(t, filepath.Join(root, "web", "package.json"), `{"dependencies":{"@aws-sdk/client-dynamodb":"^3"}}`)
 	writeFile(t, filepath.Join(root, "node_modules", "x", "index.js"), "require('@aws-sdk/client-kinesis')\n")
@@ -216,7 +216,7 @@ func TestMCPScanRepo(t *testing.T) {
 	for key, want := range map[string]string{
 		"aws/s3": "released", "aws/sqs": "released", "aws/dynamodb": "released", "aws/sns": "released",
 		"azure/servicebus": "released", "azure/storage": "released", "gcp/pubsub": "released",
-		"azure/cognitiveservices": "released", "azure/search": "not_emulated", "aws/ses": "not_emulated",
+		"azure/cognitiveservices": "released", "azure/search": "not_emulated", "aws/ses": "not_emulated", "azure/communication": "not_emulated",
 	} {
 		if status[key] != want {
 			t.Errorf("%s: status %q, want %q (all: %v)", key, status[key], want, status)
