@@ -661,7 +661,7 @@ def _finish(store, ex, status, output=None, error=None, cause=None):
     ex["status"] = status
     ex["stopDate"] = _now()
     if output is not None:
-        ex["output"] = output if isinstance(output, str) else _dumps(output)
+        ex["output"] = _dumps(output)
     if error is not None:
         ex["error"] = error
     if cause is not None:

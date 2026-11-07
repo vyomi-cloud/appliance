@@ -74,6 +74,9 @@ def main():
     ssm.unlabel_parameter_version(Name=p, ParameterVersion=1, Labels=["blue"])
     check("ssm UnlabelParameterVersion removes the label", lambda: not any(
         h.get("Labels") for h in ssm.get_parameter_history(Name=p)["Parameters"] if h["Version"] == 1))
+    check("ssm RegisterDefaultHostManagementConfiguration returns a RoleArn", lambda: ssm.register_default_host_management_configuration(
+        PermissionModel="ManagedInstance", Overwrite=True)["RoleArn"].startswith("arn:aws:iam::"))
+    check("ssm DeregisterDefaultHostManagementConfiguration succeeds", lambda: ssm.deregister_default_host_management_configuration() is not None)
     ssm.delete_parameter(Name=p)
     cid = ssm.send_command(DocumentName="AWS-RunShellScript", InstanceIds=["i-0123456789abcdef0"],
                            Parameters={"commands": ["true"]})["Command"]["CommandId"]

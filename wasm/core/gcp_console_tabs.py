@@ -1635,7 +1635,16 @@ def openapi_routes(doc: dict) -> list:
             backend = (op.get("x-google-backend") or {}).get("address") or default_backend
             if not backend or not str(backend).startswith("https://"):
                 raise TabError(400, "INVALID_ARGUMENT", "%s %s needs an x-google-backend address (an https:// URL)." % (method.upper(), path))
-            out.append({"method": method.upper(), "path": path, "operationId": oid, "backend": backend})
+            # A zero or negative deadline uses the default (15s) rather than being rejected
+            # (the negative-deadline deprecation was withdrawn on 2026-11-04).
+            raw = (op.get("x-google-backend") or {}).get("deadline", (doc.get("x-google-backend") or {}).get("deadline"))
+            try:
+                deadline = float(raw) if raw is not None else 0.0
+            except (TypeError, ValueError):
+                raise TabError(400, "INVALID_ARGUMENT", "%s %s has a non-numeric x-google-backend deadline." % (method.upper(), path))
+            if deadline <= 0:
+                deadline = 15.0
+            out.append({"method": method.upper(), "path": path, "operationId": oid, "backend": backend, "deadline": deadline})
     if not out:
         raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: no operations under paths.")
     return out
