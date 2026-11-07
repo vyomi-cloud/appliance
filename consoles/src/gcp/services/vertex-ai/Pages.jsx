@@ -111,8 +111,8 @@ export function ModelGarden() {
 export function Endpoints() {
   return (
     <>
-      <PageHeader title="Online prediction: Endpoints" />
-      <ResourceList coll="endpoints" title="Endpoints" singular="endpoint" cap="gcp.vertex-ai.endpoints"
+      <PageHeader title="Online prediction: Endpoints" actions={<CapabilityBadge id="gcp.vertex-ai.endpoints" host="[data-vyomi-header]" />} />
+      <ResourceList coll="endpoints" title="Endpoints" singular="endpoint"
         fields={[nameField, { key: "description", label: "Description" }]}
         build={(v) => ({ body: { displayName: v.displayName, description: v.description }, idKey: "endpointId" })}
         href={(i) => `#/vertex-ai/endpoints/${api.pname(i.name).location}/${lastSeg(i.name)}`}
@@ -131,11 +131,11 @@ export function EndpointDetail({ params }) {
   return (
     <>
       <PageHeader title={e ? e.displayName : params.id} back={<Button href="#/vertex-ai/endpoints">Endpoints</Button>}
-        actions={e && <><Button onClick={() => setDep(true)}>Deploy model</Button><Button onClick={ep.reload}>Refresh</Button></>} />
+        actions={<>{e && <><Button onClick={() => setDep(true)}>Deploy model</Button><Button onClick={ep.reload}>Refresh</Button></>}<CapabilityBadge id="gcp.vertex-ai.endpoints" host="[data-vyomi-header]" /></>} />
       <ErrorAlert error={ep.error} title="Failed to load endpoint" />
       {e && <Stack spacing={3}>
         <Section title="Details"><KeyValue items={[["Endpoint ID", params.id], ["Region", params.location], ["Resource name", e.name], ["Description", e.description || "—"], ["Created", api.when(e.createTime)]]} /></Section>
-        <CapabilityContainer id="gcp.vertex-ai.endpoints" title="Deployed models" description="Models serving traffic on this endpoint.">
+        <CapabilityContainer noBadge id="gcp.vertex-ai.endpoints" title="Deployed models" description="Models serving traffic on this endpoint.">
           {e.deployedModels?.length ? (
             <ResourceTable resourceName="deployed models" items={e.deployedModels} rowKey={(d) => d.id}
               columns={[{ id: "n", header: "Model", cell: (d) => d.displayName || lastSeg(d.model) }, { id: "id", header: "Deployed model ID", cell: (d) => d.id },
@@ -154,8 +154,8 @@ export function EndpointDetail({ params }) {
 export function Models() {
   return (
     <>
-      <PageHeader title="Model Registry" />
-      <ResourceList coll="models" title="Models" singular="model" createLabel="Import model" cap="gcp.vertex-ai.models"
+      <PageHeader title="Model Registry" actions={<CapabilityBadge id="gcp.vertex-ai.models" host="[data-vyomi-header]" />} />
+      <ResourceList coll="models" title="Models" singular="model" createLabel="Import model"
         fields={[nameField, { key: "artifactUri", label: "Model artifact location", default: "gs://my-bucket/model/" }, { key: "image", label: "Serving container image", default: "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-3:latest" }]}
         build={(v) => ({ body: { model: { displayName: v.displayName, artifactUri: v.artifactUri, containerSpec: { imageUri: v.image } } }, upload: true })}
         columns={[{ id: "ver", header: "Version", cell: (i) => i.versionId || "1" }, { id: "dep", header: "Deployed to", cell: (i) => (i.deployedModels || []).map((d) => lastSeg(d.endpoint)).join(", ") || "—" }]}
@@ -169,8 +169,8 @@ const DS = { Image: "image_1.0.0", Text: "text_1.0.0", Tabular: "tabular_1.0.0",
 export function Datasets() {
   return (
     <>
-      <PageHeader title="Datasets" />
-      <ResourceList coll="datasets" title="Datasets" singular="dataset" cap="gcp.vertex-ai.datasets"
+      <PageHeader title="Datasets" actions={<CapabilityBadge id="gcp.vertex-ai.datasets" host="[data-vyomi-header]" />} />
+      <ResourceList coll="datasets" title="Datasets" singular="dataset"
         fields={[nameField, { key: "type", label: "Data type", options: Object.keys(DS), default: "Image" }]}
         build={(v) => ({ body: { displayName: v.displayName, metadataSchemaUri: `gs://google-cloud-aiplatform/schema/dataset/metadata/${DS[v.type]}.yaml`, labels: { type: v.type.toLowerCase() } } })}
         columns={[{ id: "type", header: "Data type", cell: (i) => i.labels?.type || (i.metadataSchemaUri || "").split("/").pop().split("_")[0] }, { id: "n", header: "Items", cell: (i) => i.dataItemCount || "0" }]} />
@@ -187,7 +187,7 @@ export function Training({ query }) {
   const jobPool = (v) => [{ machineSpec: { machineType: v.machine }, replicaCount: String(+v.replicas || 1), containerSpec: { imageUri: v.image } }];
   return (
     <>
-      <PageHeader title="Training" actions={<CapabilityBadge id="gcp.vertex-ai.jobs" />} />
+      <PageHeader title="Training" actions={<CapabilityBadge id="gcp.vertex-ai.jobs" host="[data-vyomi-header]" />} />
       <Tabbed query={query} tabs={[
         { id: "pipelines", label: "Training pipelines", render: () => (
           <ResourceList coll="trainingPipelines" title="Training pipelines" singular="training pipeline" poll
@@ -218,8 +218,8 @@ export function Training({ query }) {
 export function Pipelines() {
   return (
     <>
-      <PageHeader title="Pipelines" />
-      <ResourceList coll="pipelineJobs" title="Pipeline runs" singular="pipeline run" createLabel="Create run" poll cap="gcp.vertex-ai.jobs"
+      <PageHeader title="Pipelines" actions={<CapabilityBadge id="gcp.vertex-ai.jobs" host="[data-vyomi-header]" />} />
+      <ResourceList coll="pipelineJobs" title="Pipeline runs" singular="pipeline run" createLabel="Create run" poll
         fields={[nameField, { key: "template", label: "Pipeline template (gs:// or Artifact Registry URI)", default: "gs://my-bucket/pipeline.json" }, { key: "root", label: "Pipeline root", default: "gs://my-bucket/pipeline-root" }]}
         build={(v) => ({ body: { displayName: v.displayName, templateUri: v.template, runtimeConfig: { gcsOutputDirectory: v.root } } })}
         columns={[stateCol, { id: "dur", header: "Duration", cell: dur }, { id: "t", header: "Template", cell: (i) => i.templateUri || "—" }]} actions={[cancel]} />
@@ -232,8 +232,8 @@ export function Batch() {
   const models = useAsync(() => api.list("models"), []);
   return (
     <>
-      <PageHeader title="Batch predictions" />
-      <ResourceList coll="batchPredictionJobs" title="Batch predictions" singular="batch prediction" poll cap="gcp.vertex-ai.jobs"
+      <PageHeader title="Batch predictions" actions={<CapabilityBadge id="gcp.vertex-ai.jobs" host="[data-vyomi-header]" />} />
+      <ResourceList coll="batchPredictionJobs" title="Batch predictions" singular="batch prediction" poll
         fields={[nameField, { key: "model", label: "Model", options: (models.data || []).map((m) => ({ value: m.name, label: m.displayName })) }, { key: "input", label: "Input (gs://)", default: "gs://my-bucket/input.jsonl" }, { key: "output", label: "Output prefix (gs://)", default: "gs://my-bucket/output" }]}
         build={(v) => ({ body: { displayName: v.displayName, model: v.model, inputConfig: { instancesFormat: "jsonl", gcsSource: { uris: [v.input] } }, outputConfig: { predictionsFormat: "jsonl", gcsDestination: { outputUriPrefix: v.output } } } })}
         columns={[stateCol, { id: "m", header: "Model", cell: (i) => lastSeg(i.model || "") || "—" }, { id: "o", header: "Output", cell: (i) => i.outputInfo?.gcsOutputDirectory || "—" }]} actions={[cancel]} />
@@ -249,7 +249,7 @@ const power = [
 export function Workbench({ query }) {
   return (
     <>
-      <PageHeader title="Workbench" actions={<CapabilityBadge id="gcp.vertex-ai.notebooks" />} />
+      <PageHeader title="Workbench" actions={<CapabilityBadge id="gcp.vertex-ai.notebooks" host="[data-vyomi-header]" />} />
       <Tabbed query={query} tabs={[
         { id: "instances", label: "Instances", render: () => (
           <ResourceList coll="instances" v2 title="Instances" singular="notebook instance"
@@ -277,7 +277,7 @@ export function Workbench({ query }) {
 export function VectorSearch({ query }) {
   return (
     <>
-      <PageHeader title="Vector Search" actions={<CapabilityBadge id="gcp.vertex-ai.vector-search" />} />
+      <PageHeader title="Vector Search" actions={<CapabilityBadge id="gcp.vertex-ai.vector-search" host="[data-vyomi-header]" />} />
       <Tabbed query={query} tabs={[
         { id: "indexes", label: "Indexes", render: () => (
           <ResourceList coll="indexes" title="Indexes" singular="index"
@@ -301,7 +301,7 @@ export function VectorSearch({ query }) {
 export function FeatureStore({ query }) {
   return (
     <>
-      <PageHeader title="Feature Store" actions={<CapabilityBadge id="gcp.vertex-ai.feature-store" />} />
+      <PageHeader title="Feature Store" actions={<CapabilityBadge id="gcp.vertex-ai.feature-store" host="[data-vyomi-header]" />} />
       <Tabbed query={query} tabs={[
         { id: "groups", label: "Feature groups", render: () => (
           <ResourceList coll="featureGroups" title="Feature groups" singular="feature group" hideId
@@ -330,7 +330,7 @@ const mstore = (region, project) => `projects/${project}/locations/${region}/met
 export function Experiments({ query }) {
   return (
     <>
-      <PageHeader title="Experiments" actions={<CapabilityBadge id="gcp.vertex-ai.experiments" />} />
+      <PageHeader title="Experiments" actions={<CapabilityBadge id="gcp.vertex-ai.experiments" host="[data-vyomi-header]" />} />
       <Tabbed query={query} tabs={[
         { id: "experiments", label: "Experiments", render: () => (
           <ResourceList coll="contexts" title="Experiments" singular="experiment" fixedParent={mstore} noRegion hideId

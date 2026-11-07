@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { PageHeader } from "../../kit/common.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import LocalModelBar from "../../../common/LocalModelBar.jsx";
 import * as api from "./api.js";
 
@@ -67,10 +67,10 @@ export default function Studio() {
   };
   return (
     <>
-      <PageHeader title="Vertex AI Studio" />
+      <PageHeader title="Vertex AI Studio" actions={<CapabilityBadge id="gcp.vertex-ai.gemini" host="[data-vyomi-header]" />} />
       <LocalModelBar />
       <Stack spacing={3}>
-        <CapabilityContainer id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against a Gemini publisher model. Every model id is served by the same small local model.">
+        <CapabilityContainer noBadge id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against a Gemini publisher model. Every model id is served by the same small local model.">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>
             <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{api.GEMINI.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField>
             <TextField size="small" label="System instructions" value={system} onChange={(e) => setSystem(e.target.value)} multiline minRows={2} />
@@ -81,10 +81,10 @@ export default function Studio() {
               <Typography variant="caption" color="text.secondary">{out.usageMetadata.promptTokenCount} input / {out.usageMetadata.candidatesTokenCount} output tokens; countTokens: {tokens}; finish: {out.candidates[0].finishReason}</Typography></Alert>}
           </Stack>
         </CapabilityContainer>
-        <CapabilityContainer id="gcp.vertex-ai.gemini" title="Chat" description="Multi-turn conversation: the full history is sent as role-tagged contents on every generateContent call.">
+        <CapabilityContainer noBadge id="gcp.vertex-ai.gemini" title="Chat" description="Multi-turn conversation: the full history is sent as role-tagged contents on every generateContent call.">
           <ChatPanel />
         </CapabilityContainer>
-        <CapabilityContainer id="gcp.vertex-ai.embeddings" title="Text embeddings" description="embedContent on a text embedding model.">
+        <CapabilityContainer noBadge id="gcp.vertex-ai.embeddings" title="Text embeddings" description="embedContent on a text embedding model.">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>
             <TextField select size="small" label="Embedding model" value={embModel} onChange={(e) => setEmbModel(e.target.value)}>{api.EMBED.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField>
             <TextField size="small" label="Text" value={embText} onChange={(e) => setEmbText(e.target.value)} />
