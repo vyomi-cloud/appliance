@@ -60,6 +60,11 @@ try:                                              # Azure Monitor alerting (Micr
 except ImportError:
     import azure_alerts_core as alerts_engine      # type: ignore
 
+try:                                              # autoscale engine (App Service plan instance count driven by real host metrics)
+    from core import azure_autoscale_core as autoscale_engine
+except ImportError:
+    import azure_autoscale_core as autoscale_engine   # type: ignore
+
 try:                                              # App Service engine (Microsoft.Web: web apps, function apps, plans)
     from core import azure_webapp_core as web_engine
 except ImportError:
@@ -1160,6 +1165,19 @@ class AzureArm:
         missing = missing_identity_ref(self.state, ua)
         if missing:
             return _err(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+        pl = str(path).lower().split("?")[0]
+        if "/serverfarms" in pl or "/autoscalesettings" in pl or "/sites/" in pl:   # autoscale is evaluated when its plan / setting / sites are touched
+            try:
+                autoscale_engine.evaluate(self.state)
+            except Exception:
+                pass
+            hm = re.search(r"/autoscalesettings/([^/]+)/vyomihistory$", pl)
+            if hm and m == "GET":                                             # Vyomi extension: the autoscale Run history (scale actions taken)
+                st = next((r for r in self.state.values() if isinstance(r, dict) and r.get("_type", "").lower() == "microsoft.insights/autoscalesettings"
+                           and r["name"].lower() == hm.group(1) and pl.startswith(r["id"].lower())), None)
+                if st is None:
+                    return _err(404, "ResourceNotFound", "The autoscale setting was not found.")
+                return _ok({"value": autoscale_engine.history(st)})
         out = self._handle_raw(method, path, query, body)
         if m != "GET" and isinstance(out, dict):   # security audit feed (core/secscan_core.py classifier)
             sub_m = re.search(r"/subscriptions/([^/]+)", str(path))

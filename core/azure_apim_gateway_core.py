@@ -322,6 +322,11 @@ def _mock(ctx, e):
 # ── routing ──────────────────────────────────────────────────────────────────
 def _match_template(tpl, path):
     tpl = tpl.split("?", 1)[0]
+    if tpl.endswith("/*"):                              # wildcard operation (``/*`` matches any tail, as APIM wildcard operations do)
+        pre = tpl[:-2]
+        if path == pre or path.startswith(pre + "/") or not pre:
+            return re.match(r"(?P<_tail>.*)", path)
+        return None
     rx = "^" + re.sub(r"\\\{([^/}]+)\\\}", r"(?P<\1>[^/]+)", re.escape(tpl.rstrip("/") or "/")) + "/?$"
     try:
         return re.match(rx, path)
@@ -361,7 +366,7 @@ def _auth(state, svc, api, key):
     return None, "Access denied due to invalid subscription key. Make sure to provide a valid key for an active subscription."
 
 
-def handle(state, svc, method, path, query, headers, body, fetch=None, now=None, ip="127.0.0.1"):
+def handle(state, svc, method, path, query, headers, body, fetch=None, now=None, ip="127.0.0.1", gateway=None):
     """Serve one gateway request. ``svc`` is the APIM service record; ``path`` is the gateway path (no query)."""
     now = time.time() if now is None else now
     t0 = time.time()
@@ -388,6 +393,10 @@ def handle(state, svc, method, path, query, headers, body, fetch=None, now=None,
 
     # route: longest API path prefix
     apis = [a for a in _recs(state, sid + "/apis", APIM + "/apis") if "/" not in a["id"][len(sid) + 6:]]
+    if gateway:   # a SELF-HOSTED gateway serves only the APIs associated with it (service/gateways/{gw}/apis/{api}); the managed gateway serves all
+        if f"{sid}/gateways/{gateway}".lower() not in state:
+            return done(_body(404, f"Gateway '{gateway}' not found."))
+        apis = [a for a in apis if f"{sid}/gateways/{gateway}/apis/{a['name']}".lower() in state]
     best, rem = None, None
     for a in apis:
         pre = "/" + str(_props(a).get("path", "")).strip("/")
