@@ -364,7 +364,7 @@ def dispatch_providers(providers, pool_name, rest, method, query, body):
                 return 200, _view(p)
             if method == "GET":
                 items = [_view(p) for n, p in sorted(providers.items()) if n.startswith(prefix) and p.get("state") != "DELETED"]
-                return 200, {"providers" if "workforcePools" in pool_name else "workloadIdentityPoolProviders": items}
+                return 200, ({"workforcePoolProviders": items, "providers": items} if "workforcePools" in pool_name else {"workloadIdentityPoolProviders": items})
             return 400, ("INVALID_ARGUMENT", "Unsupported method %s on providers." % method)
         name = prefix + rest[0]
         p = providers.get(name)

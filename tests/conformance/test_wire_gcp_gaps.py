@@ -399,3 +399,67 @@ def test_network_management_flow_logs_and_compute_firewall_policies(router):
     assert e.value.resp.status == 404
     fp.delete(project=PROJECT, firewallPolicy="pol1").execute()
     assert fp.list(project=PROJECT).execute().get("items", []) == []
+
+
+# ───────────────────────────── Compute: real mutations on the VM store ─────────────────────────────
+def test_compute_disks_images_snapshots_instances_fill(router):
+    c = api(router, "compute", "v1")
+    z = "us-central1-a"
+    c.disks().insert(project=PROJECT, zone=z, body={"name": "d1", "sizeGb": "10"}).execute()
+    c.disks().insert(project=PROJECT, zone=z, body={"name": "d2", "sizeGb": "20"}).execute()
+    # resize: grow only, and the record really changes
+    c.disks().resize(project=PROJECT, zone=z, disk="d1", body={"sizeGb": "30"}).execute()
+    assert c.disks().get(project=PROJECT, zone=z, disk="d1").execute()["sizeGb"] == "30"
+    with pytest.raises(HttpError) as e:
+        c.disks().resize(project=PROJECT, zone=z, disk="d1", body={"sizeGb": "5"}).execute()
+    assert e.value.resp.status == 400
+    c.disks().setLabels(project=PROJECT, zone=z, resource="d1", body={"labels": {"env": "dev"}, "labelFingerprint": ""}).execute()
+    d1 = c.disks().get(project=PROJECT, zone=z, disk="d1").execute()
+    assert d1["labels"] == {"env": "dev"}
+    with pytest.raises(HttpError) as e:   # stale fingerprint is refused
+        c.disks().setLabels(project=PROJECT, zone=z, resource="d1", body={"labels": {}, "labelFingerprint": "stale"}).execute()
+    assert e.value.resp.status == 412
+    c.disks().setIamPolicy(project=PROJECT, zone=z, resource="d1", body={"policy": {"bindings": [{"role": "roles/compute.storageAdmin", "members": ["user:a@x.test"]}]}}).execute()
+    assert c.disks().getIamPolicy(project=PROJECT, zone=z, resource="d1").execute()["bindings"][0]["members"] == ["user:a@x.test"]
+    # snapshot + image of the disk, then labels / deprecate / family
+    c.disks().createSnapshot(project=PROJECT, zone=z, disk="d1", body={"name": "s1"}).execute()
+    c.snapshots().setLabels(project=PROJECT, resource="s1", body={"labels": {"k": "v"}, "labelFingerprint": ""}).execute()
+    assert c.snapshots().get(project=PROJECT, snapshot="s1").execute()["labels"] == {"k": "v"}
+    c.images().insert(project=PROJECT, body={"name": "img-v1", "sourceDisk": "zones/%s/disks/d1" % z, "family": "fam"}).execute()
+    c.images().insert(project=PROJECT, body={"name": "img-v2", "sourceDisk": "zones/%s/disks/d1" % z, "family": "fam"}).execute()
+    assert c.images().getFromFamily(project=PROJECT, family="fam").execute()["name"] == "img-v2"
+    c.images().deprecate(project=PROJECT, image="img-v2", body={"state": "DEPRECATED", "replacement": "projects/%s/global/images/img-v1" % PROJECT}).execute()
+    assert c.images().getFromFamily(project=PROJECT, family="fam").execute()["name"] == "img-v1"
+    assert c.images().get(project=PROJECT, image="img-v2").execute()["deprecated"]["state"] == "DEPRECATED"
+    # instances: attach/detach a disk for real, access configs, scheduling, service account (stopped only)
+    c.instances().insert(project=PROJECT, zone=z, body={"name": "vm1", "machineType": "zones/%s/machineTypes/e2-micro" % z,
+                                                        "disks": [{"boot": True, "autoDelete": True, "initializeParams": {"sourceImage": "projects/debian-cloud/global/images/family/debian-12"}}],
+                                                        "networkInterfaces": [{"network": "global/networks/default"}]}).execute()
+    c.instances().attachDisk(project=PROJECT, zone=z, instance="vm1", body={"source": "zones/%s/disks/d2" % z, "deviceName": "data"}).execute()
+    vm = c.instances().get(project=PROJECT, zone=z, instance="vm1").execute()
+    assert any(d.get("deviceName") == "data" for d in vm["disks"])
+    with pytest.raises(HttpError) as e:   # a second instance cannot take a disk that is in use
+        c.instances().attachDisk(project=PROJECT, zone=z, instance="vm1", body={"source": "zones/%s/disks/d2" % z, "deviceName": "data2"}).execute()
+    assert e.value.resp.status in (400, 409)
+    with pytest.raises(HttpError) as e:
+        c.disks().delete(project=PROJECT, zone=z, disk="d2").execute()   # in use now
+    assert e.value.resp.status == 400
+    c.instances().setDiskAutoDelete(project=PROJECT, zone=z, instance="vm1", deviceName="data", autoDelete=True).execute()
+    c.instances().detachDisk(project=PROJECT, zone=z, instance="vm1", deviceName="data").execute()
+    assert not any(d.get("deviceName") == "data" for d in c.instances().get(project=PROJECT, zone=z, instance="vm1").execute()["disks"])
+    c.disks().delete(project=PROJECT, zone=z, disk="d2").execute()
+    c.instances().addAccessConfig(project=PROJECT, zone=z, instance="vm1", networkInterface="nic0", body={"name": "ext", "type": "ONE_TO_ONE_NAT"}).execute()
+    assert any(a["name"] == "ext" for a in c.instances().get(project=PROJECT, zone=z, instance="vm1").execute()["networkInterfaces"][0]["accessConfigs"])
+    c.instances().deleteAccessConfig(project=PROJECT, zone=z, instance="vm1", networkInterface="nic0", accessConfig="ext").execute()
+    c.instances().setScheduling(project=PROJECT, zone=z, instance="vm1", body={"automaticRestart": False, "onHostMaintenance": "TERMINATE"}).execute()
+    assert c.instances().get(project=PROJECT, zone=z, instance="vm1").execute()["scheduling"]["onHostMaintenance"] == "TERMINATE"
+    with pytest.raises(HttpError) as e:   # service account can only change while stopped
+        c.instances().setServiceAccount(project=PROJECT, zone=z, instance="vm1", body={"email": "a@b.iam.gserviceaccount.com", "scopes": []}).execute()
+    assert e.value.resp.status == 400
+    c.instances().stop(project=PROJECT, zone=z, instance="vm1").execute()
+    c.instances().setServiceAccount(project=PROJECT, zone=z, instance="vm1", body={"email": "a@b.iam.gserviceaccount.com", "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}).execute()
+    assert c.instances().get(project=PROJECT, zone=z, instance="vm1").execute()["serviceAccounts"][0]["email"] == "a@b.iam.gserviceaccount.com"
+    assert c.diskTypes().get(project=PROJECT, zone=z, diskType="pd-ssd").execute()["name"] == "pd-ssd"
+    assert any(a["name"] == "nvidia-l4" for a in c.acceleratorTypes().list(project=PROJECT, zone=z).execute()["items"])
+    c.projects().setDefaultNetworkTier(project=PROJECT, body={"networkTier": "STANDARD"}).execute()
+    c.projects().setUsageExportBucket(project=PROJECT, body={}).execute()

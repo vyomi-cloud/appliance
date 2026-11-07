@@ -22,7 +22,6 @@ import re
 import time
 from datetime import datetime, timezone
 
-from core.gcp_ext_specs import SPECS
 
 UNWIRED = re.compile(
     r"Unsupported|No route|UnknownOperation|InvalidAction|not implemented|NotImplemented|Unknown path|Unknown operation|"
@@ -39,6 +38,7 @@ def _now():
 def _specs():
     global _COMPILED
     if _COMPILED is None:
+        from core.gcp_ext_specs import SPECS   # big generated table: loaded on first use only
         _COMPILED = []
         for api, rows in SPECS.items():
             for (mid, http, rx, lk, kind, idp, resp) in rows:

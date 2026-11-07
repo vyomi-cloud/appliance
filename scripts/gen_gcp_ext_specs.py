@@ -22,18 +22,7 @@ APIS = [
     ("networkmanagement", "v1", None),
     ("securitycenter", "v1", None),
     ("cloudfunctions", "v1", None),
-    ("compute", "v1", {
-        "firewallPolicies", "networkFirewallPolicies", "regionNetworkFirewallPolicies", "organizationSecurityPolicies",
-        "securityPolicies", "regionSecurityPolicies", "networkAttachments", "serviceAttachments", "licenses", "sslPolicies",
-        "regionSslPolicies", "httpHealthChecks", "httpsHealthChecks", "regionHealthChecks", "targetInstances", "targetPools",
-        "targetVpnGateways", "externalVpnGateways", "vpnGateways", "vpnTunnels", "autoscalers", "regionAutoscalers",
-        "regionInstantSnapshots", "instantSnapshots", "regionSnapshots", "regionDisks", "futureReservations",
-        "regionNotificationEndpoints", "regionBackendBuckets", "backendBuckets", "targetTcpProxies", "targetSslProxies",
-        "interconnectGroups", "crossSiteNetworks", "instanceGroupManagers", "regionInstanceGroupManagers", "targetHttpProxies",
-        "targetHttpsProxies", "regionTargetHttpsProxies", "regionUrlMaps", "urlMaps", "backendServices", "regionBackendServices",
-        "forwardingRules", "globalForwardingRules", "routers", "routes", "snapshots", "images", "disks", "addresses",
-        "globalAddresses", "firewalls", "networks", "subnetworks", "instanceTemplates", "regionInstanceTemplates",
-    }),
+    ("compute", "v1", None),
 ]
 
 
