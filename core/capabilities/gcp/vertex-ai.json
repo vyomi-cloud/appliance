@@ -165,5 +165,18 @@
   "tests": [
    "tests/conformance/test_ai_agent_lanes.py"
   ]
+ },
+ "gcp.vertex-ai.agent-engine": {
+  "title": "Agent Engine (reasoningEngines create/get/list/update/delete, :query, :streamQuery) - Vyomi agent spec, Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified: the control plane (aiplatform v1/v1beta1 reasoningEngines with LROs) is real, and :query / :streamQuery really run an agent - but not a pickled/packaged Python class. The agent is a Vyomi agent spec (JSON instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) carried in spec.vyomiAgentSpec (REST) or a spec.deploymentSpec.env entry VYOMI_AGENT_SPEC (typed google-cloud-aiplatform gapic clients, transport='rest'), executed as a tool-calling loop over the local model (llama.cpp on the booster/appliance, WebLLM on Nano). Class methods query, stream_query/async_stream_query and session helpers (create/get/list/delete_session, multi-turn history) are served; :streamQuery events follow the ADK Event shape inside the REST JSON-array-of-HttpBody framing. vertexai.agent_engines.create(<python object>) (cloudpickle + GCS staging), packageSpec/containerSpec deployment, Memory Bank, Example Store and ADK/LangChain/LangGraph runtimes are not supported; an engine with no spec answers :query with FAILED_PRECONDITION, and no model running returns 503 UNAVAILABLE (never a canned answer). Toy-grade quality; webhook tools need network egress (not in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. gcloud has no reasoning-engines surface in the stable track - use the SDK or REST. State is in the persisted account bag."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py"
+  ]
  }
 }

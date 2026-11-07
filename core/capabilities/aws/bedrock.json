@@ -58,15 +58,16 @@
  },
  "bedrock.agentcore.runtime": {
   "booster": true,
-  "title": "AgentCore runtime (hosted agents)",
+  "title": "AgentCore runtime (hosted agents) - Vyomi agent spec, Dev Simplified",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Runtimes are control-plane records (create/get/list/update/delete with versions and CREATING->READY). The simulator does not run runtime containers, so InvokeAgentRuntime returns a RuntimeClientError. Memory, identity and observability sub-services are not simulated."
+   "Dev Simplified: runtimes are control-plane records (CreateAgentRuntime/Get/List/Update/Delete, versions, runtime endpoints with DEFAULT, CREATING->READY) and InvokeAgentRuntime really runs an agent - but NOT your container. A runtime whose environmentVariables carry VYOMI_AGENT_SPEC (JSON: instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) is executed in-process as a tool-calling loop over the local model (llama.cpp on the booster/appliance, WebLLM on Nano; payload {\"prompt\": ...}, runtimeSessionId keeps multi-turn history, Accept: text/event-stream streams steps). A container-only runtime returns RuntimeClientError (424); no model running -> 503 ServiceUnavailableException, never a canned answer. Quality is toy-grade; no container/ECR pull, A2A/MCP-protocol runtimes, InvokeAgentRuntimeCommand, Memory, Identity or Observability. Webhook tools need network egress (not available in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. State is in the persisted account bag."
   ],
   "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py",
    "tests/conformance/test_bedrock_agents_core.py"
   ]
  },
