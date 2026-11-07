@@ -41,6 +41,8 @@ import botocore  # noqa: E402
 import botocore.serialize  # noqa: E402
 import botocore.session  # noqa: E402
 from core.aws_wire_router import AwsWireRouter, _SIGNING  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import nano_docs_extras as X  # noqa: E402
 
 # ───────────────────────────── helpers ─────────────────────────────
 UNWIRED = re.compile(
@@ -168,7 +170,8 @@ AWS_MAP = {
     "kms": ["kms"],
     "lambda": ["lambda"],
     "networkmanager": ["networkmanager"],
-    "rds": ["rds", "rds-data", "docdb", "neptune", "dms", "redshift-data", "glue"],
+    "rds": ["rds", "rds-data", "docdb", "neptune", "dms", "glue"],
+    "redshift": ["redshift", "redshift-data"],
     "s3": ["s3", "s3control", "s3tables", "s3vectors", "s3files", "cloudfront", "cloudtrail", "fsx"],
     "secretsmanager": ["secretsmanager"],
     "securityhub": ["securityhub", "guardduty", "inspector2", "codeconnections", "codestar-connections"],
@@ -268,12 +271,16 @@ GCP_MAP = {   # console service -> [(discovery name, version)]
     "pubsub": [("pubsub", "v1")], "resource-manager": [("cloudresourcemanager", "v3"), ("cloudresourcemanager", "v1")],
     "run": [("run", "v2")], "secret-manager": [("secretmanager", "v1")], "security/secret-manager": [("secretmanager", "v1")],
     "securitycenter": [("securitycenter", "v1")], "security/scc": [("securitycenter", "v1")], "sql": [("sqladmin", "v1beta4"), ("sqladmin", "v1")],
-    "storage": [("storage", "v1")], "vertex-ai": [("aiplatform", "v1")],
+    "storage": [("storage", "v1")], "vertex-ai": [("aiplatform", "v1"), ("aiplatform", "v1beta1")],
+    "security/binauthz": [("binaryauthorization", "v1")], "bigquery": [("bigquery", "v2")], "dns": [("dns", "v1")],
+    "trace": [("cloudtrace", "v2"), ("cloudtrace", "v1")],
 }
+# services with no console page of their own but a real wire on the simulator (id, title, category)
+GCP_EXTRA_SERVICES = [("bigquery", "BigQuery", "Analytics"), ("dns", "Cloud DNS", "Networking"), ("trace", "Cloud Trace", "Operations")]
 GCLOUD_GROUP = {"pubsub": "pubsub", "secretmanager": "secrets", "cloudkms": "kms", "storage": "storage", "run": "run", "compute": "compute",
                 "container": "container", "sqladmin": "sql", "redis": "redis", "cloudscheduler": "scheduler", "artifactregistry": "artifacts",
                 "cloudfunctions": "functions", "logging": "logging", "iam": "iam", "cloudbuild": "builds", "eventarc": "eventarc",
-                "monitoring": "monitoring", "firestore": "firestore", "dns": "dns", "clouddeploy": "deploy", "cloudresourcemanager": "projects"}
+                "monitoring": "monitoring", "firestore": "firestore", "dns": "dns", "bigquery": "bigquery", "binaryauthorization": "container binauthz", "aiplatform": "ai", "clouddeploy": "deploy", "cloudresourcemanager": "projects"}
 GCP_VAL = {"project": "vyomi-project", "projectId": "vyomi-project", "projectsId": "vyomi-project", "location": "us-central1", "locationsId": "us-central1",
            "zone": "us-central1-a", "region": "us-central1", "bucket": "my-bucket", "object": "my-object", "instance": "my-instance",
            "name": "my-name", "parent": "my-parent"}
@@ -472,6 +479,35 @@ AZ_MAP = {   # console service id -> ARM types documented under it
     "streamanalytics": [], "containerapps": ["Microsoft.App/containerApps", "Microsoft.App/jobs", "Microsoft.App/managedEnvironments"],
     "recoveryservices": ["Microsoft.RecoveryServices/vaults"],
 }
+# v4 additions: ARM types the router answers (probed) that the console services above did not list yet
+for _sid, _ts in {
+    "defender": ["Microsoft.Security/automations", "Microsoft.Security/pricings"],
+    "monitor": ["Microsoft.Insights/actionGroups", "Microsoft.Insights/activityLogAlerts", "Microsoft.Insights/autoscaleSettings",
+                "Microsoft.Insights/scheduledQueryRules", "Microsoft.Insights/dataCollectionRules", "Microsoft.Insights/workbooks",
+                "Microsoft.Insights/components", "Microsoft.Monitor/accounts", "Microsoft.Dashboard/grafana"],
+    "streamanalytics": ["Microsoft.StreamAnalytics/streamingjobs"],
+    "vnets": ["Microsoft.Network/ddosProtectionPlans", "Microsoft.Network/firewallPolicies", "Microsoft.Network/networkWatchers"],
+    "subscriptions": ["Microsoft.Authorization/locks", "Microsoft.Authorization/roleAssignments"],
+    "appservices": ["Microsoft.Web/certificates"],
+    "cost": [], "common": [],
+}.items():
+    AZ_MAP[_sid] = AZ_MAP.get(_sid, []) + [t for t in _ts if t not in AZ_MAP.get(_sid, [])]
+AZ_EXTRA_SERVICES = [("redis", "Azure Cache for Redis", "Databases", ["Microsoft.Cache/redis"]),
+                     ("search", "Azure AI Search", "AI + machine learning", ["Microsoft.Search/searchServices"]),
+                     ("logic", "Logic Apps", "Integration", ["Microsoft.Logic/workflows"])]
+AZ_API_VERSION.update({"Microsoft.Security": "2023-12-01-preview", "Microsoft.Dashboard": "2023-09-01", "Microsoft.Monitor": "2023-04-03",
+                       "Microsoft.StreamAnalytics": "2021-10-01-preview", "Microsoft.Authorization": "2022-04-01", "Microsoft.Search": "2023-11-01",
+                       "Microsoft.Logic": "2019-05-01"})
+AZ_SDK.update({
+    "Microsoft.Insights/actionGroups": ("monitor action-group", "azure.mgmt.monitor.MonitorManagementClient", "action_groups", "@azure/arm-monitor"),
+    "Microsoft.Insights/activityLogAlerts": ("monitor activity-log alert", "azure.mgmt.monitor.MonitorManagementClient", "activity_log_alerts", "@azure/arm-monitor"),
+    "Microsoft.Insights/autoscaleSettings": ("monitor autoscale", "azure.mgmt.monitor.MonitorManagementClient", "autoscale_settings", "@azure/arm-monitor"),
+    "Microsoft.Insights/scheduledQueryRules": ("monitor scheduled-query", "azure.mgmt.monitor.MonitorManagementClient", "scheduled_query_rules", "@azure/arm-monitor"),
+    "Microsoft.Security/automations": ("", "azure.mgmt.security.SecurityCenter", "automations", "@azure/arm-security"),
+    "Microsoft.Logic/workflows": ("logic workflow", "azure.mgmt.logic.LogicManagementClient", "workflows", "@azure/arm-logic"),
+    "Microsoft.Search/searchServices": ("search service", "azure.mgmt.search.SearchManagementClient", "services", "@azure/arm-search"),
+    "Microsoft.Network/networkWatchers": ("network watcher", "azure.mgmt.network.NetworkManagementClient", "network_watchers", "@azure/arm-network"),
+})
 AZ_DATA = {   # data-plane notes per console service (native wire the SDKs/CLIs use)
     "storage": [("Blob", "GET {EP}/devstoreaccount1/{container}?restype=container&comp=list", "azure-storage-blob / `az storage blob`"),
                 ("Queue", "GET {EP}/azure-data/queue/devstoreaccount1?comp=list", "azure-storage-queue / `az storage queue`")],
@@ -486,7 +522,7 @@ def gen_azure_types(router):
     sub = "/subscriptions/00000000-0000-0000-0000-cloudlearn01"
     router.handle("PUT", sub + "/resourceGroups/docs-rg?api-version=2021-04-01", {}, {"host": "x", "content-type": "application/json"}, b'{"location":"eastus"}')
     res = {}
-    types = sorted({t for ts in AZ_MAP.values() for t in ts})
+    types = sorted({t for ts in AZ_MAP.values() for t in ts} | {t for e in AZ_EXTRA_SERVICES for t in e[3]})
     for t in types:
         rp, rt = t.split("/", 1)
         api = AZ_API_VERSION.get(rp, "2023-01-01")
@@ -545,7 +581,30 @@ def feature_rows(feats):
 GLOBAL_WIRED = {}
 
 
+def verify_extras():
+    """Send every hand-authored op to the real Nano router; fail on anything that does not answer (503 = needs local LLM)."""
+    router = AwsWireRouter()
+    router.STRICT_GCP_PROJECT = False
+    h = {"host": "x", "content-type": "application/json", "api-key": "test", "x-goog-api-key": "test", "authorization": "Bearer dev"}
+    for m, p, b in X.VERIFY_SETUP:
+        router.handle(m, p, dict(parse_qsl(p.split("?", 1)[1])), h, json.dumps(b).encode())
+    bad = 0
+    for (cloud, sid), ex in sorted(X.EXTRAS.items()):
+        for o in ex["api"]["ops"]:
+            u = re.sub(r"\{[^}]+\}", "x", o["u"])
+            q = dict(parse_qsl(u.split("?", 1)[1])) if "?" in u else {}
+            body = json.dumps(o["in"]).encode() if o["in"] is not None else b""
+            out = router.handle(o["m"], u if cloud == "azure" else u.split("?", 1)[0], q, h, body)
+            txt = out["body"][:300].decode("utf8", "replace")
+            ok = out["status"] < 400 or (o.get("llm") and out["status"] == 503) or (out["status"] == 404 and "{" in o["u"])
+            print("%-4s %-60s %s %s" % ("ok" if ok else "FAIL", o["n"][:60], out["status"], "" if ok else txt))
+            bad += not ok
+    sys.exit(1 if bad else 0)
+
+
 def main():
+    if "--verify-extras" in sys.argv:
+        return verify_extras()
     check = "--check" in sys.argv
     cov = {"botocore": botocore.__version__}
     index = {"clouds": {}}
@@ -572,7 +631,7 @@ def main():
     names = sorted({n for v in GCP_MAP.values() for n in v})
     gdocs = gen_gcp_apis(names)
     seen_ids = set()
-    for sid, title, cat in consoles_g + [(k, k, "Other") for k in reg_g if k not in {c[0] for c in console_services("gcp")}]:
+    for sid, title, cat in consoles_g + [(k, k, "Other") for k in reg_g if k not in {c[0] for c in console_services("gcp")}] + GCP_EXTRA_SERVICES + [("gemini", X.EXTRAS[("gcp", "gemini")]["title"], X.EXTRAS[("gcp", "gemini")]["category"])]:
         apis = [gdocs["%s.%s" % n] for n in GCP_MAP.get(sid, []) if "%s.%s" % n in gdocs]
         feats = reg_g.get(sid, reg_g.get(sid.split("/")[-1], []))
         if sid.split("/")[-1] in seen_ids:
@@ -587,6 +646,8 @@ def main():
         types = AZ_MAP.get(sid, [])
         feats = reg_a.get(sid, [])
         svcs.append(("azure", sid, title, cat, ("azure", types), feats))
+    for sid, title, cat, types in AZ_EXTRA_SERVICES:
+        svcs.append(("azure", sid, title, cat, ("azure", types), []))
 
     GLOBAL_WIRED["aws"] = {o["n"] for a in aws.values() for o in a["ops"]}
     GLOBAL_WIRED["gcp"] = {o["n"] for a in gdocs.values() for o in a["ops"]} | {o["n"].split(".", 1)[-1] for a in gdocs.values() for o in a["ops"]}
@@ -608,6 +669,11 @@ def main():
             doc["data"] = [{"n": a, "u": b, "c": c} for a, b, c in AZ_DATA.get(sid, [])]
         else:
             doc["apis"] = apis
+        ex = X.EXTRAS.get((cloud, sid))
+        if ex:
+            e = dict(ex["api"])
+            e.update({"extra": True, "total": len(e["ops"]), "wired": len(e["ops"]), "unwired": []})
+            doc["apis"] = list(doc["apis"]) + [e]
         doc["ops"] = sum(len(a["ops"]) for a in doc["apis"])
         doc["total"] = sum(a["total"] for a in doc["apis"])
         # registry-declared ops vs wired (AWS: by name; GCP: by method suffix)

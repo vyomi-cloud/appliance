@@ -105,7 +105,9 @@
     out.push(['curl (ARM REST)', 'curl -s -X ' + o.m + ' "' + EP + url + '" \\\n  -H "Authorization: Bearer dev"' + (hasBody ? ' \\\n  -H "Content-Type: application/json" \\\n  -d ' + sh1(J(inp, 0)) : '')]);
     return out;
   }
-  function snips(cloud, a, o, EP) { return cloud === 'aws' ? awsSnips(a, o, EP) : cloud === 'gcp' ? gcpSnips(a, o, EP) : azSnips(a, o, EP); }
+  function snips(cloud, a, o, EP) {
+    if (o.s) return o.s.map(function (x) { return [x[0], x[1].split('{EP}').join(EP)]; });   // hand-authored ops carry their own runnable snippets
+    return cloud === 'aws' ? awsSnips(a, o, EP) : cloud === 'gcp' ? gcpSnips(a, o, EP) : azSnips(a, o, EP); }
 
   /* ── shared widgets ────────────────────────────────────────────────────── */
   function codeTabs(list) {
@@ -127,12 +129,14 @@
     return '<table class="am-t"><tr><th>Name</th><th>Type</th></tr>' + o.p.map(function (p) { return '<tr><td>' + esc(p[0]) + (p[2] ? ' <span class="am-req">required</span>' : '') + '</td><td><code class="am-inline">' + esc(p[1]) + '</code></td></tr>'; }).join('') + '</table>';
   }
   function wireLine(cloud, a, o) {
+    if (o.w) return o.w;
     if (cloud === 'aws') return (a.protocol === 'json' && o.t) ? 'POST /   X-Amz-Target: ' + o.t : (a.protocol === 'query' || a.protocol === 'ec2') ? 'POST /   Action=' + o.n : o.m + ' ' + o.u;
     return o.m + ' ' + (cloud === 'gcp' ? o.ex : o.u);
   }
   function opDetail(cloud, a, o, EP) {
     var h = '';
     if (o.d) h += '<p class="am-none" style="color:#cdd8e6;margin:0 0 8px">' + esc(o.d) + '</p>';
+    if (o.llm) h += '<p class="am-none">Needs the local model: start it with <code>vyomi llm start</code> (offline appliance); answers 503 until then.</p>';
     h += '<div class="am-sec-h">Wire request</div><pre class="api-pre"><code>' + esc(wireLine(cloud, a, o)) + '</code></pre>';
     h += '<div class="am-sec-h">Parameters</div>' + paramTable(cloud, o);
     if (o['in'] && Object.keys(o['in']).length) h += '<div class="am-sec-h">Request example</div><pre class="api-pre"><code>' + esc(J(o['in'])) + '</code></pre>';
