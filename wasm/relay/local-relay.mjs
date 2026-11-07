@@ -32,6 +32,7 @@
 import { egress } from "./egress.mjs";
 import { createHub } from "./booster-hub.mjs";
 import { createRunnerLlmHub } from "./runner-llm-hub.mjs";
+import { createMeshHub } from "./booster-mesh.mjs";
 import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
@@ -59,6 +60,8 @@ const hub = createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m)
 // Remote-LLM plane (spike, inert unless VYOMI_BOOSTER_SESSION_KEY is set): a GitHub-Actions runner dials OUT to /llm-runner;
 // the booster reaches it with plain HTTP under /llm/*.
 const llmHub = createRunnerLlmHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
+// LLM mesh (WireGuard star over WebSocket): only active when VYOMI_MESH=1 (the hub needs NET_ADMIN + wireguard-tools).
+const meshHub = process.env.VYOMI_MESH === "1" ? createMeshHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) }) : null;
 function pickTab() {           // most-recently-registered OPEN socket, or null
   let chosen = null;
   for (const ws of tabs) if (ws.readyState === ws.OPEN) chosen = ws;
@@ -121,6 +124,7 @@ const server = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
+    if (meshHub && meshHub.http(req, res)) return;               // LLM mesh peer table (/mesh/_peers)
     if (llmHub.http(req, res, Buffer.concat(chunks))) return;   // remote-LLM plane (/llm/*)
     if (hub.http(req, res, Buffer.concat(chunks))) return;     // booster plane (carries X-Vyomi-Session-Token)
     const tab = pickTab();
@@ -170,6 +174,7 @@ const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/booster") { hub.upgrade(req, socket, head); return; }
+  if (p === "/mesh" && meshHub) { meshHub.upgrade(req, socket, head); return; }
   if (p === "/llm-runner") { llmHub.upgrade(req, socket, head); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;
   if (!target) { socket.destroy(); return; }
