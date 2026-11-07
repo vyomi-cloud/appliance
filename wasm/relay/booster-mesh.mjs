@@ -301,7 +301,7 @@ if (process.argv[1] && process.argv[1].endsWith("booster-mesh.mjs") && process.a
   const token = process.env.VYOMI_MESH_TOKEN || ""; delete process.env.VYOMI_MESH_TOKEN;
   if (!token || !process.env.VYOMI_RELAY_URL) { console.error("[mesh] VYOMI_RELAY_URL and VYOMI_MESH_TOKEN are required"); process.exit(2); }
   const agent = meshAgent({ relayUrl: process.env.VYOMI_RELAY_URL, token, WS, iface: process.env.VYOMI_MESH_IFACE || "wgvyomi",
-                            statusFile: process.env.VYOMI_MESH_STATUS || "", log: (m) => console.log("[mesh] " + m) });
+                            statusFile: process.env.VYOMI_MESH_STATUS || "", directWaitMs: Number(process.env.VYOMI_MESH_DIRECT_WAIT_MS || 8000), log: (m) => console.log("[mesh] " + m) });
   for (const s of ["SIGTERM", "SIGINT"]) process.on(s, () => agent.leave("signal"));
   if (process.env.TTL_S) setTimeout(() => agent.leave("ttl"), Number(process.env.TTL_S) * 1000).unref();
   const why = await agent.done; console.log("[mesh] ended: " + why);

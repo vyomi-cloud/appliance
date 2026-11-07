@@ -1,0 +1,14 @@
+# LOCAL TEST image (vyomi-mesh-llama:test): llama.cpp built WITH the RPC backend (the stock :server image ships no rpc-server).
+# The same checkout builds llama-server (--rpc client) and rpc-server, so the RPC protocol versions match. On a real GitHub runner
+# the workflow builds/caches the same two binaries (or downloads a release build that includes them).
+FROM vyomi-mesh-node:test AS build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates && rm -rf /var/lib/apt/lists/*
+ARG LLAMA_REF=master
+RUN git clone --depth 1 --branch ${LLAMA_REF} https://github.com/ggml-org/llama.cpp /src && cd /src \
+ && cmake -B build -DGGML_RPC=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=ON -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build build -j6 --target llama-server rpc-server \
+ && mkdir -p /opt/llama && cp build/bin/llama-server build/bin/rpc-server /opt/llama/ && cp -a build/bin/*.so* /opt/llama/ 2>/dev/null; true
+
+FROM vyomi-mesh-node:test
+COPY --from=build /opt/llama /opt/llama
+ENV LD_LIBRARY_PATH=/opt/llama

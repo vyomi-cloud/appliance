@@ -7,6 +7,8 @@
   },
   "postCreateCommand": "bash .devcontainer/booster/boot-booster.sh up",
   "postStartCommand": "bash .devcontainer/booster/boot-booster.sh resume",
+  "capAdd": ["NET_ADMIN"],
+  "//capAdd": "LLM mesh (docs/architecture/v4.0/BOOSTER-LLM-MESH.md): the booster joins the WireGuard star with mesh-up.sh (kernel wg, else wireguard-go). docker-in-docker already runs the container privileged (so /dev/net/tun exists); NET_ADMIN is declared explicitly so it still works if that feature changes. Nothing is published.",
   "containerEnv": { "VYOMI_ROLE": "booster" },
   "remoteEnv": { "VYOMI_BOOSTER_MAX_SESSION": "8h", "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud", "VYOMI_BILLING": "free_personal_quota" },
   "hostRequirements": { "cpus": 2, "memory": "8gb", "storage": "32gb" }

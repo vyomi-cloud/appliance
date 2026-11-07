@@ -275,9 +275,39 @@ def main_docker():
             cleanup()
 
 
+def direct_phase():
+    """Optional direct-UDP attempt: hub advertises a direct endpoint; reachable -> path direct-udp, black hole -> falls back to the WS bridge."""
+    net, rl, nd = "vyomi-mesh-netD", "vyomi-mesh-relayD", "vyomi-mesh-nodeD"
+    end = int(time.time()) + 3600
+    c = M.mint_mesh_session("sess-x", [{"id": "d1", "role": "runner"}], relay_url=f"ws://{rl}:8787", session_end=end, key=KEY)["d1"]
+    mounts = ["-v", f"{ROOT}/wasm/relay:/opt/relay:ro", "-v", f"{ROOT}/docker/booster-runner-llm:/opt/rl:ro", "-v", f"{ROOT}/docker/booster-mesh-test:/opt/test:ro"]
+
+    def clean():
+        sh("docker", "rm", "-f", rl, nd)
+        sh("docker", "network", "rm", net)
+    clean()
+    try:
+        sh("docker", "network", "create", "--subnet", "172.29.77.0/24", net, check_rc=True)
+        sh("docker", "run", "-d", "--name", nd, "--network", net, "--cap-add", "NET_ADMIN", *mounts, "-e", "WS_PKG=/opt/runner/node_modules/ws", "-e", "MESH_JS=/opt/relay/booster-mesh.mjs",
+           "-e", "VYOMI_MESH_DIRECT_WAIT_MS=3000", "--entrypoint", "sleep", IMG, "infinity", check_rc=True)
+        for label, direct, want in (("reachable UDP endpoint", "172.29.77.50:51820", "direct-udp"), ("black-holed UDP endpoint", "172.29.77.99:51820", "ws-bridge")):
+            sh("docker", "rm", "-f", rl)
+            sh("docker", "run", "-d", "--name", rl, "--network", net, "--ip", "172.29.77.50", "--cap-add", "NET_ADMIN", "--sysctl", "net.ipv4.ip_forward=1", *mounts,
+               "-e", f"VYOMI_BOOSTER_SESSION_KEY={KEY}", "-e", f"VYOMI_MESH_DIRECT={direct}", "-e", "WS_PKG=/opt/runner/node_modules/ws", "--entrypoint", "node", IMG, "/opt/test/mesh-relay.mjs", check_rc=True)
+            time.sleep(1.5)
+            dx(nd, "bash /opt/rl/mesh-up.sh down")
+            r = dx(nd, f"VYOMI_RELAY_URL={c['relay_url']} VYOMI_MESH_TOKEN='{c['env']['VYOMI_MESH_TOKEN']}' bash /opt/rl/mesh-up.sh up", timeout=60)
+            st = dx(nd, "cat /tmp/vyomi-mesh/status.json").stdout
+            pg = dx(nd, "ping -c 3 -W 2 -q 100.96.0.1").returncode
+            check(f"direct UDP, {label}: joined via '{want}' and the hub answers on the WG address", r.returncode == 0 and f'"path":"{want}"' in st and pg == 0, (r.stdout, r.stderr, st, pg))
+    finally:
+        clean()
+
+
 if docker_ok():
     try:
         main_docker()
+        direct_phase()
     except Exception as e:  # noqa: BLE001
         check("docker harness ran to completion", False, repr(e))
     print("METRICS " + json.dumps(METRICS))
