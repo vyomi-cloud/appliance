@@ -83,11 +83,11 @@ def _resolve(store, ns: str, rid: str, dim: str, *, must_exist: bool = True):
     if ns != "dynamodb":
         raise _bad(f"The service namespace '{ns}' is not implemented by this simulator; only 'dynamodb' is supported.")
     if dim not in _DIMS:
-        raise _bad(f"Unsupported scalable dimension '{dim}' for service namespace 'dynamodb'. "
+        raise _bad(f"Invalid scalable dimension '{dim}' for service namespace 'dynamodb'. "
                    f"Supported: {sorted(_DIMS)}")
     m = _RES_RE.match(rid or "")
     if not m:
-        raise _bad(f"Unsupported resource ID '{rid}' for dynamodb. Expected table/<name> or table/<name>/index/<index>.")
+        raise _bad(f"Invalid resource ID '{rid}' for dynamodb. Expected table/<name> or table/<name>/index/<index>.")
     kind = _DIMS[dim][0]
     if (kind == "index") != bool(m.group(2)):
         raise _bad(f"Scalable dimension '{dim}' does not match resource ID '{rid}'.")

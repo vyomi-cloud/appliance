@@ -428,3 +428,10 @@ def dispatch(store, target: str, payload: dict | None = None):
         return types.SimpleNamespace(status=200, headers=hdr, body=op(store, payload if isinstance(payload, dict) else {}))
     except DmsError as e:
         return types.SimpleNamespace(status=e.status, headers=hdr, body={"__type": e.code, "message": e.message})
+
+
+try:
+    from core import dms_gap_core as _gap   # noqa: E402
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import dms_gap_core as _gap  # type: ignore  # noqa: E402  (wire-gap sweep: tags, Modify*, subnet groups, subscriptions, migration projects, ...)
+_OPS.update(_gap.OPS)
