@@ -141,9 +141,9 @@ def probe(fid: str, p: dict, level: str, ctx: dict) -> tuple[bool, str]:
         kind = p["gcp_vertex"]
         if kind == "gemini":
             # countTokens is model-free; generateContent must answer, or say UNAVAILABLE (503) when no local model runs, never fake an answer
-            c, cb = call("POST", f"{pub}/gemini-2.0-flash:countTokens", svc="aiplatform",
+            c, cb = call("POST", f"{pub}/qwen2.5-3b:countTokens", svc="aiplatform",
                          body=json.dumps({"contents": [{"role": "user", "parts": [{"text": "12345678"}]}]}).encode())
-            g, gb = call("POST", f"{pub}/gemini-2.0-flash:generateContent", svc="aiplatform",
+            g, gb = call("POST", f"{pub}/qwen2.5-3b:generateContent", svc="aiplatform",
                          body=json.dumps({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).encode())
             gj = json.loads(gb or b"{}")
             honest = g == 200 and gj.get("candidates") or g == 503 and gj.get("error", {}).get("status") == "UNAVAILABLE"

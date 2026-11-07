@@ -6,6 +6,7 @@ import json
 import sys
 import time
 
+from core import ai_model_catalog as CAT
 from core.aws_wire_router import AwsWireRouter
 
 AwsWireRouter.STRICT_GCP_PROJECT = False   # engine test: ad-hoc project ids
@@ -37,10 +38,12 @@ def resp(op):
 
 
 # Model Garden
-st, b = call("GET", "/v1/publishers/google/models")
-check("Model Garden lists publisher models", st == 200 and any(m["name"].endswith("gemini-2.0-flash") for m in b["publisherModels"]), b)
-st, b = call("GET", "/v1/publishers/google/models/gemini-2.5-pro")
-check("Model Garden get", st == 200 and b["launchStage"] == "GA", b)
+st, b = call("GET", "/v1/publishers/-/models")
+check("Model Garden lists exactly the ten pool models", st == 200 and sorted(m["name"].split("/")[-1] for m in b["publisherModels"]) == sorted(CAT.IDS), b)
+check("Model Garden availability: only the local small model without a booster", {m["name"].split("/")[-1] for m in b["publisherModels"] if m["vyomiAvailability"]["available"]} == {"qwen2.5-3b"})
+st, b = call("GET", "/v1/publishers/qwen/models/qwen2.5-7b")
+check("Model Garden get", st == 200 and b["launchStage"] == "GA" and b["vyomiAvailability"]["label"] == "Needs Booster (Pro/Max)", b)
+check("Model Garden has no gemini/claude entries", call("GET", "/v1/publishers/google/models/gemini-2.5-pro")[0] == 404 and call("GET", "/v1/publishers/anthropic/models")[1]["publisherModels"] == [])
 check("Model Garden unknown -> 404", call("GET", "/v1/publishers/google/models/nope")[0] == 404)
 
 # Models, endpoints, deploy

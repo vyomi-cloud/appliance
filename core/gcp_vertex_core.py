@@ -74,22 +74,15 @@ ITEM_VERBS = {
 }
 NO_DISPLAY = {"featureOnlineStores", "featureViews", "featureGroups", "features", "metadataStores", "instances", "experiments", "runs"}
 
-PUBLISHER_MODELS = [
-    ("google", "gemini-2.5-pro", "PROPRIETARY", "GA", "Gemini 2.5 Pro", "Multimodal reasoning model", ["generate"]),
-    ("google", "gemini-2.5-flash", "PROPRIETARY", "GA", "Gemini 2.5 Flash", "Fast multimodal model", ["generate"]),
-    ("google", "gemini-2.0-flash", "PROPRIETARY", "GA", "Gemini 2.0 Flash", "Low-latency multimodal model", ["generate"]),
-    ("google", "gemini-1.5-pro", "PROPRIETARY", "GA", "Gemini 1.5 Pro", "Long-context multimodal model", ["generate"]),
-    ("google", "gemini-1.5-flash", "PROPRIETARY", "GA", "Gemini 1.5 Flash", "Fast, cost-efficient model", ["generate"]),
-    ("google", "text-embedding-005", "PROPRIETARY", "GA", "Text Embedding 005", "English and code text embeddings", ["embed"]),
-    ("google", "text-embedding-004", "PROPRIETARY", "GA", "Text Embedding 004", "Text embeddings", ["embed"]),
-    ("google", "gemini-embedding-001", "PROPRIETARY", "GA", "Gemini Embedding", "State-of-the-art text embeddings", ["embed"]),
-    ("google", "imagen-3.0-generate-002", "PROPRIETARY", "GA", "Imagen 3", "Text-to-image generation", ["catalog"]),
-    ("google", "gemma-2-9b-it", "GOOGLE_OWNED_OSS", "GA", "Gemma 2 9B", "Open model from Google", ["deploy"]),
-    ("meta", "llama-3.1-8b-instruct", "THIRD_PARTY_OWNED_OSS", "GA", "Llama 3.1 8B Instruct", "Open instruction-tuned LLM", ["deploy"]),
-    ("meta", "llama-3.3-70b-instruct", "THIRD_PARTY_OWNED_OSS", "GA", "Llama 3.3 70B Instruct", "Open instruction-tuned LLM", ["deploy"]),
-    ("mistralai", "mistral-small", "THIRD_PARTY_OWNED_OSS", "GA", "Mistral Small", "Efficient open model", ["deploy"]),
-    ("anthropic", "claude-sonnet-4", "PROPRIETARY", "GA", "Claude Sonnet 4", "Anthropic model (partner, catalog only)", ["catalog"]),
-]
+try:
+    from core import ai_model_catalog as CAT
+except ImportError:  # Pyodide flat layout
+    import ai_model_catalog as CAT  # type: ignore
+
+# Model Garden = the ten booster-mesh open models (core/ai_model_catalog.py), nothing else. (publisher, id, oss category, stage, title,
+# description, actions); every one is served (generate / embed) once its booster runner is up.
+PUBLISHER_MODELS = [(m["publisher"], m["id"], "GOOGLE_OWNED_OSS" if m["vendor"] == "Google" else "THIRD_PARTY_OWNED_OSS", "GA", m["name"], m["blurb"],
+                     ["embed"] if m["kind"] == "embed" else ["generate"]) for m in CAT.MODELS]
 
 
 @dataclass
@@ -647,7 +640,8 @@ def _pm(pub, mid, oss, stage, title, desc, acts):
     return {"name": f"publishers/{pub}/models/{mid}", "versionId": "default", "openSourceCategory": oss,
             "launchStage": stage, "versionState": "VERSION_STATE_STABLE", "supportedActions": actions,
             "publisherModelTemplate": f"projects/{{project}}/locations/{{location}}/publishers/{pub}/models/{mid}@default",
-            "displayName": title, "description": desc, "servedByVyomi": bool({"generate", "embed"} & set(acts))}
+            "displayName": title, "description": desc, "servedByVyomi": bool({"generate", "embed"} & set(acts)),
+            "vyomiAvailability": CAT.availability(mid)}
 
 
 def _model_garden(method, pub, mid, query):

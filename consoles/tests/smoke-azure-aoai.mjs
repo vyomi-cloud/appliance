@@ -20,7 +20,7 @@ const put = (p, b) => page.evaluate(async ([u, p, b]) => { const r = await fetch
 const S = "00000000-0000-0000-0000-cloudlearn01";
 await put(`/subscriptions/${S}/resourcegroups/aoai-rg?api-version=2021-04-01`, { location: "eastus" });
 const a = await put(`/subscriptions/${S}/resourceGroups/aoai-rg/providers/Microsoft.CognitiveServices/accounts/aoai1?api-version=2024-10-01`, { location: "eastus", kind: "OpenAI", sku: { name: "S0" }, properties: { customSubDomainName: "aoai1" } });
-const d = await put(`/subscriptions/${S}/resourceGroups/aoai-rg/providers/Microsoft.CognitiveServices/accounts/aoai1/deployments/chat?api-version=2024-10-01`, { sku: { name: "Standard", capacity: 10 }, properties: { model: { format: "OpenAI", name: "gpt-4o-mini", version: "2024-07-18" } } });
+const d = await put(`/subscriptions/${S}/resourceGroups/aoai-rg/providers/Microsoft.CognitiveServices/accounts/aoai1/deployments/chat?api-version=2024-10-01`, { sku: { name: "Standard", capacity: 10 }, properties: { model: { format: "Alibaba", name: "qwen2.5-3b", version: "1" } } });
 check("seed account + deployment", a < 300 && d < 300, `${a}/${d}`);
 await page.goto(`${UI}#/cognitiveservices/aoai-rg/aoai1/playground`);
 await page.getByLabel("User query").waitFor({ timeout: 30000 });

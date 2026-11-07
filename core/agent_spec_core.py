@@ -8,7 +8,7 @@ Substrate-independent, Pyodide-loadable, no fastapi/boto3. The real services run
 simulator does NOT. Instead the "agent" is data:
 
   {"instructions": "You are a weather bot.",          # system prompt
-   "model": "gemini-2.5-flash",                       # optional; llm_core.resolve_model maps it onto the local model
+   "model": "qwen2.5-3b",                             # optional; llm_core.resolve_model maps it onto the local model
    "max_steps": 5, "max_tokens": 256, "temperature": 0.2,
    "tools": [
      {"name": "get_weather", "description": "...", "parameters": {JSON schema},

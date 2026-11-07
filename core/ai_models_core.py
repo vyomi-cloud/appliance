@@ -33,8 +33,10 @@ import zlib
 
 try:
     from core import llm_core as llm
+    from core import ai_model_catalog as CAT
 except ImportError:  # Pyodide flat layout
     import llm_core as llm  # type: ignore
+    import ai_model_catalog as CAT  # type: ignore
 
 def _guardrails():
     try:
@@ -46,21 +48,10 @@ def _guardrails():
 
 _ACCT = "123456789012"
 
-# (model id, provider, name, input modalities, output modalities, streaming, customizations)
-BEDROCK_MODELS = [
-    ("anthropic.claude-3-haiku-20240307-v1:0", "Anthropic", "Claude 3 Haiku", ["TEXT", "IMAGE"], ["TEXT"], True),
-    ("anthropic.claude-3-5-sonnet-20241022-v2:0", "Anthropic", "Claude 3.5 Sonnet v2", ["TEXT", "IMAGE"], ["TEXT"], True),
-    ("anthropic.claude-sonnet-4-20250514-v1:0", "Anthropic", "Claude Sonnet 4", ["TEXT", "IMAGE"], ["TEXT"], True),
-    ("amazon.titan-text-express-v1", "Amazon", "Titan Text G1 - Express", ["TEXT"], ["TEXT"], True),
-    ("amazon.titan-text-lite-v1", "Amazon", "Titan Text G1 - Lite", ["TEXT"], ["TEXT"], True),
-    ("amazon.titan-embed-text-v2:0", "Amazon", "Titan Text Embeddings V2", ["TEXT"], ["EMBEDDING"], False),
-    ("amazon.nova-micro-v1:0", "Amazon", "Nova Micro", ["TEXT"], ["TEXT"], True),
-    ("amazon.nova-lite-v1:0", "Amazon", "Nova Lite", ["TEXT", "IMAGE"], ["TEXT"], True),
-    ("amazon.nova-pro-v1:0", "Amazon", "Nova Pro", ["TEXT", "IMAGE"], ["TEXT"], True),
-    ("meta.llama3-8b-instruct-v1:0", "Meta", "Llama 3 8B Instruct", ["TEXT"], ["TEXT"], True),
-    ("meta.llama3-1-8b-instruct-v1:0", "Meta", "Llama 3.1 8B Instruct", ["TEXT"], ["TEXT"], True),
-    ("mistral.mistral-7b-instruct-v0:2", "Mistral AI", "Mistral 7B Instruct", ["TEXT"], ["TEXT"], True),
-]
+# (model id, provider, name, input modalities, output modalities, streaming, catalogue id): the ten booster-mesh models only
+# (core/ai_model_catalog.py). Legacy real-vendor ids resolve through the hidden alias map (see _resolve_model) but are never listed.
+BEDROCK_MODELS = [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT"], ["EMBEDDING"] if m["kind"] == "embed" else ["TEXT"],
+                   m["kind"] != "embed", m["id"]) for m in CAT.MODELS]
 _BM = {m[0]: m for m in BEDROCK_MODELS}
 
 
@@ -117,7 +108,13 @@ def _resolve_model(mid):
     """Accept foundation-model ids, cross-Region inference profile ids (us./eu./apac. prefix) and their ARNs."""
     mid = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:(foundation-model|inference-profile)/", "", mid)
     base = re.sub(r"^(us|eu|apac|us-gov|global)\.", "", mid)
-    return _BM.get(base)
+    if base in _BM:
+        return _BM[base]
+    cid = CAT.resolve("aws", base)          # hidden compat alias (anthropic.claude*, amazon.nova*, ...): resolves, never listed
+    if cid is None:
+        return None
+    return (base, CAT.BY_ID[cid]["vendor"], CAT.BY_ID[cid]["name"], ["TEXT"], ["EMBEDDING"] if CAT.BY_ID[cid]["kind"] == "embed" else ["TEXT"],
+            CAT.BY_ID[cid]["kind"] != "embed", cid)
 
 
 def _ll_err(e):
@@ -318,26 +315,39 @@ def _claude_request(p, mid):
     return out, sysm, p["max_tokens"], p.get("temperature", 1.0), p.get("stop_sequences"), ex
 
 
+def _fam(m):
+    """Wire family used to pick the InvokeModel body/response shape. Legacy alias ids keep their vendor family; the ten native
+    ``vyomi.<id>`` models take a Converse-style body (messages) or a Llama-style one (prompt / inputText)."""
+    return m[7] if len(m) > 7 else m[0]
+
+
 def _bedrock_text_request(m, p):
     """-> (messages, system, max_tokens, temperature, stop, extras) from the family-specific InvokeModel body, or an error string."""
-    mid = m[0]
-    if mid.startswith("anthropic."):
+    mid, fam = m[0], _fam(m)
+    if fam.startswith("vyomi.") or fam == "vyomi-prompt":
+        txt = p.get("prompt") or p.get("inputText")
+        if not txt:
+            return "Malformed input request: required key [prompt] not found, please reformat your input and try again."
+        c = p.get("textGenerationConfig") or {}
+        return ([{"role": "user", "content": txt}], None, p.get("max_gen_len") or p.get("max_tokens") or c.get("maxTokenCount", 512),
+                p.get("temperature", c.get("temperature", 0.5)), p.get("stop") or c.get("stopSequences"), {"model": mid})
+    if fam.startswith("anthropic."):
         return _claude_request(p, mid)
-    if mid.startswith("amazon.titan-text"):
+    if fam.startswith("amazon.titan-text"):
         if not p.get("inputText"):
             return "Malformed input request: required key [inputText] not found, please reformat your input and try again."
         c = p.get("textGenerationConfig") or {}
         return ([{"role": "user", "content": p["inputText"]}], None, c.get("maxTokenCount", 512), c.get("temperature", 0.7),
                 c.get("stopSequences"), {"model": mid, **({"top_p": c["topP"]} if c.get("topP") is not None else {})})
-    if mid.startswith("amazon.nova"):
+    if fam.startswith("amazon.nova"):
         if not isinstance(p.get("messages"), list) or not p["messages"]:
             return "messages: field required"
         return _converse_request(p, mid, "max_new_tokens")
-    if mid.startswith("meta."):
+    if fam.startswith("meta."):
         if not p.get("prompt"):
             return "Malformed input request: required key [prompt] not found, please reformat your input and try again."
         return [{"role": "user", "content": p["prompt"]}], None, p.get("max_gen_len", 512), p.get("temperature", 0.5), None, {"model": mid}
-    if mid.startswith("mistral."):
+    if fam.startswith("mistral."):
         if not p.get("prompt"):
             return "Malformed input request: required key [prompt] not found, please reformat your input and try again."
         return [{"role": "user", "content": p["prompt"]}], None, p.get("max_tokens", 512), p.get("temperature", 0.5), p.get("stop"), {"model": mid}
@@ -355,21 +365,21 @@ def _converse_content(r):
 
 
 def _bedrock_response(m, p, r):
-    mid, txt = m[0], r["text"]
-    if mid.startswith("anthropic."):
+    mid, txt, fam = m[0], r["text"], _fam(m)
+    if fam.startswith("anthropic."):
         content = [{"type": "text", "text": txt}] if (txt or not r.get("tool_calls")) else []
         content += [{"type": "tool_use", "id": c["id"], "name": c["name"], "input": c["arguments"]} for c in r.get("tool_calls") or []]
         return {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant", "model": mid,
                 "content": content, "stop_reason": "tool_use" if r.get("tool_calls") else ("max_tokens" if r["finish_reason"] == "length" else "end_turn"),
                 "stop_sequence": None, "usage": {"input_tokens": r["input_tokens"], "output_tokens": r["output_tokens"]}}
-    if mid.startswith("amazon.titan-text"):
+    if fam.startswith("amazon.titan-text"):
         return {"inputTextTokenCount": r["input_tokens"], "results": [{"tokenCount": r["output_tokens"], "outputText": txt,
                 "completionReason": "LENGTH" if r["finish_reason"] == "length" else "FINISH"}]}
-    if mid.startswith("amazon.nova"):
+    if fam.startswith("amazon.nova"):
         return {"output": {"message": {"role": "assistant", "content": _converse_content(r)}}, "stopReason": _stop_reason(r["finish_reason"]),
                 "usage": {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"],
                           "totalTokens": r["input_tokens"] + r["output_tokens"]}}
-    if mid.startswith("meta."):
+    if fam.startswith("meta.") or fam == "vyomi-prompt":
         return {"generation": txt, "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
                 "stop_reason": "length" if r["finish_reason"] == "length" else "stop"}
     return {"outputs": [{"text": txt, "stop_reason": "length" if r["finish_reason"] == "length" else "stop"}]}
@@ -454,14 +464,14 @@ def _chunk_frame(obj):
 def _invoke_frames(m, it, t0):
     """InvokeModelWithResponseStream: the model family's own streaming events, each wrapped in a base64 `chunk` frame, emitted as the
     seam generates them (Claude Messages events, Nova/Converse events, Titan/Llama/Mistral chunks)."""
-    mid = m[0]
+    mid, fam = m[0], _fam(m)
     first = [None]
 
     def metrics(ev):
         return {"inputTokenCount": ev["input_tokens"], "outputTokenCount": ev["output_tokens"],
                 "invocationLatency": int((time.time() - t0) * 1000), "firstByteLatency": int(((first[0] or time.time()) - t0) * 1000)}
     try:
-        if mid.startswith("amazon.nova"):
+        if fam.startswith("amazon.nova"):
             def F(name, payload, message_type="event"):
                 if message_type != "event":
                     return eventstream_frame(name, payload, message_type=message_type)
@@ -474,7 +484,7 @@ def _invoke_frames(m, it, t0):
                 if fr:
                     yield fr
             return
-        if mid.startswith("anthropic."):
+        if fam.startswith("anthropic."):
             yield _chunk_frame({"type": "message_start", "message": {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant",
                                                                     "model": mid, "content": [], "stop_reason": None, "stop_sequence": None,
                                                                     "usage": {"input_tokens": 0, "output_tokens": 0}}})
@@ -511,18 +521,18 @@ def _invoke_frames(m, it, t0):
             first[0] = first[0] or time.time()
             if ev["type"] == "text":
                 n_out += 1
-                if mid.startswith("amazon.titan-text"):
+                if fam.startswith("amazon.titan-text"):
                     yield _chunk_frame({"outputText": ev["text"], "index": 0, "totalOutputTextTokenCount": None, "completionReason": None, "inputTextTokenCount": None})
-                elif mid.startswith("meta."):
+                elif fam.startswith("meta.") or fam == "vyomi-prompt":
                     yield _chunk_frame({"generation": ev["text"], "prompt_token_count": None, "generation_token_count": n_out, "stop_reason": None})
                 else:
                     yield _chunk_frame({"outputs": [{"text": ev["text"], "stop_reason": None}]})
             elif ev["type"] == "done":
                 lim = ev["finish_reason"] == "length"
-                if mid.startswith("amazon.titan-text"):
+                if fam.startswith("amazon.titan-text"):
                     yield _chunk_frame({"outputText": "", "index": 0, "totalOutputTextTokenCount": ev["output_tokens"], "completionReason": "LENGTH" if lim else "FINISH",
                                         "inputTextTokenCount": ev["input_tokens"], "amazon-bedrock-invocationMetrics": metrics(ev)})
-                elif mid.startswith("meta."):
+                elif fam.startswith("meta.") or fam == "vyomi-prompt":
                     yield _chunk_frame({"generation": "", "prompt_token_count": ev["input_tokens"], "generation_token_count": ev["output_tokens"],
                                         "stop_reason": "length" if lim else "stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
                 else:
@@ -613,6 +623,8 @@ def bedrock_dispatch(method, path, query, headers, body):
     p = _body(body)
     if p is None:
         return _b_err("ValidationException", "Malformed input request, please reformat your input and try again.", 400)
+    if m[0] in CAT._BYNAME:     # native ids: Converse-style body -> nova family, else Llama-style
+        m = m + ("amazon.nova-vyomi" if isinstance(p.get("messages"), list) else "vyomi-prompt",)
     t0 = time.time()
     if op.startswith("converse"):
         if m[5] is False and "TEXT" not in m[4]:
@@ -647,7 +659,16 @@ def bedrock_dispatch(method, path, query, headers, body):
                             "metrics": {"latencyMs": int((time.time() - t0) * 1000)}}, {"x-vyomi-local-model": r["model"]})
         return _stream_out(200, {}, _converse_frames(it, t0), "application/vnd.amazon.eventstream")
     # InvokeModel[WithResponseStream]
-    if m[0].startswith("amazon.titan-embed"):
+    if m[6] == CAT.DEFAULT_EMBED and m[0] in CAT._BYNAME:      # native ids: 768-d nomic-style embedding, Titan-free body
+        if op != "invoke":
+            return _b_err("ValidationException", "This model doesn't support the InvokeModelWithResponseStream operation.", 400)
+        txt = p.get("inputText") or p.get("prompt") or p.get("input")
+        if not isinstance(txt, str) or not txt:
+            return _b_err("ValidationException", "Malformed input request: required key [inputText] not found, please reformat your input and try again.", 400)
+        e = llm.embed(txt)
+        v = (e["vectors"][0] + [0.0] * 768)[:768]
+        return _j(200, {"embedding": v, "inputTextTokenCount": e["input_tokens"]}, {"x-amzn-bedrock-input-token-count": str(e["input_tokens"])})
+    if m[0].startswith("amazon.titan-embed") or m[6] == CAT.DEFAULT_EMBED:
         if op != "invoke":
             return _b_err("ValidationException", "This model doesn't support the InvokeModelWithResponseStream operation.", 400)
         if not isinstance(p.get("inputText"), str) or not p["inputText"]:
@@ -691,12 +712,19 @@ def bedrock_dispatch(method, path, query, headers, body):
 def _summary(m):
     return {"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{m[0]}", "modelId": m[0], "modelName": m[2],
             "providerName": m[1], "inputModalities": m[3], "outputModalities": m[4], "responseStreamingSupported": m[5],
-            "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"}}
+            "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
+            "vyomiAvailability": CAT.availability(m[6])}
 
 
 # ───────────────────────────── Vertex AI ─────────────────────────────
-GEMINI_MODELS = ("gemini-2.0-flash", "gemini-2.0-flash-001", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro")
-GEMINI_EMBED = ("text-embedding-004", "text-embedding-005", "gemini-embedding-001", "textembedding-gecko@003")
+# Vertex / Gemini-API model ids: the ten catalogue models by bare id (and ollama/vyomi by-name ids); legacy gemini-*/text-embedding-*
+# ids still RESOLVE through the hidden alias map but are never listed (core/ai_model_catalog.py).
+def _vx_known(model):
+    return CAT.resolve("gcp", model) is not None
+
+
+def _vx_embed(model):
+    return CAT.resolve("gcp", model) == CAT.DEFAULT_EMBED
 
 
 def _g_err(status, st, msg):
@@ -868,18 +896,18 @@ def _gdev_dispatch(method, path, query, headers, body):
     method = method.upper()
     mt = re.match(r"^/v1(?:beta)?/models/?$", path)
     if mt and method == "GET":
-        return _j(200, {"models": [_gdev_model(m) for m in GEMINI_MODELS + GEMINI_EMBED if "@" not in m]})
+        return _j(200, {"models": [_gdev_model(m) for m in CAT.IDS]})
     mt = re.match(r"^/v1(?:beta)?/models/([^/:]+)$", path)
     if mt and method == "GET":
         m = mt.group(1)
-        if m not in GEMINI_MODELS and m not in GEMINI_EMBED:
+        if not _vx_known(m):
             return _g_err(404, "NOT_FOUND", f"models/{m} is not found for API version v1beta, or is not supported for this method.")
         return _j(200, _gdev_model(m))
     mt = re.match(r"^/v1(?:beta)?/models/([^/:]+):([A-Za-z]+)$", path)
     if not mt or method != "POST":
         return _g_err(404, "NOT_FOUND", f"Unsupported Gemini API operation: {method} {path}")
     model, op = mt.groups()
-    if model not in GEMINI_MODELS and model not in GEMINI_EMBED:
+    if not _vx_known(model):
         return _g_err(404, "NOT_FOUND", f"models/{model} is not found for API version v1beta, or is not supported for {op}. "
                       "Call ListModels to see the list of available models and their supported methods.")
     p = _body(body)
@@ -893,18 +921,19 @@ def _gdev_dispatch(method, path, query, headers, body):
         if not all(texts):
             return _g_err(400, "INVALID_ARGUMENT", "content.parts: at least one text part is required in every request.")
         return _j(200, {"embeddings": [{"values": v} for v in llm.embed(texts)["vectors"]]})
-    if op == "embedContent" and model not in GEMINI_EMBED:
+    if op == "embedContent" and not _vx_embed(model):
         return _g_err(400, "INVALID_ARGUMENT", f"models/{model} does not support embedContent.")
-    if op == "generateContent" and model in GEMINI_EMBED:
+    if op == "generateContent" and _vx_embed(model):
         return _g_err(400, "INVALID_ARGUMENT", f"models/{model} does not support generateContent.")
     r = vertex_dispatch("POST", f"/v1/projects/gemini-api/locations/global/publishers/google/models/{model}:{op}", query, headers, body)
     return r
 
 
 def _gdev_model(m):
-    emb = m in GEMINI_EMBED
-    return {"name": f"models/{m}", "version": "001", "displayName": m, "description": "Vyomi local-model alias (Dev Simplified)",
-            "inputTokenLimit": 8192 if emb else 1048576, "outputTokenLimit": 1 if emb else 8192,
+    emb = _vx_embed(m)
+    return {"name": f"models/{m}", "version": "001", "displayName": CAT.BY_ID[m]["name"] if m in CAT.BY_ID else m,
+            "description": (CAT.BY_ID[m]["blurb"] if m in CAT.BY_ID else "Vyomi booster-mesh model") + f" ({CAT.availability(CAT.resolve('gcp', m) or m)['label']})",
+            "inputTokenLimit": 8192, "outputTokenLimit": 1 if emb else 8192,
             "supportedGenerationMethods": ["embedContent", "batchEmbedContents"] if emb else ["generateContent", "streamGenerateContent", "countTokens"]}
 
 
@@ -918,11 +947,11 @@ def vertex_dispatch(method, path, query, headers, body):
     p = _body(body)
     if p is None:
         return _g_err(400, "INVALID_ARGUMENT", "Invalid JSON payload received.")
-    if pub != "google" or (model not in GEMINI_MODELS and model not in GEMINI_EMBED):
+    if not _vx_known(model):
         return _g_err(404, "NOT_FOUND", f"Publisher Model `projects/{proj}/locations/{loc}/publishers/{pub}/models/{model}` was not found "
                                          "or your project does not have access to it.")
-    if op in ("embedContent", "predict") or model in GEMINI_EMBED:
-        if model not in GEMINI_EMBED:
+    if op in ("embedContent", "predict") or _vx_embed(model):
+        if not _vx_embed(model):
             return _g_err(400, "FAILED_PRECONDITION", f"{model} does not support {op}.")
         if op == "predict":
             insts = [i.get("content", "") for i in p.get("instances") or []]
@@ -1169,19 +1198,19 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         if inp in (None, "", []):
             return _a_err(400, "BadRequest", "'input' is a required property.", "input")
         e = llm.embed(inp if isinstance(inp, list) else [inp])
-        native = 3072 if "large" in model else 1536
+        native = 768 if model in CAT._BYNAME and CAT.resolve("azure", model) == CAT.DEFAULT_EMBED else (3072 if "large" in model else 1536)
         dims = int(p.get("dimensions") or native)       # the real service returns its native width unless `dimensions` shortens it
         vecs = [llm._renorm(_fit_dims(v, dims)) for v in e["vectors"]]
         return _j(200, {"object": "list", "model": model, "usage": {"prompt_tokens": e["input_tokens"], "total_tokens": e["input_tokens"]},
                         "data": [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vecs)]})
     if op == "responses":
-        if "embedding" in model:
+        if "embedding" in model or CAT.resolve("azure", model) == CAT.DEFAULT_EMBED:
             return _a_err(400, "OperationNotSupported", f"The responses operation does not work with the specified model, {model}.")
         try:
             return ag.responses_create(None, p, model)
         except ag.Bad as e:
             return ag._err(e)
-    if "embedding" in model or (caps and "chatCompletion" not in caps):
+    if "embedding" in model or CAT.resolve("azure", model) == CAT.DEFAULT_EMBED or (caps and "chatCompletion" not in caps):
         return _a_err(400, "OperationNotSupported", f"The {op} operation does not work with the specified model, {model}. "
                       "Please choose different model and try again.")
     if op == "completions":

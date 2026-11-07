@@ -52,7 +52,7 @@ function CreateKb({ visible, onDismiss }) {
         <FormField label="S3 bucket" description="Text documents (.txt .md .csv .json .html ...) in this bucket are chunked and embedded."><Select selectedOption={bucket} onChange={({ detail }) => setBucket(detail.selectedOption)} options={(buckets.data || []).map((b) => ({ label: b, value: b }))} statusType={buckets.loading ? "loading" : "finished"} placeholder="Choose a bucket" ariaLabel="S3 bucket" empty="No buckets" /></FormField>
         <FormField label="Key prefix - optional"><Input value={prefix} onChange={({ detail }) => setPrefix(detail.value)} ariaLabel="Key prefix" placeholder="docs/" /></FormField>
         <FormField label="Chunk size (tokens)"><Input type="number" value={tokens} onChange={({ detail }) => setTokens(detail.value)} ariaLabel="Chunk size" /></FormField>
-        <Box variant="small">Embedding model: Titan Text Embeddings V2 (computed locally).</Box>
+        <Box variant="small">Embedding model: Nomic Embed Text (computed locally).</Box>
       </SpaceBetween>
     </Modal>
   );

@@ -8,6 +8,7 @@ import struct
 import sys
 
 from core import llm_core as llm
+from core import ai_model_catalog as CAT
 from core.aws_wire_router import AwsWireRouter
 
 BR = "AWS4-HMAC-SHA256 Credential=T/20261104/us-east-1/bedrock/aws4_request, SignedHeaders=host, Signature=0"
@@ -70,9 +71,9 @@ check("status() reports registered backend", llm.status()["available"] is True)
 # ── Bedrock
 o = bedrock("/foundation-models", method="GET")
 ids = [m["modelId"] for m in js(o)["modelSummaries"]]
-check("ListFoundationModels", o["status"] == 200 and "anthropic.claude-3-haiku-20240307-v1:0" in ids)
-o = bedrock("/foundation-models", method="GET", query={"byProvider": "amazon"})
-check("ListFoundationModels byProvider", all(m["providerName"] == "Amazon" for m in js(o)["modelSummaries"]))
+check("ListFoundationModels lists exactly the ten pool models (vyomi.<id>), no real-vendor ids", o["status"] == 200 and sorted(ids) == sorted("vyomi." + i for i in CAT.IDS), ids)
+o = bedrock("/foundation-models", method="GET", query={"byProvider": "meta"})
+check("ListFoundationModels byProvider", [m["modelId"] for m in js(o)["modelSummaries"]] == ["vyomi.llama3.1-8b"], js(o))
 check("GetFoundationModel 404", bedrock("/foundation-models/nope.x", method="GET")["status"] == 404)
 
 o = bedrock("/model/anthropic.claude-3-haiku-20240307-v1:0/invoke", {"anthropic_version": "bedrock-2023-05-31", "max_tokens": 50,
@@ -84,8 +85,10 @@ o = bedrock("/model/us.anthropic.claude-3-haiku-20240307-v1:0/invoke", {"max_tok
 check("cross-Region inference profile id accepted", o["status"] == 200)
 o = bedrock("/model/anthropic.claude-3-haiku-20240307-v1:0/invoke", {"messages": [{"role": "user", "content": "x"}]})
 check("missing max_tokens -> ValidationException", o["status"] == 400 and o["headers"]["x-amzn-errortype"] == "ValidationException")
-o = bedrock("/model/amazon.titan-text-express-v1/invoke", {"inputText": "ping", "textGenerationConfig": {"maxTokenCount": 20}})
-check("InvokeModel Titan Text", js(o)["results"][0]["outputText"] == "echo[]:ping" and js(o)["inputTextTokenCount"] > 0)
+o = bedrock("/model/vyomi.qwen2.5-7b/invoke", {"prompt": "ping", "max_gen_len": 20})
+check("InvokeModel native vyomi.<id> (prompt body)", js(o)["generation"] == "echo[]:ping")
+o = bedrock("/model/amazon.titan-text-express-v1/invoke", {"inputText": "ping"})
+check("id outside the ten (titan-text) -> ValidationException", o["status"] == 400 and o["headers"]["x-amzn-errortype"] == "ValidationException")
 o = bedrock("/model/meta.llama3-8b-instruct-v1:0/invoke", {"prompt": "yo", "max_gen_len": 20})
 check("InvokeModel Llama", js(o)["generation"] == "echo[]:yo")
 o = bedrock("/model/amazon.nova-lite-v1:0/invoke", {"messages": [{"role": "user", "content": [{"text": "n"}]}], "inferenceConfig": {"max_new_tokens": 9}})

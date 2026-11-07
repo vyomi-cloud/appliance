@@ -20,6 +20,8 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from llm_fakes import FakeLLM  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from core import ai_model_catalog as CAT  # noqa: E402
 
 PASS = FAIL = 0
 
@@ -111,9 +113,11 @@ def main():
               and "content_block_start" in kinds and "message_delta" in kinds and txt == "streamed text reply", kinds)
         check("Claude stream is incremental (several text deltas spread over time, not one slice)", kinds.count("content_block_delta") >= 4 and ts[-1] - ts[0] > 0.05, (kinds, ts[-1] - ts[0]))
         check("Claude stream final chunk carries amazon-bedrock-invocationMetrics", "amazon-bedrock-invocationMetrics" in evs[-1], evs[-1])
-        evs, _ = invoke_stream("amazon.titan-text-express-v1", {"inputText": "hi", "textGenerationConfig": {"maxTokenCount": 50}})
-        check("Titan stream: outputText chunks + final completionReason FINISH", "".join(e["outputText"] for e in evs) == "streamed text reply"
-              and evs[-1]["completionReason"] == "FINISH" and len(evs) >= 4, evs[-2:])
+        evs, _ = invoke_stream("vyomi.qwen2.5-7b", {"prompt": "hi", "max_gen_len": 50})
+        check("native vyomi.<id> stream (prompt body): generation chunks + final stop_reason", "".join(e["generation"] for e in evs) == "streamed text reply" and evs[-1]["stop_reason"] == "stop", evs[-1])
+        evs, _ = invoke_stream("vyomi.llama3.1-8b", {"messages": [{"role": "user", "content": [{"text": "hi"}]}], "inferenceConfig": {"max_new_tokens": 50}})
+        check("native vyomi.<id> stream (messages body): contentBlockDelta chunks + messageStop", "".join(e["contentBlockDelta"]["delta"]["text"] for e in evs if "contentBlockDelta" in e) == "streamed text reply"
+              and "messageStop" in evs[-1], evs[-1])
         evs, _ = invoke_stream("meta.llama3-8b-instruct-v1:0", {"prompt": "hi", "max_gen_len": 50})
         check("Llama stream: generation chunks + final stop_reason", "".join(e["generation"] for e in evs) == "streamed text reply" and evs[-1]["stop_reason"] == "stop", evs[-1])
         evs, _ = invoke_stream("mistral.mistral-7b-instruct-v0:2", {"prompt": "hi", "max_tokens": 50})
@@ -259,7 +263,7 @@ def main():
         m = gc.models.get(model="gemini-2.0-flash")
         check("models.get returns models/<id> with supportedActions", m.name == "models/gemini-2.0-flash" and "generateContent" in m.supported_actions, m)
         names = [x.name for x in gc.models.list()]
-        check("models.list includes gemini + embedding models", "models/gemini-2.0-flash" in names and "models/text-embedding-004" in names, names)
+        check("models.list is exactly the ten pool models (no gemini/text-embedding ids)", sorted(names) == sorted("models/" + i for i in CAT.IDS), names)
         try:
             gc.models.generate_content(model="gemini-9-ultra", contents="x")
             check("unknown model -> 404", False)

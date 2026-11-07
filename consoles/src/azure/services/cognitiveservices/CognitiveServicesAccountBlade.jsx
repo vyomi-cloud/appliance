@@ -31,6 +31,7 @@ import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { restJson } from "../../../common/wire.js";
+import { availText } from "../../../common/aiModels.js";
 import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 
 export const MENU = [
@@ -310,6 +311,7 @@ function Deployments({ a }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.listDeployments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
   const [create, setCreate] = useState(false);
+  const avq = useAsync(() => api.modelAvailability(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
   const rows = data || [];
   return (
     <>
@@ -332,7 +334,7 @@ function Deployments({ a }) {
         ]}
         emptyAction={api.MODEL_KINDS.includes(a.kind) ? <Link as="button" onClick={() => setCreate(true)}>Create new deployment</Link> : undefined}
       />
-      <CreateDeploymentDialog open={create} onClose={() => setCreate(false)}
+      <CreateDeploymentDialog open={create} onClose={() => setCreate(false)} av={avq.data || {}}
         onCreate={async (name, model, type, capacity) => {
           await api.putDeployment(a.resourceGroup, a.name, name, { sku: { name: type, capacity }, properties: { model } });
           notify.success(`Deployment '${name}' was created.`, "Deployment succeeded");
@@ -345,7 +347,7 @@ function Deployments({ a }) {
 const MODEL_NAMES = [...new Set(api.MODELS.map((m) => m[1]))];
 const versionsFor = (name) => api.MODELS.filter((m) => m[1] === name).map((m) => m[2]);
 
-function CreateDeploymentDialog({ open, onClose, onCreate }) {
+function CreateDeploymentDialog({ open, onClose, onCreate, av = {} }) {
   const notify = useNotify();
   const [name, setName] = useState("");
   const [modelName, setModelName] = useState(MODEL_NAMES[0]);
@@ -372,7 +374,7 @@ function CreateDeploymentDialog({ open, onClose, onCreate }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <Field label="Select a model" required>
                 <Select value={modelName} onChange={pickModel} aria-label="Select a model">
-                  {MODEL_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+                  {MODEL_NAMES.map((n) => <option key={n} value={n}>{n} - {availText(av[n], n)}</option>)}
                 </Select>
               </Field>
               <Field label="Model version" required>

@@ -2864,7 +2864,7 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Deploy" }).click();
   await page.getByText(DEPLOY, { exact: true }).first().waitFor({ timeout: 10000 });
   const depGet = await armCogs("GET", `/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${COGS}/deployments/${DEPLOY}`);
-  check("UI create model deployment → readable over native ARM", depGet.status === 200 && JSON.parse(depGet.text).properties?.model?.name === "gpt-4o", `HTTP ${depGet.status}`);
+  check("UI create model deployment → readable over native ARM", depGet.status === 200 && JSON.parse(depGet.text).properties?.model?.name === "qwen2.5-3b", `HTTP ${depGet.status}`);
   await shot("35-cognitiveservices-deployments");
 
   // ── Account created over the wire → visible in the UI browse grid (CLI → UI) ───────────

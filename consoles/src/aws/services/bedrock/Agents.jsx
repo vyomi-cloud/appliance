@@ -23,7 +23,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import * as api from "./api.js";
-import { NOVA, stat } from "./Common.jsx";
+import { NOVA, stat, modelOption } from "./Common.jsx";
 
 function CreateAgent({ visible, onDismiss }) {
   const models = useAsync(() => api.listModels(), []);
@@ -32,7 +32,7 @@ function CreateAgent({ visible, onDismiss }) {
   const [instr, setInstr] = useState("You are a helpful assistant. Answer briefly and use the knowledge base when it is relevant.");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const opts = (models.data || []).filter((m) => m.outputModalities?.includes("TEXT")).map((m) => ({ label: m.modelName, description: m.modelId, value: m.modelId }));
+  const opts = (models.data || []).filter((m) => m.outputModalities?.includes("TEXT")).map(modelOption);
   const sel = model || opts.find((o) => o.value === NOVA) || opts[0];
   const go = async () => {
     setBusy(true); setError(null);

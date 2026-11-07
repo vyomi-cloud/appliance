@@ -43,7 +43,7 @@ _ALNUM = string.ascii_uppercase + string.digits
 _TEXT_EXT = (".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm", ".xml", ".log", ".tsv", ".yaml", ".yml", ".rst")
 _STORAGE_TYPES = ("OPENSEARCH_SERVERLESS", "PINECONE", "REDIS_ENTERPRISE_CLOUD", "RDS", "MONGO_DB_ATLAS", "OPENSEARCH_MANAGED_CLUSTER",
                   "NEPTUNE_ANALYTICS", "S3_VECTORS")
-_EMBED_MODELS = ("amazon.titan-embed-text-v2:0", "amazon.titan-embed-text-v1")
+_EMBED_MODELS = ("vyomi.nomic-embed-text",)      # + hidden aliases (amazon.titan-embed*, cohere.embed*) via ai_models_core._resolve_model
 _GATEWAY_AUTH = ("CUSTOM_JWT", "AWS_IAM", "NONE")
 
 
@@ -135,8 +135,9 @@ def _create_kb(st, p):
     if cfg.get("type") != "VECTOR":
         raise _bad("knowledgeBaseConfiguration.type must be VECTOR")
     emb = ((cfg.get("vectorKnowledgeBaseConfiguration") or {}).get("embeddingModelArn") or "")
-    if emb.rsplit("/", 1)[-1] not in _EMBED_MODELS:
-        raise _bad(f"The knowledge base embedding model {emb or '(none)'} is not supported; use amazon.titan-embed-text-v2:0")
+    fmm = _resolve_fm(emb.rsplit("/", 1)[-1]) if emb else None
+    if not fmm or fmm[6] != "nomic-embed-text":
+        raise _bad(f"The knowledge base embedding model {emb or '(none)'} is not supported; use vyomi.nomic-embed-text")
     sto = p.get("storageConfiguration") or {}
     if sto.get("type") not in _STORAGE_TYPES:
         raise _bad(f"storageConfiguration.type must be one of {', '.join(_STORAGE_TYPES)}")

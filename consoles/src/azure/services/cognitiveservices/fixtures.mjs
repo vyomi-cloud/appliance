@@ -24,7 +24,7 @@ export default {
   "live-deployment": async (wire, uniq) => {
     await ensureAccount(wire);
     await wire("PUT", `${accountPath(ACCOUNT).split("?")[0]}/deployments/${uniq}?${AV}`, { svc: null,
-      body: { sku: { name: "Standard", capacity: 1 }, properties: { model: { format: "OpenAI", name: "gpt-4o-mini", version: "2024-07-18" } } } });
+      body: { sku: { name: "Standard", capacity: 1 }, properties: { model: { format: "Alibaba", name: "qwen2.5-3b", version: "1" } } } });
     return uniq;
   },
 
