@@ -477,7 +477,11 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
             if service == "azure_cosmos":
                 from core import azure_cmk_core as _cmk
                 kw["kv_store"] = r.az_kvkeys      # customer-managed key (envelope encryption at rest)
-            resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kw)
+            if service == "azure_table":      # service properties / CORS / logging / metrics (the wrapper Nano's router uses)
+                from core import azure_storage_svc_core as _svcc
+                resp = _svcc.serve("table", core, st, method, path, query or {}, headers or {}, body or b"", arm_state=_ctx.azure_arm_state)
+            else:
+                resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kw)
         finally:
             _ctx.REQUEST_PROVIDER.reset(tok)
         hdrs = dict(resp.headers or {})
@@ -1075,8 +1079,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
         path = request.url.path[len("/azure-data/queue-core"):] or "/"
         tok = _ctx.REQUEST_PROVIDER.set("azure")
         try:
-            resp = _azq.dispatch(_aps.az_queue_store(), request.method, path, dict(request.query_params),
-                                 dict(request.headers), await request.body())
+            # service properties / CORS preflight / logging / metrics / retention (azure_storage_svc_core) — the same
+            # wrapper Nano's router puts around the queue core, over the offline ARM state of the storage account
+            from core import azure_storage_svc_core as _svcc
+            resp = _svcc.serve("queue", _azq, _aps.az_queue_store(), request.method, path, dict(request.query_params),
+                               dict(request.headers), await request.body(), arm_state=_ctx.azure_arm_state)
             if request.method == "GET" and resp.status < 300 and "/messages" in path \
                     and str(request.query_params.get("peekonly", "")).lower() != "true":
                 _ctx.persist_state()   # a receive changes visibility / dequeue counts on a GET
@@ -1087,7 +1094,7 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
             hdrs["content-type"] = resp.media_type
         return Response(content=resp.body or b"", status_code=resp.status, headers=hdrs)
 
-    app.add_route("/azure-data/queue-core/{rest:path}", _az_queue, methods=methods)
+    app.add_route("/azure-data/queue-core/{rest:path}", _az_queue, methods=methods + ["OPTIONS"])   # OPTIONS: storage-account CORS preflight
 
     # Resource Manager v3 projects (create / search / get / update / delete / undelete): EXACT
     # paths only — "/v3/projects/{p}/<collection>" is Cloud Monitoring (providers/
