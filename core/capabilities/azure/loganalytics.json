@@ -206,13 +206,12 @@
  },
  "azure.loganalytics.workspace.monitoring": {
   "title": "Workbooks on a workspace",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Workbooks are pre-authored Microsoft.Insights/workbooks content rendered by a portal visualisation engine; there is no workbook renderer in Vyomi, so the tab stays not simulated. Alerts, Metrics and Diagnostic settings on a workspace are real through the shared panels (azure.common.resource_monitoring, azure.common.diagnostic_settings)."
-  ]
+   "Workbooks are real Microsoft.Insights/workbooks resources (CRUD, shared/private kind, category, sourceId) and the workspace's Workbooks tab lists the ones sourced from it. Real Azure renders serializedData client-side in the portal; Vyomi renders it server-side (POST .../workbooks/{name}/render, core/azure_workbooks_core.py): text, parameters ({Name}, {Name:value}, {TimeRange} expansion), KQL query items and groups with conditionalVisibility are executed against the workspace's Log Analytics KQL subset (including the live AzureActivity feed) and returned as tables, shown as a table with a simple bar for bar/pie charts.",
+   "Not rendered, and reported per item as 'unsupported' or 'error' rather than blanked: Azure Monitor metrics items, Azure Resource Graph / Data Explorer / custom-endpoint queries (queryType other than 0), map/graph/tile visualisations, Resource Health items, the gallery of Microsoft templates and the visual editor (the tab offers a JSON editor). KQL operators outside the supported subset (no join/union/let/render charts) fail that item with the engine's error. Only the first resolved workspace of an item is queried (no cross-workspace union). Alerts, Metrics and Diagnostic settings on a workspace are real through the shared panels (azure.common.resource_monitoring, azure.common.diagnostic_settings)."
+  ],
+  "tests": ["tests/conformance/test_azure_workbooks_core.py", "tests/conformance/test_azure_workbooks_sdk.py", "tests/cli/azure-workbooks-cli-smoke.sh"]
  },
  "azure.loganalytics.workspace.tools": {
   "title": "Diagnose and solve problems, Computer groups (classic), Linked storage accounts",

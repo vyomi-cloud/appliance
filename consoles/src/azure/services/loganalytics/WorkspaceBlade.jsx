@@ -29,6 +29,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import WorkbooksPanel from "../../kit/Workbooks.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -110,6 +111,7 @@ export default function WorkspaceBlade({ params }) {
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="loganalytics" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      workbooks: () => <WorkbooksPanel workspace={a} />,
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];

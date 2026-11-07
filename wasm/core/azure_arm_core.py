@@ -182,6 +182,11 @@ try:                                              # Network Watcher packet captu
 except ImportError:
     import azure_pcap_core as pcap_engine          # type: ignore
 
+try:                                              # Workbooks renderer (serializedData -> KQL tables over the Log Analytics subset)
+    from core import azure_workbooks_core as workbooks_engine
+except ImportError:
+    import azure_workbooks_core as workbooks_engine   # type: ignore
+
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
 except ImportError:
@@ -1915,6 +1920,8 @@ class AzureArm:
             return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
+        if namespace.lower() == "microsoft.insights" and workbooks_engine.handles(chain) and method == "POST" and rg is not None:
+            return workbooks_engine.render(self.state, sub, rg, chain[1], payload)
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
             return self._monitor(method, sub, rg, chain, payload, query)
 
