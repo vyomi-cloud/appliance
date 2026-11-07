@@ -204,5 +204,18 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["Control plane only: profiles (AFD Standard/Premium + classic CDN SKUs, SKU change rules), afdEndpoints (derived *.z01.azurefd.net host), originGroups + origins (health probe / load balancing / priority / weight / port ranges), routes (origin group, rule set and custom domain cross references, pattern/protocol validation, conflict detection), ruleSets + rules (condition/action names, unique order) and customDomains (managed/customer TLS, Pending DNS validation token), with in-use delete protection. No edge request is ever served: no caching, WAF, TLS termination, or origin health probing, and custom domains never leave Pending. The console has a Front Door and CDN profiles service (#/frontdoor: profiles, endpoints, origin groups + origins, routes, rule sets + rules, custom domains) and a Network managers service (#/networkmanagers: groups, security admin configurations -> rule collections -> admin rules, connectivity configurations) over these same ARM resources; there is no Deploy step, so security admin rules are never evaluated against traffic."],
   "tests": ["tests/conformance/test_azure_netcfg_core.py"]
+ },
+ "azure.vnets.network_manager_deploy": {
+  "title": "Virtual Network Manager: deploy connectivity configurations and evaluate security admin rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deploy is real for Connectivity: Mesh and HubAndSpoke commits write peerings into the member virtual networks (visible to the VNet Peerings blade, Network Watcher next hop and the netsim engine); each commit replaces the peerings the manager created before. SecurityAdmin commits activate the rules for the on-demand Effective rules evaluation (priority order across collections; Deny beats NSG allow, AlwaysAllow bypasses NSGs). Only static group members (no Azure Policy conditional membership), no routing configurations, and Deny/AlwaysAllow verdicts are not yet consumed by the Docker/nftables data path for live packets."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_nm_engine.py"
+  ]
  }
 }
