@@ -147,6 +147,7 @@ def authorise(headers: dict, path: str, provider: str, *, now: Optional[float] =
                 _SESSION["end_mono"] = time.monotonic()      # latch: once ended, ended
         return e
     _arm_expiry(claims, now)
+    _apply_tier(claims)
     if path in _EXEMPT_PATHS or not provider:
         return None
     tier = str(claims.get("tier", "")).lower()
@@ -160,6 +161,39 @@ def authorise(headers: dict, path: str, provider: str, *, now: Optional[float] =
     if provider != primary:
         return SessionError("tier_provider_locked", f"Pro tier is locked to {primary}; {provider} needs Max", 403)
     return None
+
+
+def _apply_tier(claims: dict) -> None:
+    """The booster has no licence JWT, so tier_policy (which reads the tenant / STATE licence tier) would treat it as Free and 403
+    every Pro/Max service (dynamodb, eventbridge, ...). Mirror the verified session tier into the licence state (idempotent, cheap)."""
+    tier = str(claims.get("tier", "")).lower()
+    if not tier:
+        return
+    try:
+        from core import app_context as ctx
+        lic = ctx.STATE.setdefault("license", {})
+        if lic.get("tier") != tier:
+            lic["tier"] = tier
+        for t in (ctx.tenants_state().get("tenants") or {}).values():
+            if isinstance(t, dict) and t.get("license_tier") != tier:
+                t["license_tier"] = tier
+    except Exception:
+        pass
+
+
+def effective_tier() -> Optional[str]:
+    """Booster role only: the tier the appliance itself must run at, taken from the verified session token (the booster has no
+    licence JWT of its own - boot-booster.sh never provides one - so without this every tier-gated route answers as Free).
+    None = not a booster / no valid token (fail closed upstream: SessionMiddleware refuses the request anyway)."""
+    if not role_is_booster():
+        return None
+    token = os.environ.get("VYOMI_BOOSTER_SESSION_TOKEN", "")
+    if not token:
+        return None
+    try:
+        return str(verify(token).get("tier", "")).lower() or None
+    except SessionError:
+        return None
 
 
 class SessionMiddleware:

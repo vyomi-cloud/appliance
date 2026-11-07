@@ -267,7 +267,8 @@ def register(app: FastAPI) -> None:
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
-        return {"status": "ok", "tier": ctx.STATE["license"].get("tier", "free"), "packs_active": sum(1 for p in ctx.STATE["packs"].values() if p.get("active"))}
+        from core import booster_session as _bs
+        return {"status": "ok", "tier": _bs.effective_tier() or ctx.STATE["license"].get("tier", "free"), "packs_active": sum(1 for p in ctx.STATE["packs"].values() if p.get("active"))}
 
     @app.on_event("startup")
     def _startup_reconcile_ec2_state():
