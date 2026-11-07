@@ -621,6 +621,25 @@ def _serve_website(store: AzureBlobStore, acct: str, tail: str, arm_state: dict 
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
+def _edge_dispatch(store, method, p, query, headers, body, arm_state):
+    """Front Door / CDN edge (core/azure_cdn_edge_core.py): `/_edge/{endpoint host}/{path}` -> caching proxy over this Blob store."""
+    try:
+        from core import azure_cdn_edge_core as edge
+    except ImportError:                               # Pyodide flat layout
+        import azure_cdn_edge_core as edge            # type: ignore
+    segs = p.lstrip("/").split("/", 1)
+    host, rest = segs[0], "/" + (segs[1] if len(segs) > 1 else "")
+    from urllib.parse import urlencode
+
+    def fetch(acct, m, blob_path, hdrs):
+        bp, _, q = blob_path.partition("?")
+        r = dispatch(store, m, bp, dict(x.split("=", 1) for x in q.split("&") if "=" in x), hdrs, b"", account=acct, arm_state=arm_state)
+        return {"status": r.status, "headers": r.headers, "body": r.body or b""}
+    q = urlencode(query or {})
+    out = edge.serve(arm_state or {}, store, method, host, rest, q, headers, body, fetch)
+    return Response(status=out["status"], headers=out["headers"], body=out["body"], media_type=out["headers"].get("content-type"))
+
+
 def dispatch(store: AzureBlobStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"", account: str | None = None, arm_state: dict | None = None) -> Response:
@@ -632,6 +651,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     method = method.upper()
 
     p = path.split("?", 1)[0]
+    if account == "_edge" or p.startswith("/_edge/"):
+        return _edge_dispatch(store, method, p[len("/_edge"):] if p.startswith("/_edge/") else p, query, headers, body, arm_state)
     if account is not None:
         acct = account.lower()
         p = p or "/"

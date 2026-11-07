@@ -138,7 +138,8 @@ const CORES = [
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
   "gcp_compute_core.py",   // main-side Nano cores (merged)
-  "azure_graph_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
+  "azure_graph_ext_core.py", "azure_graph_core.py",
+  "azure_cdn_edge_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
   "azure_servicebus_core.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
   "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   "vpc_lattice_dataplane.py",

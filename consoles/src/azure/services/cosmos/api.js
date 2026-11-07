@@ -149,3 +149,17 @@ export function toArmBody(f) {
     },
   };
 }
+
+// ── Data Migration + Azure Function integration (real: core/azure_cosmos_core.migrate, cosmosDBTrigger) ──
+export const migrate = (spec) => cosmos("POST", "/vyomi/migrations", { body: spec });
+export const listMigrations = async () => (await cosmos("GET", "/vyomi/migrations")).migrations || [];
+const WEB = "2023-12-01";
+export const listFunctionApps = async (sub) =>
+  ((await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Web/sites`, { query: { "api-version": WEB } })).value || []).filter((s) => /functionapp/i.test(s.kind || ""));
+export const listFunctions = async (siteId) => (await restJson("GET", `${siteId}/functions`, { query: { "api-version": WEB } })).value || [];
+export const getAppSettings = async (siteId) => (await restJson("POST", `${siteId}/config/appsettings/list`, { query: { "api-version": WEB } })).properties || {};
+export const patchAppSettings = (siteId, props) => restJson("PATCH", `${siteId}/config/appsettings`, { query: { "api-version": WEB }, body: { properties: props } });
+export const putFunction = (siteId, name, bindings, code) =>
+  restJson("PUT", `${siteId}/functions/${encodeURIComponent(name)}`, { query: { "api-version": WEB }, body: { properties: { config: { bindings }, files: { "__init__.py": code } } } });
+export const deleteFunction = (siteId, name) => restJson("DELETE", `${siteId}/functions/${encodeURIComponent(name)}`, { query: { "api-version": WEB } });
+export const invocations = async (siteId, name) => { try { return (await restJson("GET", `${siteId}/functions/${encodeURIComponent(name)}`, { query: { "api-version": WEB } })).properties?.invocations || []; } catch { return []; } };

@@ -693,6 +693,18 @@ def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = No
         denied = _cosmos_net_denied(arm_state, acct, hdrs)
         if denied:
             return _err(*denied)
+    if segs[:2] == ["vyomi", "migrations"]:
+        m = method.upper()
+        if m == "GET":
+            return _json(200, {"migrations": list(getattr(store, "migrations", []) or [])})
+        if m == "POST":
+            try:
+                spec = json.loads(body.decode("utf-8")) if body else {}
+            except ValueError:
+                return _err(400, "BadRequest", "Migration spec is not valid JSON.")
+            job = migrate(store, spec, arm_state, acct)
+            return _json(400 if job.get("status") == "Failed" and "read" not in job else 200, job)
+        return _err(405, "MethodNotAllowed", "GET or POST only.")
     is_query = str(hdrs.get("x-ms-documentdb-isquery", "")).lower() == "true"
     charge = request_charge(method, len(body or b""), 200, is_query)
     lim = None
@@ -724,6 +736,123 @@ def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = No
             except Exception:   # a failing trigger never fails the write
                 pass
     return r
+
+
+# ── Data Migration (the portal's "Data Migration" blade): a REAL container -> container / JSON -> container copy ──────────
+_SYS_PROPS = ("_rid", "_self", "_etag", "_ts", "_attachments", "_lsn")
+
+
+def _apply_mapping(doc: dict, mapping: dict) -> dict:
+    out = {k: v for k, v in doc.items() if k not in _SYS_PROPS}
+    for old, new in (mapping.get("rename") or {}).items():
+        if old in out and new and new != old:
+            out[new] = out.pop(old)
+    for k in mapping.get("drop") or []:
+        out.pop(k, None)
+    for k, v in (mapping.get("set") or {}).items():
+        out[k] = v
+    return out
+
+
+def migrate(store: CosmosStore, spec: dict, arm_state: dict | None = None, acct: dict | None = None) -> dict:
+    """Copy documents into a target container through the SAME write path the data plane uses (system properties
+    regenerated, _lsn advanced so the change feed / cosmosDBTrigger functions see every migrated row, partition-key
+    path of the target honoured).  Source: a container (optionally narrowed by a SQL query) or inline JSON rows.
+    ``conflict``: upsert (default) | skip | fail (stop at the first existing id).  ``dryRun`` only counts."""
+    src, dst = spec.get("source") or {}, spec.get("target") or {}
+    conflict = str(spec.get("conflict") or "upsert").lower()
+    if conflict not in ("upsert", "skip", "fail"):
+        return {"status": "Failed", "error": "conflict must be upsert, skip or fail."}
+    mapping = spec.get("mapping") or {}
+    tdb, tcoll = dst.get("database"), dst.get("container")
+    if not tdb or not tcoll:
+        return {"status": "Failed", "error": "target.database and target.container are required."}
+    if str(src.get("type") or "container").lower() == "json":
+        rows = src.get("data")
+        if isinstance(rows, str):
+            try:
+                rows = json.loads(rows)
+            except ValueError:
+                return {"status": "Failed", "error": "source.data is not valid JSON."}
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            return {"status": "Failed", "error": "source.data must be a JSON array of objects."}
+        label = "json"
+    else:
+        sdb, scoll = src.get("database"), src.get("container")
+        if sdb not in store.docs or scoll not in store.docs.get(sdb, {}):
+            return {"status": "Failed", "error": f"Source container '{sdb}/{scoll}' does not exist."}
+        if (sdb, scoll) == (tdb, tcoll):
+            return {"status": "Failed", "error": "Source and target are the same container."}
+        rows = list(store.docs[sdb][scoll].values())
+        if src.get("query"):
+            try:
+                rows = _run_query(rows, src["query"])
+            except Exception as e:                         # noqa: BLE001
+                return {"status": "Failed", "error": f"Source query failed: {e}"}
+        rows = sorted(rows, key=lambda d: d.get("_lsn", 0))
+        label = f"{sdb}/{scoll}"
+    job = {"id": _rid(), "source": label, "target": f"{tdb}/{tcoll}", "conflict": conflict, "dryRun": bool(spec.get("dryRun")),
+           "startedAt": _now_ts(), "read": len(rows), "migrated": 0, "created": 0, "replaced": 0, "skipped": 0, "failed": 0, "errors": []}
+    if not job["dryRun"]:
+        if tdb not in store.dbs:
+            _dispatch_inner(store, "POST", "/dbs", body=json.dumps({"id": tdb}).encode())
+        if tcoll not in store.colls.get(tdb, {}):
+            pk = dst.get("partitionKeyPath") or "/id"
+            r = _dispatch_inner(store, "POST", f"/dbs/{tdb}/colls", body=json.dumps({"id": tcoll, "partitionKey": {"paths": [pk], "kind": "Hash"}}).encode())
+            if r.status >= 400:
+                job.update(status="Failed", error="Could not create the target container.")
+                return job
+            job["createdTarget"] = True
+    existing = store.docs.get(tdb, {}).get(tcoll, {})
+    for raw in rows:
+        doc = _apply_mapping(raw, mapping)
+        did = doc.get("id")
+        if did in (None, ""):
+            job["failed"] += 1
+            job["errors"].append("a source row has no 'id'")
+            if conflict == "fail":
+                break
+            continue
+        did = str(did)
+        doc["id"] = did
+        if did in existing and conflict == "skip":
+            job["skipped"] += 1
+            continue
+        if did in existing and conflict == "fail":
+            job["failed"] += 1
+            job["errors"].append(f"id '{did}' already exists in the target; stopped (conflict=fail)")
+            break
+        if job["dryRun"]:
+            job["replaced" if did in existing else "created"] += 1
+            job["migrated"] += 1
+            continue
+        had = did in existing
+        r = _dispatch_inner(store, "POST", f"/dbs/{tdb}/colls/{tcoll}/docs", headers={"x-ms-documentdb-is-upsert": "true"},
+                            body=json.dumps(doc).encode())
+        if r.status >= 400:
+            job["failed"] += 1
+            job["errors"].append(f"{did}: {r.status}")
+            continue
+        job["replaced" if had else "created"] += 1
+        job["migrated"] += 1
+        if arm_state:
+            try:
+                fire_change_feed_triggers(arm_state, acct, tdb, tcoll, [json.loads(r.body) if isinstance(r.body, (bytes, str)) else r.body])
+            except Exception:                              # noqa: BLE001 - a failing trigger never fails the copy
+                pass
+    job["errors"] = job["errors"][:20]
+    job["status"] = "Failed" if (job["failed"] and not job["migrated"]) else ("CompletedWithErrors" if job["failed"] else "Succeeded")
+    job["completedAt"] = _now_ts()
+    if not job["dryRun"]:
+        hist = getattr(store, "migrations", None)
+        if hist is None:
+            hist = store.migrations = []
+        hist.append(job)
+        del hist[:-50]
+        store.persist()
+    return job
 
 
 # ── Azure Functions cosmosDBTrigger (change feed -> function) ──────────────────────────────────────────────────────────

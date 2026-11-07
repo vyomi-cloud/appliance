@@ -16,11 +16,12 @@ import UserSettings from "./UserSettings.jsx";
 import Properties from "./Properties.jsx";
 import SignInLogs from "./SignInLogs.jsx";
 import AuditLogs from "./AuditLogs.jsx";
+import { Licenses, CustomSecurityAttributes, ConditionalAccess } from "./EntraExtras.jsx";
 
 const STATIC_IDS = [
   "previewfeatures", "diagnose", "delegatedadminpartners", "agents", "identitygovernance", "appproxy",
-  "customsecurityattributes", "licenses", "crosstenantsync", "entraconnect", "mobility", "passwordreset",
-  "companybranding", "security", "provisioninglogs", "health", "loganalytics", "diagnosticsettings",
+  "crosstenantsync", "entraconnect", "mobility", "passwordreset",
+  "companybranding", "provisioninglogs", "health", "loganalytics", "diagnosticsettings",
   "workbooks", "usageinsights", "bulkresults", "support",
 ];
 
@@ -55,6 +56,9 @@ export default {
     { pattern: "/entra/appregistrations/:id", component: AppBlade, crumbs: appCrumb },
     { pattern: "/entra/appregistrations/:id/:panel", component: AppBlade, crumbs: appCrumb },
 
+    { pattern: "/entra/licenses", component: Licenses },
+    { pattern: "/entra/customsecurityattributes", component: CustomSecurityAttributes },
+    { pattern: "/entra/security", component: ConditionalAccess },
     { pattern: "/entra/customdomains", component: CustomDomains },
     { pattern: "/entra/usersettings", component: UserSettings },
     { pattern: "/entra/properties", component: Properties },

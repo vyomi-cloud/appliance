@@ -70,6 +70,11 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
+try:
+    from core import azure_graph_ext_core as ext
+except ImportError:                                    # Pyodide flat layout
+    import azure_graph_ext_core as ext                 # type: ignore
+
 
 @dataclass
 class Response:
@@ -196,7 +201,7 @@ class GraphStore:
         })
 
 
-    def user_sign_in(self, user: dict | None, upn: str, app_id: str, success: bool, error_code: int, failure_reason: str | None) -> None:
+    def user_sign_in(self, user: dict | None, upn: str, app_id: str, success: bool, error_code: int, failure_reason: str | None, ca: str = "notApplied") -> None:
         """A real "User sign-ins (non-interactive)" row — appended only by the oauth2 token
         endpoint's resource-owner-password grant (what MSAL ``acquire_token_by_username_password``
         sends), after the password was really checked against the directory user."""
@@ -211,7 +216,7 @@ class GraphStore:
             "clientAppUsed": "Other clients",
             "signInEventTypes": ["nonInteractiveUser"],
             "isInteractive": False,
-            "conditionalAccessStatus": "notApplied",
+            "conditionalAccessStatus": ca,
             "authenticationRequirement": "singleFactorAuthentication",
             "status": {"errorCode": 0 if success else error_code, "failureReason": None if success else failure_reason, "additionalDetails": None},
         })
@@ -274,6 +279,11 @@ def _patch_user(store: GraphStore, uid: str, body: dict) -> Response:
     if not u:
         return _err(404, "Request_ResourceNotFound", f"Resource '{uid}' does not exist.")
     body = dict(body)
+    if "customSecurityAttributes" in body:
+        bad = ext.csa_apply(store, u, body.pop("customSecurityAttributes"))
+        if bad:
+            return _json(*bad)
+    body.pop("assignedLicenses", None)           # licenses change only through assignLicense (consumes SKU units)
     newpwd = (body.get("passwordProfile") or {}).get("password")
     if newpwd:
         u["_password"] = newpwd
@@ -730,10 +740,20 @@ def _token_password(store: GraphStore, form: dict, client_id: str) -> Response:
     if not form.get("password") or user.get("_password") != form.get("password"):
         store.user_sign_in(user, upn, client_id, False, 50126, "Error validating credentials due to invalid username or password.")
         return _oauth_err(400, "invalid_grant", "AADSTS50126: Error validating credentials due to invalid username or password.")
-    store.user_sign_in(user, upn, client_id, True, 0, None)
+    blocked = ext.enforce_signin(store, user, client_id)
+    if blocked:
+        code, msg, _ = blocked
+        store.user_sign_in(user, upn, client_id, False, code, msg.split(": ", 1)[-1], ca="failure")
+        return _oauth_err(400 if code != 53003 else 403, "interaction_required" if code in (50076, 53000) else "access_denied", msg)
+    store.user_sign_in(user, upn, client_id, True, 0, None, ca="success" if getattr(store, "ca_policies", None) else "notApplied")
     token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
     return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
                        "access_token": token, "scope": form.get("scope", "")})
+
+
+def _ext(res) -> Response:
+    status, obj = res
+    return Response(status=status) if obj is None else _json(status, obj)
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
@@ -762,6 +782,51 @@ def dispatch(store: GraphStore, method: str, path: str,
         return _err(404, "Request_ResourceNotFound", f"Unknown path: {path}")
 
     head = segs[0].lower()
+    q = query or {}
+
+    if head == "$batch" and method == "POST":
+        out = []
+        for r in (payload.get("requests") or [])[:20]:
+            u = str(r.get("url", "")).lstrip("/")
+            rb = json.dumps(r.get("body") or {}).encode() if r.get("body") is not None else b""
+            from urllib.parse import parse_qsl
+            rq = dict(parse_qsl(u.split("?", 1)[1])) if "?" in u else {}
+            res = dispatch(store, r.get("method", "GET"), "/v1.0/" + u.split("?", 1)[0], rq, headers, rb)
+            try:
+                rbody = json.loads(res.body) if res.body else None
+            except Exception:
+                rbody = None
+            out.append({"id": r.get("id"), "status": res.status, "body": rbody})
+        return _json(200, {"responses": out})
+
+    if head == "subscribedskus" and method == "GET":
+        return _collection([ext.sku_view(store, k) for k in ext.SKUS])
+    if head == "identity" and len(segs) >= 3 and segs[1].lower() == "conditionalaccess":
+        sub = segs[2].lower()
+        if sub == "policies":
+            return _ext(ext.ca_policy(store, method, segs[3:], payload))
+        if sub == "namedlocations":
+            return _ext(ext.named_location(store, method, segs[3:], payload))
+        if sub == "evaluate" and method == "POST":
+            return _ext(ext.what_if(store, payload))
+    if head == "informationprotection" and len(segs) >= 3 and segs[1].lower() == "bitlocker" and segs[2].lower() == "recoverykeys":
+        return _ext(ext.bitlocker(store, method, segs[3:], payload, q))
+    if head == "directory" and len(segs) >= 2 and segs[1].lower() == "attributesets":
+        return _ext(ext.csa_sets(store, method, segs[2:], payload))
+    if head == "directory" and len(segs) >= 2 and segs[1].lower() == "customsecurityattributedefinitions":
+        return _ext(ext.csa_defs(store, method, segs[2:], payload))
+    if head == "directory" and len(segs) >= 4 and segs[1].lower() == "administrativeunits" and segs[3].lower() == "members":
+        return _ext(ext.au_members(store, segs[2], method, segs[4:], payload))
+    if head == "users" and len(segs) == 3 and segs[2].lower() == "assignlicense" and method == "POST":
+        return _ext(ext.assign_license(store, segs[1], payload))
+    if head == "users" and len(segs) == 3 and segs[2].lower() == "licensedetails" and method == "GET":
+        return _ext(ext.license_details(store, segs[1]))
+    if head == "users" and len(segs) == 4 and segs[2].lower() == "authentication" and segs[3].lower() == "requirements":
+        return _ext(ext.mfa_requirements(store, segs[1], method, payload))
+    if head == "users" and len(segs) == 2 and method == "GET" and "customsecurityattributes" in str(q.get("$select", "")).lower():
+        u = store.users.get(segs[1])
+        if u:
+            return _json(200, {"id": u["id"], "customSecurityAttributes": ext.csa_view(u)})
 
     if head == "users":
         if len(segs) == 1:
