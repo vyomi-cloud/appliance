@@ -86,9 +86,13 @@
  "azure.nsgs.packet_capture": {
   "tier": "pro",
   "title": "Network Watcher packet capture",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Packet capture (Microsoft.Network/networkWatchers/packetCaptures) is not simulated: there is no packet data plane that yields .cap files. Traffic flow summaries are available through flow logs and AWS-style traffic mirroring is the closest equivalent; Azure captures are not created."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Packet captures are real Microsoft.Network/networkWatchers/{nw}/packetCaptures resources with the real lifecycle (PUT creates and starts, GET, list, stop, queryStatus, DELETE) and real validation (network watcher and target VM/scale set must exist in the same region, storage account or filePath required, timeLimitInSeconds 1-18000, totalBytesPerSession <= 1 GiB, <= 10 filters with TCP|UDP|Any and valid IP/port lists). Time and byte limits stop the capture (TimeExceeded / BytesExceeded) and a stopped or deleted capture writes a real libpcap .cap file to network-watcher-logs/subscriptions/.../virtualmachines/<vm>/<yyyy>/<mm>/<dd>/packetcapture_<time>.cap of the target storage account (readable through the blob data plane; Wireshark/tcpdump open it).",
+   "There is no packet data plane, so a capture is a FLOW SUMMARY in pcap form, not a wire capture. Offline with netsim enforcement on (Docker backend; Azure VMs on LXD/Multipass produce no flows), each nftables flow-counter delta of traffic that PASSED the forward chain becomes one header-only packet; on Nano and offline every flow the shared netsim evaluator ALLOWS for the target VM (ipFlowVerify / connectivityCheck) becomes one probe packet. Each record carries real Ethernet/IPv4/TCP|UDP|ICMP headers (5-tuple, MACs, checksums) but NO payload (caplen = headers, origlen = the flow's average packet size), no handshake, retransmit or per-packet timing; denied flows are never captured and real traffic that the simulator does not route (guest-to-guest inside an LXD VM, internet) is not seen. A filePath-only capture keeps the bytes in the simulator (the guest filesystem is not written). Offline delivery code is covered by unit tests with synthetic counter deltas only.",
+   "The NetworkWatcherAgent VM extension that real Azure requires on the target is not required here."
+  ],
+  "tests": ["tests/conformance/test_azure_pcap_core.py", "tests/conformance/test_azure_pcap_sdk.py", "tests/cli/azure-packetcapture-cli-smoke.sh"]
  },
  "azure.nsgs.tasks": {
   "title": "Tasks",
