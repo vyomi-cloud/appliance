@@ -6,11 +6,14 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorBar, Loading } from "../../kit/common.jsx";
 
 const DEFAULT_QUERY = "AzureActivity\n| take 20";
+/** Other blades (Activity log "Insights", Change Analysis "Open query") hand a KQL query over through sessionStorage. */
+const takeHandoff = () => { try { const q = sessionStorage.getItem("vyomi.logs.query"); sessionStorage.removeItem("vyomi.logs.query"); return q; } catch { return null; } };
+export const openInLogs = (kql) => { try { sessionStorage.setItem("vyomi.logs.query", kql); } catch { /* storage blocked */ } location.hash = "#/monitor/logs"; };
 
 export default function Logs() {
   const [workspaces, setWorkspaces] = useState(null);
   const [workspace, setWorkspace] = useState("");
-  const [query, setQuery] = useState(DEFAULT_QUERY);
+  const [query, setQuery] = useState(() => takeHandoff() || DEFAULT_QUERY);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [running, setRunning] = useState(false);
@@ -60,6 +63,7 @@ export default function Logs() {
               style={{ width: "100%", fontFamily: "monospace" }} aria-label="KQL query" />
             <div className="vy-cmdbar" role="toolbar" aria-label="Command bar">
               <Button appearance="primary" disabled={running || !workspace} onClick={run}>Run</Button>
+              <span style={{ fontSize: 12, marginLeft: 12, opacity: 0.8 }}>KQL: where, extend, project, summarize (count/sum/avg/min/max/dcount/countif by col or bin()), top, order by, take, count, distinct; ago(), strcat(), iff() ...</span>
             </div>
             <ErrorBar error={error} title="Query failed" />
             {table && (table.rows.length ? (

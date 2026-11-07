@@ -55,6 +55,11 @@ try:                                              # Azure Monitor workspaces + M
 except ImportError:
     import azure_monitorproducts_core as monprod_engine   # type: ignore
 
+try:                                              # Azure Monitor alerting (Microsoft.AlertsManagement: alerts, processing rules, Prometheus rule groups)
+    from core import azure_alerts_core as alerts_engine
+except ImportError:
+    import azure_alerts_core as alerts_engine      # type: ignore
+
 try:                                              # App Service engine (Microsoft.Web: web apps, function apps, plans)
     from core import azure_webapp_core as web_engine
 except ImportError:
@@ -1868,6 +1873,8 @@ class AzureArm:
                     ext_engine.site_log(_site, f"Configuration '{chain[3]}' updated.")
             return r
 
+        if alerts_engine.handles(namespace, chain):
+            return self._alerts(method, sub, rg, chain, payload, query)
         if monprod_engine.handles(namespace, chain):
             return self._monprod(method, sub, rg, namespace, chain, payload, query)
         if sa_engine.handles(namespace, chain):
@@ -3521,6 +3528,12 @@ class AzureArm:
         if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE") and len(chain) == 2 and rg:
             self._record_activity(sa_engine._rid(sub, rg, chain[1]), f"Microsoft.StreamAnalytics/streamingjobs/{'delete' if method == 'DELETE' else 'write'}", sub)
         return {"status": r["status"], "headers": {}, "body": r["body"]}
+
+    def _alerts(self, method, sub, rg, chain, payload, query):
+        r = alerts_engine.dispatch(self.state, method, sub, rg, "Microsoft.AlertsManagement", chain, payload, query, blob_store=self.blob_store)
+        if r["status"] < 300 and r["rid"] and method in ("PUT", "PATCH", "DELETE"):
+            self._record_activity(r["rid"], f"{'/'.join(r['rid'].split('/providers/')[1].split('/')[:2])}/{'delete' if method == 'DELETE' else 'write'}", sub)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _monprod(self, method, sub, rg, namespace, chain, payload, query):
         r = monprod_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)

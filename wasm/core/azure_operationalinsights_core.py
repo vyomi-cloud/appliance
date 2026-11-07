@@ -78,7 +78,7 @@ BASE_TABLES = {
     "Perf": ["TimeGenerated", "Computer", "ObjectName", "CounterName", "CounterValue"],
     "Syslog": ["TimeGenerated", "Computer", "Facility", "SeverityLevel", "SyslogMessage"],
     "Event": ["TimeGenerated", "Computer", "EventLog", "EventID", "RenderedDescription"],
-    "AzureActivity": ["TimeGenerated", "OperationName", "Caller", "Level", "ResourceGroup", "ResourceId"],
+    "AzureActivity": ["TimeGenerated", "OperationName", "Caller", "Level", "ResourceGroup", "ResourceId", "Category", "ActivityStatus", "SubscriptionId"],
     "Usage": ["TimeGenerated", "DataType", "Quantity", "IsBillable", "Solution"],
     "AzureDiagnostics": ["TimeGenerated", "ResourceId", "Category", "OperationName", "ResultType"],
 }
@@ -382,8 +382,17 @@ def _activity_rows(state, sub):
     for e in events:
         op = e.get("operationName")
         op = op.get("value") if isinstance(op, dict) else op
-        rows.append([e.get("eventTimestamp"), op, e.get("caller"), e.get("level"), e.get("resourceGroupName"), e.get("resourceId")])
+        st = e.get("status")
+        rows.append([e.get("eventTimestamp"), op, e.get("caller"), e.get("level"), e.get("resourceGroupName"), e.get("resourceId"),
+                     (e.get("category") or {}).get("value") if isinstance(e.get("category"), dict) else (e.get("category") or "Administrative"),
+                     st.get("value") if isinstance(st, dict) else st, e.get("subscriptionId") or sub])
     return rows
+
+
+def activity_table(state, sub):
+    """AzureActivity as row dicts, the shape run_kql consumes."""
+    names = BASE_TABLES["AzureActivity"]
+    return [dict(zip(names, r)) for r in _activity_rows(state, sub)]
 
 
 def _col_index(schema, name):
@@ -646,12 +655,12 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
         head = rest[0].lower()
         if head in ("api", "query", "datacollectionrules"):
             _lr = [x.lower() for x in rest]
-            if _lr == ["api", "query"]:
-                # The ARM pass-through (.../workspaces/{ws}/api/query) is POST-only, and AzureActivity is the
-                # real Microsoft.Insights/eventtypes feed (the Activity log) — that table needs the ARM state map.
-                _tbl = str((payload or {}).get("query") or "").split("|")[0].strip().lower()
-                if (method != "POST" and not (query or {}).get("query")) or _tbl == "azureactivity":
-                    return _run_query(state, sub, rec, method, payload)
+            if _lr == ["api", "query"] and method != "POST" and not (query or {}).get("query"):
+                return _err(405, "MethodNotAllowed", "POST required.")
+            if _lr in (["api", "query"], ["query"]):
+                # AzureActivity is the real Microsoft.Insights/eventtypes feed (the Activity log): it lives in the
+                # ARM state map, so it is injected as a table for the single KQL engine (run_kql) to query.
+                return _data_plane(rec, rest, method, payload, query, extra={"AzureActivity": activity_table(state, sub)})
             return _data_plane(rec, rest, method, payload, query)
         if head in ("savedsearches", "tables", "datasources"):
             if len(rest) > 2:
@@ -685,7 +694,7 @@ def _bad_arg(msg, code="BadArgumentError"):
     return _err(400, code, msg)
 
 
-def _data_plane(rec, rest, method, payload, query):
+def _data_plane(rec, rest, method, payload, query, extra=None):
     low = [x.lower() for x in rest]
     try:
         if low[:2] == ["api", "logs"] and method == "POST":
@@ -698,7 +707,7 @@ def _data_plane(rec, rest, method, payload, query):
                 q = query.get("query")
             if not isinstance(q, str) or not q.strip():
                 return _bad_arg("The request had some invalid properties: query is required.", "BadArgumentError")
-            return _ok(run_kql(rec, q))
+            return _ok(run_kql(rec, q, extra))
     except KqlError as e:
         return _bad_arg(str(e), "SemanticError" if e.semantic else "SyntaxError")
     return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
@@ -913,13 +922,232 @@ def _resolve_col(cols, name):
     raise KqlError(f"Failed to resolve scalar expression named '{name}'", semantic=True)
 
 
-def run_kql(rec, query):
+# ───────── KQL scalar expressions (extend / summarize / top / where fallback) ─────────
+import ast as _ast
+import math as _math
+
+_DUR_RE = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m|h|d)$", re.I)
+
+
+def _dur_secs(tok):
+    m = _DUR_RE.match(str(tok).strip())
+    if not m:
+        raise KqlError(f"Unrecognised timespan '{tok}'")
+    return float(m.group(1)) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2).lower()]
+
+
+def _iso_dt(v):
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _iso_str(d):
+    return d.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _fn_bin(v, size):
+    size = _dur_secs(size) if isinstance(size, str) else float(size)
+    d = _iso_dt(v)
+    if d is not None and not isinstance(v, (int, float)):
+        t = d.timestamp()
+        return _iso_str(datetime.fromtimestamp(t - (t % size), timezone.utc))
+    return None if v is None else _math.floor(float(v) / size) * size
+
+
+def _fn_substring(s, start, n=None):
+    s = "" if s is None else str(s)
+    return s[start:] if n is None else s[start:start + n]
+
+
+_KQL_FUNCS = {
+    "strcat": lambda *a: "".join("" if x is None else str(x) for x in a),
+    "tolower": lambda s: None if s is None else str(s).lower(), "toupper": lambda s: None if s is None else str(s).upper(),
+    "tostring": lambda v: "" if v is None else str(v), "strlen": lambda s: len(str(s or "")),
+    "toint": lambda v: int(float(v)), "tolong": lambda v: int(float(v)), "todouble": lambda v: float(v), "toreal": lambda v: float(v),
+    "round": lambda v, n=0: round(float(v), int(n)), "floor": lambda v, n=1: _math.floor(float(v) / n) * n,
+    "abs": lambda v: abs(v), "sqrt": lambda v: _math.sqrt(v), "log": lambda v: _math.log(v), "pow": lambda a, b: a ** b,
+    "iff": lambda c, a, b: a if c else b, "iif": lambda c, a, b: a if c else b,
+    "isnull": lambda v: v is None, "isnotnull": lambda v: v is not None,
+    "isempty": lambda v: v is None or v == "", "isnotempty": lambda v: not (v is None or v == ""),
+    "coalesce": lambda *a: next((x for x in a if x is not None and x != ""), None),
+    "substring": _fn_substring, "bin": _fn_bin,
+    "ago": lambda d: _iso_str(datetime.now(timezone.utc) - timedelta(seconds=_dur_secs(d))),
+    "now": lambda: _iso_str(datetime.now(timezone.utc)),
+    "datetime_diff": lambda unit, a, b: (_iso_dt(a) - _iso_dt(b)).total_seconds() / {"second": 1, "minute": 60, "hour": 3600, "day": 86400}[str(unit)],
+    "startofday": lambda v: _iso_str(_iso_dt(v).replace(hour=0, minute=0, second=0, microsecond=0)),
+}
+
+
+def _compile_expr(text):
+    text = text.strip()
+    # `x contains 'a'` style needs rewriting to a call; do it structurally before python parsing
+    m = re.fullmatch(r"(.+?)\s+(!contains|contains|!startswith|startswith|!endswith|endswith|!has|has)\s+(.+)", text, re.S)
+    if m and " and " not in text and " or " not in text:
+        lhs, op, rhs = m.groups()
+        return ("op", _compile_expr(lhs), op, _compile_expr(rhs))
+    mm = re.fullmatch(r"(.+?)\s+in\s*\((.*)\)", text, re.S)
+    if mm and " and " not in text and " or " not in text:
+        return ("in", _compile_expr(mm.group(1)), [_compile_expr(x) for x in _split_top(mm.group(2), ",")])
+    src = text.replace("=~", " ==ci ").replace("!~", " !=ci ")
+    src = re.sub(r"\b(\d+(?:\.\d+)?(?:ms|s|m|h|d))\b", lambda x: repr(x.group(1)), src)
+    src = re.sub(r"\bnull\b", "None", src, flags=re.I)
+    src = re.sub(r"\btrue\b", "True", src, flags=re.I)
+    src = re.sub(r"\bfalse\b", "False", src, flags=re.I)
+    src = src.replace(" ==ci ", " == ").replace(" !=ci ", " != ")
+    src = re.sub(r"\b(and|or|not)\b", lambda x: x.group(1).lower(), src, flags=re.I)
+    try:
+        tree = _ast.parse(src, mode="eval")
+    except SyntaxError:
+        raise KqlError(f"Failed to parse expression '{text}'")
+    for node in _ast.walk(tree):
+        if not isinstance(node, (_ast.Expression, _ast.BinOp, _ast.UnaryOp, _ast.Constant, _ast.Name, _ast.Call, _ast.Compare,
+                                 _ast.BoolOp, _ast.IfExp, _ast.Load, _ast.operator, _ast.unaryop, _ast.cmpop, _ast.boolop)):
+            raise KqlError(f"Unsupported expression '{text}'")
+        if isinstance(node, _ast.Call) and not (isinstance(node.func, _ast.Name) and node.func.id.lower() in _KQL_FUNCS and not node.keywords):
+            raise KqlError(f"Unknown function in '{text}'", semantic=True)
+    return ("py", tree.body, text)
+
+
+def _eval_node(node, row, cols):
+    if isinstance(node, _ast.Constant):
+        return node.value
+    if isinstance(node, _ast.Name):
+        return row.get(_resolve_col(cols, node.id))
+    if isinstance(node, _ast.UnaryOp):
+        v = _eval_node(node.operand, row, cols)
+        return (not v) if isinstance(node.op, _ast.Not) else (None if v is None else (-v if isinstance(node.op, _ast.USub) else +v))
+    if isinstance(node, _ast.BinOp):
+        a, b = _eval_node(node.left, row, cols), _eval_node(node.right, row, cols)
+        if a is None or b is None:
+            return None
+        if isinstance(node.op, _ast.Add) and (isinstance(a, str) or isinstance(b, str)):
+            raise KqlError("Cannot add strings; use strcat()", semantic=True)
+        try:
+            return {_ast.Add: lambda: a + b, _ast.Sub: lambda: a - b, _ast.Mult: lambda: a * b,
+                    _ast.Div: lambda: (a // b if isinstance(a, int) and isinstance(b, int) and a % b == 0 else a / b),
+                    _ast.Mod: lambda: a % b}[type(node.op)]()
+        except ZeroDivisionError:
+            return None
+    if isinstance(node, _ast.BoolOp):
+        vals = (_eval_node(v, row, cols) for v in node.values)
+        return all(vals) if isinstance(node.op, _ast.And) else any(vals)
+    if isinstance(node, _ast.IfExp):
+        return _eval_node(node.body if _eval_node(node.test, row, cols) else node.orelse, row, cols)
+    if isinstance(node, _ast.Compare):
+        left = _eval_node(node.left, row, cols)
+        for op, comp in zip(node.ops, node.comparators):
+            right = _eval_node(comp, row, cols)
+            o = {_ast.Eq: "==", _ast.NotEq: "!=", _ast.Gt: ">", _ast.Lt: "<", _ast.GtE: ">=", _ast.LtE: "<="}.get(type(op))
+            if o is None or not _cmp(left, o, right):
+                return False
+            left = right
+        return True
+    if isinstance(node, _ast.Call):
+        return _KQL_FUNCS[node.func.id.lower()](*[_eval_node(a, row, cols) for a in node.args])
+    raise KqlError("Unsupported expression")
+
+
+def _eval(compiled, row, cols):
+    if compiled[0] == "py":
+        return _eval_node(compiled[1], row, cols)
+    if compiled[0] == "op":
+        return _cmp(_eval(compiled[1], row, cols), compiled[2], _eval(compiled[3], row, cols))
+    return any(_cmp(_eval(compiled[1], row, cols), "==", _eval(x, row, cols)) for x in compiled[2])
+
+
+def _expr_name(text):
+    m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)", text.strip(), re.S)
+    if m and not text.strip().startswith(m.group(1) + "=="):
+        return m.group(1), m.group(2)
+    return None, text
+
+
+_AGGS = ("count", "countif", "sum", "avg", "min", "max", "dcount", "sumif")
+
+
+def _summarize(arg, rows, cols):
+    by_txt = None
+    parts = re.split(r"\s+by\s+", arg, maxsplit=1, flags=re.I)
+    agg_txt = parts[0]
+    if len(parts) == 2:
+        by_txt = parts[1]
+    aggs = []
+    for a in _split_top(agg_txt, ","):
+        if not a:
+            continue
+        name, body = _expr_name(a)
+        m = re.fullmatch(r"([A-Za-z_]+)\((.*)\)", body.strip(), re.S)
+        if not m or m.group(1).lower() not in _AGGS:
+            raise KqlError(f"Unsupported summarize aggregate '{a}'. Supported: {', '.join(x + '()' for x in _AGGS)}.")
+        fn, inner = m.group(1).lower(), m.group(2).strip()
+        if fn in ("sum", "avg", "min", "max", "dcount", "countif", "sumif") and not inner:
+            raise KqlError(f"{fn}() needs an argument", semantic=True)
+        if not name:
+            name = "count_" if fn == "count" else f"{fn}_{re.sub(r'[^A-Za-z0-9_]', '', inner.split(',')[0]) or 'x'}"
+        sumif_cond = None
+        if fn == "sumif":
+            xs = _split_top(inner, ",")
+            inner, sumif_cond = xs[0], _compile_expr(xs[1])
+        aggs.append((name, fn, _compile_expr(inner) if inner else None, sumif_cond))
+    keys = []
+    if by_txt:
+        for k in _split_top(by_txt, ","):
+            name, body = _expr_name(k)
+            if not name:
+                bm = re.fullmatch(r"bin\(\s*([A-Za-z_]\w*)\s*,.*\)", body.strip(), re.I)
+                name = bm.group(1) if bm else body.strip()
+            keys.append((name, _compile_expr(body)))
+    if not aggs:
+        aggs = [("count_", "count", None, None)]
+    groups = {}
+    for r in rows:
+        kv = tuple(_eval(c, r, cols) for _, c in keys)
+        groups.setdefault(kv, []).append(r)
+    if not keys and not groups:
+        groups[()] = []
+    out = []
+    for kv, grp in groups.items():
+        row = {n: v for (n, _), v in zip(keys, kv)}
+        for name, fn, ex, cond in aggs:
+            if fn == "count":
+                row[name] = len(grp)
+                continue
+            if fn == "countif":
+                row[name] = sum(1 for r in grp if _eval(ex, r, cols))
+                continue
+            vals = [_eval(ex, r, cols) for r in grp if cond is None or _eval(cond, r, cols)]
+            vals = [v for v in vals if v is not None]
+            nums = [v for v in vals if isinstance(v, (int, float)) and not isinstance(v, bool)]
+            if fn in ("sum", "sumif"):
+                row[name] = sum(nums) if nums else 0
+            elif fn == "avg":
+                row[name] = (sum(nums) / len(nums)) if nums else None
+            elif fn == "min":
+                row[name] = min(vals) if vals else None
+            elif fn == "max":
+                row[name] = max(vals) if vals else None
+            elif fn == "dcount":
+                row[name] = len({str(v) for v in vals})
+        out.append(row)
+    return out, [n for n, _ in keys] + [a[0] for a in aggs]
+
+
+
+def run_kql(rec, query, extra=None):
     stages = _split_top(query.strip().rstrip(";"), "|")
     head = stages[0]
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", head):
         raise KqlError(f"Query must start with a table name, got '{head}'")
-    store = _rows(rec)
+    store = dict(_rows(rec))
+    for k, v in (extra or {}).items():      # state-derived tables (AzureActivity) live outside the workspace record
+        store[k] = v
     tkey = next((k for k in list(store) + [t["name"] for t in rec.get("_tables", {}).values()] if k.lower() == head.lower()), None)
+    if tkey is None and head.lower() in BASE_TABLES_LOWER:
+        tkey = BASE_TABLES_LOWER[head.lower()]
     if tkey is None:
         raise KqlError(f"'{head}' : Failed to resolve table or column expression named '{head}'", semantic=True)
     rows = [dict(r) for r in store.get(tkey, [])]
@@ -930,18 +1158,25 @@ def run_kql(rec, query):
                 cols.append(c)
     if not cols:
         base = next((t for t in rec.get("_tables", {}).values() if t["name"].lower() == head.lower()), None)
-        cols = [c["name"] for c in ((base or {}).get("properties", {}).get("schema", {}).get("columns") or [])] or ["TimeGenerated"]
+        cols = [c["name"] for c in ((base or {}).get("properties", {}).get("schema", {}).get("columns") or [])] \
+            or BASE_TABLES.get(BASE_TABLES_LOWER.get(head.lower(), ""), None) or ["TimeGenerated"]
     for stage in stages[1:]:
         m = re.match(r"([A-Za-z]+)\b\s*(.*)$", stage, re.S)
         if not m:
             raise KqlError(f"Unsupported operator in '{stage}'")
         op, arg = m.group(1).lower(), m.group(2).strip()
         if op == "where":
-            groups = [[_parse_pred(a) for a in ands] for ands in _split_bool(arg)]
-            for g in groups:
-                for col, _, _ in g:
-                    _resolve_col(cols, col)
-            rows = [r for r in rows if any(all(_cmp(r.get(_resolve_col(cols, c)), o, v) for c, o, v in g) for g in groups)]
+            try:
+                groups = [[_parse_pred(a) for a in ands] for ands in _split_bool(arg)]
+                for g in groups:
+                    for col, _, _ in g:
+                        _resolve_col(cols, col)
+                rows = [r for r in rows if any(all(_cmp(r.get(_resolve_col(cols, c)), o, v) for c, o, v in g) for g in groups)]
+            except KqlError as pe:
+                if pe.semantic:
+                    raise
+                comp = _compile_expr(arg)      # general scalar expression (functions, arithmetic, parenthesised logic)
+                rows = [r for r in rows if _eval(comp, r, cols)]
         elif op == "project":
             names = [_resolve_col(cols, x) for x in _split_top(arg, ",")]
             rows = [{n: r.get(n) for n in names} for r in rows]
@@ -963,15 +1198,26 @@ def run_kql(rec, query):
             for col, desc in reversed(keys):
                 rows.sort(key=lambda r, c=col: (r.get(c) is None, r.get(c) if isinstance(r.get(c), (int, float)) else str(r.get(c))), reverse=desc)
         elif op == "summarize":
-            mm = re.fullmatch(r"count\(\)\s*(?:by\s+(.+))?", arg, re.I)
-            if not mm:
-                raise KqlError("Only 'summarize count() [by col, ...]' is supported")
-            by = [_resolve_col(cols, x) for x in _split_top(mm.group(1), ",")] if mm.group(1) else []
-            groups = {}
-            for r in rows:
-                groups.setdefault(tuple(r.get(b) for b in by), []).append(r)
-            rows = [dict(zip(by, k), count_=len(v)) for k, v in groups.items()] if by else [{"count_": len(rows)}]
-            cols = by + ["count_"]
+            rows, cols = _summarize(arg, rows, cols)
+        elif op == "extend":
+            for item in _split_top(arg, ","):
+                name, body = _expr_name(item)
+                if not name:
+                    raise KqlError(f"extend needs 'name = expression', got '{item}'")
+                comp = _compile_expr(body)
+                for r in rows:
+                    r[name] = _eval(comp, r, cols)
+                if name not in cols:
+                    cols = cols + [name]
+        elif op == "top":
+            mt = re.fullmatch(r"(\d+)\s+by\s+([A-Za-z_]\w*)(?:\s+(asc|desc))?", arg, re.I)
+            if not mt:
+                raise KqlError("Usage: top <N> by <column> [asc|desc]")
+            col = _resolve_col(cols, mt.group(2))
+            rows = sorted(rows, key=lambda r: (r.get(col) is None, r.get(col) if isinstance(r.get(col), (int, float)) else str(r.get(col))),
+                          reverse=(mt.group(3) or "desc").lower() == "desc")[: int(mt.group(1))]
+        elif op == "render":
+            pass          # chart hint only; results are unchanged
         elif op == "distinct":
             names = [_resolve_col(cols, x) for x in _split_top(arg, ",")]
             seen, out = set(), []
@@ -982,7 +1228,7 @@ def run_kql(rec, query):
                     out.append({n: r.get(n) for n in names})
             rows, cols = out, names
         else:
-            raise KqlError(f"Unsupported operator '{op}'. Supported: where, project, take, limit, count, order by, sort by, summarize count() by, distinct.")
+            raise KqlError(f"Unsupported operator '{op}'. Supported: where, project, extend, take, limit, count, order by, sort by, summarize, top, distinct, render.")
     types = {}
     for c in cols:
         types[c] = next((_coltype(r[c]) for r in rows if r.get(c) is not None), "datetime" if c == "TimeGenerated" else "string")

@@ -108,6 +108,7 @@ const CORES = [
   "azure_health_core.py",      // Resource health + Advisor (derived from the stored ARM resources)
   "azure_templates_core.py",   // Export template engine (ARM→Bicep/Terraform) — lazily imported by azure_arm_core
   "azure_support_core.py",  // Microsoft.Support support requests (imported by azure_arm_core)
+  "azure_alerts_core.py",  // Microsoft.AlertsManagement alert evaluation + processing rules (imported by azure_arm_core; needs monitor + operationalinsights first)
   "azure_monitorproducts_core.py",  // Microsoft.Monitor accounts + Microsoft.Dashboard grafana (imported by azure_arm_core)
   "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
   "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it

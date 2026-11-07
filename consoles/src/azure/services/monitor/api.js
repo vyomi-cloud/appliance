@@ -42,10 +42,48 @@ export const listActivityLogAlerts = async () => (await ACTIVITY_LOG_ALERTS.list
 export const putActivityLogAlert = (rg, name, body) => ACTIVITY_LOG_ALERTS.put(rg, name, body);
 export const deleteActivityLogAlert = (rg, name) => ACTIVITY_LOG_ALERTS.remove(rg, name);
 
+// ── log search alert rules (Microsoft.Insights/scheduledQueryRules) — the rule's KQL is executed by the
+// REAL Log Analytics KQL engine over the workspace's stored rows (core/azure_alerts_core.py).
+export const SCHEDULED_QUERY_RULES = armType("Microsoft.Insights", "scheduledQueryRules", "2023-03-15-preview");
+export const listScheduledQueryRules = async () => (await SCHEDULED_QUERY_RULES.list()).map(withRg);
+export const putScheduledQueryRule = (rg, name, body) => SCHEDULED_QUERY_RULES.put(rg, name, body);
+export const deleteScheduledQueryRule = (rg, name) => SCHEDULED_QUERY_RULES.remove(rg, name);
+
+// ── fired alerts (Microsoft.AlertsManagement/alerts) — raised only when a rule's condition is really met
+export const ALERTS_API_VERSION = "2019-03-01";
+const alertsPath = () => `/subscriptions/${getSubscription()}/providers/Microsoft.AlertsManagement`;
+export const listFiredAlerts = async (query = {}) =>
+  (await restJson("GET", `${alertsPath()}/alerts`, { query: { "api-version": ALERTS_API_VERSION, ...query } })).value || [];
+export const getAlertsSummary = async (groupby = "severity,alertState") =>
+  (await restJson("GET", `${alertsPath()}/alertsSummary`, { query: { "api-version": ALERTS_API_VERSION, groupby } })).properties;
+export const changeAlertState = (name, newState) =>
+  restJson("POST", `${alertsPath()}/alerts/${encodeURIComponent(name)}/changestate`, { query: { "api-version": ALERTS_API_VERSION, newState }, body: {} });
+export const getAlertHistory = async (name) =>
+  (await restJson("GET", `${alertsPath()}/alerts/${encodeURIComponent(name)}/history`, { query: { "api-version": ALERTS_API_VERSION } })).value || [];
+/** Vyomi extension: run the evaluation loop now, ignoring each rule's evaluationFrequency. */
+export const evaluateAlertsNow = () =>
+  restJson("POST", `${alertsPath()}/evaluate`, { query: { "api-version": ALERTS_API_VERSION }, body: {} });
+
+// ── alert processing rules (Microsoft.AlertsManagement/actionRules) + Prometheus rule groups
+export const PROCESSING_RULES = armType("Microsoft.AlertsManagement", "actionRules", "2021-08-08");
+export const PROMETHEUS_RULE_GROUPS = armType("Microsoft.AlertsManagement", "prometheusRuleGroups", "2023-03-01");
+export const listProcessingRules = async () => (await PROCESSING_RULES.list()).map(withRg);
+export const putProcessingRule = (rg, name, body) => PROCESSING_RULES.put(rg, name, body);
+export const deleteProcessingRule = (rg, name) => PROCESSING_RULES.remove(rg, name);
+export const listPrometheusRuleGroups = async () => (await PROMETHEUS_RULE_GROUPS.list()).map(withRg);
+export const putPrometheusRuleGroup = (rg, name, body) => PROMETHEUS_RULE_GROUPS.put(rg, name, body);
+export const deletePrometheusRuleGroup = (rg, name) => PROMETHEUS_RULE_GROUPS.remove(rg, name);
+
+/** Resources collecting through a data collection rule: every association that names it. */
+export const listDcrResources = async (rg, name) =>
+  (await restJson("GET", `${DATA_COLLECTION_RULES.path(rg, name)}/associations`, { query: { "api-version": DATA_COLLECTION_RULES.apiVersion } })).value || [];
+
 /** Both alert rule types normalized into one shape for the combined "Alerts" grid. */
 export async function listAlertRules() {
-  const [metric, activity] = await Promise.all([listMetricAlerts(), listActivityLogAlerts()]);
+  const [metric, activity, sqr] = await Promise.all([listMetricAlerts(), listActivityLogAlerts(), listScheduledQueryRules().catch(() => [])]);
   return [
+    ...sqr.map((r) => ({ id: r.id, name: r.name, resourceGroup: r.resourceGroup, kind: "Log search", severity: r.properties.severity,
+      enabled: r.properties.enabled, scopes: r.properties.scopes, condition: (r.properties.criteria?.allOf?.[0]?.query || "--").split("\n")[0].slice(0, 60), raw: r })),
     ...metric.map((r) => ({ id: r.id, name: r.name, resourceGroup: r.resourceGroup, kind: "Metric", severity: r.properties.severity,
       enabled: r.properties.enabled, scopes: r.properties.scopes, condition: conditionSummary(r), raw: r })),
     ...activity.map((r) => ({ id: r.id, name: r.name, resourceGroup: r.resourceGroup, kind: "Activity Log", severity: null,
@@ -70,9 +108,10 @@ export const putAutoscaleSetting = (rg, name, body) => AUTOSCALE.put(rg, name, b
 export const deleteAutoscaleSetting = (rg, name) => AUTOSCALE.remove(rg, name);
 
 // ── activity log (Microsoft.Insights/eventtypes, subscription-wide ARM activity feed) ──
-export async function listActivityLog(resourceId) {
+export async function listActivityLog(resourceId, extraFilter) {
   const query = { "api-version": "2015-04-01" };
-  if (resourceId) query["$filter"] = `resourceUri eq '${resourceId}'`;
+  const parts = [resourceId ? `resourceUri eq '${resourceId}'` : null, extraFilter || null].filter(Boolean);
+  if (parts.length) query["$filter"] = parts.join(" and ");
   const r = await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query });
   return r.value || [];
 }

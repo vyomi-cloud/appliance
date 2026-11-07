@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, ToolbarButton } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
 import { listAllResources } from "./api.js";
-import { Loading, NotSimulated } from "../../kit/common.jsx";
+import { Loading } from "../../kit/common.jsx";
 
 const SERVICES = [
   { name: "Applications", description: "Application Performance Monitoring for your live web application.", href: "#/monitor/insights-applications" },
@@ -43,7 +43,7 @@ export default function InsightsHub() {
             ))}
           </TableBody>
         </Table>
-        <NotSimulated feature="Feedback" />
+        <p><a href="#/monitor/support">Feedback</a> - opens a real support request filed with Vyomi.</p>
       </section>
       <section className="vy-form-section">
         <h3>Your inventory</h3>
