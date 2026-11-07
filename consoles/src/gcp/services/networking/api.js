@@ -221,6 +221,7 @@ async function listLogEntries(logId) {
   });
   return r.entries || [];
 }
+export const sendEvaluatedFlow = (body) => restJson("POST", `${base()}/global/vyomiFlows:send`, { body });
 export const listFlowLogEntries = () => listLogEntries("compute.googleapis.com%2Fvpc_flows");
 export const listMirroredPacketLogEntries = () => listLogEntries("vyomi.dev%2Fpacket_mirroring");
 

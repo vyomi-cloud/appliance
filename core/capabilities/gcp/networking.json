@@ -156,16 +156,18 @@
  "gcp.networking.vpc-flow-logs": {
   "title": "VPC Flow Logs (Subnets / VLAN attachments / Cloud VPN tunnels)",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Offline only, and only with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend): core/netsim/wiring.py reads the enforcer's real per-flow nft counters, renders GCP VPC Flow Log records (core/gcp_compute_core.py:gcp_flow_log_records, gated on each subnet's own flowLogs flag) and writes them as real Cloud Logging entries (logName compute.googleapis.com%2Fvpc_flows) from ONE persistent collector, so each apply reports only the counter DELTA of its window (a long-lived flow is no longer re-emitted with its cumulative totals) — console Logs views read the same store. Nano has no data plane at all (no VMs produce real packets), so there is nothing to export there; VLAN attachments and Cloud VPN tunnels aren't modeled."
+   "Nano (and offline without enforcement): flow records come from the logical netsim evaluator, not from packets. (Vyomi) POST /compute/v1/projects/{p}/global/vyomiFlows:send evaluates ONE submitted flow (firewalls, routes, NAT, peering) and, when delivered, writes real compute.googleapis.com%2Fvpc_flows entries to Cloud Logging for each reporter (SRC/DEST) whose subnet has logConfig.enable, honouring that subnet's aggregationInterval (window alignment), flowSampling (packets/bytes scaled, a flow sampled to 0 packets logs nothing), metadata (INCLUDE/EXCLUDE/CUSTOM) and filterExpr (only true/false/inIpRange(connection.src_ip|dest_ip,'CIDR') joined by && and || - other CEL is rejected). Subnetworks.patch edits logConfig. There is no background traffic: nothing is logged unless a flow is submitted, repeated sends in one interval are not merged, and denied flows write nothing (Firewall Rules Logging is not modelled).",
+   "Offline with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend): core/netsim/wiring.py reads the enforcer's real per-flow nft counters, renders GCP VPC Flow Log records (core/gcp_compute_core.py:gcp_flow_log_records, gated on each subnet's own flowLogs flag) and writes them as real Cloud Logging entries (logName compute.googleapis.com%2Fvpc_flows) from ONE persistent collector, so each apply reports only the counter DELTA of its window (a long-lived flow is no longer re-emitted with its cumulative totals) — console Logs views read the same store. Nano has no data plane at all (no VMs produce real packets), so there is nothing to export there; VLAN attachments and Cloud VPN tunnels aren't modeled."
   ],
   "api": [
-   "entries:write", "entries:list"
+   "entries:write", "entries:list", "subnetworks.patch (logConfig)", "(Vyomi) POST global/vyomiFlows:send"
   ],
   "tests": [
+   "tests/conformance/test_gcp_vpc_flow_logs_evaluated.py",
    "tests/conformance/test_gcp_networking_depth_core.py",
    "tests/netsim/test_traffic_mirror.py"
   ]
