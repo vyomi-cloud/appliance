@@ -147,6 +147,9 @@ jobs:
           go-version-file: cmd/vyomi/go.mod
           cache-dependency-path: cmd/vyomi/go.mod
       - name: Build vyomi-mcp (macOS/Linux/Windows)
+        # Never let this block the release: packaging tolerates missing binaries
+        # (formula + .deb/.rpm skip them; `vyomi mcp` then prints a clear error).
+        continue-on-error: true
         run: |
           VER="${{ steps.ver.outputs.version }}"
           # Embed THIS release's version + service registry in the MCP knowledge.
