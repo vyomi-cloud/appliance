@@ -134,7 +134,8 @@
   // While the session is running the relay is registered as an in-memory booster and compute/AI wire calls are routed to it.
   var sess = null, sessTimer = null;
   var COMPUTE_SCOPE = /Credential=[^/]+\/[^/]+\/[^/]+\/(ec2|lambda|ecs|eks|batch|lightsail|autoscaling|apprunner|bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime|sagemaker|sagemaker-runtime)\//i;
-  var COMPUTE_PATH = /^\/(compute\/v1\/|v1\/projects\/[^/]+\/locations\/[^/]+\/(publishers|endpoints|models)\b|.*\/aiplatform\/)|\/providers\/Microsoft\.(Compute|ContainerService|CognitiveServices|MachineLearningServices|Batch|ContainerInstance)\//i;
+  // AI data planes: Vertex publishers/endpoints (v1 AND v1beta1 - the router accepts both), Azure OpenAI (/openai/..., offline /azure-data/openai/...).
+  var COMPUTE_PATH = /^\/(compute\/v1\/|v1(beta1)?\/projects\/[^/]+\/locations\/[^/]+\/(publishers|endpoints|models)\b|openai\/|azure-data\/openai\/|.*\/aiplatform\/)|\/providers\/Microsoft\.(Compute|ContainerService|CognitiveServices|MachineLearningServices|Batch|ContainerInstance)\//i;
   // Heuristic classifier for native-wire calls: EC2/VMs, languages (Lambda/functions), AI. Everything else stays in the browser.
   function isComputeCall(wirePath, authorization) { return COMPUTE_SCOPE.test(authorization || "") || COMPUTE_PATH.test(wirePath || ""); }
   function httpBase(u) { try { var x = new URL(u); x.protocol = x.protocol === "wss:" ? "https:" : x.protocol === "ws:" ? "http:" : x.protocol; x.pathname = ""; x.search = ""; return x.toString().replace(/\/+$/, ""); } catch (_) { return ""; } }
@@ -160,6 +161,12 @@
   function sessionTick() { if (sess && sess.session && sess.session.countdown_seconds > 0) { sess.session.countdown_seconds -= 1; renderChip(); } }
   function fmtLeft(s) { s = Math.max(0, s | 0); return Math.floor(s / 3600) + "h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m"; }
   var ACTION_TEXT = { reconnect: "Reconnect GitHub", copy_repo: "Fix on dashboard", choose_cloud: "Choose your cloud", upgrade: "See plans", wait: "Open dashboard", retry: "Open dashboard", contact: "Contact support", restart: "Open dashboard" };
+  // The booster's own status carries ai:{state, chip, usage:{totals}}: show the model state + this session's request/token tally.
+  function aiChip(st) {
+    var ai = st && st.ai; if (!ai) return "";
+    if (typeof ai.chip === "string" && ai.chip) return ai.chip;
+    var t = ai.usage && ai.usage.totals; return t ? "AI: " + t.requests + " req · " + t.total_tokens + " tok" : "";
+  }
   function renderChip() {
     if (!document.body) return;
     if (!sess) { kill("vyb-chip"); return; }
@@ -168,6 +175,7 @@
     if (st === "running") {
       cls = link === "connected" ? "vyb-c-ok" : "vyb-c-warn";
       text = "Booster " + (link === "connected" ? "connected" : "linking…") + " · ends in " + fmtLeft(x.countdown_seconds) + (x.warning ? " · " + x.warning : "");
+      var aiText = aiChip(link === "connected" ? (state[SESSION_ID] || {}).status : null); if (aiText) text += " · " + aiText;
     } else if (st === "pending" || st === "starting") { cls = "vyb-c-warn"; text = "Booster starting… (about 2 minutes)"; }
     else if (st === "stopping") { cls = "vyb-c-warn"; text = "Booster stopping…"; }
     else if (err) { cls = "vyb-c-err"; text = "Booster: " + err.message; action = err.action || "retry"; }
@@ -358,7 +366,7 @@
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
     homeOptions: homeOptions, defaultHome: defaultHome, cloudAllowed: cloudAllowed, planCloud: planCloud, pinCloud: pinCloud, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
-    session: function () { return sess; }, sessionBooster: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall,
+    session: function () { return sess; }, sessionBooster: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall, aiChip: aiChip,
     isBlocked: blocked, candidates: function (id) { var b = get(id); return b ? candidates(b) : []; },
   };
 

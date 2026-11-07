@@ -184,10 +184,16 @@ class HeadlessMiddleware:
             return await self._inner(scope, receive, send)
         slots: list = []                 # admission slots this request reserves; leftovers are released when it ends
         tok = REQUEST_SLOTS.set(slots)
+        from core import booster_ai
+        ai_cloud = booster_ai.cloud_of_path(scope.get("path", ""))
+        ai_toks = (booster_ai.CLOUD.set(ai_cloud), booster_ai.OP.set(booster_ai.op_of_path(scope.get("path", "")))) if ai_cloud else None
         try:
             await self._inner(scope, receive, send)
         finally:
             REQUEST_SLOTS.reset(tok)
+            if ai_toks:
+                booster_ai.OP.reset(ai_toks[1])
+                booster_ai.CLOUD.reset(ai_toks[0])
             if slots:
                 release_slots("compute", slots)
 
@@ -594,7 +600,19 @@ def status() -> dict:
                       "free_mb": {k: max(0, res["memory_split_mb"][k] - u[k]) for k in u}},
         "health": {"ok": healthy, "state": "locked" if (on and expired) else ("ok" if on else "not-a-booster")},
         "tunnel": _relay_info(), "nano_ui": NANO_URL, **endpoints(),
+        "ai": _ai_status(on),
     }
+
+
+def _ai_status(on: bool) -> Optional[dict]:
+    """AI pack summary for the Nano chip: model state + the session token/request ledger (None when not a booster)."""
+    if not on:
+        return None
+    try:
+        from core import booster_ai
+        return booster_ai.status(recent=5)
+    except Exception:
+        return None
 
 
 def _relay_info() -> dict:
@@ -620,6 +638,15 @@ def register(app) -> None:
             booster_relay.start_supervised()
         except Exception:
             pass
+    if booster_mode():
+        try:   # AI pack: ledger hook, admit the configured models against the AI RAM bucket, point the seam at the local model server
+            from core import booster_ai
+            booster_ai.install()
+            booster_ai.admit_configured()
+            booster_ai.point_llm_at_gateway()
+        except Exception:
+            pass
+
     def _cors(resp, request):      # CORS headers are applied by HeadlessMiddleware
         return resp
 
@@ -682,3 +709,48 @@ def register(app) -> None:
         except Exception as e:
             return _deny(request, 401, "InvalidToken", str(e))
         return _cors(JSONResponse({"account": c["sub"], "booster_id": c["bid"], "tier": c["tier"], "exp": c["exp"]}), request)
+
+    @app.get("/booster/ai/status", include_in_schema=False)
+    def _ai_status_route(request: Request):
+        g = _guard(request)
+        if g:
+            return g
+        from core import booster_ai
+        return _cors(JSONResponse(booster_ai.status(recent=20)), request)
+
+    @app.get("/booster/ai/plan", include_in_schema=False)
+    def _ai_plan(request: Request):
+        # What the boot script should start (admitted models only). Loopback: the Codespace host runs `docker exec ... curl`.
+        g = _guard(request, loopback_only=True)
+        if g:
+            return g
+        from core import booster_ai
+        return _cors(JSONResponse(booster_ai.plan()), request)
+
+    @app.post("/booster/ai/admit", include_in_schema=False)
+    async def _ai_admit(request: Request):
+        g = _guard(request, loopback_only=True)
+        if g:
+            return g
+        from core import booster_ai
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        kind = str(body.get("kind") or "chat")
+        kind = kind if kind in ("chat", "embed") else "chat"
+        try:
+            m = booster_ai.admit(str(body.get("model") or booster_ai.selected()[kind]), kind)
+        except booster_ai.ModelAdmissionError as e:
+            return _deny(request, 409 if e.code == "ai_memory_exceeded" else 400, e.code, e.message)
+        booster_ai.point_llm_at_gateway()
+        return _cors(JSONResponse({"admitted": booster_ai._pub(m), "plan": booster_ai.plan()}), request)
+
+    @app.post("/booster/ai/reset-usage", include_in_schema=False)
+    def _ai_reset(request: Request):
+        g = _guard(request, loopback_only=True)
+        if g:
+            return g
+        from core import booster_ai
+        booster_ai.LEDGER.reset()
+        return _cors(JSONResponse({"ok": True}), request)

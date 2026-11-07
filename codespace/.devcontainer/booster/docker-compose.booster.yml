@@ -23,6 +23,10 @@ services:
       # them, serves one cloud on Pro, and refuses all after session_end (core/booster_session.py).
       VYOMI_BOOSTER_SESSION_TOKEN: ${VYOMI_BOOSTER_SESSION_TOKEN:-}
       VYOMI_BOOSTER_SESSION_KEY: ${VYOMI_BOOSTER_SESSION_KEY:-}
+      # AI pack: the model ids to ADMIT against the AI RAM bucket (core/booster_ai.py). The booster appliance then points
+      # VYOMI_LLM_ENDPOINT at the `llm` gateway below; WebLLM stays the Nano-only fallback.
+      VYOMI_BOOSTER_AI_MODEL: ${VYOMI_BOOSTER_AI_MODEL:-qwen2.5-3b}
+      VYOMI_BOOSTER_AI_EMBED: ${VYOMI_BOOSTER_AI_EMBED:-bge-small}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - booster-data:/data
@@ -41,5 +45,34 @@ services:
       VYOMI_BOOSTER_SESSION_TOKEN: ${VYOMI_BOOSTER_SESSION_TOKEN:-}
       VYOMI_BOOSTER_LOCAL_URL: http://simulator:9000
       WS_PKG: /app/relay/node_modules/ws
+  # ---- AI pack (profile "ai"; boot-booster.sh starts it only after the simulator ADMITS the models) -------------------------
+  # Two llama.cpp servers (one model per process) behind a tiny OpenAI-compatible gateway. Models are pulled on first start
+  # by llama-server's -hf into the ai-models volume (cached across stop/resume of the same Codespace). No published ports.
+  llm-chat:
+    image: ${VYOMI_LLM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    volumes: [ai-models:/root/.cache]
+    # --jinja: native tool-call templates; -np 1: one slot on 2 cores (queue upstream); --cache-reuse: keep the shared prompt prefix
+    command: ["-hf", "${VYOMI_AI_CHAT_HF:-Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M}", "--host", "0.0.0.0", "--port", "8080",
+              "-c", "${VYOMI_AI_CHAT_CTX:-4096}", "--jinja", "-np", "1", "--cache-reuse", "256", "-t", "2", "--alias", "${VYOMI_BOOSTER_AI_MODEL:-qwen2.5-3b}"]
+  llm-embed:
+    image: ${VYOMI_LLM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    volumes: [ai-models:/root/.cache]
+    command: ["-hf", "${VYOMI_AI_EMBED_HF:-CompendiumLabs/bge-small-en-v1.5-gguf:Q8_0}", "--host", "0.0.0.0", "--port", "8080",
+              "--embeddings", "-c", "${VYOMI_AI_EMBED_CTX:-512}", "-np", "1", "-t", "1"]
+  llm:
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    profiles: ["ai"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    working_dir: /app
+    entrypoint: ["python", "-m", "core.booster_llm_gateway"]
+    environment: { CHAT_URL: "http://llm-chat:8080", EMBED_URL: "http://llm-embed:8080", PORT: "8080" }
 volumes:
   booster-data:
+  ai-models:
