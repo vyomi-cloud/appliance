@@ -27,7 +27,12 @@ if missing:
 # Every store the router reads from its `stores` dict must exist in Nano's registry under that name
 # (or a declared alias) AND be persisted — otherwise the router silently builds a private store
 # whose state is lost on reload and invisible to the SDK relay.
-OFFLINE_INJECTED = {"gcp_project"}   # a fixed NANO_PROJECT on Nano; the appliance injects the space's project
+# "obs" = the request-telemetry recorder (core/observability_core.ObsStore): per-session MEASURED
+# counters/spans keyed by tuples (not JSON-persistable), owned by the router alone by design
+# ("the Nano router owns its own ObsStore") -- it is not resource state, so it is deliberately
+# neither in the shared registry nor in nano_persist.
+EPHEMERAL_ROUTER_STORES = {"obs"}
+OFFLINE_INJECTED = {"gcp_project"} | EPHEMERAL_ROUTER_STORES   # a fixed NANO_PROJECT on Nano; the appliance injects the space's project
 ALIASES = {"lam": "compute", "apigw": "compute", "vpc": "vpc_net", "eventbridge": "msg"}
 reg = (ROOT / "core/nano_registry.py").read_text()
 per = (ROOT / "core/nano_persist.py").read_text()
