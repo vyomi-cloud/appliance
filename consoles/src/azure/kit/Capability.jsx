@@ -92,7 +92,7 @@ export function CapabilityBadge({ id }) {
 
 /** A console section; limited / config-only ones become a bordered card whose capability tab
  *  attaches to the bottom-right border. Becomes the honest Not-simulated panel when the registry says so. */
-export function CapabilityContainer({ id, title, actions, children }) {
+export function CapabilityContainer({ id, title, actions, children, noBadge }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
     return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
@@ -105,7 +105,7 @@ export function CapabilityContainer({ id, title, actions, children }) {
         {actions && <span style={{ marginLeft: "auto" }}>{actions}</span>}
       </h3>
       {children}
-      <CapabilityBadge id={id} />
+      {!noBadge && <CapabilityBadge id={id} />}
     </section>
   );
 }

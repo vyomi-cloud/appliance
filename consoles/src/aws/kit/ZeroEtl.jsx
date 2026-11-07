@@ -104,7 +104,7 @@ function QueryEditor({ integrations, reloadKey }) {
             const dn = i.IntegrationName.replace(/[^A-Za-z0-9_]/g, "_");
             try { await runSql(`CREATE DATABASE ${dn} FROM INTEGRATION '${i.IntegrationName}'`); notify.success(`Database ${dn} created from integration.`); setDb(dn); dbs.reload(); } catch (e) { notify.error(e); }
           }}>Create database from {i.IntegrationName}</Button>))}
-      </SpaceBetween>}>Query editor (Redshift-lite)<CapabilityBadge id="dynamodb.account.zero-etl" /></Header>}>
+      </SpaceBetween>}>Query editor (Redshift-lite)</Header>}>
       <SpaceBetween size="s">
         <FormField label="Database"><Select selectedOption={{ label: db, value: db }} onChange={({ detail }) => setDb(detail.selectedOption.value)} options={(dbs.data || ["dev"]).map((d) => ({ label: d, value: d }))} ariaLabel="Database" /></FormField>
         <FormField label="SQL"><Textarea value={sql} rows={4} onChange={({ detail }) => setSql(detail.value)} ariaLabel="SQL statement" /></FormField>

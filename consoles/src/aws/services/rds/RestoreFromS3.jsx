@@ -55,7 +55,7 @@ export default function RestoreFromS3() {
                   <Input value={f.role} onChange={set("role")} ariaLabel="IAM role" placeholder="arn:aws:iam::123456789012:role/rds-s3-ingest" /></FormField>
               </SpaceBetween>
             </CapabilityContainer>
-            <CapabilityContainer id="rds.restore-from-s3" title="Settings">
+            <CapabilityContainer noBadge id="rds.restore-from-s3" title="Settings">
               <SpaceBetween size="l">
                 <FormField label="DB instance identifier" errorText={missing(f.id)}><Input value={f.id} onChange={set("id")} ariaLabel="DB instance identifier" /></FormField>
                 <FormField label="DB instance class"><Select selectedOption={f.cls} options={CLASSES} onChange={set("cls")} ariaLabel="DB instance class" /></FormField>

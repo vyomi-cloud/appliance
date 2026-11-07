@@ -61,7 +61,7 @@ export function DeliveryByCountry() {
     return rows;
   }, []);
   return (
-    <CapabilityContainer id="sns.sms.delivery-statistics" title="Delivery statistics by country" description={`Last ${HOURS} hours.`}
+    <CapabilityContainer noBadge id="sns.sms.delivery-statistics" title="Delivery statistics by country" description={`Last ${HOURS} hours.`}
       actions={<Button iconName="refresh" onClick={s.reload}>Refresh</Button>}>
       {s.loading ? <StatusIndicator type="loading">Loading</StatusIndicator> : s.error ? <ErrorAlert error={s.error} /> : (
         <Table variant="embedded" items={s.data} trackBy="country"

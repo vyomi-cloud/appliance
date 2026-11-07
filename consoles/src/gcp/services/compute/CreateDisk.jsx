@@ -2,7 +2,7 @@
  * Google-managed-encryption disk is modeled; every other option is an honest gap. */
 import { useEffect, useState } from "react";
 import {
-  Box, Button, Divider, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
+  Box, Button, Checkbox, Divider, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
   Radio, RadioGroup, Select, Stack, TextField, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
