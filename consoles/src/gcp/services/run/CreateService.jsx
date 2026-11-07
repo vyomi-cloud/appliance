@@ -193,7 +193,7 @@ export default function CreateService({ query }) {
             {api.REGIONS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
           </Select>
         </FormControl>
-        <CustomUrlsPanel a={adv} set={setAdv} cap="gcp.run.networking" />
+        <CustomUrlsPanel a={adv} set={setAdv} cap={null} />
         <Typography variant="body2" color="text.secondary">Endpoint URL: generated after you create the service.</Typography>
       </SourceOpt>
       <Divider />

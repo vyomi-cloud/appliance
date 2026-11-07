@@ -70,7 +70,7 @@ export default function MigrateAServer() {
               { id: "in", header: "Target instance", cell: (s) => (s.launchedInstance ? <Button variant="inline-link" onClick={() => navigate("ec2", "instances", s.launchedInstance.ec2InstanceID)}>{s.launchedInstance.ec2InstanceID}</Button> : "-") },
             ]} />
         </CapabilityContainer>
-        <CapabilityContainer id="ec2.migration.application-migration-service" title="Replication settings templates">
+        <CapabilityContainer noBadge id="ec2.migration.application-migration-service" title="Replication settings templates">
           <ResourceTable resourceName="Replication templates" variant="embedded" items={tpls.data || []} loading={tpls.loading} error={tpls.error} onRefresh={tpls.reload}
             trackBy="replicationConfigurationTemplateID" empty={{ title: "No replication settings template", description: "Create one before adding a source server." }}
             actions={<Button onClick={() => { setF({}); setDlg("tpl"); }}>Create template</Button>}

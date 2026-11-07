@@ -444,7 +444,7 @@ async function route(method, path, body, query) {
   //     /api/azure/operations/{id}. The substrate-free AzureArm core serves both;
   //     its HTTP envelope (status + Azure-AsyncOperation/Location headers + body)
   //     is returned verbatim (see the __http handling in the fetch listener).
-  if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/api/azure/operations/")) {
+  if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/providers/Microsoft.ResourceGraph/") || path.startsWith("/api/azure/operations/")) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null, origin: self.location.origin + BASE }] };
   }
 
@@ -768,6 +768,16 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/azure\/vm\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
    || path.match(/^\/api\/console\/azurevm\/instances\/([^/]+)\/(exec)$/);
   if (m) return vmTuple("azure", dec(m[1]), m[2], method, body);
+  // Azure VM guest views (Inventory / Update Manager / Performance diagnostics): the appliance's scripts run in the VM.
+  m = path.match(/^\/api\/azure\/vm\/([^/]+)\/guest\/(inventory|performance|updates)$/);
+  if (m && (method === "GET" || (method === "POST" && m[2] === "updates"))) {
+    return { tuple: ["azure", "_vm", "Guest" + m[2][0].toUpperCase() + m[2].slice(1), { ref: dec(m[1]), body: method === "POST" ? (body || {}) : {} }] };
+  }
+  // AWS Systems Manager Session Manager console endpoints: sessions on running in-browser EC2 VMs.
+  if (path === "/api/ssm/sessions" && method === "POST") return { tuple: ["aws", "_vm", "SsmStart", { ref: "", body: body || {} }] };
+  if (path === "/api/ssm/sessions" && method === "GET") return { tuple: ["aws", "_vm", "SsmList", { ref: "", body: { state: (query && query.state) || "Active" } }] };
+  m = path.match(/^\/api\/ssm\/sessions\/([^/]+)\/(exec|terminate)$/);
+  if (m && method === "POST") return { tuple: ["aws", "_vm", m[2] === "exec" ? "SsmExec" : "SsmTerminate", { ref: dec(m[1]), body: body || {} }] };
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
   // EC2 instance detail tabs (core/aws_console_detail.py, same engine as offline).
   m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(details|network-interfaces|security|storage|user-data|iam-instance-profile|console-output)$/);

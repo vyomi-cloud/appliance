@@ -104,7 +104,7 @@ function AddWidgetForm({ onAdd }) {
         items={WIDGET_TYPES.map((label) => ({ value: label, label }))}
         ariaLabel="Widget type"
       />
-      {!SUPPORTED.has(type) && <Alert type="info" header="Not simulated in Vyomi">This widget type isn't backed by a Vyomi backend yet; Line, Number, Text and Alarm status widgets are.</Alert>}
+      {!SUPPORTED.has(type) && <Alert type="info" header="Coming soon">This widget type isn't backed by a Vyomi backend yet; Line, Number, Text and Alarm status widgets are.</Alert>}
       {(type === "Line" || type === "Number") && (
         <ColumnFields>
           <Select placeholder="Namespace" selectedOption={namespace ? { label: namespace, value: namespace } : null} onChange={({ detail }) => { setNamespace(detail.selectedOption.value); setMetricName(null); }} options={namespaces.map((n) => ({ label: n, value: n }))} ariaLabel="Namespace" />

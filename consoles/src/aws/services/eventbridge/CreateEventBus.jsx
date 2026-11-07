@@ -122,7 +122,7 @@ export default function CreateEventBus({ params }) {
                 {!editing && (
                   <Container header={<Header variant="h2">Additional configuration - optional</Header>}>
                     <SpaceBetween size="l">
-                      <FormField label="Retention period" description="Not simulated — events are never discarded for age.">
+                      <FormField label="Retention period" description="Coming soon — events are never discarded for age.">
                         <Input type="number" value={retention} onChange={({ detail }) => setRetention(detail.value)} ariaLabel="Retention period" placeholder="e.g. 1" />
                       </FormField>
                       <FormField label="Enable event bus sharing">

@@ -55,7 +55,7 @@ export default function Zones() {
         />
       </div>
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Open query" ? "Resource Graph queries" : "Bulk tag assignment"} /></DialogContent>

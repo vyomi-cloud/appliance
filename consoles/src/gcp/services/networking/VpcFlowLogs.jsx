@@ -3,7 +3,7 @@
  * Management API; Vyomi models the per-subnet flag only (no VLAN attachments or VPN
  * tunnels), so this reuses the real subnet data for its one real tab. */
 import { useState } from "react";
-import { Box, Tab, Tabs, Typography } from "@mui/material";
+import { Alert, Box, Button, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import { useAsync } from "../../../common/useAsync.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import { PageHeader, Section } from "../../kit/common.jsx";
@@ -16,6 +16,17 @@ export default function VpcFlowLogs() {
   const project = useProject();
   const [tab, setTab] = useState("subnets");
   const { data: subnets = [], loading } = useAsync(api.listAllSubnets, [project]);
+  const [flow, setFlow] = useState({ src: "", dst: "", port: "443", packets: "100" });
+  const [flowMsg, setFlowMsg] = useState(null);
+  const sendFlow = async () => {
+    setFlowMsg(null);
+    try {
+      const r = await api.sendEvaluatedFlow({ source: { ipAddress: flow.src }, destination: { ipAddress: flow.dst, port: Number(flow.port) },
+        protocol: "TCP", packets: Number(flow.packets), bytes: Number(flow.packets) * 512 });
+      setFlowMsg({ severity: r.result === "ACCEPT" ? "success" : "warning", text: `${r.result}: ${r.reason || "delivered"}; ${r.logged} flow log record(s) written.` });
+      reloadEntries();
+    } catch (err) { setFlowMsg({ severity: "error", text: String(err.message || err) }); }
+  };
   const { data: entries = [], loading: entriesLoading, reload: reloadEntries } = useAsync(api.listFlowLogEntries, [project]);
 
   return (
@@ -46,7 +57,15 @@ export default function VpcFlowLogs() {
           </CapabilityContainer>
           <Box sx={{ mt: 2 }}>
             <CapabilityContainer id="gcp.networking.vpc-flow-logs" title="Flow log records"
-              description="Real exported records from traffic that crossed the appliance's network enforcer, for subnets with flow logs on.">
+              description="Records for subnets with flow logs on: real traffic through the appliance's network enforcer (offline), or flows you evaluate here (Nano has no packets).">
+              <Stack direction="row" spacing={1} sx={{ mb: 1.5 }} alignItems="center" flexWrap="wrap">
+                <TextField size="small" label="Source VM IP" value={flow.src} onChange={(e) => setFlow({ ...flow, src: e.target.value })} />
+                <TextField size="small" label="Destination VM IP" value={flow.dst} onChange={(e) => setFlow({ ...flow, dst: e.target.value })} />
+                <TextField size="small" label="Port" sx={{ width: 90 }} value={flow.port} onChange={(e) => setFlow({ ...flow, port: e.target.value })} />
+                <TextField size="small" label="Packets" sx={{ width: 100 }} value={flow.packets} onChange={(e) => setFlow({ ...flow, packets: e.target.value })} />
+                <Button variant="outlined" size="small" disabled={!flow.src || !flow.dst} onClick={sendFlow}>Evaluate and log flow</Button>
+              </Stack>
+              {flowMsg && <Alert severity={flowMsg.severity} sx={{ mb: 1.5 }}>{flowMsg.text}</Alert>}
               <ResourceTable
                 resourceName="log entries"
                 items={entries}
@@ -54,7 +73,7 @@ export default function VpcFlowLogs() {
                 loading={entriesLoading}
                 onRetry={reloadEntries}
                 filterPlaceholder="Filter"
-                empty={<Typography variant="body2" color="text.secondary">No flow log entries yet — they appear once real traffic crosses the appliance's network enforcer.</Typography>}
+                empty={<Typography variant="body2" color="text.secondary">No flow log entries yet — enable flow logs on a subnet and evaluate a flow above (offline: they also appear once real traffic crosses the network enforcer).</Typography>}
                 columns={[
                   { id: "time", header: "Timestamp", cell: (e) => e.timestamp },
                   { id: "src", header: "Source", cell: (e) => `${e.jsonPayload?.connection?.src_ip}:${e.jsonPayload?.connection?.src_port}` },

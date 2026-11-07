@@ -224,7 +224,7 @@ function Overview({ a, reload, self }) {
           navigate("apim");
         }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>{gap === "Feedback" ? <NotSimulated feature="Sending product feedback" /> : <ApimDeletedServices onRestored={(rg, n) => { setGap(null); navigate("apim", rg, n); }} />}</DialogContent>
@@ -324,7 +324,7 @@ function AccessControlIam({ a }) {
       {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
       {tab === "classic" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
         </DialogSurface>
@@ -422,7 +422,7 @@ function Locks({ a }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>

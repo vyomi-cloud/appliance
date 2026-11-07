@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import PacketCapturePanel from "../nsgs/PacketCapture.jsx";
 import { VmDisasterRecovery, VmVaultBackup } from "./RecoveryPanels.jsx";
 import { BootDiagnostics, SerialConsole, BastionConnect, GuestInventory, GuestPerformance, UpdateManager } from "../../kit/VmGuestPages.jsx";
 import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
@@ -70,7 +71,7 @@ export const MENU = [
   ] },
   { group: "Automation", items: [{ id: "tasks", label: "Tasks" }, { id: "exporttemplate", label: "Export template" }] },
   { group: "Help", items: [
-    { id: "resourcehealth", label: "Resource health" }, { id: "bootdiagnostics", label: "Boot diagnostics" },
+    { id: "resourcehealth", label: "Resource health" }, { id: "packetcapture", label: "Packet capture" }, { id: "bootdiagnostics", label: "Boot diagnostics" },
     { id: "perfdiagnostics", label: "Performance diagnostics" }, { id: "resetpassword", label: "Reset password" },
     { id: "redeploy", label: "Redeploy + reapply" }, { id: "serialconsole", label: "Serial console" },
     { id: "support", label: "Support + Troubleshooting" },
@@ -161,6 +162,7 @@ export default function VmBlade({ params }) {
       logs: () => <VmLogs a={a} />,
       connectionmonitor: () => <ConnectionMonitor a={a} />,
       workbooks: () => <VmWorkbooks a={a} />,
+      packetcapture: () => <PacketCapturePanel vm={a} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
@@ -269,7 +271,7 @@ function Overview({ a, reload, self }) {
           navigate("vms");
         }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap === "JSON View" ? "Viewing the raw ARM JSON for this resource" : gap || ""} note={gap === "Hibernate" || gap === "Capture" ? capability("azure.vms.power")?.limitations?.join(" ") : undefined} /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
@@ -515,7 +517,7 @@ function Locks({ a }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
@@ -1129,7 +1131,7 @@ function RunCommand({ a }) {
     <CapabilityContainer id="azure.vms.run_command" title={`${a.name} | Run command`}>
       <BrowseGrid resourceName="command" rowKey={(r) => r.name} filterPlaceholder="Filter by name"
         items={COMMAND_TEMPLATES} columns={[{ key: "name", label: "Name" }, { key: "description", label: "Description" }]}
-        extraCommands={<ToolbarButton onClick={() => notify.error("Not simulated", "Vyomi does not persist a custom command gallery to create into.")}>Create</ToolbarButton>} />
+        extraCommands={<ToolbarButton onClick={() => notify.error("Coming soon", "Vyomi does not persist a custom command gallery to create into.")}>Create</ToolbarButton>} />
       <section className="vy-section" style={{ marginTop: 16 }}>
         <h3>Run Command Script</h3>
         <p style={{ fontSize: 13 }}>

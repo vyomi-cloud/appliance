@@ -14,7 +14,7 @@ export function NotSimulated({ feature, note }) {
   return (
     <Box padding="l" textAlign="center" color="text-body-secondary" data-vyomi-not-simulated={feature}>
       <SpaceBetween size="xs">
-        <Badge color="grey">Not simulated in Vyomi</Badge>
+        <Badge color="grey">Coming soon</Badge>
         <Box variant="p" color="inherit">{feature} isn't backed by a Vyomi backend yet.</Box>
         {note && <Box variant="small" color="inherit">{note}</Box>}
       </SpaceBetween>

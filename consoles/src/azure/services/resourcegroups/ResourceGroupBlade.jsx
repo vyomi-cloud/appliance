@@ -24,6 +24,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import Insights from "./Insights.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
@@ -128,6 +129,7 @@ export default function ResourceGroupBlade({ params }) {
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,
       budgets: () => <Budgets name={name} />,
+      insightspreview: () => <Insights name={name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -217,7 +219,7 @@ function Overview({ a, reload, self, name }) {
         </DialogSurface>
       </Dialog>
       <Dialog open={!!gap && gap !== "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>
@@ -607,7 +609,7 @@ function Locks({ name }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (lockName, level, notes) => { await api.putLock(name, lockName, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap === "Subscription" ? "Resource group" : gap}</DialogTitle>
             <DialogContent>

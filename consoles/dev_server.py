@@ -42,7 +42,7 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("content-length") or 0)
         body = self.rfile.read(n) if n else b""
         rest = u.path[len("/_wire"):] or "/"
-        if rest.startswith("/subscriptions/") or rest.startswith("/api/azure/operations/"):
+        if rest.startswith("/subscriptions/") or rest.startswith("/providers/Microsoft.ResourceGraph/") or rest.startswith("/api/azure/operations/"):
             return self._arm(rest, dict(parse_qsl(u.query, keep_blank_values=True)), body)
         try:
             out = ROUTER.handle(self.command, u.path[len("/_wire"):] or "/", dict(parse_qsl(u.query, keep_blank_values=True)),
@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._wire()
         return self._static()
 
-    do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = do_PATCH = _go
+    do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _go
 
     def log_message(self, fmt, *args):
         if "-q" not in sys.argv:

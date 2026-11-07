@@ -450,7 +450,7 @@ function Iam({ name, a }) {
       {tab === "denyassignments" && <DenyAssignmentsPanel a={t} />}
       {tab === "classicadmins" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>

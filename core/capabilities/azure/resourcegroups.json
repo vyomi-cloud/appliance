@@ -125,19 +125,15 @@
   ]
  },
  "azure.resourcegroups.tools": {
-  "title": "Resource group tools: Move resources (validate + move) and Export template",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
+  "title": "Resource group tools: Move resources (validate + move), Export template, Insights and force delete",
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "validateMoveResources / moveResources really re-parent resources inside the one simulated subscription: they check the target group, name clashes, ARM locks, non-movable types and that referenced/referencing resources move together, then rewrite ids and embedded references and re-key state. Moving to another subscription is rejected (Vyomi models one subscription). Real Azure's per-provider move rules (e.g. region/SKU specifics) are approximated by the generic reference-closure check; the call completes synchronously with 204 instead of a 202 long-running operation.",
-   "Export template is generated from live state (azure.common export template); dependency-ordered group delete, tag-governance insights and the Tasks tab are not built (Tasks needs an external automation product).",
-   "Open query (Azure Resource Graph) and Manage view are separate products/portal chrome and stay not simulated."
+   "Export template is generated from live state (azure.common export template).",
+   "Insights (preview) is computed from the group's real records (GET {rg}/providers/Microsoft.Vyomi/insights): inventory by type and location, tag coverage and untagged resources (the tag-governance view), VM power states, failed provisioning, locks, alert rules, resource health, Advisor recommendations and the group's Activity log (24h operations, failures, top operations). There are no platform metrics or cost in it, and it is Vyomi's own page, not the Azure Monitor Insights workbook.",
+   "Force delete is the real DELETE resourceGroups/{rg}?forceDeletionTypes=Microsoft.Compute/virtualMachines,Microsoft.Compute/virtualMachineScaleSets parameter (other types are a 400). Without it every running VM / scale set is first taken through a graceful deallocate (powerState PowerState/deallocated, a deallocate/action Activity log row) and then deleted; with it the resource is deleted directly with a 'Force delete' row and no deallocate step. No guest OS is shut down (there is no hypervisor) and the other resource types are removed all at once, not in dependency order; the DELETE completes synchronously with 200 instead of a 202 long-running operation.",
+   "Open query (Azure Resource Graph) and Manage view are separate products/portal chrome and stay not simulated; the Tasks tab (DevOps/automation tasks) is a different panel."
   ],
-  "tests": [
-   "tests/conformance/test_azure_rg_move_resources.py",
-   "tests/conformance/test_azure_templates_core.py"
-  ]
+  "tests": ["tests/conformance/test_azure_rg_move_resources.py", "tests/conformance/test_azure_templates_core.py", "tests/conformance/test_azure_rgtools.py", "tests/conformance/test_azure_rgtools_sdk.py", "tests/cli/azure-rgtools-cli-smoke.sh"]
  }
 }

@@ -260,6 +260,12 @@ def deliver_flows(accepted: list, rejected: list, topo, *, aws_model: dict | Non
         from core.netsim import mirror as _mir
         caps = _mir.mirror_captures(aws_model, topo, delta, int(now if now is not None else time.time()))
         out["mirror"] = _mir.deliver(aws_model, caps, logs_store)
+    if az_state and delta:                        # Azure Network Watcher packet captures (core/azure_pcap_core.py)
+        try:
+            from core import azure_pcap_core as _pc, azure_blob_core as _pcb
+            _pc.ingest_flows(az_state, delta, blob_store=az_blob_store, blob_mod=_pcb, now=now)
+        except Exception as exc:
+            _warn_once(f"pcap:{type(exc).__name__}", f"packet capture ingest skipped: {exc}")
     rows = col.aws_rows()
     if aws_model and aws_model.get("flow_logs") and rows:
         def cw_put(group, stream, evs):

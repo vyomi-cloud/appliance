@@ -61,7 +61,7 @@ export default function StorageAccounts() {
       </div>
       <RestoreDeletedStorage open={gap === "Restore"} onClose={() => setGap(null)} onRestored={reload} />
       <Dialog open={!!gap && gap !== "Restore"} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Restore" ? "Restoring a deleted storage account" : gap === "Open query" ? "Resource Graph queries" : "Bulk tag assignment"} /></DialogContent>

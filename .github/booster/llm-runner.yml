@@ -1,0 +1,95 @@
+# TEMPLATE (spike, OFF by default - nothing installs or dispatches this). Lives in the USER's own runner repo, never ours.
+# See docs/architecture/v4.0/BOOSTER-RUNNER-LLM.md - including the OPEN RISK about GitHub Actions terms of service.
+#
+# The Vyomi portal GitHub App would write this file + docker/booster-runner-llm/{entrypoint.sh,runner-llm-dial.mjs} into the
+# user's repo, then `workflow_dispatch` it with a short-lived runner-role token. Public repos get free Linux runners
+# (4 vCPU / 16 GB / 6 h job cap); logs of a public repo are WORLD-READABLE, hence the masking rules below.
+# NOT validated on real Actions (no GitHub calls were allowed in the spike): llama.cpp pin/asset name are placeholders.
+name: vyomi-booster-llm
+run-name: "vyomi-booster-llm"          # constant on purpose: never put the session id / inputs in the title
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_token:                    # runner-role session token (HMAC, role=llm-runner, expires <= 5h30m)
+        description: "session token"
+        required: true
+        type: string
+      relay_url:
+        description: "relay"
+        required: true
+        type: string
+      model_key:
+        description: "model cache key (hash of the pinned GGUFs)"
+        required: true
+        type: string
+      chat_sha256:
+        required: true
+        type: string
+      embed_sha256:
+        required: true
+        type: string
+      ttl_s:
+        required: false
+        default: "19800"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vyomi-booster-llm
+  cancel-in-progress: true             # a new dispatch replaces the old runner
+
+jobs:
+  llm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350               # < 360 min job cap; the entrypoint exits at TTL_S (<= 19800 s = 330 min) anyway
+    steps:
+      # FIRST step, before anything can print: mask the token and relay. Inputs go through env, never inline in `run:`
+      # (expression injection). The portal's token expires with the session and only allows dialling /llm-runner.
+      - name: mask
+        shell: bash
+        env:
+          T: ${{ inputs.runner_token }}
+          R: ${{ inputs.relay_url }}
+        run: |
+          echo "::add-mask::$T"
+          echo "::add-mask::$R"
+
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: docker/booster-runner-llm }
+
+      - name: model cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: vyomi-llm-${{ inputs.model_key }}     # 10 GB/repo cap, 7-day eviction: a cold start re-downloads (~2.2 GB)
+
+      - name: llama.cpp + ws
+        shell: bash
+        env:
+          LLAMA_TAG: b0000                            # PLACEHOLDER: pinned at template-render time, with asset sha256
+        run: |
+          set -e
+          curl -fsSL -o llama.zip "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_TAG}/llama-${LLAMA_TAG}-bin-ubuntu-x64.zip"
+          mkdir -p bin && unzip -q llama.zip -d bin && echo "$PWD/bin/build/bin" >> "$GITHUB_PATH"
+          (cd docker/booster-runner-llm && npm i --no-audit --no-fund --silent ws@8.18.0)
+
+      - name: serve
+        shell: bash
+        env:
+          VYOMI_RUNNER_TOKEN: ${{ inputs.runner_token }}  # via env, never argv, never echoed
+          VYOMI_RELAY_URL: ${{ inputs.relay_url }}
+          CHAT_SHA256: ${{ inputs.chat_sha256 }}
+          EMBED_SHA256: ${{ inputs.embed_sha256 }}
+          TTL_S: ${{ inputs.ttl_s }}
+          MODEL_DIR: ${{ github.workspace }}/models
+          WS_PKG: ${{ github.workspace }}/docker/booster-runner-llm/node_modules/ws
+          THREADS: "4"
+        run: bash docker/booster-runner-llm/entrypoint.sh
+
+      - name: cleanup
+        if: always()                   # runs on cancel too
+        shell: bash
+        run: pkill llama-server || true

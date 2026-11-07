@@ -420,7 +420,7 @@ def _docker_build(store, build, step, args, tree, logs, local):
     ci.create_repo(db, repo)
     try:
         ci.commit_files(db, repo, "main", {k: v for k, v in ctree.items()}, "cloud build context", "cloudbuild")
-        job = ci.submit_job(db, repo, "main", {"kind": "image", "tag": tags[0], "buildArgs": bargs}, trigger="cloudbuild")
+        job = ci.submit_job(db, repo, "main", {"kind": "image", "tag": tags[0], "buildArgs": bargs, "layered": True}, trigger="cloudbuild")
     finally:
         ci.delete_repo(db, repo)
     logs.extend(l["message"] for l in job["logs"])

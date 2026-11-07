@@ -86,7 +86,7 @@ export default function Properties() {
             {assignments.loading ? "Loading..." : <YN value={elevated} onChange={setElevated} label="Access management for Azure resources" />}
           </div>
         </CapabilityContainer>
-        <CapabilityContainer id="azure.entra.security_defaults" title="Security defaults">
+        <CapabilityContainer noBadge id="azure.entra.security_defaults" title="Security defaults">
           <div className="vy-form-row">
             <label>{secDefaults.data ? `Security defaults: ${secDefaults.data.isEnabled ? "Enabled" : "Disabled"}` : "Security defaults"}</label>
             <Button onClick={openManage} disabled={secDefaults.loading}>Manage security defaults</Button>

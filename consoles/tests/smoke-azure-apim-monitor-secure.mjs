@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const pw = require(process.env.PW || "playwright");
 const BASE = process.env.BASE || "http://127.0.0.1:9092";
-const UI = `${BASE}/v4/azure/`, WIRE = `${BASE}/_wire`;
+const UI = `${BASE}${process.env.UI_PATH || "/v4/azure/"}`, WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
 const SUB = "00000000-0000-0000-0000-cloudlearn01";
 const n = Date.now() % 100000, RG = `am-rg-${n}`, SVC = `amsvc${n}`, WS = `amws${n}`;
 let pass = 0, fail = 0;

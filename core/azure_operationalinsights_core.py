@@ -356,6 +356,174 @@ def _workspace_ops(state, sub, rec, rest, method, payload):
     return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
 
 
+# ═══════════════════════════ linked storage accounts ═════════════════════════════
+# Microsoft.OperationalInsights/workspaces/{ws}/linkedStorageAccounts/{dataSourceType} -- the workspace's "Linked storage accounts" blade
+# (bring-your-own-storage). Real validation (data source type enum, storage accounts must exist and share the workspace's region); the link is
+# CONFIGURATION: ingestion/queries/alerts are not re-routed through the account (see the registry entry).
+LINKED_TYPES = ("CustomLogs", "AzureWatson", "Query", "Ingestion", "Alerts")
+MAX_LINKED_ACCOUNTS = 5
+
+
+def _linked_view(rec, kind, cur):
+    return {"id": _child_id(rec, "linkedStorageAccounts", kind), "name": kind, "type": f"{WS_TYPE}/linkedStorageAccounts",
+            "properties": {"dataSourceType": kind, "storageAccountIds": list(cur["ids"])}}
+
+
+def _linked_storage(state, rec, name, method, payload):
+    store = rec.setdefault("_linked", {})
+    if name is None:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_linked_view(rec, k, store[k.lower()]) for k in LINKED_TYPES if k.lower() in store]})
+    kind = next((k for k in LINKED_TYPES if k.lower() == name.lower()), None)
+    if kind is None:
+        raise _bad(f"The data source type '{name}' is invalid. Allowed: {', '.join(LINKED_TYPES)}.")
+    cur = store.get(kind.lower())
+    if method == "GET":
+        if cur is None:
+            raise _child_not_found("linked storage account", kind, rec["name"])
+        return _ok(_linked_view(rec, kind, cur))
+    if method == "DELETE":
+        store.pop(kind.lower(), None)
+        return _ok(None, 200 if cur is not None else 204)
+    if method not in ("PUT", "PATCH"):
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    p = payload.get("properties")
+    if not isinstance(p, dict):
+        raise _bad("The request body must contain 'properties'.")
+    if p.get("dataSourceType") is not None and str(p["dataSourceType"]).lower() != kind.lower():
+        raise _bad(f"properties.dataSourceType '{p['dataSourceType']}' does not match the resource name '{kind}'.")
+    ids = p.get("storageAccountIds")
+    if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids):
+        raise _bad("The property 'storageAccountIds' must be a non-empty array of storage account resource ids.")
+    if len(ids) > MAX_LINKED_ACCOUNTS:
+        raise _bad(f"At most {MAX_LINKED_ACCOUNTS} storage accounts can be linked per data source type.")
+    if len({i.lower() for i in ids}) != len(ids):
+        raise _bad("storageAccountIds contains duplicates.")
+    for i in ids:
+        sa = state.get(i.lower())
+        if sa is None or (sa.get("_type") or "").lower() != "microsoft.storage/storageaccounts":
+            raise _bad(f"The storage account '{i}' was not found.")
+        if str(sa.get("location") or "").lower() != str(rec.get("location") or "").lower():
+            raise _bad(f"The storage account '{i.rsplit('/', 1)[-1]}' is in {sa.get('location')} but the workspace is in {rec.get('location')}; "
+                       "a linked storage account must be in the workspace's region.")
+    store[kind.lower()] = {"ids": list(ids)}
+    return _ok(_linked_view(rec, kind, store[kind.lower()]), 200)
+
+
+# ═══════════════════════════ computer groups (classic) ═══════════════════════════
+# A computer group is a SAVED SEARCH (category "Computer Groups", functionAlias = the group name) whose query returns a Computer column; its
+# members are the distinct Computer values of that query, evaluated on read. A group is usable in KQL as `Computer in (GroupName)` (expanded in
+# run_kql). The /computerGroups resource is a Vyomi view over the savedSearches of the real API.
+CG_CATEGORY = "Computer Groups"
+_CG_TYPE = f"{WS_TYPE}/computerGroups"
+
+
+def _cg_computer_col(cols):
+    return next((c for c in cols if c.lower() in ("computer", "computer_s")), None) or next((c for c in cols if c.lower().startswith("computer")), None)
+
+
+def _cg_members(rec, query):
+    res = run_kql(rec, query)
+    t = res["tables"][0]
+    names = [c["name"] for c in t["columns"]]
+    col = _cg_computer_col(names)
+    if col is None:
+        raise _bad("A computer group query must return a Computer column (project Computer).")
+    i = names.index(col)
+    out = []
+    for r in t["rows"]:
+        v = r[i]
+        if v not in (None, "") and str(v) not in out:
+            out.append(str(v))
+    return out
+
+
+def _cg_view(rec, name, saved, members):
+    pr = saved["properties"]
+    return {"id": _child_id(rec, "computerGroups", name), "name": name, "type": _CG_TYPE,
+            "properties": {"displayName": pr.get("displayName") or name, "query": pr["query"], "groupType": "LogSearch", "functionAlias": pr.get("functionAlias") or name,
+                           "memberCount": len(members), "members": members, "savedSearchId": saved["id"]}}
+
+
+def _computer_groups(state, rec, rest, method, payload):
+    saved = rec["_saved"]
+    groups = {k: v for k, v in saved.items() if (v["properties"].get("category") or "").lower() == CG_CATEGORY.lower()}
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        out = []
+        for k, v in sorted(groups.items()):
+            try:
+                mem = _cg_members(rec, v["properties"]["query"])
+            except (KqlError, _E):
+                mem = []
+            out.append(_cg_view(rec, v["name"], v, mem))
+        return _ok({"value": out})
+    name = rest[0]
+    key = name.lower()
+    cur = groups.get(key)
+    if len(rest) == 2 and rest[1].lower() == "members":
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "GET required.")
+        if cur is None:
+            raise _child_not_found("computer group", name, rec["name"])
+        return _ok({"value": [{"computer": m} for m in _cg_members(rec, cur["properties"]["query"])]})
+    if len(rest) != 1:
+        return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/computerGroups/{'/'.join(rest)}' is not supported.")
+    if method == "GET":
+        if cur is None:
+            raise _child_not_found("computer group", name, rec["name"])
+        return _ok(_cg_view(rec, name, cur, _cg_members(rec, cur["properties"]["query"])))
+    if method == "DELETE":
+        if cur is not None:
+            saved.pop(key, None)
+        return _ok(None, 200 if cur is not None else 204)
+    if method not in ("PUT", "PATCH"):
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,59}", name):
+        raise _bad("A computer group name must be a valid identifier (letters, digits, underscore; max 60) because it is used as a KQL function alias.")
+    if cur is None and key in saved:
+        raise _E(409, "Conflict", f"A saved search named '{name}' already exists and is not a computer group.")
+    p = payload.get("properties")
+    if not isinstance(p, dict):
+        raise _bad("The request body must contain 'properties'.")
+    q = p.get("query", ((cur or {}).get("properties") or {}).get("query"))
+    if not isinstance(q, str) or not q.strip():
+        raise _bad("The property 'query' is required (a KQL query returning a Computer column).")
+    try:
+        mem = _cg_members(rec, q)
+    except KqlError as e:
+        raise _bad(f"The computer group query is not valid: {e}")
+    if cur is None and len(saved) >= MAX_SAVED:
+        raise _E(409, "Conflict", f"A workspace can hold at most {MAX_SAVED} saved searches.")
+    disp = p.get("displayName") or ((cur or {}).get("properties") or {}).get("displayName") or name
+    new = _saved_search(rec, name, {"properties": {"category": CG_CATEGORY, "displayName": disp, "query": q, "functionAlias": name, "version": 2}}, cur)
+    saved[key] = new
+    return _ok(_cg_view(rec, name, new, mem), 200)
+
+
+def _expand_groups(rec, query, depth=0):
+    """`Computer in (GroupName)` -> `Computer in ("a", "b")` for computer groups of this workspace."""
+    if depth > 3 or "(" not in query:
+        return query
+    groups = {(v["properties"].get("functionAlias") or v["name"]).lower(): v for v in rec.get("_saved", {}).values()
+              if (v["properties"].get("category") or "").lower() == CG_CATEGORY.lower()}
+    if not groups:
+        return query
+
+    def rep(m):
+        g = groups.get(m.group(2).lower())
+        if g is None:
+            return m.group(0)
+        try:
+            mem = _cg_members(rec, _expand_groups(rec, g["properties"]["query"], depth + 1))
+        except (KqlError, _E):
+            mem = []
+        return m.group(1) + "(" + ", ".join(json.dumps(x) for x in mem or [""]) + ")"
+    return re.sub(r"(\bin\s*)\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", rep, query, flags=re.I)
+
+
 # ═══════════════════════════ logs query (KQL subset) ═════════════════════════════
 # A small, real subset of KQL — enough to prove a genuine query engine runs over real data,
 # never enough to silently accept syntax it does not understand (unsupported ops/operators
@@ -686,6 +854,12 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
             if len(rest) > 2:
                 return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
             return _data_exports(rec, rest[1] if len(rest) == 2 else None, method, payload)
+        if head == "linkedstorageaccounts":
+            if len(rest) > 2:
+                return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+            return _linked_storage(state, rec, rest[1] if len(rest) == 2 else None, method, payload)
+        if head == "computergroups":
+            return _computer_groups(state, rec, rest[1:], method, payload)
         if head in ("savedsearches", "tables", "datasources"):
             if len(rest) > 2:
                 return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
@@ -1360,6 +1534,7 @@ def _summarize(arg, rows, cols):
 
 
 def run_kql(rec, query, extra=None):
+    query = _expand_groups(rec, query)
     stages = _split_top(query.strip().rstrip(";"), "|")
     head = stages[0]
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", head):

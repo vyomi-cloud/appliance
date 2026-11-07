@@ -17,15 +17,16 @@
  "azure.containerapps.environment.tools": {
   "title": "Diagnose and solve problems, Logs",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Logs (POST managedEnvironments/{env}/logs) aggregates the real console logs of every app container in the environment with a substring filter -- not a Log Analytics/KQL pipeline; Diagnose runs the per-app detectors. Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab)."
+   "Logs (POST managedEnvironments/{env}/logs) aggregates the real console logs of every app container in the environment with a substring filter -- not a Log Analytics/KQL pipeline; Diagnose runs the per-app detectors. Offline appliance with the Docker compute backend (Pro/Max): real. Nano (v4): with in-browser VMs on (localStorage.nano_vm_compute = '1') and a running VM, a replica 'container' is a PROCESS started from the container's command/args inside that Alpine v86 VM (env exported, stdout/stderr to a log file); this operation reads or drives that process. There is no Docker daemon in a browser tab, so the image is never pulled or run: an app or job without command/args is reported as failed to start (not faked), CPU percent is not sampled, replicas share the one VM (no per-container isolation), and the process lives only while the tab keeps the VM running. With no running VM the operation answers 409 RuntimeUnavailable."
   ],
   "api": [],
   "tests": [
-   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+   "tests/conformance/test_azure_containerapps_runtime_tools.py",
+   "tests/conformance/test_nano_vm_runtime.py"
   ]
  },
  "azure.containerapps.app.crud": {
@@ -95,29 +96,31 @@
  "azure.containerapps.app.monitoring": {
   "title": "Log stream",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Log stream (GET/POST containerApps/{app}/logstream) returns the app container's real stdout/stderr (docker logs) and Console (POST .../exec) runs commands in it (docker exec); metrics come from docker stats (GET .../vyomiMetrics). Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab). Log lines are a snapshot tail, not a websocket stream."
+   "Log stream (GET/POST containerApps/{app}/logstream) returns the app container's real stdout/stderr (docker logs) and Console (POST .../exec) runs commands in it (docker exec); metrics come from docker stats (GET .../vyomiMetrics). Offline appliance with the Docker compute backend (Pro/Max): real. Nano (v4): with in-browser VMs on (localStorage.nano_vm_compute = '1') and a running VM, a replica 'container' is a PROCESS started from the container's command/args inside that Alpine v86 VM (env exported, stdout/stderr to a log file); this operation reads or drives that process. There is no Docker daemon in a browser tab, so the image is never pulled or run: an app or job without command/args is reported as failed to start (not faked), CPU percent is not sampled, replicas share the one VM (no per-container isolation), and the process lives only while the tab keeps the VM running. With no running VM the operation answers 409 RuntimeUnavailable. Log lines are a snapshot tail, not a websocket stream."
   ],
   "api": [],
   "tests": [
-   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+   "tests/conformance/test_azure_containerapps_runtime_tools.py",
+   "tests/conformance/test_nano_vm_runtime.py"
   ]
  },
  "azure.containerapps.app.tools": {
   "title": "Diagnose and solve problems, Events",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Events lists the app's system events (container started/stopped/restarted, console commands); Diagnose and solve problems runs detectors over the REAL container state and recent log errors; revision Restart really restarts the container. Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab)."
+   "Events lists the app's system events (container started/stopped/restarted, console commands); Diagnose and solve problems runs detectors over the REAL container state and recent log errors; revision Restart really restarts the container. Offline appliance with the Docker compute backend (Pro/Max): real. Nano (v4): with in-browser VMs on (localStorage.nano_vm_compute = '1') and a running VM, a replica 'container' is a PROCESS started from the container's command/args inside that Alpine v86 VM (env exported, stdout/stderr to a log file); this operation reads or drives that process. There is no Docker daemon in a browser tab, so the image is never pulled or run: an app or job without command/args is reported as failed to start (not faked), CPU percent is not sampled, replicas share the one VM (no per-container isolation), and the process lives only while the tab keeps the VM running. With no running VM the operation answers 409 RuntimeUnavailable."
   ],
   "api": [],
   "tests": [
-   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+   "tests/conformance/test_azure_containerapps_runtime_tools.py",
+   "tests/conformance/test_nano_vm_runtime.py"
   ]
  },
  "azure.containerapps.job.crud": {
@@ -131,15 +134,16 @@
  "azure.containerapps.job.tools": {
   "title": "Diagnose and solve problems, Identity, Log stream",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Job executions run as REAL one-shot containers (docker run): the exit code decides Succeeded/Failed and the container output is the execution's log (GET jobs/{job}/executions/{e}/logs); Diagnose and Events reflect those runs; the job resource stores a system/user-assigned identity over ARM (the console Identity blade for jobs is not built). Offline appliance with the Docker compute backend (Pro/Max): real. Nano / no Docker: the operation answers 409 RuntimeUnavailable (no container runtime in a browser tab). Without a runtime an execution is only recorded (no log)."
+   "Job executions run as REAL one-shot containers (docker run): the exit code decides Succeeded/Failed and the container output is the execution's log (GET jobs/{job}/executions/{e}/logs); Diagnose and Events reflect those runs; the job resource stores a system/user-assigned identity over ARM (the console Identity blade for jobs is not built). Offline appliance with the Docker compute backend (Pro/Max): real. Nano (v4): with in-browser VMs on (localStorage.nano_vm_compute = '1') and a running VM, a replica 'container' is a PROCESS started from the container's command/args inside that Alpine v86 VM (env exported, stdout/stderr to a log file); this operation reads or drives that process. There is no Docker daemon in a browser tab, so the image is never pulled or run: an app or job without command/args is reported as failed to start (not faked), CPU percent is not sampled, replicas share the one VM (no per-container isolation), and the process lives only while the tab keeps the VM running. With no running VM the operation answers 409 RuntimeUnavailable. Without a runtime an execution is only recorded (no log)."
   ],
   "api": [],
   "tests": [
-   "tests/conformance/test_azure_containerapps_runtime_tools.py"
+   "tests/conformance/test_azure_containerapps_runtime_tools.py",
+   "tests/conformance/test_nano_vm_runtime.py"
   ]
  },
  "azure.containerapps.iam": {

@@ -56,7 +56,7 @@ export default function Subscriptions() {
       </div>
       <TransferRequestsDialog open={gap === "View Requests"} onClose={() => setGap(null)} id={getSubscription()} />
       <Dialog open={!!gap && gap !== "View Requests"} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>{gap === "Manage Policies" ? <PolicyPanel title="Manage Policies" /> : <NotSimulated feature={GAPS[gap] || gap} />}</DialogContent>

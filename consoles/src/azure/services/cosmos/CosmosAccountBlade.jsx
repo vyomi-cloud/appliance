@@ -258,7 +258,7 @@ function Overview({ a, reload, self }) {
           navigate("cosmos");
         }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : "Moving a resource to a different resource group/subscription"} /></DialogContent>
@@ -329,7 +329,7 @@ function Iam({ a }) {
       {tab === "denyassignments" && <DenyAssignmentsPanel a={a} />}
       {tab === "classicadmins" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
@@ -492,7 +492,7 @@ function Replicate({ a, reload }) {
         </DialogSurface>
       </Dialog>
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={`${gap} between regions`} /></DialogContent>
@@ -795,7 +795,7 @@ function Locks({ a }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (name, level, notes) => { await api.putLock(resPath, name, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>
