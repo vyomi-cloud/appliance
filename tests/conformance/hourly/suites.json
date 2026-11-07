@@ -2386,6 +2386,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-platform-readonly2",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_platform_readonly_api2.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-console-data-planes",
       "target": "offline",
       "cloud": "aws",
