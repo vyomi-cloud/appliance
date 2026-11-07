@@ -1,6 +1,16 @@
 {
- "at": "2026-11-07T01:08:14+00:00",
+ "at": "2026-11-07T02:08:18+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "storage",
+   "kind": "spec-commit",
+   "key": "azure:storage:3b64c3a12a",
+   "title": "Azure storage: [Storage] `2027-03-07` svc version for STG105 Rust releease TypeSpec Changes (#48016)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/3b64c3a12af9938128abcf05d04c323a518ea78a",
+   "actionable": true
+  }
+ ],
  "errors": []
 }
