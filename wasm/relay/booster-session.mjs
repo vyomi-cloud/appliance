@@ -25,10 +25,18 @@ export function verify(token, key, nowS = Date.now() / 1000) {
   if (!key) throw new SessionError("BoosterSessionKeyMissing", "no session key configured", 503);
   const parts = String(token || "").trim().split(".");
   if (parts.length !== 3 || parts[0] !== "v1") throw new SessionError("BoosterSessionMalformed", "malformed session token");
-  const want = crypto.createHmac("sha256", key).update(`v1.${parts[1]}`).digest();
   let got; try { got = Buffer.from(parts[2], "base64url"); } catch { got = Buffer.alloc(0); }
-  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) throw new SessionError("BoosterSessionBadSignature", "bad signature");
-  let c; try { c = JSON.parse(Buffer.from(parts[1], "base64url").toString()); } catch { throw new SessionError("BoosterSessionMalformed", "unreadable payload"); }
+  const sigOk = (k) => { const want = crypto.createHmac("sha256", k).update(`v1.${parts[1]}`).digest(); return got.length === want.length && crypto.timingSafeEqual(got, want); };
+  let c; try { c = JSON.parse(Buffer.from(parts[1], "base64url").toString()); } catch { c = null; }
+  // The portal signs each token with a PER-SESSION key = hex(HMAC(master, "session:<id>")) (app/booster_session.py session_key), so a
+  // compromised codespace only learns its own key. The relay holds the MASTER key: accept a token signed directly with `key`
+  // (tests, single-session boosters), else re-derive the per-session key from the payload's session_id and verify with that.
+  if (!sigOk(key)) {
+    const sid = c && c.session_id ? String(c.session_id) : "";
+    const derived = sid ? crypto.createHmac("sha256", key).update(`session:${sid}`).digest("hex") : "";
+    if (!derived || !sigOk(derived)) throw new SessionError("BoosterSessionBadSignature", "bad signature");
+  }
+  if (!c) throw new SessionError("BoosterSessionMalformed", "unreadable payload");
   if (c.aud !== AUD) throw new SessionError("BoosterSessionBadAudience", "not a booster session token");
   const end = Number(c.session_end);
   if (!Number.isFinite(end)) throw new SessionError("BoosterSessionMalformed", "missing session_end");
