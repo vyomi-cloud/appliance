@@ -4,12 +4,11 @@
 # as the stock binary (b12124 / 8bed7cfb9: client and servers must match) and drop them into /app. Build takes a few minutes, not an hour.
 FROM vyomi-mesh-node:test AS build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates && rm -rf /var/lib/apt/lists/*
-ARG LLAMA_COMMIT=8bed7cfb9
-RUN mkdir /src && cd /src && git init -q && git remote add origin https://github.com/ggml-org/llama.cpp \
- && git fetch -q --depth 1 origin ${LLAMA_COMMIT} && git checkout -q FETCH_HEAD \
- && cmake -B build -DGGML_RPC=ON -DGGML_BACKEND_DL=ON -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release \
- && cmake --build build -j4 --target ggml-rpc rpc-server \
- && mkdir -p /opt/llama && cp build/bin/rpc-server /opt/llama/ && cp -a build/bin/libggml*.so* /opt/llama/ && ls -la /opt/llama
+ARG LLAMA_TAG=b12124
+RUN git clone -q --depth 1 --branch ${LLAMA_TAG} https://github.com/ggml-org/llama.cpp /src && cd /src \
+ && cmake -B build -DGGML_RPC=ON -DGGML_BACKEND_DL=ON -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_BUILD_TOOLS=ON -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build build -j4 --target ggml-rpc ggml-rpc-server \
+ && mkdir -p /opt/llama && cp build/bin/*rpc-server /opt/llama/rpc-server && cp -a build/bin/libggml*.so* /opt/llama/ && ls -la /opt/llama
 
 FROM vyomi-mesh-node:test
 COPY --from=build /opt/llama/rpc-server /app/rpc-server

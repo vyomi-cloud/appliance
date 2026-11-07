@@ -79,7 +79,7 @@ try:
         check(f"{k} joined the mesh ({c['address']})", r.returncode == 0, r.stdout + r.stderr)
     a1, a2 = cfgs["r1"]["address"], cfgs["r2"]["address"]
     for k, a in (("r1", a1), ("r2", a2)):
-        dx(names[k], f"(nohup /opt/llama/rpc-server -H {a} -p 50052 -t 2 > /tmp/rpc.log 2>&1 &) ; sleep 2")
+        dx(names[k], f"(nohup /app/rpc-server -H {a} -p 50052 -t 2 > /tmp/rpc.log 2>&1 &) ; sleep 2")
         ls = dx(names[k], "ss -H -ltn | awk '{print $4}'").stdout.split()
         check(f"{k}: rpc-server listens on the WG address only", f"{a}:50052" in ls and not any(x.startswith(("0.0.0.0", "*", "[::]")) for x in ls), ls)
     driver = names["r3"]
@@ -87,7 +87,7 @@ try:
     body = json.dumps({"prompt": "Write a short poem about the sea.", "n_predict": 48, "temperature": 0, "cache_prompt": False})
 
     def run_server(extra, port):
-        dx(driver, f"pkill llama-server; sleep 1; (nohup /opt/llama/llama-server -m /models/m.gguf --host 127.0.0.1 --port {port} -c 1024 -t 2 {extra} > /tmp/ls{port}.log 2>&1 &)")
+        dx(driver, f"pkill llama-server; sleep 1; (nohup /app/llama-server -m /models/m.gguf --host 127.0.0.1 --port {port} -c 1024 -t 2 {extra} > /tmp/ls{port}.log 2>&1 &)")
         t0 = time.time()
         while time.time() - t0 < 600:
             if dx(driver, f"curl -s -m 3 http://127.0.0.1:{port}/health").stdout.find('"ok"') >= 0:
@@ -114,7 +114,6 @@ try:
     log = dx(driver, "cat /tmp/ls8091.log").stdout
     bufs = dict(re.findall(r"(RPC\d*)[^\n]*model buffer size\s*=\s*([\d.]+) MiB", log))
     RES["rpc_buffers_MiB"] = bufs
-    check("RPC: layers are split across both RPC devices (each holds weights)", len(bufs) >= 2 and all(float(v) > 50 for v in bufs.values()), (bufs, log[-400:]))
     tm, txt = complete(8091)
     check("RPC: tokens return", len(txt) > 10, txt)
     RES["rpc2_tokens_per_s"] = round(tm["predicted_per_second"], 2)
@@ -122,7 +121,10 @@ try:
     # which peer carried the traffic
     rx = [int(dx(names[k], "wg show wgvyomi transfer | awk '{print $2}'").stdout.strip() or 0) for k in ("r1", "r2")]
     RES["wg_rx_bytes_r1_r2"] = rx
-    check("RPC: weights/activations travelled over the mesh to both rpc-servers", all(x > 20_000_000 for x in rx), rx)
+    # the split is proven by the bytes each rpc-server received over the mesh (the stock log does not print per-device buffers):
+    # together ~ the model size, each a substantial share
+    msize = os.path.getsize(MODEL)
+    check("RPC: the layers split across both rpc-servers (each received a share; together ~ the model size)", all(x > 0.25 * msize for x in rx) and sum(rx) > 0.8 * msize, (rx, msize))
 finally:
     if os.environ.get("MESH_KEEP") != "1":
         cleanup()

@@ -106,7 +106,33 @@ mesh twice per RPC hop, so decode speed is bounded by mesh RTT x layers per hop;
 
 ## 8. Measured (local harness: Docker Desktop VM, 8 CPUs; relay 1 cpu; runners `--cpus 2 --memory 1g`, booster `--cpus 1 --memory 768m`)
 
-RESULTS_PLACEHOLDER
+Mesh (`tests/conformance/test_booster_mesh.py`, 55/55 checks):
+
+| Metric | Value |
+|---|---|
+| Join, 4 nodes (script start -> linked) | 1.6 - 3.4 s total |
+| RTT booster -> r1 over WS-tunnelled WG (via the hub, 2 WS hops) | ~4.4 - 5.1 ms (plain docker path to the relay: 0.2 ms) |
+| TCP throughput booster -> r1 (iperf3, 6 s) | 9.5 - 21.4 MB/s up, 7.0 - 21.5 MB/s down (varies with host load; Docker VM shared with ~100 other containers) |
+| Re-key: r1 leaves and rejoins with a new key while booster pings r2 | 0 / 48-50 packets lost |
+| Direct UDP attempt: reachable endpoint / black hole | joins via `direct-udp` / falls back to `ws-bridge` after the wait (3 s in test, 8 s default) |
+
+Also asserted: no published ports, no TCP listener on a routable address, a service bound to a runner's WG address is not reachable on its docker
+address, runners cannot reach each other except through the mesh, token-less/forged/expired/wrong-role/other-session joins are refused (401/410/403/409),
+the token appears in no log and no process command line, `mesh-up.sh` is idempotent.
+
+llama.cpp RPC (`tests/conformance/test_booster_mesh_rpc.py`; Qwen2.5-1.5B-Instruct Q4_K_M, 1.1 GB; r1/r2 run `rpc-server` on their WG address,
+r3 runs `llama-server --rpc`; every container `--cpus 2`, `-t 2`; llama.cpp b12124 + libggml-rpc built as a loadable backend):
+
+| | Load | Decode | Prompt |
+|---|---|---|---|
+| Single node (r3 alone) | 10 s | 2.77 tok/s | 5.05 tok/s |
+| 2 RPC servers over the mesh | 116 s | 0.36 tok/s | 1.27 tok/s |
+
+The split is real: r1 and r2 received 460 MB and 592 MB over the mesh (together ~ the whole 1.1 GB model) and tokens came back correctly. But RPC over the
+WS-tunnelled mesh is ~8x SLOWER than one node for a model that fits locally: load is bound by mesh throughput (~10 MB/s effective) and decode by
+per-token round trips (~2.8 s/token). So pooling only makes sense for a model that does NOT fit one runner (qwen3:30b), where the alternative is not running it
+at all, and it needs the follow-ups in 10 (cache weights on the servers, measure on real hosts, consider direct UDP/bigger MTU path). We did not get a clean
+attribution (RPC vs. WS tunnel): a plain-docker single-server control run crashed inside libggml-rpc on the client, so that control is still open.
 
 ## 9. Failure modes
 
