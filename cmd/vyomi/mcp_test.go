@@ -295,7 +295,7 @@ func TestMCPStatus(t *testing.T) {
 			_, _ = w.Write([]byte(`{"active_space_id":"sp-1","space":{"name":"dev","provider":"aws","service_states":{"s3":{"buckets":{}}},
 				"cloudsim":{"summary":{"s3_bucket_count":2,"sqs_count":0,"total_resource_count":2}}}}`))
 		case "/api/runtime/readiness":
-			_, _ = w.Write([]byte(`{"ready_count":2,"total_count":12,"overall_pct":18,"backends":[]}`))
+			_, _ = w.Write([]byte(`{"ready_count":2,"total_count":3,"overall_pct":18,"services":[{"name":"simulator","status":"ready"},{"name":"postgres","status":"ready"},{"name":"vault","status":"loading"}]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -319,8 +319,11 @@ func TestMCPStatus(t *testing.T) {
 	if res := up["active_space"].(map[string]any)["resources"].(map[string]any); res["s3_bucket"] != float64(2) {
 		t.Errorf("non-zero resource counts should be kept: %v", res)
 	}
-	if !strings.Contains(string(raw), "NOT a tier limit") {
+	if !strings.Contains(string(raw), "Not a tier limit") {
 		t.Error("readiness must explain what it measures")
+	}
+	if nr := up["readiness"].(map[string]any)["not_reachable"].([]any); len(nr) != 1 || nr[0] != "vault" {
+		t.Errorf("readiness must name the unreachable backends, got %v", nr)
 	}
 }
 
