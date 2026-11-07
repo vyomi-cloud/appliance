@@ -107,7 +107,7 @@ CORES = [
     "cloudformation_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_vpn_core.py",
-    "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "vpc_lattice_dataplane.py", "ec2_ops_core.py", "ec2_gap_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
+    "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "vpc_lattice_dataplane.py", "ec2_ops_core.py", "ec2_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
     "netfw_core.py",
     "dnsfw_core.py",
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)

@@ -2189,7 +2189,11 @@ class AwsWireRouter:
                 from core import zeroetl_core
                 import types as _ty
                 _fn = zeroetl_core.dispatch_glue if svc == "glue" else zeroetl_core.dispatch_redshift_data
-                _st, _doc = _fn(self.rds, self.ddb, target, payload)
+                if svc == "glue":   # Data Catalog / crawlers (real S3 reads) / jobs -> core/glue_catalog_core; zero-ETL stays in zeroetl_core
+                    from core import glue_catalog_core
+                    _st, _doc = glue_catalog_core.dispatch(self.rds, self.s3, self.ddb, target, payload, fallback=_fn)
+                else:
+                    _st, _doc = _fn(self.rds, self.ddb, target, payload)
                 r = _ty.SimpleNamespace(status=_st, headers={"x-amzn-errortype": _doc["__type"]} if _st >= 400 else {}, body=_doc)
             elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
                 r = netfw.dispatch(self.vpc, target, payload)

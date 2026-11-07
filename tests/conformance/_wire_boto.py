@@ -1,6 +1,6 @@
 """Shared harness: a real boto3 client whose HTTP transport is the Nano/offline AwsWireRouter
 (no sockets). Same request bytes the SDK/CLI would send, answered by the same router code."""
-from urllib.parse import urlsplit, parse_qsl
+from urllib.parse import urlsplit, parse_qsl, unquote
 
 import boto3
 from botocore.awsrequest import AWSResponse
@@ -35,7 +35,7 @@ def make_clients(router=None):
             body = body.read()
         h = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in request.headers.items()}
         h["host"] = u.netloc
-        path = u.path + (("?" + u.query) if u.query else "")
+        path = unquote(u.path) + (("?" + u.query) if u.query else "")   # the HTTP server hands the router a decoded path
         out = router.handle(request.method, path, q, h, bytes(body))
         resp = AWSResponse(request.url, out["status"], {k: str(v) for k, v in (out.get("headers") or {}).items()},
                            _Raw(out["body"] if isinstance(out["body"], bytes) else str(out["body"]).encode()))
