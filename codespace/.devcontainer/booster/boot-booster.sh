@@ -42,7 +42,7 @@ arm_expiry() {
 }
 expire() {
   post /api/booster/session/ended "{\"codespace_id\":\"$CODESPACE\",\"reason\":\"ttl\"}"
-  docker compose -f "$COMPOSE" --profile link down 2>/dev/null || true
+  docker compose -f "$COMPOSE" --profile link --profile ai down 2>/dev/null || true
   date -u +%FT%TZ > "$RUN_DIR/EXPIRED"; log "session ended — stack stopped (idle timeout will stop the Codespace)."
 }
 
@@ -77,6 +77,38 @@ fetch_session() {
   log "WARNING: could not fetch a session token - the booster will refuse requests (fails closed)."; return 1
 }
 
+# AI pack: ask the simulator (it holds the RAM ledger) to ADMIT the configured models against the AI bucket; start the model
+# servers only for admitted ones. A refusal is logged with its reason and the booster still serves compute. Never blocks readiness.
+AI_MIN_FREE_GB="${VYOMI_AI_MIN_FREE_GB:-8}"
+start_ai() {
+  [ "${VYOMI_BOOSTER_AI:-1}" = "0" ] && { log "AI pack disabled (VYOMI_BOOSTER_AI=0)."; return 0; }
+  local plan free; plan=$(docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 5 http://localhost:9000/booster/ai/plan 2>/dev/null) \
+    || { log "AI pack: could not read the admission plan - not starting models."; return 0; }
+  free=$(df -BG --output=avail "$HOME" 2>/dev/null | tail -1 | tr -dc 0-9)
+  if [ -n "$free" ] && [ "$free" -lt "$AI_MIN_FREE_GB" ]; then log "AI pack: only ${free} GB free disk (< ${AI_MIN_FREE_GB}) - not pulling models."; return 0; fi
+  local vars; vars=$(printf '%s' "$plan" | python3 -c '
+import json, sys
+p = json.load(sys.stdin)
+for k, e in (p.get("errors") or {}).items():
+    print("echo " + json.dumps("AI pack: %s model refused: %s" % (k, e.get("message"))))
+if not p.get("ok"):
+    sys.exit(3)
+c, m = p["chat"], p.get("embed")
+print("export VYOMI_AI_CHAT_HF=%s VYOMI_AI_CHAT_CTX=%s VYOMI_BOOSTER_AI_MODEL=%s" % (c["hf"], c["ctx"], c["id"]))
+print("export VYOMI_AI_NEED_EMBED=%d" % (1 if m else 0))
+if m: print("export VYOMI_AI_EMBED_HF=%s VYOMI_AI_EMBED_CTX=%s" % (m["hf"], m["ctx"]))
+' 2>/dev/null); local rc=$?
+  eval "$(printf '%s\n' "$vars" | grep '^echo ')" 2>/dev/null
+  [ $rc -ne 0 ] && { log "AI pack: chat model not admitted - not starting model servers."; return 0; }
+  eval "$(printf '%s\n' "$vars" | grep '^export ')"
+  local svc="llm-chat llm"; [ "${VYOMI_AI_NEED_EMBED:-0}" = "1" ] && svc="llm-chat llm-embed llm"
+  docker compose -f "$COMPOSE" --profile ai up -d $svc && log "AI pack: starting ${VYOMI_BOOSTER_AI_MODEL} (first start downloads the model)."
+  ( for _ in $(seq 1 200); do
+      docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 3 http://llm:8080/health >/dev/null 2>&1 && { echo "[vyomi-booster] AI model ready."; exit 0; }
+      sleep 6; done; echo "[vyomi-booster] WARNING: AI model not ready after 20 min." ) &
+  disown 2>/dev/null || true
+}
+
 start_stack() {
   [ -f "$RUN_DIR/EXPIRED" ] && { log "session already expired — not starting."; return 1; }
   fetch_session || true
@@ -84,6 +116,7 @@ start_stack() {
   for _ in $(seq 1 60); do
     if docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 3 http://localhost:9000/healthz >/dev/null 2>&1; then
       post /api/booster/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
+      start_ai
       start_link
       log "booster ready."; return 0
     fi; sleep 3
