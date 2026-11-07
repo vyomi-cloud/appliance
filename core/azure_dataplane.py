@@ -378,6 +378,17 @@ def _cos_acct(sid: str, a: str) -> dict:
 async def _cosmos_handle(account: str, rest: str, request: Request) -> Response:
     method = request.method.upper()
     segs = [s for s in (rest or "").split("/") if s]
+    from core import wire_ingress as _wi
+    if _wi.is_unified("azure_cosmos"):
+        # v4 ngoff: the native Cosmos SDK (which lands here via the type=master rewrite in core/middleware.py) is served by the
+        # SAME core engine Nano and the v4 console use (core/azure_cosmos_core over the space-scoped AppStateCosmosStore), so
+        # dedicated-gateway caching, CMK envelope encryption, RU/s + network-rule enforcement behave identically offline.
+        hdrs = dict(request.headers)
+        if account and account != "_default" and "x-vyomi-account" not in {k.lower() for k in hdrs}:
+            hdrs["x-vyomi-account"] = account
+        out = _wi.dispatch_service("azure_cosmos", request.method, "/" + (rest or ""), dict(request.query_params), hdrs, await request.body())
+        return Response(content=out["body"], status_code=out["status"],
+                        headers={k: v for k, v in out["headers"].items() if k.lower() not in ("content-length", "transfer-encoding")})
     acct = _cos_acct(_sid(), account)
     try:
         import os

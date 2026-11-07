@@ -154,3 +154,75 @@ def test_sql_always_encrypted_over_offline_wire():
     _kvkey("PATCH", "/keys/cmk1", {"attributes": {"enabled": False}})
     r = Q("SELECT ssn FROM pat", columnEncryptionSetting="Enabled")
     assert r.status_code == 500 and "AZURE_KEY_VAULT" in r.json()["error"]["message"]
+
+
+# ───────────────────────────── Cosmos DB (dedicated gateway + CMK) with the real azure-cosmos SDK ─────────────────────────────
+def _hdr_transport(extra):
+    from tests.conformance._az_http_bridge import header_transport
+    return header_transport(extra)
+
+
+def test_cosmos_dedicated_gateway_cache_over_offline_wire(base):
+    from azure.cosmos import CosmosClient
+    _rg()
+    acct = f"{RG}/providers/Microsoft.DocumentDB/databaseAccounts/owdgw"
+    arm("PUT", acct, {"location": "eastus", "kind": "GlobalDocumentDB", "properties": {"databaseAccountOfferType": "Standard"}}, "2024-05-15")
+    seen = {}
+    hook = lambda hdrs, body=None: seen.update(hdrs=dict(hdrs))
+
+    def client(dedicated=False, max_age=None):
+        h = {"x-vyomi-account": "owdgw", **({"x-vyomi-endpoint": "dedicated"} if dedicated else {}),
+             **({"x-ms-dedicatedgateway-max-age": str(max_age)} if max_age is not None else {})}
+        return CosmosClient(base, credential="a2V5", transport=_hdr_transport(h), enable_endpoint_discovery=False)
+    std = client()
+    c = std.create_database("d").create_container("c", partition_key={"paths": ["/pk"], "kind": "Hash"})
+    c.upsert_item({"id": "1", "pk": "a", "v": 1})
+    with pytest.raises(Exception) as ei:                      # no gateway provisioned yet
+        client(True).get_database_client("d").get_container_client("c").read_item("1", "a")
+    assert "503" in str(ei.value) or "not available" in str(ei.value)
+    arm("PUT", acct + "/services/SqlDedicatedGateway",
+        {"properties": {"serviceType": "SqlDedicatedGateway", "instanceSize": "Cosmos.D4s", "instanceCount": 1}}, "2024-05-15")
+    cc = client(True, 60000).get_database_client("d").get_container_client("c")
+    cc.read_item("1", "a", response_hook=hook)
+    assert seen["hdrs"].get("x-ms-cosmos-cachehit") == "False"
+    cc.read_item("1", "a", response_hook=hook)
+    assert seen["hdrs"].get("x-ms-cosmos-cachehit") == "True" and float(seen["hdrs"].get("x-ms-request-charge")) == 0.0
+    sc = std.get_database_client("d").get_container_client("c")
+    sc.upsert_item({"id": "1", "pk": "a", "v": 2})             # behind the gateway: cached read stays stale
+    assert cc.read_item("1", "a", response_hook=hook)["v"] == 1
+    sc.read_item("1", "a", response_hook=hook)
+    assert "x-ms-cosmos-cachehit" not in seen["hdrs"]          # the standard endpoint is never cached
+    bp = client(True, 0).get_database_client("d").get_container_client("c")
+    assert bp.read_item("1", "a", response_hook=hook)["v"] == 2     # max-age 0 bypasses
+    cc.upsert_item({"id": "1", "pk": "a", "v": 3})
+    assert cc.read_item("1", "a", response_hook=hook)["v"] == 3     # write-through
+
+
+def test_cosmos_cmk_encryption_over_offline_wire(base):
+    from azure.core.exceptions import HttpResponseError
+    from azure.cosmos import CosmosClient
+    _rg()
+    assert _kvkey("POST", "/keys/cmkc/create", {"kty": "RSA"}).status_code == 200
+    arm("PUT", f"{RG}/providers/Microsoft.KeyVault/vaults/owkv", {"location": "eastus", "properties": {"tenantId": "t", "sku": {"family": "A", "name": "standard"}}}, "2023-07-01")
+    key = "https://owkv.vault.azure.net/keys/cmkc"
+    arm("PUT", f"{RG}/providers/Microsoft.DocumentDB/databaseAccounts/owcmk",
+        {"location": "eastus", "identity": {"type": "SystemAssigned"},
+         "properties": {"keyVaultKeyUri": key, "defaultIdentity": "SystemAssignedIdentity"}}, "2024-05-15")
+    cl = CosmosClient(base, credential="a2V5", transport=_hdr_transport({"x-vyomi-account": "owcmk"}), enable_endpoint_discovery=False)
+    c = cl.create_database("cd").create_container("cc", partition_key={"paths": ["/pk"], "kind": "Hash"})
+    c.upsert_item({"id": "1", "pk": "a", "secret": "TOP-SECRET-VALUE"})
+    assert c.read_item("1", "a")["secret"] == "TOP-SECRET-VALUE"
+    from core import wire_ingress as _wi
+    from core import app_context as ctx
+    tok = ctx.REQUEST_PROVIDER.set("azure")          # the store is a durable slot of the Azure space
+    try:
+        docs = json.dumps(_wi.appliance_router().az_cosmos.docs, default=str)
+    finally:
+        ctx.REQUEST_PROVIDER.reset(tok)
+    assert "$cmk" in docs and "TOP-SECRET" not in docs     # only the CMK envelope is at rest
+    _kvkey("PATCH", "/keys/cmkc", {"attributes": {"enabled": False}})
+    with pytest.raises(HttpResponseError) as ei:
+        c.read_item("1", "a")
+    assert ei.value.status_code == 403
+    _kvkey("PATCH", "/keys/cmkc", {"attributes": {"enabled": True}})
+    assert c.read_item("1", "a")["secret"] == "TOP-SECRET-VALUE"
