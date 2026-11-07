@@ -147,7 +147,7 @@ CORES = [
     "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
     "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
     "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)
-    "azure_security_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
+    "azure_security_core.py", "azure_attackpath_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
     "azure_keyvault_x509_core.py",          # Azure Key Vault certificates (real self-signed X.509 + RSA) — vendored VERBATIM
     "azure_arm_ext_core.py",                        # Azure ARM: locks, managed identity, resource health, NICs/public IPs, schedules, run commands, restore points — vendored VERBATIM
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)

@@ -124,13 +124,13 @@
  },
  "azure.defender.other": {
   "tier": "pro",
-  "title": "Getting started, Attack path analysis, Cloud Security Explorer, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions, Workflow automation",
+  "title": "Getting started, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions, Workflow automation",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "These pages depend on Defender CSPM's cloud security graph, connected DevOps/data/firewall services or Logic Apps automation, none of which Vyomi simulates."
+   "These pages depend on connected DevOps/data/firewall services or Logic Apps automation, none of which Vyomi simulates (Attack path analysis and Cloud Security Explorer are real; see azure.defender.attack_paths)."
   ]
  },
  "azure.defender.image_vulnerabilities": {
@@ -149,6 +149,19 @@
   ],
   "tests": [
    "tests/conformance/test_azure_defender_alerts.py"
+  ]
+ },
+ "azure.defender.attack_paths": {
+  "title": "Attack path analysis and Cloud Security Explorer (Defender CSPM)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A security graph is built live from ARM state: internet exposure through NIC/subnet NSG + public IP, managed identities of VMs/App Services/AKS, role assignments (scope inheritance), and the native rule engine's unhealthy assessments. Paths are configuration-derived (can, not did): there is no traffic, process or vulnerability-on-host telemetry, and only internet->VM->identity->{Key Vault, Storage, SQL, Cosmos} paths are modelled. Gated by the Defender CSPM plan like Azure."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_attackpath.py"
   ]
  }
 }
