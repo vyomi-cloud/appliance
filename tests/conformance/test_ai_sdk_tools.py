@@ -149,9 +149,9 @@ def main():
         fake.handler = agent
         try:
             br.converse(modelId="amazon.nova-lite-v1:0", messages=msgs[:1], guardrailConfig={"guardrailIdentifier": "g", "guardrailVersion": "1"})
-            check("guardrailConfig is rejected, not ignored", False)
+            check("guardrailConfig naming an unknown guardrail is rejected, not ignored", False)
         except Exception as e:
-            check("guardrailConfig is rejected, not ignored", "ValidationException" in str(e), e)
+            check("guardrailConfig naming an unknown guardrail is rejected, not ignored", "ResourceNotFoundException" in str(e), e)
         # Claude InvokeModel tool use
         body = {"anthropic_version": "bedrock-2023-05-31", "max_tokens": 200, "messages": [{"role": "user", "content": "weather in Paris?"}],
                 "tools": [{"name": "get_weather", "description": "w", "input_schema": WX}]}

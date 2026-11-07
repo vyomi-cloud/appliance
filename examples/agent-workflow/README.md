@@ -7,6 +7,7 @@ A small tool-calling agent you can copy. It answers customer messages with three
 |---|---|
 | `triage_tools.py` | the shared part: `get_order_status`, `search_kb` (embeddings + cosine search), `create_ticket`, a JSON "database" (local file, or an S3 object), the system prompt, 3 scenarios, a CLI |
 | `agent_aws.py` | boto3 `bedrock-runtime` **Converse** tool loop (`toolUse` / `toolResult`), Titan embeddings (primary) |
+| `agent_aws_guardrails.py` | boto3 Guardrails (CreateGuardrail / ApplyGuardrail / Converse `guardrailConfig`) + real `InvokeModelWithResponseStream` token streaming (Dev Simplified filters) |
 | `agent_gcp.py` | `google-genai` with `vertexai=True`, manual function-calling loop, `text-embedding-005` |
 | `agent_azure.py` | `openai.AzureOpenAI` `tools=` loop, embeddings deployment |
 | `run_demo.py` / `run_demo.sh` | starts the local Vyomi AI wire server (`core.wire_ingress`) in front of a real local model and can run all three agents |
@@ -91,3 +92,8 @@ so it fits with an embedding model loaded beside it, while a 7B Q4 does not. CPU
 
 `tests/conformance/test_example_agent_workflow.py` imports and runs all three drivers end to end through the wire server. **Its model is a
 scripted fake** (CI cannot run a 3B model); it proves the example code and wire plumbing only. Real-model results: `SAMPLE-RUN.md`.
+
+## More agent lanes (Dev Simplified, same seam)
+- **Gemini Developer API**: `genai.Client(api_key="x", http_options=types.HttpOptions(base_url=ENDPOINT))` - generateContent, streaming, function calling, embeddings, `models.list/get`.
+- **Azure OpenAI Responses + Assistants**: `AzureOpenAI(...).responses.create(...)` (tools, `previous_response_id`, streaming) and `client.beta.assistants/threads/runs` (function tools, `submit_tool_outputs`).
+- Limits are listed per lane in `core/capabilities/*` and proven by `tests/conformance/test_ai_agent_lanes.py`.

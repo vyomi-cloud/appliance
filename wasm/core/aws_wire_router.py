@@ -122,6 +122,8 @@ def _gcp_service(path):
         return "gcp-run"
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/publishers/[^/]+/models/[^/:]+:[A-Za-z]+$", path):
         return "gcp-aiplatform"   # Vertex AI publisher models (Gemini generateContent/countTokens/embed) -> core/ai_models_core over the local-LLM seam
+    if re.match(r"^/v1(beta)?/models(/[^/:]+(:[A-Za-z]+)?)?/?$", path):
+        return "gcp-aiplatform"   # Gemini Developer API alias (generativelanguage.googleapis.com; API-key auth) -> same seam as Vertex
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1", "/storage/website/")):
         return "gcp-gcs"
     if re.match(r"^/v[12]/projects/[^/]+/traces([/:]|$)", path) or re.match(r"^/v2/projects/[^/]+/traces/", path) \
@@ -346,7 +348,7 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
-    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/", p0):
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/token$", p0):
         return "az-graph"

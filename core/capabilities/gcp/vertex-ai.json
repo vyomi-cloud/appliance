@@ -1,5 +1,5 @@
 {
- "$doc": "Vyomi capability registry \u2014 GCP Vertex AI (Gemini publisher models over the local-LLM seam). Proven by tests/conformance/test_capabilities.py.",
+ "$doc": "Vyomi capability registry — GCP Vertex AI (Gemini publisher models over the local-LLM seam). Proven by tests/conformance/test_capabilities.py.",
  "gcp.vertex-ai.gemini": {
   "title": "Gemini generateContent / countTokens / streamGenerateContent",
   "level": {
@@ -7,9 +7,10 @@
    "offline": "limited"
   },
   "limitations": [
-   "One small local model answers every Gemini model id (llama.cpp on the appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts only: no images/audio/video, tools/function calling, grounding, safety settings or tuning."
+   "One small local model answers every Gemini model id (llama.cpp on the booster/appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts, function calling (functionDeclarations, automatic function calling via google-genai) and responseSchema JSON output work; images/audio/video, grounding/Google Search, code execution, safety settings and tuning are rejected."
   ],
   "tests": [
+   "tests/conformance/test_ai_sdk_tools.py",
    "tests/conformance/test_local_llm_seam.py"
   ],
   "probe": {
@@ -150,6 +151,19 @@
   ],
   "tests": [
    "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.gemini-developer-api": {
+  "title": "Gemini Developer API (generativelanguage.googleapis.com, API key) - Dev Simplified alias",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Alias of the Vertex Gemini lane for google-genai / REST clients pointed at base_url with an API key: /v1beta|/v1 models list/get, generateContent, streamGenerateContent (alt=sse), countTokens, embedContent, batchEmbedContents. A missing key returns 403 PERMISSION_DENIED; the key itself is not validated. Same model, limits and rejected features as the Vertex Gemini lane; no Files API, caching, Live API, tuning or Imagen/Veo."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py"
   ]
  }
 }
