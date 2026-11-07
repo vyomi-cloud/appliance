@@ -190,22 +190,22 @@ export function Training({ query }) {
       <PageHeader title="Training" actions={<CapabilityBadge id="gcp.vertex-ai.jobs" />} />
       <Tabbed query={query} tabs={[
         { id: "pipelines", label: "Training pipelines", render: () => (
-          <ResourceList coll="trainingPipelines" title="Training pipelines" singular="training pipeline" poll cap="gcp.vertex-ai.jobs"
+          <ResourceList coll="trainingPipelines" title="Training pipelines" singular="training pipeline" poll
             fields={[nameField, { key: "model", label: "Output model name" }, { key: "image", label: "Training container image", default: IMG }]}
             build={(v) => ({ body: { displayName: v.displayName, trainingTaskDefinition: "gs://google-cloud-aiplatform/schema/trainingjob/definition/custom_task_1.0.0.yaml", trainingTaskInputs: { workerPoolSpecs: jobPool({ machine: "n1-standard-4", replicas: 1, image: v.image }) }, modelToUpload: { displayName: v.model || `${v.displayName}-model` } } })}
             columns={[stateCol, { id: "dur", header: "Elapsed", cell: dur }, { id: "model", header: "Model", cell: (i) => (i.modelToUpload?.name ? lastSeg(i.modelToUpload.name) : "—") }]} actions={[cancel]} />) },
         { id: "custom", label: "Custom jobs", render: () => (
-          <ResourceList coll="customJobs" title="Custom jobs" singular="custom job" poll cap="gcp.vertex-ai.jobs"
+          <ResourceList coll="customJobs" title="Custom jobs" singular="custom job" poll
             fields={[nameField, { key: "machine", label: "Machine type", options: ["n1-standard-4", "n1-standard-8", "n1-highmem-8", "a2-highgpu-1g"], default: "n1-standard-4" }, { key: "replicas", label: "Replica count", default: "1" }, { key: "image", label: "Container image", default: IMG }]}
             build={(v) => ({ body: { displayName: v.displayName, jobSpec: { workerPoolSpecs: jobPool(v) } } })}
             columns={[stateCol, { id: "dur", header: "Elapsed", cell: dur }, { id: "m", header: "Machine", cell: (i) => i.jobSpec?.workerPoolSpecs?.[0]?.machineSpec?.machineType }]} actions={[cancel]} />) },
         { id: "hpt", label: "Hyperparameter tuning", render: () => (
-          <ResourceList coll="hyperparameterTuningJobs" title="Hyperparameter tuning jobs" singular="tuning job" poll cap="gcp.vertex-ai.jobs"
+          <ResourceList coll="hyperparameterTuningJobs" title="Hyperparameter tuning jobs" singular="tuning job" poll
             fields={[nameField, { key: "metric", label: "Metric ID", default: "accuracy" }, { key: "goal", label: "Goal", options: ["MAXIMIZE", "MINIMIZE"], default: "MAXIMIZE" }, { key: "trials", label: "Max trial count", default: "4" }, { key: "image", label: "Container image", default: IMG }]}
             build={(v) => ({ body: { displayName: v.displayName, maxTrialCount: +v.trials || 4, parallelTrialCount: 1, studySpec: { metrics: [{ metricId: v.metric, goal: v.goal }], parameters: [{ parameterId: "learning_rate", doubleValueSpec: { minValue: 0.001, maxValue: 0.1 } }] }, trialJobSpec: { workerPoolSpecs: jobPool({ machine: "n1-standard-4", replicas: 1, image: v.image }) } } })}
             columns={[stateCol, { id: "t", header: "Max trials", cell: (i) => i.maxTrialCount }]} actions={[cancel]} />) },
         { id: "tuning", label: "Model tuning", render: () => (
-          <ResourceList coll="tuningJobs" title="Tuning jobs" singular="tuning job" poll cap="gcp.vertex-ai.jobs"
+          <ResourceList coll="tuningJobs" title="Tuning jobs" singular="tuning job" poll
             fields={[nameField, { key: "base", label: "Base model", options: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"], default: "gemini-2.0-flash" }, { key: "data", label: "Training dataset (gs://)", default: "gs://my-bucket/train.jsonl" }]}
             build={(v) => ({ body: { displayName: v.displayName, baseModel: v.base, supervisedTuningSpec: { trainingDatasetUri: v.data } } })}
             columns={[stateCol, { id: "b", header: "Base model", cell: (i) => i.baseModel }]} actions={[cancel]} />) },
@@ -252,19 +252,19 @@ export function Workbench({ query }) {
       <PageHeader title="Workbench" actions={<CapabilityBadge id="gcp.vertex-ai.notebooks" />} />
       <Tabbed query={query} tabs={[
         { id: "instances", label: "Instances", render: () => (
-          <ResourceList coll="instances" v2 title="Instances" singular="notebook instance" cap="gcp.vertex-ai.notebooks"
+          <ResourceList coll="instances" v2 title="Instances" singular="notebook instance"
             fields={[{ key: "id", label: "Instance name", helper: "Lowercase letters, numbers and hyphens" }, { key: "machine", label: "Machine type", options: ["e2-standard-4", "n1-standard-4", "n1-standard-8", "g2-standard-4"], default: "n1-standard-4" }]}
             build={(v) => ({ body: { gceSetup: { machineType: v.machine } }, idKey: "instanceId", id: v.id })}
             nameOf={(i) => api.shortId(i.name)} hideId
             columns={[{ id: "state", header: "Status", cell: (i) => <StateChip s={i.state} /> }, { id: "m", header: "Machine type", cell: (i) => i.gceSetup?.machineType }, { id: "jl", header: "JupyterLab", cell: (i) => (i.state === "ACTIVE" ? <Link href={`https://${i.proxyUri}`} target="_blank">Open JupyterLab</Link> : "—") }]}
             actions={power} />) },
         { id: "runtimes", label: "Colab runtimes", render: () => (
-          <ResourceList coll="notebookRuntimes" title="Runtimes" singular="runtime" cap="gcp.vertex-ai.notebooks"
+          <ResourceList coll="notebookRuntimes" title="Runtimes" singular="runtime"
             fields={[nameField, { key: "template", label: "Runtime template", default: "" }]}
             build={(v) => ({ body: { displayName: v.displayName, notebookRuntimeTemplateRef: v.template ? { notebookRuntimeTemplate: v.template } : undefined } })}
             columns={[{ id: "state", header: "Status", cell: (i) => <StateChip s={i.runtimeState} /> }]} actions={power} />) },
         { id: "templates", label: "Runtime templates", render: () => (
-          <ResourceList coll="notebookRuntimeTemplates" title="Runtime templates" singular="runtime template" cap="gcp.vertex-ai.notebooks"
+          <ResourceList coll="notebookRuntimeTemplates" title="Runtime templates" singular="runtime template"
             fields={[nameField, { key: "machine", label: "Machine type", options: ["e2-standard-4", "n1-standard-4", "n1-standard-8"], default: "e2-standard-4" }]}
             build={(v) => ({ body: { displayName: v.displayName, machineSpec: { machineType: v.machine } } })}
             columns={[{ id: "m", header: "Machine type", cell: (i) => i.machineSpec?.machineType }]} />) },
@@ -280,14 +280,14 @@ export function VectorSearch({ query }) {
       <PageHeader title="Vector Search" actions={<CapabilityBadge id="gcp.vertex-ai.vector-search" />} />
       <Tabbed query={query} tabs={[
         { id: "indexes", label: "Indexes", render: () => (
-          <ResourceList coll="indexes" title="Indexes" singular="index" cap="gcp.vertex-ai.vector-search"
+          <ResourceList coll="indexes" title="Indexes" singular="index"
             fields={[nameField, { key: "dims", label: "Dimensions", default: "128" }, { key: "dist", label: "Distance measure", options: ["COSINE_DISTANCE", "DOT_PRODUCT_DISTANCE", "SQUARED_L2_DISTANCE", "L1_DISTANCE"], default: "COSINE_DISTANCE" }]}
             build={(v) => ({ body: { displayName: v.displayName, indexUpdateMethod: "STREAM_UPDATE", metadata: { config: { dimensions: +v.dims, distanceMeasureType: v.dist, approximateNeighborsCount: 10, algorithmConfig: { treeAhConfig: {} } } } } })}
             columns={[{ id: "dim", header: "Dimensions", cell: (i) => i.metadata?.config?.dimensions }, { id: "vc", header: "Vectors", cell: (i) => i.indexStats?.vectorsCount || "0" }, { id: "dist", header: "Distance", cell: (i) => i.metadata?.config?.distanceMeasureType }, { id: "dep", header: "Deployed", cell: (i) => (i.deployedIndexes || []).length }]}
             actions={[{ label: "Upsert datapoints", dialog: ({ item, onClose }) => <UpsertDialog index={item} onClose={onClose} /> },
               { label: "Remove datapoint…", dialog: ({ item, onClose }) => <FormDialog open title="Remove datapoints" submitLabel="Remove" fields={[{ key: "ids", label: "Datapoint IDs (comma separated)" }]} onClose={onClose} onSubmit={(v) => api.verb(item.name, "removeDatapoints", { datapointIds: v.ids.split(",").map((s) => s.trim()).filter(Boolean) })} /> }]} />) },
         { id: "endpoints", label: "Index endpoints", render: () => (
-          <ResourceList coll="indexEndpoints" title="Index endpoints" singular="index endpoint" cap="gcp.vertex-ai.vector-search"
+          <ResourceList coll="indexEndpoints" title="Index endpoints" singular="index endpoint"
             fields={[nameField]} build={(v) => ({ body: { displayName: v.displayName, publicEndpointEnabled: true } })}
             columns={[{ id: "dep", header: "Deployed indexes", cell: (i) => (i.deployedIndexes || []).map((d) => d.id).join(", ") || "—" }]}
             actions={[{ label: "Deploy index", dialog: ({ item, onClose }) => <DeployIndexDialog endpoint={item} onClose={onClose} /> },
@@ -304,20 +304,20 @@ export function FeatureStore({ query }) {
       <PageHeader title="Feature Store" actions={<CapabilityBadge id="gcp.vertex-ai.feature-store" />} />
       <Tabbed query={query} tabs={[
         { id: "groups", label: "Feature groups", render: () => (
-          <ResourceList coll="featureGroups" title="Feature groups" singular="feature group" cap="gcp.vertex-ai.feature-store" hideId
+          <ResourceList coll="featureGroups" title="Feature groups" singular="feature group" hideId
             fields={[{ key: "id", label: "Feature group ID" }, { key: "table", label: "BigQuery source", default: "bq://my-project.my_dataset.my_table" }]}
             build={(v) => ({ body: { bigQuery: { bigQuerySource: { inputUri: v.table } } }, idKey: "featureGroupId", id: v.id })}
             nameOf={(i) => api.shortId(i.name)} columns={[{ id: "src", header: "Source", cell: (i) => i.bigQuery?.bigQuerySource?.inputUri }]} />) },
         { id: "features", label: "Features", render: () => (
-          <ResourceList coll="features" title="Features" singular="feature" parentColl="featureGroups" parentLabel="Feature group" cap="gcp.vertex-ai.feature-store" noRegion hideId
+          <ResourceList coll="features" title="Features" singular="feature" parentColl="featureGroups" parentLabel="Feature group" noRegion hideId
             fields={[{ key: "id", label: "Feature ID" }, { key: "description", label: "Description" }]}
             build={(v) => ({ body: { description: v.description }, idKey: "featureId", id: v.id })} nameOf={(i) => api.shortId(i.name)} />) },
         { id: "stores", label: "Online stores", render: () => (
-          <ResourceList coll="featureOnlineStores" title="Online stores" singular="online store" cap="gcp.vertex-ai.feature-store" hideId
+          <ResourceList coll="featureOnlineStores" title="Online stores" singular="online store" hideId
             fields={[{ key: "id", label: "Online store ID" }]} build={(v) => ({ body: { optimized: {} }, idKey: "featureOnlineStoreId", id: v.id })}
             nameOf={(i) => api.shortId(i.name)} columns={[{ id: "type", header: "Type", cell: (i) => (i.optimized ? "Optimized" : "Bigtable") }]} />) },
         { id: "views", label: "Feature views", render: () => (
-          <ResourceList coll="featureViews" title="Feature views" singular="feature view" parentColl="featureOnlineStores" parentLabel="Online store" cap="gcp.vertex-ai.feature-store" noRegion hideId
+          <ResourceList coll="featureViews" title="Feature views" singular="feature view" parentColl="featureOnlineStores" parentLabel="Online store" noRegion hideId
             fields={[{ key: "id", label: "Feature view ID" }, { key: "group", label: "Feature group (optional)" }]}
             build={(v) => ({ body: v.group ? { featureRegistrySource: { featureGroups: [{ featureGroupId: v.group, featureIds: [] }] } } : {}, idKey: "featureViewId", id: v.id })} nameOf={(i) => api.shortId(i.name)} />) },
       ]} />
@@ -333,23 +333,23 @@ export function Experiments({ query }) {
       <PageHeader title="Experiments" actions={<CapabilityBadge id="gcp.vertex-ai.experiments" />} />
       <Tabbed query={query} tabs={[
         { id: "experiments", label: "Experiments", render: () => (
-          <ResourceList coll="contexts" title="Experiments" singular="experiment" fixedParent={mstore} noRegion cap="gcp.vertex-ai.experiments" hideId
+          <ResourceList coll="contexts" title="Experiments" singular="experiment" fixedParent={mstore} noRegion hideId
             query={{ filter: 'schema_title="system.Experiment"' }}
             fields={[{ key: "id", label: "Experiment name", helper: "Lowercase letters, numbers and hyphens" }, { key: "description", label: "Description" }]}
             build={(v) => ({ body: { displayName: v.id, description: v.description, schemaTitle: "system.Experiment" }, idKey: "contextId", id: v.id })}
             nameOf={(i) => i.displayName || api.shortId(i.name)} columns={[{ id: "d", header: "Description", cell: (i) => i.description || "—" }]} />) },
         { id: "artifacts", label: "Artifacts", render: () => (
-          <ResourceList coll="artifacts" title="Artifacts" singular="artifact" fixedParent={mstore} noRegion cap="gcp.vertex-ai.experiments"
+          <ResourceList coll="artifacts" title="Artifacts" singular="artifact" fixedParent={mstore} noRegion
             fields={[nameField, { key: "uri", label: "URI", default: "gs://my-bucket/artifact" }, { key: "type", label: "Schema", options: ["system.Artifact", "system.Dataset", "system.Model", "system.Metrics"], default: "system.Artifact" }]}
             build={(v) => ({ body: { displayName: v.displayName, uri: v.uri, schemaTitle: v.type } })}
             columns={[{ id: "t", header: "Type", cell: (i) => i.schemaTitle }, { id: "u", header: "URI", cell: (i) => i.uri || "—" }]} />) },
         { id: "executions", label: "Executions", render: () => (
-          <ResourceList coll="executions" title="Executions" singular="execution" fixedParent={mstore} noRegion cap="gcp.vertex-ai.experiments"
+          <ResourceList coll="executions" title="Executions" singular="execution" fixedParent={mstore} noRegion
             fields={[nameField, { key: "state", label: "State", options: ["COMPLETE", "RUNNING", "FAILED", "CACHED"], default: "COMPLETE" }]}
             build={(v) => ({ body: { displayName: v.displayName, state: v.state, schemaTitle: "system.ContainerExecution" } })}
             columns={[{ id: "s", header: "State", cell: (i) => <StateChip s={i.state} /> }]} />) },
         { id: "tensorboards", label: "TensorBoard", render: () => (
-          <ResourceList coll="tensorboards" title="TensorBoard instances" singular="TensorBoard instance" cap="gcp.vertex-ai.experiments"
+          <ResourceList coll="tensorboards" title="TensorBoard instances" singular="TensorBoard instance"
             fields={[nameField]} build={(v) => ({ body: { displayName: v.displayName } })} />) },
       ]} />
     </>
