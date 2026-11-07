@@ -3,7 +3,7 @@
  * disclaimer in a page — wrap the section in <CapabilityContainer id=…> instead.
  *
  *   full           → no badge
- *   limited        → "Dev-ready" badge + popover with the limitations
+ *   limited        → "Dev Simplified" badge + popover with the limitations
  *   config_only    → "Config only" badge + popover; saves add "not enforced" to the notice
  *   not_simulated  → the whole section becomes the honest Not-simulated panel
  */
@@ -54,9 +54,9 @@ export function capability(id) {
   return { ...e, id, level: e.level?.[SUBSTRATE] || e.level?.offline || "not_simulated" };
 }
 
-const LABEL = { limited: "Dev-ready", config_only: "Config only" };
+const LABEL = { limited: "Dev Simplified", config_only: "Config only" };
 const DEFAULT_NOTE = {
-  limited: "Ready for building and testing your app against this API. Where Vyomi differs from the real cloud, it is listed below.",
+  limited: "A simplified version of this service, built for developing and testing your app. Where Vyomi differs from the real cloud, it is listed below.",
   config_only: "Vyomi stores this setting and returns it from the API exactly as configured, but does not enforce it.",
 };
 
