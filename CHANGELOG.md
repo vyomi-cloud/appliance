@@ -21,6 +21,7 @@ Major release. The first release built from the v4 line: about 1,450 commits on 
 - **Azure operations tooling.** Network Watcher packet capture backed by real flows (pcap into storage), Log Analytics Workbooks that run KQL query items, linked storage accounts, computer groups and workspace Diagnose, and Resource Group force delete with Insights; a Resource Graph route is served by the Nano service worker.
 - **Honest labels.** Sections that are not simulated now read "Coming soon" instead of a bare "Not simulated" (AWS, GCP, Azure).
 - **Booster terms and runner-LLM spike.** A Booster terms-of-use draft (60-minute idle destroy, limits, acceptable use) and a runner-hosted LLM mesh spike (eager runner pool, rotation, idle destroy) are included; the runner LLM mesh is OFF by default and is not part of the supported booster.
+- **One AI model catalogue.** All AI consoles (Bedrock, Vertex AI, Azure OpenAI) list only the 10 mesh models from the shared catalogue (`core/ai_model_catalog.py`), so a model shown is a model the booster can serve.
 - **AI agent lanes.** Bedrock InvokeModel streaming and Guardrails, a Gemini Developer API alias, and Azure OpenAI Responses and Assistants run on the shared local-model seam (tools, structured output and streaming included).
 
 ### Fixes — AWS
