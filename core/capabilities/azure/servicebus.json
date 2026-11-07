@@ -96,19 +96,7 @@
     "tests/cli/azure-netenforce-cli-smoke.sh"
    ]
   },
-  "azure.servicebus.namespace.encryption": {
-    "title": "Encryption (customer-managed key)",
-    "level": {
-      "nano": "config_only",
-      "offline": "config_only"
-    },
-    "limitations": [
-      "Premium namespaces only; requires a managed identity and a Key Vault that exists in this subscription. The key is looked up in the Key Vault keys data plane (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled); that store is one keyspace shared by all vaults, so the lookup is by key name, not per vault; messages are not re-encrypted or blocked when the key is disabled."
-    ],
-    "tests": [
-      "tests/conformance/test_azure_cfgext_core.py"
-    ]
-  },
+  "azure.servicebus.namespace.encryption": {"title": "Encryption (customer-managed key)", "level": {"nano": "limited", "offline": "config_only"}, "limitations": ["Data is envelope-encrypted at rest: a per-store data-encryption key is wrapped by the Key Vault key (wrapKey); requests unwrap it (unwrapKey) and re-seal under the key's latest version, so rotation re-wraps. Disabling, expiring or deleting the key makes every request fail 403 and the data stays ciphertext until the key is usable again. Message bodies are sealed (queues, topics, subscription copies, dead-letter); the namespace is resolved from x-vyomi-namespace, the *.servicebus.windows.net host or the only CMK namespace because the REST data wire carries no namespace. AMQP is not simulated. Offline appliance: not verified."], "tests": ["tests/conformance/test_azure_cmk_enforced.py", "tests/conformance/test_azure_cfgext_core.py", "tests/conformance/test_azure_cmk_keylookup.py"]},
   "azure.servicebus.namespace.georecovery": {
     "title": "Geo-disaster recovery (paired namespaces + alias failover)",
     "level": { "nano": "limited", "offline": "limited" },

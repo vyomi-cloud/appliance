@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 from core import azure_keyvault_keys_core as kv_keys
 from core import azure_sql_ext_core as _ext
 from core import azure_netaccess as _netaccess
+from core import azure_sql_security_core as _sec
 from core.sql_store import SqlStore
 
 
@@ -184,6 +185,7 @@ def _delete_database(store: SqlStore, server: str, database: str) -> AzureSqlRes
     if not store.instance_exists(db_id):
         return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
     store.db_instances.pop(db_id, None)
+    _sec.forget(store, db_id)
     srv = _servers(store).get(server)
     if srv and database in srv["databases"]:
         srv["databases"].remove(database)
@@ -257,7 +259,8 @@ def query_insights(store: SqlStore, server: str, database: str, window_s: float 
                          "maxMs": lats[-1] if lats else 0, "totalMs": round(sum(lats), 3), "sizeBytes": _db_size_bytes(store, db_id)},
             "topQueries": top[:25], "timeline": timeline,
             "audit": [{"eventTime": r["ts"], "actionName": "BATCH COMPLETED", "succeeded": r["ok"], "statement": r["sql"],
-                       "durationMs": r["ms"], "rowCount": r["rows"], "errorMessage": r["error"]} for r in reversed(ring[-200:])]}
+                       "durationMs": r["ms"], "rowCount": r["rows"], "errorMessage": r["error"],
+                       "dataSensitivityInformation": r.get("sensitivity"), "maskedColumns": r.get("masked"), "serverPrincipalName": r.get("login")} for r in reversed(ring[-200:])]}
 
 
 def execute_sql(store: SqlStore, server: str, database: str, sql: str,
@@ -354,9 +357,38 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
                         f"size of {int(max_size)} bytes (Error 40544). Partition or delete "
                         "data, drop indexes, or increase the maximum size.")
 
-    result = execute_sql(store, server, database, sql, payload.get("params"))
+    # ── security engine: GRANT/REVOKE UNMASK, ledger guards, Always Encrypted driver emulation ──
+    hd = {str(k).lower(): v for k, v in (headers or {}).items()}
+    login = str(hd.get("x-vyomi-sql-login") or payload.get("login") or "")
+    admin = _sec.admin_login(arm_state, server)
+    is_admin = (not login) or bool(admin and login.lower() == admin.lower())
+    ae_on = str(payload.get("columnEncryptionSetting") or hd.get("x-vyomi-column-encryption") or "").lower() in ("enabled", "on", "true")
+    run_sql, run_params, lctx, aectx = sql, payload.get("params"), None, None
+    try:
+        perm = _sec.handle_permission(store, db_id, sql, is_admin) if store.instance_exists(db_id) else None
+        if perm is not None:
+            return _json(200, perm)
+        if store.instance_exists(db_id):
+            run_sql, lctx = _sec.ledger_pre(store, db_id, arm_state, server, database, sql)
+            run_params, aectx = _sec.ae_pre(store, db_id, kv_store, run_sql, payload.get("params"), ae_on)
+    except _sec.SecError as e:
+        return _err(e.status, e.code, e.message)
+
+    result = execute_sql(store, server, database, run_sql, run_params)
     if not result.get("ok"):
         return _err(400, result.get("code", "SQLError"), result.get("message", ""))
+    try:
+        _sec.ledger_post(store, db_id, lctx, sql)
+        _sec.ae_post(store, db_id, kv_store, run_sql, result, aectx, ae_on)
+        sens = _sec.sensitivity_for(store, db_id, arm_state, server, database, run_sql, result)
+        masked = _sec.apply_masking(store, db_id, arm_state, server, database, run_sql, result, login, is_admin)
+    except _sec.SecError as e:
+        return _err(e.status, e.code, e.message)
+    ring = _qrings(store).get(db_id)
+    if ring and (sens or masked):
+        ring[-1]["sensitivity"] = sens
+        ring[-1]["masked"] = masked
+        ring[-1]["login"] = login or admin or "dbo"
 
     if is_w:
         sqlbk.post_write(store, arm_state, server, database, sql, payload.get("params"))
@@ -536,6 +568,8 @@ def dispatch(store: SqlStore, method: str, path: str,
                 return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
             return _json(200, out)
         db_id0 = _db_id(server, database)
+        if len(segs) >= 6 and segs[4] == "security":
+            return _security_routes(store, method, segs, query or {}, body, arm_state, kv_store, server, database, db_id0)
         if len(segs) >= 5 and segs[4] in ("watcher", "sync"):
             if not store.instance_exists(db_id0):
                 return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
@@ -669,3 +703,48 @@ def import_database(store: SqlStore, server: str, database: str, blob_store, sto
     except Exception as e:  # noqa: BLE001
         return False, "ImportFailed", f"Import failed: {e}"
     return True, "", ""
+
+
+# ── security engine routes (core/azure_sql_security_core.py) ────────────────────────────────────────────
+#   GET  .../security/discovery                       scan real tables: name + sample-data pattern recommendations + current labels
+#   GET  .../security/ledger[/history?table=T]        ledger tables, blocks, digests / a table's ledger history
+#   POST .../security/ledger/digest | verify          generate a digest / verify chain + digests + table state
+#   GET  .../security/ae                              Always Encrypted metadata
+#   PUT  .../security/ae/cmk/{name}  {keyPath}        column master key (Key Vault key)
+#   PUT  .../security/ae/cek/{name}  {cmk}            column encryption key (wrapped by the CMK via Key Vault)
+#   POST .../security/ae/encrypt {table,column,cek,encryptionType}   encrypt a column in place
+def _security_routes(store, method, segs, query, body, arm_state, kv_store, server, database, db_id):
+    if not store.instance_exists(db_id):
+        return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
+    try:
+        payload = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        payload = {}
+    area, rest = segs[5], segs[6:]
+    try:
+        if area == "discovery" and method == "GET":
+            return _json(200, _sec.discover(store, db_id, arm_state, server, database))
+        if area == "ledger":
+            if not rest and method == "GET":
+                return _json(200, _sec.ledger_info(store, db_id))
+            if rest == ["history"] and method == "GET":
+                return _json(200, {"value": _sec.ledger_history(store, db_id, str(query.get("table") or ""))})
+            if rest == ["digest"] and method == "POST":
+                return _json(200, _sec.ledger_digest(store, db_id, database))
+            if rest == ["verify"] and method == "POST":
+                return _json(200, _sec.ledger_verify(store, db_id, payload.get("digests")))
+        if area == "ae":
+            if not rest and method == "GET":
+                return _json(200, _sec.ae_info(store, db_id))
+            if len(rest) == 2 and rest[0] == "cmk" and method == "PUT":
+                return _json(200, _sec.ae_create_cmk(store, db_id, kv_store, rest[1], str(payload.get("keyPath") or "")))
+            if len(rest) == 2 and rest[0] == "cek" and method == "PUT":
+                return _json(200, _sec.ae_create_cek(store, db_id, kv_store, rest[1], str(payload.get("cmk") or "")))
+            if rest == ["encrypt"] and method == "POST":
+                return _json(200, _sec.ae_encrypt_column(store, db_id, kv_store, str(payload.get("table") or ""), str(payload.get("column") or ""),
+                                                          str(payload.get("cek") or ""), payload.get("encryptionType")))
+    except _sec.SecError as e:
+        return _err(e.status, e.code, e.message)
+    except Exception as e:                       # noqa: BLE001
+        return _err(500, "InternalError", str(e))
+    return _err(404, "NotFound", "Unknown security path.")

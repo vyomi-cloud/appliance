@@ -154,20 +154,7 @@
    "tests/conformance/test_azure_appconfiguration_core.py"
   ]
  },
- "azure.appconfiguration.encryption": {
-  "title": "Customer-managed key encryption",
-  "level": {
-   "nano": "config_only",
-   "offline": "config_only"
-  },
-  "limitations": [
-   "Requires a Standard or Premium store, a managed identity and a key identifier whose Key Vault exists in this subscription. The key is looked up in the Key Vault keys data plane (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled); that store is one keyspace shared by all vaults, so the lookup is by key name, not per vault, and data is not re-encrypted."
-  ],
-  "tests": [
-   "tests/conformance/test_azure_cfgext_core.py",
-   "tests/conformance/test_azure_cmk_keylookup.py"
-  ]
- },
+ "azure.appconfiguration.encryption": {"title": "Customer-managed key encryption", "level": {"nano": "limited", "offline": "config_only"}, "limitations": ["Data is envelope-encrypted at rest: a per-store data-encryption key is wrapped by the Key Vault key (wrapKey); requests unwrap it (unwrapKey) and re-seal under the key's latest version, so rotation re-wraps. Disabling, expiring or deleting the key makes every request fail 403 and the data stays ciphertext until the key is usable again. Requires a Standard or Premium store, a managed identity and an existing Key Vault key (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled at configuration time). Offline appliance: the offline App Configuration data plane is not wired to this engine."], "tests": ["tests/conformance/test_azure_cmk_enforced.py", "tests/conformance/test_azure_cmk_sdk.py", "tests/conformance/test_azure_cfgext_core.py"]},
  "azure.appconfiguration.tasks": {
   "title": "Tasks (Logic App-backed task templates)",
   "level": {

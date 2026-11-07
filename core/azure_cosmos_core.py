@@ -718,8 +718,202 @@ def _cors_headers(rule: dict, origin: str, preflight_headers: str = "") -> dict:
     return h
 
 
+# ── customer-managed key (account.properties.keyVaultKeyUri): ENFORCED envelope encryption at rest ──────────────
+# Documents live in `store.docs` only inside a request. Between requests `store.docs` holds a single CMK envelope
+# ({"$cmk": envelope}, DEK wrapped by the Key Vault key — core/azure_cmk_core.py); a request opens it (unwrapKey),
+# serves, and re-seals under the key's latest version. A disabled / deleted / expired key => 403 Forbidden
+# (substatus 4000, "customer-managed key inaccessible") and the data stays unreadable at rest. The simulator has ONE
+# Cosmos data store shared by every account (documents are not partitioned per account), so the sealed unit is that
+# whole store, driven by the account the request resolves to.
+CMK_SLOT = "$cmk"
+
+
+def _cmk_scope_for(store, acct, arm_state=None):
+    uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
+    sealed = isinstance(getattr(store, "docs", None), dict) and CMK_SLOT in store.docs
+    if not uri:      # the data store is shared by every account: any CMK account protects it, so re-seal under that key
+        for a in _cosmos_accounts(arm_state or {}):
+            u = (a.get("properties") or {}).get("keyVaultKeyUri")
+            if u:
+                uri = u
+                break
+    return uri, sealed
+
+
+class _CmkScope:
+    def __init__(self, store, uri, sealed, kv_store=None):
+        self.store, self.uri, self.sealed, self.kv = store, uri, sealed, kv_store
+        self.active = False
+
+    def __enter__(self):
+        from core import azure_cmk_core as cmk
+        self.cmk = cmk
+        self.kv = cmk.keys(self.kv)
+        cmk.LOCK.acquire()
+        self.locked = True
+        try:
+            return self._enter(cmk)
+        except BaseException:
+            self.locked = False
+            cmk.LOCK.release()
+            raise
+
+    def _enter(self, cmk):
+        self.sealed = isinstance(getattr(self.store, "docs", None), dict) and CMK_SLOT in self.store.docs
+        if self.kv is None or not (self.uri or self.sealed):
+            return self
+        if self.uri:
+            ok, why = cmk.usable(self.kv, self.uri)
+            if not ok:
+                raise _CmkDenied(f"Request is blocked: the account's customer-managed key cannot be used ({why}). "
+                                 "Data is unreadable until the key is enabled / recovered.")
+        if self.sealed:
+            try:
+                plain = json.loads(cmk.unseal(self.kv, self.store.docs[CMK_SLOT]).decode())
+            except cmk.CmkError as e:
+                raise _CmkDenied(e.message)
+            self.store.docs.clear()
+            self.store.docs.update(plain)
+        self.active = True
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if not self.active or not self.uri:
+                return False
+            try:
+                env = self.cmk.seal(self.kv, self.uri, json.dumps(self.store.docs, sort_keys=True, default=str).encode())
+            except self.cmk.CmkError:
+                return False
+            self.store.docs.clear()
+            self.store.docs[CMK_SLOT] = env
+            try:
+                self.store.persist()
+            except Exception:
+                pass
+            return False
+        finally:
+            if getattr(self, "locked", False):
+                self.locked = False
+                self.cmk.LOCK.release()
+
+
+class _CmkDenied(Exception):
+    pass
+
+
+def rotate_cmk(store, acct, kv_store=None):
+    """Key rotation: re-wrap the envelope's DEK under the account key's latest version (data ciphertext untouched)."""
+    from core import azure_cmk_core as cmk
+    kv = cmk.keys(kv_store)
+    uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
+    if kv is not None and uri and CMK_SLOT in store.docs:
+        store.docs[CMK_SLOT] = cmk.rewrap(kv, store.docs[CMK_SLOT], uri)
+    return store.docs.get(CMK_SLOT)
+
+
+# ── Dedicated gateway: INTEGRATED CACHE (databaseAccounts/services/SqlDedicatedGateway) ──────────────────────────────
+# A request that arrives on the dedicated-gateway endpoint (host `<acct>.sqlx.cosmos.azure.com`, or header
+# `x-vyomi-endpoint: dedicated`) is served through a read-through cache in front of the account's data: point reads and
+# queries are cached for `x-ms-dedicatedgateway-max-age` ms (MaxIntegratedCacheStaleness; default 300000 = 5 min; 0 or
+# `x-ms-cosmos-bypass-integrated-cache` bypasses).  A hit costs 0 RU and carries `x-ms-cosmos-cachehit: True`.  Item writes
+# through the gateway are write-through for that item's point-read entry (replace updates, delete evicts); the QUERY cache is
+# never invalidated by writes - it is stale until its TTL, exactly the real trade-off.  Requests on the dedicated endpoint
+# are refused (503) when the account has no running SqlDedicatedGateway service.  The cache is per account, bounded
+# (CACHE_MAX entries, oldest evicted) and holds nothing for the standard gateway endpoint.
+CACHE_MAX = 1000
+DEFAULT_MAX_AGE_MS = 300000
+
+
+def _dedicated_request(hd) -> bool:
+    return str(hd.get("x-vyomi-endpoint", "")).lower() == "dedicated" or str(hd.get("host", "")).split(":")[0].lower().endswith(".sqlx.cosmos.azure.com")
+
+
+def _gateway_running(arm_state, acct) -> bool:
+    rec = (arm_state or {}).get(f"{acct['id']}/services/sqldedicatedgateway".lower())
+    return bool(rec) and str(((rec.get("properties") or {}).get("status") or "Running")).lower() == "running"
+
+
+def _gw(store):
+    g = getattr(store, "_dgw", None)
+    if g is None:
+        g = store._dgw = {"cache": {}, "metrics": {}}
+    return g
+
+
+def gateway_metrics(store, acct_id=None):
+    out = {}
+    for k, m in _gw(store)["metrics"].items():
+        if acct_id is None or k == acct_id.lower():
+            n = sum(1 for ck in _gw(store)["cache"] if ck[0] == k)
+            out[k] = {**m, "entries": n, "hitRatio": round(m["hits"] / (m["hits"] + m["misses"]), 3) if (m["hits"] + m["misses"]) else None}
+    return out
+
+
+def _gateway_dispatch(store, acct, hd, method, path, query, headers, body, arm_state, kv_store, now=None):
+    g = _gw(store)
+    key0 = acct["id"].lower()
+    m = g["metrics"].setdefault(key0, {"hits": 0, "misses": 0, "bypass": 0, "writeThrough": 0, "evictions": 0, "requestChargeSaved": 0.0})
+    now = now if now is not None else _clock()
+    segs = [s for s in path.split("?", 1)[0].split("/") if s]
+    meth = method.upper()
+    is_query = str(hd.get("x-ms-documentdb-isquery", "")).lower() == "true" or str(hd.get("content-type", "")).startswith("application/query+json")
+    doc_path = len(segs) >= 6 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs"
+    coll_docs = len(segs) == 5 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs"
+    pk = hd.get("x-ms-documentdb-partitionkey", "")
+    inner = lambda: _dispatch_cmk(store, method, path, query, headers, body, arm_state, kv_store)
+    cacheable = (meth == "GET" and doc_path) or (meth == "POST" and coll_docs and is_query)
+    try:
+        max_age = int(hd.get("x-ms-dedicatedgateway-max-age", DEFAULT_MAX_AGE_MS))
+    except ValueError:
+        max_age = DEFAULT_MAX_AGE_MS
+    bypass = max_age <= 0 or str(hd.get("x-ms-cosmos-bypass-integrated-cache", "")).lower() == "true"
+    if cacheable and not bypass:
+        ck = (key0, meth, path.split("?", 1)[0].rstrip("/"), pk, bytes(body or b"") if is_query else b"")
+        hit = g["cache"].get(ck)
+        if hit and hit["expires"] > now and hit["stored_at"] + max_age / 1000.0 > now:
+            m["hits"] += 1
+            m["requestChargeSaved"] = round(m["requestChargeSaved"] + hit["charge"], 3)
+            r = Response(status=hit["status"], headers={**hit["headers"], "x-ms-request-charge": "0", "x-ms-cosmos-cachehit": "True"}, body=hit["body"])
+            return r
+        r = inner()
+        m["misses"] += 1
+        if r.status == 200:
+            if len(g["cache"]) >= CACHE_MAX:
+                for old in sorted(g["cache"], key=lambda k: g["cache"][k]["stored_at"])[:max(1, CACHE_MAX // 10)]:
+                    g["cache"].pop(old, None)
+                    m["evictions"] += 1
+            g["cache"][ck] = {"stored_at": now, "expires": now + DEFAULT_MAX_AGE_MS * 1000.0, "status": r.status,
+                              "headers": {k: v for k, v in (r.headers or {}).items() if k.lower() != "x-ms-request-charge"},
+                              "body": r.body, "charge": float((r.headers or {}).get("x-ms-request-charge") or 0)}
+        r.headers["x-ms-cosmos-cachehit"] = "False"
+        return r
+    if cacheable:
+        m["bypass"] += 1
+    r = inner()
+    wt_base = None
+    if doc_path and meth in ("PUT", "DELETE") and r.status < 300:      # item write-through / evict (point-read entries only)
+        wt_base = path.split("?", 1)[0].rstrip("/")
+    elif coll_docs and meth == "POST" and not is_query and r.status < 300:        # create / upsert
+        try:
+            wt_base = path.split("?", 1)[0].rstrip("/") + "/" + str(json.loads(r.body).get("id"))
+            meth = "PUT"
+        except Exception:
+            wt_base = None
+    if wt_base:
+        base = wt_base
+        for ck in [k for k in g["cache"] if k[0] == key0 and k[1] == "GET" and k[2] == base]:
+            if meth == "DELETE":
+                g["cache"].pop(ck, None)
+                m["evictions"] += 1
+            else:
+                g["cache"][ck].update(body=r.body, stored_at=now)
+                m["writeThrough"] += 1
+    return r
+
+
 def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"", arm_state: dict | None = None) -> Response:
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> Response:
     """Cosmos CORS wrapper (azure.cosmos.cors) around the data-plane dispatch: an OPTIONS preflight is answered from the
     account's properties.cors rules (no matching rule -> 403 and NO Access-Control-* headers, so a browser blocks the call),
     and a real request carrying an admitted Origin gets Access-Control-Allow-Origin / -Expose-Headers on its response."""
@@ -727,7 +921,7 @@ def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = No
     origin = hdrs.get("origin")
     acct = resolve_account(arm_state, hdrs) if arm_state else None
     if acct is None or not origin:
-        resp = _dispatch_data(store, method, path, query, headers, body, arm_state)
+        resp = _dispatch_data(store, method, path, query, headers, body, arm_state, kv_store)
         if acct is not None:      # diagnostic settings (DataPlaneRequests): real delivery (core/azure_diag_pipeline.py)
             try:
                 from core import azure_diag_pipeline as _dp
@@ -744,7 +938,7 @@ def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = No
         if rule is None:
             return _err(403, "Forbidden", f"CORS preflight rejected: origin '{origin}' is not allowed by the account's CORS rules.")
         return Response(status=200, headers=_cors_headers(rule, origin, hdrs.get("access-control-request-headers") or "x-ms-version"), body=b"", media_type=None)
-    resp = _dispatch_data(store, method, path, query, headers, body, arm_state)
+    resp = _dispatch_data(store, method, path, query, headers, body, arm_state, kv_store)
     rule = _cors_rule(acct, origin, method)
     if rule is not None:
         resp.headers = {**(resp.headers or {}), **_cors_headers(rule, origin)}
@@ -752,7 +946,37 @@ def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = No
 
 
 def _dispatch_data(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
-                   body: bytes = b"", arm_state: dict | None = None) -> Response:
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> Response:
+    """CMK-aware entry: seals / opens the account's data around `_dispatch_plain`."""
+    hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hd) if arm_state else None
+    if acct is not None and _dedicated_request(hd) and [x for x in path.split("/") if x][:2] != ["vyomi", "dedicatedgateway"]:
+        if not _gateway_running(arm_state, acct):
+            return _err(503, "ServiceUnavailable", f"The dedicated gateway endpoint of account '{acct.get('name')}' is not available: no running "
+                                                   "SqlDedicatedGateway service is provisioned for this account.")
+        return _gateway_dispatch(store, acct, hd, method, path, query, headers, body, arm_state, kv_store)
+    if [x for x in path.split("?", 1)[0].split("/") if x][:2] == ["vyomi", "dedicatedgateway"] and method.upper() == "GET":
+        return _json(200, {"metrics": gateway_metrics(store, acct["id"] if acct else None)})
+    return _dispatch_cmk(store, method, path, query, headers, body, arm_state, kv_store)
+
+
+def _dispatch_cmk(store, method, path, query, headers, body, arm_state, kv_store):
+    hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hd) if arm_state else None
+    uri, sealed = _cmk_scope_for(store, acct, arm_state)
+    if not (uri or sealed):
+        return _dispatch_plain(store, method, path, query, headers, body, arm_state)
+    try:
+        with _CmkScope(store, uri, sealed, kv_store):
+            return _dispatch_plain(store, method, path, query, headers, body, arm_state)
+    except _CmkDenied as e:
+        r = _err(403, "Forbidden", str(e))
+        r.headers["x-ms-substatus"] = "4000"
+        return r
+
+
+def _dispatch_plain(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+                    body: bytes = b"", arm_state: dict | None = None) -> Response:
     """Data-plane dispatch. With `arm_state` (the Azure ARM state) the target account's network rules and provisioned /
     autoscale throughput are ENFORCED: a denied caller gets 403, a request that would exceed the offer in the trailing
     second gets 429 (RequestRateTooLarge) with x-ms-retry-after-ms; every response carries x-ms-request-charge (modelled RU)."""

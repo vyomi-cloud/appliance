@@ -485,3 +485,137 @@ def dispatch(store: MessagingStore, method: str, path: str,
         return _error("BadRequest", f"Unknown Service Bus path: {path}", 404)
     except ServiceBusError as e:
         return _error(e.code, e.message, e.status)
+
+
+# ── customer-managed key: message bodies are ENVELOPE-ENCRYPTED at rest (core/azure_cmk_core.py) ─────────────
+# A Premium namespace with encryption.keyVaultProperties[0] {keyVaultUri, keyName[, keyVersion]} has every message
+# body (queue/topic backlogs, subscription copies, dead-letter) replaced by a placeholder between requests; the real
+# bodies live only inside one CMK envelope (`store._sb_sealed`, DEK wrapped by the Key Vault key). A request opens the
+# envelope (Key Vault unwrapKey), serves, and re-seals under the key's latest version. A disabled / deleted / expired key
+# => 403 MessagingGatewayKeyInaccessible and the bodies stay unreadable. The simulator has ONE message store shared by
+# all namespaces (the data wire carries no namespace), so the sealed unit is the whole store, driven by the namespace the
+# request resolves to (x-vyomi-namespace header, `<ns>.servicebus.windows.net` host, or the only CMK namespace).
+def cmk_namespace(arm_state, headers):
+    nss = [r for r in (arm_state or {}).values()
+           if str(r.get("_type") or r.get("type") or "").lower() == "microsoft.servicebus/namespaces"]
+    hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    want = str(hd.get("x-vyomi-namespace") or "").lower()
+    if not want:
+        host = str(hd.get("host") or "").split(":")[0].lower()
+        if host.endswith(".servicebus.windows.net"):
+            want = host.split(".")[0]
+    if want:
+        nss = [r for r in nss if (r.get("name") or "").lower() == want]
+    with_key = [r for r in nss if cmk_key_uri(r)]
+    return with_key[0] if len(with_key) == 1 else None
+
+
+def cmk_key_uri(ns_rec):
+    kvp = (((ns_rec or {}).get("properties") or {}).get("encryption") or {}).get("keyVaultProperties") or []
+    if not kvp or not kvp[0].get("keyName"):
+        return None
+    k = kvp[0]
+    return f"{str(k.get('keyVaultUri') or '').rstrip('/')}/keys/{k['keyName']}" + (f"/{k['keyVersion']}" if k.get("keyVersion") else "")
+
+
+def _all_messages(store):
+    for t in getattr(store, "topics", {}).values():
+        for m in t.get("messages", []):
+            yield m
+        for m in t.get("dead_letter", []):
+            yield m
+        for s in t.get("subscriptions", {}).values():
+            for m in s.get("messages", []):
+                yield m
+            for m in s.get("dead_letter", []):
+                yield m
+
+
+class CmkScope:
+    def __init__(self, store, ns_rec, kv_store=None):
+        self.store, self.ns, self.kv = store, ns_rec, kv_store
+
+    def __enter__(self):
+        from core import azure_cmk_core as cmk
+        self.cmk = cmk
+        self.kv = cmk.keys(self.kv)
+        self.uri = cmk_key_uri(self.ns) if self.ns else None
+        self.active = self.kv is not None and (self.uri is not None or getattr(self.store, "_sb_sealed", None) is not None)
+        if not self.active:
+            return self
+        cmk.LOCK.acquire()
+        self.locked = True
+        try:
+            return self._enter(cmk)
+        except BaseException:
+            self.active = False
+            self.locked = False
+            cmk.LOCK.release()
+            raise
+
+    def _enter(self, cmk):
+        if self.uri:
+            ok, why = cmk.usable(self.kv, self.uri)
+            if not ok:
+                self.active = False
+                raise ServiceBusError("MessagingGatewayKeyInaccessible",
+                                      f"The namespace's customer-managed key cannot be used ({why}); message data is unreadable.", 403)
+        env = getattr(self.store, "_sb_sealed", None)
+        if env is not None:
+            if not self.uri:        # request did not resolve to the CMK namespace: still re-seal under the envelope's key
+                self.uri = "https://vault.vault.azure.net/keys/" + env["keyName"]
+            try:
+                bodies = json.loads(cmk.unseal(self.kv, env).decode())
+            except cmk.CmkError as e:
+                self.active = False
+                raise ServiceBusError("MessagingGatewayKeyInaccessible", e.message, 403)
+            import base64
+            for m in _all_messages(self.store):
+                if m.get("_sealed") and m["_id"] in bodies:
+                    m["body"] = base64.b64decode(bodies[m["_id"]])
+                    del m["_sealed"]
+            self.store._sb_sealed = None
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            return self._exit()
+        finally:
+            if getattr(self, "locked", False):
+                self.locked = False
+                self.cmk.LOCK.release()
+
+    def _exit(self):
+        if not self.active:
+            return False
+        import base64
+        if not self.uri:
+            return False
+        bodies = {}
+        for m in _all_messages(self.store):
+            if isinstance(m.get("body"), (bytes, bytearray)):
+                bodies[m["_id"]] = base64.b64encode(bytes(m["body"])).decode()
+        try:
+            env = self.cmk.seal(self.kv, self.uri, json.dumps(bodies).encode())
+        except self.cmk.CmkError:
+            return False
+        for m in _all_messages(self.store):
+            if m["_id"] in bodies:
+                m["body"] = b""
+                m["_sealed"] = True
+        self.store._sb_sealed = env
+        try:
+            self.store.persist()          # persist AFTER sealing so a backed store never keeps the plaintext
+        except Exception:
+            pass
+        return False
+
+
+def rotate_cmk(store, ns_rec, kv_store=None):
+    """Re-wrap the envelope's DEK under the namespace key's latest version (key rotation); bodies are not re-encrypted."""
+    from core import azure_cmk_core as cmk
+    kv = cmk.keys(kv_store)
+    env = getattr(store, "_sb_sealed", None)
+    if env is not None and kv is not None:
+        store._sb_sealed = cmk.rewrap(kv, env, cmk_key_uri(ns_rec))
+    return getattr(store, "_sb_sealed", None)

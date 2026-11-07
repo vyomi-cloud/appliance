@@ -101,12 +101,13 @@ export function SqlAuditing({ a }) {
         <p style={{ fontSize: 12 }}>Audit records of every statement executed through the SQL data plane (newest first, last 200). Storage / Log Analytics / Event Hub destinations are not offered.</p>
         {loading && !data ? <Loading /> : (
           <table className="vy-grid" aria-label="Audit records">
-            <thead><tr><th>Event time</th><th>Action</th><th>Succeeded</th><th>Statement</th><th>Duration (ms)</th><th>Rows</th></tr></thead>
+            <thead><tr><th>Event time</th><th>Action</th><th>Succeeded</th><th>Statement</th><th>Duration (ms)</th><th>Rows</th><th>Data sensitivity</th></tr></thead>
             <tbody>
               {rows.length ? rows.map((r, i) => (
                 <tr key={i} data-testid="audit-row"><td>{new Date(r.eventTime * 1000).toLocaleString()}</td><td>{r.actionName}</td><td>{r.succeeded ? "Yes" : "No"}</td>
-                  <td style={{ fontFamily: "monospace" }}>{r.statement}{r.errorMessage ? ` -- ${r.errorMessage}` : ""}</td><td>{r.durationMs}</td><td>{r.rowCount}</td></tr>
-              )) : <tr><td colSpan={6} className="vy-muted" data-testid="audit-empty">No audit records yet.</td></tr>}
+                  <td style={{ fontFamily: "monospace" }}>{r.statement}{r.errorMessage ? ` -- ${r.errorMessage}` : ""}</td><td>{r.durationMs}</td><td>{r.rowCount}</td>
+                  <td>{(r.dataSensitivityInformation || []).map((d) => `${d.tableName}.${d.columnName} [${d.label || d.informationType}, ${d.rank}]`).join("; ") || "--"}{r.maskedColumns?.length ? ` (masked for ${r.serverPrincipalName}: ${r.maskedColumns.join(", ")})` : ""}</td></tr>
+              )) : <tr><td colSpan={7} className="vy-muted" data-testid="audit-empty">No audit records yet.</td></tr>}
             </tbody>
           </table>
         )}
