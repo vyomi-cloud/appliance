@@ -7,6 +7,8 @@ case "$1" in
     for a in "$@"; do last="$a"; done
     case "$last" in
       vyomi-i-good|vyomi-i-good2|vyomi-i-gcp1|vyomi-i-az1) echo 'true|1|vyomi-net ' ;;
+      vyomi-i-vpc1) echo 'true|1|vyomi-net-sp1-vpc ' ;;
+      vyomi-i-lookalike) echo 'true|1|vyomi-netx ' ;;
       vyomi-i-stopped) echo 'false|1|vyomi-net ' ;;
       vyomi-i-othernet) echo 'true|1|bridge ' ;;
       vyomi-i-nolabel) echo 'true||vyomi-net ' ;;

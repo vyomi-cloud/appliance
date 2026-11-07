@@ -8,7 +8,7 @@ from core import booster_shell
 
 MAP = {("aws", "i-good"): "vyomi-i-good", ("aws", "i-good2"): "vyomi-i-good2", ("gcp", "vm-gcp1"): "vyomi-i-gcp1", ("azure", "vm-az1"): "vyomi-i-az1",
        ("aws", "i-stopped"): "vyomi-i-stopped", ("aws", "i-othernet"): "vyomi-i-othernet", ("aws", "i-nolabel"): "vyomi-i-nolabel",
-       ("aws", "i-evil"): "nginx", ("aws", "i-evil2"): "vyomi-i-good; rm -rf /", ("aws", "i-ghost"): "vyomi-i-ghost", ("aws", "i-real"): "vyomi-i-ngshelltest"}
+       ("aws", "i-evil"): "nginx", ("aws", "i-evil2"): "vyomi-i-good; rm -rf /", ("aws", "i-vpc"): "vyomi-i-vpc1", ("aws", "i-lookalike"): "vyomi-i-lookalike", ("aws", "i-ghost"): "vyomi-i-ghost", ("aws", "i-real"): "vyomi-i-ngshelltest"}
 app = FastAPI()
 from core import booster_session
 app.add_middleware(booster_session.SessionMiddleware)   # VYOMI_ROLE=booster: the simulator re-verifies the same token

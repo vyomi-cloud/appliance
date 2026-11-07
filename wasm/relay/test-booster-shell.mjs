@@ -121,7 +121,7 @@ check("cross-account: same session id, other account -> BoosterSessionMismatch",
 
 // ── wrong-container refusals (the simulator decides; the client cannot name a container)
 const refusals = [["aws", "i-ghost", "InstanceNotFound"], ["aws", "i-nope", "InstanceNotFound"], ["aws", "i-evil", "ContainerNotAllowed"], ["aws", "i-evil2", "ContainerNotAllowed"],
-                  ["aws", "i-othernet", "ContainerNotAllowed"], ["aws", "i-nolabel", "ContainerNotAllowed"], ["aws", "i-stopped", "InstanceNotRunning"], ["aws", "vyomi-i-good", "InstanceNotFound"]];
+                  ["aws", "i-othernet", "ContainerNotAllowed"], ["aws", "i-lookalike", "ContainerNotAllowed"], ["aws", "i-nolabel", "ContainerNotAllowed"], ["aws", "i-stopped", "InstanceNotRunning"], ["aws", "vyomi-i-good", "InstanceNotFound"]];
 for (const [cloud, ref, want] of refusals) {
   b = tab({ cloud, ref }); await b.opened; check(`refused: ${cloud}/${ref} -> ${want}`, code(b) === want, JSON.stringify(b.ctrl));
 }
@@ -130,6 +130,8 @@ check("a client-supplied container name is ignored (still the resolved instance)
 b = tab({ cloud: "../..", ref: "i-good" }); await b.opened; check("bad cloud refused", code(b) === "BadRequest", JSON.stringify(b.ctrl));
 const inspected = fs.readFileSync(dockerLog, "utf8");
 check("no docker exec was ever run for a refused target", !/exec .*(nginx|ghost|othernet|nolabel|stopped|evil)/.test(inspected));
+
+b = tab({ ref: "i-vpc" }); check("a VM on a per-VPC bridge derived from vyomi-net (vyomi-net-<space>) is allowed", await b.opened === true && b.ctrl[0].container === "vyomi-i-vpc1", JSON.stringify(b.ctrl)); b.ws.close();
 
 // ── limits
 const many = []; for (let i = 0; i < 3; i++) { const t = tab(); await t.opened; many.push(t); }

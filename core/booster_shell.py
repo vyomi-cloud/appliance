@@ -96,8 +96,10 @@ def verify_container(name: str) -> None:
         raise ShellError("ContainerNotAllowed", "unreadable container record")
     if label.strip() != "1":
         raise ShellError("ContainerNotAllowed", "not a Vyomi instance container")
-    if _network() not in nets.split():
-        raise ShellError("ContainerNotAllowed", f"container is not on network {_network()}")
+    n = _network()
+    # the instance network itself, or one of the per-VPC bridges the network simulator derives from it (<net>-<space>...)
+    if not any(x == n or x.startswith(n + "-") for x in nets.split()):
+        raise ShellError("ContainerNotAllowed", f"container is not on network {n}")
     if running.strip() != "true":
         raise ShellError("InstanceNotRunning", "the VM is not running; start it first")
 
