@@ -104,10 +104,18 @@
   "title": "Continuously deploy from a repository (Cloud Build / GitHub) or set up continuous deployment on an existing service",
   "level": {
    "nano": "not_simulated",
-   "offline": "not_simulated"
+   "offline": "limited"
   },
   "limitations": [
-   "Continuous deployment needs a real GitHub/Cloud Source Repository connection and a real container build (Cloud Build). The simulator has no git-hosting service to fetch source from, and shared cores forbid network egress (tests/conformance/test_no_cloud_egress.py) — there is nothing local to connect to or build, unlike a stateful sub-resource this appliance could model on its own."
+   "Offline: \"Continuously deploy from a repository\" creates the same trigger Cloud Run does against a repository on the simulator's built-in git host (the CI seam, the same one `git push` through the vyomi extension or a Gitea-style host feeds): a push to the matching branch runs a Cloud Build whose steps are the standard Build (docker build on the BuildKit builder), Push (into the simulated Artifact Registry) and Deploy (`gcloud run deploy|services update`, executed against the simulated Cloud Run, so validation, Binary Authorization and revision cutting all apply). A failing deploy fails the build and leaves the service on its previous revision.",
+   "Not simulated: GitHub / Cloud Source Repositories / Bitbucket connections (no network egress from the cores; only the built-in git host), buildpacks (a Dockerfile is required), Cloud Build worker pools, and any builder step other than docker build/push and gcloud run deploy/services update. Nano has no container builder, so on Nano the first build fails with that reason."
+  ],
+  "api": [
+   "cloudbuild projects.triggers.create/run (build steps: docker build, docker push, gcloud run deploy|services update)",
+   "(Vyomi) cloudbuild triggers:vyomiPush"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_continuous_deployment.py"
   ]
  },
  "gcp.run.services.triggers": {

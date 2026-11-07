@@ -1511,6 +1511,45 @@ class AwsWireRouter:
         gcp_cloudbuild.push_to_ar(self.gcp_ar, project, ref, tag)
         return ref
 
+    def _cb_run_deploy(self, project, region, service, opts, create):
+        """Cloud Build `gcloud run deploy|services update` step -> a real create/patch on the simulated Cloud Run (so Binary
+        Authorization, validation and revision cutting all apply). Raises ValueError with the API's message on failure."""
+        base = "/v2/projects/%s/locations/%s/services" % (project, region)
+
+        def call(method, path, query, body=None):
+            r = gcp_run.dispatch(self.gcp_run, method, path, query, {}, json.dumps(body).encode() if body is not None else b"",
+                                 log_fn=self._run_log, topic_exists=self._run_topic_exists)
+            try:
+                return r.status, json.loads(r.body or b"{}")
+            except Exception:
+                return r.status, {}
+        labels = dict(kv.split("=", 1) for kv in str(opts.get("labels") or "").split(",") if "=" in kv)
+        env = [dict(zip(("name", "value"), kv.split("=", 1))) for kv in str(opts.get("set-env-vars") or "").split(",") if "=" in kv]
+        st, cur = call("GET", "%s/%s" % (base, service), {})
+        if st == 200:
+            tpl = cur.get("template") or {"containers": [{}]}
+            c0 = (tpl.get("containers") or [{}])[0]
+            if opts.get("image"):
+                c0["image"] = opts["image"]
+            if opts.get("port") and opts["port"] is not True:
+                c0["ports"] = [{"containerPort": int(opts["port"])}]
+            if env:
+                c0["env"] = env
+            tpl["containers"] = [c0] + (tpl.get("containers") or [])[1:]
+            tpl.pop("revision", None)
+            body = {"template": tpl, "labels": {**(cur.get("labels") or {}), **labels}}
+            st, op = call("PATCH", "%s/%s" % (base, service), {"updateMask": "template,labels"}, body)
+        elif create:
+            c0 = {"image": opts["image"], **({"ports": [{"containerPort": int(opts["port"])}]} if opts.get("port") and opts["port"] is not True else {}), **({"env": env} if env else {})}
+            st, op = call("POST", base, {"serviceId": service}, {"template": {"containers": [c0]}, "labels": labels})
+        else:
+            raise ValueError("Service [%s] could not be found." % service)
+        if st != 200:
+            raise ValueError(((op.get("error") or {}).get("message")) or "Cloud Run rejected the deploy (HTTP %d)." % st)
+        resp = op.get("response") or {}
+        rev = (resp.get("latestReadyRevision") or resp.get("latestCreatedRevision") or "").rsplit("/", 1)[-1]
+        return "Deploying container to Cloud Run service [%s] in project [%s] region [%s]\nDone. Service [%s] revision [%s] has been deployed and is serving 100 percent of traffic." % (service, project, region, service, rev)
+
     def _ca_vuln_occurrences(self, project):
         """Container Analysis VULNERABILITY occurrences of the project's scanned Artifact Registry images."""
         try:
@@ -2042,7 +2081,7 @@ class AwsWireRouter:
             elif svc == "gcp-artifactregistry":   # a repository's CMEK key is checked/used through the real KMS core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), kms_store=self.gcp_kms)
             elif svc == "gcp-cloudbuild":   # docker build/push steps run on the CI seam and push into the simulated Artifact Registry
-                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ar_store=self.gcp_ar, gcs_read=self._gcs_read_object)
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ar_store=self.gcp_ar, gcs_read=self._gcs_read_object, run_deploy=self._cb_run_deploy)
             elif svc == "gcp-hub":   # Marketplace / Cloud Hub / Privacy & Security — derived from live state
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), inputs=self.hub_inputs)
             elif svc == "gcp-eventarc":   # triggers validate their Cloud Run destination / bucket / topic for real

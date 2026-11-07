@@ -18,7 +18,7 @@ builds the image, `docker push T` and the top-level `images:` push the built ima
 (gcp_artifactregistry_core.push_built_image) — a missing repository fails the step like the real registry. Substitutions
 ($PROJECT_ID, $BUILD_ID, $COMMIT_SHA, $SHORT_SHA, $BRANCH_NAME, $REPO_NAME, $TAG_NAME, $LOCATION, user `_VARS`) are applied and validated.
 
-Honest limits: only docker build/push steps run (no arbitrary builder containers: gcloud, npm, bash...), no Cloud Build worker pools,
+Honest limits: only docker build/push steps and `gcloud run deploy|services update` (against the simulated Cloud Run) run (no other builder containers: npm, bash...), no Cloud Build worker pools,
 approvals, GitHub PR / pubsub / webhook triggers, Cloud Logging streaming (logs are on the build as `vyomiLogs`); builds run
 synchronously (so :cancel only ever sees finished builds); on Nano there is no container builder so image builds FAIL with that reason.
 """
@@ -429,8 +429,62 @@ def _docker_build(store, build, step, args, tree, logs, local):
     return {"images": tags}
 
 
+GCLOUD_BUILDERS = ("gcr.io/google.com/cloudsdktool/cloud-sdk", "gcr.io/google.com/cloudsdktool/cloud-sdk:slim", "gcr.io/google.com/cloudsdktool/cloud-sdk:latest",
+                   "gcr.io/cloud-builders/gcloud", "gcr.io/cloud-builders/gcloud:latest")
+_DEPLOY_FLAGS = {"image", "region", "platform", "quiet", "port", "set-env-vars", "labels", "allow-unauthenticated", "project", "memory", "cpu",
+                 "min-instances", "max-instances", "no-traffic", "tag"}
+
+
+def _gcloud_run(build, step, args, logs, ctx):
+    """`gcloud run deploy|services update SERVICE --image IMG --region R [--labels k=v,...]` — the deploy step of Cloud Run's
+    continuous-deployment build config — executed against the simulated Cloud Run (ctx['run_deploy'])."""
+    argv = list(args)
+    if (step.get("entrypoint") or "gcloud") not in ("gcloud", "") and argv[:1] != ["run"]:
+        raise _StepFail("entrypoint '%s' cannot run in Vyomi (only gcloud run deploy / services update)." % step.get("entrypoint"))
+    if argv and argv[0] == "gcloud":
+        argv = argv[1:]
+    if argv[:2] == ["run", "deploy"]:
+        verb, rest, create = "deploy", argv[2:], True
+    elif argv[:3] == ["run", "services", "update"]:
+        verb, rest, create = "services update", argv[3:], False
+    else:
+        raise _StepFail("builder step 'gcloud %s' cannot run in Vyomi: only gcloud run deploy / gcloud run services update are executed." % " ".join(argv[:3]))
+    opts, pos, i = {}, [], 0
+    while i < len(rest):
+        a = rest[i]
+        if a.startswith("--"):
+            k, eq, v = a[2:].partition("=")
+            if k not in _DEPLOY_FLAGS:
+                raise _StepFail("gcloud run %s: flag --%s is not supported by Vyomi's builder step." % (verb, k))
+            if not eq and k not in ("quiet", "allow-unauthenticated", "no-traffic") and i + 1 < len(rest):
+                v = rest[i + 1]
+                i += 1
+            opts[k] = v or True
+        else:
+            pos.append(a)
+        i += 1
+    if len(pos) != 1:
+        raise _StepFail("gcloud run %s requires exactly one SERVICE argument." % verb)
+    if not opts.get("image") and create:
+        raise _StepFail("gcloud run deploy: --image (or --source) is required.")
+    if not opts.get("region"):
+        raise _StepFail("gcloud run %s: --region is required (no default region is configured)." % verb)
+    fn = (ctx or {}).get("run_deploy")
+    if not callable(fn):
+        raise _StepFail("Cloud Run is not available to this build.")
+    try:
+        msg = fn(build["projectId"], opts["region"], pos[0], opts, create)
+    except ValueError as e:
+        raise _StepFail(str(e))
+    logs.append(msg)
+    return {}
+
+
 def _run_step(store, build, step, tree, logs, local, ctx):
     name, args = step["name"], step.get("args") or []
+    if name in GCLOUD_BUILDERS and args:
+        logs.append("Starting Step #%s - \"%s\": gcloud %s" % (build["steps"].index(step), step.get("id") or name, " ".join(args)))
+        return _gcloud_run(build, step, args, logs, ctx)
     if name not in DOCKER_BUILDERS or not args:
         raise _StepFail("builder '%s' cannot run in Vyomi: only the docker builder (docker build / docker push) is executed, "
                         "arbitrary builder containers are not simulated." % name)
@@ -788,7 +842,7 @@ def _builds(store, method, project, loc, rest, query, payload, ctx):
 _PATH = re.compile(r"^v1/projects/([^/]+)/(?:locations/([^/]+)/)?(builds|triggers)(?:/(.+))?$")
 
 
-def dispatch(store, method, path, query=None, headers=None, body=b"", ar_store=None, gcs_read=None):
+def dispatch(store, method, path, query=None, headers=None, body=b"", ar_store=None, gcs_read=None, run_deploy=None):
     query, method = dict(query or {}), method.upper()
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
@@ -808,7 +862,7 @@ def dispatch(store, method, path, query=None, headers=None, body=b"", ar_store=N
         else:
             project, loc, kind, tail = m.group(1), m.group(2), m.group(3), m.group(4)
             rest = tail.split("/") if tail else []
-        ctx = {"ar_store": ar_store, "gcs_read": gcs_read}
+        ctx = {"ar_store": ar_store, "gcs_read": gcs_read, "run_deploy": run_deploy}
         if kind == "triggers":
             if loc and loc != "global":
                 raise _E(404, "NOT_FOUND", "Regional triggers are not routed by Vyomi (use the global trigger path).")
