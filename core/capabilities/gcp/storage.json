@@ -57,12 +57,19 @@
   },
   "gcp.storage.insights-datasets": {
     "title": "Insights datasets (Storage Intelligence inventory/usage dataset configs)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
-      "Dataset configs are accepted and listed exactly like the real create/list calls, but Vyomi never runs the underlying export — no BigQuery dataset is populated.",
-      "Modeled as a sub-resource of Vyomi's own wire (/storage/v1/insightsDatasets) rather than the real separate storageinsights.googleapis.com service."
+      "Creating a dataset config really runs the export: the matching source buckets (by name prefix) and their objects are snapshotted into a linked BigQuery dataset (default storage_insights_<id>) as bucket_attributes_view, object_attributes_view and project_attributes_view tables, populated through core/gcp_bigquery_core.py (datasets/tables/tabledata/jobs.query on the native BigQuery v2 wire) and queryable with SQL. POST insightsDatasets/{id}:refresh (a Vyomi extension) re-runs the export; the real service refreshes daily on a schedule, here only on create/refresh. Deleting the config deletes the linked dataset.",
+      "The BigQuery stand-in executes queries on SQLite (stdlib), so SQL is SQLite's dialect rather than GoogleSQL (no STRUCT/ARRAY/UNNEST, SAFE_ functions or QUALIFY); only SELECT is accepted; views are plain tables here; only a subset of the real column set is exported (no per-object Insights activity columns, no retention-period history).",
+      "Modeled as a sub-resource of Vyomi's own wire (/storage/v1/insightsDatasets) rather than the real separate storageinsights.googleapis.com datasetConfigs service."
     ],
-    "tests": ["tests/conformance/test_gcp_storage_intelligence_core.py"]
+    "tests": [
+      "tests/conformance/test_gcp_storage_intelligence_core.py",
+      "tests/conformance/test_gcp_bigquery_insights.py"
+    ]
   },
   "gcp.storage.cors": {
     "title": "Cross-origin resource sharing (CORS) configuration",

@@ -84,6 +84,7 @@ from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
 from core import gcp_binauthz_core as gcp_binauthz
+from core import gcp_bigquery_core as gcp_bigquery
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_commit_core as gcp_commit
@@ -130,6 +131,8 @@ def _gcp_service(path):
         return "gcp-cloudbuild"   # Cloud Build builds + triggers on the shared CI seam (core/gcp_cloudbuild_core; images pushed into Artifact Registry)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(deliveryPipelines|targets)([/:?]|$)", path):
         return "gcp-clouddeploy"   # Cloud Deploy: pipelines/targets/releases/rollouts state machine deploying to the simulator's Cloud Run + GKE (core/gcp_clouddeploy_core)
+    if gcp_bigquery.handles(path):
+        return "gcp-bigquery"   # BigQuery v2: datasets/tables/rows + SQL (SQLite engine); Storage Insights datasets are populated here (core/gcp_bigquery_core)
     if gcp_binauthz.handles(path):
         return "gcp-binauthz"   # Binary Authorization policy/attestors + attestation occurrences, enforced at Cloud Run deploy (core/gcp_binauthz_core)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(backupVaults|backupPlans|backupPlanAssociations)([/:?]|$)", path):
@@ -2011,6 +2014,7 @@ class AwsWireRouter:
                 "gcp-pam": (gcp_pam, self.gcp_pam),
                 "gcp-run": (gcp_run, self.gcp_run),
                 "gcp-binauthz": (gcp_binauthz, self.gcp_run),
+                "gcp-bigquery": (gcp_bigquery, self.gcs),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

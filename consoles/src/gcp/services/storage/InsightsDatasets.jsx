@@ -1,8 +1,7 @@
-/* Insights datasets — Storage Intelligence dataset configs, real create/list/delete
- * against core/gcp_storage_core.py's insightsDatasets sub-resource (config_only: no
- * BigQuery export actually runs). */
+/* Insights datasets — Storage Intelligence dataset configs. Creating one really exports the matching buckets/objects into a
+ * linked BigQuery dataset (core/gcp_bigquery_core.py) that you can query with SQL below; Refresh re-runs the export. */
 import { useState } from "react";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
@@ -39,11 +38,16 @@ export default function InsightsDatasets() {
           { id: "name", header: "Display name", sortField: "displayName", cell: (d) => d.displayName },
           { id: "prefix", header: "Source bucket prefix", cell: (d) => d.sourceBucketPrefix || "—" },
           { id: "state", header: "State", cell: (d) => d.state },
+          { id: "bq", header: "BigQuery dataset", cell: (d) => d.link?.dataset?.split("/").pop() },
+          { id: "rows", header: "Exported objects", cell: (d) => d.tableRowCounts?.object_attributes_view ?? 0 },
+          { id: "refreshed", header: "Last refresh", cell: (d) => fmtDate(d.lastRefreshTime) },
+          { id: "ref", header: "", cell: (d) => <Button size="small" onClick={async () => { try { await api.refreshInsightsDataset(d.name.split("/").pop()); notify.success("Export refreshed"); reload(); } catch (e) { notify.error(e); } }}>Refresh export</Button> },
           { id: "created", header: "Created", sortField: "createTime", cell: (d) => fmtDate(d.createTime) },
           { id: "del", header: "", cell: (d) => <Button size="small" startIcon={<DeleteIcon />} onClick={() => setDel(d)}>Delete</Button> },
         ]}
         empty={<Typography variant="body2" color="text.secondary">No dataset configs yet.</Typography>}
       />
+      <QueryPanel datasets={data} />
       {create && <CreateDatasetDialog onClose={() => setCreate(false)} onSave={async (body) => {
         try { await api.createInsightsDataset(body); notify.success("Dataset config created"); reload(); } catch (e) { notify.error(e); }
       }} />}
@@ -81,5 +85,27 @@ function CreateDatasetDialog({ onClose, onSave }) {
         <Button variant="contained" disabled={busy || !ok} onClick={save}>Create</Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+function QueryPanel({ datasets }) {
+  const first = datasets[0]?.link?.dataset?.split("/").pop();
+  const [sql, setSql] = useState("");
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const q = sql || (first ? `SELECT bucket, COUNT(*) AS objects, SUM(size) AS bytes FROM \`${first}.object_attributes_view\` GROUP BY bucket` : "");
+  if (!first) return null;
+  return (
+    <Stack spacing={1} sx={{ mt: 3 }}>
+      <Typography variant="h3" component="h2">Query the exported inventory (BigQuery)</Typography>
+      <TextField multiline minRows={2} value={q} onChange={(e) => setSql(e.target.value)} inputProps={{ "aria-label": "SQL" }} />
+      <Stack direction="row" spacing={1}><Button variant="contained" onClick={async () => { setErr(null); try { setRes(await api.bqQuery(q)); } catch (e) { setErr(e); } }}>Run query</Button></Stack>
+      {err && <Alert severity="error">{err.message}</Alert>}
+      {res && (
+        <ResourceTable resourceName="rows" items={(res.rows || []).map((r, i) => ({ i, c: r.f.map((x) => x.v) }))} rowKey={(r) => r.i}
+          columns={res.schema.fields.map((f, k) => ({ id: f.name, header: f.name, cell: (r) => String(r.c[k] ?? "") }))} />
+      )}
+      <Typography variant="caption" color="text.secondary">Queries run on SQLite over the exported tables (bucket_attributes_view, object_attributes_view, project_attributes_view), not GoogleSQL.</Typography>
+    </Stack>
   );
 }

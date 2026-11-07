@@ -31,6 +31,9 @@ export async function listInsightsDatasets() {
   return r.datasets || [];
 }
 export const createInsightsDataset = (body) => restJson("POST", "/storage/v1/insightsDatasets", { body });
+export const refreshInsightsDataset = (id) => restJson("POST", `/storage/v1/insightsDatasets/${e(id)}:refresh`);
+/* BigQuery v2 (core/gcp_bigquery_core.py): the linked dataset the export fills; SQL runs on SQLite. */
+export const bqQuery = (query) => restJson("POST", `/bigquery/v2/projects/${e(getProject())}/queries`, { body: { query, useLegacySql: false } });
 export const deleteInsightsDataset = (id) => restJson("DELETE", `/storage/v1/insightsDatasets/${e(id)}`);
 
 /** Long-running bucket operations (e.g. the Turbo replication switch) — a real,
