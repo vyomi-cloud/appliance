@@ -589,6 +589,19 @@ def _check_binauthz(b):
         raise _E(400, "INVALID_ARGUMENT", "binaryAuthorization.policy must look like projects/P/platforms/cloudRun/policies/default.")
 
 
+def _enforce_binauthz(store, project, b, template):
+    """Admission: evaluate every container image of the new revision against the Binary Authorization policy
+    (core/gcp_binauthz_core.py — real allowlist + attestation signature verification)."""
+    if not b:
+        return
+    from core import gcp_binauthz_core as ba
+    try:
+        ba.enforce(store, project, b, [c.get("image", "") for c in (template or {}).get("containers") or []],
+                   resolver=lambda img: _ref(store, "image_digest", img))
+    except ba.BaError as e:
+        raise _E(e.status, e.gstatus, e.message)
+
+
 def _check_tags(traffic):
     seen = set()
     for tt in traffic or []:
@@ -869,6 +882,8 @@ def create_service(store, project, location, query, payload):
     _validate_function_source(spec.get("annotations"))
     template = _revision_template(project, spec["template"], False, store, location)
     _check_binauthz(spec.get("binaryAuthorization"))
+    if query.get("validateOnly") not in ("true", "True", True):
+        _enforce_binauthz(store, project, spec.get("binaryAuthorization"), template)
     _check_tags(spec.get("traffic"))
     traffic = spec.get("traffic") or [{"type": LATEST, "percent": 100}]
     now = _ts()
@@ -963,6 +978,8 @@ def update_service(store, project, location, sid, query, payload):
         _validate_function_source(new.get("annotations"))
     if query.get("validateOnly") in ("true", "True", True):
         return _operation(store, project, location, "service", new)
+    if changed_template or "binaryAuthorization" in fields:
+        _enforce_binauthz(store, project, new.get("binaryAuthorization"), new.get("template"))
     svc.update({k: new[k] for k in fields if k in new})
     if "traffic" in fields and not svc.get("traffic"):
         svc["traffic"] = new["traffic"]

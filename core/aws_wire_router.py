@@ -81,6 +81,7 @@ from core import gcp_compute_instances_core as gcp_compute_vm
 from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
+from core import gcp_binauthz_core as gcp_binauthz
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_commit_core as gcp_commit
@@ -127,6 +128,8 @@ def _gcp_service(path):
         return "gcp-cloudbuild"   # Cloud Build builds + triggers on the shared CI seam (core/gcp_cloudbuild_core; images pushed into Artifact Registry)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(deliveryPipelines|targets)([/:?]|$)", path):
         return "gcp-clouddeploy"   # Cloud Deploy: pipelines/targets/releases/rollouts state machine deploying to the simulator's Cloud Run + GKE (core/gcp_clouddeploy_core)
+    if gcp_binauthz.handles(path):
+        return "gcp-binauthz"   # Binary Authorization policy/attestors + attestation occurrences, enforced at Cloud Run deploy (core/gcp_binauthz_core)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(backupVaults|backupPlans|backupPlanAssociations)([/:?]|$)", path):
         return "gcp-backupdr"   # Backup and DR: vaults/plans/associations; backups are real Compute snapshots (core/gcp_backupdr_core, state on the Compute store)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(applications|discoveredServices|discoveredWorkloads)([/:?]|$)", path):
@@ -1089,6 +1092,8 @@ class AwsWireRouter:
             finally:
                 if tok is not None:
                     _ctx.REQUEST_PROVIDER.reset(tok)
+        if kind == "image_digest":   # Binary Authorization: image ref -> digest via the simulated Artifact Registry
+            return gcp_ar.resolve_image_digest(self.gcp_ar, args[0])
         if kind == "bucket":
             return bool(self.gcs.bucket_exists(args[0]))
         if kind == "vpcconn":   # Serverless VPC Access connector: (project, region, name)
@@ -1987,6 +1992,7 @@ class AwsWireRouter:
                 "gcp-resourcemanager": (gcp_rm, self.gcp_rm),
                 "gcp-pam": (gcp_pam, self.gcp_pam),
                 "gcp-run": (gcp_run, self.gcp_run),
+                "gcp-binauthz": (gcp_binauthz, self.gcp_run),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
@@ -2024,6 +2030,9 @@ class AwsWireRouter:
                                   pubsub_store=self.gcp_msg, gcs_store=self.gcs, log_fn=self._run_log)
             elif svc == "gcp-pubsub":   # a message delivered to an Eventarc-style Cloud Run trigger
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), on_publish=self._eventarc_deliver)
+            elif svc == "gcp-binauthz":   # tags resolve to digests through the simulated Artifact Registry
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
+                                  resolver=lambda ref: gcp_ar.resolve_image_digest(self.gcp_ar, ref))
             elif svc == "gcp-run":   # real mutations + Eventarc deliveries -> real Cloud Logging entries
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   log_fn=self._run_log, topic_exists=self._run_topic_exists)

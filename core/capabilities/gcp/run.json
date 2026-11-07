@@ -364,17 +364,24 @@
  "gcp.run.binary-authorization": {
   "title": "Binary Authorization",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The setting (default policy or a named policy) is validated and stored, but Vyomi has no attestation service, so images are never blocked at deploy time."
+   "Enforced for real at deploy (core/gcp_binauthz_core.py): a service/patch with binaryAuthorization {useDefault | policy} evaluates every container image against the project policy (projects/P/policy) or a named Cloud Run platform policy: admission allowlist (incl. the global Google-image allowlist), ALWAYS_ALLOW / ALWAYS_DENY / REQUIRE_ATTESTATION, ENFORCED_BLOCK_AND_AUDIT_LOG vs DRYRUN_AUDIT_LOG_ONLY. REQUIRE_ATTESTATION verifies real ECDSA P-256/SHA-256 signatures of Container Analysis ATTESTATION occurrences against the attestor's PKIX keys and the payload's image digest (tags are resolved through the simulated Artifact Registry). A denied deploy fails with FAILED_PRECONDITION and no service/revision is created (real Cloud Run creates the revision and leaves it not-ready).",
+   "Only ECDSA_P256_SHA256 PKIX keys are supported (RSA, other curves and Cloud KMS-backed attestor keys are refused at write time, not faked). GKE/Anthos cluster rules and continuous validation are stored on the policy but not enforced. The admission decision log is a Vyomi extension (GET projects/P/policy:decisions); it is not written to Cloud Audit Logs."
   ],
   "api": [
+   "projects.policy.get/update",
+   "projects.attestors.create/get/list/update/delete/validateAttestationOccurrence",
+   "projects.platforms.policies.create/get/list/replace/delete",
+   "containeranalysis projects.occurrences.create/get/list/delete (ATTESTATION only)",
+   "(Vyomi) projects/P/policy:evaluate, projects/P/policy:decisions",
    "projects.locations.services.create",
    "projects.locations.services.patch"
   ],
   "tests": [
+   "tests/conformance/test_gcp_binauthz.py",
    "tests/conformance/test_gcp_run_ext.py"
   ]
  },

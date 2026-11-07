@@ -78,6 +78,9 @@ check("KMS key in another region -> 400", svc("cmek3", {"encryptionKey": KMS.rep
 check("revocation action without a key -> 400", svc("cmek4", {"encryptionKeyRevocationAction": "SHUTDOWN"})[0] == 400)
 check("binauthz needs exactly one of useDefault/policy", svc("ba", {}, binaryAuthorization={"useDefault": True, "policy": "projects/p/platforms/cloudRun/policies/x"})[0] == 400)
 check("binauthz policy shape", svc("ba2", {}, binaryAuthorization={"policy": "bogus"})[0] == 400)
+check("binauthz named policy must exist (enforced at deploy)", svc("ba3x", {}, binaryAuthorization={"policy": "projects/p1/platforms/cloudRun/policies/default"})[0] == 400)
+from core import gcp_binauthz_core as _ba  # noqa: E402
+_ba.dispatch(st, "POST", "/v1/projects/p1/platforms/cloudRun/policies", {"policyId": "default"}, {}, json.dumps({"defaultAdmissionRule": {"evaluationMode": "ALWAYS_ALLOW", "enforcementMode": "ENFORCED_BLOCK_AND_AUDIT_LOG"}}).encode())
 check("binauthz policy accepted", svc("ba3", {}, binaryAuthorization={"policy": "projects/p1/platforms/cloudRun/policies/default"})[0] == 200)
 # revision tags
 s, o = svc("tg", {})
