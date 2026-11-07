@@ -283,5 +283,47 @@
     "api": ["PrivateLinkScopes.CreateOrUpdate", "PrivateLinkScopes.List", "PrivateLinkScopes.Delete",
             "PrivateLinkScopes.ScopedResources.CreateOrUpdate", "PrivateLinkScopes.ScopedResources.List", "PrivateLinkScopes.ScopedResources.Delete"],
     "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.fired_alerts": {
+    "title": "Fired alerts (metric, activity log and log-search rules evaluated for real; change state; history; summary)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": ["Rules are evaluated when alerts are read or via the evaluate action - there is no background timer on Nano.", "Dynamic-threshold and availability criteria are not evaluated.", "Email/SMS/voice/push receivers are recorded in the alert history but never delivered (no mail/SMS gateway); webhook receivers get a real HTTP POST."],
+    "api": ["Alerts.GetAll", "Alerts.GetById", "Alerts.ChangeState", "Alerts.GetHistory", "AlertsSummary.Get"],
+    "tests": ["tests/conformance/test_azure_alerts_core.py"]
+  },
+  "azure.monitor.alert_processing_rules": {
+    "title": "Alert processing rules (suppress notifications, add action groups; scope, condition and schedule enforced)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "api": ["AlertProcessingRules.CreateOrUpdate", "AlertProcessingRules.ListByResourceGroup", "AlertProcessingRules.Delete"],
+    "tests": ["tests/conformance/test_azure_alerts_core.py"]
+  },
+  "azure.monitor.prometheus_rule_groups": {
+    "title": "Prometheus rule groups (ARM resource + rule validation)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": ["Rules are validated and stored but never evaluated - Vyomi has no Prometheus time-series store or PromQL engine."],
+    "api": ["PrometheusRuleGroups.CreateOrUpdate", "PrometheusRuleGroups.ListByResourceGroup", "PrometheusRuleGroups.Delete"],
+    "tests": ["tests/conformance/test_azure_alerts_core.py"]
+  },
+  "azure.monitor.log_search_alerts": {
+    "title": "Log search alert rules (scheduledQueryRules evaluated by the Log Analytics KQL engine)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": ["The KQL engine supports where/extend/project/summarize/top/order/take/count/distinct, not joins, unions, let or time-series functions.", "Only tables with stored rows (AzureActivity, ingested *_CL) return data."],
+    "api": ["ScheduledQueryRules.CreateOrUpdate", "ScheduledQueryRules.ListByResourceGroup", "ScheduledQueryRules.Delete"],
+    "tests": ["tests/conformance/test_azure_alerts_core.py"]
+  },
+  "azure.monitor.dcr_resources": {
+    "title": "Resources collecting through a data collection rule (association list)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "api": ["DataCollectionRuleAssociations.ListByRule"],
+    "tests": ["tests/conformance/test_azure_alerts_core.py"]
+  },
+  "azure.monitor.alert_timeline": {
+    "title": "Alert timeline (fired/resolved/state-change events from real alert history)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "api": ["Alerts.GetHistory"],
+    "tests": ["tests/conformance/test_azure_alerts_core.py"]
   }
 }

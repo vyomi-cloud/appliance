@@ -1,14 +1,34 @@
 import { useEffect, useState } from "react";
-import { Button, Select } from "@fluentui/react-components";
+import { Button, Select, ToolbarButton } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
-import { deleteWorkspace, listWorkspaces } from "./api.js";
+import { deleteWorkspace, listWorkbooks, listWorkspaces } from "./api.js";
 import { locationLabel } from "../../kit/arm.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { Loading } from "../../kit/common.jsx";
 
 const TIME_RANGES = ["Last 24 hours", "Last 7 days", "Last 30 days", "All time"];
 const RANGE_MS = { "Last 24 hours": 864e5, "Last 7 days": 6048e5, "Last 30 days": 2592e6 };
+
+/** Workbooks gallery strip: the REAL Microsoft.Insights/workbooks stored in the subscription (same list as the Workbooks blade). */
+function WorkspaceWorkbooks() {
+  const [wbs, setWbs] = useState(null);
+  useEffect(() => { listWorkbooks().then(setWbs).catch(() => setWbs([])); }, []);
+  return (
+    <CapabilityContainer id="azure.monitor.workbooks" title="Workbooks" actions={
+      <div className="vy-cmdbar" role="toolbar" aria-label="Command bar">
+        <ToolbarButton as="a" href="#/monitor/createworkbook">New workbook</ToolbarButton>
+        <ToolbarButton as="a" href="#/monitor/workbooks">Open gallery</ToolbarButton>
+      </div>
+    }>
+      {wbs === null ? <Loading /> : !wbs.length ? <p>No workbooks yet.</p> : (
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {wbs.map((w) => <li key={w.id}><a href="#/monitor/workbooks">{w.properties.displayName || w.name}</a> <span style={{ opacity: 0.7 }}>({w.resourceGroup})</span></li>)}
+        </ul>
+      )}
+    </CapabilityContainer>
+  );
+}
 
 export default function LogAnalyticsWorkspaces() {
   const [items, setItems] = useState([]);
@@ -47,7 +67,7 @@ export default function LogAnalyticsWorkspaces() {
           emptyAction={<Button appearance="primary" as="a" href="#/monitor/createloganalyticsworkspace">Create workspace</Button>}
           csvName="log-analytics-workspaces.csv" />
       </CapabilityContainer>
-      <NotSimulatedContainer title="Workbooks" note="Customize is not simulated either." />
+      <WorkspaceWorkbooks />
     </MonitorShell>
   );
 }

@@ -69,6 +69,7 @@ TYPES = {
     "healthmodels": ("healthModels", "2023-04-01-preview"),
     "pipelinegroups": ("pipelineGroups", "2023-10-01-preview"),
     "components": ("components", "2020-02-02"),
+    "scheduledqueryrules": ("scheduledQueryRules", "2023-03-15-preview"),
 }
 # ARM echoes these type strings back (autoscale is lower-cased in the real service)
 TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts": "Microsoft.Insights/metricAlerts",
@@ -80,11 +81,13 @@ TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts
                 "privatelinkscopes": "Microsoft.Insights/privateLinkScopes",
                 "healthmodels": "Microsoft.Insights/healthModels",
                 "pipelinegroups": "Microsoft.Insights/pipelineGroups",
-                "components": "Microsoft.Insights/components"}
+                "components": "Microsoft.Insights/components",
+                "scheduledqueryrules": "Microsoft.Insights/scheduledQueryRules"}
 
 EVAL_FREQUENCIES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H")
+SQR_FREQUENCIES = ("PT1M", "PT5M", "PT10M", "PT15M", "PT30M", "PT1H", "PT2H", "PT6H", "PT12H", "P1D")
 WINDOW_SIZES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H", "PT6H", "PT12H", "P1D")
-_DUR_MIN = {"PT1M": 1, "PT5M": 5, "PT15M": 15, "PT30M": 30, "PT1H": 60, "PT6H": 360, "PT12H": 720, "P1D": 1440}
+_DUR_MIN = {"PT10M": 10, "PT2H": 120, "PT1M": 1, "PT5M": 5, "PT15M": 15, "PT30M": 30, "PT1H": 60, "PT6H": 360, "PT12H": 720, "P1D": 1440}
 OPERATORS = ("Equals", "GreaterThan", "GreaterThanOrEqual", "LessThan", "LessThanOrEqual")
 DYNAMIC_OPERATORS = ("GreaterThan", "LessThan", "GreaterOrLessThan")
 AGGREGATIONS = ("Average", "Count", "Minimum", "Maximum", "Total")
@@ -384,6 +387,48 @@ def _activity_props(props, old=None):
     return out
 
 
+# ═══════════════════════════ scheduled query rules (log search alerts) ═══════════
+SQR_AGGS = ("Count", "Average", "Minimum", "Maximum", "Total")
+
+
+def _sqr_props(props, old=None, name=""):
+    """Microsoft.Insights/scheduledQueryRules 2023-03-15-preview. The rule's KQL runs against the Log Analytics
+    workspace(s) named in `scopes` (core/azure_alerts_core.py evaluates it with the real KQL engine)."""
+    p = dict(old or {})
+    p.update(props)
+    out = {"displayName": p.get("displayName") or name, "description": p.get("description") or "",
+           "severity": _int(p.get("severity", 3), "severity", 0, 4), "enabled": _bool(p.get("enabled"), "enabled", default=True),
+           "scopes": _scopes(p), "evaluationFrequency": _enum(p.get("evaluationFrequency"), "evaluationFrequency", SQR_FREQUENCIES),
+           "windowSize": _enum(p.get("windowSize"), "windowSize", SQR_FREQUENCIES + ("P2D",)),
+           "autoMitigate": _bool(p.get("autoMitigate"), "autoMitigate", default=False)}
+    out["kind"] = "LogAlert"
+    for sc in out["scopes"]:
+        if "/microsoft.operationalinsights/workspaces/" not in sc.lower():
+            raise _bad(f"The scope '{sc}' must be a Log Analytics workspace (Microsoft.OperationalInsights/workspaces).")
+    cr = p.get("criteria")
+    allof = cr.get("allOf") if isinstance(cr, dict) else None
+    if not isinstance(allof, list) or not allof:
+        raise _bad("The property 'criteria.allOf' must contain at least one condition.")
+    norm = []
+    for c in allof:
+        if not isinstance(c, dict):
+            raise _bad("criteria.allOf must contain objects.")
+        c = dict(c)
+        c["query"] = _str(c.get("query"), "criteria.allOf.query")
+        c["timeAggregation"] = _enum(c.get("timeAggregation") or "Count", "criteria.allOf.timeAggregation", SQR_AGGS)
+        c["operator"] = _enum(c.get("operator"), "criteria.allOf.operator", OPERATORS)
+        c["threshold"] = _num(c.get("threshold"), "criteria.allOf.threshold")
+        if c["timeAggregation"] != "Count" and not c.get("metricMeasureColumn"):
+            raise _bad("criteria.allOf.metricMeasureColumn is required when timeAggregation is not Count.")
+        norm.append(c)
+    out["criteria"] = {"allOf": norm}
+    ag = (p.get("actions") or {}).get("actionGroups") if isinstance(p.get("actions"), dict) else None
+    out["actions"] = {"actionGroups": [_ag_id(a) for a in (ag or [])], "customProperties": dict((p.get("actions") or {}).get("customProperties") or {})}
+    out["isWorkspaceAlertsStorageConfigured"] = False
+    out["createdWithApiVersion"] = "2023-03-15-preview"
+    return out
+
+
 # ═══════════════════════════ autoscale settings ══════════════════════════════════
 def _profile(pr):
     if not isinstance(pr, dict):
@@ -598,7 +643,8 @@ _BUILDERS = {"components": lambda pr, old, nm: _component_props(pr, old),
              "datacollectionendpoints": _dce_props,
              "privatelinkscopes": lambda pr, old, nm: _plscope_props(pr, old),
              "healthmodels": lambda pr, old, nm: _health_model_props(pr, old),
-             "pipelinegroups": lambda pr, old, nm: _pipeline_props(pr, old)}
+             "pipelinegroups": lambda pr, old, nm: _pipeline_props(pr, old),
+             "scheduledqueryrules": _sqr_props}
 
 
 # ═══════════════════ private link scopes — scoped resources (child resource) ═════
@@ -1119,7 +1165,9 @@ def _put(state, sub, rg, low, name, payload, method):
             loc = "Global" if low != "metricalerts" else "global"
         rec = {"id": rid, "name": name, "type": TYPE_STRINGS[low], "location": loc,
                "tags": dict(payload.get("tags") or {}), "properties": props,
-               "_type": TYPE_STRINGS[low], "_sub": sub, "_rg": rg}
+               "_type": TYPE_STRINGS[low], "_sub": sub, "_rg": rg, "_created": _now()}
+        if low == "scheduledqueryrules":
+            rec["kind"] = "LogAlert"
         state[rid.lower()] = rec
         return rec, True
     if isinstance(payload.get("tags"), dict):
@@ -1282,6 +1330,11 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
             return _action_group_ops(state, rec, rest, method, payload, base)
         if low == "metricalerts" and rest[0].lower() == "status" and method == "GET":
             return _ok({"value": []})
+        if low == "datacollectionrules" and rest[0].lower() == "associations" and method == "GET":
+            # Resources collecting via this rule: every dataCollectionRuleAssociation naming it (real ARM list).
+            items = [r for r in state.values() if r.get("_dcra_scope") and str((r.get("properties") or {}).get("dataCollectionRuleId", "")).lower() == rid.lower()]
+            items.sort(key=lambda r: r["id"].lower())
+            return _ok({"value": [_view(r) for r in items]})
         if low == "privatelinkscopes" and rest[0].lower() == "scopedresources":
             return _scoped_resource_ops(state, rec, rest[1:], method, payload)
         return _err(404, "ResourceTypeNotSupported", f"The resource type '{NAMESPACE}/{low}/{'/'.join(rest)}' is not supported.")

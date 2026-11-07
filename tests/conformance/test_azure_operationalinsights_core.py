@@ -93,7 +93,7 @@ check("where+project: real rows, right columns, other subscription excluded",
       [c["name"] for c in t["columns"]] == ["TimeGenerated", "OperationName"]
       and t["rows"] == [["2026-01-01T00:00:00.000000Z", "Microsoft.Storage/storageAccounts/write"]], t)
 check("count", cp(st, "POST", Q, {"query": "AzureActivity | count"})["body"]["tables"][0]["rows"] == [[1]])
-check("unsupported operator → 400 (not a silent success)", cp(st, "POST", Q, {"query": "AzureActivity | summarize count() by Caller"})["status"] == 400)
+check("unsupported operator → 400 (not a silent success)", cp(st, "POST", Q, {"query": "AzureActivity | join kind=inner (X) on Caller"})["status"] == 400)
 check("unknown column in where → 400", cp(st, "POST", Q, {"query": "AzureActivity | where NoSuchColumn == 'x'"})["status"] == 400)
 check("GET not allowed on the query action", cp(st, "GET", Q)["status"] == 405)
 

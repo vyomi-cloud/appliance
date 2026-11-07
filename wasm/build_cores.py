@@ -135,6 +135,7 @@ CORES = [
     "azure_sqlbackup_core.py",
     "azure_dpbackup_core.py",
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
+    "azure_alerts_core.py",                         # v4: Azure Monitor alert evaluation + processing rules (Microsoft.AlertsManagement) — after monitor/operationalinsights, before azure_arm_core
     "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",
     "azure_search_vector_core.py", "azure_search_core.py",
@@ -163,7 +164,7 @@ CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'net
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"ssh_access_core.py", "gcp_vertex_core.py", "gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_cost_core.py", "azure_webapp_core.py"}
+VERBATIM = {"ssh_access_core.py", "gcp_vertex_core.py", "gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_alerts_core.py", "azure_cost_core.py", "azure_webapp_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
