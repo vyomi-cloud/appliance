@@ -183,6 +183,8 @@ def keyvault_parity(make_kv, make_key, label):
         n = int.from_bytes(base64.urlsafe_b64decode(b["key"]["n"] + "=="), "big")
         pub = rsa.RSAPublicNumbers(65537, n).public_key()
         ct = pub.encrypt(b"client-side", padding.OAEP(mgf=padding.MGF1(hashes.SHA1()), algorithm=hashes.SHA1(), label=None))
+        # the key was disabled above; Key Vault refuses crypto ops on a disabled key, so re-enable first
+        _k(kvk, key, "PATCH", "/keys/k", {"attributes": {"enabled": True}})
         s, d, _ = _k(kvk, key, "POST", f"/keys/k/{ver}/decrypt",
                      {"alg": "RSA-OAEP", "value": base64.urlsafe_b64encode(ct).decode().rstrip("=")})
         _check(f"[{label}] keys: real RSA — client-side encrypt with (n, e) decrypts on the service",
