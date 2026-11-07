@@ -587,6 +587,16 @@ class _CmkScope:
         self.uri = _cmk_uri(self.rec)
         if self.kv is None or not (self.uri or "_kv_sealed" in self.rec):
             return self
+        cmk.LOCK.acquire()
+        self.locked = True
+        try:
+            return self._enter(cmk)
+        except BaseException:
+            self.locked = False
+            cmk.LOCK.release()
+            raise
+
+    def _enter(self, cmk):
         self.st = cmk.SealedState(self.rec, "_kv", "_kv_sealed")
         if self.uri:
             ok, why = cmk.usable(self.kv, self.uri)
@@ -601,14 +611,19 @@ class _CmkScope:
         return self
 
     def __exit__(self, *exc):
-        if self.st is not None:
-            if self.uri:
-                try:
-                    self.st.close(self.kv, self.uri)
-                except self.cmk.CmkError:
-                    pass                      # key went away mid-request: leave plaintext rather than lose data
-            else:
-                self.rec.pop("_kv_sealed", None)   # CMK removed: store is plaintext again
+        try:
+            if self.st is not None:
+                if self.uri:
+                    try:
+                        self.st.close(self.kv, self.uri)
+                    except self.cmk.CmkError:
+                        pass                      # key went away mid-request: leave plaintext rather than lose data
+                else:
+                    self.rec.pop("_kv_sealed", None)   # CMK removed: store is plaintext again
+        finally:
+            if getattr(self, "locked", False):
+                self.locked = False
+                self.cmk.LOCK.release()
         return False
 
 

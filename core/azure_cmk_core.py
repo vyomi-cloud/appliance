@@ -28,6 +28,7 @@ import hashlib
 import hmac
 import json
 import os
+import threading
 
 try:
     from core import azure_keyvault_keys_core as kvk
@@ -37,6 +38,8 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
 MAGIC = "vyomi-cmk-v1"
 
 _BOUND = {"keys": None}
+# Sealed state exists in plaintext only inside a request; concurrent requests on a CMK-protected store are serialised.
+LOCK = threading.RLock()
 
 
 def bind(kv_store) -> None:

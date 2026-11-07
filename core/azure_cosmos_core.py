@@ -692,7 +692,7 @@ CMK_SLOT = "$cmk"
 def _cmk_scope_for(store, acct, arm_state=None):
     uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
     sealed = isinstance(getattr(store, "docs", None), dict) and CMK_SLOT in store.docs
-    if sealed and not uri:      # request did not resolve to the CMK account: still re-seal under that account's key
+    if not uri:      # the data store is shared by every account: any CMK account protects it, so re-seal under that key
         for a in _cosmos_accounts(arm_state or {}):
             u = (a.get("properties") or {}).get("keyVaultKeyUri")
             if u:
@@ -710,6 +710,17 @@ class _CmkScope:
         from core import azure_cmk_core as cmk
         self.cmk = cmk
         self.kv = cmk.keys(self.kv)
+        cmk.LOCK.acquire()
+        self.locked = True
+        try:
+            return self._enter(cmk)
+        except BaseException:
+            self.locked = False
+            cmk.LOCK.release()
+            raise
+
+    def _enter(self, cmk):
+        self.sealed = isinstance(getattr(self.store, "docs", None), dict) and CMK_SLOT in self.store.docs
         if self.kv is None or not (self.uri or self.sealed):
             return self
         if self.uri:
@@ -728,19 +739,24 @@ class _CmkScope:
         return self
 
     def __exit__(self, *exc):
-        if not self.active or not self.uri:
-            return False
         try:
-            env = self.cmk.seal(self.kv, self.uri, json.dumps(self.store.docs, sort_keys=True, default=str).encode())
-        except self.cmk.CmkError:
+            if not self.active or not self.uri:
+                return False
+            try:
+                env = self.cmk.seal(self.kv, self.uri, json.dumps(self.store.docs, sort_keys=True, default=str).encode())
+            except self.cmk.CmkError:
+                return False
+            self.store.docs.clear()
+            self.store.docs[CMK_SLOT] = env
+            try:
+                self.store.persist()
+            except Exception:
+                pass
             return False
-        self.store.docs.clear()
-        self.store.docs[CMK_SLOT] = env
-        try:
-            self.store.persist()
-        except Exception:
-            pass
-        return False
+        finally:
+            if getattr(self, "locked", False):
+                self.locked = False
+                self.cmk.LOCK.release()
 
 
 class _CmkDenied(Exception):

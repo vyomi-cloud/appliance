@@ -525,6 +525,17 @@ class CmkScope:
         self.active = self.kv is not None and (self.uri is not None or getattr(self.store, "_sb_sealed", None) is not None)
         if not self.active:
             return self
+        cmk.LOCK.acquire()
+        self.locked = True
+        try:
+            return self._enter(cmk)
+        except BaseException:
+            self.active = False
+            self.locked = False
+            cmk.LOCK.release()
+            raise
+
+    def _enter(self, cmk):
         if self.uri:
             ok, why = cmk.usable(self.kv, self.uri)
             if not ok:
@@ -533,6 +544,8 @@ class CmkScope:
                                       f"The namespace's customer-managed key cannot be used ({why}); message data is unreadable.", 403)
         env = getattr(self.store, "_sb_sealed", None)
         if env is not None:
+            if not self.uri:        # request did not resolve to the CMK namespace: still re-seal under the envelope's key
+                self.uri = "https://vault.vault.azure.net/keys/" + env["keyName"]
             try:
                 bodies = json.loads(cmk.unseal(self.kv, env).decode())
             except cmk.CmkError as e:
@@ -547,6 +560,14 @@ class CmkScope:
         return self
 
     def __exit__(self, *exc):
+        try:
+            return self._exit()
+        finally:
+            if getattr(self, "locked", False):
+                self.locked = False
+                self.cmk.LOCK.release()
+
+    def _exit(self):
         if not self.active:
             return False
         import base64

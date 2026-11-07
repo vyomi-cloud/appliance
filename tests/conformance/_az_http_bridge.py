@@ -11,7 +11,7 @@ def start(router=None):
     router = router or AwsWireRouter()
 
     class H(BaseHTTPRequestHandler):
-        protocol_version = "HTTP/1.1"
+        protocol_version = "HTTP/1.0"
 
         def log_message(self, *a):
             pass
@@ -22,7 +22,11 @@ def start(router=None):
             body = self.rfile.read(n) if n else b""
             hdrs = {k.lower(): v for k, v in self.headers.items()}
             q = dict(parse_qsl(u.query, keep_blank_values=True))
-            r = router.handle(self.command, u.path + (("?" + u.query) if u.query else ""), q, hdrs, body)
+            try:
+                r = router.handle(self.command, u.path + (("?" + u.query) if u.query else ""), q, hdrs, body)
+            except Exception:   # noqa: BLE001
+                import traceback; traceback.print_exc()
+                r = {"status": 500, "headers": {}, "body": b"router error"}
             out = r.get("body") or b""
             if isinstance(out, str):
                 out = out.encode()
