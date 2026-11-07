@@ -3407,7 +3407,11 @@ class AzureArm:
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _oi(self, method, sub, rg, chain, payload, query):
-        r = oi_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        try:
+            from core import azure_blob_core as _bm
+        except ImportError:
+            import azure_blob_core as _bm              # type: ignore
+        r = oi_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base, blob_store=self.blob_store, blob_mod=_bm)
         resp = {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
         if r["lro"] and r["status"] < 300:
             op_id = self._make_operation(r["rid"], method)

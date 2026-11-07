@@ -305,7 +305,7 @@ def _usages(rec):
     reset = p["workspaceCapping"]["quotaNextResetTime"]
     n = len(rec["_tables"])
     return {"value": [
-        {"name": {"value": "DataAnalyzed", "localizedValue": "Data Analyzed"}, "unit": "Bytes", "currentValue": 0.0,
+        {"name": {"value": "DataAnalyzed", "localizedValue": "Data Analyzed"}, "unit": "Bytes", "currentValue": float(rec.get("_ingest", {}).get(_today(), 0)),
          "limit": 524288000.0 if p["sku"]["name"] == "Free" else (-1.0 if cap == -1 else cap * 1073741824.0),
          "nextResetTime": reset, "quotaPeriod": "P1D"},
         {"name": {"value": "TableCount", "localizedValue": "Tables"}, "unit": "Count", "currentValue": float(n),
@@ -349,6 +349,10 @@ def _workspace_ops(state, sub, rec, rest, method, payload):
             return _ok(None, 200)
     if op == "api" and len(rest) == 2 and rest[1].lower() == "query":
         return _run_query(state, sub, rec, method, payload)
+    if op == "purge" and len(rest) == 1:
+        return _purge(rec, method, payload)
+    if op == "operations" and len(rest) == 2:
+        return _purge_status(rec, method, rest[1])
     return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
 
 
@@ -624,9 +628,16 @@ def _put_data_source(rec, store, name, cur, payload):
 
 
 # ═══════════════════════════ dispatch ════════════════════════════════════════════
-def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, base=""):
-    """Handle one ``Microsoft.OperationalInsights`` ARM request (``chain`` = tokens after the namespace)."""
+_CTX = {"blob_store": None, "blob_mod": None, "state": None}
+
+
+def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, base="", blob_store=None, blob_mod=None):
+    """Handle one ``Microsoft.OperationalInsights`` ARM request (``chain`` = tokens after the namespace).
+
+    ``blob_store``/``blob_mod`` (optional) are the host's Azure Blob store + core: data export rules write the
+    exported rows there as real blobs. Without them an export rule is stored but nothing can be written."""
     method = (method or "GET").upper()
+    _CTX.update(blob_store=blob_store, blob_mod=blob_mod, state=state)
     payload = {"_array": payload} if isinstance(payload, list) else (payload if isinstance(payload, dict) else {})
     try:
         return _dispatch(state, method, sub, rg, list(chain), payload, query or {})
@@ -662,6 +673,10 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
                 # ARM state map, so it is injected as a table for the single KQL engine (run_kql) to query.
                 return _data_plane(rec, rest, method, payload, query, extra={"AzureActivity": activity_table(state, sub)})
             return _data_plane(rec, rest, method, payload, query)
+        if head == "dataexports":
+            if len(rest) > 2:
+                return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+            return _data_exports(rec, rest[1] if len(rest) == 2 else None, method, payload)
         if head in ("savedsearches", "tables", "datasources"):
             if len(rest) > 2:
                 return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
@@ -717,7 +732,33 @@ def _rows(rec):
     return rec.setdefault("_rows", {})
 
 
+def _today():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _daily_limit_bytes(rec):
+    p = rec["properties"]
+    if p["sku"]["name"] == "Free":
+        return 524288000
+    cap = p["workspaceCapping"]["dailyQuotaGb"]
+    return None if cap == -1 else int(cap * 1073741824)
+
+
 def _store(rec, table, rows):
+    # Real ingestion volume: bytes accepted today feed the Usage blade; once the daily cap is reached the
+    # service silently drops further data until the next reset (it does not error the sender).
+    size = len(json.dumps(rows, default=str).encode())
+    ing = rec.setdefault("_ingest", {})
+    lim = _daily_limit_bytes(rec)
+    if lim is not None and ing.get(_today(), 0) >= lim:
+        rec["_droppedBytes"] = rec.get("_droppedBytes", 0) + size
+        return
+    ing[_today()] = ing.get(_today(), 0) + size
+    for k in sorted(ing)[:-35]:
+        ing.pop(k, None)
+    by = rec.setdefault("_ingestByTable", {}).setdefault(_today(), {})
+    by[table] = by.get(table, 0) + size
+    _export_rows(rec, table, rows)
     tbl = _rows(rec).setdefault(table, [])
     tbl.extend(rows)
     if len(tbl) > MAX_ROWS:
@@ -765,6 +806,178 @@ def _ingest_dcr(rec, stream, payload):
         out.append(row)
     _store(rec, table, out)
     return {"status": 204, "headers": {}, "body": None, "lro": False, "rid": "", "verb": ""}
+
+
+# ═══════════════════════ data export rules (real blob writes) ════════════════════
+MAX_EXPORT_RULES = 10
+_EXPORT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{2,62}[A-Za-z0-9]$")
+_SA_ID = re.compile(r"^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.storage/storageaccounts/([a-z0-9]{3,24})$", re.I)
+
+
+def _export_view(rec, r):
+    out = {k: v for k, v in r.items() if not k.startswith("_")}
+    out["id"] = _child_id(rec, "dataExports", r["name"])
+    return out
+
+
+def _known_table(rec, t):
+    return t.lower() in BASE_TABLES_LOWER or t.lower() in rec["_tables"]
+
+
+def _data_exports(rec, name, method, payload):
+    store = rec.setdefault("_exports", {})
+    if name is None:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_export_view(rec, r) for r in sorted(store.values(), key=lambda r: r["name"].lower())]})
+    key, cur = name.lower(), store.get(name.lower())
+    if method == "GET":
+        if cur is None:
+            raise _child_not_found("data export", name, rec["name"])
+        return _ok(_export_view(rec, cur))
+    if method == "DELETE":
+        if cur is None:
+            raise _child_not_found("data export", name, rec["name"])
+        store.pop(key)
+        return _ok(None, 200)
+    if method != "PUT":
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if not _EXPORT_NAME.match(name):
+        raise _bad(f"The data export rule name '{name}' is invalid. It must be 4-63 characters: letters, digits and '-', starting and ending with a letter or digit.")
+    p = payload.get("properties")
+    if not isinstance(p, dict):
+        raise _bad("The request body must contain 'properties'.")
+    tables = p.get("tableNames")
+    if not isinstance(tables, list) or not tables or any(not isinstance(t, str) for t in tables):
+        raise _bad("The property 'tableNames' must be a non-empty list of table names.")
+    canon = []
+    for t in tables:
+        if not _known_table(rec, t):
+            raise _bad(f"Table '{t}' does not exist in the workspace '{rec['name']}' and cannot be exported.")
+        canon.append(BASE_TABLES_LOWER[t.lower()] if t.lower() in BASE_TABLES_LOWER else rec["_tables"][t.lower()]["name"])
+    dest = p.get("destination") or {}
+    rid = dest.get("resourceId") or p.get("resourceId")
+    if not isinstance(rid, str) or not rid:
+        raise _bad("The property 'destination.resourceId' is required.")
+    m = _SA_ID.match(rid)
+    if not m:
+        if "microsoft.eventhub" in rid.lower():
+            raise _bad("Event Hub export destinations are not supported by Vyomi; use a Storage account.")
+        raise _bad("The destination must be a Microsoft.Storage/storageAccounts resource id.")
+    state = _CTX.get("state") or {}
+    if rid.lower() not in state:
+        raise _E(400, "InvalidDestination", f"The destination storage account '{m.group(1)}' was not found.")
+    enable = bool(p.get("enable", True))
+    if cur is None and len(store) >= MAX_EXPORT_RULES:
+        raise _E(409, "Conflict", f"A workspace can hold at most {MAX_EXPORT_RULES} data export rules.")
+    if enable:
+        for other in store.values():
+            if other["name"].lower() != key and other["properties"].get("enable") and \
+                    {t.lower() for t in other["properties"]["tableNames"]} & {t.lower() for t in canon}:
+                raise _E(409, "Conflict", f"One or more tables are already exported by the enabled rule '{other['name']}'.")
+    now = _now()
+    props = {"dataExportId": (cur or {}).get("properties", {}).get("dataExportId") or str(uuid.uuid4()),
+             "tableNames": canon, "destination": {"resourceId": rid, "type": "StorageAccount", "metaData": {}},
+             "enable": enable, "createdDate": (cur or {}).get("properties", {}).get("createdDate") or now, "lastModifiedDate": now}
+    new = {"id": _child_id(rec, "dataExports", name), "name": name, "type": f"{WS_TYPE}/dataexports",
+           "etag": _etag(), "properties": props}
+    store[key] = new
+    return _ok(_export_view(rec, new), 200 if cur else 201)
+
+
+def _export_rows(rec, table, rows):
+    """Write freshly ingested rows to every enabled export rule's storage account, as the real service
+    does: container ``am-<table>``, blob ``WorkspaceResourceId=<id>/y=…/m=…/d=…/h=…/m=…/PT05M.json``
+    (one JSON record per line). Appends to the current 5-minute blob."""
+    bs, bm = _CTX.get("blob_store"), _CTX.get("blob_mod")
+    if bs is None or bm is None:
+        return
+    for rule in list((rec.get("_exports") or {}).values()):
+        pr = rule["properties"]
+        if not pr["enable"] or table.lower() not in {t.lower() for t in pr["tableNames"]}:
+            continue
+        try:
+            acct = _SA_ID.match(pr["destination"]["resourceId"]).group(1).lower()
+            cont = "am-" + table.lower().replace("_", "-")
+            ck = f"{acct}/{cont}"
+            if not bs.container_exists(ck):
+                bs.create_container(ck)
+            t = datetime.now(timezone.utc)
+            blob = (f"WorkspaceResourceId={rec['id'].lower()}/y={t:%Y}/m={t:%m}/d={t:%d}/h={t:%H}/m={t.minute // 5 * 5:02d}/PT05M.json")
+            old = b""
+            g = bm.dispatch(bs, "GET", f"/{cont}/{blob}", {}, {}, b"", account=acct)
+            if g.status == 200:
+                old = g.body if isinstance(g.body, bytes) else str(g.body).encode()
+            lines = "".join(json.dumps({**r, "Type": table, "_ResourceId": rec["id"]}, default=str) + "\n" for r in rows).encode()
+            r = bm.dispatch(bs, "PUT", f"/{cont}/{blob}", {}, {"x-ms-blob-type": "BlockBlob", "content-type": "application/json"}, old + lines, account=acct)
+            if r.status >= 300:
+                raise RuntimeError(r.status)
+            rule["_rows"] = rule.get("_rows", 0) + len(rows)
+        except Exception:
+            rule["_failures"] = rule.get("_failures", 0) + 1
+
+
+# ═══════════════════════ purge (really deletes rows) ═════════════════════════════
+_PURGE_OPS = ("==", ">", "<", ">=", "<=", "in", "between")
+
+
+def _purge(rec, method, payload):
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", "POST required.")
+    table = payload.get("table")
+    if not isinstance(table, str) or not table:
+        raise _bad_p("The 'table' property is required.")
+    schema = _table_schema(rec, table)
+    if schema is None:
+        raise _bad_p(f"Table '{table}' was not found in the workspace.")
+    filters = payload.get("filters")
+    if not isinstance(filters, list) or not filters:
+        raise _bad_p("At least one filter is required: a purge without filters is not allowed.")
+    cols = {c.lower(): c for c, _ in schema}
+    for f in filters:
+        if not isinstance(f, dict) or str(f.get("column", "")).lower() not in cols:
+            raise _bad_p(f"Filter column '{(f or {}).get('column')}' does not exist in table '{table}'.")
+        if f.get("operator") not in _PURGE_OPS:
+            raise _bad_p(f"Filter operator must be one of {', '.join(_PURGE_OPS)}.")
+        if "value" not in f and "values" not in f:
+            raise _bad_p("Each filter needs a 'value'.")
+
+    def match(row):
+        for f in filters:
+            col = cols[f["column"].lower()]
+            v, rhs, op = row.get(col), f.get("value", f.get("values")), f["operator"]
+            if op == "in":
+                if v not in (rhs if isinstance(rhs, list) else [rhs]):
+                    return False
+            elif op == "between":
+                if not isinstance(rhs, list) or len(rhs) != 2 or v is None or not (str(rhs[0]) <= str(v) <= str(rhs[1])):
+                    return False
+            elif v is None or not _cmp(v, op, rhs):
+                return False
+        return True
+
+    real = next((t for t in _rows(rec) if t.lower() == table.lower()), None)
+    before = _rows(rec).get(real, []) if real else []
+    keep = [r for r in before if not match(r)]
+    removed = len(before) - len(keep)
+    if real:
+        _rows(rec)[real] = keep
+    oid = "purge-" + uuid.uuid4().hex
+    rec.setdefault("_purges", {})[oid] = {"status": "completed", "table": table, "rowsPurged": removed, "completed": _now()}
+    return _ok({"operationId": oid}, 202, headers={"x-ms-status-location": f"{rec['id']}/operations/{oid}"})
+
+
+def _bad_p(msg):
+    return _E(400, "BadRequest", msg)
+
+
+def _purge_status(rec, method, oid):
+    if method != "GET":
+        return _err(405, "MethodNotAllowed", "GET required.")
+    op = (rec.get("_purges") or {}).get(oid)
+    if op is None:
+        raise _E(404, "NotFound", f"Purge operation '{oid}' was not found.")
+    return _ok({"status": op["status"]})
 
 
 class KqlError(Exception):

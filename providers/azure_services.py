@@ -1342,7 +1342,13 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
         for hk, qk in (("log-type", "logType"), ("time-generated-field", "time-generated-field")):
             if request.headers.get(hk) and qk not in q:
                 q[qk] = request.headers[hk]
-    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base)
+    from core import azure_blob_core as _bm
+    try:
+        from core.appliance_stores import az_blob_store as _abs
+        _bs = _abs()
+    except Exception:
+        _bs = None
+    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base, blob_store=_bs, blob_mod=_bm)
     api_version = request.query_params.get("api-version") or _oi.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
