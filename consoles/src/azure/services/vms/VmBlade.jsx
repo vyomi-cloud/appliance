@@ -269,7 +269,7 @@ function Overview({ a, reload, self }) {
           navigate("vms");
         }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap === "JSON View" ? "Viewing the raw ARM JSON for this resource" : gap || ""} note={gap === "Hibernate" || gap === "Capture" ? capability("azure.vms.power")?.limitations?.join(" ") : undefined} /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
@@ -515,7 +515,7 @@ function Locks({ a }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
@@ -1129,7 +1129,7 @@ function RunCommand({ a }) {
     <CapabilityContainer id="azure.vms.run_command" title={`${a.name} | Run command`}>
       <BrowseGrid resourceName="command" rowKey={(r) => r.name} filterPlaceholder="Filter by name"
         items={COMMAND_TEMPLATES} columns={[{ key: "name", label: "Name" }, { key: "description", label: "Description" }]}
-        extraCommands={<ToolbarButton onClick={() => notify.error("Not simulated", "Vyomi does not persist a custom command gallery to create into.")}>Create</ToolbarButton>} />
+        extraCommands={<ToolbarButton onClick={() => notify.error("Coming soon", "Vyomi does not persist a custom command gallery to create into.")}>Create</ToolbarButton>} />
       <section className="vy-section" style={{ marginTop: 16 }}>
         <h3>Run Command Script</h3>
         <p style={{ fontSize: 13 }}>

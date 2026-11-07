@@ -51,7 +51,7 @@ function GapBox({ title, lines, note }) {
     <div data-vyomi-gap-box="">
       <Box padding="l" textAlign="center" color="text-body-secondary" data-vyomi-not-simulated={title}>
         <SpaceBetween size="xs">
-          <Badge color="grey">Not simulated in Vyomi</Badge>
+          <Badge color="grey">Coming soon</Badge>
           <Box variant="p" color="inherit">{title} isn't backed by a Vyomi backend yet.</Box>
           {lines.map((l) => <Box key={l} variant="small" color="inherit">{l}</Box>)}
           {note && <Box variant="small" color="inherit">{note}</Box>}

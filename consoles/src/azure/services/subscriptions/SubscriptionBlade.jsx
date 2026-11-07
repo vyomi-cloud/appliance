@@ -190,7 +190,7 @@ function Overview({ a, reload, id, name, self }) {
       {tab === "free" && <div style={{ marginTop: 12 }}><TopFreeServices id={id} /></div>}
 
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>
@@ -590,7 +590,7 @@ function ResourceGroupsPanel({ id }) {
         ]}
       />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Open query" ? "Azure Resource Graph Explorer" : "Assigning tags across a multi-selection"} /></DialogContent>
@@ -643,7 +643,7 @@ function ResourcesPanel({ id }) {
         </DialogSurface>
       </Dialog>
       <Dialog open={!!gap && gap !== "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>
@@ -738,7 +738,7 @@ function Deployments({ id }) {
         </DialogSurface>
       </Dialog>
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Cancel" ? "Cancelling an in-progress deployment" : "Redeploying a past deployment"} note="Every simulated deployment completes synchronously, so there is nothing in-flight to cancel or re-run." /></DialogContent>
@@ -786,7 +786,7 @@ function Locks({ id }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (lockName, level, notes) => { await api.putLock(id, lockName, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>

@@ -217,7 +217,7 @@ function Overview({ a, reload, self, name }) {
         </DialogSurface>
       </Dialog>
       <Dialog open={!!gap && gap !== "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>
@@ -607,7 +607,7 @@ function Locks({ name }) {
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (lockName, level, notes) => { await api.putLock(name, lockName, { properties: { level, notes } }); reload(); }} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap === "Subscription" ? "Resource group" : gap}</DialogTitle>
             <DialogContent>

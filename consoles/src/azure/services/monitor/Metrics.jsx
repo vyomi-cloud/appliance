@@ -165,7 +165,7 @@ export default function Metrics() {
                   <Button onClick={() => setChartType(chartType === "line" ? "bar" : "line")}>{chartType === "line" ? "Line chart" : "Bar chart"}</Button>
                 </div>
                 <div style={{ marginTop: 12 }}><MetricChart rows={rows} chartType={chartType} /></div>
-                <NotSimulatedContainer title="Not simulated in Vyomi" note="Add filter, Apply splitting, Save to dashboard — Vyomi has no metric dimensions and no custom-dashboard resource to save a chart into." />
+                <NotSimulatedContainer title="Coming soon" note="Add filter, Apply splitting, Save to dashboard — Vyomi has no metric dimensions and no custom-dashboard resource to save a chart into." />
               </>
             )}
           </CapabilityContainer>

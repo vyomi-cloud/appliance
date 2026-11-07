@@ -11,7 +11,7 @@ import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 export function NotSimulated({ feature, note }) {
   return (
     <div className="vy-ns" data-vyomi-not-simulated={feature} role="note">
-      <span className="vy-ns-badge">Not simulated in Vyomi</span>
+      <span className="vy-ns-badge">Coming soon</span>
       <div>{feature} isn't backed by a Vyomi backend yet.</div>
       {note && <div style={{ marginTop: 6, fontSize: 12 }}>{note}</div>}
     </div>

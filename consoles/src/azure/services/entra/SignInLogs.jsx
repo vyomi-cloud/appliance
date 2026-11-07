@@ -49,7 +49,7 @@ export default function SignInLogs() {
           <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
         </div>
         <NotSimulatedContainer feature="Export Data Settings, Troubleshoot, Columns, Got feedback?"
-          note="Export Data Settings. Troubleshoot. Columns. Got feedback? Not simulated in Vyomi." />
+          note="Export Data Settings. Troubleshoot. Columns. Got feedback? Coming soon." />
         <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Sign-in logs">
           <Tab value="interactive">User sign-ins (interactive)</Tab>
           <Tab value="noninteractive">User sign-ins (non-interactive)</Tab>

@@ -579,7 +579,7 @@ function Locks({ a }) {
         onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
       <ScopeLocksDialog scope={scopeView} a={a} onClose={() => setScopeView(null)} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature="Sending product feedback" /></DialogContent>

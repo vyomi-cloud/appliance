@@ -55,7 +55,7 @@ export default function ApiManagementServices() {
         />
       </div>
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent>{gap === "Manage deleted services" ? <ApimDeletedServices onRestored={() => { setGap(null); reload(); }} /> : <NotSimulated feature={gap === "Open query" ? "Azure Resource Graph queries" : "Bulk-assigning tags from the browse grid"} />}</DialogContent>

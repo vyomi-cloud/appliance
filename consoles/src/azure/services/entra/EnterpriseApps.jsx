@@ -42,7 +42,7 @@ export default function EnterpriseApps() {
           extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => navigate("entra", "appregistrations", "register")}>New application</ToolbarButton>}
         />
         <NotSimulatedContainer title="More commands" feature="Download (Export), Preview info, Columns, Preview features, Got feedback?"
-          note="Download (Export). Preview info. Columns. Preview features. Got feedback? Not simulated in Vyomi." />
+          note="Download (Export). Preview info. Columns. Preview features. Got feedback? Coming soon." />
       </div>
     </EntraShell>
   );

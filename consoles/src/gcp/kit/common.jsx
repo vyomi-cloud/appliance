@@ -12,7 +12,7 @@ export function NotSimulated({ feature, note, compact }) {
     <Box className="vyomi-ns-container" data-vyomi-not-simulated={feature}
       sx={{ p: compact ? 1.5 : 3, textAlign: compact ? "left" : "center", color: "text.secondary" }}>
       <Stack spacing={0.75} alignItems={compact ? "flex-start" : "center"}>
-        <Chip size="small" label="Not simulated in Vyomi" sx={{ fontWeight: 500 }} />
+        <Chip size="small" label="Coming soon" sx={{ fontWeight: 500 }} />
         <Typography variant="body2" color="inherit">{feature} isn't backed by a Vyomi backend yet.</Typography>
         {note && <Typography variant="caption" color="inherit">{note}</Typography>}
       </Stack>

@@ -60,7 +60,7 @@ export default function CosmosAccounts() {
       </div>
       <CosmosRestoreDialog open={restore} onClose={() => setRestore(false)} onRestored={reload} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
+        <DialogSurface aria-label={gap || "Coming soon"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
             <DialogContent><NotSimulated feature={gap === "Open query" ? "Querying across accounts with Azure Resource Graph" : "Bulk tag assignment from the browse grid"} /></DialogContent>

@@ -88,7 +88,7 @@ await page.evaluate(() => { window.__noReload = "same-page"; });
 if (CLOUD === "aws") await page.getByRole("button", { name: /^Connect$/ }).first().click();
 await page.getByText(/In-browser VMs are off/i).first().waitFor({ timeout: 30000 }).catch(async (e) => { await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-fail.png` }); console.log(await page.evaluate(() => location.href)); console.log((await page.locator("body").innerText()).slice(0, 300)); throw e; });
 check("flag off: honest 'In-browser VMs are off' panel with a Turn on button", await page.getByRole("button", { name: /Turn on in-browser VMs/ }).isVisible());
-check("flag off: no Not-simulated panel", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
+check("flag off: no Not-simulated panel", !/Coming soon/i.test(await page.locator("body").innerText()));
 await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-off.png` });
 
 // 2. turn on without reload
@@ -135,7 +135,7 @@ else {
 if (CLOUD === "azure" && BOOT) {
   await page.goto(UI + `#/vms/${cl.rg}/${vmId}/serialconsole`); await ready();
   await page.locator(".vy-term").first().waitFor({ timeout: 60000 }).catch(() => {});
-  check("azure Serial console blade is the in-browser shell (not Not-simulated)", (await page.locator(".vy-term").count()) === 1 && !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
+  check("azure Serial console blade is the in-browser shell (not Not-simulated)", (await page.locator(".vy-term").count()) === 1 && !/Coming soon/i.test(await page.locator("body").innerText()));
 }
 check("no uncaught page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

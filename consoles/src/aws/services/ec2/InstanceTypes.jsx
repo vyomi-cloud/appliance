@@ -59,14 +59,14 @@ export function InstanceTypeDetail({ params }) {
           <KeyValue title="Instance type details" columns={2} items={[
             ["Instance type", x.InstanceType], ["Instance family", x.InstanceType.split(".")[0]], ["Hypervisor", x.Hypervisor],
             ["Free tier eligible", x.FreeTierEligible ? "Yes" : "No"], ["Current generation", "Yes"], ["Bare metal", x.BareMetal ? "Yes" : "No"],
-            ["On-Demand Linux pricing", "Not simulated"], ["Supported root device types", "ebs"],
+            ["On-Demand Linux pricing", "Coming soon"], ["Supported root device types", "ebs"],
           ]} />
         ) },
         { id: "compute", label: "Compute", content: <KeyValue title="Compute" columns={2} items={[["vCPUs", x.VCpuCount], ["Memory (GiB)", (x.MemoryMiB / 1024).toFixed(0)]]} /> },
         { id: "networking", label: "Networking", content: <KeyValue title="Networking" columns={1} items={[["Network performance", x.NetworkPerformance]]} /> },
         { id: "storage", label: "Storage", content: <KeyValue title="Storage" columns={1} items={[["Storage type", "EBS only"]]} /> },
         { id: "accelerators", label: "Accelerators", content: <KeyValue title="Accelerators" columns={1} items={[["GPUs", "None"]]} /> },
-        { id: "pricing", label: "Pricing", content: <KeyValue title="Pricing" columns={1} items={[["On-Demand hourly rate", "Not simulated"]]} /> },
+        { id: "pricing", label: "Pricing", content: <KeyValue title="Pricing" columns={1} items={[["On-Demand hourly rate", "Coming soon"]]} /> },
       ]} />
     </ContentLayout>
   );
