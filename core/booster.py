@@ -268,6 +268,18 @@ def _state_dir() -> str:
     return os.environ.get("CLOUDLEARN_STATE_DIR", "/data")
 
 
+def _memory_split(cap_mb: int) -> dict:
+    """50/50 compute/AI - except while the LLM is remote (core/booster_remote_llm): the in-Codespace AI pack does not load, so the
+    AI bucket is 0 and the whole cap goes to compute (VMs/services)."""
+    try:
+        from core import booster_remote_llm as R
+        if R.active():
+            return {"compute": int(cap_mb), "ai": 0}
+    except Exception:
+        pass
+    return {"compute": int(cap_mb * (1 - AI_SHARE)), "ai": int(cap_mb * AI_SHARE)}
+
+
 def resource_budget() -> dict:
     host_mb = host_memory_mb()
     limit_mb = container_memory_limit_mb()
@@ -289,7 +301,7 @@ def resource_budget() -> dict:
         "host_memory_mb": host_mb,
         "docker_vm_limit_mb": limit_mb,
         "memory_cap_mb": cap_mb,                      # hard budget
-        "memory_split_mb": {"compute": int(cap_mb * (1 - AI_SHARE)), "ai": int(cap_mb * AI_SHARE)},
+        "memory_split_mb": _memory_split(cap_mb),
         "cpu_cap_cores": round(cpus * CAP_FRACTION, 2),   # shared / overcommittable (not enforced)
         "disk_quota_gb": disk_cap_gb, "disk_free_gb": disk_free_gb,
     }
@@ -601,7 +613,16 @@ def status() -> dict:
         "health": {"ok": healthy, "state": "locked" if (on and expired) else ("ok" if on else "not-a-booster")},
         "tunnel": _relay_info(), "nano_ui": NANO_URL, **endpoints(),
         "ai": _ai_status(on),
+        "llm": _llm_label(),
     }
+
+
+def _llm_label() -> str:
+    try:
+        from core import booster_remote_llm as R
+        return R.info()["label"]
+    except Exception:
+        return "llm: local (booster)"
 
 
 def _ai_status(on: bool) -> Optional[dict]:
@@ -754,3 +775,35 @@ def register(app) -> None:
         from core import booster_ai
         booster_ai.LEDGER.reset()
         return _cors(JSONResponse({"ok": True}), request)
+
+    # ---- remote LLM (spike; inert unless VYOMI_BOOSTER_REMOTE_LLM=1) - loopback only, like /booster/ai/admit ------------
+    @app.post("/booster/ai/remote/attach", include_in_schema=False)
+    async def _remote_attach(request: Request):
+        g = _guard(request, loopback_only=True)
+        if g:
+            return g
+        from core import booster_remote_llm as R
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        try:
+            return _cors(JSONResponse(R.attach(str(body.get("hub_url") or ""), body.get("token") or None)), request)
+        except R.RemoteLLMError as e:
+            return _deny(request, e.status, e.code, e.message)
+
+    @app.post("/booster/ai/remote/detach", include_in_schema=False)
+    def _remote_detach(request: Request):
+        g = _guard(request, loopback_only=True)
+        if g:
+            return g
+        from core import booster_remote_llm as R
+        return _cors(JSONResponse(R.detach()), request)
+
+    @app.get("/booster/ai/remote", include_in_schema=False)
+    def _remote_info(request: Request):
+        g = _guard(request)
+        if g:
+            return g
+        from core import booster_remote_llm as R
+        return _cors(JSONResponse(R.info()), request)

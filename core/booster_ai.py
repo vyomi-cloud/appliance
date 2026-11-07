@@ -68,6 +68,9 @@ def _mb(n: int) -> str:
 def admit(model_id: str, kind: str = "chat", *, enforce: Optional[bool] = None) -> dict:
     """Reserve `model_id`'s RAM in the AI bucket (replacing any previously admitted model of the same kind)."""
     from core import booster as B
+    from core import booster_remote_llm as R
+    if R.active():          # the LLM runs on a remote runner: never reserve the local AI bucket (and never load the pack)
+        raise ModelAdmissionError("remote_llm_attached", "The LLM is served by a remote runner; the in-booster AI pack stays unloaded. Detach the remote LLM first.")
     m = MODELS.get(model_id)
     if not m or m["kind"] != kind:
         known = ", ".join(sorted(k for k, v in MODELS.items() if v["kind"] == kind))
@@ -95,6 +98,9 @@ def admit(model_id: str, kind: str = "chat", *, enforce: Optional[bool] = None) 
 def admit_configured(*, enforce: Optional[bool] = None) -> dict:
     """Admit the env-selected chat + embeddings models. Never raises: failures land in status()['ai']['errors'] so the
     boot script (and the Nano chip) can show the reason."""
+    from core import booster_remote_llm as R
+    if R.active():
+        return plan()
     sel = selected()
     for kind in ("chat", "embed"):
         try:
@@ -118,6 +124,9 @@ def plan() -> dict:
     """What the boot script should start: only admitted models. `ok` is False if the chat model was refused."""
     with _ADMIT_LOCK:
         chat, emb = _ADMITTED.get("chat"), _ADMITTED.get("embed")
+        from core import booster_remote_llm as R
+        if R.active():      # boot script must start NO local model servers
+            return {"ok": False, "remote": True, "chat": None, "embed": None, "errors": {}, "endpoint": R.info()["endpoint"]}
         return {"ok": bool(chat), "chat": _pub(chat), "embed": _pub(emb), "errors": dict(_ERRORS), "endpoint": GATEWAY_ENDPOINT}
 
 
@@ -252,6 +261,9 @@ def point_llm_at_gateway() -> Optional[str]:
     admitted chat model, use the gateway. Returns the endpoint now in effect (None = untouched)."""
     if os.environ.get("VYOMI_LLM_ENDPOINT"):
         return os.environ["VYOMI_LLM_ENDPOINT"]
+    from core import booster_remote_llm as R
+    if R.active():
+        return R.info()["endpoint"]
     if _ADMITTED.get("chat"):
         os.environ["VYOMI_LLM_ENDPOINT"] = GATEWAY_ENDPOINT
         os.environ.setdefault("VYOMI_LLM_MODEL", _ADMITTED["chat"]["id"])
@@ -278,6 +290,15 @@ def _probe() -> bool:
 
 def status(recent: int = 10) -> dict:
     from core import llm_core
+    from core import booster_remote_llm as R
+    if R.active():
+        ri = R.info()
+        st = ri["runner"]
+        u = LEDGER.summary(recent)
+        state = {"ready": "ready", "starting": "starting"}.get(st, "unavailable")
+        return {"state": state, "endpoint": ri["endpoint"], "backend": "remote-runner", "mode": "remote", "runner": st,
+                "label": ri["label"], "models": {}, "errors": {}, "usage": u,
+                "chip": "AI: remote (runner)" + ("" if state == "ready" else f" - {st}")}
     with _ADMIT_LOCK:
         models = {k: _pub(v) for k, v in _ADMITTED.items()}
         errors = dict(_ERRORS)

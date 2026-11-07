@@ -28,6 +28,11 @@ def route(path: str, chat_url: str, embed_url: str) -> str:
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     chat_url, embed_url = CHAT_URL, EMBED_URL
+    # Remote-LLM mode (spike, core/booster_remote_llm.py): when `remote` is set, EVERY request goes to the relay's /llm plane
+    # (the runner routes chat vs embeddings itself) carrying the booster session token. `remote` is a callable returning
+    # (base_url, token) or None when detached. Relay-generated failures (x-vyomi-hub: 1) and connection errors are an
+    # honest 503 - never a silent fallback to a local model.
+    remote = None
 
     def log_message(self, *a):  # quiet
         pass
@@ -40,7 +45,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b)
 
+    def _unavailable(self, why: str, code: str = "RemoteLLMUnavailable") -> None:
+        self._send_json(503, {"error": {"message": f"remote LLM runner unavailable: {why}", "type": "unavailable", "code": code}})
+
     def _health(self) -> None:
+        if self.remote is not None:
+            t = self.remote()
+            if not t:
+                return self._send_json(503, {"status": "detached", "chat": False, "embed": False})
+            try:
+                r = urllib.request.urlopen(urllib.request.Request(t[0] + "/_status", headers={"x-vyomi-session-token": t[1]}), timeout=3)
+                st = json.loads(r.read()).get("runner")
+            except Exception:
+                st = "unreachable"
+            ok = st == "ready"
+            return self._send_json(200 if ok else 503, {"status": "ok" if ok else st, "chat": ok, "embed": ok})
         out = {}
         for name, url in (("chat", self.chat_url), ("embed", self.embed_url)):
             try:
@@ -56,21 +75,37 @@ class Handler(BaseHTTPRequestHandler):
             return self._health()
         n = int(self.headers.get("content-length") or 0)
         body = self.rfile.read(n) if n else None
-        up = route(p, self.chat_url, self.embed_url)
-        if up == self.embed_url and body:
+        headers = {"content-type": self.headers.get("content-type", "application/json")}
+        if self.remote is not None:
+            t = self.remote()
+            if not t:
+                return self._unavailable("no runner is attached", "RemoteLLMDetached")
+            up = t[0]
+            headers["x-vyomi-session-token"] = t[1]
+        else:
+            up = route(p, self.chat_url, self.embed_url)
+        if self.remote is None and up == self.embed_url and body:
             try:
                 j = json.loads(body)
                 j["model"] = "embed"
                 body = json.dumps(j).encode()
             except Exception:
                 pass
-        req = urllib.request.Request(up + p, data=body, method=method, headers={"content-type": self.headers.get("content-type", "application/json")})
+        req = urllib.request.Request(up + p, data=body, method=method, headers=headers)
         try:
             r = urllib.request.urlopen(req, timeout=TIMEOUT)
             code = r.status
         except urllib.error.HTTPError as e:
             r, code = e, e.code
+            if self.remote is not None and e.headers.get("x-vyomi-hub"):        # the relay says the runner isn't there / ended
+                try:
+                    c = str(json.loads(e.read()).get("error", {}).get("code", "RunnerUnavailable"))[:60]
+                except Exception:
+                    c = "RunnerUnavailable"
+                return self._unavailable(c, c)
         except Exception as e:
+            if self.remote is not None:
+                return self._unavailable("relay not reachable")
             return self._send_json(503, {"error": {"message": f"model server not reachable: {type(e).__name__}", "type": "unavailable"}})
         ctype = r.headers.get("content-type", "application/json")
         if "text/event-stream" in ctype:
@@ -101,9 +136,11 @@ class Handler(BaseHTTPRequestHandler):
         self._proxy("POST")
 
 
-def serve(port: int = 8080, chat_url: str = CHAT_URL, embed_url: str = EMBED_URL) -> ThreadingHTTPServer:
-    h = type("H", (Handler,), {"chat_url": chat_url.rstrip("/"), "embed_url": embed_url.rstrip("/")})
-    return ThreadingHTTPServer(("0.0.0.0", port), h)
+def serve(port: int = 8080, chat_url: str = CHAT_URL, embed_url: str = EMBED_URL, *, remote=None,
+          host: str = "0.0.0.0") -> ThreadingHTTPServer:
+    h = type("H", (Handler,), {"chat_url": chat_url.rstrip("/"), "embed_url": embed_url.rstrip("/"),
+                               "remote": staticmethod(remote) if remote else None})
+    return ThreadingHTTPServer((host, port), h)
 
 
 if __name__ == "__main__":
