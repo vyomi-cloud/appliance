@@ -319,7 +319,7 @@ func TestMCPStatus(t *testing.T) {
 	if res := up["active_space"].(map[string]any)["resources"].(map[string]any); res["s3_bucket"] != float64(2) {
 		t.Errorf("non-zero resource counts should be kept: %v", res)
 	}
-	if !strings.Contains(string(raw), "NOT a tier limit") {
+	if !strings.Contains(string(raw), "Not a tier limit") {
 		t.Error("readiness must explain what it measures")
 	}
 }

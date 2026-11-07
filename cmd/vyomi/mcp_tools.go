@@ -196,7 +196,7 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 	}
 	if rd, err := s.getJSON(base, "/api/runtime/readiness"); err == nil {
 		r := pick(rd, []string{"ready_count", "total_count", "overall_pct"})
-		r["meaning"] = "Backend containers (databases, emulators, brokers) that have finished starting. They keep starting in the background after `vyomi up`; this is NOT a tier limit."
+		r["meaning"] = "Backends (databases, emulators, brokers) the simulator can reach right now, weighted by image size. Not a tier limit. Low values usually mean heavy backends that start lazily on first use (Docker tiers) or are still starting; if containers are up but stay unreachable, the stack is split across Docker networks or another stack holds the ports - suggest `docker ps` and restarting a single stack."
 		out["readiness"] = r
 	}
 	if sp, err := s.getJSON(base, "/api/spaces/active"); err == nil {
