@@ -26,7 +26,7 @@ const pyodideIndex = () => fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD"
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
-  "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
