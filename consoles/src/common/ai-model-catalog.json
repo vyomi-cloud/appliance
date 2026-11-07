@@ -1,0 +1,129 @@
+{
+ "_comment": "GENERATED from core/ai_model_catalog.py by scripts/gen_ai_model_catalog_json.py - do not edit.",
+ "default_chat": "qwen2.5-3b",
+ "default_embed": "nomic-embed-text",
+ "local_id": "qwen2.5-3b",
+ "needs_booster": "Needs Booster (Pro/Max)",
+ "models": [
+  {
+   "id": "qwen2.5-3b",
+   "name": "Qwen2.5 3B",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Small (3B)",
+   "role": "Fast chat",
+   "blurb": "Quick turns, cheap routing and classification steps",
+   "tag": "qwen2.5:3b",
+   "pooled": false
+  },
+  {
+   "id": "nomic-embed-text",
+   "name": "Nomic Embed Text",
+   "vendor": "Nomic AI",
+   "publisher": "nomic-ai",
+   "kind": "embed",
+   "size": "Embedding",
+   "role": "Embeddings",
+   "blurb": "Vector search and retrieval (RAG) pipelines",
+   "tag": "nomic-embed-text",
+   "pooled": false
+  },
+  {
+   "id": "qwen2.5-7b",
+   "name": "Qwen2.5 7B",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Medium (7B)",
+   "role": "General",
+   "blurb": "General question answering and summaries",
+   "tag": "qwen2.5:7b",
+   "pooled": false
+  },
+  {
+   "id": "qwen2.5-coder-7b",
+   "name": "Qwen2.5 Coder 7B",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Medium (7B)",
+   "role": "Code",
+   "blurb": "Code generation, review and refactoring agents",
+   "tag": "qwen2.5-coder:7b",
+   "pooled": false
+  },
+  {
+   "id": "llama3.1-8b",
+   "name": "Llama 3.1 8B",
+   "vendor": "Meta",
+   "publisher": "meta",
+   "kind": "chat",
+   "size": "Medium (8B)",
+   "role": "Tool use / agents",
+   "blurb": "Function calling and multi-step agent loops",
+   "tag": "llama3.1:8b",
+   "pooled": false
+  },
+  {
+   "id": "gemma2-9b",
+   "name": "Gemma 2 9B",
+   "vendor": "Google",
+   "publisher": "google",
+   "kind": "chat",
+   "size": "Medium (9B)",
+   "role": "Second family",
+   "blurb": "Cross-checking answers against a different model family",
+   "tag": "gemma2:9b",
+   "pooled": false
+  },
+  {
+   "id": "qwen3-8b",
+   "name": "Qwen3 8B",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Medium (8B)",
+   "role": "Newer general",
+   "blurb": "Newer-generation general tasks",
+   "tag": "qwen3:8b",
+   "pooled": false
+  },
+  {
+   "id": "deepseek-r1-8b",
+   "name": "DeepSeek R1 8B",
+   "vendor": "DeepSeek",
+   "publisher": "deepseek-ai",
+   "kind": "chat",
+   "size": "Medium (8B)",
+   "role": "Reasoning",
+   "blurb": "Step-by-step reasoning and problem solving",
+   "tag": "deepseek-r1:8b",
+   "pooled": false
+  },
+  {
+   "id": "mistral-7b",
+   "name": "Mistral 7B",
+   "vendor": "Mistral AI",
+   "publisher": "mistralai",
+   "kind": "chat",
+   "size": "Medium (7B)",
+   "role": "Another family",
+   "blurb": "A third family for agreement and disagreement checks",
+   "tag": "mistral:7b",
+   "pooled": false
+  },
+  {
+   "id": "qwen3-30b",
+   "name": "Qwen3 30B (MoE)",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Large (30B MoE)",
+   "role": "Pooled across 2 machines",
+   "blurb": "The strongest answer in the pool, split over two machines on the private mesh",
+   "tag": "qwen3:30b",
+   "pooled": true
+  }
+ ]
+}

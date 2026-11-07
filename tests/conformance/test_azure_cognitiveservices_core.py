@@ -3,6 +3,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from core import ai_model_catalog as CAT
 from core import azure_cognitiveservices_core as cs  # noqa: E402
 from core.azure_arm_core import AzureArm  # noqa: E402
 
@@ -38,13 +39,13 @@ k2 = cp(st, "POST", ["accounts", "oai-one", "regenerateKey"], {"keyName": "Key1"
 check("regenerateKey rotates only the named key", k2["key1"] != k["key1"] and k2["key2"] == k["key2"])
 check("regenerateKey validates keyName", cp(st, "POST", ["accounts", "oai-one", "regenerateKey"], {"keyName": "Key3"})["status"] == 400)
 
-D = {"sku": {"name": "Standard", "capacity": 10}, "properties": {"model": {"format": "OpenAI", "name": "gpt-4o", "version": "2024-08-06"}}}
+D = {"sku": {"name": "Standard", "capacity": 10}, "properties": {"model": {"format": "OpenAI", "name": "qwen2.5-7b", "version": "1"}}}
 r = cp(st, "PUT", ["accounts", "oai-one", "deployments", "chat"], D)
-check("deployment create", r["status"] == 201 and r["body"]["properties"]["model"]["name"] == "gpt-4o" and r["body"]["sku"]["capacity"] == 10, r["body"])
+check("deployment create", r["status"] == 201 and r["body"]["properties"]["model"]["name"] == "qwen2.5-7b" and r["body"]["sku"]["capacity"] == 10, r["body"])
 bad = dict(D, properties={"model": {"format": "OpenAI", "name": "nope", "version": "1"}})
 check("unknown model", cp(st, "PUT", ["accounts", "oai-one", "deployments", "b"], bad)["body"]["error"]["code"] == "DeploymentModelNotSupported")
 check("over quota", cp(st, "PUT", ["accounts", "oai-one", "deployments", "b"], dict(D, sku={"name": "Standard", "capacity": 10 ** 6}))["body"]["error"]["code"] == "InsufficientQuota")
-used = [u for u in cp(st, "GET", ["accounts", "oai-one", "usages"])["body"]["value"] if u["name"]["value"].endswith("gpt-4o")][0]["currentValue"]
+used = [u for u in cp(st, "GET", ["accounts", "oai-one", "usages"])["body"]["value"] if u["name"]["value"].endswith("qwen2.5-7b")][0]["currentValue"]
 check("usages reflect deployed capacity", used == 10, used)
 check("deployments only on OpenAI/AIServices", cp(st, "PUT", ["accounts", "ta", "deployments", "d"], D)["status"] == 404)
 ta = cp(st, "PUT", ["accounts", "ta"], {"kind": "TextAnalytics", "location": "eastus", "sku": {"name": "S"}})
@@ -55,7 +56,10 @@ check("list in RG / subscription", len(cp(st, "GET", ["accounts"])["body"]["valu
 check("checkDomainAvailability taken / free",
       cp(st, "POST", ["checkDomainAvailability"], {"subdomainName": "oai-one"}, rg=None)["body"]["isSubdomainAvailable"] is False
       and cp(st, "POST", ["checkDomainAvailability"], {"subdomainName": "fresh-one"}, rg=None)["body"]["isSubdomainAvailable"] is True)
-check("location models", len(cp(st, "GET", ["locations", "eastus", "models"], rg=None)["body"]["value"]) > 10)
+lm = cp(st, "GET", ["locations", "eastus", "models"], rg=None)["body"]["value"]
+check("location models are exactly the ten pool models (per kind), no OpenAI catalogue", sorted({x["model"]["name"] for x in lm}) == sorted(CAT.IDS), sorted({x["model"]["name"] for x in lm}))
+check("legacy gpt-4o deployment still resolves (hidden alias) but is not listed", cp(st, "PUT", ["accounts", "oai-one", "deployments", "legacy"], dict(D, properties={"model": {"format": "OpenAI", "name": "gpt-4o", "version": "2024-08-06"}}))["status"] in (200, 201)
+      and not any(x["model"]["name"] == "gpt-4o" for x in lm))
 
 r = cp(st, "DELETE", ["accounts", "oai-one"])
 check("delete → soft-deleted", r["status"] == 200 and cp(st, "GET", ["accounts", "oai-one"])["status"] == 404

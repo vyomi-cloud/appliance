@@ -138,13 +138,13 @@ from core import gcp_project  # noqa: E402
 GP = gcp_project.project_id()
 
 BR = {"authorization": "AWS4-HMAC-SHA256 Credential=T/20261104/us-east-1/bedrock/aws4_request, SignedHeaders=host, Signature=0"}
-r = c.post("/model/anthropic.claude-3-haiku-20240307-v1:0/converse", headers=BR,
+r = c.post("/model/vyomi.qwen2.5-3b/converse", headers=BR,
            json={"messages": [{"role": "user", "content": [{"text": "hello"}]}], "inferenceConfig": {"maxTokens": 20}})
 check("Bedrock Converse answered by the booster model with exact usage", r.status_code == 200 and r.json()["usage"]["inputTokens"] == 17 and r.json()["usage"]["outputTokens"] == 5, r.text)
-r = c.post(f"/v1/projects/{GP}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent",
+r = c.post(f"/v1/projects/{GP}/locations/us-central1/publishers/qwen/models/qwen2.5-3b:generateContent",
            json={"contents": [{"role": "user", "parts": [{"text": "hi"}]}]})
 check("Vertex generateContent answered", r.status_code == 200 and r.json()["usageMetadata"]["promptTokenCount"] == 17, r.text[:200])
-r = c.post(f"/v1beta1/projects/{GP}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent",
+r = c.post(f"/v1beta1/projects/{GP}/locations/us-central1/publishers/qwen/models/qwen2.5-3b:generateContent",
            json={"contents": [{"role": "user", "parts": [{"text": "hi"}]}]})
 check("Vertex v1beta1 path routed too", r.status_code == 200, r.text[:200])
 u = AI.LEDGER.summary()
@@ -161,7 +161,7 @@ check("embed call recorded as an aws embed op", any(e["op"] in ("invoke", "embed
 # unavailable backend is counted as an error and surfaced in the cloud's own shape
 os.environ["VYOMI_LLM_ENDPOINT"] = "http://127.0.0.1:9"
 before = AI.LEDGER.summary()["totals"]["errors"]
-r = c.post("/model/anthropic.claude-3-haiku-20240307-v1:0/converse", headers=BR, json={"messages": [{"role": "user", "content": [{"text": "x"}]}]})
+r = c.post("/model/vyomi.qwen2.5-3b/converse", headers=BR, json={"messages": [{"role": "user", "content": [{"text": "x"}]}]})
 check("model down -> Bedrock ModelNotReady 429 (no canned answer) and ledger error", r.status_code == 429 and AI.LEDGER.summary()["totals"]["errors"] == before + 1, (r.status_code, r.text[:120]))
 os.environ["VYOMI_LLM_ENDPOINT"] = gw_url
 

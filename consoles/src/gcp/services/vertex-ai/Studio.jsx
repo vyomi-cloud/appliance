@@ -1,13 +1,16 @@
-/* Vertex AI Studio: Gemini freeform prompt (generateContent + countTokens) and text embeddings, on the local model. */
+/* Vertex AI Studio: freeform prompt (generateContent + countTokens) and text embeddings, on the local model. */
 import { useState } from "react";
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import LocalModelBar from "../../../common/LocalModelBar.jsx";
 import * as api from "./api.js";
+import { AI_CHAT, AI_EMBED, DEFAULT_CHAT, DEFAULT_EMBED, availText } from "../../../common/aiModels.js";
+import { useAsync } from "../../../common/useAsync.js";
 
 function ChatPanel() {
-  const [model, setModel] = useState("gemini-2.0-flash");
+  const av = useAsync(() => api.modelAvailability().catch(() => ({})), []);
+  const [model, setModel] = useState(DEFAULT_CHAT);
   const [system, setSystem] = useState("");
   const [msg, setMsg] = useState("");
   const [hist, setHist] = useState([]);
@@ -25,7 +28,7 @@ function ChatPanel() {
   };
   return (
     <Stack spacing={2} sx={{ maxWidth: 760 }}>
-      <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{api.GEMINI.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField>
+      <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{AI_CHAT.map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.id}) - {availText(av.data?.[m.id], m.id)}</MenuItem>)}</TextField>
       <TextField size="small" label="System instructions" value={system} onChange={(e) => setSystem(e.target.value)} multiline minRows={2} />
       <Stack spacing={1} data-testid="chat-history">
         {hist.map((m, i) => (
@@ -49,14 +52,15 @@ function ChatPanel() {
 }
 
 export default function Studio() {
-  const [model, setModel] = useState("gemini-2.0-flash");
+  const av = useAsync(() => api.modelAvailability().catch(() => ({})), []);
+  const [model, setModel] = useState(DEFAULT_CHAT);
   const [system, setSystem] = useState("");
   const [prompt, setPrompt] = useState("Write a one-line greeting.");
   const [out, setOut] = useState(null);
   const [tokens, setTokens] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [embModel, setEmbModel] = useState("text-embedding-005");
+  const [embModel, setEmbModel] = useState(DEFAULT_EMBED);
   const [embText, setEmbText] = useState("hello world");
   const [emb, setEmb] = useState(null);
   const [embErr, setEmbErr] = useState(null);
@@ -70,9 +74,9 @@ export default function Studio() {
       <PageHeader title="Vertex AI Studio" actions={<CapabilityBadge id="gcp.vertex-ai.gemini" host="[data-vyomi-header]" />} />
       <LocalModelBar />
       <Stack spacing={3}>
-        <CapabilityContainer noBadge id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against a Gemini publisher model. Every model id is served by the same small local model.">
+        <CapabilityContainer noBadge id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against one of the ten pool models. Without a booster only the local small model answers; the others need the booster (Pro/Max).">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>
-            <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{api.GEMINI.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField>
+            <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{AI_CHAT.map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.id}) - {availText(av.data?.[m.id], m.id)}</MenuItem>)}</TextField>
             <TextField size="small" label="System instructions" value={system} onChange={(e) => setSystem(e.target.value)} multiline minRows={2} />
             <TextField size="small" label="Prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} multiline minRows={3} />
             <div><Button variant="contained" disabled={!prompt || busy} onClick={run}>Submit</Button></div>
@@ -86,7 +90,7 @@ export default function Studio() {
         </CapabilityContainer>
         <CapabilityContainer noBadge id="gcp.vertex-ai.embeddings" title="Text embeddings" description="embedContent on a text embedding model.">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>
-            <TextField select size="small" label="Embedding model" value={embModel} onChange={(e) => setEmbModel(e.target.value)}>{api.EMBED.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField>
+            <TextField select size="small" label="Embedding model" value={embModel} onChange={(e) => setEmbModel(e.target.value)}>{AI_EMBED.map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.id}) - {availText(av.data?.[m.id], m.id)}</MenuItem>)}</TextField>
             <TextField size="small" label="Text" value={embText} onChange={(e) => setEmbText(e.target.value)} />
             <div><Button variant="outlined" disabled={!embText} onClick={async () => { setEmbErr(null); setEmb(null); try { setEmb((await api.embed(embModel, embText)).embedding.values); } catch (e) { setEmbErr(e); } }}>Embed</Button></div>
             {embErr && <Alert severity="error">{embErr.message}</Alert>}

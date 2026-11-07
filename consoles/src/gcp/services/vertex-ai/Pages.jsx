@@ -11,6 +11,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import { Link } from "../../link.jsx";
 import ResourceList, { StateChip, Tabbed } from "./ResourceList.jsx";
 import { DeployModelDialog, DeployIndexDialog, UpsertDialog, QueryDialog } from "./Dialogs.jsx";
+import { AI_CHAT, DEFAULT_CHAT, availText } from "../../../common/aiModels.js";
 import * as api from "./api.js";
 
 const nameField = { key: "displayName", label: "Name" };
@@ -87,6 +88,7 @@ export function ModelGarden() {
                     <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{m.displayName}</Typography>
                     <Typography variant="caption" color="text.secondary">{m.name.split("/")[1]} · {m.openSourceCategory === "PROPRIETARY" ? "Proprietary" : "Open"} · {m.launchStage}</Typography>
                     <Typography variant="body2" sx={{ mt: 1 }}>{m.description}</Typography>
+                    <Chip size="small" sx={{ mt: 1 }} data-testid="garden-availability" color={m.vyomiAvailability?.available ? "success" : "default"} label={m.vyomiAvailability?.label || availText(null, id)} />
                   </CardContent>
                   <CardActions>
                     {m.servedByVyomi && <Button size="small" href="#/vertex-ai/studio">Open in Studio</Button>}
@@ -206,7 +208,7 @@ export function Training({ query }) {
             columns={[stateCol, { id: "t", header: "Max trials", cell: (i) => i.maxTrialCount }]} actions={[cancel]} />) },
         { id: "tuning", label: "Model tuning", render: () => (
           <ResourceList coll="tuningJobs" title="Tuning jobs" singular="tuning job" poll
-            fields={[nameField, { key: "base", label: "Base model", options: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"], default: "gemini-2.0-flash" }, { key: "data", label: "Training dataset (gs://)", default: "gs://my-bucket/train.jsonl" }]}
+            fields={[nameField, { key: "base", label: "Base model", options: AI_CHAT.map((m) => m.id), default: DEFAULT_CHAT }, { key: "data", label: "Training dataset (gs://)", default: "gs://my-bucket/train.jsonl" }]}
             build={(v) => ({ body: { displayName: v.displayName, baseModel: v.base, supervisedTuningSpec: { trainingDatasetUri: v.data } } })}
             columns={[stateCol, { id: "b", header: "Base model", cell: (i) => i.baseModel }]} actions={[cancel]} />) },
       ]} />

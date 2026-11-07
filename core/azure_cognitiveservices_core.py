@@ -71,27 +71,17 @@ DEPLOY_SKUS = ("Standard", "GlobalStandard", "ProvisionedManaged", "GlobalProvis
                "GlobalBatch", "DeveloperTier")
 QUOTA_LIMIT = 1000          # thousands of tokens-per-minute per deployment sku (per account)
 
-# (format, name, version, max capacity, capabilities)
-MODELS = [
-    ("OpenAI", "gpt-4o", "2024-05-13", 450, ("chatCompletion", "assistants", "jsonObjectResponse")),
-    ("OpenAI", "gpt-4o", "2024-08-06", 450, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4o", "2024-11-20", 450, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4o-mini", "2024-07-18", 1000, ("chatCompletion", "assistants", "jsonObjectResponse")),
-    ("OpenAI", "gpt-4.1", "2025-04-14", 1000, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4.1-mini", "2025-04-14", 1000, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4.1-nano", "2025-04-14", 1000, ("chatCompletion", "jsonObjectResponse")),
-    ("OpenAI", "gpt-4", "0613", 80, ("chatCompletion",)),
-    ("OpenAI", "gpt-4", "turbo-2024-04-09", 80, ("chatCompletion",)),
-    ("OpenAI", "gpt-35-turbo", "0125", 1000, ("chatCompletion",)),
-    ("OpenAI", "o1", "2024-12-17", 100, ("chatCompletion", "reasoning")),
-    ("OpenAI", "o3-mini", "2025-01-31", 1000, ("chatCompletion", "reasoning")),
-    ("OpenAI", "text-embedding-ada-002", "2", 1000, ("embeddings",)),
-    ("OpenAI", "text-embedding-3-small", "1", 1000, ("embeddings",)),
-    ("OpenAI", "text-embedding-3-large", "1", 1000, ("embeddings",)),
-    ("OpenAI", "dall-e-3", "3.0", 2, ("imageGenerations",)),
-    ("OpenAI", "whisper", "001", 3, ("audioTranscriptions",)),
-    ("OpenAI", "tts", "001", 3, ("audioSpeech",)),
-]
+try:
+    from core import ai_model_catalog as CAT
+except ImportError:  # Pyodide flat layout
+    import ai_model_catalog as CAT  # type: ignore
+
+# (format, name, version, max capacity, capabilities): the ten booster-mesh open models only (core/ai_model_catalog.py).
+# format = the model's real vendor. Legacy OpenAI names (gpt-4o, o1 ...) are not listed; _find_model still resolves them via
+# the hidden alias map so deployments created by existing SDK/IaC code keep working.
+_CHAT_CAPS = ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")
+MODELS = [(m["vendor"], m["id"], "1", 1000, ("embeddings",) if m["kind"] == "embed" else
+           (_CHAT_CAPS + ("reasoning",) if m["id"] == "deepseek-r1-8b" else _CHAT_CAPS)) for m in CAT.MODELS]
 MODEL_KINDS = ("OpenAI", "AIServices")
 
 TIERS = {                       # commitment tiers by kind (list pricing, USD)
@@ -468,13 +458,14 @@ def _openai_ops(rec, rest, method, payload, state=None, query=None):
 
 # ── deployments / commitment plans / RAI policies ────────────────────────────
 def _find_model(fmt, name, version):
+    nm = str(name or "").lower()
     for m in MODELS:
-        if m[0].lower() == str(fmt or "").lower() and m[1].lower() == str(name or "").lower() and (not version or m[2] == version):
-            return m
-    # a known model name with a version we don't list (newer/older/"latest"): deployable, version echoed back
-    for m in MODELS:
-        if m[0].lower() == str(fmt or "").lower() and m[1].lower() == str(name or "").lower():
-            return (m[0], m[1], str(version), m[3], m[4])
+        if m[1].lower() == nm:      # a listed model; the format is the vendor (a stale "OpenAI" default is tolerated)
+            return m if (not version or m[2] == version) else (m[0], m[1], str(version), m[3], m[4])
+    cid = CAT.resolve("azure", name) if name and not isinstance(name, (dict, list)) else None
+    if cid:                         # hidden compat alias (gpt-4o, o1, ...): deployable, never listed; the model echoes the requested name
+        m = next(x for x in MODELS if x[1] == cid)
+        return (m[0], str(name), str(version or m[2]), m[3], m[4])
     return None
 
 
@@ -702,7 +693,7 @@ def _account_ops(state, rec, rest, method, payload, query):
 
 
 def _model_item(m, kind="OpenAI"):
-    return {"kind": kind, "skuName": "S0", "isDefaultVersion": True, "maxCapacity": m[3],
+    return {"kind": kind, "skuName": "S0", "isDefaultVersion": True, "maxCapacity": m[3], "vyomiAvailability": CAT.availability(m[1]),
             "model": {"format": m[0], "name": m[1], "version": m[2], "lifecycleStatus": "GenerallyAvailable",
                       "capabilities": {c: "true" for c in m[4]},
                       "skus": [{"name": s, "usageName": f"OpenAI.{s}.{m[1]}", "capacity": {"maximum": m[3], "default": min(m[3], 30)}}

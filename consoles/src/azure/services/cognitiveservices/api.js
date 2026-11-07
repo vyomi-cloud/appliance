@@ -5,6 +5,7 @@
  * Served by core/azure_cognitiveservices_core.py through core/azure_arm_core.py — the same
  * azure-mgmt-cognitiveservices / armcognitiveservices SDK shapes work unchanged. */
 import { restJson } from "../../../common/wire.js";
+import { AI_MODELS } from "../../../common/aiModels.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.CognitiveServices", "accounts", "2024-10-01");
@@ -55,14 +56,13 @@ export const KIND_LABEL = Object.fromEntries(Object.entries(TYPE_TO_KIND).map(([
 export const MODEL_KINDS = ["OpenAI", "AIServices"];
 export const NEEDS_SUBDOMAIN = new Set(["OpenAI", "AIServices", "ContentSafety", "FormRecognizer", "ComputerVision", "Face", "TextAnalytics", "HealthInsights", "ImmersiveReader"]);
 export const DEPLOY_SKUS = ["Standard", "GlobalStandard", "ProvisionedManaged", "GlobalProvisionedManaged", "DataZoneStandard", "GlobalBatch", "DeveloperTier"];
-// (format, name, version, maxCapacity) — mirrors core MODELS
-export const MODELS = [
-  ["OpenAI", "gpt-4o", "2024-05-13", 450], ["OpenAI", "gpt-4o", "2024-08-06", 450], ["OpenAI", "gpt-4o", "2024-11-20", 450],
-  ["OpenAI", "gpt-4o-mini", "2024-07-18", 1000], ["OpenAI", "gpt-4", "turbo-2024-04-09", 80], ["OpenAI", "gpt-35-turbo", "0125", 1000],
-  ["OpenAI", "o1", "2024-12-17", 100], ["OpenAI", "o3-mini", "2025-01-31", 1000],
-  ["OpenAI", "text-embedding-ada-002", "2", 1000], ["OpenAI", "text-embedding-3-small", "1", 1000], ["OpenAI", "text-embedding-3-large", "1", 1000],
-  ["OpenAI", "dall-e-3", "3.0", 2], ["OpenAI", "whisper", "001", 3], ["OpenAI", "tts", "001", 3],
-];
+// (format, name, version, maxCapacity) — the ten booster-mesh models (shared catalogue core/ai_model_catalog.py); format = real vendor
+export const MODELS = AI_MODELS.map((m) => [m.vendor, m.id, "1", 1000]);
+/** Live availability per model name (account models list); without a booster only the local small model is available. */
+export const modelAvailability = async (rg, name) => {
+  try { return Object.fromEntries(((await restJson("GET", `${ARM.path(rg, name)}/models`, { query: { "api-version": API_VERSION } })).value || []).map((x) => [x.model?.name, x.vyomiAvailability])); }
+  catch { return {}; }
+};
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
 

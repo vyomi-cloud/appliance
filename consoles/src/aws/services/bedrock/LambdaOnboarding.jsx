@@ -12,6 +12,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import * as api from "./api.js";
+import { NOVA } from "./Common.jsx";
 
 const GW = "lambda-tools";
 
@@ -26,7 +27,7 @@ export default function LambdaOnboarding() {
     `Build and deploy Lambda functions there, then expose them as MCP tools through the AgentCore gateway "${GW}" (POST ${origin}/_wire/gateways/<gatewayId>/mcp).`;
   const check = async () => {
     setBusy("model");
-    try { const r = await api.converse("amazon.nova-micro-v1:0", "ping", { maxTokens: 4 }); setModel({ ok: true, t: `${r.usage.outputTokens} tokens, ${r.metrics.latencyMs} ms` }); }
+    try { const r = await api.converse(NOVA, "ping", { maxTokens: 4 }); setModel({ ok: true, t: `${r.usage.outputTokens} tokens, ${r.metrics.latencyMs} ms` }); }
     catch (e) { setModel({ ok: false, t: e.message }); } finally { setBusy(""); }
   };
   const mk = async () => {
