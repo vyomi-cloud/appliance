@@ -19,7 +19,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtBytes, fmtDate } from "../../kit/common.jsx";
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
@@ -73,7 +73,7 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // (core/capabilities/azure/loganalytics.json).
 const CAP_FOR_PANEL = {
   diagnose: "azure.loganalytics.workspace.tools", computergroups: "azure.loganalytics.workspace.tools",
-  dataexport: "azure.loganalytics.workspace.tools", linkedstorage: "azure.loganalytics.workspace.tools",
+  dataexport: "azure.loganalytics.workspace.dataexport", linkedstorage: "azure.loganalytics.workspace.tools",
   resourcehealth: "azure.loganalytics.workspace.tools", support: "azure.loganalytics.workspace.tools",
   alerts: "azure.loganalytics.workspace.monitoring", metrics: "azure.loganalytics.workspace.monitoring",
   diagnosticsettings: "azure.loganalytics.workspace.monitoring", workbooks: "azure.loganalytics.workspace.monitoring",
@@ -103,6 +103,7 @@ export default function WorkspaceBlade({ params }) {
       logs: () => <Logs a={a} />,
       savedsearches: () => <SavedSearches a={a} />,
       tables: () => <Tables a={a} />,
+      dataexport: () => <DataExport a={a} />,
       datasources: () => <DataSources a={a} />,
       legacysolutions: () => <LegacySolutions a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
@@ -413,7 +414,7 @@ function Usage({ a, reload }) {
         <>
           <ErrorBar error={error} />
           <div className="vy-props">
-            <KV label="Data analyzed" value="0 B" />
+            <KV label="Data analyzed today" value={fmtBytes(metric("DataAnalyzed")?.currentValue || 0)} />
             <KV label="Tables" value={metric("TableCount")?.currentValue} />
             <KV label="Saved searches" value={metric("SavedSearchCount")?.currentValue} />
             <KV label="Pricing tier" value={api.skuLabel(p.sku)} />
@@ -565,6 +566,84 @@ function Tables({ a }) {
           reload();
         }} />
     </>
+  );
+}
+
+// ── Data export (rules that copy ingested rows to a storage account as blobs) + Purge ───
+function DataExport({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDataExports(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const tables = useAsync(() => api.listTables(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const accts = useAsync(() => api.listStorageAccounts(), []);
+  const [form, setForm] = useState(null);
+  const [pg, setPg] = useState({ table: "", column: "", value: "" });
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.putDataExport(a.resourceGroup, a.name, form.name, { properties: { tableNames: form.tables, destination: { resourceId: form.sa }, enable: form.enable } });
+      notify.success(`Data export rule '${form.name}' was saved.`, "Saved"); setForm(null); reload();
+    } catch (e) { notify.error(e, "Saving the data export rule failed"); }
+    finally { setBusy(false); }
+  };
+  const doPurge = async () => {
+    setBusy(true);
+    try {
+      const r = await api.purge(a.resourceGroup, a.name, { table: pg.table, filters: [{ column: pg.column, operator: "==", value: pg.value }] });
+      const st = await api.purgeStatus(a.resourceGroup, a.name, r.operationId);
+      notify.success(`Purge ${r.operationId} ${st.status}.`, "Purge"); 
+    } catch (e) { notify.error(e, "Purge failed"); }
+    finally { setBusy(false); }
+  };
+  const tnames = (tables.data || []).map((t) => t.name);
+  return (
+    <CapabilityContainer id="azure.loganalytics.workspace.dataexport" title="Data export">
+      <div className="vy-cmdbar" role="toolbar" aria-label="Data export commands">
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setForm({ name: "", tables: [], sa: "", enable: true })}>New export rule</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <table className="vy-grid">
+          <thead><tr><th>Rule name</th><th>Tables</th><th>Destination</th><th>Enabled</th><th /></tr></thead>
+          <tbody>
+            {(data || []).length ? data.map((r) => (
+              <tr key={r.name}>
+                <td>{r.name}</td><td>{(r.properties.tableNames || []).join(", ")}</td>
+                <td>{(r.properties.destination?.resourceId || "").split("/").pop()}</td><td>{r.properties.enable ? "Yes" : "No"}</td>
+                <td><Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Delete ${r.name}`}
+                  onClick={async () => { try { await api.deleteDataExport(a.resourceGroup, a.name, r.name); reload(); } catch (e) { notify.error(e, "Delete failed"); } }} /></td>
+              </tr>
+            )) : <tr><td colSpan={5} className="vy-muted">No data export rules</td></tr>}
+          </tbody>
+        </table>
+      )}
+      {form && (
+        <div style={{ marginTop: 12, maxWidth: 480 }}>
+          <Field label="Rule name" required><Input value={form.name} onChange={(_, d) => setForm({ ...form, name: d.value })} aria-label="Rule name" /></Field>
+          <Field label="Table" required>
+            <Select value={form.tables[0] || ""} onChange={(_, d) => setForm({ ...form, tables: d.value ? [d.value] : [] })} aria-label="Table">
+              <option value="">Select a table</option>{tnames.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Select>
+          </Field>
+          <Field label="Destination storage account" required>
+            <Select value={form.sa} onChange={(_, d) => setForm({ ...form, sa: d.value })} aria-label="Destination storage account">
+              <option value="">Select a storage account</option>{(accts.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+          </Field>
+          <Checkbox label="Enable" checked={form.enable} onChange={(_, d) => setForm({ ...form, enable: !!d.checked })} />
+          <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={busy || !form.name || !form.tables.length || !form.sa} onClick={save}>Create</Button> <Button onClick={() => setForm(null)}>Cancel</Button></div>
+        </div>
+      )}
+      <h3 style={{ marginTop: 24 }}>Purge data</h3>
+      <p style={{ fontSize: 12 }}>Permanently deletes the rows of a table where the column equals the value. This cannot be undone.</p>
+      <div style={{ display: "flex", gap: 8, maxWidth: 640 }}>
+        <Select value={pg.table} onChange={(_, d) => setPg({ ...pg, table: d.value })} aria-label="Purge table"><option value="">Table</option>{tnames.map((t) => <option key={t} value={t}>{t}</option>)}</Select>
+        <Input placeholder="Column" value={pg.column} onChange={(_, d) => setPg({ ...pg, column: d.value })} aria-label="Purge column" />
+        <Input placeholder="Value" value={pg.value} onChange={(_, d) => setPg({ ...pg, value: d.value })} aria-label="Purge value" />
+        <Button appearance="primary" disabled={busy || !pg.table || !pg.column} onClick={doPurge}>Purge</Button>
+      </div>
+    </CapabilityContainer>
   );
 }
 

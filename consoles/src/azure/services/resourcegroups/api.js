@@ -69,3 +69,9 @@ const costQ = { "api-version": COST_API_VERSION };
 export const costQuery = (name, body) => restJson("POST", `${rgPath(name)}/providers/Microsoft.CostManagement/query`, { query: costQ, body });
 export const listBudgets = async (name) => (await restJson("GET", `${rgPath(name)}/providers/Microsoft.Consumption/budgets`, { query: costQ })).value || [];
 export const listCostAlerts = async (name) => (await restJson("GET", `${rgPath(name)}/providers/Microsoft.CostManagement/alerts`, { query: costQ })).value || [];
+
+// ── Move resources (validateMoveResources / moveResources — really re-parents the resources) ──
+export const validateMove = (name, ids, target) =>
+  restJson("POST", `${rgPath(name)}/validateMoveResources`, { query: armQ, body: { resources: ids, targetResourceGroup: `${sub()}/resourceGroups/${target}` } });
+export const moveResources = (name, ids, target) =>
+  restJson("POST", `${rgPath(name)}/moveResources`, { query: armQ, body: { resources: ids, targetResourceGroup: `${sub()}/resourceGroups/${target}` } });

@@ -1,134 +1,240 @@
 {
-  "$doc": "Vyomi capability registry — Azure Log Analytics (Microsoft.OperationalInsights). See servicebus.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py generic catalog + core/azure_operationalinsights_core.py); 'offline' = the appliance, which shares the same generic ARM catalog.",
-  "azure.loganalytics.workspace.crud": {
-    "title": "Workspaces — create, list, get, update, delete, pricing tier, retention, daily cap",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": [],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+ "$doc": "Vyomi capability registry \u2014 Azure Log Analytics (Microsoft.OperationalInsights). See servicebus.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py generic catalog + core/azure_operationalinsights_core.py); 'offline' = the appliance, which shares the same generic ARM catalog.",
+ "azure.loganalytics.workspace.crud": {
+  "title": "Workspaces \u2014 create, list, get, update, delete, pricing tier, retention, daily cap",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.tags": {
-    "title": "Tags",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": [],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.agents": {
-    "title": "Agents management — workspace ID and primary/secondary shared keys (getSharedKeys / regenerateSharedKey)",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": ["Keys are simulated values derived from the workspace id, not cryptographically meaningful; no real agent ever authenticates with them."],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.agents": {
+  "title": "Agents management \u2014 workspace ID and primary/secondary shared keys (getSharedKeys / regenerateSharedKey)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.usage": {
-    "title": "Usage and estimated costs (usages action) and the daily cap (workspaceCapping)",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": ["Data Analyzed always reads 0 bytes — there is no ingestion pipeline to meter; Tables and Saved searches counts are real."],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "Keys are simulated values derived from the workspace id, not cryptographically meaningful; no real agent ever authenticates with them."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.usage": {
+  "title": "Usage and estimated costs (usages action) and the daily cap (workspaceCapping)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.savedsearches": {
-    "title": "Saved searches — create, list, get, update, delete",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": [],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "Data Analyzed always reads 0 bytes \u2014 there is no ingestion pipeline to meter; Tables and Saved searches counts are real.",
+   "Data analyzed is the real byte volume ingested today through the data-plane APIs, and the daily cap really drops further ingestion once reached; no per-table billing breakdown or commitment-tier pricing is computed."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.savedsearches": {
+  "title": "Saved searches \u2014 create, list, get, update, delete",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.tables": {
-    "title": "Tables — built-in tables plus custom (_CL/_RST) table create/update/delete, retention and plan",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": [],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.tables": {
+  "title": "Tables \u2014 built-in tables plus custom (_CL/_RST) table create/update/delete, retention and plan",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.datasources": {
-    "title": "Data sources — create, list (by kind), get, delete",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": ["Data sources are stored and listed like real ARM but never receive data — there is no VM extension/agent in this simulator to collect from."],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.datasources": {
+  "title": "Data sources \u2014 create, list (by kind), get, delete",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.legacysolutions": {
-    "title": "Legacy solutions (intelligencePacks) — list, enable, disable",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": ["Enabling a solution only flips its flag; it does not add the solution's own tables or saved searches."],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "Data sources are stored and listed like real ARM but never receive data \u2014 there is no VM extension/agent in this simulator to collect from."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.legacysolutions": {
+  "title": "Legacy solutions (intelligencePacks) \u2014 list, enable, disable",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.logs": {
-    "title": "Logs — KQL query editor (api/query), a real subset of KQL over real data",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": [
-      "Only a small KQL subset is understood: a table name, then where (==/!=/contains/startswith), project, sort by/order by, take/limit and count — summarize, join and the rest of the language raise the real ARM-shaped error rather than a silent empty result.",
-      "The AzureActivity table returns real rows (this subscription's Activity log feed); every other built-in table (Heartbeat, Perf, Syslog, Event, Usage, AzureDiagnostics) and every custom table is always empty — there is no agent/telemetry ingestion pipeline to populate them.",
-      "The api.loganalytics.io data-plane host (azure-monitor-query / LogsQueryClient) is not modelled — only the ARM pass-through path the portal's Logs blade itself uses."
-    ],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "Enabling a solution only flips its flag; it does not add the solution's own tables or saved searches."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.logs": {
+  "title": "Logs \u2014 KQL query editor (api/query), a real subset of KQL over real data",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
-  "azure.loganalytics.workspace.locks": {
-   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this workspace",
-   "level": { "nano": "limited", "offline": "limited" },
-   "limitations": [
-    "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this Log Analytics workspace only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a Log Analytics workspace is stored and listed only: it does not block writes or deletes of the Log Analytics workspace itself."
-   ],
-   "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "Only a small KQL subset is understood: a table name, then where (==/!=/contains/startswith), project, sort by/order by, take/limit and count \u2014 summarize, join and the rest of the language raise the real ARM-shaped error rather than a silent empty result.",
+   "The AzureActivity table returns real rows (this subscription's Activity log feed); every other built-in table (Heartbeat, Perf, Syslog, Event, Usage, AzureDiagnostics) and every custom table is always empty \u2014 there is no agent/telemetry ingestion pipeline to populate them.",
+   "The api.loganalytics.io data-plane host (azure-monitor-query / LogsQueryClient) is not modelled \u2014 only the ARM pass-through path the portal's Logs blade itself uses."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this workspace",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
-  "azure.loganalytics.workspace.activitylog": {
-    "title": "Workspace activity log",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": [
-      "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
-    ],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this Log Analytics workspace only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a Log Analytics workspace is stored and listed only: it does not block writes or deletes of the Log Analytics workspace itself."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.activitylog": {
+  "title": "Workspace activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
-  "azure.loganalytics.workspace.listactions": {
-    "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Export Activity Logs, and Locks' Subscription/Resource group scope + Feedback",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": [
-      "Continuous Export Activity Logs (to Storage/Event Hub/Log Analytics), the per-event Activity detail flyout, and portal Feedback are not modeled.",
-      "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) — this entry covers only the actions listed above."
-    ]
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.listactions": {
+  "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Export Activity Logs, and Locks' Subscription/Resource group scope + Feedback",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
-  "azure.loganalytics.workspace.properties": {
-    "title": "Properties (read-only resource summary)",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": [],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [
+   "'Export Activity Logs' configures the SUBSCRIPTION's Activity Log export (a Microsoft.Insights/diagnosticSettings at subscription scope, a different resource from the workspace's own Diagnostic settings and Data export); the per-event Activity detail flyout and portal Feedback are not modeled. Honest gap, not faked.",
+   "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) \u2014 this entry covers only the actions listed above."
+  ]
+ },
+ "azure.loganalytics.workspace.properties": {
+  "title": "Properties (read-only resource summary)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
   },
-  "azure.loganalytics.workspace.exporttemplate": {
-    "title": "Export template (ARM template)",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": ["Only the ARM Template tab is generated from the workspace's real properties; Bicep and Terraform export are not modeled."],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.exporttemplate": {
+  "title": "Export template (ARM template)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
-  "azure.loganalytics.workspace.iam": {
-    "title": "Access control (IAM) on a workspace",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": [
+  "limitations": [
+   "Only the ARM Template tab is generated from the workspace's real properties; Bicep and Terraform export are not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.iam": {
+  "title": "Access control (IAM) on a workspace",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
    "Check access, Role assignments and Deny assignments are REAL and scoped to this workspace's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
   ],
-  "tests": ["tests/conformance/test_azure_rbac_core.py"]
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.networking": {
+  "title": "Public network access for ingestion/query (set at create time and from Properties)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
-  "azure.loganalytics.workspace.networking": {
-   "title": "Public network access for ingestion/query (set at create time and from Properties)",
-   "level": { "nano": "limited", "offline": "limited" },
-   "limitations": [
-    "publicNetworkAccessForIngestion (Data Collector / DCR ingestion) and publicNetworkAccessForQuery (api/query) are enforced: Disabled returns 403 InsufficientAccessError unless the declared caller arrives through an approved private endpoint that targets the workspace. Diagnostic-settings delivery is a platform path and is not blocked by it, as in Azure.",
-    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
-    "Azure Monitor Private Link Scopes (AMPLS) are not modelled; access modes (Open / PrivateOnly) are not evaluated."
-   ],
-   "tests": [
-    "tests/conformance/test_azure_operationalinsights_core.py",
-    "tests/conformance/test_azure_netenforce.py",
-    "tests/conformance/test_azure_netenforce_sdk.py",
-    "tests/cli/azure-netenforce-cli-smoke.sh"
-   ]
+  "limitations": [
+   "publicNetworkAccessForIngestion (Data Collector / DCR ingestion) and publicNetworkAccessForQuery (api/query) are enforced: Disabled returns 403 InsufficientAccessError unless the declared caller arrives through an approved private endpoint that targets the workspace. Diagnostic-settings delivery is a platform path and is not blocked by it, as in Azure.",
+   "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+   "Azure Monitor Private Link Scopes (AMPLS) are not modelled; access modes (Open / PrivateOnly) are not evaluated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py",
+   "tests/conformance/test_azure_netenforce.py",
+   "tests/conformance/test_azure_netenforce_sdk.py",
+   "tests/cli/azure-netenforce-cli-smoke.sh"
+  ]
+ },
+ "azure.loganalytics.workspace.monitoring": {
+  "title": "Workbooks on a workspace",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
-  "azure.loganalytics.workspace.monitoring": {
-   "title": "Workbooks on a workspace",
-   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-   "limitations": [
-    "The workspace's Workbooks tab is not modeled. Alerts, Metrics and Diagnostic settings on a workspace are real through the shared panels (azure.common.resource_monitoring, azure.common.diagnostic_settings)."
-   ]
+  "limitations": [
+   "Workbooks are pre-authored Microsoft.Insights/workbooks content rendered by a portal visualisation engine; there is no workbook renderer in Vyomi, so the tab stays not simulated. Alerts, Metrics and Diagnostic settings on a workspace are real through the shared panels (azure.common.resource_monitoring, azure.common.diagnostic_settings)."
+  ]
+ },
+ "azure.loganalytics.workspace.tools": {
+  "title": "Diagnose and solve problems, Computer groups (classic), Linked storage accounts",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
-  "azure.loganalytics.workspace.tools": {
-   "title": "Diagnose and solve problems, Computer groups (classic), Data export, Linked storage accounts",
-   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-   "limitations": [
-    "These portal troubleshooting, agent-based computer grouping, continuous data export and linked-storage-account features are not modeled. Resource health (azure.common.resource_health) and Support + Troubleshooting (azure.common.support) are the shared panels and are not part of this gap."
-   ]
-  }
+  "limitations": [
+   "Portal troubleshooting, agent-based computer grouping and linked-storage-account configuration are not modeled (Data export is real: azure.loganalytics.workspace.dataexport). Resource health (azure.common.resource_health) and Support + Troubleshooting (azure.common.support) are the shared panels and are not part of this gap."
+  ]
+ },
+ "azure.loganalytics.workspace.dataexport": {
+  "title": "Data export rules (to a storage account) and the Purge API",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Rows ingested through the HTTP Data Collector / Logs Ingestion APIs for an exported table are really written (JSON lines) to blobs in the destination storage account ('am-<table>' container, WorkspaceResourceId=\u2026/y=/m=/d=/h=/m=/PT05M.json), and the Purge API really deletes the matching rows. Event Hub destinations are rejected, not faked. AzureActivity and agent-fed built-in tables have no ingestion pipeline here, so they have nothing to export. Real Azure exports in ~5-minute batches; Vyomi writes at ingest time."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_loganalytics_export_purge.py"
+  ]
+ }
 }

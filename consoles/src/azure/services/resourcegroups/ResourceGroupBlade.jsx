@@ -154,6 +154,7 @@ function Overview({ a, reload, self, name }) {
   const [tab, setTab] = useState("resources");
   const [gap, setGap] = useState(null); // "Create" | "Manage view" | "Open query" | "Move" | "Open in mobile"
   const [assign, setAssign] = useState(false);
+  const [move, setMove] = useState(false);
   const resources = useAsync(() => api.listResources(name), [name]);
   const tags = Object.entries(a.tags || {});
   return (
@@ -165,7 +166,7 @@ function Overview({ a, reload, self, name }) {
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Open query")}>Open query</ToolbarButton>
         <ToolbarButton onClick={() => setAssign(true)}>Assign tags</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Move")}>Move</ToolbarButton>
+        <ToolbarButton onClick={() => setMove(true)}>Move</ToolbarButton>
         <ToolbarButton icon={<ArrowDownload20Regular />} as="a" href={`${self}/exporttemplate`}>Export template</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Open in mobile")}>Open in mobile</ToolbarButton>
       </div>
@@ -224,7 +225,6 @@ function Overview({ a, reload, self, name }) {
                 Create: "Creating a new resource from the Marketplace",
                 "Manage view": "Saving a custom blade layout",
                 "Open query": "Azure Resource Graph Explorer",
-                Move: "Moving resources to another resource group or subscription",
                 "Open in mobile": "Opening this resource group in the Azure mobile app",
               }[gap] || gap} />
             </DialogContent>
@@ -232,6 +232,7 @@ function Overview({ a, reload, self, name }) {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+      <MoveDialog open={move} onClose={() => setMove(false)} group={name} resources={resources.data || []} onDone={() => { resources.reload(); }} />
       <AssignTagsDialog open={assign} onClose={() => setAssign(false)} tags={a.tags || {}}
         onAssign={async (name2, value) => {
           await api.createGroup(a.name, { location: a.location, tags: { ...a.tags, [name2]: value } });
@@ -239,6 +240,53 @@ function Overview({ a, reload, self, name }) {
           reload();
         }} />
     </>
+  );
+}
+
+function MoveDialog({ open, onClose, group, resources, onDone }) {
+  const notify = useNotify();
+  const groups = useAsync(() => api.listGroups(), []);
+  const [sel, setSel] = useState([]);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const ids = sel;
+  const run = async (fn, okText) => {
+    setBusy(true); setMsg(null);
+    try { await fn(group, ids, target); setMsg({ ok: true, text: okText }); return true; }
+    catch (e) { setMsg({ ok: false, error: e }); return false; }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Move resources" style={{ maxWidth: 640 }}>
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Move resources</DialogTitle>
+          <DialogContent>
+            <Field label="Target resource group" required>
+              <Select value={target} onChange={(_, d) => { setTarget(d.value); setMsg(null); }} aria-label="Target resource group">
+                <option value="">Select a resource group</option>
+                {(groups.data || []).filter((g) => g.name.toLowerCase() !== group.toLowerCase()).map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
+              </Select>
+            </Field>
+            <div style={{ maxHeight: 220, overflow: "auto", margin: "8px 0" }}>
+              {resources.map((r) => (
+                <div key={r.id}><Checkbox label={`${r.name} (${r.type})`} checked={sel.includes(r.id)}
+                  onChange={(_, d) => { setMsg(null); setSel(d.checked ? [...sel, r.id] : sel.filter((x) => x !== r.id)); }} /></div>
+              ))}
+              {!resources.length && <span className="vy-muted">No resources in this group</span>}
+            </div>
+            {msg && (msg.ok ? <div role="status">{msg.text}</div> : <ErrorBar error={msg.error} title="Validation failed" />)}
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={busy || !target || !ids.length} onClick={() => run(api.validateMove, "Validation succeeded: these resources can be moved.")}>Validate</Button>
+            <Button appearance="primary" disabled={busy || !target || !ids.length}
+              onClick={async () => { if (await run(api.moveResources, `Moved ${ids.length} resource${ids.length === 1 ? "" : "s"} to '${target}'.`)) { notify.success(`Moved to '${target}'.`, "Move succeeded"); setSel([]); onDone(); } }}>Move</Button>
+            <Button onClick={onClose}>Close</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 

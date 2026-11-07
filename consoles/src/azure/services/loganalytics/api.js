@@ -92,3 +92,14 @@ export function workspaceArmBody(f) {
     },
   };
 }
+
+// ── Data export rules (continuous export of ingested rows to a storage account) ────────
+const exportPath = (rg, name, id) => `${ARM.path(rg, name)}/dataExports${id ? `/${encodeURIComponent(id)}` : ""}`;
+export const listDataExports = async (rg, name) => (await restJson("GET", exportPath(rg, name), { query: q })).value || [];
+export const putDataExport = (rg, name, id, body) => restJson("PUT", exportPath(rg, name, id), { query: q, body });
+export const deleteDataExport = (rg, name, id) => restJson("DELETE", exportPath(rg, name, id), { query: q });
+export const listStorageAccounts = async () => (await armType("Microsoft.Storage", "storageAccounts", "2023-01-01").list()) || [];
+
+// ── Purge (really deletes the matching rows) ─────────────────────────────────────────────
+export const purge = (rg, name, body) => restJson("POST", `${ARM.path(rg, name)}/purge`, { query: q, body });
+export const purgeStatus = (rg, name, id) => restJson("GET", `${ARM.path(rg, name)}/operations/${encodeURIComponent(id)}`, { query: q });
