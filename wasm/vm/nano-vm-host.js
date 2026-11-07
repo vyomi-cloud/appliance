@@ -72,7 +72,7 @@
       const m = e.data || {};
       if (m.rid && h.waits.has(m.rid)) { const r = h.waits.get(m.rid); h.waits.delete(m.rid); r(m); }
       if (m.type === "vm-status" || (m.rid && m.state)) { h.status = { ...m }; onStatus(id, h.status); }
-      if (m.type === "serial-out") for (const f of serialSubs) { try { f(id, m.data); } catch (_) {} }
+      if (m.type === "serial-out") { noteSerial(id, m.data); for (const f of serialSubs) { try { f(id, m.data); } catch (_) {} } }
     };
     w.port.start();
     handles.set(id, h);
@@ -89,6 +89,61 @@
   }
   const serialSubs = new Set();
 
+  // ── guest agent (Compute Engine only) ───────────────────────────────────
+  // What the GCE guest agent does, done from the page: (1) keep a bounded tail of the VM's real ttyS0 output and report it, so
+  // instances.getSerialPortOutput returns the VM's actual console text; (2) once the VM is running, read os-release / uname /
+  // /proc over the same serial shell and report it, so osInfo + getGuestAttributes answer from the live guest. Both reports
+  // ride the existing Annotate path (rec.update) into the instance record; private `_`-keys are not part of the instance JSON.
+  // The probe types one line into the VM shell (visible if the xterm panel is open). Not available for EC2/Azure VMs.
+  const SERIAL_KEEP = 32768;
+  const tails = new Map();      // id -> {text, base}
+  const flushT = new Map();
+  function noteSerial(id, data) {
+    if (typeof data !== "string") return;
+    let t = tails.get(id); if (!t) { t = { text: "", base: 0 }; tails.set(id, t); }
+    t.text += data;
+    if (t.text.length > SERIAL_KEEP) { const cut = t.text.length - SERIAL_KEEP; t.text = t.text.slice(cut); t.base += cut; }
+    if (flushT.has(id)) return;
+    flushT.set(id, setTimeout(() => { flushT.delete(id); reportGuest(id, {}); }, 4000));
+  }
+  function reportGuest(id, extra) {
+    const it = readReg()[id], t = tails.get(id);
+    if (!it || it.cloud !== "gcp" || !annotateFn || !t) return;
+    try { annotateFn(it.cloud, it.ref, { _serial: t.text, _serialBase: t.base, ...extra }); } catch (_) {}
+  }
+  const PROBE = "echo VYGA-$((1+1))-B; . /etc/os-release 2>/dev/null; echo \"PN=$PRETTY_NAME\"; echo \"ID=$ID\"; echo \"VER=$VERSION_ID\"; " +
+    "echo \"HN=$(hostname)\"; echo \"KR=$(uname -sr)\"; echo \"AR=$(uname -m)\"; echo \"UP=$(cut -d' ' -f1 /proc/uptime)\"; " +
+    "echo \"MEM=$(grep MemTotal /proc/meminfo | tr -s ' ' | cut -d' ' -f2)\"; echo VYGA-$((1+1))-E\r";
+  const probed = new Map();     // id -> {tries, done}
+  function probeGuest(id) {
+    const it = readReg()[id]; if (!it || it.cloud !== "gcp") return Promise.resolve(false);
+    const h = attach(id);
+    return new Promise((resolve) => {
+      let buf = "";
+      const off = onSerial((sid, d) => {
+        if (sid !== id || typeof d !== "string") return;
+        buf += d;
+        const m = /VYGA-2-B\r?\n([\s\S]*?)VYGA-2-E/.exec(buf);
+        if (!m) return;
+        off(); clearTimeout(to);
+        const kv = {}; m[1].split(/\r?\n/).forEach((l) => { const i = l.indexOf("="); if (i > 0) kv[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+        const guest = { prettyName: kv.PN || "", id: kv.ID || "", version: kv.VER || "", hostname: kv.HN || "", kernel: kv.KR || "", architecture: kv.AR || "",
+                        uptimeSeconds: parseFloat(kv.UP) || null, memoryKb: parseInt(kv.MEM, 10) || null, reportedAt: new Date().toISOString() };
+        reportGuest(id, { _guest: guest }); resolve(true);
+      });
+      const to = setTimeout(() => { off(); resolve(false); }, 15000);
+      h.port.postMessage({ type: "serial-in", data: PROBE });
+    });
+  }
+  function maybeProbe(id, st) {
+    if (st.state !== "running") { probed.delete(id); return; }
+    const p = probed.get(id) || { tries: 0, done: false };
+    probed.set(id, p);
+    if (p.done || p.busy || p.tries >= 4) return;
+    p.busy = true;
+    setTimeout(async () => { p.tries++; p.done = await probeGuest(id); p.busy = false; if (!p.done) setTimeout(() => maybeProbe(id, { state: "running" }), 10000); }, p.tries ? 1000 : 6000);
+  }
+
   // Runtime facts → the instance record (grid / describe show launch status + ssh port).
   let annotateFn = null;
   const lastAnn = new Map();
@@ -103,6 +158,7 @@
     }
     const reg = readReg(), it = reg[id];
     if (!it || !annotateFn) return;
+    if (it.cloud === "gcp") maybeProbe(id, st);
     const ann = { launch_status: st.state === "running" ? "ready" : st.state, nano_vm: { engine: "v86", state: st.state, host_port: st.host_port || null, image: st.image } };
     if (st.state === "running" && st.host_port) ann.ssh_command = sshCommand(it, st.host_port);
     const sig = JSON.stringify(ann);
@@ -456,7 +512,7 @@
   }
   window.NanoVM = {
     enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect, shownPower,
-    registry: readReg,
+    registry: readReg, probeGuest: (cloud, ref) => probeGuest(vmId(cloud, ref)),
     status: (cloud, ref) => call(vmId(cloud, ref), { type: "status" }, 10000),
     init(o) { listDesired = o.listDesired; annotateFn = o.annotate || null; if (enabled()) { resume(); reconcile(); setInterval(reconcile, 5000); } },
   };

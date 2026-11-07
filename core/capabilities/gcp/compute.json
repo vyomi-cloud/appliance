@@ -2,105 +2,250 @@
  "$doc": "Vyomi capability registry — Compute Engine. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
  "gcp.compute.instances.crud": {
   "title": "VM instances (create, start, stop, suspend, resume, reset, delete)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["instances.insert", "instances.get", "instances.list", "instances.aggregatedList", "instances.delete",
-          "instances.start", "instances.stop", "instances.suspend", "instances.resume", "instances.reset",
-          "instances.setLabels", "instances.setMetadata", "instances.setMachineType"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "instances.insert",
+   "instances.get",
+   "instances.list",
+   "instances.aggregatedList",
+   "instances.delete",
+   "instances.start",
+   "instances.stop",
+   "instances.suspend",
+   "instances.resume",
+   "instances.reset",
+   "instances.setLabels",
+   "instances.setMetadata",
+   "instances.setMachineType"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.instances.nano_vm": {
   "title": "SSH (in-browser VM on Nano)",
-  "level": { "nano": "limited", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "not_simulated"
+  },
   "limitations": [
    "On Nano (in-browser VMs turned on) a Compute Engine instance is a real Linux VM running inside the browser tab (v86, 32-bit x86 Alpine, not the boot image you picked): the SSH section shows its boot state, an xterm.js shell on the VM serial console (root, no tunnel needed) and an ssh command that works only through the local vyomi-tunnel (>= 1.1.0) while the tab is open. Limits: 32-bit x86 only; the VM's RAM is its disk (Stop saves it, Terminate/Delete discards it); a background tab runs the VM several times slower; no general internet egress (only plain-HTTP URLs that allow CORS), so git clone / apt / pip from the internet do not work; the 21 MB image and 2 MB engine load on first launch only. With in-browser VMs off the section offers a Turn on in-browser VMs button and the instance stays a record. Offline uses the Docker-backed SSH described under gcp.compute.instances.data_plane."
   ],
-  "tests": ["tests/conformance/test_ssh_access.py"]
+  "tests": [
+   "tests/conformance/test_ssh_access.py"
+  ]
  },
  "gcp.compute.instances.data_plane": {
   "title": "Guest OS access (SSH, screenshot, OS info)",
-  "level": { "nano": "not_simulated", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "SSH (offline): the instance is a real Docker container with sshd. Setting the `ssh-keys` metadata (POST /api/gcp/compute/instances/{id}/ssh-keys, USERNAME:KEY lines) creates the user and authorizes the key in the guest the way the guest agent does, so `ssh -i key user@host -p port` really logs in; malformed lines are rejected. OS info (GET .../os-info) is read from the running guest (os-release, kernel, arch, memory, uptime). OS Login keys use the same path. On Nano, OS info and Screenshot are not simulated; SSH is served by the in-browser VM (see gcp.compute.instances.nano_vm).",
-   "Screenshot: getScreenshot needs a real virtual display's framebuffer; none is rendered, so there is nothing to capture.",
-   "OS info: getGuestAttributes is populated by a guest agent writing back through the metadata server after boot; no guest OS or agent runs to report hostname, OS release or kernel version."
+   "SSH (offline): the instance is a real Docker container with sshd. Setting the `ssh-keys` metadata (POST /api/gcp/compute/instances/{id}/ssh-keys, USERNAME:KEY lines) creates the user and authorizes the key in the guest the way the guest agent does, so `ssh -i key user@host -p port` really logs in; malformed lines are rejected. OS info (GET .../os-info) is read from the running guest (os-release, kernel, arch, memory, uptime). OS Login keys use the same path. On Nano, SSH is served by the in-browser VM (see gcp.compute.instances.nano_vm).",
+   "Screenshot: getScreenshot needs a framebuffer. Nano VMs run headless on the serial console (the v86 worker has no screen adapter), so there is nothing to capture; unchanged on both substrates.",
+   "OS info / guest attributes: offline has no guest agent for getGuestAttributes (FAILED_PRECONDITION). On Nano (in-browser VMs on, instance RUNNING) a page-side guest agent (wasm/vm/nano-vm-host.js) reads os-release, uname, /proc/uptime and MemTotal from the VM over its ttyS0 shell once it boots and reports them: GET :osInfo answers with source=guest (the VM's Alpine, i686 kernel - not the boot image you picked) and getGuestAttributes serves them in the `vyomi` namespace (hostname, os-release, kernel, architecture, uptime-seconds, memory-kb) when enable-guest-attributes=TRUE, with queryPath/variableKey. The facts are a snapshot taken after boot (uptime is not live), the probe types one line into the VM shell (visible in an open terminal), and a VM that never reaches a shell prompt reports nothing. Verified against the core with the agent's report applied; the browser probe itself was not run in a real browser VM in this session."
   ],
-  "api": ["instances.getScreenshot", "instances.getGuestAttributes", "(Vyomi) POST /api/gcp/compute/instances/{id}/ssh-keys", "(Vyomi) GET /api/gcp/compute/instances/{id}/os-info"],
-  "tests": ["tests/conformance/test_ssh_access.py"]
+  "api": [
+   "instances.getScreenshot",
+   "instances.getGuestAttributes",
+   "(Vyomi) POST /api/gcp/compute/instances/{id}/ssh-keys",
+   "(Vyomi) GET /api/gcp/compute/instances/{id}/os-info"
+  ],
+  "tests": [
+   "tests/conformance/test_ssh_access.py",
+   "tests/conformance/test_gcp_compute_nano_guest.py"
+  ]
  },
  "gcp.compute.instances.serial_console": {
   "title": "Serial port output",
-  "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Serial output is Vyomi's own instance lifecycle record (create/start/stop/suspend/resume/reset, each at its real timestamp) rendered as console lines, not a real guest kernel's boot/console text — no guest OS runs to produce authentic kernel or init messages."],
-  "api": ["instances.getSerialPortOutput"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Serial output is Vyomi's own instance lifecycle record (create/start/stop/suspend/resume/reset, each at its real timestamp) rendered as console lines, not a real guest kernel's boot/console text — no guest OS runs to produce authentic kernel or init messages. Nano with an in-browser VM running: getSerialPortOutput returns the VM's real ttyS0 text instead (bounded 32 KiB tail kept by the page, byte-offset start/next cursors; older bytes are dropped); the lifecycle replay is used when no VM output exists."
+  ],
+  "api": [
+   "instances.getSerialPortOutput"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py",
+   "tests/conformance/test_gcp_compute_nano_guest.py"
+  ]
  },
  "gcp.compute.disks.crud": {
   "title": "Persistent disks (create, delete, snapshot)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["disks.insert", "disks.get", "disks.list", "disks.aggregatedList", "disks.delete", "disks.createSnapshot"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "disks.insert",
+   "disks.get",
+   "disks.list",
+   "disks.aggregatedList",
+   "disks.delete",
+   "disks.createSnapshot"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.snapshots.crud": {
   "title": "Snapshots",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["snapshots.get", "snapshots.list", "snapshots.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "snapshots.get",
+   "snapshots.list",
+   "snapshots.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.images.crud": {
   "title": "Custom images (create from disk, import rawDisk from Cloud Storage, export to Cloud Storage, import/export history)",
-  "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Import (images.insert with rawDisk.source) really checks the .tar.gz object exists in the simulator's Cloud Storage; export writes an image archive (tar.gz with image metadata) into a real destination bucket object. Disk CONTENTS are not modeled, so neither moves guest bytes.", "Export, and the import/export history (global/imageJobs), are Vyomi collections: real gcloud compute images import|export run Cloud Build workflows and show up as Cloud Build history, which Vyomi does not run."],
-  "api": ["images.insert", "images.get", "images.list", "images.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py", "tests/conformance/test_gcp_image_import_export.py"]
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Import (images.insert with rawDisk.source) really checks the .tar.gz object exists in the simulator's Cloud Storage; export writes an image archive (tar.gz with image metadata) into a real destination bucket object. Disk CONTENTS are not modeled, so neither moves guest bytes.",
+   "Export, and the import/export history (global/imageJobs), are Vyomi collections: real gcloud compute images import|export run Cloud Build workflows and show up as Cloud Build history, which Vyomi does not run."
+  ],
+  "api": [
+   "images.insert",
+   "images.get",
+   "images.list",
+   "images.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py",
+   "tests/conformance/test_gcp_image_import_export.py"
+  ]
  },
  "gcp.compute.machine_images.crud": {
   "title": "Machine images",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["machineImages.insert", "machineImages.get", "machineImages.list", "machineImages.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "machineImages.insert",
+   "machineImages.get",
+   "machineImages.list",
+   "machineImages.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.instance_templates.crud": {
   "title": "Instance templates",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["instanceTemplates.insert", "instanceTemplates.get", "instanceTemplates.list", "instanceTemplates.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "instanceTemplates.insert",
+   "instanceTemplates.get",
+   "instanceTemplates.list",
+   "instanceTemplates.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.instance_groups.crud": {
   "title": "Instance groups (unmanaged and managed)",
-  "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Autoscaling policies aren't simulated — there's no real request load for a policy to react to, so resize (manual, or a rolling update's own batch of creates/deletes) is the only way the member count changes."],
-  "api": ["instanceGroups.insert", "instanceGroups.get", "instanceGroups.list", "instanceGroups.aggregatedList",
-          "instanceGroups.delete", "instanceGroups.addInstances", "instanceGroups.removeInstances", "instanceGroups.listInstances",
-          "instanceGroupManagers.insert", "instanceGroupManagers.get", "instanceGroupManagers.list", "instanceGroupManagers.aggregatedList",
-          "instanceGroupManagers.delete", "instanceGroupManagers.resize", "instanceGroupManagers.listManagedInstances",
-          "instanceGroupManagers.patch"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Autoscaling policies aren't simulated — there's no real request load for a policy to react to, so resize (manual, or a rolling update's own batch of creates/deletes) is the only way the member count changes."
+  ],
+  "api": [
+   "instanceGroups.insert",
+   "instanceGroups.get",
+   "instanceGroups.list",
+   "instanceGroups.aggregatedList",
+   "instanceGroups.delete",
+   "instanceGroups.addInstances",
+   "instanceGroups.removeInstances",
+   "instanceGroups.listInstances",
+   "instanceGroupManagers.insert",
+   "instanceGroupManagers.get",
+   "instanceGroupManagers.list",
+   "instanceGroupManagers.aggregatedList",
+   "instanceGroupManagers.delete",
+   "instanceGroupManagers.resize",
+   "instanceGroupManagers.listManagedInstances",
+   "instanceGroupManagers.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.health_checks.crud": {
   "title": "Health checks",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["healthChecks.insert", "healthChecks.get", "healthChecks.list", "healthChecks.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "healthChecks.insert",
+   "healthChecks.get",
+   "healthChecks.list",
+   "healthChecks.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.metadata": {
   "title": "Project metadata (custom metadata, SSH keys)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["projects.get", "projects.setCommonInstanceMetadata"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "projects.get",
+   "projects.setCommonInstanceMetadata"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.operations": {
   "title": "Operations",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "api": ["zoneOperations.list", "globalOperations.list", "globalOperations.aggregatedList"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "zoneOperations.list",
+   "globalOperations.list",
+   "globalOperations.aggregatedList"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.vm-manager": {
   "title": "VM Manager (Patch, OS policies, OS inventory, reports, VM extension policies)",
@@ -147,150 +292,309 @@
  },
  "gcp.compute.observability": {
   "title": "Observability, recommendations and VM Manager",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "The status duration and recent-activity feed shown here are real — Vyomi's own recorded instance lifecycle operations (insert/start/stop/suspend/resume/reset/...) at their real timestamps — not Cloud Monitoring charts or Cloud Logging entries: there's no request-metering engine tying a VM's real CPU/disk/network state to a sampled time series (the same boundary as gcp.storage.observability).",
    "Recommender suggestions are state-derived (see gcp.compute.recommender), not Google's usage-based AI insights.",
    "VM Manager is modelled as a control plane only (see gcp.compute.vm-manager): no guest agent runs, so nothing is applied to the VM."
   ],
-  "api": ["zoneOperations.list", "globalOperations.aggregatedList"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "api": [
+   "zoneOperations.list",
+   "globalOperations.aggregatedList"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_instances_core.py"
+  ]
  },
  "gcp.compute.recommender": {
   "title": "Recommender (Compute Advisor, dashboard recommendations)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Recommendations are computed from live Compute state only (unattached disks, in-use disks without any backup, unused reservations, unattached resource policies, empty sole-tenant node groups). There is no CPU/memory/network utilisation telemetry, so Google's usage-based recommenders (idle VM, rightsizing machine type) are not produced.",
-     "Idle-disk recommendations fire immediately on an unattached disk; the real recommender observes it for ~14 days first. Savings are estimates from list prices, not your billing data.",
-     "Applying a recommendation is manual: markClaimed/markSucceeded/markFailed/markDismissed record state, nothing is auto-remediated."
+   "Recommendations are computed from live Compute state only (unattached disks, in-use disks without any backup, unused reservations, unattached resource policies, empty sole-tenant node groups). There is no CPU/memory/network utilisation telemetry, so Google's usage-based recommenders (idle VM, rightsizing machine type) are not produced.",
+   "Idle-disk recommendations fire immediately on an unattached disk; the real recommender observes it for ~14 days first. Savings are estimates from list prices, not your billing data.",
+   "Applying a recommendation is manual: markClaimed/markSucceeded/markFailed/markDismissed record state, nothing is auto-remediated."
   ],
-  "api": ["recommenders.recommendations.list", "recommenders.recommendations.get", "recommendations.markClaimed", "recommendations.markSucceeded", "recommendations.markFailed", "recommendations.markDismissed"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "recommenders.recommendations.list",
+   "recommenders.recommendations.get",
+   "recommendations.markClaimed",
+   "recommendations.markSucceeded",
+   "recommendations.markFailed",
+   "recommendations.markDismissed"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.instance_schedules": {
   "tier": "pro",
   "title": "Instance schedules (scheduled VM start/stop)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Schedules are evaluated lazily on every Compute API call (no background thread in a substrate-independent core): fire times missed while the appliance/browser tab was not running are caught up (last 24 snapshot fires, the most recent start/stop) at the next call instead of firing at their wall-clock minute.",
-     "Time zones need the host's tz database; on a runtime without one (some in-browser Python builds) schedules evaluate in UTC."
+   "Schedules are evaluated lazily on every Compute API call (no background thread in a substrate-independent core): fire times missed while the appliance/browser tab was not running are caught up (last 24 snapshot fires, the most recent start/stop) at the next call instead of firing at their wall-clock minute.",
+   "Time zones need the host's tz database; on a runtime without one (some in-browser Python builds) schedules evaluate in UTC."
   ],
-  "api": ["resourcePolicies.insert", "resourcePolicies.get", "resourcePolicies.list", "resourcePolicies.aggregatedList", "resourcePolicies.delete", "instances.addResourcePolicies", "instances.removeResourcePolicies"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "resourcePolicies.insert",
+   "resourcePolicies.get",
+   "resourcePolicies.list",
+   "resourcePolicies.aggregatedList",
+   "resourcePolicies.delete",
+   "instances.addResourcePolicies",
+   "instances.removeResourcePolicies"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.snapshot_schedules": {
   "tier": "pro",
   "title": "Snapshot schedules (hourly / daily / weekly with retention)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Schedules are evaluated lazily on every Compute API call (no background thread in a substrate-independent core): fire times missed while the appliance/browser tab was not running are caught up (last 24 snapshot fires, the most recent start/stop) at the next call instead of firing at their wall-clock minute.",
-     "Scheduled snapshots are metadata records (size is the disk's provisioned size, not changed blocks); there is no incremental block storage to snapshot.",
-     "Application-consistent (guest flush) snapshots need a guest agent; `guestFlush` is stored but not honoured."
+   "Schedules are evaluated lazily on every Compute API call (no background thread in a substrate-independent core): fire times missed while the appliance/browser tab was not running are caught up (last 24 snapshot fires, the most recent start/stop) at the next call instead of firing at their wall-clock minute.",
+   "Scheduled snapshots are metadata records (size is the disk's provisioned size, not changed blocks); there is no incremental block storage to snapshot.",
+   "Application-consistent (guest flush) snapshots need a guest agent; `guestFlush` is stored but not honoured."
   ],
-  "api": ["resourcePolicies.insert", "disks.addResourcePolicies", "disks.removeResourcePolicies", "disks.insert (resourcePolicies)"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "resourcePolicies.insert",
+   "disks.addResourcePolicies",
+   "disks.removeResourcePolicies",
+   "disks.insert (resourcePolicies)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.instant_snapshots": {
   "tier": "pro",
   "title": "Instant snapshots",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Instant snapshots are zonal metadata records of a disk (name, source, size); no block data is captured, so a restored disk is an empty disk of the same size."
+   "Instant snapshots are zonal metadata records of a disk (name, source, size); no block data is captured, so a restored disk is an empty disk of the same size."
   ],
-  "api": ["instantSnapshots.insert", "instantSnapshots.get", "instantSnapshots.list", "instantSnapshots.aggregatedList", "instantSnapshots.delete", "disks.insert (sourceInstantSnapshot)"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "instantSnapshots.insert",
+   "instantSnapshots.get",
+   "instantSnapshots.list",
+   "instantSnapshots.aggregatedList",
+   "instantSnapshots.delete",
+   "disks.insert (sourceInstantSnapshot)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.async_replication": {
   "title": "Disk async replication",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Replication pairing, constraints (cross-region, size, unattached secondary) and lifecycle are real, but disks hold no block data here, so nothing is copied and there is no measured RPO/replication lag; state is always ACTIVE until stopped."
+   "Replication pairing, constraints (cross-region, size, unattached secondary) and lifecycle are real, but disks hold no block data here, so nothing is copied and there is no measured RPO/replication lag; state is always ACTIVE until stopped."
   ],
-  "api": ["disks.startAsyncReplication", "disks.stopAsyncReplication", "disks.get (asyncPrimaryDisk / asyncSecondaryDisks)"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "disks.startAsyncReplication",
+   "disks.stopAsyncReplication",
+   "disks.get (asyncPrimaryDisk / asyncSecondaryDisks)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.consistency_groups": {
   "title": "Disk consistency groups",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "A consistency group is a diskConsistencyGroupPolicy resource policy attached to disks; group-wide crash-consistent snapshotting and group failover are not performed because no block data is replicated."
+   "A consistency group is a diskConsistencyGroupPolicy resource policy attached to disks; group-wide crash-consistent snapshotting and group failover are not performed because no block data is replicated."
   ],
-  "api": ["resourcePolicies.insert (diskConsistencyGroupPolicy)", "disks.addResourcePolicies", "disks.removeResourcePolicies"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "resourcePolicies.insert (diskConsistencyGroupPolicy)",
+   "disks.addResourcePolicies",
+   "disks.removeResourcePolicies"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.instances.multi_nic": {
   "title": "Multiple network interfaces",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Up to 8 NICs in distinct VPC networks are stored and returned (nic0..nicN, per-NIC internal IP); packet forwarding between NICs and per-NIC routing are not simulated (no guest network stack)."
+   "Up to 8 NICs in distinct VPC networks are stored and returned (nic0..nicN, per-NIC internal IP); packet forwarding between NICs and per-NIC routing are not simulated (no guest network stack)."
   ],
-  "api": ["instances.insert (networkInterfaces[])", "instances.get"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "instances.insert (networkInterfaces[])",
+   "instances.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.instances.lb_health_check_firewall": {
   "title": "Load balancer health-check firewall rule",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "The console creates a real VPC firewall rule (130.211.0.0/22, 35.191.0.0/16 on the chosen ports, target tag lb-health-check) and tags the instance; there is no load balancer sending health probes."
+   "The console creates a real VPC firewall rule (130.211.0.0/22, 35.191.0.0/16 on the chosen ports, target tag lb-health-check) and tags the instance; there is no load balancer sending health probes."
   ],
-  "api": ["firewalls.insert", "instances.setTags"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "firewalls.insert",
+   "instances.setTags"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.network_endpoint_groups": {
   "title": "Network endpoint groups",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Zonal, global (internet) and regional serverless NEGs with endpoint attach/detach/list and validation are real; endpoint health is not reported and a NEG cannot be attached to a backend service because no load balancer data plane exists."
+   "Zonal, global (internet) and regional serverless NEGs with endpoint attach/detach/list and validation are real; endpoint health is not reported and a NEG cannot be attached to a backend service because no load balancer data plane exists."
   ],
-  "api": ["networkEndpointGroups.insert", "networkEndpointGroups.get", "networkEndpointGroups.list", "networkEndpointGroups.aggregatedList", "networkEndpointGroups.delete", "networkEndpointGroups.attachNetworkEndpoints", "networkEndpointGroups.detachNetworkEndpoints", "networkEndpointGroups.listNetworkEndpoints"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "networkEndpointGroups.insert",
+   "networkEndpointGroups.get",
+   "networkEndpointGroups.list",
+   "networkEndpointGroups.aggregatedList",
+   "networkEndpointGroups.delete",
+   "networkEndpointGroups.attachNetworkEndpoints",
+   "networkEndpointGroups.detachNetworkEndpoints",
+   "networkEndpointGroups.listNetworkEndpoints"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.reservations": {
   "title": "Reservations",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Capacity is not actually held back: reservations are accounting. Running VMs whose machine type and zone match (and whose reservationAffinity allows it) are counted as consumers up to the reserved count, but a VM is never refused for lack of unreserved capacity.",
-     "Shared reservations (shareSettings) are stored, not enforced across projects."
+   "Capacity is not actually held back: reservations are accounting. Running VMs whose machine type and zone match (and whose reservationAffinity allows it) are counted as consumers up to the reserved count, but a VM is never refused for lack of unreserved capacity.",
+   "Shared reservations (shareSettings) are stored, not enforced across projects."
   ],
-  "api": ["reservations.insert", "reservations.get", "reservations.list", "reservations.aggregatedList", "reservations.delete", "reservations.resize", "instances.insert (reservationAffinity)"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "reservations.insert",
+   "reservations.get",
+   "reservations.list",
+   "reservations.aggregatedList",
+   "reservations.delete",
+   "reservations.resize",
+   "instances.insert (reservationAffinity)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.sole_tenant": {
   "title": "Sole-tenant nodes (node templates, node groups, node types)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Node groups, templates and VM-to-node placement (first-fit by vCPU and memory, with a hard fit check at VM creation) are real; there is no physical host, so maintenance policies and autoscaling are stored but never act, and CPU overcommit is not modelled."
+   "Node groups, templates and VM-to-node placement (first-fit by vCPU and memory, with a hard fit check at VM creation) are real; there is no physical host, so maintenance policies and autoscaling are stored but never act, and CPU overcommit is not modelled."
   ],
-  "api": ["nodeTypes.list", "nodeTemplates.insert", "nodeTemplates.get", "nodeTemplates.list", "nodeTemplates.delete", "nodeGroups.insert", "nodeGroups.get", "nodeGroups.list", "nodeGroups.delete", "nodeGroups.addNodes", "nodeGroups.deleteNodes", "nodeGroups.setNodeTemplate", "nodeGroups.listNodes"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "nodeTypes.list",
+   "nodeTemplates.insert",
+   "nodeTemplates.get",
+   "nodeTemplates.list",
+   "nodeTemplates.delete",
+   "nodeGroups.insert",
+   "nodeGroups.get",
+   "nodeGroups.list",
+   "nodeGroups.delete",
+   "nodeGroups.addNodes",
+   "nodeGroups.deleteNodes",
+   "nodeGroups.setNodeTemplate",
+   "nodeGroups.listNodes"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.storage_pools": {
   "title": "Hyperdisk Storage Pools",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-     "Pool capacity accounting (a disk can't exceed free provisioned capacity; ADVANCED allows 5x thin provisioning) and disk-type matching are enforced; provisioned IOPS/throughput are stored but disks are not throttled by them (there is no I/O path)."
+   "Pool capacity accounting (a disk can't exceed free provisioned capacity; ADVANCED allows 5x thin provisioning) and disk-type matching are enforced; provisioned IOPS/throughput are stored but disks are not throttled by them (there is no I/O path)."
   ],
-  "api": ["storagePoolTypes.list", "storagePools.insert", "storagePools.get", "storagePools.list", "storagePools.aggregatedList", "storagePools.delete", "disks.insert (storagePool)"],
-  "tests": ["tests/conformance/test_gcp_compute_ext_core.py"]
+  "api": [
+   "storagePoolTypes.list",
+   "storagePools.insert",
+   "storagePools.get",
+   "storagePools.list",
+   "storagePools.aggregatedList",
+   "storagePools.delete",
+   "disks.insert (storagePool)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_ext_core.py"
+  ]
  },
  "gcp.compute.rollouts": {
   "title": "Rollouts",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
   "limitations": [
-     "Compute rollout plans orchestrate Google-managed product updates across waves; there is no managed fleet or update stream to roll out."
+   "Compute rollout plans orchestrate Google-managed product updates across waves; there is no managed fleet or update stream to roll out."
   ],
   "api": []
  },
-  "gcp.compute.security-risk-overview": {
-    "title": "Security risk overview",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": [
-      "Compute findings are a deterministic rule engine over stored VMs/firewalls. Threat findings come from Vyomi's deterministic detector over the control-plane calls the simulator served (bucket opened to allUsers, Owner/Editor granted, log sink deleted, world-open firewall, KMS destruction, service-account key creation) - no ML threat analysis and no attack-path simulation. Image vulnerabilities come from Artifact Registry scanning (core/vuln_scan_core.py: bundled advisory snapshot + EOL table over the image config; the real Trivy container where the offline appliance has it). It is not Security Command Center: no findings history, muting or org-level aggregation."
-    ],
-    "api": ["securityPosture.compute"],
-    "tests": ["tests/conformance/test_gcp_posture.py", "tests/conformance/test_gcp_secscan.py"]
+ "gcp.compute.security-risk-overview": {
+  "title": "Security risk overview",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
   },
-  "gcp.compute.migrate-to-vms": {
+  "limitations": [
+   "Compute findings are a deterministic rule engine over stored VMs/firewalls. Threat findings come from Vyomi's deterministic detector over the control-plane calls the simulator served (bucket opened to allUsers, Owner/Editor granted, log sink deleted, world-open firewall, KMS destruction, service-account key creation) - no ML threat analysis and no attack-path simulation. Image vulnerabilities come from Artifact Registry scanning (core/vuln_scan_core.py: bundled advisory snapshot + EOL table over the image config; the real Trivy container where the offline appliance has it). It is not Security Command Center: no findings history, muting or org-level aggregation."
+  ],
+  "api": [
+   "securityPosture.compute"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_posture.py",
+   "tests/conformance/test_gcp_secscan.py"
+  ]
+ },
+ "gcp.compute.migrate-to-vms": {
   "title": "Migrate to Virtual Machines (sources, connectors, migrating VMs, replication cycles, clone/cutover jobs)",
   "level": {
    "nano": "limited",
@@ -320,17 +624,17 @@
    "tests/conformance/test_gcp_commit_capacity.py"
   ]
  },
-  "gcp.compute.incidents": {
-    "title": "Google Cloud incidents (service health feed)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "The feed reports outages on Google's real infrastructure; Vyomi is a local simulator with no Google status source, so there is nothing true to report."
-    ]
+ "gcp.compute.incidents": {
+  "title": "Google Cloud incidents (service health feed)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
-  "gcp.compute.tpus": {
+  "limitations": [
+   "The feed reports outages on Google's real infrastructure; Vyomi is a local simulator with no Google status source, so there is nothing true to report."
+  ]
+ },
+ "gcp.compute.tpus": {
   "title": "TPUs (Cloud TPU v2 nodes)",
   "level": {
    "nano": "limited",
@@ -354,17 +658,17 @@
    "tests/conformance/test_gcp_commit_capacity.py"
   ]
  },
-  "gcp.compute.bms": {
-    "title": "Bare Metal Solution (servers, networks, VRFs, volumes, NFS shares, procurements, maintenance events)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Bare Metal Solution provisions physical Oracle-certified servers in a Google-colocated facility with procurement and on-site maintenance workflows; there is no hardware (or meaningful software stand-in) to model."
-    ]
+ "gcp.compute.bms": {
+  "title": "Bare Metal Solution (servers, networks, VRFs, volumes, NFS shares, procurements, maintenance events)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
-  "gcp.compute.committed-use-discounts": {
+  "limitations": [
+   "Bare Metal Solution provisions physical Oracle-certified servers in a Google-colocated facility with procurement and on-site maintenance workflows; there is no hardware (or meaningful software stand-in) to model."
+  ]
+ },
+ "gcp.compute.committed-use-discounts": {
   "title": "Committed use discounts (resource-based and spend-based commitments)",
   "level": {
    "nano": "limited",
@@ -385,7 +689,7 @@
    "tests/conformance/test_gcp_commit_capacity.py"
   ]
  },
-  "gcp.compute.capacity-advisor": {
+ "gcp.compute.capacity-advisor": {
   "tier": "pro",
   "title": "Capacity advisor (quota, reservations, simulated fleet)",
   "level": {
@@ -405,16 +709,47 @@
    "tests/conformance/test_gcp_commit_capacity.py"
   ]
  },
-  "gcp.compute.preview-features": {
-    "title": "Preview features (opt-in to pre-GA Compute Engine features)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "The catalog and enrollment are managed by Google per project and gate real backend rollouts; Vyomi has a single fixed feature set."
-    ]
+ "gcp.compute.preview-features": {
+  "title": "Preview features (opt-in to pre-GA Compute Engine features)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
- "gcp.compute.opsagent_metrics": {"title": "Instance Observability: Ops Agent host metrics", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["agent.googleapis.com cpu (cpu_state=used only), network and disk series measured inside the instance (cgroup + /proc counters) and pushed to /_obs/gce-counters by a runtime; there is no built-in sampler for GCE instances on this branch, so a VM with no pushes shows 'No samples'. Memory, process and filesystem metrics are not produced."], "tests": ["tests/conformance/test_obs_collectors.py"]},
- "gcp.compute.instances.ssh_metadata": {"title": "SSH keys and OS info", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["SSH keys: the instance `ssh-keys` metadata item (and the project one) is real state: lines are validated as USERNAME:ssh-key, shown with SHA256 fingerprints, block-project-ssh-keys is honoured in the effective list. Offline, saving authorizes each key inside the running instance container (guest-agent behaviour) so `ssh -i key user@host -p port` logs in; removing a line does not yet revoke the key already written to the guest. On Nano the metadata is recorded and validated but no guest receives it (SSH there is the in-browser VM).", "OS info: offline it is read from the running guest (os-release, uname, /proc); on Nano, or when the instance is stopped, it is declared from the boot image only (no kernel, uptime or package counts).", "OS Login (IAM-based key distribution) is not simulated: the `enable-oslogin` flag is shown but identity-based login is not enforced."], "api": ["instances.setMetadata", "(Vyomi) POST/GET .../instances/{name}:sshKeys", "(Vyomi) GET .../instances/{name}:osInfo"], "tests": ["tests/conformance/test_gce_ssh_metadata.py"]}
+  "limitations": [
+   "The catalog and enrollment are managed by Google per project and gate real backend rollouts; Vyomi has a single fixed feature set."
+  ]
+ },
+ "gcp.compute.opsagent_metrics": {
+  "title": "Instance Observability: Ops Agent host metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "agent.googleapis.com cpu (cpu_state=used only), network and disk series measured inside the instance (cgroup + /proc counters) and pushed to /_obs/gce-counters by a runtime; there is no built-in sampler for GCE instances on this branch, so a VM with no pushes shows 'No samples'. Memory, process and filesystem metrics are not produced."
+  ],
+  "tests": [
+   "tests/conformance/test_obs_collectors.py"
+  ]
+ },
+ "gcp.compute.instances.ssh_metadata": {
+  "title": "SSH keys and OS info",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "SSH keys: the instance `ssh-keys` metadata item (and the project one) is real state: lines are validated as USERNAME:ssh-key, shown with SHA256 fingerprints, block-project-ssh-keys is honoured in the effective list. Offline, saving authorizes each key inside the running instance container (guest-agent behaviour) so `ssh -i key user@host -p port` logs in; removing a line does not yet revoke the key already written to the guest. On Nano the metadata is recorded and validated but no guest receives it (SSH there is the in-browser VM).",
+   "OS info: offline it is read from the running guest (os-release, uname, /proc); on Nano, or when the instance is stopped, it is declared from the boot image only (no kernel, uptime or package counts).",
+   "OS Login (IAM-based key distribution) is not simulated: the `enable-oslogin` flag is shown but identity-based login is not enforced."
+  ],
+  "api": [
+   "instances.setMetadata",
+   "(Vyomi) POST/GET .../instances/{name}:sshKeys",
+   "(Vyomi) GET .../instances/{name}:osInfo"
+  ],
+  "tests": [
+   "tests/conformance/test_gce_ssh_metadata.py"
+  ]
+ }
 }

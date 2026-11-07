@@ -474,7 +474,18 @@ def _instance_operations(store, project, zone, name):
 
 
 def get_serial_port_output(store, project, zone, name, query):
-    full, _ = _instance(store, project, zone, name)
+    full, _inst = _instance(store, project, zone, name)
+    live = _inst.get("_serial")
+    if live and _inst.get("status") == "RUNNING":
+        # Nano: the in-browser VM's real ttyS0 text (tail kept by the page-side guest agent), byte offsets like the real API
+        try:
+            start = int((query or {}).get("start") or 0)
+        except (TypeError, ValueError):
+            start = 0
+        base = int(_inst.get("_serialBase") or 0)       # absolute offset of live[0] (the page keeps a bounded tail)
+        start = max(base, min(start or base, base + len(live)))
+        return {"kind": "compute#serialPortOutput", "selfLink": _selflink(full), "contents": live[start - base:],
+                "start": str(start), "next": str(base + len(live))}
     lines = ["%s  Instance %s %s." % (op["insertTime"], name, _SERIAL_VERB.get(op["operationType"], op["operationType"]))
              for op in _instance_operations(store, project, zone, name)]
     try:
@@ -588,6 +599,39 @@ _IMAGE_OS = {"debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12"), "d
              "rocky-linux-9": ("Rocky Linux 9", "rocky", "9"), "cos": ("Container-Optimized OS", "cos", "stable")}
 
 
+def get_guest_attributes(store, project, zone, name, query):
+    """instances.getGuestAttributes. Nano: attributes the page-side guest agent read from the running in-browser VM, in the
+    `vyomi` namespace (hostname, os-release, kernel, uptime-seconds, memory-kb, architecture). Like GCE it needs the
+    `enable-guest-attributes=TRUE` metadata (instance or project) and 404s for a key the guest never wrote. Offline /
+    no running VM: FAILED_PRECONDITION with the reason."""
+    full, inst = _instance(store, project, zone, name)
+    g = inst.get("_guest") if inst.get("status") == "RUNNING" else None
+    if not g:
+        raise _E(400, "FAILED_PRECONDITION", "Guest attributes aren't available: no guest agent is reporting for this instance "
+                 "(on Nano turn on in-browser VMs and let the VM boot; the offline Docker guest has no agent).")
+    iitems = (inst.get("metadata") or {}).get("items") or []
+    if str(_md_get(iitems, "enable-guest-attributes") or _md_get(_proj(store, project)["items"], "enable-guest-attributes") or "").upper() != "TRUE":
+        raise _E(404, "NOT_FOUND", "The resource '%s/guestAttributes' was not found (set the enable-guest-attributes=TRUE metadata)." % _selflink(full))
+    attrs = {"hostname": g.get("hostname"), "os-release": g.get("prettyName"), "kernel": g.get("kernel"), "architecture": g.get("architecture"),
+             "uptime-seconds": g.get("uptimeSeconds"), "memory-kb": g.get("memoryKb")}
+    items = [{"namespace": "vyomi", "key": k, "value": str(v)} for k, v in attrs.items() if v not in (None, "")]
+    q = dict(query or {})
+    qp, vk = q.get("queryPath"), q.get("variableKey")
+    if vk:
+        ns, _, key = vk.partition("/")
+        hit = next((i for i in items if i["namespace"] == ns and i["key"] == key), None)
+        if hit is None:
+            raise _E(404, "NOT_FOUND", "The resource '%s/guestAttributes/%s' was not found" % (_selflink(full), vk))
+        return {"kind": "compute#guestAttributes", "selfLink": _selflink(full) + "/getGuestAttributes", "variableKey": vk, "variableValue": hit["value"]}
+    if qp:
+        pre = qp.strip("/")
+        sel = [i for i in items if ("%s/%s" % (i["namespace"], i["key"])).startswith(pre)]
+        if not sel:
+            raise _E(404, "NOT_FOUND", "The resource '%s/guestAttributes/%s' was not found" % (_selflink(full), qp))
+        return {"kind": "compute#guestAttributes", "selfLink": _selflink(full) + "/getGuestAttributes", "queryPath": qp, "queryValue": {"items": sel}}
+    return {"kind": "compute#guestAttributes", "selfLink": _selflink(full) + "/getGuestAttributes", "queryPath": "", "queryValue": {"items": items}}
+
+
 def get_os_info(store, project, zone, name):
     """Declared OS info from the instance's boot image + machine shape. Offline, the server overlays the
     live guest's os-release/kernel/uptime on top (source 'guest'); on Nano there is no guest to ask."""
@@ -600,6 +644,14 @@ def get_os_info(store, project, zone, name):
     key = next((k for k in _IMAGE_OS if k in src), None)
     pretty, osid, ver = _IMAGE_OS.get(key, ("Linux", "linux", ""))
     mt = _last(inst.get("machineType", ""))
+    g = inst.get("_guest") if inst.get("status") == "RUNNING" else None
+    if g:    # Nano: facts read from the running in-browser VM by the page-side guest agent (os-release, uname, /proc)
+        return {"kind": "vyomi#instanceOsInfo", "instance": name, "status": inst["status"], "source": "guest",
+                "prettyName": g.get("prettyName") or pretty, "id": g.get("id") or osid, "version": g.get("version") or ver,
+                "hostname": g.get("hostname") or "%s.%s.c.%s.internal" % (name, zone, project),
+                "kernel": g.get("kernel", ""), "architecture": g.get("architecture") or "i686", "machineType": mt,
+                "uptimeSeconds": g.get("uptimeSeconds"), "memoryKb": g.get("memoryKb"), "reportedAt": g.get("reportedAt"),
+                "note": "Read from the running in-browser VM (v86, 32-bit x86 Alpine), not from the boot image you picked."}
     return {"kind": "vyomi#instanceOsInfo", "instance": name, "status": inst["status"], "source": "image",
             "prettyName": pretty, "id": osid, "version": ver, "hostname": "%s.%s.c.%s.internal" % (name, zone, project),
             "architecture": "x86_64", "machineType": mt,
@@ -1565,8 +1617,7 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                 _instance(store, project, zone, name)
                 raise _E(400, "FAILED_PRECONDITION", "Screenshots aren't available: no virtual display runs behind an instance in Vyomi.")
             if verb == "getGuestAttributes" and method == "GET":
-                _instance(store, project, zone, name)
-                raise _E(400, "FAILED_PRECONDITION", "Guest attributes aren't available: no guest OS or agent runs behind an instance in Vyomi.")
+                return _json(200, get_guest_attributes(store, project, zone, name, query))
     elif coll == "disks":
         if not rest2:
             if method == "POST":
