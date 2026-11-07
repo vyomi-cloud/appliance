@@ -19,8 +19,9 @@ agent/RetrieveAndGenerate answer is the local model prompted with the retrieved 
 Honest limits: the model is a small local one (see llm_core.HONEST_LIMIT). Agent action groups are stored but the model does
 not emit tool calls, so they are never invoked; only text (.txt/.md/.csv/.json/.html/.xml/.log) documents are ingested - other
 types (PDF/Office) are counted as failed; vector storage is always the in-account index regardless of the storage type named;
-AgentCore runtimes are control-plane only (the simulator does not run runtime containers, InvokeAgentRuntime returns a
-RuntimeClientError); gateway targets of type openApiSchema/smithyModel/mcpServer are registered but their tools are not callable.
+AgentCore runtimes: InvokeAgentRuntime runs a Vyomi agent spec (core/agent_spec_core: JSON instructions + declarative tools in-process over
+llm_core, Dev Simplified) carried in environmentVariables.VYOMI_AGENT_SPEC - container images are never run (without a spec the invoke
+returns RuntimeClientError); runtime endpoints/versions/sessions are modelled; gateway targets of type openApiSchema/smithyModel/mcpServer are registered but their tools are not callable.
 """
 from __future__ import annotations
 
@@ -873,50 +874,235 @@ def _mcp(st, lam, gid, p, headers):
     return fail(-32601, f"Method not found: {method}")
 
 
+# ═══════════════ AgentCore runtimes: control plane + InvokeAgentRuntime over the Vyomi agent spec (Dev Simplified) ═══════════════
+_RT_PATH = re.compile(r"^(?:arn:[^/]*:runtime/)?([A-Za-z][A-Za-z0-9_\-]*)(?:/(.*))?$")
+_SESS_HDR = "x-amzn-bedrock-agentcore-runtime-session-id"
+_SPEC_ENV = "VYOMI_AGENT_SPEC"
+
+
+def _agent_core():
+    try:
+        from core import agent_spec_core as m
+    except ImportError:
+        import agent_spec_core as m  # type: ignore
+    return m
+
+
+def _rt_summary(rt):
+    return {k: rt[k] for k in ("agentRuntimeArn", "agentRuntimeId", "agentRuntimeVersion", "agentRuntimeName", "description", "lastUpdatedAt", "status")}
+
+
+def _ep_view(rt, ep):
+    _ac_ready(ep)
+    return {k: v for k, v in ep.items() if not k.startswith("_")}
+
+
+def _mk_endpoint(rt, name, version, desc=""):
+    now = _iso()
+    return {"name": name, "id": f"{name}-{_rid(10, _LOWER)}", "agentRuntimeEndpointArn": f"{rt['agentRuntimeArn']}/runtime-endpoint/{name}", "agentRuntimeArn": rt["agentRuntimeArn"],
+            "description": desc, "status": "CREATING", "liveVersion": version, "targetVersion": version, "createdAt": now, "lastUpdatedAt": now, "_readyAt": time.time() + 1.0}
+
+
+def _page_q(pq, method, body):
+    if method == "POST":
+        pq.update({k: str(v) for k, v in _body(body).items() if k in ("maxResults", "nextToken")})
+    return pq
+
+
+def _runtimes(st, method, path, query, headers, body):
+    rest = path[len("/runtimes"):].strip("/")
+    pq = dict(query or {})
+    if not rest:                                   # collection: create (PUT, or legacy POST with a name) / list (POST body or GET)
+        p = _body(body) if method in ("PUT", "POST") else {}
+        if method == "PUT" or (method == "POST" and "agentRuntimeName" in p):
+            r = _create_runtime(st, p)
+            rt = next(x for x in st["runtimes"].values() if x["agentRuntimeName"] == p["agentRuntimeName"])
+            rt["_versions"] = {"1": _rt_summary(rt)}
+            rt["_endpoints"] = {"DEFAULT": _mk_endpoint(rt, "DEFAULT", "1", "Default endpoint for the agent runtime")}
+            rt["_sessions"] = {}
+            return r
+        if method in ("GET", "POST"):
+            pq.update({k: str(v) for k, v in p.items() if k in ("maxResults", "nextToken")})
+            for r in st["runtimes"].values():
+                _ac_ready(r)
+            return _j(200, _paginate([_rt_summary(r) for r in st["runtimes"].values()], pq, "agentRuntimes"))
+        raise _Err("UnknownOperationException", f"Unsupported AgentCore operation: {method} {path}", 404)
+    m = _RT_PATH.match(urllib.parse.unquote(rest))
+    if not m:
+        raise _bad("Invalid agentRuntimeId / agentRuntimeArn")
+    rid, tail = m.group(1), (m.group(2) or "").strip("/")
+    rt = st["runtimes"].get(rid)
+    if not rt:
+        raise _nf(f"Runtime {rid} not found")
+    rt.setdefault("_versions", {rt["agentRuntimeVersion"]: _rt_summary(rt)})
+    rt.setdefault("_endpoints", {})
+    rt.setdefault("_sessions", {})
+    _ac_ready(rt)
+    if tail == "invocations" and method == "POST":
+        return _invoke_runtime(rt, query or {}, headers or {}, body)
+    if tail == "stopruntimesession" and method == "POST":
+        sid = _body(body).get("runtimeSessionId") or (headers or {}).get(_SESS_HDR)
+        if not sid or sid not in rt["_sessions"]:
+            raise _nf(f"Runtime session {sid} not found")
+        del rt["_sessions"][sid]
+        return _j(200, {"runtimeSessionId": sid, "statusCode": 200}, {_SESS_HDR: sid})
+    if tail == "commands":
+        raise _Err("ValidationException", "InvokeAgentRuntimeCommand needs a container; the Vyomi agent-spec runtime has none", 400)
+    if tail == "":
+        if method == "GET":
+            v = pq.get("agentRuntimeVersion")
+            if v and v not in rt["_versions"]:
+                raise _nf(f"Runtime {rid} version {v} not found")
+            return _j(200, _pub(rt))
+        if method == "PUT":
+            p = _body(body)
+            art = p.get("agentRuntimeArtifact") or rt["agentRuntimeArtifact"]
+            if not (art.get("containerConfiguration") or {}).get("containerUri"):
+                raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+            rt["agentRuntimeArtifact"] = art
+            rt["agentRuntimeVersion"] = str(int(rt["agentRuntimeVersion"]) + 1)
+            for f in ("roleArn", "networkConfiguration", "description", "environmentVariables", "protocolConfiguration", "authorizerConfiguration"):
+                if f in p:
+                    rt[f] = p[f]
+            rt["status"], rt["_readyAt"], rt["lastUpdatedAt"] = "UPDATING", time.time() + 1.0, _iso()
+            rt["_versions"][rt["agentRuntimeVersion"]] = _rt_summary(rt)
+            return _j(202, {k: rt[k] for k in ("agentRuntimeArn", "agentRuntimeId", "agentRuntimeVersion", "createdAt", "lastUpdatedAt", "status", "workloadIdentityDetails")})
+        if method == "DELETE":
+            del st["runtimes"][rid]
+            return _j(202, {"status": "DELETING", "agentRuntimeId": rid, "agentRuntimeVersion": rt["agentRuntimeVersion"]})
+    if tail == "versions" and method in ("POST", "GET"):
+        return _j(200, _paginate([dict(v, status="READY") for v in rt["_versions"].values()], _page_q(pq, method, body), "agentRuntimes"))
+    if tail.startswith("runtime-endpoints"):
+        en = tail[len("runtime-endpoints"):].strip("/")
+        if not en:
+            if method == "PUT":
+                p = _body(body)
+                name = p.get("name")
+                if not name or not re.match(r"^[a-zA-Z][a-zA-Z0-9_]{0,47}$", name):
+                    raise _bad("name must match [a-zA-Z][a-zA-Z0-9_]{0,47}")
+                if name in rt["_endpoints"]:
+                    raise _conflict(f"Endpoint {name} already exists")
+                ver = p.get("agentRuntimeVersion") or rt["agentRuntimeVersion"]
+                if ver not in rt["_versions"]:
+                    raise _nf(f"Runtime {rid} version {ver} not found")
+                ep = rt["_endpoints"][name] = _mk_endpoint(rt, name, ver, p.get("description", ""))
+                return _j(202, {"targetVersion": ver, "agentRuntimeEndpointArn": ep["agentRuntimeEndpointArn"], "agentRuntimeArn": rt["agentRuntimeArn"],
+                                "agentRuntimeId": rid, "endpointName": name, "status": "CREATING", "createdAt": ep["createdAt"]})
+            if method in ("POST", "GET"):
+                return _j(200, _paginate([_ep_view(rt, e) for e in rt["_endpoints"].values()], _page_q(pq, method, body), "runtimeEndpoints"))
+        else:
+            ep = rt["_endpoints"].get(en)
+            if not ep:
+                raise _nf(f"Endpoint {en} not found")
+            if method == "GET":
+                return _j(200, _ep_view(rt, ep))
+            if method == "PUT":
+                p = _body(body)
+                ver = p.get("agentRuntimeVersion") or ep["liveVersion"]
+                if ver not in rt["_versions"]:
+                    raise _nf(f"Runtime {rid} version {ver} not found")
+                ep.update(targetVersion=ver, liveVersion=ver, status="UPDATING", lastUpdatedAt=_iso(), _readyAt=time.time() + 1.0)
+                if "description" in p:
+                    ep["description"] = p["description"]
+                return _j(202, {k: ep[k] for k in ("liveVersion", "targetVersion", "agentRuntimeEndpointArn", "agentRuntimeArn", "status", "createdAt", "lastUpdatedAt")})
+            if method == "DELETE":
+                if en == "DEFAULT":
+                    raise _bad("The DEFAULT endpoint cannot be deleted")
+                del rt["_endpoints"][en]
+                return _j(202, {"status": "DELETING", "agentRuntimeId": rid, "endpointName": en})
+    raise _Err("UnknownOperationException", f"Unsupported AgentCore operation: {method} {path}", 404)
+
+
+def _payload_text(raw):
+    """Payload convention of AgentCore samples: JSON {"prompt": ...}; also message / input / inputText / question, or raw text."""
+    if not raw:
+        raise _bad("payload is required")
+    txt = raw.decode("utf-8", "replace")
+    try:
+        d = json.loads(txt)
+    except ValueError:
+        return txt, False
+    if isinstance(d, dict):
+        for k in ("prompt", "message", "input", "inputText", "question", "query"):
+            if isinstance(d.get(k), str) and d[k]:
+                return d[k], bool(d.get("stream"))
+        raise _bad('payload must carry a "prompt" (or message/input/inputText/question) string')
+    return (d if isinstance(d, str) else txt), False
+
+
+def _rt_client_err(msg):
+    return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "RuntimeClientError"}, "body": json.dumps({"message": msg}).encode()}
+
+
+def _invoke_runtime(rt, query, headers, body):
+    """InvokeAgentRuntime: run the runtime's Vyomi agent spec (env VYOMI_AGENT_SPEC) in-process over llm_core."""
+    q = {k.lower(): v for k, v in (query or {}).items()}
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    qual = q.get("qualifier")
+    if qual and qual != "DEFAULT" and qual not in rt["_endpoints"]:
+        raise _nf(f"Endpoint {qual} not found")
+    if rt["status"] != "READY":
+        return _rt_client_err(f"Runtime is {rt['status']}, not READY")
+    raw_spec = (rt.get("environmentVariables") or {}).get(_SPEC_ENV)
+    if not raw_spec:
+        return _rt_client_err("The simulator does not run AgentCore runtime containers. Give the runtime a Vyomi agent spec "
+                              f"(environmentVariables[{_SPEC_ENV}] = JSON of instructions + tools) to make it invocable (Dev Simplified).")
+    ag = _agent_core()
+    try:
+        spec = ag.parse_spec(raw_spec)
+    except ag.SpecError as e:
+        return _rt_client_err(f"Invalid Vyomi agent spec: {e}")
+    sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
+    if len(sid) < 33:
+        raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
+    text, want_stream = _payload_text(body)
+    sess = rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
+    accept = h.get("accept", "")
+    hdrs = {_SESS_HDR: sid, "x-vyomi-local-model": llm.model_name()}
+    try:
+        if want_stream or "text/event-stream" in accept:
+            gen = ag.run_events(spec, text, sess["history"])
+            first = next(gen)
+
+            def sse():
+                import itertools
+                for ev in itertools.chain([first], gen):
+                    if ev["type"] == "final":
+                        sess["history"].extend(ev["messages"])
+                        yield "data: " + json.dumps({"event": "final", "response": ev["text"], "usage": ev["usage"]}) + "\n\n"
+                    elif ev["type"] == "model" and not ev["tool_calls"]:
+                        yield "data: " + json.dumps({"event": "message", "text": ev["text"]}) + "\n\n"
+                    elif ev["type"] == "model":
+                        yield "data: " + json.dumps({"event": "tool_use", "tools": ev["tool_calls"]}) + "\n\n"
+                    else:
+                        yield "data: " + json.dumps({"event": "tool_result", "name": ev["name"], "result": ev["result"], "isError": ev["isError"]}) + "\n\n"
+            try:
+                from core import ai_models_core as am
+            except ImportError:
+                import ai_models_core as am  # type: ignore
+            return am._stream_out(200, hdrs, sse(), "text/event-stream")
+        r = ag.run(spec, text, sess["history"])
+    except llm.LlmUnavailable as e:
+        return {"status": 503, "headers": {"content-type": "application/json", "x-amzn-errortype": "ServiceUnavailableException"},
+                "body": json.dumps({"message": f"{e}"}).encode()}
+    except ValueError as e:
+        raise _bad(str(e))
+    sess["history"].extend(r["messages"])
+    return _j(200, {"response": r["text"], "sessionId": sid,
+                    "toolCalls": [{"name": s["name"], "arguments": s["arguments"], "result": s["result"], "isError": s["isError"]} for s in r["steps"] if s["type"] == "tool_result"],
+                    "usage": r["usage"], "model": r["model"], "truncated": r["truncated"]}, hdrs)
+
+
 def agentcore_dispatch(s3, lam, method, path, query, headers, body):
     method = method.upper()
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
     try:
         st = _state(s3)
-        p = _body(body) if method in ("PUT", "POST", "PATCH") else {}
         if segs[0] == "runtimes":
-            if len(segs) == 1:
-                if method == "POST":
-                    return _create_runtime(st, p)
-                if method == "GET":
-                    return _j(200, _paginate([{k: _pub(r)[k] for k in ("agentRuntimeArn", "agentRuntimeId", "agentRuntimeVersion", "agentRuntimeName", "description", "lastUpdatedAt", "status")}
-                                              for r in st["runtimes"].values()], query, "agentRuntimes"))
-            else:
-                rid = segs[1].rsplit("/", 1)[-1]
-                rid = rid.split("runtime/")[-1]
-                rt = st["runtimes"].get(rid)
-                if len(segs) == 3 and segs[2] == "invocations" and method == "POST":
-                    if not rt:
-                        raise _nf(f"Runtime {rid} not found")
-                    _ac_ready(rt)
-                    return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "RuntimeClientError"},
-                            "body": json.dumps({"message": "The simulator does not run AgentCore runtime containers; the runtime is registered (control plane only)."}).encode()}
-                if not rt:
-                    raise _nf(f"Runtime {rid} not found")
-                if len(segs) == 2:
-                    if method == "GET":
-                        return _j(200, _pub(rt))
-                    if method == "PUT":
-                        art = p.get("agentRuntimeArtifact") or rt["agentRuntimeArtifact"]
-                        if not (art.get("containerConfiguration") or {}).get("containerUri"):
-                            raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
-                        rt["agentRuntimeArtifact"] = art
-                        rt["agentRuntimeVersion"] = str(int(rt["agentRuntimeVersion"]) + 1)
-                        for f in ("roleArn", "networkConfiguration", "description", "environmentVariables"):
-                            if f in p:
-                                rt[f] = p[f]
-                        rt["status"], rt["_readyAt"], rt["lastUpdatedAt"] = "UPDATING", time.time() + 1.0, _iso()
-                        return _j(202, {k: rt[k] for k in ("agentRuntimeArn", "agentRuntimeId", "agentRuntimeVersion", "createdAt", "lastUpdatedAt", "status")})
-                    if method == "DELETE":
-                        del st["runtimes"][rid]
-                        return _j(202, {"status": "DELETING", "agentRuntimeId": rid})
-        elif segs[0] == "gateways":
+            return _runtimes(st, method, path, query, headers, body)
+        p = _body(body) if method in ("PUT", "POST", "PATCH") else {}
+        if segs[0] == "gateways":
             if len(segs) == 1:
                 if method == "POST":
                     return _create_gateway(st, p)

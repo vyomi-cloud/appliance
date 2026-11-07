@@ -101,6 +101,9 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
+            or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
+        return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
     if gcp_vertex.handles(path):
         return "gcp-vertex"   # Vertex AI control plane (endpoints/models/datasets/jobs/indexes/feature store/metadata) + Workbench + Model Garden (core/gcp_vertex_core)
     if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
@@ -1497,7 +1500,7 @@ class AwsWireRouter:
             r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
             return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
-        if svc in ("bedrock", "gcp-aiplatform", "az-openai") or (svc == "azure-arm" and re.search(
+        if svc in ("bedrock", "gcp-aiplatform", "gcp-agentengine", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
                 r"/providers/microsoft\.cognitiveservices/accounts/[^/]+/openai/", path.lower())):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
             from core import llm_core
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
@@ -1839,6 +1842,10 @@ class AwsWireRouter:
         if svc == "gcp-aiplatform":
             from core import ai_models_core
             return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "gcp-agentengine":
+            from core import gcp_agentengine_core
+            return gcp_agentengine_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
         if svc == "az-openai":
             from core import ai_models_core
