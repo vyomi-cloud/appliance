@@ -255,7 +255,8 @@ def dispatch(state: dict, method: str, sub: str, rg, rest: list, payload: dict, 
             evaluate(state, sub, alerts_fn())
             return _ok(_view(new), 200 if rec else 201)
         if method == "DELETE":
-            return _ok(None, 200 if state.pop(key, None) is not None else 204)
+            state.pop(key, None)
+            return _ok(None, 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
     except _E as e:
         return _err(e.status, e.code, e.message)
