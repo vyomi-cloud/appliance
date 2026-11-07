@@ -231,16 +231,7 @@
       "tests/conformance/test_azure_services_depth.py"
     ]
   },
-  "azure.sql.always_encrypted": {
-    "title": "Always Encrypted",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Always Encrypted (column master keys and client-side column encryption) is not modelled; Transparent data encryption is a separate, real-as-config page (azure.sql.transparent_data_encryption)."
-    ]
-  },
+  "azure.sql.always_encrypted": {"title": "Always Encrypted", "level": {"nano": "limited", "offline": "config_only"}, "limitations": ["Column master key (a Key Vault key, validated) -> column encryption key (wrapped by Key Vault wrapKey) -> encrypted columns (Deterministic / Randomized). The server stores ciphertext only; the client-side driver is EMULATED in the simulator's query path (body columnEncryptionSetting: Enabled encrypts parameters bound to encrypted columns and decrypts results, unwrapping the CEK through Key Vault so a disabled CMK stops decryption). Without the setting plaintext writes are rejected and reads return ciphertext; LIKE / range / randomized-equality on an encrypted column are rejected.", "No real ODBC/JDBC driver is involved (TDS cannot traverse the relay); secure enclaves are not modelled; the cipher is an HMAC-SHA256 stream construction, not AEAD_AES_256_CBC_HMAC_SHA_256. Enforced on the Nano substrate (azure_sql_core via the Nano wire router); the offline appliance does not route the Azure SQL data plane through this engine yet, so there it is config-only."], "tests": ["tests/conformance/test_azure_sql_security_enforced.py"]},
   "azure.storage.private_endpoints": {
     "title": "Private endpoint connections",
     "level": {

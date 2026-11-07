@@ -4,7 +4,7 @@
  * Every save goes over the native ARM wire; the capability registry says exactly what is and is not enforced. */
 import { useState } from "react";
 import { Button, Checkbox, Field, Input, Select, Textarea } from "@fluentui/react-components";
-import { restJson } from "../../common/wire.js";
+import { restJson, sendRaw } from "../../common/wire.js";
 import { useNotify } from "../../common/notify.jsx";
 import { useAsync } from "../../common/useAsync.js";
 import { CapabilityContainer } from "./Capability.jsx";
@@ -136,6 +136,10 @@ export function CosmosDedicatedGateway({ a }) {
   const [size, setSize] = useState("Cosmos.D4s");
   const [count, setCount] = useState("1");
   const cur = gw.data?.properties;
+  const cache = useAsync(async () => {
+    const r = await sendRaw("GET", "/vyomi/dedicatedgateway/metrics", { headers: { "x-vyomi-account": a.name } });
+    return r.ok ? Object.values(JSON.parse(r.text).metrics || {})[0] || null : null;
+  }, [a.id, gw.data]);
   return (
     <CapabilityContainer id="azure.cosmos.dedicatedgateway" title={`${a.name} | Dedicated Gateway`}>
       {gw.loading && !gw.data ? <Loading /> : cur ? (
@@ -144,6 +148,8 @@ export function CosmosDedicatedGateway({ a }) {
           <KV label="Gateway size" value={cur.instanceSize} />
           <KV label="Number of instances" value={String(cur.instanceCount)} />
           <KV label="Dedicated gateway endpoint" value={cur.sqlDedicatedGatewayEndpoint} />
+          <InfoBar>The endpoint serves an integrated cache: point reads and queries sent to it are cached for x-ms-dedicatedgateway-max-age (default 5 min) and hits cost 0 RU. Item writes through the gateway are write-through; the query cache stays stale until its TTL.</InfoBar>
+          <KV label="Integrated cache hits / misses" value={cache.data ? `${cache.data.hits} / ${cache.data.misses} (hit ratio ${cache.data.hitRatio ?? "n/a"}, ${cache.data.entries} cached entries, ${cache.data.requestChargeSaved} RU saved)` : "no traffic through the gateway yet"} />
           <div style={{ marginTop: 8 }}><Button aria-label="Deprovision dedicated gateway" onClick={async () => { await save(() => restJson("DELETE", path, { query: COSMOS_V }), "The dedicated gateway was deprovisioned."); gw.reload(); }}>Deprovision</Button></div>
         </>
       ) : <p className="vy-muted">No dedicated gateway is provisioned for this account.</p>}
@@ -174,7 +180,7 @@ export function CosmosDataEncryption({ a, reload }) {
             await restJson("PATCH", a.id, { query: COSMOS_V, body: { properties: { keyVaultKeyUri: uri, defaultIdentity: sys ? "SystemAssignedIdentity" : a.properties?.defaultIdentity } } });
           }, cur ? "The customer-managed key was rotated." : "The customer-managed key was saved.")}>{cur ? "Rotate key" : "Save"}</Button>
       </div>
-      <p className="vy-muted" style={{ fontSize: 13 }}>As in Azure, once an account uses a customer-managed key it cannot go back to a service-managed key.</p>
+      <p className="vy-muted" style={{ fontSize: 13 }}>As in Azure, once an account uses a customer-managed key it cannot go back to a service-managed key. The account's data is envelope-encrypted at rest with a data key wrapped by this Key Vault key: disabling or deleting the key makes data requests fail (403, substatus 4000) until it is enabled or recovered; rotating re-wraps the data key.</p>
     </CapabilityContainer>
   );
 }
@@ -191,6 +197,7 @@ export function SbEncryption({ a, reload }) {
     <CapabilityContainer id="azure.servicebus.namespace.encryption" title={`${a.name} | Encryption`}>
       {!premium && <InfoBar intent="warning">Customer-managed keys are only available on Premium namespaces.</InfoBar>}
       <KV label="Encryption" value={cur ? `Customer-managed key (${cur.keyName})` : "Microsoft-managed key"} />
+      <p className="vy-muted" style={{ fontSize: 13 }}>Message bodies are envelope-encrypted at rest with a data key wrapped by this Key Vault key. Disabling or deleting the key makes message operations fail (403 MessagingGatewayKeyInaccessible) until it is usable again; rotating re-wraps the data key.</p>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", margin: "8px 0" }}>
         <Field label="Key vault URI"><Input value={f.vault} onChange={(_, d) => setF((x) => ({ ...x, vault: d.value }))} placeholder="https://<vault>.vault.azure.net" aria-label="Key vault URI" /></Field>
         <Field label="Key name"><Input value={f.key} onChange={(_, d) => setF((x) => ({ ...x, key: d.value }))} aria-label="Key name" /></Field>
@@ -266,6 +273,7 @@ export function AppConfigEncryption({ a, reload }) {
     <CapabilityContainer id="azure.appconfiguration.encryption" title={`${a.name} | Encryption`}>
       {!ok && <InfoBar intent="warning">Customer-managed keys require a Standard or Premium configuration store.</InfoBar>}
       <KV label="Encryption" value={cur?.keyIdentifier ? "Customer-managed key" : "Microsoft-managed key"} />
+      <p className="vy-muted" style={{ fontSize: 13 }}>Key-values are envelope-encrypted at rest with a data key wrapped by this Key Vault key. Disabling or deleting the key makes data-plane requests fail (403) until it is usable again; rotating re-wraps the data key.</p>
       <Field label="Key identifier" style={{ maxWidth: 560 }}><Input value={uri} onChange={(_, d) => setUri(d.value)} placeholder="https://<vault>.vault.azure.net/keys/<name>" aria-label="Key identifier" /></Field>
       <div style={{ marginTop: 8 }}>
         <Button appearance="primary" disabled={!ok || !uri} aria-label="Save encryption key"

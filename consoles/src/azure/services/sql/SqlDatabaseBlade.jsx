@@ -4,7 +4,7 @@
  * are backed by native ARM / the azure-sql data-plane wire; everything else in the menu is
  * an honest NotSimulated panel. */
 import { SqlBackups, SqlReplicas } from "./SqlBackupPanels.jsx";
-import { DataDiscovery, DataMasking, Ledger, Maintenance } from "./SqlSecurityPages.jsx";
+import { AlwaysEncrypted, DataDiscovery, DataMasking, Ledger, Maintenance } from "./SqlSecurityPages.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -50,7 +50,7 @@ export const MENU = [
   { group: "Data management", items: [{ id: "backups", label: "Backups" }, { id: "replicas", label: "Replicas" }, { id: "syncdatabases", label: "Sync to other databases" }] },
   { group: "Integrations", items: [{ id: "streamanalytics", label: "Stream analytics (preview)" }, { id: "addazuresearch", label: "Add Azure Search" }] },
   { group: "Power Platform", items: [{ id: "powerbi", label: "Power BI" }, { id: "powerapps", label: "Power Apps" }, { id: "powerautomate", label: "Power Automate" }] },
-  { group: "Security", items: [{ id: "auditing", label: "Auditing" }, { id: "datadiscovery", label: "Data Discovery & Classification" }, { id: "datamasking", label: "Dynamic Data Masking" }, { id: "defender", label: "Microsoft Defender for Cloud" }, { id: "tde", label: "Transparent data encryption" }, { id: "ledger", label: "Ledger" }, { id: "identity", label: "Identity" }] },
+  { group: "Security", items: [{ id: "auditing", label: "Auditing" }, { id: "datadiscovery", label: "Data Discovery & Classification" }, { id: "datamasking", label: "Dynamic Data Masking" }, { id: "defender", label: "Microsoft Defender for Cloud" }, { id: "tde", label: "Transparent data encryption" }, { id: "ledger", label: "Ledger" }, { id: "alwaysencrypted", label: "Always Encrypted" }, { id: "identity", label: "Identity" }] },
   { group: "Intelligent Performance", items: [{ id: "perfoverview", label: "Performance overview" }, { id: "perfrecommendations", label: "Performance recommendations" }, { id: "queryperfinsight", label: "Query Performance Insight" }, { id: "autotuning", label: "Automatic tuning" }] },
   { group: "Monitoring", items: [{ id: "alerts", label: "Alerts" }, { id: "metrics", label: "Metrics" }, { id: "diagnosticsettings", label: "Diagnostic settings" }, { id: "logs", label: "Logs" }, { id: "databasewatcher", label: "Database watcher" }] },
   { group: "Automation", items: [{ id: "tasks", label: "Tasks" }, { id: "exporttemplate", label: "Export template" }] },
@@ -117,6 +117,7 @@ export default function SqlDatabaseBlade({ params }) {
       datadiscovery: () => <DataDiscovery a={a} />,
       datamasking: () => <DataMasking a={a} />,
       ledger: () => <Ledger a={a} />,
+      alwaysencrypted: () => <AlwaysEncrypted a={a} />,
       maintenance: () => <Maintenance a={a} />,
       identity: () => <IdentityPanel a={a} reload={reload} />,
       autotuning: () => <AutomaticTuning a={a} reload={reload} />,

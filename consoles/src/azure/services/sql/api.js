@@ -94,11 +94,26 @@ export async function ensureDataPlane(server, db) {
 }
 export const dropDataPlane = (server, db) =>
   sqlWire("DELETE", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}`, {}).catch(() => {});
-export const runQuery = (server, db, sql, params) =>
-  sqlWire("POST", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/query`, { body: { sql, params } });
+// opts.login = run as that SQL login (masking applies to non-admin logins); opts.columnEncryption = emulate the driver's
+// "Column Encryption Setting=Enabled" (encrypt parameters / decrypt results for Always Encrypted columns).
+export const runQuery = (server, db, sql, params, opts = {}) =>
+  sqlWire("POST", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/query`, {
+    body: { sql, params, ...(opts.columnEncryption ? { columnEncryptionSetting: "Enabled" } : {}) },
+    headers: opts.login ? { "x-vyomi-sql-login": opts.login } : {},
+  });
+const secPath = (server, db, rest) => `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/security/${rest}`;
+export const discoveryScan = (server, db) => sqlWire("GET", secPath(server, db, "discovery"), {});
+export const ledgerInfo = (server, db) => sqlWire("GET", secPath(server, db, "ledger"), {});
+export const ledgerHistory = async (server, db, table) => (await sqlWire("GET", secPath(server, db, "ledger/history"), { query: { table } })).value || [];
+export const ledgerDigest = (server, db) => sqlWire("POST", secPath(server, db, "ledger/digest"), {});
+export const ledgerVerify = (server, db) => sqlWire("POST", secPath(server, db, "ledger/verify"), {});
+export const aeInfo = (server, db) => sqlWire("GET", secPath(server, db, "ae"), {});
+export const aeCreateCmk = (server, db, name, keyPath) => sqlWire("PUT", secPath(server, db, `ae/cmk/${encodeURIComponent(name)}`), { body: { keyPath } });
+export const aeCreateCek = (server, db, name, cmk) => sqlWire("PUT", secPath(server, db, `ae/cek/${encodeURIComponent(name)}`), { body: { cmk } });
+export const aeEncryptColumn = (server, db, body) => sqlWire("POST", secPath(server, db, "ae/encrypt"), { body });
 
 export const listTables = (server, db) =>
-  runQuery(server, db, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+  runQuery(server, db, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND substr(name,1,8) <> '__vyomi_' ORDER BY name");
 export const listViews = (server, db) =>
   runQuery(server, db, "SELECT name FROM sqlite_master WHERE type='view' ORDER BY name");
 

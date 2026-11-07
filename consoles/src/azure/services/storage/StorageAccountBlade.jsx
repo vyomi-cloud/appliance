@@ -39,6 +39,7 @@ import { ResourceRecommendations } from "../defender/Pages.jsx";
 import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
 import { FileServiceSettings, FileShares, ServiceCors } from "./FileShares.jsx";
+import { ServiceMonitoring } from "./StorageServiceProps.jsx";
 import { DataMigration, StorageMover } from "./StorageMover.jsx";
 import StorageEdge from "./StorageEdge.jsx";
 
@@ -1276,8 +1277,8 @@ function Cors({ a }) {
         </CapabilityContainer>
       )}
       {tab === "file" && <CapabilityContainer id="azure.storage.fileservice" title="File service"><FileServiceSettings a={a} /><ServiceCors a={a} kind="fileServices" title="File service CORS" /></CapabilityContainer>}
-      {tab === "queue" && <CapabilityContainer id="azure.storage.queueservice" title="Queue service"><ServiceCors a={a} kind="queueServices" title="Queue service CORS" /></CapabilityContainer>}
-      {tab === "table" && <CapabilityContainer id="azure.storage.tableservice" title="Table service"><ServiceCors a={a} kind="tableServices" title="Table service CORS" /></CapabilityContainer>}
+      {tab === "queue" && <CapabilityContainer id="azure.storage.queueservice" title="Queue service"><ServiceCors a={a} kind="queueServices" title="Queue service CORS" /><ServiceMonitoring a={a} kind="queue" /></CapabilityContainer>}
+      {tab === "table" && <CapabilityContainer id="azure.storage.tableservice" title="Table service"><ServiceCors a={a} kind="tableServices" title="Table service CORS" /><ServiceMonitoring a={a} kind="table" /></CapabilityContainer>}
       <AddCorsRuleDialog open={add} onClose={() => setAdd(false)} onCreate={(rule) => save([...rules, rule])} />
     </>
   );

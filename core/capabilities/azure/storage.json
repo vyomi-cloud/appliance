@@ -310,18 +310,8 @@
   "limitations": ["Share soft-delete retention (1-365 days) is enforced on share delete / restore; SMB versions / authentication / channel-encryption values are validated and multichannel is Premium-only. CORS rules are validated and stored; the Vyomi file content API does not evaluate preflight requests."],
   "tests": ["tests/conformance/test_azure_files_core.py"]
  },
- "azure.storage.queueservice": {
-  "title": "Queue service CORS",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["CORS rules are validated and stored on queueServices/default; the Queue data plane does not answer preflight requests with them."],
-  "tests": ["tests/conformance/test_azure_files_core.py"]
- },
- "azure.storage.tableservice": {
-  "title": "Table service CORS",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["CORS rules are validated and stored on tableServices/default; the Table data plane does not answer preflight requests with them."],
-  "tests": ["tests/conformance/test_azure_files_core.py"]
- },
+ "azure.storage.queueservice": {"title": "Queue service properties", "level": {"nano": "limited", "offline": "config_only"}, "limitations": ["Service properties (Set/Get Service Properties XML: Logging, HourMetrics, MinuteMetrics, Cors, retention) are stored in the storage-account record shared with the ARM queueServices/default CORS, the data plane answers CORS preflight with the rules (403 CorsPreflightFailure when no rule matches) and adds Access-Control headers, counts requests into hour/minute metrics (API-level when includeAPIs), logs per the read/write/delete flags and purges beyond the retention days.", "Logs and metrics are kept in a bounded in-memory ring served at ?restype=service&comp=vyomi-logs|vyomi-metrics, not written to the $logs blob container / $Metrics tables. Queue, Table and Blob service-root requests are indistinguishable on one relay: send the <acct>.queue.core.windows.net host or x-vyomi-service: queue. Nano only."], "tests": ["tests/conformance/test_azure_storage_service_props_sdk.py", "tests/conformance/test_azure_files_core.py"]},
+ "azure.storage.tableservice": {"title": "Table service properties", "level": {"nano": "limited", "offline": "config_only"}, "limitations": ["Service properties (Set/Get Service Properties XML: Logging, HourMetrics, MinuteMetrics, Cors, retention) are stored in the storage-account record shared with the ARM tableServices/default CORS, the data plane answers CORS preflight with the rules (403 CorsPreflightFailure when no rule matches) and adds Access-Control headers, counts requests into hour/minute metrics (API-level when includeAPIs), logs per the read/write/delete flags and purges beyond the retention days.", "Logs and metrics are kept in a bounded in-memory ring served at ?restype=service&comp=vyomi-logs|vyomi-metrics, not written to the $logs blob container / $Metrics tables. Queue, Table and Blob service-root requests are indistinguishable on one relay: send the <acct>.table.core.windows.net host or x-vyomi-service: table. Nano only."], "tests": ["tests/conformance/test_azure_storage_service_props_sdk.py", "tests/conformance/test_azure_files_core.py"]},
  "azure.storage.largefileshares": {
   "title": "Large file shares, NFS v3 and SFTP account properties",
   "level": { "nano": "limited", "offline": "limited" },
