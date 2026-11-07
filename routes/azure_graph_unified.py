@@ -103,7 +103,7 @@ def register(app) -> list:
         app.add_route("/dbs/{rest:path}", _cosmos, methods=_METHODS)
         mounted.append("azure_cosmos")
     if _wi.is_unified("azure_table"):
-        app.add_route("/azure-data/tableroot/{rest:path}", _table, methods=_METHODS + ["HEAD", "MERGE"])
+        app.add_route("/azure-data/tableroot/{rest:path}", _table, methods=_METHODS + ["HEAD", "MERGE", "OPTIONS"])
         app.add_middleware(AzureTableRewrite)
         mounted.append("azure_table")
     return mounted

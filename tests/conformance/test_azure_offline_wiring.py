@@ -228,6 +228,66 @@ def test_cosmos_cmk_encryption_over_offline_wire(base):
     assert c.read_item("1", "a")["secret"] == "TOP-SECRET-VALUE"
 
 
+# ───────────────────────────── Storage Queue / Table service properties (native SDKs) ─────────────────────────────
+def test_storage_queue_and_table_service_properties_over_offline_wire(base):
+    import urllib.error
+    import urllib.request
+    from azure.core.credentials import AzureNamedKeyCredential
+    from azure.data.tables import TableAnalyticsLogging, TableCorsRule, TableRetentionPolicy, TableServiceClient
+    from azure.storage.queue import CorsRule, Metrics, QueueAnalyticsLogging, QueueServiceClient, RetentionPolicy
+    _rg()
+    sa = f"{RG}/providers/Microsoft.Storage/storageAccounts/owqacct"
+    arm("PUT", sa, {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}}, "2023-01-01")
+    cred = AzureNamedKeyCredential("owqacct", "a2V5")
+    hdr = {"x-vyomi-service": "queue", "x-vyomi-account": "owqacct"}
+    qs = QueueServiceClient(account_url=base + "/owqacct", credential=cred, headers=hdr, api_version="2021-08-06")
+    props = qs.get_service_properties()
+    assert not props["analytics_logging"].write and props["cors"] == []
+    qs.set_service_properties(
+        analytics_logging=QueueAnalyticsLogging(read=True, write=True, delete=False, retention_policy=RetentionPolicy(enabled=True, days=2)),
+        hour_metrics=Metrics(enabled=True, include_apis=True, retention_policy=RetentionPolicy(enabled=True, days=3)),
+        minute_metrics=Metrics(enabled=True, include_apis=False),
+        cors=[CorsRule(allowed_origins=["https://app.example.com"], allowed_methods=["GET", "PUT"], allowed_headers=["x-ms-*"],
+                       exposed_headers=["x-ms-request-id"], max_age_in_seconds=120)])
+    p = qs.get_service_properties()
+    assert p["analytics_logging"].read and p["analytics_logging"].retention_policy.days == 2 and p["hour_metrics"].include_apis
+    assert p["cors"][0].max_age_in_seconds == 120
+
+    def preflight(origin, method="PUT"):
+        req = urllib.request.Request(base + "/owqacct/q1/messages", method="OPTIONS",
+                                     headers={**hdr, "Origin": origin, "Access-Control-Request-Method": method, "x-ms-version": "2021-08-06"})
+        try:
+            r = urllib.request.urlopen(req)
+            return r.status, {k.title(): v for k, v in r.headers.items()}
+        except urllib.error.HTTPError as e:
+            return e.code, {k.title(): v for k, v in e.headers.items()}
+    st, h = preflight("https://app.example.com")
+    assert st == 200 and h["Access-Control-Allow-Origin"] == "https://app.example.com" and h["Access-Control-Max-Age"] == "120"
+    assert preflight("https://evil.example.com")[0] == 403
+    assert preflight("https://app.example.com", "DELETE")[0] == 403
+    qc = qs.get_queue_client("q1"); qc.create_queue(); qc.send_message("hello")
+    vh = {**hdr, "x-ms-version": "2021-08-06"}
+    logs = json.loads(urllib.request.urlopen(urllib.request.Request(base + "/owqacct/?restype=service&comp=vyomi-logs", headers=vh)).read())["value"]
+    assert any(e["operation"] == "write" for e in logs) and not any(e["operation"] == "delete" for e in logs)
+    mets = json.loads(urllib.request.urlopen(urllib.request.Request(base + "/owqacct/?restype=service&comp=vyomi-metrics", headers=vh)).read())["value"]
+    assert any(m["interval"] == "hourMetrics" and m["api"] for m in mets) and not any(m["interval"] == "minuteMetrics" and m["api"] for m in mets)
+    assert any(m["TotalRequests"] >= 2 for m in mets)
+    # ARM queueServices CORS is shared with the data plane
+    arm("PUT", sa + "/queueServices/default", {"properties": {"cors": {"corsRules": [{"allowedOrigins": ["https://arm.example.com"], "allowedMethods": ["GET"],
+                                                                                       "maxAgeInSeconds": 5, "exposedHeaders": ["*"], "allowedHeaders": ["*"]}]}}}, "2023-01-01")
+    assert preflight("https://arm.example.com", "GET")[0] == 200
+    # Table service: same enforcement through the real azure-data-tables SDK
+    ts = TableServiceClient(endpoint=base, credential=cred, headers={"x-vyomi-service": "table", "x-vyomi-account": "owqacct"})
+    ts.set_service_properties(analytics_logging=TableAnalyticsLogging(read=True, write=True, delete=True, retention_policy=TableRetentionPolicy(enabled=True, days=1)),
+                              cors=[TableCorsRule(allowed_origins=["https://t.example.com"], allowed_methods=["GET"], allowed_headers=["*"], exposed_headers=["*"], max_age_in_seconds=30)])
+    tp = ts.get_service_properties()
+    assert tp["analytics_logging"].delete and tp["cors"][0].max_age_in_seconds == 30
+    ts.create_table("t1")
+    tlogs = json.loads(urllib.request.urlopen(urllib.request.Request(base + "/?restype=service&comp=vyomi-logs",
+                                                                      headers={"x-vyomi-service": "table", "x-vyomi-account": "owqacct", "x-ms-version": "2021-08-06"})).read())["value"]
+    assert any("Tables" in e["request"] for e in tlogs)
+
+
 # ───────────────────────────── CMK for App Configuration + Service Bus ─────────────────────────────
 def _cmk_vault(key):
     _rg()

@@ -401,7 +401,7 @@ async def azure_blob_dispatch_middleware(request, call_next):
             request.scope["path"] = new_path
             request.scope["raw_path"] = new_path.encode("utf-8")
         elif (request.headers.get("x-ms-version") and not passthrough
-                and path not in ("/",)):
+                and (path not in ("/",) or (request.headers.get("x-vyomi-service") or "").lower() in ("queue", "table"))):
             new_path = "/azure-data/blob" + path
             # The ROOT Storage Queue wire (the v4 console's / Nano's: `/{queue}`, `/{queue}/messages`,
             # unauthenticated `/{account}?comp=list`) — told apart from blob exactly as Nano's router
@@ -409,9 +409,11 @@ async def azure_blob_dispatch_middleware(request, call_next):
             # azure_queue_unified via core/wire_ingress), not into a blob container.
             try:
                 from core.aws_wire_router import _azure_service, _lower_headers
-                if _azure_service(path, _lower_headers(dict(request.headers)),
-                                  dict(request.query_params)) == "az-queue":
+                _svc = _azure_service(path, _lower_headers(dict(request.headers)), dict(request.query_params))
+                if _svc == "az-queue":
                     new_path = "/azure-data/queue-core" + path
+                elif _svc == "az-table":      # Table data plane + service properties/CORS (azure_table_core + azure_storage_svc_core)
+                    new_path = "/azure-data/tableroot" + path
             except Exception:
                 pass
             request.scope["path"] = new_path
@@ -1062,8 +1064,17 @@ def register_middleware(app) -> None:
                    "http://localhost:8080", "http://127.0.0.1:8080"]
     else:
         origins = ["*"]
+    class _AppCors(CORSMiddleware):
+        """The app-wide CORS layer must not answer a Storage Queue/Table preflight itself: those are governed by the storage
+        account's own service-properties CORS rules (core/azure_storage_svc_core, 403 CorsPreflightFailure on no match)."""
+
+        async def __call__(self, scope, receive, send):
+            if scope.get("type") == "http" and str(scope.get("path", "")).startswith(("/azure-data/queue-core", "/azure-data/tableroot")):
+                return await self.app(scope, receive, send)
+            return await super().__call__(scope, receive, send)
+
     app.add_middleware(
-        CORSMiddleware,
+        _AppCors,
         allow_origins=origins,
         allow_methods=["*"],
         allow_headers=["*"],
