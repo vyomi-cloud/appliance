@@ -103,19 +103,21 @@
  "gcp.run.services.continuous_deployment": {
   "title": "Continuously deploy from a repository (Cloud Build / GitHub) or set up continuous deployment on an existing service",
   "level": {
-   "nano": "not_simulated",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
    "Offline: \"Continuously deploy from a repository\" creates the same trigger Cloud Run does against a repository on the simulator's built-in git host (the CI seam, the same one `git push` through the vyomi extension or a Gitea-style host feeds): a push to the matching branch runs a Cloud Build whose steps are the standard Build (docker build on the BuildKit builder), Push (into the simulated Artifact Registry) and Deploy (`gcloud run deploy|services update`, executed against the simulated Cloud Run, so validation, Binary Authorization and revision cutting all apply). A failing deploy fails the build and leaves the service on its previous revision.",
-   "Not simulated: GitHub / Cloud Source Repositories / Bitbucket connections (no network egress from the cores; only the built-in git host), buildpacks (a Dockerfile is required), Cloud Build worker pools, and any builder step other than docker build/push and gcloud run deploy/services update. Nano has no container builder, so on Nano the first build fails with that reason."
+   "Nano / offline-without-Docker: no container runtime, so the daemonless layer builder (core/ci_core.py LayerBuilder) builds a REAL OCI image: each COPY/ADD is a deterministic gzip tar layer with real sha256 diff-ids/digests, ENV/WORKDIR/EXPOSE/CMD/ENTRYPOINT/LABEL/USER/VOLUME/ARG populate the image config, multi-stage COPY --from works, and docker push puts the manifest + blobs into the simulated Artifact Registry. NOT built: any RUN (nothing can execute commands), any base image other than `scratch`, an earlier stage or a tag the builder made earlier (base layers cannot be pulled without registry egress), remote ADD URLs, buildpacks / Dockerfile-less builds, --target/--platform/cache flags. Those builds FAIL with that reason and the service keeps its previous revision. The trigger store, push event wiring (vyomiPush), build records and the standard gcloud run deploy step run identically on Nano (Cloud Run revisions there are control-plane records; the container is not executed).",
+   "Not simulated: GitHub / Cloud Source Repositories / Bitbucket connections (no network egress from the cores; only the built-in git host), buildpacks (a Dockerfile is required), Cloud Build worker pools, and any builder step other than docker build/push and gcloud run deploy/services update."
   ],
   "api": [
    "cloudbuild projects.triggers.create/run (build steps: docker build, docker push, gcloud run deploy|services update)",
    "(Vyomi) cloudbuild triggers:vyomiPush"
   ],
   "tests": [
-   "tests/conformance/test_gcp_run_continuous_deployment.py"
+   "tests/conformance/test_gcp_run_continuous_deployment.py",
+   "tests/conformance/test_gcp_nano_layered_cd.py"
   ]
  },
  "gcp.run.services.triggers": {
@@ -446,7 +448,7 @@
   },
   "limitations": [
    "Offline: a connected-repo source deploy builds the Dockerfile on BuildKit, pushes the image into the simulated Artifact Registry repository cloud-run-source-deploy (created on demand, as gcloud does) and cuts the revision with that Artifact Registry reference. Vyomi still does not run the container for arbitrary images; no buildpacks.",
-   "Nano has no container builder, so a source build fails with that reason."
+   "Nano: still not simulated for a connected GitHub repo - the Cloud Run source build fetches the branch from github.com and Nano has no outbound HTTP. The daemonless layer builder now exists (see gcp.run.services.continuous_deployment), and the Cloud Build push-trigger path pushes its image into cloud-run-source-deploy and cuts the revision, but the Cloud Run 'Deploy from source' (connect-repo) entry itself has no Nano source."
   ],
   "tests": [
    "tests/conformance/test_gcp_cloudbuild_core.py"

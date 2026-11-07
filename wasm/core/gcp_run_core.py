@@ -2391,7 +2391,7 @@ def _build_from_repo(store, project, location, sid, full, svc, conn, build, bful
         if "Dockerfile" not in tree:
             raise ci.CiError("NoDockerfile", "No Dockerfile in %s@%s; source builds with buildpacks are not available in Vyomi." % (conn["repository"], conn["branch"]))
         tag = "vyomi-run/%s/%s:%s" % (project, sid, bid)
-        job = ci.submit_job(db, repo, conn["branch"], {"kind": "image", "tag": tag}, trigger="cloudrun:" + sid)
+        job = ci.submit_job(db, repo, conn["branch"], {"kind": "image", "tag": tag, "layered": True}, trigger="cloudrun:" + sid)
         logs = [l["message"] for l in job["logs"]]
         if job["status"] != "Succeeded":
             raise ci.CiError("BuildFailed", job["error"])

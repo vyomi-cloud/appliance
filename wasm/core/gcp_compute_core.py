@@ -331,7 +331,7 @@ def _subnet_view(rec: dict) -> dict:
         "privateIpGoogleAccess": rec.get("privateIpGoogleAccess", False),
         "stackType": rec.get("stackType", "IPV4_ONLY"),
         "purpose": "PRIVATE",
-        "logConfig": {"enable": rec.get("flowLogs", False)},
+        "logConfig": _log_config_view(rec),
         "creationTimestamp": rec["creationTimestamp"],
         "selfLink": _self_link("regions", project, f"{rec['region']}/subnetworks/{rec['name']}"),
     }
@@ -375,6 +375,9 @@ def _create_subnet(store: ComputeStore, project: str, region: str, body: dict, a
         "flowLogs": bool(body.get("flowLogs") or (body.get("logConfig") or {}).get("enable", False)),
         "creationTimestamp": _ts(),
     }
+    if body.get("logConfig"):
+        rec["logConfig"] = _norm_log_config(body["logConfig"])
+        rec["flowLogs"] = bool(rec["logConfig"]["enable"])
     store.subnetworks[_sub_key(project, region, name)] = rec
     net.setdefault("_subnets", []).append({"region": region, "name": name})
     return rec
@@ -426,6 +429,176 @@ def _delete_subnet(store: ComputeStore, project: str, region: str, name: str) ->
         net["_subnets"] = [s for s in net.get("_subnets", []) if not (s["region"] == region and s["name"] == name)]
     return _json(200, _operation(project, "regional", region, "delete",
                                   _self_link("regions", project, f"{region}/subnetworks/{name}"), store))
+
+
+
+# ── VPC Flow Logs config (Subnetwork.logConfig) + flows emitted by the logical evaluator ──────
+_FLOW_INTERVALS = {"INTERVAL_5_SEC": 5, "INTERVAL_30_SEC": 30, "INTERVAL_1_MIN": 60, "INTERVAL_5_MIN": 300,
+                   "INTERVAL_10_MIN": 600, "INTERVAL_15_MIN": 900}
+_FILTER_TERM = re.compile(r"^\s*(true|false|inIpRange\(\s*connection\.(src_ip|dest_ip)\s*,\s*'([0-9a-fA-F:./]+)'\s*\))\s*$")
+
+
+def _norm_log_config(lc: dict) -> dict:
+    """Validate Subnetwork.logConfig the way compute does (enable, aggregationInterval, flowSampling, metadata, filterExpr)."""
+    if not isinstance(lc, dict):
+        raise _E(400, "INVALID_ARGUMENT", "logConfig must be an object")
+    out = {"enable": bool(lc.get("enable", False))}
+    iv = lc.get("aggregationInterval", "INTERVAL_5_SEC")
+    if iv not in _FLOW_INTERVALS:
+        raise _E(400, "INVALID_ARGUMENT", f"Invalid value for field 'resource.logConfig.aggregationInterval': '{iv}'.")
+    try:
+        fs = float(lc.get("flowSampling", 0.5))
+    except (TypeError, ValueError):
+        fs = -1.0
+    if not 0.0 <= fs <= 1.0:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.logConfig.flowSampling': must be between 0.0 and 1.0.")
+    md = lc.get("metadata", "INCLUDE_ALL_METADATA")
+    if md not in ("INCLUDE_ALL_METADATA", "EXCLUDE_ALL_METADATA", "CUSTOM_METADATA"):
+        raise _E(400, "INVALID_ARGUMENT", f"Invalid value for field 'resource.logConfig.metadata': '{md}'.")
+    out.update({"aggregationInterval": iv, "flowSampling": fs, "metadata": md})
+    if md == "CUSTOM_METADATA":
+        out["metadataFields"] = [str(x) for x in (lc.get("metadataFields") or [])]
+    fe = lc.get("filterExpr")
+    if fe is not None and str(fe).strip():
+        for alt in re.split(r"\s*\|\|\s*", str(fe)):
+            for term in re.split(r"\s*&&\s*", alt):
+                if not _FILTER_TERM.match(term):
+                    raise _E(400, "INVALID_ARGUMENT", "Unsupported logConfig.filterExpr: Vyomi evaluates `true`, `false` and "
+                             "inIpRange(connection.src_ip|dest_ip, 'CIDR') terms joined by && and || (CEL beyond that is not evaluated).")
+        out["filterExpr"] = str(fe)
+    return out
+
+
+def _log_config_view(rec: dict) -> dict:
+    lc = rec.get("logConfig")
+    if lc is None:
+        return {"enable": bool(rec.get("flowLogs", False))}
+    return dict(lc)
+
+
+def _filter_matches(expr, src_ip: str, dst_ip: str) -> bool:
+    if not expr:
+        return True
+    for alt in re.split(r"\s*\|\|\s*", expr):
+        ok = True
+        for term in re.split(r"\s*&&\s*", alt):
+            m = _FILTER_TERM.match(term)
+            if m.group(1) == "true":
+                continue
+            if m.group(1) == "false":
+                ok = False
+            else:
+                ok = ok and ip_in_cidr(src_ip if m.group(2) == "src_ip" else dst_ip, m.group(3))
+        if ok:
+            return True
+    return False
+
+
+def _patch_subnet(store: ComputeStore, project: str, region: str, name: str, body: dict) -> ComputeResponse:
+    rec = store.subnetworks.get(_sub_key(project, region, name))
+    if not rec:
+        return _not_found(f"The resource 'projects/{project}/regions/{region}/subnetworks/{name}' was not found")
+    try:
+        if "logConfig" in body:
+            rec["logConfig"] = _norm_log_config(body["logConfig"])
+            rec["flowLogs"] = bool(rec["logConfig"]["enable"])
+    except _E as e:
+        return _err(e.status, e.gcp_status, e.message)
+    if "privateIpGoogleAccess" in body:
+        rec["privateIpGoogleAccess"] = bool(body["privateIpGoogleAccess"])
+    if "description" in body:
+        rec["description"] = str(body["description"])
+    return _json(200, _operation(project, "regional", region, "patch",
+                                  _self_link("regions", project, f"{region}/subnetworks/{name}"), store))
+
+
+def _send_flows(store: ComputeStore, vm_store, project: str, payload: dict) -> ComputeResponse:
+    """(Vyomi) POST /compute/v1/projects/{p}/global/vyomiFlows:send -- evaluate ONE flow through the logical netsim
+    evaluator (firewalls, routes, NAT, peering) and, when it is delivered, emit the VPC Flow Log records the subnets'
+    own logConfig asks for into Cloud Logging (compute.googleapis.com%2Fvpc_flows). This is the substrate-neutral path
+    (Nano has no packets): the flow is the one you submit, not observed traffic."""
+    try:
+        from core.netsim import evaluate as ev, from_gcp as fg
+    except ImportError:                                  # pragma: no cover - flat layout
+        from netsim import evaluate as ev, from_gcp as fg   # type: ignore
+    try:
+        topo = fg.from_gcp(store, vm_store, project)
+        src_ref, src_ip = _ct_endpoint(topo, payload.get("source") or {}, project)
+        dst_ref, dst_ip = _ct_endpoint(topo, payload.get("destination") or {}, project)
+        proto = str(payload.get("protocol") or "TCP").lower()
+        port = (payload.get("destination") or {}).get("port") or payload.get("port")
+        sport = int(payload.get("sourcePort") or 49152)
+        packets = int(payload.get("packets") or 10)
+        nbytes = int(payload.get("bytes") or packets * 512)
+        if packets < 1 or nbytes < 1:
+            raise _E(400, "INVALID_ARGUMENT", "packets and bytes must be positive")
+    except _E as e:
+        return _err(e.status, e.gcp_status, e.message)
+    v = ev.reach(topo, src_ref, dst_ref, proto, int(port) if port else None)
+    now = int(datetime.now(timezone.utc).timestamp())
+    result = {"kind": "vyomi#flowEvaluation", "result": "ACCEPT" if v.reachable else "DROP",
+              "reason": v.reason, "records": [], "logged": 0,
+              "note": "Evaluated by the logical network evaluator; not observed packet traffic."}
+    if not v.reachable:
+        result["note"] += " Denied flows are Firewall Rules Logging, which is not modelled; no VPC flow record is written."
+        return _json(200, result)
+    pnum = {"tcp": 6, "udp": 17, "icmp": 1}.get(proto, 6)
+    entries, seen = [], set()
+    for reporter, ref in (("SRC", src_ref), ("DEST", dst_ref)):
+        iface = topo.interfaces.get(ref) if isinstance(ref, str) else None
+        if iface is None or not iface.instance:
+            continue
+        srec = store.subnetworks.get(iface.subnet)
+        if not srec or srec["project"] != project:
+            continue
+        lc = _log_config_view(srec)
+        if not lc.get("enable") or (reporter, iface.id) in seen:
+            continue
+        if not _filter_matches(lc.get("filterExpr"), src_ip, dst_ip):
+            continue
+        fs = float(lc.get("flowSampling", 0.5))
+        sp = int(round(packets * fs))
+        if sp < 1:
+            continue                                      # nothing survived sampling, like a real low-volume flow
+        sb = max(1, int(round(nbytes * sp / packets)))
+        iv = _FLOW_INTERVALS[lc.get("aggregationInterval", "INTERVAL_5_SEC")]
+        start = now - now % iv
+        rec = {"connection": {"src_ip": src_ip, "dest_ip": dst_ip, "src_port": sport,
+                              "dest_port": int(port) if port else 0, "protocol": pnum},
+               "reporter": reporter, "bytes_sent": str(sb), "packets_sent": str(sp),
+               "start_time": _iso_ts(start), "end_time": _iso_ts(start + iv)}
+        if lc.get("metadata", "INCLUDE_ALL_METADATA") != "EXCLUDE_ALL_METADATA":
+            for side, sref in (("src", src_ref), ("dest", dst_ref)):
+                si = topo.interfaces.get(sref) if isinstance(sref, str) else None
+                if si is None or not si.instance:
+                    continue
+                ssub = topo.subnet_of(si)
+                srr = store.subnetworks.get(si.subnet) or {}
+                rec[f"{side}_instance"] = {"project_id": project, "vm_name": si.instance, "region": srr.get("region", ""), "zone": ssub.zone}
+                rec[f"{side}_vpc"] = {"project_id": project, "vpc_name": srr.get("networkName", ""), "subnetwork_name": srr.get("name", ""),
+                                      "subnetwork_region": srr.get("region", "")}
+            if lc.get("metadata") == "CUSTOM_METADATA":
+                keep = {"connection", "reporter", "bytes_sent", "packets_sent", "start_time", "end_time"}
+                fields = set(lc.get("metadataFields") or [])
+                rec = {k: val for k, val in rec.items() if k in keep or any(f == k or f.startswith(k + ".") for f in fields)}
+        seen.add((reporter, iface.id))
+        entries.append({"jsonPayload": rec, "severity": "INFO",
+                        "resource": {"type": "gce_subnetwork", "labels": {"project_id": project, "subnetwork_name": srec["name"],
+                                                                         "subnetwork_id": srec["id"], "location": srec["region"]}}})
+    result["records"] = [e["jsonPayload"] for e in entries]
+    lstore = getattr(store, "logging_store", None)
+    if entries and lstore is not None:
+        try:
+            from core.gcp_logging_core import write_entries
+        except ImportError:                              # pragma: no cover - flat layout
+            from gcp_logging_core import write_entries   # type: ignore
+        write_entries(lstore, project, {"logName": f"projects/{project}/logs/compute.googleapis.com%2Fvpc_flows", "entries": entries})
+        result["logged"] = len(entries)
+    return _json(200, result)
+
+
+def _iso_ts(t: int) -> str:
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ── firewalls ────────────────────────────────────────────────────────────────
@@ -1634,6 +1807,8 @@ def _dispatch(store: ComputeStore, method: str, path: str,
         if len(segs) == 3 and scope in ("enableXpnHost", "disableXpnHost", "enableXpnResource",
                                         "disableXpnResource", "listXpnHosts", "getXpnResources"):
             return _xpn_action(store, method, project, scope, payload, query or {})
+        if scope == "global" and len(segs) == 4 and segs[3] == "vyomiFlows:send" and method == "POST":
+            return _send_flows(store, vm_store, project, payload)
         # ── global/* ──────────────────────────────────────────────────────
         if scope == "global":
             if len(segs) < 4:
@@ -1718,6 +1893,8 @@ def _dispatch(store: ComputeStore, method: str, path: str,
                         return _get_subnet(store, project, region, name)
                     if method == "DELETE":
                         return _delete_subnet(store, project, region, name)
+                    if method == "PATCH":
+                        return _patch_subnet(store, project, region, name, payload)
             elif kind == "addresses":
                 if len(segs) == 5:
                     if method == "POST":

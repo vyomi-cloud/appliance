@@ -306,6 +306,227 @@ class PackageBuilder:
         return {"ok": True, "artifact": {"type": "package", "digest": digest, "size": len(data), "files": len(tree), "runtime": runtime}}
 
 
+class LayerBuilder:
+    """Daemonless OCI image builder for substrates with no container runtime (Nano, offline without Docker).
+
+    It builds REAL images: every COPY/ADD becomes a deterministic gzip'd tar layer (real sha256 diff-ids/digests), and
+    ENV / WORKDIR / EXPOSE / CMD / ENTRYPOINT / LABEL / USER / VOLUME / ARG populate a real OCI image config. What it can
+    NOT do is execute anything or pull anything: `RUN` needs a container, and a base image other than `scratch` (or a
+    tag this builder produced earlier / an earlier stage of the same Dockerfile) has layers that cannot be fetched
+    without registry egress. Those Dockerfiles FAIL with that reason; they are never reported as built."""
+    name = "layers"
+    runs_containers = False
+    NOPE = "No container builder on this substrate (the Vyomi layer builder runs no commands and pulls no base images): "
+
+    def __init__(self):
+        self.images = {}        # tag -> {"config": bytes, "layers": [gz bytes], "repoTags": [tag]}
+
+    # -- helpers --
+    @staticmethod
+    def _tar(files: dict) -> tuple:
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w", format=tarfile.PAX_FORMAT) as tf:
+            dirs = set()
+            for path in sorted(files):
+                parts = path.strip("/").split("/")
+                for i in range(1, len(parts)):
+                    d = "/".join(parts[:i])
+                    if d not in dirs:
+                        dirs.add(d)
+                        ti = tarfile.TarInfo(d)
+                        ti.type, ti.mode, ti.mtime = tarfile.DIRTYPE, 0o755, 0
+                        tf.addfile(ti)
+                ti = tarfile.TarInfo(path.strip("/"))
+                ti.size, ti.mode, ti.mtime = len(files[path]), 0o644, 0
+                tf.addfile(ti, io.BytesIO(files[path]))
+        raw = buf.getvalue()
+        import gzip
+        gz = io.BytesIO()
+        with gzip.GzipFile(fileobj=gz, mode="wb", mtime=0) as g:
+            g.write(raw)
+        return raw, gz.getvalue()
+
+    @staticmethod
+    def _expand(text, env):
+        return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: str(env.get(m.group(1) or m.group(2), "")), text)
+
+    @staticmethod
+    def _exec_form(arg):
+        a = arg.strip()
+        if a.startswith("["):
+            try:
+                v = json.loads(a)
+                if isinstance(v, list) and all(isinstance(x, str) for x in v):
+                    return v
+            except ValueError:
+                pass
+        return ["/bin/sh", "-c", a]
+
+    def _ignored(self, tree):
+        pats = [l.strip() for l in tree.get(".dockerignore", b"").decode(errors="replace").splitlines() if l.strip() and not l.startswith("#")]
+        if not pats:
+            return tree
+        import fnmatch
+        return {k: v for k, v in tree.items() if not any(fnmatch.fnmatch(k, p.lstrip("/")) or k.startswith(p.strip("/") + "/") for p in pats)}
+
+    # -- build --
+    def build(self, job, tree, log):
+        import fnmatch
+        if "Dockerfile" not in tree:
+            return {"ok": False, "error": "No Dockerfile in the repository root."}
+        instr, errs = parse_dockerfile(tree["Dockerfile"].decode(errors="replace"))
+        errs += _copy_sources_ok([(o, a) for o, a in instr if "--from=" not in a], tree)
+        if errs:
+            for e in errs:
+                log(f"Dockerfile: {e}")
+            return {"ok": False, "error": "Dockerfile validation failed"}
+        ctx = self._ignored({k: v for k, v in tree.items() if k not in ("Dockerfile", ".dockerignore")} | {"Dockerfile": tree["Dockerfile"]})
+        build_args = dict(a.split("=", 1) for a in job["spec"].get("buildArgs", []) if "=" in a)
+        stages, cur, global_args = {}, None, {}
+        history = []
+
+        def new_stage(base, alias):
+            nonlocal cur
+            if base == "scratch":
+                cur = {"fs": {}, "layers": [], "diff": [], "cfg": {"Env": [], "Labels": {}}, "env": {}, "workdir": "/", "alias": alias}
+            elif base in stages:
+                o = stages[base]
+                cur = {"fs": dict(o["fs"]), "layers": list(o["layers"]), "diff": list(o["diff"]),
+                       "cfg": json.loads(json.dumps(o["cfg"])), "env": dict(o["env"]), "workdir": o["workdir"], "alias": alias}
+            elif base in self.images:
+                img = self.images[base]
+                c = json.loads(img["config"])
+                cur = {"fs": {}, "layers": list(img["layers"]), "diff": list(c["rootfs"]["diff_ids"]), "cfg": c.get("config") or {"Env": [], "Labels": {}},
+                       "env": dict(e.split("=", 1) for e in (c.get("config") or {}).get("Env", [])), "workdir": (c.get("config") or {}).get("WorkingDir") or "/", "alias": alias}
+            else:
+                raise ValueError(self.NOPE + f"base image '{base}' has layers that cannot be pulled here (only FROM scratch, an earlier stage, "
+                                 "or an image this builder built can be used).")
+            if alias:
+                stages[alias] = cur
+            cur.setdefault("cfg", {}).setdefault("Env", [])
+
+        def add_layer(files, note):
+            raw, gz = self._tar(files)
+            cur["layers"].append(gz)
+            cur["diff"].append("sha256:" + hashlib.sha256(raw).hexdigest())
+            cur["fs"].update(files)
+            history.append({"created_by": note, "created": "1970-01-01T00:00:00Z"})
+
+        try:
+            for op, arg in instr:
+                if op == "ARG":
+                    k, _, v = arg.partition("=")
+                    val = build_args.get(k.strip(), v.strip())
+                    if cur is None:
+                        global_args[k.strip()] = val
+                    else:
+                        cur["env"][k.strip()] = val
+                    continue
+                if op == "FROM":
+                    toks = arg.split()
+                    alias = toks[toks.index("AS") + 1] if "AS" in toks else (toks[toks.index("as") + 1] if "as" in toks else None)
+                    base = self._expand([t for t in toks if not t.startswith("--")][0], global_args)
+                    new_stage(base, alias)
+                    log(f"FROM {base}" + (f" AS {alias}" if alias else ""))
+                    last = cur
+                    continue
+                if op == "RUN":
+                    raise ValueError(self.NOPE + f"`RUN {arg[:80]}` needs a container to execute in.")
+                env = cur["env"]
+                if op in ("COPY", "ADD"):
+                    toks = shlex.split(self._expand(arg, env))
+                    frm = None
+                    flags = [t for t in toks if t.startswith("--")]
+                    for f in flags:
+                        if f.startswith("--from="):
+                            frm = f[7:]
+                        elif not f.startswith("--chown=") and not f.startswith("--chmod="):
+                            raise ValueError(f"{op}: flag {f} is not supported by the layer builder.")
+                    parts = [t for t in toks if not t.startswith("--")]
+                    if len(parts) < 2:
+                        raise ValueError(f"{op} requires at least a source and a destination.")
+                    *srcs, dest = parts
+                    if frm is not None:
+                        if frm not in stages:
+                            raise ValueError(f"{op} --from={frm}: no such earlier stage (pulling an external image is not possible here).")
+                        src_fs = stages[frm]["fs"]
+                    else:
+                        src_fs = ctx
+                    if any(sx.startswith(("http://", "https://")) for sx in srcs):
+                        raise ValueError(f"{op}: remote URL sources need network egress and are not fetched here.")
+                    import posixpath
+                    d = posixpath.normpath(dest if dest.startswith("/") else (cur["workdir"].rstrip("/") + "/" + dest)) + ("/" if dest.endswith("/") or dest in (".", "./") else "")
+                    dir_dest = dest.endswith("/") or len(srcs) > 1 or any(sx in (".", "./") or sx.endswith("/") for sx in srcs)
+                    files = {}
+                    for sx in srcs:
+                        sp = sx.lstrip("./") if sx not in (".", "./") else ""
+                        sp = sp.strip("/")
+                        hits = {k: v for k, v in src_fs.items() if (not sp) or k == sp or k.startswith(sp + "/")
+                                or fnmatch.fnmatch(k, sp) or any(fnmatch.fnmatch(k, sp + "/*") for _ in [0])}
+                        if not hits:
+                            raise ValueError(f"{op} {sx}: not found in the {'stage' if frm else 'build context'}.")
+                        for k, v in hits.items():
+                            if sp and k == sp and not dir_dest:
+                                files[d.strip("/")] = v
+                            else:
+                                rel = k[len(sp) + 1:] if (sp and k.startswith(sp + "/")) else (k if not sp else k.rsplit("/", 1)[-1])
+                                files[(d.rstrip("/") + "/" + rel).strip("/")] = v
+                    if op == "ADD":
+                        pass
+                    add_layer(files, f"{op} {arg}")
+                    continue
+                if op == "ENV":
+                    toks = shlex.split(self._expand(arg, env)) if "=" in arg.split()[0] else None
+                    pairs = [t.split("=", 1) for t in toks] if toks else [arg.split(None, 1)]
+                    for k, v in pairs:
+                        env[k] = v
+                        cur["cfg"]["Env"] = [e for e in cur["cfg"]["Env"] if not e.startswith(k + "=")] + [f"{k}={v}"]
+                elif op == "WORKDIR":
+                    w = self._expand(arg, env)
+                    cur["workdir"] = w if w.startswith("/") else cur["workdir"].rstrip("/") + "/" + w
+                    cur["cfg"]["WorkingDir"] = cur["workdir"]
+                elif op == "EXPOSE":
+                    cur["cfg"].setdefault("ExposedPorts", {}).update({(p if "/" in p else p + "/tcp"): {} for p in self._expand(arg, env).split()})
+                elif op == "CMD":
+                    cur["cfg"]["Cmd"] = self._exec_form(arg)
+                elif op == "ENTRYPOINT":
+                    cur["cfg"]["Entrypoint"] = self._exec_form(arg)
+                elif op == "LABEL":
+                    for t in shlex.split(self._expand(arg, env)):
+                        if "=" in t:
+                            k, v = t.split("=", 1)
+                            cur["cfg"].setdefault("Labels", {})[k] = v
+                elif op == "USER":
+                    cur["cfg"]["User"] = self._expand(arg, env)
+                elif op == "VOLUME":
+                    cur["cfg"].setdefault("Volumes", {}).update({v: {} for v in (json.loads(arg) if arg.strip().startswith("[") else arg.split())})
+                elif op in ("STOPSIGNAL", "SHELL", "HEALTHCHECK", "MAINTAINER", "ONBUILD"):
+                    cur["cfg"].setdefault("Labels", {})[f"vyomi.dockerfile.{op.lower()}"] = arg[:200]
+                history.append({"created_by": f"{op} {arg}", "created": "1970-01-01T00:00:00Z", "empty_layer": True})
+            if cur is None:
+                raise ValueError("a Dockerfile must contain a FROM instruction")
+        except ValueError as e:
+            log(f"Dockerfile: {e}")
+            return {"ok": False, "error": str(e)}
+        cfg = dict(cur["cfg"])
+        cfg.setdefault("Env", cfg.get("Env") or [])
+        config = {"architecture": "amd64", "os": "linux", "created": "1970-01-01T00:00:00Z", "config": cfg,
+                  "rootfs": {"type": "layers", "diff_ids": cur["diff"]}, "history": history}
+        cb = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+        tag = job["spec"].get("tag") or f"vyomi-ci/{job['repo']}:{job['commit'][:7]}"
+        self.images[tag] = {"config": cb, "layers": list(cur["layers"]), "repoTags": [tag]}
+        digest = "sha256:" + hashlib.sha256(cb).hexdigest()
+        size = sum(len(x) for x in cur["layers"]) + len(cb)
+        log(f"Built {tag}: {len(cur['layers'])} layer(s), {size} bytes, config {digest[:19]}")
+        return {"ok": True, "artifact": {"type": "image", "tag": tag, "digest": digest, "size": size, "layers": len(cur["layers"])}}
+
+    def export(self, tag):
+        img = self.images.get(tag)
+        if img is None:
+            raise CiError("ExportFailed", f"image {tag} was not built by the layer builder", 404)
+        return img
+
+
 class BuildKitBuilder:
     """Real BuildKit via the docker CLI. ``run(argv, input_bytes, timeout) -> (rc, stdout_bytes)`` injected (subprocess)."""
     name = "buildkit"
@@ -394,6 +615,8 @@ def image_to_registry(exp: dict) -> dict:
 
 def export_image(tag: str) -> dict:
     """Export a built image (by tag) from the active builder. Only a builder that really holds images can."""
+    if tag in _layer_builder.images and not getattr(_builder, "runs_containers", False):
+        return image_to_registry(_layer_builder.export(tag))
     fn = getattr(_builder, "export", None)
     if fn is None:
         raise CiError("NoImage", f"The '{_builder.name}' builder holds no container images, so nothing can be pushed to a registry.", 400)
@@ -402,6 +625,7 @@ def export_image(tag: str) -> dict:
 
 _git: object = MemoryGit()
 _builder: object = PackageBuilder()
+_layer_builder = LayerBuilder()
 _fetcher = None
 _consumers: dict = {}
 
@@ -659,17 +883,20 @@ def submit_job(db, repo, ref, spec=None, branch=None, trigger="manual"):
     commit = _git.head(db, repo, ref) or ref
     db["seq"] += 1
     jid = f"job-{db['seq']:04d}"
+    bld = _builder
+    if kind == "image" and spec.get("layered") and not getattr(_builder, "runs_containers", False):
+        bld = _layer_builder        # GCP callers opt in: a daemonless builder for substrates with no container runtime
     job = {"id": jid, "repo": repo, "ref": ref, "commit": commit, "branch": branch, "kind": kind, "spec": spec, "trigger": trigger,
-           "status": "Running", "builder": _builder.name, "queued": _now(), "started": _now(), "finished": None, "logs": [], "artifact": None,
+           "status": "Running", "builder": bld.name, "queued": _now(), "started": _now(), "finished": None, "logs": [], "artifact": None,
            "error": None}
     db["jobs"][jid] = job
     t0 = time.time()
 
     def lg(msg):
         job["logs"].append({"time": _now(), "message": str(msg)[:2000]})
-    lg(f"Build {jid}: {repo}@{commit[:7]} ({kind}) on builder '{_builder.name}'")
+    lg(f"Build {jid}: {repo}@{commit[:7]} ({kind}) on builder '{bld.name}'")
     try:
-        res = _builder.build(job, t, lg)
+        res = bld.build(job, t, lg)
     except CiError as e:
         res = {"ok": False, "error": e.message}
     except Exception as e:                                  # a crashing builder is a failed build, not a 500

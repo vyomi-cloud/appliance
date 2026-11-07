@@ -765,6 +765,7 @@ class AwsWireRouter:
         self.gcp_msg.mon_store = self.gcp_mon   # Pub/Sub topic/subscription Metrics tabs mirror live publish/backlog counts into Monitoring
         self.gcs.mon_store = self.gcp_mon   # Cloud Storage request-count metering (storage.googleapis.com/api/request_count)
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
+        self.gcp_compute.logging_store = self.gcp_logging   # VPC Flow Logs (evaluated flows) are written into this space's Cloud Logging
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
         self.gcp_mon.redis_store = self.gcp_redis   # Memorystore Monitoring metrics derive from real instance state
         self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
