@@ -25,6 +25,11 @@ export const setLayoutSettings = (v) => write(LAYOUT_KEY, { ...DEFAULT_LAYOUT, .
 export const getExploreSettings = () => read(EXPLORE_KEY, DEFAULT_EXPLORE);
 export const setExploreSettings = (v) => write(EXPLORE_KEY, { ...DEFAULT_EXPLORE, ...v });
 
+const TABLE_DEFAULTS_KEY = "vyomi.ddb.tableDefaults";
+const DEFAULT_TABLE = { capacityMode: "PAY_PER_REQUEST", rcu: 5, wcu: 5, tableClass: "STANDARD", deletionProtection: false };
+export const getTableDefaults = () => read(TABLE_DEFAULTS_KEY, DEFAULT_TABLE);
+export const setTableDefaults = (v) => write(TABLE_DEFAULTS_KEY, { ...DEFAULT_TABLE, ...v });
+
 export function getFavoriteTables() {
   try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]"); } catch { return []; }
 }

@@ -196,7 +196,7 @@
    "Real: Publish to a platform endpoint builds the platform-native payload (APNS aps.alert, GCM/FCM/ADM data, or your own per-platform JSON with MessageStructure=json) and the push gateway stub delivers it to the endpoint's device inbox (VyomiListPushInbox, shown on the Push notifications page); on the offline appliance it also POSTs it to the endpoint's VyomiPushWebhook attribute, and a 404/410 answer disables the endpoint like APNS/FCM rejecting a token. It is never sent to real APNS, FCM or ADM (no Apple/Google credentials); Nano has no sockets, so it delivers to the inbox only."
   ],
   "api": ["Publish", "CreatePlatformEndpoint"],
-  "tests": ["tests/conformance/test_sns_push_gateway_core.py"]
+  "tests": ["tests/conformance/test_sns_push_gateway_core.py", "consoles/tests/smoke-aws-xraytrace-pushinbox.mjs"]
  },
  "sns.sms.preferences": {
   "title": "SMS account attributes (default type, spend limit, sample rate, logging role, usage report bucket, sender ID)",

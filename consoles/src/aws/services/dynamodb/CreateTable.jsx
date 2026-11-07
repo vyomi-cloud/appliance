@@ -22,6 +22,7 @@ import { follow, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import { getTableDefaults } from "./prefs.js";
 import AutoScalingFields, { DEFAULT_AS, validateAs } from "./AutoScalingFields.jsx";
 
 const TYPES = [{ value: "S", label: "String" }, { value: "N", label: "Number" }, { value: "B", label: "Binary" }];
@@ -108,6 +109,7 @@ export default function CreateTable() {
   const nameErr = touched && !/^[a-zA-Z0-9_.-]{3,255}$/.test(name) ? "Table name must be between 3 and 255 characters long, and contain only a-z, A-Z, 0-9, underscore (_), dash (-) and dot (.)." : null;
   const pkErr = touched && !pk ? "Partition key is required." : null;
   const custom = settings === "custom";
+  const td = getTableDefaults();   // Settings > Update settings: what "Default settings" means for this account
 
   const submit = async () => {
     setTouched(true);
@@ -115,7 +117,7 @@ export default function CreateTable() {
     setBusy(true); setError(null);
     const attrs = [{ AttributeName: pk, AttributeType: pkType }, ...(sk ? [{ AttributeName: sk, AttributeType: skType }] : [])];
     const addAttr = (n, t) => { if (n && !attrs.some((a) => a.AttributeName === n)) attrs.push({ AttributeName: n, AttributeType: t }); };
-    const billing = settings === "default" ? "PAY_PER_REQUEST" : mode;
+    const billing = settings === "default" ? td.capacityMode : mode;
     const indexes = custom ? gsis.map((g) => {
       addAttr(g.pk, g.pkType); addAttr(g.sk, g.skType);
       return { IndexName: g.name, KeySchema: [{ AttributeName: g.pk, KeyType: "HASH" }, ...(g.sk ? [{ AttributeName: g.sk, KeyType: "RANGE" }] : [])], Projection: { ProjectionType: g.projection } };
@@ -132,10 +134,10 @@ export default function CreateTable() {
         AttributeDefinitions: attrs,
         KeySchema: [{ AttributeName: pk, KeyType: "HASH" }, ...(sk ? [{ AttributeName: sk, KeyType: "RANGE" }] : [])],
         BillingMode: billing,
-        ...(billing === "PROVISIONED" ? { ProvisionedThroughput: { ReadCapacityUnits: Number(rcu), WriteCapacityUnits: Number(wcu) } } : {}),
+        ...(billing === "PROVISIONED" ? { ProvisionedThroughput: settings === "default" ? { ReadCapacityUnits: td.rcu, WriteCapacityUnits: td.wcu } : { ReadCapacityUnits: Number(rcu), WriteCapacityUnits: Number(wcu) } } : {}),
         ...(custom && billing === "PAY_PER_REQUEST" && capOn ? { OnDemandThroughput: { MaxReadRequestUnits: Number(capR), MaxWriteRequestUnits: Number(capW) } } : {}),
         ...(custom && (warmR || warmW) ? { WarmThroughput: { ...(warmR ? { ReadUnitsPerSecond: Number(warmR) } : {}), ...(warmW ? { WriteUnitsPerSecond: Number(warmW) } : {}) } } : {}),
-        ...(custom ? { TableClass: tableClass, DeletionProtectionEnabled: deletionProtection } : {}),
+        ...(custom ? { TableClass: tableClass, DeletionProtectionEnabled: deletionProtection } : { TableClass: td.tableClass, DeletionProtectionEnabled: td.deletionProtection }),
         ...(custom && sseType !== "OWNED" ? { SSESpecification: { Enabled: true, SSEType: "KMS" } } : {}),
         ...(indexes.length ? { GlobalSecondaryIndexes: indexes } : {}),
         ...(localIndexes.length ? { LocalSecondaryIndexes: localIndexes } : {}),
@@ -149,9 +151,10 @@ export default function CreateTable() {
   };
 
   const defaults = [
-    ["Table class", "DynamoDB Standard", "Yes"], ["Capacity mode", "On-demand", "Yes"], ["Read capacity", "-", "Yes"], ["Write capacity", "-", "Yes"],
+    ["Table class", td.tableClass === "STANDARD" ? "DynamoDB Standard" : "DynamoDB Standard-IA", "Yes"], ["Capacity mode", td.capacityMode === "PROVISIONED" ? "Provisioned" : "On-demand", "Yes"],
+    ["Read capacity", td.capacityMode === "PROVISIONED" ? td.rcu : "-", "Yes"], ["Write capacity", td.capacityMode === "PROVISIONED" ? td.wcu : "-", "Yes"],
     ["Auto scaling", "Not applicable", "Yes"], ["Local secondary indexes", "-", "No"], ["Global secondary indexes", "-", "Yes"],
-    ["Encryption key management", "Owned by Amazon DynamoDB", "Yes"], ["Deletion protection", "Off", "Yes"], ["Resource-based policy", "Not active", "Yes"],
+    ["Encryption key management", "Owned by Amazon DynamoDB", "Yes"], ["Deletion protection", td.deletionProtection ? "On" : "Off", "Yes"], ["Resource-based policy", "Not active", "Yes"],
   ];
 
   return (

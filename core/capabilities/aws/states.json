@@ -47,6 +47,6 @@
       "Real: a finished execution of a machine with active tracing becomes a trace in Vyomi's X-Ray (core/xray_core.py): one segment for the state machine, one timed subsegment per state visited, Lambda task subsegments, fault flags, a caller-supplied traceHeader Root is honoured, and DescribeExecution returns traceHeader. aws xray batch-get-traces / get-trace-summaries (time window, service(), fault, error, duration filters) / get-service-graph and PutTraceSegments read and write it. The trace is written when the execution finishes (not streamed while it runs), Lambda functions do not emit their own segments, and there is no X-Ray daemon/UDP ingest, sampling rules, groups or insights."
     ],
     "api": ["StartExecution", "DescribeExecution", "BatchGetTraces", "GetTraceSummaries", "GetServiceGraph", "PutTraceSegments"],
-    "tests": ["tests/conformance/test_xray_sfn_tracing_core.py"]
+    "tests": ["tests/conformance/test_xray_sfn_tracing_core.py", "consoles/tests/smoke-aws-xraytrace-pushinbox.mjs"]
   }
 }

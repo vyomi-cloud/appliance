@@ -6,6 +6,7 @@ import Dashboard from "./Dashboard.jsx";
 import PartiqlEditor from "./PartiqlEditor.jsx";
 import Backups from "./Backups.jsx";
 import Settings from "./Settings.jsx";
+import UpdateSettings from "./UpdateSettings.jsx";
 import EditLayoutSettings from "./EditLayoutSettings.jsx";
 import EditExploreItemsSettings from "./EditExploreItemsSettings.jsx";
 import Exports from "./Exports.jsx";
@@ -22,7 +23,6 @@ import { getLayoutSettings } from "./prefs.js";
 import ZeroEtlIntegrations from "../../kit/ZeroEtl.jsx";
 
 const ns = (title, id) => () => <CapabilityContainer id={`dynamodb.account.${id}`} title={title} />;
-const NS = [["update-settings", "Update settings", "update-settings"]];
 
 // The bare "/dynamodb" entry route honours the "Default entry page" console preference
 // (Dashboard / Tables / Explore items) — Tables.jsx renders both the Tables and Explore
@@ -73,6 +73,6 @@ export default {
     { pattern: "/dynamodb/dax/events", component: DaxEvents, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Events", href: "#/dynamodb/dax/events" }] },
     { pattern: "/dynamodb/integrations", component: () => <ZeroEtlIntegrations kind="dynamodb" />, crumbs: () => [{ text: "Integrations", href: "#/dynamodb/integrations" }] },
     { pattern: "/dynamodb/reserved-capacity", component: ReservedCapacity, crumbs: () => [{ text: "Reserved capacity", href: "#/dynamodb/reserved-capacity" }] },
-    ...NS.map(([p, t, id]) => ({ pattern: `/dynamodb/${p}`, component: ns(t, id), crumbs: () => [{ text: t, href: `#/dynamodb/${p}` }] })),
+    { pattern: "/dynamodb/update-settings", component: UpdateSettings, crumbs: () => [{ text: "Settings", href: "#/dynamodb/settings" }, { text: "Update settings", href: "#/dynamodb/update-settings" }] },
   ],
 };

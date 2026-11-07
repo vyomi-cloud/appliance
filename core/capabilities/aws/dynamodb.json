@@ -427,15 +427,16 @@
   ]
  },
  "dynamodb.account.update-settings": {
-  "title": "Update settings",
+  "title": "Update settings (default settings for new tables)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Account-level table defaults are not modeled; edit capacity, class and protection per table from its Additional settings tab."
+   "Like the real console, these are console-side defaults (capacity mode, provisioned RCU/WCU, table class, deletion protection) kept in this browser that the Create table form applies when you choose Default settings. They never change existing tables or tables created through the SDK/CLI/CloudFormation, and are not shared across browsers."
   ],
-  "api": []
+  "api": [],
+  "tests": ["consoles/tests/smoke-aws-ddbupdatesettings.mjs"]
  },
  "dynamodb.aws_backup_vaults": {"tier": "pro", "title": "AWS Backup vaults, plans, selections, jobs, recovery points, restore jobs, vault lock", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup plan rules with a ScheduleExpression (cron/rate, UTC) really run from the shared scheduler tick (core/schedule_core) against the selection's explicit Resources ARNs, creating attributed backup jobs + recovery points, and recovery points past DeleteAfterDays expire. Offline: background loop; Nano: only while the page is open. Tag/condition-based selections are listed but not expanded; missed runs coalesce into one; ScheduleExpressionTimezone is ignored.", "Real: vault CRUD + lock (min/max retention enforced on lifecycle and recovery-point deletion), plans/selections with validation, backup jobs for DynamoDB (S3-backed backup), RDS (awsbackup:job-* snapshot with table data), S3 (object artifact in vyomi-aws-backup) and EBS (EC2 snapshot), and restore jobs that create the table / DB instance / bucket / volume.", "EC2 AMI, EC2 instances (real AMI recovery points, restore launches an instance) and FSx for OpenZFS volumes (file-tree recovery points, restore into an existing volume) ARE protected; EFS and Aurora clusters are refused honestly (the simulator has no EFS file systems or Aurora DB clusters) and Redshift is not backed up; no audit frameworks, report plans, restore testing or logically air-gapped vaults; the IAM role is accepted but not checked."], "tests": ["tests/conformance/test_aws_backup_ec2_fsx.py", "tests/conformance/test_schedule_core.py", "tests/conformance/test_aws_backup_vaults.py"]}
 }
