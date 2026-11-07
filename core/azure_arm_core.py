@@ -1206,6 +1206,7 @@ class AzureArm:
             if op:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
                 base.update(op.get("result") or {})
+                base["status"] = "Succeeded"    # a resource body's own "status" (e.g. plan "Ready") must not hide the LRO status
             return _ok(base)
         bare = path.split("?", 1)[0].rstrip("/")
         # Only the TOP-LEVEL account listings: a child collection named "subscriptions" (API Management
