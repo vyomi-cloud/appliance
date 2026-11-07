@@ -474,6 +474,9 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         tok = _ctx.REQUEST_PROVIDER.set("azure")   # the state lives in the Azure space
         try:
             kw = {"arm_state": _ctx.azure_arm_state} if service == "azure_cosmos" else {}   # RU/s + network-rule enforcement
+            if service == "azure_cosmos":
+                from core import azure_cmk_core as _cmk
+                kw["kv_store"] = r.az_kvkeys      # customer-managed key (envelope encryption at rest)
             resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kw)
         finally:
             _ctx.REQUEST_PROVIDER.reset(tok)
@@ -578,7 +581,14 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
                     days = acr_retention_days(r.az_arm.state, reg0)
                     if days is not None:
                         kwargs["retention_days"] = days
-            resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kwargs)
+            if service == "azure_servicebus":      # Premium-namespace customer-managed key: bodies sealed at rest
+                try:
+                    with mod.CmkScope(st, mod.cmk_namespace(_ctx.azure_arm_state, headers), r.az_kvkeys):
+                        resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kwargs)
+                except mod.ServiceBusError as _e:
+                    resp = mod._error(_e.code, _e.message, _e.status)
+            else:
+                resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kwargs)
             hdrs = dict(resp.headers or {})
             if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = resp.media_type

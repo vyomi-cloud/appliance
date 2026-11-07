@@ -679,8 +679,103 @@ def _cosmos_net_denied(arm_state, acct, headers):
                               "Cosmos DB account firewall settings.")
 
 
+# ── customer-managed key (account.properties.keyVaultKeyUri): ENFORCED envelope encryption at rest ──────────────
+# Documents live in `store.docs` only inside a request. Between requests `store.docs` holds a single CMK envelope
+# ({"$cmk": envelope}, DEK wrapped by the Key Vault key — core/azure_cmk_core.py); a request opens it (unwrapKey),
+# serves, and re-seals under the key's latest version. A disabled / deleted / expired key => 403 Forbidden
+# (substatus 4000, "customer-managed key inaccessible") and the data stays unreadable at rest. The simulator has ONE
+# Cosmos data store shared by every account (documents are not partitioned per account), so the sealed unit is that
+# whole store, driven by the account the request resolves to.
+CMK_SLOT = "$cmk"
+
+
+def _cmk_scope_for(store, acct, arm_state=None):
+    uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
+    sealed = isinstance(getattr(store, "docs", None), dict) and CMK_SLOT in store.docs
+    if sealed and not uri:      # request did not resolve to the CMK account: still re-seal under that account's key
+        for a in _cosmos_accounts(arm_state or {}):
+            u = (a.get("properties") or {}).get("keyVaultKeyUri")
+            if u:
+                uri = u
+                break
+    return uri, sealed
+
+
+class _CmkScope:
+    def __init__(self, store, uri, sealed, kv_store=None):
+        self.store, self.uri, self.sealed, self.kv = store, uri, sealed, kv_store
+        self.active = False
+
+    def __enter__(self):
+        from core import azure_cmk_core as cmk
+        self.cmk = cmk
+        self.kv = cmk.keys(self.kv)
+        if self.kv is None or not (self.uri or self.sealed):
+            return self
+        if self.uri:
+            ok, why = cmk.usable(self.kv, self.uri)
+            if not ok:
+                raise _CmkDenied(f"Request is blocked: the account's customer-managed key cannot be used ({why}). "
+                                 "Data is unreadable until the key is enabled / recovered.")
+        if self.sealed:
+            try:
+                plain = json.loads(cmk.unseal(self.kv, self.store.docs[CMK_SLOT]).decode())
+            except cmk.CmkError as e:
+                raise _CmkDenied(e.message)
+            self.store.docs.clear()
+            self.store.docs.update(plain)
+        self.active = True
+        return self
+
+    def __exit__(self, *exc):
+        if not self.active or not self.uri:
+            return False
+        try:
+            env = self.cmk.seal(self.kv, self.uri, json.dumps(self.store.docs, sort_keys=True, default=str).encode())
+        except self.cmk.CmkError:
+            return False
+        self.store.docs.clear()
+        self.store.docs[CMK_SLOT] = env
+        try:
+            self.store.persist()
+        except Exception:
+            pass
+        return False
+
+
+class _CmkDenied(Exception):
+    pass
+
+
+def rotate_cmk(store, acct, kv_store=None):
+    """Key rotation: re-wrap the envelope's DEK under the account key's latest version (data ciphertext untouched)."""
+    from core import azure_cmk_core as cmk
+    kv = cmk.keys(kv_store)
+    uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
+    if kv is not None and uri and CMK_SLOT in store.docs:
+        store.docs[CMK_SLOT] = cmk.rewrap(kv, store.docs[CMK_SLOT], uri)
+    return store.docs.get(CMK_SLOT)
+
+
 def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"", arm_state: dict | None = None) -> Response:
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> Response:
+    """CMK-aware entry: seals / opens the account's data around `_dispatch_plain`."""
+    hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hd) if arm_state else None
+    uri, sealed = _cmk_scope_for(store, acct, arm_state)
+    if not (uri or sealed):
+        return _dispatch_plain(store, method, path, query, headers, body, arm_state)
+    try:
+        with _CmkScope(store, uri, sealed, kv_store):
+            return _dispatch_plain(store, method, path, query, headers, body, arm_state)
+    except _CmkDenied as e:
+        r = _err(403, "Forbidden", str(e))
+        r.headers["x-ms-substatus"] = "4000"
+        return r
+
+
+def _dispatch_plain(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+                    body: bytes = b"", arm_state: dict | None = None) -> Response:
     """Data-plane dispatch. With `arm_state` (the Azure ARM state) the target account's network rules and provisioned /
     autoscale throughput are ENFORCED: a denied caller gets 403, a request that would exceed the offer in the trailing
     second gets 429 (RequestRateTooLarge) with x-ms-retry-after-ms; every response carries x-ms-request-charge (modelled RU)."""

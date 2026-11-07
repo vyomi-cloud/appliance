@@ -782,6 +782,8 @@ class AwsWireRouter:
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
         self.az_kvsec = s.get("az_kvsec") or InMemoryKvStore()
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
+        from core import azure_cmk_core as _az_cmk
+        _az_cmk.bind(self.az_kvkeys)   # customer-managed-key envelope encryption (Cosmos / Service Bus / App Configuration / SQL)
         self.az_kvcerts = s.get("az_kvcerts") or InMemoryKvStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_table = s.get("az_table") or AzureTableStore()
@@ -2227,7 +2229,14 @@ class AwsWireRouter:
                 # CORS/Lifecycle/Static website panels already write through ARM.
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
             elif svc == "az-cosmos":   # account network rules + provisioned/autoscale RU/s (429), from the ARM state
-                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state, kv_store=self.az_kvkeys)
+            elif svc == "az-servicebus":   # Premium-namespace customer-managed key: bodies sealed at rest
+                _ns = az_sb.cmk_namespace(self.az_arm.state, headers)
+                try:
+                    with az_sb.CmkScope(store, _ns, self.az_kvkeys):
+                        r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+                except az_sb.ServiceBusError as _e:
+                    r = az_sb._error(_e.code, _e.message, _e.status)
             elif svc == "az-acr":
                 # Same registry-scoped networking/retention enforcement as the offline substrate
                 # (core/wire_ingress.py) — see azure.acr.networking / azure.acr.retention. The

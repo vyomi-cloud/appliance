@@ -206,6 +206,9 @@ def _new_store(rid, name, sub, rg, payload, soft_deleted=None, base=""):
         rec["identity"] = out
     if soft_deleted:
         rec["_kv"] = soft_deleted.get("_kv") or rec["_kv"]
+        if "_kv_sealed" in soft_deleted:
+            rec["_kv_sealed"] = soft_deleted["_kv_sealed"]
+            rec.pop("_kv", None)
         rec["_keys"] = soft_deleted.get("_keys") or rec["_keys"]
     return rec
 
@@ -502,7 +505,11 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
     if rest:
         if rec is None:
             raise _not_found("configurationStores", name, rg)
-        return _store_ops(state, rec, rest, method, payload, query)
+        try:
+            with _CmkScope(rec):
+                return _store_ops(state, rec, rest, method, payload, query)
+        except _CmkBlocked as b:
+            raise _E(403, "KeyVaultKeyInaccessible", f"The store's customer-managed key cannot be used: {b.why}.")
     if method == "GET":
         if rec is None:
             raise _not_found("configurationStores", name, rg)
@@ -511,6 +518,11 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
         if rg is None:
             return _err(400, "InvalidResourceId", "App Configuration stores must be created in a resource group.")
         rec, created = _put_store(state, sub, rg, rid, name, payload, method, base)
+        try:
+            with _CmkScope(rec):      # seal immediately when a CMK was just configured
+                pass
+        except _CmkBlocked as b:
+            raise _E(403, "KeyVaultKeyInaccessible", f"The store's customer-managed key cannot be used: {b.why}.")
         return _ok(_store_view(rec), 201 if created else 200, lro=True, rid=rid, verb=method.lower())
     if method == "DELETE":
         if rec is None:
@@ -541,6 +553,63 @@ def _deleted_ops(state, sub, chain, method):
 
 def resource_types():
     return [("configurationStores", API_VERSION)]
+
+
+
+# ── customer-managed key: ENFORCED envelope encryption at rest (core/azure_cmk_core.py) ──────────
+# With encryption.keyVaultProperties.keyIdentifier set, the store's key-values live in the ARM record ONLY as a
+# CMK envelope between requests (`_kv_sealed`); each request opens it (Key Vault unwrapKey) and re-seals it
+# afterwards under the key's latest version (so rotation re-wraps on the next touch). A disabled / deleted /
+# expired key makes every request fail 403 KeyVaultKeyInaccessible and the data stays unreadable at rest.
+def _cmk_uri(rec):
+    kvp = ((rec.get("properties") or {}).get("encryption") or {}).get("keyVaultProperties") or {}
+    return kvp.get("keyIdentifier") or None
+
+
+class _CmkBlocked(Exception):
+    def __init__(self, uri, why):
+        self.uri, self.why = uri, why
+
+
+class _CmkScope:
+    def __init__(self, rec):
+        self.rec = rec
+        self.kv = None
+        self.st = None
+
+    def __enter__(self):
+        try:
+            from core import azure_cmk_core as cmk
+        except ImportError:  # pragma: no cover
+            import azure_cmk_core as cmk  # type: ignore
+        self.cmk = cmk
+        self.kv = cmk.keys()
+        self.uri = _cmk_uri(self.rec)
+        if self.kv is None or not (self.uri or "_kv_sealed" in self.rec):
+            return self
+        self.st = cmk.SealedState(self.rec, "_kv", "_kv_sealed")
+        if self.uri:
+            ok, why = cmk.usable(self.kv, self.uri)
+            if not ok:
+                self.st = None
+                raise _CmkBlocked(self.uri, why)
+        try:
+            self.st.open(self.kv)
+        except cmk.CmkError as e:
+            self.st = None
+            raise _CmkBlocked(self.uri or "", e.message)
+        return self
+
+    def __exit__(self, *exc):
+        if self.st is not None:
+            if self.uri:
+                try:
+                    self.st.close(self.kv, self.uri)
+                except self.cmk.CmkError:
+                    pass                      # key went away mid-request: leave plaintext rather than lose data
+            else:
+                self.rec.pop("_kv_sealed", None)   # CMK removed: store is plaintext again
+        return False
 
 
 # ═══════════════════════════ key-value store (shared by both planes) ═══════════
@@ -800,7 +869,11 @@ def data_dispatch(state, store_name, method, path, query=None, headers=None, bod
             return _problem(400, "invalid-argument", "Invalid request body", "The request body is not valid JSON.", "")
     body = body if isinstance(body, dict) else {}
     try:
-        return _data(store, method, "/" + path.strip("/"), query, headers, body, base)
+        with _CmkScope(store):
+            return _data(store, method, "/" + path.strip("/"), query, headers, body, base)
+    except _CmkBlocked as b:
+        return _problem(403, "forbidden", "The customer-managed key is inaccessible",
+                        f"KeyVaultKeyInaccessible: the store's encryption key cannot be used ({b.why}). Data is unreadable until the key is usable again.", store_name)
     except _D as e:
         return _problem(e.status, e.type, e.title, e.detail, e.name)
     except _Locked as e:
