@@ -205,6 +205,15 @@
       if (!r.ok) return http(r.error === "timeout" || /timed out/.test(r.error || "") ? 504 : 409, { detail: r.error || "exec failed" });
       return { ok: true, message: "Console command executed", instance_id: ref, stdout: r.stdout, stderr: "", exit_code: r.exit_code, output: r.stdout };
     }
+    if (/^Guest(Inventory|Performance|Updates)$/.test(op)) {
+      // Azure VM guest views: the appliance's own scripts, run in the VM; parsed by core/nano_vm_runtime_core.py.
+      if (!st || st.state !== "running") return http(409, { detail: "InstanceNotRunning", state: st && st.state, hint: st && st.detail });
+      if (!pyHooks) return http(409, { detail: { error: "NoRuntime", hint: "The Python engine is not loaded in this view." } });
+      const kind = op.slice(5).toLowerCase(), body = (params && params.body) || {};
+      const r = await call(it.id, { type: "exec", command: pyHooks.guestCommand(kind, JSON.stringify(body)), user: "root", timeout_ms: 120000 }, 125000);
+      if (!r.ok) return http(r.error === "timeout" || /timed out/.test(r.error || "") ? 504 : 409, { detail: r.error || "guest command failed" });
+      return JSON.parse(pyHooks.guestParse(kind, r.stdout || ""));
+    }
     if (op === "ConnectInfo") {
       if (!st || st.state !== "running") {
         return http(409, { detail: { error: st && st.state === "error" ? "VmFailed" : "InstanceNotReady",
@@ -454,8 +463,27 @@
       } catch (_) { return res; }
     };
   }
+  // ── sync/async helpers for the Python engines (core/nano_vm_runtime_core.py) ──────────────
+  let pyHooks = null;
+  const runningVms = () => {
+    if (!enabled()) return [];
+    const reg = readReg(), out = [];
+    for (const id of Object.keys(reg)) {
+      const it = reg[id], hs = handles.get(id);
+      if (hs && hs.status && hs.status.state === "running" && it.desired !== "stop" && it.desired !== "terminate") out.push(it);
+    }
+    return out;
+  };
+  // The VM that hosts Container Apps replicas: the first running Azure VM, else any running VM.
+  const hostVm = () => { const r = runningVms(), it = r.find((x) => x.cloud === "azure") || r[0]; return JSON.stringify(it ? { id: it.id, cloud: it.cloud, ref: it.ref } : null); };
+  const runningOf = (cloud) => JSON.stringify(runningVms().filter((x) => x.cloud === cloud).map((x) => ({ ref: x.ref, name: x.name || x.ref, ip: "", az: x.zone || "" })));
+  // Run an sh script as root in a running VM; resolves {exit_code, stdout} or {error} (never throws).
+  async function runScript(vm, script, timeoutMs) {
+    const r = await call(vm, { type: "exec", command: script, user: "root", timeout_ms: timeoutMs || 30000 }, (timeoutMs || 30000) + 3000);
+    return r && r.ok ? { exit_code: r.exit_code, stdout: r.stdout || "" } : { error: (r && r.error) || "VM did not answer", state: r && r.state };
+  }
   window.NanoVM = {
-    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect, shownPower,
+    enabled, kick, resume, handle, hostVm, runningOf, runScript, setPyHooks(h) { pyHooks = h; }, onSerial, serialSend, accountKey, vmId, renderConnect, shownPower,
     registry: readReg,
     status: (cloud, ref) => call(vmId(cloud, ref), { type: "status" }, 10000),
     init(o) { listDesired = o.listDesired; annotateFn = o.annotate || null; if (enabled()) { resume(); reconcile(); setInterval(reconcile, 5000); } },

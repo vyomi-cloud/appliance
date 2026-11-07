@@ -56,7 +56,7 @@ export function Console({ path, cap }) {
   };
   return (
     <Wrap cap={cap} title="Console">
-      <p style={{ fontSize: 13 }}>Runs the command inside the app's running container (docker exec).</p>
+      <p style={{ fontSize: 13 }}>Runs the command in the app's running replica: docker exec on the offline appliance; on Nano, a shell command in the in-browser VM that hosts the replica process (same environment variables, shared with the other replicas).</p>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <Input style={{ flex: 1 }} value={cmd} aria-label="Command" onChange={(_, d) => setCmd(d.value)} onKeyDown={(e) => { if (e.key === "Enter" && !busy) run(); }} />
         <Button appearance="primary" disabled={busy || !cmd} onClick={run}>Run</Button>

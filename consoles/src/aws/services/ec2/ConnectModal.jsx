@@ -145,7 +145,15 @@ export default function ConnectModalBody({ instanceId }) {
   // Nano: the instance is a real v86 VM in this browser tab; the host paints boot state, the vyomi-tunnel ssh command and an xterm shell.
   return (
     <CapabilityContainer id="ec2.instances.connect" title="Connect">
-      {isNano() ? <NanoVmPanel cloud="aws" vmRef={instanceId} /> : <Body instanceId={instanceId} />}
+      {isNano() ? (
+        <SpaceBetween size="l">
+          <NanoVmPanel cloud="aws" vmRef={instanceId} />
+          <CapabilityContainer id="ssm.session-manager" title="Session Manager">
+            <Box color="text-body-secondary" variant="small">Runs a command-at-a-time shell in this instance's in-browser VM (it must be running). No ssmmessages data channel, so the AWS CLI session-manager-plugin cannot attach.</Box>
+            <SsmSession instanceId={instanceId} />
+          </CapabilityContainer>
+        </SpaceBetween>
+      ) : <Body instanceId={instanceId} />}
     </CapabilityContainer>
   );
 }
