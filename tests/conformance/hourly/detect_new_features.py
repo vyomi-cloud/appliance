@@ -111,6 +111,7 @@ def _ops_in(path: str) -> set[str]:
         tree = ast.parse(open(path, encoding="utf-8").read())
     except Exception:
         return set()
+    aws_core = _cloud_of(path) == "aws"
     ops = set()
     fn_ops: dict[str, str] = {}
     keys_all: set[str] = set()
@@ -127,7 +128,8 @@ def _ops_in(path: str) -> set[str]:
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
-        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name) \
+                and not (aws_core and n.name.startswith("_")):  # AWS: _private helpers are not SDK operations
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
             ops.add(fn_ops[n.name])
     for fname in dispatched:
