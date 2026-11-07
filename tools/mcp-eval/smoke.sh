@@ -41,6 +41,9 @@ pass=0; fail=0
 check() {  # $1 label, $2 command that must succeed
   if eval "$2" >/dev/null 2>&1; then echo "  PASS  $1"; pass=$((pass+1)); else echo "  FAIL  $1"; fail=$((fail+1)); fi
 }
+for id in 3 4 5 6 7; do  # a tool that errored explains every FAIL below it
+  [ "$(r $id | jq -r '.result.isError')" = "true" ] && echo "  NOTE  tool call #$id returned an error: $(text $id)"
+done
 
 echo "vyomi mcp smoke test: $BIN ${ARGS[*]-}"
 check "stdout is pure JSON-RPC"            "jq -e . '$OUT/replies'"
@@ -65,7 +68,13 @@ else
 fi
 if [ -n "${SCAN:-}" ]; then
   echo "  SCAN  $SCAN"
-  text 10 | jq -r '.summary[]' | sed 's/^/        /'
+  if [ "$(r 10 | jq -r '.result.isError')" = "true" ]; then
+    echo "  FAIL  scan: $(text 10)"; fail=$((fail+1))
+  else
+    text 10 | jq -r '.summary[]' | sed 's/^/        /'
+    text 10 | jq -r '"        not emulated: " + ([.clouds[]?[] | select(.status != "released") | .service] | unique | if length == 0 then "none" else join(", ") end)'
+    text 10 | jq -r 'select(.unrecognized) | "        unrecognized (send these over): " + (.unrecognized | tostring)'
+  fi
 fi
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
