@@ -745,6 +745,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-runtime-budgets",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_runtime_budgets_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-console-rds-sql",
       "target": "offline",
       "cloud": "aws",
