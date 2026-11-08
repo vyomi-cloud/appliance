@@ -43,6 +43,7 @@ VERB_RE = re.compile(r"^_?(create|list|get|delete|update|put|patch|describe|publ
                      r"enable|disable|encrypt|decrypt|sign|verify|rotate|restore|purge|send|receive|batch|run|"
                      r"generate|import|export|tag|untag|subscribe|unsubscribe|commit|rollback|begin|execute|"
                      r"lease|break|renew|regenerate|deallocate|poweroff|reboot|resize|seek|snapshot)_[a-z0-9_]+$")
+ASL_CMP_RE = re.compile(r"^(String|Numeric|Boolean|Timestamp)(Equals|LessThan|GreaterThan|Matches)\w*$|^Is(Null|Numeric|String|Boolean|Timestamp|Present)$")
 TEST_DIRS = ("tests", "wasm/ui-tests", "samples")
 SDK_TEST_EXT = (".java", ".go", ".py", ".sh", ".mjs", ".js")
 
@@ -133,6 +134,15 @@ def _ops_in(path: str) -> set[str]:
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
             ops.discard(fn_ops[fname])
+    if keys_all:
+        # An engine with an SDK dispatch table: its API surface is the table. Verb-named
+        # functions outside it (private helpers like _create_grand, _publish_to_topic) are
+        # internals, not operations a client can call.
+        ops -= {v for v in fn_ops.values() if v not in keys_all}
+    if os.path.basename(path) == "stepfunctions_core.py":
+        # ASL Choice-state comparators (NumericEquals, IsPresent...) are state-language
+        # operators, not Step Functions API operations.
+        ops = {o for o in ops if not ASL_CMP_RE.match(o)}
     return ops
 
 
