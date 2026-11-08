@@ -1,6 +1,25 @@
 {
- "at": "2026-11-08T02:08:49+00:00",
+ "at": "2026-11-08T03:08:49+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-added",
+   "key": "gcp:sqladmin/v1beta4:sql.projects.instances.reconcileNetworking:added",
+   "title": "GCP sqladmin/v1beta4: new operation sql.projects.instances.reconcileNetworking",
+   "detail": {
+    "params": [
+     "instance",
+     "project"
+    ],
+    "request": "SqlInstancesReconcileNetworkingRequest",
+    "response": "Operation",
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  }
+ ],
  "errors": []
 }

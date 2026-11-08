@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-08T03:08:49+00:00
+
+Tracking 4259 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 1 actionable.**
+- 🔧 `operation-added` GCP sqladmin/v1beta4: new operation sql.projects.instances.reconcileNetworking
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-08T02:08:49+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
