@@ -737,6 +737,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-aws-console-secrets-kms",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_console_secrets_kms_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-sdk-info-extras-config",
       "target": "offline",
       "cloud": "aws",
