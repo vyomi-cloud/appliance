@@ -207,6 +207,28 @@ func main() {
 		}
 	}
 	chk("PutInsightRule + DescribeInsightRules", err == nil && found, fmt.Sprint(err, err2))
+	dis, err := cw.DisableInsightRules(ctx, &cloudwatch.DisableInsightRulesInput{RuleNames: []string{"go-rule-" + sfx}})
+	ir2, err2 := cw.DescribeInsightRules(ctx, &cloudwatch.DescribeInsightRulesInput{})
+	state := ""
+	if err2 == nil {
+		for _, r := range ir2.InsightRules {
+			if aws.ToString(r.Name) == "go-rule-"+sfx {
+				state = aws.ToString(r.State)
+			}
+		}
+	}
+	chk("DisableInsightRules -> DISABLED", err == nil && len(dis.Failures) == 0 && state == "DISABLED", fmt.Sprint(err, err2, state))
+	en, err := cw.EnableInsightRules(ctx, &cloudwatch.EnableInsightRulesInput{RuleNames: []string{"go-rule-" + sfx, "missing-" + sfx}})
+	ir3, err2 := cw.DescribeInsightRules(ctx, &cloudwatch.DescribeInsightRulesInput{})
+	state = ""
+	if err2 == nil {
+		for _, r := range ir3.InsightRules {
+			if aws.ToString(r.Name) == "go-rule-"+sfx {
+				state = aws.ToString(r.State)
+			}
+		}
+	}
+	chk("EnableInsightRules -> ENABLED, missing rule reported as failure", err == nil && len(en.Failures) == 1 && state == "ENABLED", fmt.Sprint(err, err2, state))
 	dr, err := cw.DeleteInsightRules(ctx, &cloudwatch.DeleteInsightRulesInput{RuleNames: []string{"go-rule-" + sfx, "missing-" + sfx}})
 	chk("DeleteInsightRules reports the missing rule as a failure", err == nil && len(dr.Failures) == 1, fmt.Sprint(err))
 
