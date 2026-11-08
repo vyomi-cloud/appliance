@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-08T12:09:01+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.google.cloud:google-cloud-pubsub: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-08T11:08:58+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and
 - · `release` pypi:boto3: 1.43.118 → 1.43.119
 - · `release` pypi:botocore: 1.43.118 → 1.43.119
 
-Filed 3 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-26T18:54:48+00:00
-
-Tracking 3421 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `release` cli:aws: 2.38.5 → 2.38.6
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
