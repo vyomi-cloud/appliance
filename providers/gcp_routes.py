@@ -69,6 +69,7 @@ _TARGET_OVERRIDES = {
     "api_gcp_sql_delete_instance": gcp_storage_sql_vpc.api_gcp_sql_delete_instance,
     "api_gcp_sql_restart_instance": gcp_storage_sql_vpc.api_gcp_sql_restart_instance,
     "api_gcp_sql_start_instance": gcp_storage_sql_vpc.api_gcp_sql_start_instance,
+    "api_gcp_sql_reconcile_networking": gcp_storage_sql_vpc.api_gcp_sql_reconcile_networking,
     "api_gcp_sql_stop_instance": gcp_storage_sql_vpc.api_gcp_sql_stop_instance,
     "api_gcp_sql_list_backups": gcp_storage_sql_vpc.api_gcp_sql_list_backups,
     "api_gcp_sql_create_backup": gcp_storage_sql_vpc.api_gcp_sql_create_backup,
@@ -360,6 +361,7 @@ def register(app, h) -> None:
         # /start and /stop — catalog publishes these; Cloud SQL implements them as activationPolicy flips.
         ("POST", "/api/gcp/rds/databases/{instance}/start", "api_gcp_sql_start_instance", "(project: str = \"\", instance: str = \"\")"),
         ("POST", "/api/gcp/rds/databases/{instance}/stop", "api_gcp_sql_stop_instance", "(project: str = \"\", instance: str = \"\")"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/reconcileNetworking", "api_gcp_sql_reconcile_networking", "(project: str, instance: str)"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/start", "api_gcp_sql_start_instance", "(project: str, instance: str)"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/stop", "api_gcp_sql_stop_instance", "(project: str, instance: str)"),
         ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/backups", "api_gcp_sql_list_backups", "(project: str, instance: str = \"\")"),
