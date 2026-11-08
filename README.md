@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-08 09:28 UTC · refreshes after every pipeline run_
+_Updated 2026-11-08 09:53 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-08 09:28 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 288 of 289 suites passing (run 07:55 UTC)
+- **Hourly tests:** 288 of 289 suites passing (run 09:46 UTC)
 - **Upstream watch:** 17 open changes from the real clouds to adopt
 
 ## By cloud
@@ -1142,7 +1142,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-aws-apigatewayv2 | ✅ | 21/21 |
 | nano-ui-aws-apigatewayv2 | ✅ | 21/21 |
 | offline-sdk-java-aws-cloudwatch | ✅ | 26/26 |
-| offline-sdk-go-aws-cloudwatch | ✅ | 37/37 |
+| offline-sdk-go-aws-cloudwatch | ✅ | 39/39 |
 | offline-cli-aws-cloudwatch | ✅ | 31/31 |
 | offline-ui-aws-cloudwatch | ✅ | 23/23 |
 | nano-ui-aws-cloudwatch | ✅ | 23/23 |
