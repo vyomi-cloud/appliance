@@ -745,6 +745,22 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-runtime-tier-gates",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_runtime_tier_gates_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-core-runtime-tier-features",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "core",
+      "cmd": "python3 tests/conformance/test_runtime_tier_features_core.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-runtime-budgets",
       "target": "offline",
       "cloud": "aws",
