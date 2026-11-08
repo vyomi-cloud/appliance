@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-08T14:08:57+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.azure:azure-data-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-08T13:09:03+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-10-26T20:54:52+00:00
 
-Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` Amazon RDS now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-supports-latest-cumulative-update-gdr-microsoft-sql-server/))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-26T19:54:49+00:00
-
-Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
