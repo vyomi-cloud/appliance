@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-08T07:08:52+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.azure:azure-data-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-08T06:08:52+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3008,3 @@ Tracking 3421 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and
 - 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
 
 Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-26T13:59:27+00:00
-
-Tracking 3421 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
-
-First run: baseline recorded; changes are reported from the next run.
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
