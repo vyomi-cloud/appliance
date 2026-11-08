@@ -107,6 +107,25 @@ def console_features(target: str, cloud: str) -> list[dict]:
     return feats
 
 
+_AWS_OPS: dict[str, str] | None = None
+
+
+def _aws_ops() -> dict[str, str]:
+    """lowercase -> canonical name of every operation in botocore's service models ({} if unavailable)."""
+    global _AWS_OPS
+    if _AWS_OPS is None:
+        _AWS_OPS = {}
+        try:
+            import botocore.session
+            sess = botocore.session.get_session()
+            for svc in sess.get_available_services():
+                for op in sess.get_service_model(svc).operation_names:
+                    _AWS_OPS[op.lower()] = op
+        except Exception:
+            _AWS_OPS = {}
+    return _AWS_OPS
+
+
 def _ops_in(path: str) -> set[str]:
     """Operation names an engine implements: PascalCase keys of its dispatch
     tables (AWS JSON/query cores) plus verb-named handlers (REST cores)."""
@@ -139,6 +158,13 @@ def _ops_in(path: str) -> set[str]:
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
+            if n.name.startswith("_") and _cloud_of(path) == "aws" and _aws_ops():
+                # private handler behind a route table: an SDK operation only if botocore knows it
+                # (under botocore's spelling); otherwise it is an internal helper (_create_grand, _invoke_raw)
+                canon = _aws_ops().get(fn_ops[n.name].lower())
+                if not canon:
+                    continue
+                fn_ops[n.name] = canon
             ops.add(fn_ops[n.name])
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
