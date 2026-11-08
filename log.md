@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-08T17:09:07+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.azure:azure-storage-blob: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-08T16:09:02+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and
 - · `announcement` AWS Glue Data Catalog now supports OAuth for Apache Iceberg REST Catalog APIs ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/glue-catalog-oauth-iceberg-rest/))
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-26T23:54:56+00:00
-
-Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` Compute Engine: Security (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
