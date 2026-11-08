@@ -1,8 +1,6 @@
 {
- "at": "2026-11-08T05:08:51+00:00",
+ "at": "2026-11-08T06:08:52+00:00",
  "baseline": false,
  "changes": [],
- "errors": [
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
- ]
+ "errors": []
 }
