@@ -133,6 +133,11 @@ def _ops_in(path: str) -> set[str]:
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
             ops.discard(fn_ops[fname])
+    if len(keys_all) >= 10:
+        # An engine with a real PascalCase dispatch table exposes exactly those operations;
+        # its other verb-named functions (create_grand, run_state, is_numeric...) are internal
+        # helpers, not SDK operations, so they must not be reported as untested ops.
+        ops = {o for o in ops if o in keys_all or o not in set(fn_ops.values())}
     return ops
 
 
