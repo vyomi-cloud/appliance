@@ -38,6 +38,9 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 CLOUDS = ("aws", "gcp", "azure")
 ROUTE_RE = re.compile(r"""@(?:app|router)\.(get|post|put|patch|delete|api_route)\(\s*["']([^"']+)["']""")
 OP_RE = re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$")            # PascalCase: PutItem, CreateDBInstance
+# single-word operations (Publish, Subscribe, Query) sit next to PascalCase ones in a real dispatch table
+ASL_CMP_RE = re.compile(r"^(Is[A-Z]\w+|(Numeric|String|Timestamp|Boolean)(Equals|LessThan|GreaterThan)\w*|StringMatches)$")
+ONEWORD_RE = re.compile(r"^[A-Z][A-Za-z0-9]+$")
 VERB_RE = re.compile(r"^_?(create|list|get|delete|update|put|patch|describe|publish|pull|acknowledge|ack|modify|set|"
                      r"insert|query|scan|upload|download|copy|invoke|add|remove|attach|detach|start|stop|restart|"
                      r"enable|disable|encrypt|decrypt|sign|verify|rotate|restore|purge|send|receive|batch|run|"
@@ -112,17 +115,24 @@ def _ops_in(path: str) -> set[str]:
     except Exception:
         return set()
     ops = set()
+    defined = {f.name for f in ast.walk(tree) if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))}
     fn_ops: dict[str, str] = {}
     keys_all: set[str] = set()
     dispatched = set()   # handlers wired into a dispatch table: reported under the table's SDK operation name
     for n in ast.walk(tree):
         if isinstance(n, ast.Dict) and len(n.keys) >= 3:
             keys = [k.value for k in n.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
-            if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) for v in n.values) \
-                    and all(OP_RE.match(k) for k in keys):
+            if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) or (isinstance(v, ast.Tuple) and v.elts and isinstance(v.elts[0], ast.Name))
+                           for v in n.values) \
+                    and all(not isinstance(v, ast.Name) or v.id in defined for v in n.values) \
+                    and all(ONEWORD_RE.match(k) for k in keys) and sum(bool(OP_RE.match(k)) for k in keys) * 2 > len(keys):
+                # ASL Choice comparison tables (NumericEquals: lambda a, b: ...) are not SDK operations
+                if all(isinstance(v, ast.Lambda) and len(v.args.args) == 2 for v in n.values) \
+                        and all(ASL_CMP_RE.match(k) for k in keys):
+                    continue
                 ops |= set(keys)
                 keys_all |= set(keys)
-                dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)}
+                dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)} | {v.elts[0].id for v in n.values if isinstance(v, ast.Tuple)}
         elif isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id in ("op", "action", "target", "operation"):
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
@@ -137,7 +147,7 @@ def _ops_in(path: str) -> set[str]:
         # An engine with a real PascalCase dispatch table exposes exactly those operations;
         # its other verb-named functions (create_grand, run_state, is_numeric...) are internal
         # helpers, not SDK operations, so they must not be reported as untested ops.
-        ops = {o for o in ops if o in keys_all or o not in set(fn_ops.values())}
+        ops = set(keys_all)
     return ops
 
 
