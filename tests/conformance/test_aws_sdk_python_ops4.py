@@ -54,6 +54,11 @@ def main():
     ex = sfn.start_execution(stateMachineArn=arn, input="{}")["executionArn"]
     check("sfn DescribeStateMachineForExecution", lambda: sfn.describe_state_machine_for_execution(executionArn=ex)["stateMachineArn"] == arn)
     check("sfn ListMapRuns on an execution without Map states is empty", lambda: sfn.list_map_runs(executionArn=ex)["mapRuns"] == [])
+    mr = ex.replace(":execution:", ":mapRun:") + "/nomap:00000000-0000-0000-0000-000000000000"
+    check("sfn DescribeMapRun of an unknown map run is ResourceNotFound",
+          lambda: raises(lambda: sfn.describe_map_run(mapRunArn=mr), "ResourceNotFound"))
+    check("sfn UpdateMapRun of an unknown map run is ResourceNotFound",
+          lambda: raises(lambda: sfn.update_map_run(mapRunArn=mr, maxConcurrency=2), "ResourceNotFound"))
     check("sfn RedriveExecution of a succeeded execution is refused",
           lambda: raises(lambda: sfn.redrive_execution(executionArn=ex), "ExecutionNotRedrivable"))
     check("sfn SendTaskHeartbeat with an unknown token is refused",
