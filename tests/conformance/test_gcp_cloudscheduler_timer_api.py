@@ -25,6 +25,10 @@ def check(name, ok, extra=""):
 
 def main():
     tag = uuid.uuid4().hex[:6]
+    # Create+pause must finish before the next minute boundary: a pause that lands after
+    # the job is already due legitimately fires it first (real Cloud Scheduler races too).
+    while time.time() % 60 > 45:
+        time.sleep(1)
     ps = f"{BASE}/api/gcp/pubsub/v1/projects/{PROJECT}"
     jobs = f"{BASE}/v1/projects/{PROJECT}/locations/us-central1/jobs"
     topic, sub = f"sch-t-{tag}", f"sch-s-{tag}"
