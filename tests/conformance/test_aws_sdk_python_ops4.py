@@ -87,6 +87,20 @@ def main():
     check("ssm CancelCommand with an unknown id is refused", lambda: raises(lambda: ssm.cancel_command(CommandId=str(uuid.uuid4())), "InvalidCommandId"))
     check("ssm DescribeInstanceInformation answers", lambda: "InstanceInformationList" in ssm.describe_instance_information())
 
+    try:
+        ssm.deregister_default_host_management_configuration()
+    except ClientError:
+        pass
+    check("ssm RegisterDefaultHostManagementConfiguration returns a role ARN",
+          lambda: ssm.register_default_host_management_configuration(PermissionModel="DefaultRole")["RoleArn"].startswith("arn:aws:iam::"))
+    check("ssm RegisterDefaultHostManagementConfiguration twice without Overwrite is refused",
+          lambda: raises(lambda: ssm.register_default_host_management_configuration(PermissionModel="DefaultRole"), "InvalidParameters"))
+    check("ssm RegisterDefaultHostManagementConfiguration with Overwrite replaces it",
+          lambda: ssm.register_default_host_management_configuration(PermissionModel="DefaultRole", Overwrite=True)["RoleArn"] != "")
+    ssm.deregister_default_host_management_configuration()
+    check("ssm re-register after deregister without Overwrite", lambda: bool(ssm.register_default_host_management_configuration(PermissionModel="DefaultRole")["RoleArn"]))
+    ssm.deregister_default_host_management_configuration()
+
     vpc = ec2.create_vpc(CidrBlock="10.77.0.0/16")["Vpc"]["VpcId"]
     rt = ec2.create_route_table(VpcId=vpc)["RouteTable"]["RouteTableId"]
     ec2.delete_route_table(RouteTableId=rt)
