@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-08T15:08:59+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-08T14:08:57+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3007,4 @@ Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-10-26T21:54:53+00:00
-
-Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `announcement` AWS Key Management Service now supports ML-KEM for post-quantum key encapsulation ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/kms-ml-kem-post-quantum/))
-- · `release` pypi:azure-identity: 1.26.0 → 1.27.0
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-26T20:54:52+00:00
 
