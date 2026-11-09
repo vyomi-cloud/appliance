@@ -7,5 +7,3 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | Session | Branch | Repo | Paths claimed | Since |
 |---|---|---|---|---|
 | tunnel redesign | (the tunnel session) | appliance | packaging/tunnel/**, wasm/relay/** | 2026-11-09 |
-| builder (k8s port) | v4/k8s-port | appliance | core/k3s_runtime.py, core/k3s_versions.py, core/k3s_identity.py, core/aws_eks_*.py, core/aws_s3.py router lists, consoles/src/aws/services/eks/**, core/capabilities/aws/eks.json, core/backup_vaults_core.py | 2026-11-09 |
-| builder (k8s port) | v4/tunnel-k3s-port | appliance | wasm/relay/booster-dial.mjs, wasm/relay/mesh-cli.mjs, wasm/relay/keeper.mjs, packaging/tunnel/bin/**, VYOMI-TUNNEL-ARCHITECTURE.md | 2026-11-10 |
