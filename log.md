@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-09T10:10:38+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.google.cloud:google-cloud-storage: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T09:10:30+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3008,3 @@ Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.5 → v1.114.6
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.6 → v1.52.7
 - · `release` pypi:boto3: 1.43.119 → 1.43.120
-- · `release` pypi:botocore: 1.43.119 → 1.43.120
-
-Filed 5 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-27T18:50:18+00:00
-
-Tracking 3922 AWS + GCP operations, 17 Azure spec areas, 50 SDK/CLI packages and 3 lifecycle feeds.
-
-**14 change(s), 2 actionable.**
-- 🔧 `lifecycle` Retirement: Pod name dimension in AKS pod platform metrics ([link](https://azure.microsoft.com/updates?id=570232))
-- 🔧 `lifecycle` Retirement: Transition to using standard tests for single-step availability testing in Azure Monitor application insights by September 30, 2028 ([link](https://azure.microsoft.com/updates?id=transition-to-using-standard-tests-for-singlestep-availability-testing-in-azure-monitor-application-insights-by-30-september))
