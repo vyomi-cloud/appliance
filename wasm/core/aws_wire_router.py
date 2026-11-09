@@ -457,6 +457,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "autoscaling": "asg",
     "dlm": "dlm",
+    "eks": "eks",   # Amazon EKS (rest-json /clusters, /tags, /addons, ...) -> core/aws_eks_core over the S3 account bag + a REAL k3s control plane when the runtime is installed
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "mgn": "mgn",   # Application Migration Service (rest-json POST /<Operation>) -> core/mgn_core over the shared EC2 model
@@ -1960,6 +1961,11 @@ class AwsWireRouter:
                 _o = f"{lheaders.get('x-forwarded-proto', 'http')}://{lheaders['host']}"
                 out = re.sub(rb"https://([a-z0-9]+)\.execute-api\.localhost:\d+", lambda m: (_o + "/apigw/").encode() + m.group(1), out)
             return {"status": r.status, "headers": hdrs, "body": out}
+
+        if svc == "eks":   # native Amazon EKS REST (clusters, node groups, add-ons, access entries ...) over a real k3s API server
+            from core import aws_eks_core
+            r = aws_eks_core.dispatch(self.s3.account, method, path, query or {}, headers or {}, bytes(body), vpc_store=self.vpc)
+            return {"status": r.status, "headers": {"content-type": r.media_type, **(r.headers or {})}, "body": r.body or b""}
 
         if svc == "dlm":   # native Data Lifecycle Manager REST (/policies, /policies/{id})
             r = dlm.dispatch(self.dlm, method, path, query or {}, headers or {}, bytes(body))

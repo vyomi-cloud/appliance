@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -152,6 +153,8 @@ def _classify(arn):
         return "EC2", arn.rsplit("/", 1)[1]                      # recovery point = a real AMI (+ one snapshot per attached volume)
     if re.match(r"^arn:aws[a-z-]*:fsx:[^:]+:\d{12}:volume/fs-[^/]+/fsvol-.+$", arn):
         return "FSx", arn.rsplit("/", 1)[1]                      # FSx for OpenZFS volume: its file tree is captured
+    if re.match(r"^arn:aws[a-z-]*:eks:[^:]+:\d{12}:cluster/[^/]+$", arn):
+        return "EKS", arn.rsplit("/", 1)[1]                      # AWS Backup for Amazon EKS: the cluster's Kubernetes objects (core/aws_eks_core backend)
     return None, None
 
 
@@ -161,7 +164,7 @@ def _unsupported(arn):
         return "Vyomi has no Amazon EFS file-system resource, so there is nothing to back up (EFS recovery points are not simulated)."
     if re.match(r"^arn:aws[a-z-]*:rds:[^:]+:\d{12}:cluster:", arn or ""):
         return "Vyomi's RDS models DB instances only (no Aurora DB clusters), so an Aurora cluster has nothing to back up; protect the DB instance ARN instead."
-    return "Resource type is not supported by Vyomi's AWS Backup (supported: DynamoDB, RDS instances, S3, EBS, EC2 (AMI), FSx for OpenZFS volumes)."
+    return "Resource type is not supported by Vyomi's AWS Backup (supported: DynamoDB, RDS instances, S3, EBS, EC2 (AMI), FSx for OpenZFS volumes, EKS clusters)."
 
 
 def _s3c(): return _lazy("s3_object_core")
@@ -245,7 +248,42 @@ def _capture(ddb, s3, rds, vpc, rtype, name, job_id, vault):
         c.put_object(s3, ART_BUCKET, f"{vault}/{rid}.json", json.dumps({"fsx_volume": name, "fileSystemId": vol["FileSystemId"], "volumeName": vol["Name"],
                                                                          "path": vol["OpenZFSConfiguration"]["VolumePath"], "files": files}).encode(), {"content-type": "application/json"})
         return f"arn:aws:backup:{REGION}:{ACCT}:recovery-point:{rid}", sum(int(f.get("size", 0)) for f in files.values()), None
+    if rtype == "EKS":
+        eks = _lazy("aws_eks_core")
+        try:
+            be = eks.backend(s3.account, _eks_region(name, s3), name)
+            snap, last = None, None
+            for attempt in range(3):          # a loaded apiserver can drop one kubectl call; retry before failing the backup job
+                try:
+                    snap = be.export_resources()
+                    break
+                except eks.EksError:
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    last = e
+                    time.sleep(3 * (attempt + 1))
+            if snap is None:
+                raise last
+        except eks.EksError as e:
+            return None, 0, e.message
+        except Exception as e:  # noqa: BLE001
+            return None, 0, "Could not read the cluster's Kubernetes objects: %s" % str(e)[:200]
+        rid = uuid.uuid4().hex
+        c = _s3c()
+        if not s3.bucket_exists(ART_BUCKET):
+            s3.create_bucket(ART_BUCKET)
+        raw = json.dumps({"eks_cluster": name, "snapshot": snap}).encode()
+        c.put_object(s3, ART_BUCKET, f"{vault}/{rid}.json", raw, {"content-type": "application/json"})
+        return f"arn:aws:backup:{REGION}:{ACCT}:recovery-point:{rid}", len(raw), None
     return None, 0, "Resource type is not supported by Vyomi's AWS Backup."
+
+
+def _eks_region(name, s3):
+    """The region of the (single) cluster called ``name`` in the EKS state."""
+    for key in (s3.account.get("eks") or {}).get("clusters", {}):
+        if key.endswith("/" + name):
+            return key.split("/", 1)[0]
+    return REGION
 
 
 def _drop_rp(ddb, s3, rds, vpc, rp):
@@ -268,7 +306,7 @@ def _drop_rp(ddb, s3, rds, vpc, rp):
             img = m["images"].pop(arn.rsplit("/", 1)[1], None)
             for bd in (img or {}).get("block_devices", []):
                 m["snapshots"].pop(bd.get("snapshot_id"), None)
-        elif t == "FSx":
+        elif t in ("FSx", "EKS"):
             rid = arn.rsplit(":", 1)[1]
             s3.bucket_objects(ART_BUCKET).pop(f"{rp['BackupVaultName']}/{rid}.json", None)
     except Exception:  # noqa: BLE001
@@ -415,6 +453,24 @@ def _restore(ddb, s3, rds, vpc, st, p):
             for k, f in json.loads(g.body)["files"].items():
                 tv.setdefault("_files", {})[k] = f
             created = tv["ResourceARN"]
+        elif t == "EKS":
+            eks = _lazy("aws_eks_core")
+            target = md.get("ClusterName") or md.get("clusterName") or rp["ResourceName"]
+            rid = arn.rsplit(":", 1)[1]
+            g = _s3c().get_object(s3, ART_BUCKET, f"{rp['BackupVaultName']}/{rid}.json", {}, {})
+            if g.status != 200:
+                raise ValueError("The recovery point's backup artifact is missing.")
+            snap = json.loads(g.body)["snapshot"]
+            try:
+                be = eks.backend(s3.account, _eks_region(target, s3), target)
+                docs = [{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": n["name"], "labels": dict(n.get("labels") or {})}} for n in snap.get("namespaces") or []]
+                docs += list(snap.get("objects") or [])
+                be.apply(docs)
+            except eks.EksError as e:
+                raise ValueError(e.message)
+            except Exception as e:  # noqa: BLE001
+                raise ValueError("Restore into cluster %s failed: %s" % (target, str(e)[:300]))
+            created = f"arn:aws:eks:{_eks_region(target, s3)}:{ACCT}:cluster/{target}"
         else:
             raise ValueError("Unsupported resource type.")
     except ValueError as e:
@@ -661,7 +717,8 @@ def handle(ddb, s3, rds, vpc, st, method, path, query, p):
         if rp is None:
             return _e(404, "ResourceNotFoundException", f"Recovery point {arn} does not exist.")
         md = {"DynamoDB": {"targetTableName": rp.get("ResourceName", "")}, "RDS": {"DBInstanceIdentifier": rp.get("ResourceName", ""), "DBInstanceClass": "db.t3.micro"},
-              "S3": {"DestinationBucketName": "", "NewBucket": "true"}, "EBS": {"availabilityZone": f"{REGION}a", "volumeType": "gp3"}}.get(rp["ResourceType"], {})
+              "S3": {"DestinationBucketName": "", "NewBucket": "true"}, "EBS": {"availabilityZone": f"{REGION}a", "volumeType": "gp3"},
+              "EKS": {"ClusterName": rp.get("ResourceName", "")}}.get(rp["ResourceType"], {})
         return 200, {"BackupVaultArn": rp["BackupVaultArn"], "RecoveryPointArn": arn, "ResourceType": rp["ResourceType"], "RestoreMetadata": md}
     if k == "resources" and len(segs) == 1 and method == "GET":
         seen = {}
@@ -684,5 +741,5 @@ def handle(ddb, s3, rds, vpc, st, method, path, query, p):
             st["tags"].get(arn, {}).pop(t, None)
         return 200, None
     if k == "supported-resource-types" and method == "GET":
-        return 200, {"ResourceTypes": ["DynamoDB", "EBS", "RDS", "S3"]}
+        return 200, {"ResourceTypes": ["DynamoDB", "EBS", "EKS", "RDS", "S3"]}
     return None

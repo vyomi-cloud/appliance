@@ -92,7 +92,7 @@ const CORES = [
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "aws_console_detail.py",   // main-side Nano cores (merged)
-  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "autoscaling_core.py", "gcp_gke_dataplane_core.py", "dlm_core.py", "ram_core.py", "dax_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "autoscaling_core.py", "gcp_gke_dataplane_core.py", "dlm_core.py", "aws_eks_core.py", "aws_eks_auth.py", "ram_core.py", "dax_core.py",
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it

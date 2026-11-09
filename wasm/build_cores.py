@@ -91,6 +91,7 @@ CORES = [
     "autoscaling_core.py",                          # AWS: Auto Scaling groups (CloudWatch alarm actions)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "ram_core.py",                                  # AWS: Resource Access Manager (subnet/SG resource shares)
+    "aws_eks_core.py", "aws_eks_auth.py",           # AWS: Amazon EKS control plane (degrades to a native ServiceUnavailable without the k3s runtime)
     "dlm_core.py",                                   # AWS: Data Lifecycle Manager (scheduled EBS snapshot policies)
     "ssh_access_core.py",                          # SSH/shell access: EC2 Instance Connect, SSM sessions, GCE ssh-keys, web-shell records
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
