@@ -72,6 +72,28 @@ saturated by parallel sessions and live k3s tests then time out.
 6. Owner go: merge `v4-nano-portal` into portal `main` once (a single paid deploy).
 7. Smoke test; merge `main` back into the trunk.
 
+### 2.4 Which branch is the latest: `v4-on-main` or `v4-nano-portal`? (added 2026-11-10)
+
+They are different repos with different jobs, so "latest" is answered per kind of change:
+
+| Kind of change | Latest lives in | Why |
+|---|---|---|
+| Nano bundle (`wasm/**`: consoles, `clouds.html`, `nano-docs.js`, `vyomi-appbar.js`, relay, cores) | **`v4-on-main`** (appliance) | the single source of truth; the portal only holds a vendored copy |
+| Portal-only code (pages, nav, Mesh, pricing, endpoints, `app/templates/**`) | **`v4-nano-portal`** (portal) | the appliance does not have these files |
+
+- **The flow is one-way: appliance `v4-on-main` --> `vendor_to_portal.py --apply` --> portal `v4-nano-portal`.** The portal copy of
+  the Nano bundle is therefore current only as of its last sync, and it is stale as soon as the trunk moves. Never edit
+  `app/nano/**` in the portal and never back-port by hand: change `wasm/` on a `v4/<topic>` branch, merge it to the trunk, then vendor.
+- **Order of a Nano change:** `v4/<topic>` --> `v4-on-main` --> vendor PR (`portal/nano-sync-*`) --> `v4-nano-portal`. Doing the
+  portal step first creates the "portal edit overwritten by the next `--apply`" failure (2.1, item 3).
+- **A vendor sync carries everything the portal is behind on, not just your change.** On 2026-11-10 syncing the API reference also
+  moved 21 files (v4 console pages, `core/*.py`, `nano-boot.js`, relay scripts). Run the check-only mode first and read the drift
+  list before `--apply`.
+- **Marker gotcha:** `app/nano/APPLIANCE_SYNC.json` is portal-only, so `--apply` leaves it untouched and it shows an old SHA
+  (`6babf6ed`, 2026-11-09, after the 2026-11-10 sync to `a3d4e320`). To know what the portal copy was synced from, trust the vendor
+  commit message (it names the appliance SHA) or `app/nano/.vendored-from` once that file exists (2.1, item 3), not `APPLIANCE_SYNC.json`.
+- **Neither branch is production.** `main` in either repo is go-live (2.3); syncing a trunk is not a deploy.
+
 ## 3. Rules
 
 1. **Step zero: start every topic with `scripts/v4-session-start.sh <topic>`** (portal: `--portal`). It fetches, creates the worktree and
@@ -247,4 +269,4 @@ v1 (trunk + Nano and Headless lines with a long-lived `v4/headless`) → v2 (one
 drift check, run-only worktree, claims file, enforcement layers, no `v4/headless`) → v3 (topic branches pushed at once and archived
 by tag, `headless-smoke` as a gate instead of an empty branch, a named integrator, one document) → this version, which adds:
 the fast preflight versus full `headless-smoke` split, `archive/*` tags exempt from the tag rule, the portal drift item (P1),
-and removes the status SHAs and the resolved gap list.
+and removes the status SHAs and the resolved gap list. 2026-11-10 adds section 2.4 (which trunk is the latest, and the vendor marker gotcha).
