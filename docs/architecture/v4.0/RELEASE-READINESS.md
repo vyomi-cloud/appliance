@@ -66,3 +66,26 @@ python3 tests/release/cli_crosscheck.py; node tests/release/nano_cli_check.mjs
 # vyomi.cloud/nano: three consoles load, badges, Pro pills, boot screen once, booster connect/AI call/stop
 ```
 Announce nothing until all smoke checks pass and you say so.
+
+## Update 2026-11-09: Mesh work that must ship with v4.0.0 (nothing below is in prod; prod is v3.0.45)
+
+### Done locally, NOT yet committed or pushed (push set, portal worktree portal-v4nano, branch v4-nano-portal)
+- Portal: `app/booster_keepalive.py` + `tests/test_booster_keepalive.py` (DO-side `gh codespace ssh` probe every 240 s so Pro/Max sessions beat GitHub's 240 min idle timeout; hooked into the existing worker in `booster_session.py`; status exposes `keepalive`).
+- Portal: GitHub App connect flow renamed to `/api/mesh/github/{connect,callback}` (old `/api/booster/github/*` routes removed, v4 is the first release); redirect URI, links, tests updated.
+- Portal: Mesh naming in the user-visible places: Codespace display name `vyomi-mesh`, per-user repo copy `vyomi-mesh`, error text; env `GITHUB_APP_SLUG=vyomi-mesh`.
+- Portal: console sign-out + user avatar in the AWS/GCP/Azure headers (`app/nano/vyomi-appbar.js`), Mesh Join/Leave in the avatar menu, JS terms modal, dismiss (x) on the session notice (`app/nano/booster-link.js`), landing architecture groups in equal boxes (`home.html`), redesigned OAuth-setup page with admin-only setup steps (`oauth_setup_needed.html`).
+- Appliance (worktree appliance-v4headless, uncommitted): booster devcontainer gets the `sshd` feature and the "Vyomi Mesh" display name. It only takes effect once synced to `vyomi-cloud/sandbox` (new Codespaces only).
+- Files in the portal worktree edited by OTHER sessions (access_routes, admin_console, checkout, enterprise_sandbox, oauth, booster-widget, clouds.html, v4 index pages, main.py) must be reviewed before they are committed together with the above.
+
+### External config (owner)
+- GitHub App renamed "Vyomi Mesh" (slug `vyomi-mesh`); callbacks set: `http://localhost:8099/api/mesh/github/callback` and `https://vyomi.cloud/api/mesh/github/callback`. Remove any ngrok/`/api/booster/...` entries. Regenerate the client secret (the old one was shared in chat) and delete `~/vyomi-booster-secret.txt`.
+- GitHub OAuth app (sign-in): callback `https://vyomi.cloud/api/auth/oauth/github/callback` (+ localhost for local tests); remove the ngrok entry.
+- DigitalOcean app `vyomi-portal` (18ad3cfa-ce3a-4c42-98b0-abb0cb1a6bfc): the booster env vars already exist. Only `GITHUB_APP_SLUG` must change to `vyomi-mesh`; prepared spec `do-spec-v4-ready.yaml` (scratchpad), applied ONLY at deploy time (an env change redeploys). `BOOSTER_RELAY_URL` still missing. Do not set `BOOSTER_REPO_REF`.
+
+### New or changed blockers
+1. Hosted Booster relay does not exist. `relay.vyomi.cloud` (Cloudflare Worker, `wasm/relay/worker.js`) is the Nano cloud tunnel and has no Booster routes; the Booster relay is the Node `local-relay.mjs` only. Decision needed: host the Node relay (small DO droplet, about $12-24/month) or port the Booster hub to a Durable Object.
+2. SSH access decision: phase 1 = `gh codespace ports forward` (boot runs the per-instance forwarder; Connect tab shows exact commands); phase 2 = hosted TCP SSH gateway (port per instance, sharding-ready, control plane in the portal). Both need: honour the key pair at launch (Docker VM backend ignores user keys today).
+3. 5-minute heartbeat rule ends the whole Mesh session when the Vyomi tab is closed; decide: keep, or replace by idle destroy/pause (+ `tmux`-backed shells).
+4. Keep-alive is unit-tested only. Live check needs a Codespace with sshd (devcontainer change synced to `vyomi-cloud/sandbox`) and proof that `gh` accepts a GitHub App user token (GitHub-login users hold an OAuth token with the `codespace` scope, which should work).
+5. Rerun the full Mesh E2E (GitHub login as admin@vyomi.cloud with EC2 + AI on all three clouds; Google/LinkedIn login + GitHub App connect) once a public tunnel/relay exists; local ngrok is gone.
+6. Cleanup: about 10 old `vyomi-booster-*` Codespaces on vyomi-admin (storage quota).
