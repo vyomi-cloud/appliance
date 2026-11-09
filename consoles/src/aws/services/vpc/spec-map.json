@@ -62,7 +62,7 @@
   "tls-inspection-configurations": { "route": "#/vpc/tls-inspection-configurations" },
   "network-firewall-resource-groups": { "route": "#/vpc/network-firewall-resource-groups" },
   "vpc-endpoint-associations": { "route": "#/vpc/vpc-endpoint-associations" },
-  "container-associations": { "route": "#/vpc/container-associations", "honest_page": true },
+  "container-associations": { "route": "#/vpc/container-associations" },
 
   "customer-gateways": { "route": "#/vpc/customer-gateways" },
   "virtual-private-gateways": { "route": "#/vpc/virtual-private-gateways" },

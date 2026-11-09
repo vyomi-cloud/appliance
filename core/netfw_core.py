@@ -46,7 +46,7 @@ def _V():
 def _st(store) -> dict:
     m = _V()._model(store)
     n = m.setdefault("netfw", {})
-    for k in ("firewalls", "policies", "rule_groups", "tls", "resource_policies", "logging", "assocs", "tags"):
+    for k in ("firewalls", "policies", "rule_groups", "tls", "resource_policies", "logging", "assocs", "tags", "container_assocs"):
         n.setdefault(k, {})
     return n
 
@@ -689,6 +689,83 @@ def _simulate_traffic(store, p):
     return {"FirewallName": f["name"], "Action": out["action"].upper(), "Stage": out["stage"], "Rule": out["rule"]}
 
 
+# ── container associations (Vyomi-simulated control plane) ───────────────
+# The console's "Container associations" page ties a firewall to a container platform's node networking. AWS has no public
+# API for it, so these are simulator verbs. An association binds a firewall to an EKS cluster living in the firewall's VPC (or
+# in a VPC with an endpoint association for it); the cluster's subnets become the protected node networks, and
+# SimulateContainerTraffic runs a node/pod packet through the firewall policy. ECS has no compute in Vyomi, so only EKS.
+def _casc_resp(m, a):
+    cidrs = [m["subnets"][s]["cidr"] for s in a["subnet_ids"] if s in m["subnets"] and m["subnets"][s].get("cidr")]
+    return {"ContainerAssociationId": a["id"], "ContainerAssociationArn": a["arn"], "FirewallArn": a["firewall_arn"], "FirewallName": a["firewall_name"],
+            "ClusterType": "EKS", "ClusterName": a["cluster"], "VpcId": a["vpc_id"], "SubnetIds": a["subnet_ids"], "ProtectedCidrs": cidrs,
+            "EndpointIds": a["endpoints"], "Description": a["description"], "Status": "READY", "CreatedAt": a["created"], "Tags": _tags_out(a["tags"])}
+
+
+def _create_casc(store, p, clusters=None):
+    n = _st(store); m = _vpc_model(store)
+    fw = _lookup(n["firewalls"], arn=_need(p, "FirewallArn"), what="Firewall")
+    if p.get("ClusterType", "EKS") != "EKS":
+        raise NfwError("InvalidRequestException", "Only EKS clusters can be associated; Vyomi has no ECS compute")
+    cname = _need(p, "ClusterName")
+    info = clusters(cname) if clusters else None
+    if not info:
+        raise NfwError("ResourceNotFoundException", f"EKS cluster {cname} not found")
+    if any(a["cluster"] == cname and a["firewall_arn"] == fw["arn"] for a in n["container_assocs"].values()):
+        raise NfwError("InvalidRequestException", f"Cluster {cname} is already associated with firewall {fw['name']}")
+    vpc = info["vpc_id"]
+    if vpc == fw["vpc_id"]:
+        eps = [x["endpoint"] for x in fw["subnets"]]
+    else:
+        eps = [a["endpoint"] for a in n["assocs"].values() if a["firewall_arn"] == fw["arn"] and a["vpc_id"] == vpc]
+    if not eps:
+        raise NfwError("InvalidRequestException", f"Cluster {cname} runs in VPC {vpc}, which has no endpoint of firewall {fw['name']}: use the firewall's own VPC or create a VPC endpoint association first")
+    aid = "casc-" + uuid.uuid4().hex[:12]
+    a = {"id": aid, "arn": f"arn:aws:network-firewall:{REGION}:{ACCOUNT}:container-association/{aid}", "firewall_arn": fw["arn"], "firewall_name": fw["name"],
+         "cluster": cname, "vpc_id": vpc, "subnet_ids": list(info.get("subnet_ids") or []), "endpoints": eps, "description": p.get("Description", ""), "tags": _tags_in(p), "created": _now()}
+    n["container_assocs"][aid] = a
+    return {"ContainerAssociation": _casc_resp(m, a)}
+
+
+def _casc_find(n, p):
+    key = p.get("ContainerAssociationId") or p.get("ContainerAssociationArn")
+    for a in n["container_assocs"].values():
+        if key in (a["id"], a["arn"]):
+            return a
+    raise NfwError("ResourceNotFoundException", f"Container association {key} not found")
+
+
+def _describe_casc(store, p, clusters=None):
+    return {"ContainerAssociation": _casc_resp(_vpc_model(store), _casc_find(_st(store), p))}
+
+
+def _list_casc(store, p, clusters=None):
+    n = _st(store); m = _vpc_model(store)
+    rows = [a for a in n["container_assocs"].values() if (not p.get("FirewallArn") or a["firewall_arn"] == p["FirewallArn"]) and (not p.get("ClusterName") or a["cluster"] == p["ClusterName"])]
+    return {"ContainerAssociations": [_casc_resp(m, a) for a in rows]}
+
+
+def _delete_casc(store, p, clusters=None):
+    n = _st(store); a = _casc_find(n, p); n["container_assocs"].pop(a["id"])
+    return {"ContainerAssociation": dict(_casc_resp(_vpc_model(store), a), Status="DELETING")}
+
+
+def _simulate_container_traffic(store, p, clusters=None):
+    """Simulator verb: a packet from a protected cluster's node/pod network, through the associated firewall's policy."""
+    n = _st(store); a = _casc_find(n, p)
+    pk = p.get("Packet") or {}
+    cidrs = _casc_resp(_vpc_model(store), a)["ProtectedCidrs"]
+    src = pk.get("SourceIp")
+    if not src or not cidrs or not any(_ip_in(src, c) for c in cidrs):
+        raise NfwError("InvalidRequestException", f"Packet.SourceIp must be inside the protected node networks {cidrs}")
+    out = _simulate_traffic(store, {"Packet": pk, "FirewallArn": a["firewall_arn"]})
+    out.update(ContainerAssociationId=a["id"], ClusterName=a["cluster"])
+    return out
+
+
+CLUSTER_OPS = {"CreateContainerAssociation": _create_casc, "DescribeContainerAssociation": _describe_casc, "ListContainerAssociations": _list_casc,
+               "DeleteContainerAssociation": _delete_casc, "SimulateContainerTraffic": _simulate_container_traffic}
+
+
 OPS: dict = {
     "SimulateTraffic": _simulate_traffic,
     "CreateFirewallPolicy": _create_policy, "DescribeFirewallPolicy": _describe_policy, "ListFirewallPolicies": _list_policies,
@@ -708,10 +785,13 @@ OPS: dict = {
 }
 
 
-def dispatch(store, target: str, payload: dict | None = None) -> NfwResponse:
+def dispatch(store, target: str, payload: dict | None = None, clusters=None) -> NfwResponse:
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
     op = OPS.get(action)
+    if op is None and action in CLUSTER_OPS:
+        _f = CLUSTER_OPS[action]
+        op = lambda st, b: _f(st, b, clusters)
     hdr = {"x-amzn-requestid": str(uuid.uuid4())}
     if op is None:
         return NfwResponse(400, {"__type": "UnknownOperationException", "message": f"The action {action} is not implemented."}, hdr)

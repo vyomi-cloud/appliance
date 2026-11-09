@@ -8,7 +8,8 @@ import Button from "@cloudscape-design/components/button";
 import Link from "@cloudscape-design/components/link";
 import { useAsync } from "../../../common/useAsync.js";
 import { href, follow } from "../../../common/router.js";
-import GapButton from "./GapButton.jsx";
+import { HealthSummary, runProbes } from "../../kit/ServiceHealth.jsx";
+import { probes } from "./ServiceHealth.jsx";
 import * as api from "./api.js";
 
 const counter = (label, n, reload) => (
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const pcxs = useAsync(() => api.describeVpcPeeringConnections(), []);
   const nacls = useAsync(() => api.describeNetworkAcls(), []);
   const sgs = useAsync(() => api.describeSecurityGroups(), []);
+  const health = useAsync(() => runProbes(probes), []);
   const reloadAll = () => { vpcs.reload(); subnets.reload(); rts.reload(); igws.reload(); eigws.reload(); dopts.reload(); eips.reload(); nats.reload(); pcxs.reload(); nacls.reload(); sgs.reload(); };
 
   const rows = [
@@ -56,7 +58,10 @@ export default function Dashboard() {
           <ColumnLayout columns={4} variant="text-grid">{rows.map(([label, n]) => counter(label, n, reloadAll))}</ColumnLayout>
         </Container>
         <Container header={<Header variant="h2">Service Health</Header>}>
-          <GapButton text="View complete service health details" feature="Service health dashboard" />
+          <SpaceBetween size="s">
+            <HealthSummary results={health.data} />
+            <Button href={href("vpc", "service-health")} onFollow={follow}>View complete service health details</Button>
+          </SpaceBetween>
         </Container>
         <Container header={<Header variant="h2">Settings</Header>}>
           <SpaceBetween direction="horizontal" size="l">
@@ -68,10 +73,10 @@ export default function Dashboard() {
         </Container>
         <Container header={<Header variant="h2">Additional Information</Header>}>
           <SpaceBetween direction="horizontal" size="l">
-            <GapButton text="VPC Documentation" feature="Linked AWS documentation" />
+            <Button href="https://docs.aws.amazon.com/vpc/" target="_blank" iconAlign="right" iconName="external">VPC Documentation</Button>
             <Button href={href("vpc", "all-resources")} onFollow={follow}>All VPC Resources</Button>
-            <GapButton text="Forums" feature="Linked AWS forums" />
-            <GapButton text="Report an Issue" feature="Linked issue reporting" />
+            <Button href="https://repost.aws/tags/TA4IvCeWI1TE66q4jEj4Z9zg/amazon-virtual-private-cloud" target="_blank" iconAlign="right" iconName="external">Forums</Button>
+            <Button href="https://github.com/vyomi-cloud/appliance/issues/new" target="_blank" iconAlign="right" iconName="external">Report an Issue</Button>
           </SpaceBetween>
         </Container>
         <Container header={<Header variant="h2">AWS Network Manager</Header>}>

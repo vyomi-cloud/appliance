@@ -9,6 +9,8 @@ import Link from "@cloudscape-design/components/link";
 import Table from "@cloudscape-design/components/table";
 import { useAsync } from "../../../common/useAsync.js";
 import { follow, href } from "../../../common/router.js";
+import { runProbes } from "../../kit/ServiceHealth.jsx";
+import { probes } from "./ServiceHealth.jsx";
 import * as api from "./api.js";
 
 export default function Dashboard() {
@@ -18,6 +20,8 @@ export default function Dashboard() {
     ]);
     return { instances, snapshots, events };
   });
+  const health = useAsync(() => runProbes(probes), []);
+  const bad = (health.data || []).filter((r) => !r.ok);
   const n = (xs) => (xs ? xs.length : 0);
 
   return (
@@ -47,7 +51,7 @@ export default function Dashboard() {
           </ColumnLayout>
         </Container>
 
-        <Table variant="container" items={[{ status: "Operating normally", details: "All RDS systems are operating normally." }]}
+        <Table variant="container" loading={health.loading} items={health.data ? [bad.length ? { status: "Needs attention", details: bad.map((r) => r.detail).join("; ") } : { status: "Operating normally", details: "All RDS health checks passed in this environment." }] : []}
           header={<Header variant="h2" actions={<Button href="#/rds/service-health">View service health dashboard</Button>}>Service health</Header>}
           columnDefinitions={[{ id: "s", header: "Current status", cell: (r) => r.status }, { id: "d", header: "Details", cell: (r) => r.details }]} />
 

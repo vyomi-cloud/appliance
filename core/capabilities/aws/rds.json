@@ -408,5 +408,21 @@
    "tests/conformance/test_dms_core.py"
   ]
  },
- "rds.database_insights": {"title": "Database Insights (DB load, cache hit ratio, commits/rollbacks, deadlocks)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["DBLoad (average active sessions from pg_stat_activity), BufferCacheHitRatio, TransactionCommits/Rollbacks and Deadlocks are read from pg_stat_database / pg_stat_activity by the collector (offline Postgres every 30 s, or pushed to /_obs/rds-stats) and published to CloudWatch AWS/RDS. pg_stat_database is database-wide, so instances sharing one Postgres (schema-per-instance) share these counters. Engines that cannot answer pg_stat (in-memory sqlite) publish nothing. No Top SQL / wait events. Nano PGlite uses the async collector (acollect_rds_stats) but no timer drives it yet."], "tests": ["tests/conformance/test_obs_collectors.py"]}
+ "rds.database_insights": {"title": "Database Insights (DB load, cache hit ratio, commits/rollbacks, deadlocks)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["DBLoad (average active sessions from pg_stat_activity), BufferCacheHitRatio, TransactionCommits/Rollbacks and Deadlocks are read from pg_stat_database / pg_stat_activity by the collector (offline Postgres every 30 s, or pushed to /_obs/rds-stats) and published to CloudWatch AWS/RDS. pg_stat_database is database-wide, so instances sharing one Postgres (schema-per-instance) share these counters. Engines that cannot answer pg_stat (in-memory sqlite) publish nothing. No Top SQL / wait events. Nano PGlite uses the async collector (acollect_rds_stats) but no timer drives it yet."], "tests": ["tests/conformance/test_obs_collectors.py"]},
+ "rds.service-health": {
+  "title": "Service health dashboard (live probes of DescribeDBInstances, DescribeDBSnapshots, DescribeEvents)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "DescribeDBInstances",
+   "DescribeDBSnapshots",
+   "DescribeEvents"
+  ],
+  "tests": [
+   "tests/conformance/test_rds_sweep_core.py"
+  ]
+ }
 }

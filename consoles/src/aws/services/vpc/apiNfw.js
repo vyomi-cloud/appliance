@@ -92,3 +92,11 @@ export const deleteEndpointAssociation = (a) => call("DeleteVpcEndpointAssociati
 
 /* Simulator verb (not a real Network Firewall API): run one packet through the firewall policy. */
 export const simulateTraffic = (firewallArn, Packet) => call("SimulateTraffic", { FirewallArn: firewallArn, Packet });
+
+/* Container associations (Vyomi-simulated verbs; AWS has no public API for them): a firewall <-> an EKS cluster's node networks. */
+export const listContainerAssociations = async () => ((await call("ListContainerAssociations", {})).ContainerAssociations || []).map((a) => ({
+  Id: a.ContainerAssociationId, Arn: a.ContainerAssociationArn, Firewall: a.FirewallName, FirewallArn: a.FirewallArn, Cluster: a.ClusterName, ClusterType: a.ClusterType, Vpc: a.VpcId,
+  Subnets: a.SubnetIds, Cidrs: a.ProtectedCidrs, Endpoints: a.EndpointIds, Status: a.Status, Description: a.Description || "", CreatedAt: a.CreatedAt }));
+export const createContainerAssociation = (v) => call("CreateContainerAssociation", { FirewallArn: v.firewall, ClusterName: v.cluster, ClusterType: "EKS", Description: v.description || undefined });
+export const deleteContainerAssociation = (a) => call("DeleteContainerAssociation", { ContainerAssociationId: a.Id });
+export const simulateContainerTraffic = (id, Packet) => call("SimulateContainerTraffic", { ContainerAssociationId: id, Packet });
