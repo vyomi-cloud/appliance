@@ -11957,6 +11957,40 @@ def _flush_state_at_shutdown():
 
 
 @app.on_event("startup")
+def _install_k3s_backend():
+    """VYOMI_K8S_BACKEND=k3s -> real Kubernetes (k3s containers) behind AKS/GKE/EKS clusters: wires core/k3s_runtime into the cores and starts the
+    LoadBalancer controller. Never fatal: without Docker the clusters keep the simulated control plane."""
+    import logging
+    try:
+        from core import k3s_runtime as _k3s
+        rt = _k3s.install_if_enabled()
+        if rt is not None and not rt.available():
+            logging.getLogger("vyomi.k3s").warning("VYOMI_K8S_BACKEND=k3s but the docker daemon is not reachable; clusters will fail to provision")
+    except Exception:
+        logging.getLogger("vyomi.k3s").exception("k3s backend install failed")
+
+
+# Cluster workload-identity issuer (core/k3s_identity.py): each k3s API server signs service-account tokens with
+# iss=<base>/oidc/<cloud>/<cluster hash>; discovery + JWKS (the cluster's real public keys) are served here, cloud-neutral.
+@app.get("/oidc/{cloud}/{chash}/.well-known/openid-configuration")
+def _oidc_discovery(cloud: str, chash: str):
+    from core import k3s_runtime as _k3s
+    try:
+        return JSONResponse(_k3s.runtime().oidc_discovery(cloud, chash))
+    except Exception as e:
+        return JSONResponse({"error": "unknown_cluster", "message": str(e)[:200]}, status_code=404)
+
+
+@app.get("/oidc/{cloud}/{chash}/keys")
+def _oidc_keys(cloud: str, chash: str):
+    from core import k3s_runtime as _k3s
+    try:
+        return JSONResponse(_k3s.runtime().oidc_jwks(cloud, chash))
+    except Exception as e:
+        return JSONResponse({"error": "unknown_cluster", "message": str(e)[:200]}, status_code=404)
+
+
+@app.on_event("startup")
 def _schedule_seam_loop():
     """Shared schedule runner (core/schedule_core): AWS Backup plans, Azure Backup policies, DLM, Cloud SQL backup windows and
     ECR lifecycle run on their schedules in a daemon thread. Opt out with VYOMI_NO_SCHEDULER=1."""

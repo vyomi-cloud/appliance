@@ -27,6 +27,7 @@ import datetime
 import hashlib
 import json
 import re
+import threading
 import uuid
 from urllib.parse import unquote, urlsplit
 
@@ -3229,17 +3230,38 @@ class AzureArm:
             # namespaces above (properties.namespaces, via the catalog defaults).
             k8s_engine.seed_storage_classes(rec)
             self._aks_real_create(rec)
+        elif full_type.lower() == "microsoft.containerservice/managedclusters" and existed:
+            self._aks_real_update(rec)
+        elif full_type.lower() == "microsoft.containerservice/managedclusters/agentpools":
+            self.state[key] = rec                      # visible to the pool reconcile below
+            self._aks_real_pool_changed(rec)
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 
     # ── REAL Kubernetes (k3s) behind an AKS cluster: only when the offline appliance installed kube_state.CLUSTER_RUNTIME
     # (VYOMI_K8S_BACKEND=k3s). The substrate-free core never imports Docker; it only calls the hook. ──
+    @staticmethod
+    def _aks_pool(p):
+        return {"name": p.get("name"), "count": int(p.get("count") if p.get("count") is not None else 1), "vmSize": p.get("vmSize"),
+                "labels": p.get("nodeLabels") or {}, "taints": p.get("nodeTaints") or []}
+
+    def _aks_desired_pools(self, cluster_rec):
+        """agentPoolProfiles plus agentPools child resources (children win) -> runtime pool dicts."""
+        props = cluster_rec.get("properties") or {}
+        pools = {p.get("name"): self._aks_pool(p) for p in props.get("agentPoolProfiles") or []}
+        prefix = (cluster_rec.get("id") or "").lower() + "/agentpools/"
+        for k, child in self.state.items():
+            if k.startswith(prefix) and "/__event__/" not in k:
+                cp = child.get("properties") or {}
+                pools[child.get("name")] = self._aks_pool(dict(cp, name=child.get("name")))
+        return list(pools.values())
+
     def _aks_real_create(self, rec):
         rt = kube_state.CLUSTER_RUNTIME
         if rt is None:
             return
         props = rec.setdefault("properties", {})
-        nodes = sum(int(p.get("count") or 1) for p in props.get("agentPoolProfiles") or []) or 1
+        pools = self._aks_desired_pools(rec) or None
         props["provisioningState"] = "Creating"
 
         def ready(ok, info, _props=props):
@@ -3247,18 +3269,56 @@ class AzureArm:
             if ok:
                 _props["currentKubernetesVersion"] = info.get("actualVersion")
         try:
-            rt.create_cluster("azure", rec["id"], props.get("kubernetesVersion"), nodes, [props.get("fqdn") or ""], on_ready=ready)
+            rt.create_cluster("azure", rec["id"], props.get("kubernetesVersion"), 1, [props.get("fqdn") or ""], on_ready=ready, pools=pools)
         except Exception as e:
             props["provisioningState"] = "Failed"
             props["provisioningError"] = str(e)[:300]
 
+    def _aks_real_update(self, rec):
+        """PUT on an existing cluster: upgrade when kubernetesVersion moved forward, then reconcile node pools (background)."""
+        rt = self._aks_real(rec)
+        if rt is None:
+            return
+        props = rec.setdefault("properties", {})
+        want = props.get("kubernetesVersion")
+
+        def _run():
+            try:
+                props["provisioningState"] = "Upgrading" if want else "Updating"
+                cur = rt.cluster_version("azure", rec["id"])
+                if want:
+                    from core import k3s_versions as _kv
+                    tag = _kv.resolve("azure", want)["k3sTag"]
+                    if _kv.tag_to_version(tag) != cur and _kv.parse_minor(tag) >= (_kv.parse_minor(cur) or "0.0"):
+                        info = rt.upgrade_cluster("azure", rec["id"], want)
+                        props["currentKubernetesVersion"] = info["actualVersion"]
+                rt.sync_pools("azure", rec["id"], self._aks_desired_pools(rec))
+                props["provisioningState"] = "Succeeded"
+            except Exception as e:
+                props["provisioningState"] = "Failed"
+                props["provisioningError"] = str(e)[:300]
+        threading.Thread(target=_run, daemon=True, name="aks-real-update").start()
+
+    def _aks_real_pool_changed(self, rec):
+        """agentPools child created/updated/deleted: reconcile the owning cluster's real node pools in the background."""
+        rid = (rec.get("id") or "")
+        i = rid.lower().rfind("/agentpools/")
+        cluster = self.state.get(rid[:i].lower()) if i > 0 else None
+        if cluster is None or self._aks_real(cluster) is None:
+            return
+        rt = self._aks_real(cluster)
+        threading.Thread(target=lambda: rt.sync_pools("azure", cluster["id"], self._aks_desired_pools(cluster)), daemon=True, name="aks-real-pool").start()
+
     def _aks_real_delete(self, rec):
         rt = kube_state.CLUSTER_RUNTIME
-        if rt is not None and (rec.get("_type") or "").lower() == "microsoft.containerservice/managedclusters":
+        t = (rec.get("_type") or "").lower()
+        if rt is not None and t == "microsoft.containerservice/managedclusters":
             try:
                 rt.delete_cluster("azure", rec["id"])
             except Exception:
                 pass
+        elif rt is not None and t == "microsoft.containerservice/managedclusters/agentpools":
+            self._aks_real_pool_changed(rec)
 
     def _aks_real(self, rec):
         rt = kube_state.CLUSTER_RUNTIME
@@ -4069,6 +4129,19 @@ class AzureArm:
             return _err(404, "ResourceNotFound", f"Managed cluster '{cluster_name}' not found.")
         props = rec.setdefault("properties", {})
         if action in ("start", "stop"):
+            real = self._aks_real(rec)
+            if real is not None:                                 # a REAL cluster: the k3s containers really stop/start (volumes kept)
+                try:
+                    if action == "stop":
+                        real.stop_cluster("azure", rec["id"])
+                    else:
+                        props["provisioningState"] = "Starting"
+                        real.start_cluster("azure", rec["id"], wait=False,
+                                           on_ready=lambda ok, info, _p=props: _p.__setitem__("provisioningState", "Succeeded" if ok else "Failed"))
+                except Exception as e:
+                    return _err(500, "InternalServerError", "Cluster %s failed: %s" % (action, str(e)[:300]))
+                props["powerState"] = {"code": "Running" if action == "start" else "Stopped"}
+                return _ok({"status": "Succeeded", "action": action, "powerState": props["powerState"]})
             props["powerState"] = {"code": "Running" if action == "start" else "Stopped"}
             return _ok({"status": "Succeeded", "action": action, "powerState": props["powerState"],
                         "note": "metadata-only (no node VMs backing this cluster in-browser); logical state updated"})
@@ -4103,11 +4176,14 @@ class AzureArm:
         if action in ("listclusterusercredential", "listclusteradmincredential"):
             user = "clusterUser" if action == "listclusterusercredential" else "clusterAdmin"
             real = self._aks_real(rec)
-            if real is not None:                                 # the real k3s kubeconfig (client-certificate auth; admin == user: no AAD/RBAC mapping)
+            if real is not None:                                 # the real k3s kubeconfig: admin = cluster-admin client cert, user = restricted ServiceAccount token
                 if not real.is_ready("azure", rec["id"]):
                     return _err(409, "ClusterNotReady", "The cluster is still provisioning; credentials are not available yet.")
                 import base64
-                kc = real.kubeconfig("azure", rec["id"])
+                try:
+                    kc = real.kubeconfig("azure", rec["id"], role="admin" if action == "listclusteradmincredential" else "user")
+                except Exception as e:
+                    return _err(409, "ClusterNotReady", "Credentials are not available yet: %s" % str(e)[:200])
                 return _ok({"kubeconfigs": [{"name": user, "value": base64.b64encode(kc.encode()).decode()}]})
             fqdn = props.get("fqdn") or f"{cluster_name}.hcp.azmk8s.io"
             kubeconfig = (
