@@ -15,6 +15,7 @@ import crypto from "node:crypto";
 import readline from "node:readline";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { keep } from "./keeper.mjs";
 
 const HOME = process.env.VYOMI_HOME || path.join(os.homedir(), ".vyomi");
 const SESSION = path.join(HOME, "session.json");
@@ -142,5 +143,15 @@ export async function main(argv) {
     console.log(token ? `signed in; relay ${relay}; session ${Number.isFinite(end) ? (Date.now() < end * 1000 ? "ends " + new Date(end * 1000).toISOString() : "ENDED") : "unknown"}` : "not signed in");
     return 0;
   }
-  console.error("usage: vyomi-tunnel login | config [--yes|--remove] | connect <vm>[.vyomi] | status"); return 2;
+  if (cmd === "keep") {                       // hold an ssh session to the Codespace host and write to it, to renew GitHub's idle timer
+    const opt = (n, d) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : d; };
+    const { token } = load(); if (!token) { console.error("vyomi-tunnel: not signed in. Run `vyomi-tunnel login`."); return 2; }
+    const end = tokenEnd(token);
+    const k = keep({ user: opt("--user", "vscode"), key: opt("--key"), proxy: opt("--proxy", "vyomi-tunnel connect codespace"),
+                     intervalMs: Number(opt("--interval", 240)) * 1000, sessionEndMs: Number.isFinite(end) ? end * 1000 : Infinity,
+                     onStatus: (s) => { if (s.state === "stopped") console.log(`keeper stopped: ${s.reason}`); }, log: (m) => console.error(m) });
+    for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => k.stop());
+    const s = await k.done; return s.reason === "too many failed connects" ? 1 : 0;
+  }
+  console.error("usage: vyomi-tunnel login | config [--yes|--remove] | connect <vm>[.vyomi] | keep [--user u] [--key f] [--interval s] | status"); return 2;
 }
