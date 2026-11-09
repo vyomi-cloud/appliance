@@ -1155,6 +1155,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .rd-r .nd-tab { color: #a1a1aa; border-color: rgba(255,255,255,.18); } #view-api .rd-r .nd-tab.on { background: #fff !important; color: #000 !important; border-color: #fff !important; } #view-api .rd-r .nd-cp { color: #a1a1aa; border-color: rgba(255,255,255,.18); }
     #view-api .rd .nd-unw { margin: 10px 28px; font-size: 12.5px; color: #475467; }
     #view-api .rd-more { padding: 12px 28px; margin: 0; font-size: 12.5px; color: #667085; }
+
+    /* API reference: cloud tabs live in a header bar; the doc fills the full height, no search box */
+    #view-api > .container { max-width: none; padding: 0; }
+    #view-api .tabs-wrap { display: flex; align-items: center; justify-content: flex-start; margin: 0; padding: 10px 20px; border-bottom: 1px solid #e4e7ec; background: #fff; }
+    #view-api .tabs-wrap .usage-tabs { margin: 0; }
+    #view-api .rd { border: 0; border-radius: 0; }
+    #view-api .rd-nav, #view-api .rd-main { max-height: none; height: calc(100vh - 118px); }
+    html.vy-embed #view-api .rd-nav, html.vy-embed #view-api .rd-main { height: calc(100vh - 61px); }
     @media (max-width: 1100px) { #view-api .rd-op { grid-template-columns: 1fr; } }
     @media (max-width: 760px) { #view-api .rd { grid-template-columns: 1fr; } #view-api .rd-nav { position: static; max-height: 220px; border-right: 0; border-bottom: 1px solid #e4e7ec; } #view-api .rd-main { max-height: none; } }
     /* generated API reference + per-service SDK/CLI cards (nano-docs.js) */
@@ -1543,7 +1551,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     svg[aria-label="AWS"] path[fill="#fff"] { fill: #232f3e !important; }
 
     /* API view: the AWS / Google Cloud / Azure switch as a segmented pill */
-    #view-api .tabs-wrap { text-align: center; margin-bottom: 18px; }
+    #view-api .tabs-wrap { text-align: left; }
     #view-api .usage-tabs { display: inline-flex; gap: 4px; border: 1px solid #d0d5dd !important; border-radius: 999px; padding: 4px; background: #fff !important; }
     #view-api .usage-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; padding: 7px 15px;
       border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; color: #475467; cursor: pointer; }
@@ -2440,7 +2448,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <button class="usage-tab" type="button" data-c="azure"><span class="material-icons">cloud_circle</span>Azure</button>
       </div>
     </div>
-    <input id="api-search" class="api-search" type="text" placeholder="Filter endpoints — path, method or summary…" autocomplete="off">
     <div id="api-body"></div>
     </div>
   </div>
