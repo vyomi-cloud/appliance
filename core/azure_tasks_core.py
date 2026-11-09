@@ -42,6 +42,24 @@ VM, STORAGE, COSMOS, KV, SB, SQL, SQLDB, CAPP = (
     "microsoft.keyvault/vaults", "microsoft.servicebus/namespaces", "microsoft.sql/servers", "microsoft.sql/servers/databases",
     "microsoft.app/containerapps")
 EG, RGT = "microsoft.eventgrid/topics", "microsoft.resources/resourcegroups"
+RUNNER = None   # set_runner(fn): fn(image, command, env, timeout) -> {"exitCode","logs",...} | {"error","message"}; default = core/container_runner.py
+
+
+def set_runner(fn):
+    global RUNNER
+    RUNNER = fn
+
+
+def _runner():
+    if RUNNER is not None:
+        return RUNNER
+    try:
+        from core import container_runner as cr          # offline appliance only (subprocess + Docker)
+    except Exception:  # noqa: BLE001 - Pyodide / no docker module
+        return None
+    return cr.run if cr.available() else None
+
+
 _FREQ = {"minute": "minutes", "hour": "hours", "day": "days", "week": "days"}
 
 _REC = {"frequency": "Day", "interval": 1}
@@ -133,6 +151,12 @@ TEMPLATES = [
     {"id": "rg-set-tag", "title": "Stamp a tag on the resource group on a schedule", "resourceTypes": [RGT], "recurrence": {"frequency": "Week", "interval": 1},
      "description": "Merges one tag into the group (for example a review date).", "params": [{"name": "tagName", "label": "Tag name", "required": True}, {"name": "tagValue", "label": "Tag value", "required": True}],
      "actions": lambda rid, p: [("Set_tag", "PATCH", rid, "2021-04-01", {"tags": {p["tagName"]: p["tagValue"]}})]},
+    {"id": "run-container-script", "title": "Run a script in a container", "resourceTypes": [EG, RGT], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "REAL execution: runs the script in a throw-away Docker container (no network, 256 MB, read-only filesystem, image must exist locally); the run keeps the real exit code and logs. VYOMI_TARGET_ID and VYOMI_TARGET_NAME are set. Offline appliance only.",
+     "params": [{"name": "image", "label": "Image (must exist locally)", "default": "alpine:latest"}, {"name": "command", "label": "Shell script", "required": True},
+                {"name": "timeoutSeconds", "label": "Timeout in seconds", "default": "60"}],
+     "actions": lambda rid, p: [("Run_container", "POST", f"/subscriptions/{rid.split('/')[2]}/providers/Microsoft.Logic/vyomiRunContainer", "2019-05-01",
+                                 {"image": p.get("image") or "alpine:latest", "command": p["command"], "timeoutSeconds": int(p.get("timeoutSeconds") or 60), "targetId": rid})]},
 ]
 
 
@@ -308,6 +332,23 @@ def route(arm, method, sub, rg, after, payload=None, query=None):
     payload = payload or {}
     if low[1] == "vyomitasktemplates" and len(low) == 2:
         return _ok({"value": list_templates((query or {}).get("resourceType"))}) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+    if low[1] == "vyomiruncontainer" and len(low) == 2:
+        if method != "POST":
+            return _err(405, "MethodNotAllowed", "POST only.")
+        run = _runner()
+        if run is None:
+            return _err(501, "NotImplemented", "Running a script needs Docker on the offline appliance; this context has no container engine.")
+        b = payload or {}
+        if not b.get("command"):
+            return _err(400, "InvalidParameter", "command is required.")
+        tid = str(b.get("targetId") or "")
+        res = run(str(b.get("image") or "alpine:latest"), str(b["command"]), {"VYOMI_TARGET_ID": tid, "VYOMI_TARGET_NAME": tid.rsplit("/", 1)[-1]}, b.get("timeoutSeconds") or 60)
+        if res.get("error"):
+            return _err(400, res["error"], res["message"])
+        if res["exitCode"] != 0:
+            return {"status": 422, "headers": {}, "body": {"error": {"code": "ContainerExitedNonZero", "message": f"The script exited with code {res['exitCode']}."}, **res},
+                    "scope": "", "type": "", "name": ""}
+        return _ok(res)
     if low[1] == "vyomicreatetask" and len(low) == 2:
         return _create(arm, method, sub, rg, payload)
     if low[1] != "workflows":

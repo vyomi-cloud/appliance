@@ -194,15 +194,16 @@
     ]
   },
   "azure.sql.integrations": {
-    "title": "Integrations (Fabric mirroring, Power BI; Stream Analytics, Power Apps, Power Automate)",
+    "title": "Integrations (Mirror database in Fabric, Power BI; Stream Analytics, Power Apps, Power Automate)",
     "level": {
       "nano": "limited",
       "offline": "limited"
     },
     "limitations": [
-      "Mirror database in Fabric is Dev Simplified: the mirroring settings and run state are stored as a Microsoft.Vyomi/fabricMirrors record (the SQL server and database must exist) with a simulated sync status; no Fabric workspace is contacted and no data is replicated. Power BI shows the connection details to paste into Power BI Desktop; there is no Power BI service. Power Apps and Power Automate stay not simulated. Data Sync is real (azure.sql.data_sync)."
+      "Mirror database is REAL replication into a Parquet landing zone: a worker (core/azure_sql_mirror_core.py) reads the tables from the SQL engine and writes Parquet files into the simulator's Blob store, incrementally (unchanged tables skipped, changed tables rewritten with row insert/remove counts, dropped tables removed) and keeps the sync status beside the files. It needs a synchronous Parquet engine, so it runs on the offline appliance (pyarrow); on Nano it answers 501. Syncs run on request, not on a change feed. Not in scope: Microsoft Fabric itself (workspaces, OneLake, Delta logs, SQL analytics endpoint) and the Power BI service; the Power BI blade only shows the connection details for Power BI Desktop. Power Apps and Power Automate stay not simulated. Data Sync is real (azure.sql.data_sync)."
     ],
     "tests": [
+      "tests/conformance/test_azure_sql_mirror.py",
       "tests/conformance/test_azure_devsimplified.py"
     ]
   },
@@ -269,7 +270,7 @@
       "offline": "limited"
     },
     "limitations": [
-      "Tasks are Dev Simplified Logic App workflows (core/azure_tasks_core.py) run against the group: a Recurrence trigger plus Http-to-ARM actions that really run on the simulator's ARM (list resources or locks into the run output, stamp a tag). Azure Automation runbooks and Logic Apps connectors are not simulated, expressions are not evaluated, and Nano only fires schedules while the tab is open. Force delete and Resource group insights are real (azure.resourcegroups.tools)."
+      "Tasks are real: Logic App style workflows (core/azure_tasks_core.py) on a Recurrence trigger whose Http-to-ARM actions really run on the simulator's ARM (list resources or locks into the run output, stamp a tag), plus the 'Run a script in a container' template that executes your shell script in a throw-away Docker container (no network, 256 MB, read-only filesystem, image must already exist locally) and keeps the real exit code and logs (offline appliance only; Nano answers 501 for that template). Not in scope: Azure Automation runbooks and the Logic Apps connector catalogue (e-mail, Teams); expressions are not evaluated; Nano fires schedules only while the tab is open. Force delete and Resource group insights are real (azure.resourcegroups.tools)."
     ],
     "tests": [
       "tests/conformance/test_azure_tasks_core.py",
@@ -318,13 +319,16 @@
     ]
   },
   "azure.cosmos.powerbi": {
-    "title": "Power BI integration",
+    "title": "Power BI integration (export endpoints)",
     "level": {
       "nano": "limited",
       "offline": "limited"
     },
     "limitations": [
-      "Dev Simplified: Vyomi does not run Power BI and offers no connector. The blade shows the account endpoint and read-only connection string and generates CSV / JSON exports of the account's real databases and containers for loading into Power BI Desktop."
+      "REAL export endpoints over the account's container data: an OData v4 feed (service document, $metadata, entity sets with $top/$skip) that Power BI Desktop's OData feed source can read, plus CSV, JSON and Parquet downloads per container (core/azure_cosmos_core.py). Parquet needs the offline appliance (pyarrow); Nano offers OData, CSV and JSON. Not in scope: the Power BI service itself, so there is no connector, publish or workspace."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_export.py"
     ]
   },
   "azure.sql.data_sync": {

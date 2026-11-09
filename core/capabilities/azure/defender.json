@@ -124,13 +124,13 @@
  },
  "azure.defender.other": {
   "tier": "pro",
-  "title": "Workload protections, Data security, Firewall Manager (Dev Simplified); Getting started, Workbooks, Community, Diagnose and solve problems, DevOps security, Security solutions",
+  "title": "DevOps security (real Trivy IaC scan), Workload protections, Data security, Firewall Manager; Getting started, Workbooks, Community, Diagnose and solve problems, Security solutions",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Workload protections, Data security and Firewall Manager are Dev Simplified: configuration checks (public blob access, HTTPS-only, SQL/Cosmos public network access, Key Vault purge protection, open inbound NSG rules, per-plan resource counts) computed on every load from the simulated resources (core/azure_devsimplified_core.py). There is no sensitive-data scanning, traffic analysis or Microsoft threat intelligence. Getting started, Workbooks, Community, Diagnose and solve problems, DevOps security (no connected repositories) and Security solutions (Marketplace) stay not simulated. Attack path analysis, Cloud Security Explorer and Workflow automation are real; see azure.defender.attack_paths and azure.defender.automation."
+   "DevOps security is a REAL scan: every resource group is exported as an ARM template and checked by the Trivy misconfiguration engine (aquasec/trivy) in an offline Docker container; findings are Trivy's own output and change when the resources change (offline appliance with Docker and the image only; Nano has no container engine and answers 501). Workload protections, Data security and Firewall Manager are Dev Simplified: a rule engine over the live ARM state (public blob access, HTTPS-only, SQL/Cosmos public network access, Key Vault purge protection, open inbound NSG rules, per-plan resource counts), not a scanner. Not in scope: Defender's cloud threat intelligence and detection feeds, sensitive-data classification, and source-repository connectors (GitHub, Azure DevOps). Getting started, Workbooks, Community, Diagnose and solve problems and Security solutions (Marketplace) stay not simulated. Attack path analysis, Cloud Security Explorer and Workflow automation are real; see azure.defender.attack_paths and azure.defender.automation."
   ],
   "tests": [
    "tests/conformance/test_azure_devsimplified.py"

@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 
 from core import azure_keyvault_keys_core as kv_keys
 from core import azure_sql_ext_core as _ext
+from core import azure_sql_mirror_core as _mirror
 from core import azure_netaccess as _netaccess
 from core import azure_sql_security_core as _sec
 from core.sql_store import SqlStore
@@ -514,7 +515,7 @@ def _auto_tune(store: SqlStore, arm_state: dict | None, server: str, database: s
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None, blob_store=None) -> AzureSqlResponse:
     """Native-ish Azure SQL REST wire:
         PUT    /servers/{server}                                   create server
         PUT    /servers/{server}/databases/{db}                     create database
@@ -568,6 +569,19 @@ def dispatch(store: SqlStore, method: str, path: str,
         db_id0 = _db_id(server, database)
         if len(segs) >= 6 and segs[4] == "security":
             return _security_routes(store, method, segs, query or {}, body, arm_state, kv_store, server, database, db_id0)
+        if len(segs) == 6 and segs[4] == "mirror" and segs[5] in ("sync", "status"):
+            if not store.instance_exists(db_id0):
+                return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
+            try:
+                if segs[5] == "sync" and method == "POST":
+                    b = json.loads(body.decode("utf-8")) if body else {}
+                    return _json(200, _mirror.sync(store, db_id0, blob_store, b.get("container"), b.get("prefix"), b.get("tables"), server, database))
+                if segs[5] == "status" and method == "GET":
+                    st = _mirror.read_status(blob_store, (query or {}).get("container", ""), ((query or {}).get("prefix") or "mirror").strip("/")) if blob_store else None
+                    return _json(200, st or {"syncCount": 0, "tables": {}})
+            except _mirror.MirrorError as e:
+                return _err(e.status, e.code, e.message)
+            return _err(405, "MethodNotAllowed", f"Unsupported {method} on mirror/{segs[5]}")
         if len(segs) >= 5 and segs[4] in ("watcher", "sync"):
             if not store.instance_exists(db_id0):
                 return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")

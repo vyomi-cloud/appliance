@@ -157,7 +157,7 @@
    "title": "Tasks",
    "level": { "nano": "limited", "offline": "limited" },
    "limitations": [
-    "Tasks are Dev Simplified Logic App workflows (core/azure_tasks_core.py): a Recurrence trigger plus Http-to-ARM actions that really run against the simulator's ARM (disable/enable public network access, list event subscriptions into the run output). There is no Azure DevOps/Boards work-item integration, no e-mail or Teams connector, expressions are not evaluated, and Nano only fires schedules while the tab is open. Diagnose and solve problems is real (azure.eventgrid.topic.diagnose)."
+    "Tasks are real: Logic App style workflows (core/azure_tasks_core.py) on a Recurrence trigger whose Http-to-ARM actions really run on the simulator's ARM (disable/enable the topic's public network access, list its event subscriptions into the run output), plus the 'Run a script in a container' template that executes your shell script in a throw-away Docker container (no network, 256 MB, read-only filesystem, image must already exist locally) and keeps the real exit code and logs (offline appliance only; Nano answers 501 for that template). Not in scope: Azure DevOps/Boards work items (no Gitea-backed board is built yet) and the Logic Apps connector catalogue (e-mail, Teams); expressions are not evaluated; Nano fires schedules only while the tab is open. Diagnose and solve problems is real (azure.eventgrid.topic.diagnose)."
    ],
    "tests": ["tests/conformance/test_azure_tasks_core.py", "tests/conformance/test_azure_devsimplified.py"]
   },

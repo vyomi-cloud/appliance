@@ -401,7 +401,7 @@ def _azure_service(path, lheaders, query):
     # Front Door / CDN edge (core/azure_cdn_edge_core via the blob core) and the Cosmos Data Migration extension.
     if p.startswith("/_edge/"):
         return "az-blob"
-    if p.startswith("/vyomi/migrations") or p.startswith("/vyomi/dedicatedgateway"):
+    if p.startswith("/vyomi/migrations") or p.startswith("/vyomi/export/") or p.startswith("/vyomi/odata/") or p.startswith("/vyomi/dedicatedgateway"):
         return "az-cosmos"
     # Cosmos DB: /dbs path or the documentdb headers.
     if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
@@ -2088,7 +2088,7 @@ class AwsWireRouter:
         if svc == "azure-sql":   # Azure SQL data plane (shares the SqlStore, `/azure-sql` prefix)
             sql_path = path[len("/azure-sql"):] or "/"
             r = az_sql.dispatch(self.rds, method, sql_path, query or {}, headers or {}, bytes(body),
-                                arm_state=self.az_arm.state, kv_store=self.az_kvkeys)
+                                arm_state=self.az_arm.state, kv_store=self.az_kvkeys, blob_store=self.az_blob)
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

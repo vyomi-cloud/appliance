@@ -115,3 +115,7 @@ export const exploreGraph = (body) => restJson("POST", `${SEC()}/cloudSecurityEx
 // Dev Simplified insights: computed server-side from the live ARM state (core/azure_devsimplified_core.py)
 export const getInsight = (kind) =>
   restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Vyomi/defenderInsights/${kind}`, { query: { "api-version": "2024-01-01" } });
+export const getIacScan = () =>
+  restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Vyomi/defenderInsights/iacScan`, { query: { "api-version": "2024-01-01" } });
+export const runIacScan = () =>
+  restJson("POST", `/subscriptions/${getSubscription()}/providers/Microsoft.Vyomi/defenderInsights/iacScan`, { query: { "api-version": "2024-01-01" } });

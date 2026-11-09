@@ -2019,7 +2019,13 @@ class AzureArm:
         if alerts_engine.handles(namespace, chain):
             return self._alerts(method, sub, rg, chain, payload, query)
         if devsimp_engine.handles(namespace, chain):
-            r = devsimp_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)
+            try:
+                from core import azure_tasks_core as _tk
+                _runner = _tk._runner()
+            except Exception:  # noqa: BLE001
+                _runner = None
+            r = devsimp_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query, runner=_runner,
+                                        exporter=lambda g: (self.handle("POST", f"/subscriptions/{sub}/resourceGroups/{g}/exportTemplate", {"api-version": "2021-04-01"}, {"resources": ["*"]}).get("body") or {}).get("template"))
             if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE") and rg and len(chain) == 2:
                 self._record_activity(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Vyomi/fabricMirrors/{chain[1]}",
                                       f"Microsoft.Vyomi/fabricMirrors/{'delete' if method == 'DELETE' else 'write'}", sub)

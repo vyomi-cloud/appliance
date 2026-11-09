@@ -3,25 +3,27 @@ subprocess), so the same file runs offline and in Nano.
 
     GET  /subscriptions/{sub}/providers/Microsoft.Vyomi/defenderInsights[/{kind}]   Dev Simplified Defender for Cloud pages
     *    /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Vyomi/fabricMirrors[/{name}[/start|stop|sync]]
-                                                                                    Dev Simplified Fabric mirroring configuration
+                                                                                    Fabric mirroring configuration (the worker is azure_sql_mirror_core)
 
 Defender insights (``dataSecurity``, ``workloadProtections``, ``firewallManager``) are COMPUTED on every request from the live
 ARM state (storage / SQL / Cosmos / Key Vault / NSG / firewall / VM / AKS / web app records): change a resource and the findings
 change. They are configuration checks, not Defender's detection pipeline: no data classification, no sensitive-data scanning,
 no traffic analysis.
 
-Fabric mirroring is a configuration record (Dev Simplified). It validates that the SQL server and database exist and keeps the
-mirroring settings, the run state and a *simulated* sync status (last sync time and counter); NO Microsoft Fabric workspace is
-contacted and NO data is replicated or readable anywhere.
+A Fabric mirror is the configuration record of a REAL replication: it validates that the SQL server and database exist and keeps
+the settings (tables, destination container). The sync itself is the data-plane worker core/azure_sql_mirror_core.py, which
+copies the tables into Parquet files in the simulator's blob store. Microsoft Fabric itself is not in scope.
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 
 LABEL = "Dev Simplified"
 API_VERSION = "2024-01-01"
 _KINDS = ("dataSecurity", "workloadProtections", "firewallManager")
+TRIVY_IMAGE = "aquasec/trivy:0.57.1"
 
 
 class _E(Exception):
@@ -124,6 +126,41 @@ def _firewall_manager(state, sub):
 _INSIGHTS = {"datasecurity": _data_security, "workloadprotections": _workload_protections, "firewallmanager": _firewall_manager}
 
 
+# ═══════════════════════════ DevOps security: REAL Trivy IaC scan ════════════════
+_TPL = ("{{ range . }}{{ range .Misconfigurations }}{{ .ID }}\t{{ .Severity }}\t{{ .Title }}\t{{ .Message }}\t{{ .Resolution }}\t{{ .PrimaryURL }}\n{{ end }}{{ end }}")
+_CMD = ("mkdir -p /tmp/s && cat > /tmp/s/main.json && HOME=/tmp trivy config --cache-dir /tmp/c --skip-check-update --quiet "
+        "--format template --template '" + _TPL + "' /tmp/s")
+_SKIP_TYPES = ("microsoft.resources/resourcegroups", "microsoft.logic/workflows", "microsoft.logic/workflows/runs", "microsoft.vyomi/fabricmirrors", "microsoft.vyomi/iacscanresults")
+
+
+def iac_scan(state, sub, exporter, runner):
+    """Export each resource group as an ARM template and run the REAL Trivy misconfiguration engine on it (offline container, no network)."""
+    if runner is None or exporter is None:
+        raise _E(501, "NotImplemented", "IaC scanning runs Trivy in a container and needs Docker on the offline appliance; this context has no container engine.")
+    rgs = sorted({r["_rg"] for r in state.values() if isinstance(r, dict) and r.get("_sub") == sub and r.get("_rg")
+                  and str(r.get("_type", "")).lower() not in _SKIP_TYPES and "/" in str(r.get("_type", ""))})
+    findings, scanned, started = [], [], _now()
+    for rg in rgs:
+        tpl = exporter(rg)
+        if not tpl or not tpl.get("resources"):
+            continue
+        res = runner(TRIVY_IMAGE, _CMD, {}, 180, stdin=json.dumps(tpl).encode(), tmpfs_mb=256, memory_mb=768)
+        if res.get("error"):
+            raise _E(400 if res["error"] == "ImageNotFound" else 500, res["error"], res["message"])
+        if res["exitCode"] != 0:
+            raise _E(500, "ScannerFailed", f"Trivy exited with code {res['exitCode']}: {res['logs'][-300:]}")
+        for line in res["logs"].splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 6:
+                findings.append({"resourceGroup": rg, "ruleId": parts[0], "severity": parts[1].title(), "title": parts[2], "message": parts[3],
+                                 "recommendation": parts[4], "reference": parts[5], "scanner": "Trivy " + TRIVY_IMAGE.split(":")[1]})
+        scanned.append({"resourceGroup": rg, "resources": len(tpl["resources"]), "durationMs": res.get("durationMs")})
+    out = {"scanner": TRIVY_IMAGE, "startedAt": started, "completedAt": _now(), "scanned": scanned, "findings": findings,
+           "summary": {sev: sum(1 for f in findings if f["severity"] == sev) for sev in ("Critical", "High", "Medium", "Low")}}
+    state[f"/subscriptions/{sub}/providers/microsoft.vyomi/iacscanresults/latest"] = {"_type": "Microsoft.Vyomi/iacScanResults", "_sub": sub, "result": out}
+    return out
+
+
 # ═══════════════════════════ Fabric mirroring (record) ═══════════════════════════
 def _mirrors(state, sub, rg=None):
     return [r for r in state.values() if isinstance(r, dict) and r.get("_type") == "Microsoft.Vyomi/fabricMirrors" and r.get("_sub") == sub
@@ -150,46 +187,45 @@ def _put_mirror(state, sub, rg, rid, name, payload, method):
         raise _E(400, "InvalidParameter", "properties.tables must be a list of table names (empty = all tables).")
     st = (old or {}).get("properties", {}).get("state", "Running")
     props = {"sqlServerName": server, "databaseName": db, "fabricWorkspace": pay["fabricWorkspace"], "tables": tables,
-             "state": st, "dataSource": LABEL,
-             "simulatedSync": (old or {}).get("properties", {}).get("simulatedSync") or {"syncCount": 0, "lastSyncTime": None,
-                                                                                         "note": "Status is Dev Simplified: nothing is replicated to Fabric."},
-             "provisioningState": "Succeeded"}
+             "state": st, "destinationContainer": pay.get("destinationContainer") or f"fabric-mirror-{name.lower()}"[:63],
+             "destinationPrefix": pay.get("destinationPrefix") or "mirror", "provisioningState": "Succeeded"}
     rec = {"id": rid, "name": name, "type": "Microsoft.Vyomi/fabricMirrors", "location": payload.get("location") or (old or {}).get("location") or "eastus",
            "tags": payload.get("tags", (old or {}).get("tags", {})), "properties": props,
            "_type": "Microsoft.Vyomi/fabricMirrors", "_sub": sub, "_rg": rg}
-    if old is None and props["state"] == "Running":
-        props["simulatedSync"] = {"syncCount": 1, "lastSyncTime": _now(), "note": props["simulatedSync"]["note"]}
     state[rid.lower()] = rec
     return rec, old is None
 
 
 def _mirror_action(rec, action):
-    p = rec["properties"]
+    """start / stop only change whether the console may run syncs; the replication itself is the data-plane worker
+    (core/azure_sql_mirror_core.py, POST /azure-sql/servers/{s}/databases/{db}/mirror/sync)."""
     if action == "stop":
-        p["state"] = "Stopped"
+        rec["properties"]["state"] = "Stopped"
     elif action == "start":
-        p["state"] = "Running"
-    elif action == "sync":
-        if p["state"] != "Running":
-            raise _E(409, "Conflict", "The mirror is stopped; start it before requesting a sync.")
-        s = p["simulatedSync"]
-        p["simulatedSync"] = {"syncCount": s["syncCount"] + 1, "lastSyncTime": _now(), "note": s["note"]}
+        rec["properties"]["state"] = "Running"
     else:
         raise _E(404, "ActionNotSupported", f"Action '{action}' is not supported.")
     return rec
 
 
-def dispatch(state, method, sub, rg, namespace, chain, payload=None, query=None):
+def dispatch(state, method, sub, rg, namespace, chain, payload=None, query=None, exporter=None, runner=None):
     method = (method or "GET").upper()
     payload = payload if isinstance(payload, dict) else {}
     try:
-        return _dispatch(state, method, sub, rg, chain, payload)
+        return _dispatch(state, method, sub, rg, chain, payload, exporter, runner)
     except _E as e:
         return _err(e.status, e.code, e.message)
 
 
-def _dispatch(state, method, sub, rg, chain, payload):
+def _dispatch(state, method, sub, rg, chain, payload, exporter=None, runner=None):
     kind = chain[0].lower()
+    if kind == "defenderinsights" and len(chain) == 2 and chain[1].lower() == "iacscan":
+        if method == "POST":
+            return _ok({**iac_scan(state, sub, exporter, runner), "dataSource": "Trivy"})
+        if method == "GET":
+            last = state.get(f"/subscriptions/{sub}/providers/microsoft.vyomi/iacscanresults/latest")
+            return _ok({**(last["result"] if last else {"findings": [], "scanned": [], "summary": {}, "completedAt": None}), "dataSource": "Trivy"})
+        return _err(405, "MethodNotAllowed", "GET the last result or POST to run a scan.")
     if kind == "defenderinsights":
         if method != "GET":
             return _err(405, "MethodNotAllowed", "Defender insights are read-only.")

@@ -999,6 +999,8 @@ def _dispatch_plain(store: CosmosStore, method: str, path: str, query: dict | No
             job = migrate(store, spec, arm_state, acct)
             return _json(400 if job.get("status") == "Failed" and "read" not in job else 200, job)
         return _err(405, "MethodNotAllowed", "GET or POST only.")
+    if segs[:2] in (["vyomi", "export"], ["vyomi", "odata"]):
+        return _export_route(store, method, segs, query or {})
     is_query = str(hdrs.get("x-ms-documentdb-isquery", "")).lower() == "true"
     charge = request_charge(method, len(body or b""), 200, is_query)
     lim = None
@@ -1030,6 +1032,132 @@ def _dispatch_plain(store: CosmosStore, method: str, path: str, query: dict | No
             except Exception:   # a failing trigger never fails the write
                 pass
     return r
+
+
+# ── Export endpoints for BI tools (azure.cosmos.powerbi): REAL data read from the container, served as OData v4 (Power BI
+# Desktop "OData feed"), CSV, JSON and Parquet. This is an export endpoint over the data, NOT a Power BI service connector. ──
+#   GET /vyomi/odata/{db}                      OData service document (one entity set per container)
+#   GET /vyomi/odata/{db}/$metadata            CSDL (entity type inferred from the documents)
+#   GET /vyomi/odata/{db}/{container}          {"@odata.context", "value": [...]}   ($top, $skip honoured)
+#   GET /vyomi/export/{db}/{container}.csv|.json|.parquet
+def _export_docs(store, db, coll):
+    r = _dispatch_inner(store, "GET", f"/dbs/{db}/colls/{coll}/docs")
+    if r.status >= 400:
+        return None, r
+    docs = json.loads(r.body.decode("utf-8")).get("Documents") or []
+    return [{k: v for k, v in d.items() if k not in _SYS_PROPS} for d in docs], None
+
+
+def _flat(doc, prefix=""):
+    out = {}
+    for k, v in doc.items():
+        key = f"{prefix}{k}"
+        if isinstance(v, dict):
+            out.update(_flat(v, key + "."))
+        elif isinstance(v, list):
+            out[key] = json.dumps(v)
+        else:
+            out[key] = v
+    return out
+
+
+def _kind(vals):
+    vs = [v for v in vals if v is not None]
+    if vs and all(isinstance(v, bool) for v in vs):
+        return "bool"
+    if vs and all(isinstance(v, int) and not isinstance(v, bool) for v in vs):
+        return "int64"
+    if vs and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vs):
+        return "float64"
+    return "string"
+
+
+def _table(docs):
+    rows = [_flat(d) for d in docs]
+    cols = []
+    for r in rows:
+        for k in r:
+            if k not in cols:
+                cols.append(k)
+    return cols, rows
+
+
+def _export_route(store, method, segs, query):
+    if method.upper() != "GET":
+        return _err(405, "MethodNotAllowed", "Export endpoints are read-only (GET).")
+    if segs[1] == "odata":
+        if len(segs) < 3:
+            return _err(400, "BadRequest", "Use /vyomi/odata/{database}.")
+        db = segs[2]
+        base = "/vyomi/odata/" + db
+        dbs = json.loads(_dispatch_inner(store, "GET", "/dbs").body.decode("utf-8")).get("Databases") or []
+        if db not in [d.get("id") for d in dbs]:
+            return _err(404, "NotFound", f"Database '{db}' not found.")
+        colls = [c["id"] for c in json.loads(_dispatch_inner(store, "GET", f"/dbs/{db}/colls").body.decode("utf-8")).get("DocumentCollections") or []]
+        if len(segs) == 3:
+            return _json(200, {"@odata.context": base + "/$metadata", "value": [{"name": c, "kind": "EntitySet", "url": c} for c in colls]},
+                         {"OData-Version": "4.0"})
+        if segs[3] == "$metadata":
+            ents, sets = [], []
+            for c in colls:
+                docs, _ = _export_docs(store, db, c)
+                cols, rows = _table(docs or [])
+                edm = {"bool": "Edm.Boolean", "int64": "Edm.Int64", "float64": "Edm.Double", "string": "Edm.String"}
+                props = "".join(f'<Property Name="{k.replace(".", "_")}" Type="{edm[_kind([r.get(k) for r in rows])]}" Nullable="true"/>' for k in cols if k != "id")
+                ents.append(f'<EntityType Name="{c}"><Key><PropertyRef Name="id"/></Key><Property Name="id" Type="Edm.String" Nullable="false"/>{props}</EntityType>')
+                sets.append(f'<EntitySet Name="{c}" EntityType="Vyomi.{c}"/>')
+            xml = ('<?xml version="1.0" encoding="utf-8"?><edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">'
+                   '<edmx:DataServices><Schema Namespace="Vyomi" xmlns="http://docs.oasis-open.org/odata/ns/edm">'
+                   + "".join(ents) + '<EntityContainer Name="Container">' + "".join(sets) + "</EntityContainer></Schema></edmx:DataServices></edmx:Edmx>")
+            return Response(status=200, headers={"OData-Version": "4.0"}, body=xml.encode("utf-8"), media_type="application/xml")
+        if segs[3] not in colls:
+            return _err(404, "NotFound", f"Entity set '{segs[3]}' not found.")
+        docs, bad = _export_docs(store, db, segs[3])
+        _cols, rows = _table(docs)
+        rows = [{k.replace(".", "_"): v for k, v in r.items()} for r in rows]
+        try:
+            skip, top = int(query.get("$skip") or 0), query.get("$top")
+            rows = rows[skip:skip + int(top)] if top is not None else rows[skip:]
+        except ValueError:
+            return _err(400, "BadRequest", "$top and $skip must be integers.")
+        return _json(200, {"@odata.context": f"{base}/$metadata#{segs[3]}", "value": rows}, {"OData-Version": "4.0"})
+    # /vyomi/export/{db}/{container}.{fmt}
+    if len(segs) != 4 or "." not in segs[3]:
+        return _err(400, "BadRequest", "Use /vyomi/export/{database}/{container}.csv|json|parquet.")
+    db, (coll, fmt) = segs[2], segs[3].rsplit(".", 1)
+    docs, bad = _export_docs(store, db, coll)
+    if bad is not None:
+        return bad
+    cols, rows = _table(docs)
+    if fmt == "json":
+        return _json(200, {"value": docs})
+    if fmt == "csv":
+        import csv
+        import io
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(cols)
+        for r in rows:
+            w.writerow(["" if r.get(c) is None else r.get(c) for c in cols])
+        return Response(status=200, headers={"Content-Disposition": f'attachment; filename="{coll}.csv"'}, body=buf.getvalue().encode("utf-8"), media_type="text/csv")
+    if fmt == "parquet":
+        try:
+            from core import rds_core as _r
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            import rds_core as _r  # type: ignore
+        wr = _r._resolve_parquet_writer()
+        if wr is None:
+            return _err(501, "NotImplemented", "Parquet export needs the offline appliance (pyarrow); this context has no Parquet engine. Use .csv or the OData feed.")
+        schema = [{"name": c, "type": _kind([r.get(c) for r in rows])} for c in cols]
+        columns = [[r.get(c) if _kind([x.get(c) for x in rows]) != "string" or r.get(c) is None else str(r.get(c)) for r in rows] for c in cols]
+        try:
+            data = wr(schema, columns)
+        except Exception as e:  # noqa: BLE001
+            return _err(500, "InternalServerError", f"Parquet writer failed: {e}")
+        if not isinstance(data, (bytes, bytearray)):
+            return _err(501, "NotImplemented", "The Parquet engine in this context is asynchronous; use the offline appliance, .csv or the OData feed.")
+        return Response(status=200, headers={"Content-Disposition": f'attachment; filename="{coll}.parquet"'}, body=bytes(data), media_type="application/octet-stream")
+    return _err(400, "BadRequest", f"Unknown format '{fmt}'. Use csv, json or parquet.")
 
 
 # ── Data Migration (the portal's "Data Migration" blade): a REAL container -> container / JSON -> container copy ──────────

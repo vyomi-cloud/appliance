@@ -54,9 +54,10 @@ body = {"location": "eastus", "properties": {"sqlServerName": "dssql", "database
 check("mirror for a missing database -> 404", h("PUT", f"{M}/m0", "2024-01-01", {"properties": {**body["properties"], "databaseName": "nope"}})["status"] == 404)
 check("mirror without workspace -> 400", h("PUT", f"{M}/m0", "2024-01-01", {"properties": {"sqlServerName": "dssql", "databaseName": "appdb"}})["status"] == 400)
 r = h("PUT", f"{M}/m1", "2024-01-01", body)
-check("mirror created Running with simulated sync", r["status"] == 201 and r["body"]["properties"]["state"] == "Running" and r["body"]["properties"]["simulatedSync"]["syncCount"] == 1, r["body"])
-check("sync bumps the counter", h("POST", f"{M}/m1/sync", "2024-01-01")["body"]["properties"]["simulatedSync"]["syncCount"] == 2)
-check("stop then sync -> 409", h("POST", f"{M}/m1/stop", "2024-01-01")["body"]["properties"]["state"] == "Stopped" and h("POST", f"{M}/m1/sync", "2024-01-01")["status"] == 409)
+check("mirror config created Running with a default destination container", r["status"] == 201 and r["body"]["properties"]["state"] == "Running"
+      and r["body"]["properties"]["destinationContainer"] == "fabric-mirror-m1", r["body"])
+check("stop then start", h("POST", f"{M}/m1/stop", "2024-01-01")["body"]["properties"]["state"] == "Stopped" and h("POST", f"{M}/m1/start", "2024-01-01")["body"]["properties"]["state"] == "Running")
+check("unknown action 404", h("POST", f"{M}/m1/sync", "2024-01-01")["status"] == 404)
 check("mirror listed", len(h("GET", M, "2024-01-01")["body"]["value"]) == 1)
 check("mirror deleted", h("DELETE", f"{M}/m1", "2024-01-01")["status"] == 200 and h("GET", f"{M}/m1", "2024-01-01")["status"] == 404)
 
@@ -80,6 +81,51 @@ c = h("POST", f"{P}/Microsoft.Logic/vyomiCreateTask", "2019-05-01", {"templateId
 rr = h("POST", f"{P}/Microsoft.Logic/workflows/rg-rep/triggers/Recurrence/run", "2019-05-01")
 check("resource group report run succeeds", rr["body"]["status"] == "Succeeded", rr)
 check("template/type mismatch rejected", h("POST", f"{P}/Microsoft.Logic/vyomiCreateTask", "2019-05-01", {"templateId": "rg-resources-report", "resourceId": tid, "name": "x"})["status"] == 400)
+
+# Real container task execution (needs Docker + a local alpine image; skipped otherwise)
+from core import container_runner  # noqa: E402
+if container_runner.available() and container_runner.image_present("alpine:latest"):
+    mk = lambda name, cmd: h("POST", f"{P}/Microsoft.Logic/vyomiCreateTask", "2019-05-01", {"templateId": "run-container-script", "resourceId": rgid, "name": name, "parameters": {"command": cmd}})
+    run_t = lambda name: h("POST", f"{P}/Microsoft.Logic/workflows/{name}/triggers/Recurrence/run", "2019-05-01")
+    lastrun = lambda name: h("GET", f"{P}/Microsoft.Logic/workflows/{name}/runs", "2019-05-01")["body"]["value"][0]["properties"]
+    check("script task created", mk("sh-ok", 'echo hello-from-$VYOMI_TARGET_NAME; uname -s')["status"] == 201)
+    rr = run_t("sh-ok")
+    resp = lastrun("sh-ok")["vyomiActions"]["Run_container"]["response"]
+    check("real container ran: exit 0 and real logs", rr["body"]["status"] == "Succeeded" and resp["body"]["exitCode"] == 0
+          and f"hello-from-{RG}" in resp["body"]["logs"] and "Linux" in resp["body"]["logs"], resp)
+    mk("sh-bad", "echo boom; exit 7")
+    rr = run_t("sh-bad")
+    resp = lastrun("sh-bad")["vyomiActions"]["Run_container"]["response"]
+    check("non-zero exit fails the run with the real exit code and logs", rr["body"]["status"] == "Failed" and resp["body"]["exitCode"] == 7 and "boom" in resp["body"]["logs"], resp)
+    mk("sh-net", "wget -q -T 3 -O- http://example.com >/dev/null 2>&1; echo net=$?")
+    run_t("sh-net")
+    check("the container has no network", "net=0" not in lastrun("sh-net")["vyomiActions"]["Run_container"]["response"]["body"]["logs"])
+    mk("sh-slow", "sleep 30")
+    h("POST", f"{P}/Microsoft.Logic/vyomiCreateTask", "2019-05-01", {"templateId": "run-container-script", "resourceId": rgid, "name": "sh-t", "parameters": {"command": "sleep 30", "timeoutSeconds": "2"}})
+    run_t("sh-t")
+    check("timeout kills the container", lastrun("sh-t")["vyomiActions"]["Run_container"]["response"]["body"].get("timedOut") is True)
+    mk("sh-img", "true")
+    h("POST", f"{P}/Microsoft.Logic/vyomiCreateTask", "2019-05-01", {"templateId": "run-container-script", "resourceId": rgid, "name": "sh-i", "parameters": {"command": "true", "image": "no-such/image:1"}})
+    run_t("sh-i")
+    check("a missing image is refused (no pulls)", lastrun("sh-i")["vyomiActions"]["Run_container"].get("code") == "ImageNotFound", lastrun("sh-i"))
+else:
+    print("[SKIP] Docker / alpine:latest not available: real container task checks skipped")
+
+# REAL Trivy IaC scan of the exported ARM templates (needs Docker + aquasec/trivy locally; skipped otherwise)
+if container_runner.available() and container_runner.image_present("aquasec/trivy:0.57.1"):
+    h("PUT", f"{P}/Microsoft.Storage/storageAccounts/dssa1", "2023-01-01", {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"},
+                                                                             "properties": {"supportsHttpsTrafficOnly": False, "minimumTlsVersion": "TLS1_0"}})
+    r = h("POST", "/providers/Microsoft.Vyomi/defenderInsights/iacScan", "2024-01-01")
+    fs = r["body"].get("findings", [])
+    check("Trivy ran on the exported templates and found real misconfigurations", r["status"] == 200 and any(f["ruleId"] == "AVD-AZU-0008" for f in fs)
+          and any(f["ruleId"] == "AVD-AZU-0011" for f in fs) and any(f["ruleId"] == "AVD-AZU-0016" for f in fs) and r["body"]["scanned"][0]["resourceGroup"] == RG, r["body"])
+    h("PUT", f"{P}/Microsoft.Storage/storageAccounts/dssa1", "2023-01-01", {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"},
+                                                                             "properties": {"supportsHttpsTrafficOnly": True, "minimumTlsVersion": "TLS1_2"}})
+    fs2 = h("POST", "/providers/Microsoft.Vyomi/defenderInsights/iacScan", "2024-01-01")["body"]["findings"]
+    check("fixing the resource removes its findings on the next scan", not any(f["ruleId"] in ("AVD-AZU-0008", "AVD-AZU-0011") for f in fs2), fs2)
+    check("last result is retrievable", len(h("GET", "/providers/Microsoft.Vyomi/defenderInsights/iacScan", "2024-01-01")["body"]["findings"]) == len(fs2))
+else:
+    print("[SKIP] Docker / aquasec/trivy not available: IaC scan checks skipped")
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
