@@ -993,6 +993,18 @@ async function reqLogLoad() {
   if (_reqLoaded) return; _reqLoaded = true;
   try { const old = await metaGet("reqlog"); if (Array.isArray(old)) REQLOG.unshift(...old.slice(-REQLOG_MAX)); } catch (_) {}
 }
+// Automatic issue reporting (scrub + send only; the consent dialog lives on the page).
+try { importScripts("./issue-reporter.js"); } catch (_) {}
+function reportFailure(kind, path, method, status, message, code) {
+  try {
+    const parts = path.split("/").filter(Boolean);              // /api/<cloud>/<service>/...
+    const cloud = /^(aws|gcp|azure)$/.test(parts[1] || "") ? parts[1] : "unknown";
+    const service = cloud === "unknown" ? (parts[1] || "platform") : (parts[2] || "platform");
+    self.VyomiIssueReporter && self.VyomiIssueReporter.send({
+      kind, cloud, service, action: method + " " + service, status, code, message });
+  } catch (_) {}
+}
+
 function recordReq(method, path, query, status, ms) {
   if (path.startsWith("/api/metrics")) return;
   const c = classifyReq(path); if (!c) return;
@@ -1095,6 +1107,13 @@ self.addEventListener("fetch", (event) => {
     const _res = await (async () => {
     try {
       const method = event.request.method;
+      // Issue reporting talks to the PORTAL (session cookie), not the in-browser backend.
+      if (apiPath.startsWith("/api/issues/")) {
+        const init = { method, credentials: "include", headers: { "Content-Type": "application/json" } };
+        if (method !== "GET" && method !== "HEAD") init.body = await event.request.text();
+        try { return await fetch(url.origin + apiPath, init); }
+        catch (_) { return json({ ok: false, detail: "portal unreachable" }, 502); }
+      }
       if (apiPath === "/api/metrics/series" && method === "GET") return json(await metricsSeries(url.searchParams));
       // ── console-next SPA (slice 1) ──────────────────────────────────
       // The new SPA (served at BASE/console-next/) talks ONLY to /api/console/*.
@@ -1493,8 +1512,13 @@ self.addEventListener("fetch", (event) => {
       }
       // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
       // so the adapter result is the response body verbatim.
+      if (res && res.__http && res.__http.status >= 500) {
+        const hb = res.__http.body || {};
+        reportFailure("http", apiPath, method, res.__http.status, hb.message || hb.detail || "", hb.code);
+      }
       return json(res, res && res.ok === false ? (res.http_status || 404) : 200);
     } catch (e) {
+      reportFailure("exception", apiPath, event.request.method, 500, String(e), "");
       return json({ ok: false, error: String(e) }, 500);
     }
     })();

@@ -268,12 +268,13 @@ from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runt
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability
 from routes import gcp_resourcemanager
+from routes import issue_reporting
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability,
-            gcp_resourcemanager]:
+            gcp_resourcemanager, issue_reporting]:
     mod.register(app)
 
 # Booster pack (headless Pro/Max appliance): /booster/* status + pairing routes.
@@ -288,6 +289,12 @@ _feedback.register(app)
 # ── Middleware registration ──────────────────────────────────────────
 from core.middleware import register_middleware
 register_middleware(app)
+
+# ── Automatic issue reporting (platform feature) ──────────────────────
+# Observe-only: a 5xx / unhandled exception is scrubbed and reported to the portal
+# (user's GitHub account if they consented, Vyomi bot otherwise). Headless: Pro/Max/Enterprise only.
+from core.issue_report_runtime import IssueReportMiddleware
+app.add_middleware(IssueReportMiddleware)
 
 # ── Header alias middleware (Phase 7 — vyomi rebrand) ─────────────────
 # Bridges X-CloudLearn-* ↔ X-Vyomi-* on both request and response so the

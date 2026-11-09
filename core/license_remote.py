@@ -364,6 +364,12 @@ def refresh_token(state: dict, *, backend_url: Optional[str] = None,
     state["license_last_refresh_attempted_at"] = state["license_last_refresh_at"]
     state["license_last_refresh_status"] = "ok"
     state["license_refresh_source"] = data.get("source")
+    # The portal account owns the issue-reporting choice; mirror it to the appliance.
+    try:
+        from . import issue_report_runtime as _irr
+        _irr.apply_account_mode(state, data.get("issue_reporting_mode"))
+    except Exception:
+        pass
     return claims
 
 

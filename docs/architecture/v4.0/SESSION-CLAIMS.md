@@ -10,3 +10,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | builder (EKS) | v4/eks | appliance | core/aws_eks_*.py, consoles/src/aws/services/eks/**, core/capabilities/aws/eks.json | 2026-11-09 |
 | builder (k8s platform) | v4/k8s-platform | appliance | core/k3s_versions.py, core/k3s_identity.py, core/k3s_runtime.py | 2026-11-09 |
 | tunnel redesign | (the tunnel session) | appliance | packaging/tunnel/**, wasm/relay/** | 2026-11-09 |
+| issue reporting | v4/issue-reporting | appliance | core/issue_report*.py, routes/issue_reporting.py, wasm/issue-reporter.js, wasm/sw.js, consoles/build.mjs, server.py (3 lines) | 2026-11-09 |

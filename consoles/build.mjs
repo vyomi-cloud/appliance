@@ -52,6 +52,8 @@ function nanoFoot() {
 }
 const NANO_FOOT = nanoFoot();
 const _fbHash = createHash("sha256").update(readFileSync(new URL("./feedback-widget.js", import.meta.url))).digest("hex").slice(0, 12);
+// Automatic issue reporting (consent dialog + error capture). Single source: wasm/issue-reporter.js (also imported by the Nano service worker).
+const _irHash = createHash("sha256").update(readFileSync(new URL("../wasm/issue-reporter.js", import.meta.url))).digest("hex").slice(0, 12);
 
 const html = (cloud, title, nano = false) => `<!doctype html>
 <html lang="en">
@@ -65,6 +67,7 @@ ${existsSync(join(HERE, "..", "wasm", "v4", cloud, "main.css")) ? `<link rel="st
 ${nano ? NANO_BODY : ""}<div id="root"></div>
 ${nano ? nanoChrome(cloud) : ""}<script type="module" src="./main.js?v=${assetVersion}"></script>
 ${nano ? NANO_FOOT : ""}<script src="./feedback.js?v=${_fbHash}" defer></script>
+<script src="./issue-reporter.js?v=${_irHash}" defer></script>
 </body>
 </html>
 `;
@@ -90,6 +93,7 @@ async function buildCloud(cloud, watch) {
     logLevel: "info",
   };
   await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
+  await cp(join(HERE, "..", "wasm", "issue-reporter.js"), join(out, "issue-reporter.js"));   // automatic issue reporting (both substrates)
   await cp(join(HERE, "feedback-widget.js"), join(out, "feedback.js"));   // "Share feedback" floating button (both substrates)
   if (watch) {
     const ctx = await esbuild.context({ ...opts, plugins: [emit(cloud, out)] });

@@ -563,6 +563,14 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
       if (isWrite(ev.data.tuple)) await writeStores(true); else scheduleStoresSave(false);
       port.postMessage(out);
     } catch (e) {
+      // Unhandled engine exception in the in-browser backend: report it (scrubbed) —
+      // the same failure class the appliance middleware reports as a 5xx.
+      try {
+        const t = (ev.data.tuple || []);
+        window.VyomiIssueReporter && window.VyomiIssueReporter.send({
+          kind: "exception", cloud: t[0], service: t[1], action: String(t[2] || "dispatch"),
+          status: 500, message: String(e && e.message || e), stack: String(e && e.stack || e) });
+      } catch (_) {}
       port.postMessage({ ok: false, error: String(e) });
     }
   });

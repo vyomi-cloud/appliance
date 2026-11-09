@@ -2144,6 +2144,10 @@
       "kind": "api",
       "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_maintenance_routes_api.py",
       "timeout": 120
-    }
+    },
+    {"id": "offline-api-issue-report-core", "target": "offline", "cloud": "all", "kind": "core", "cmd": "python3 tests/conformance/test_issue_report_core.py", "timeout": 120},
+    {"id": "offline-api-issue-report-middleware", "target": "offline", "cloud": "all", "kind": "api", "cmd": "python3 tests/conformance/test_issue_report_middleware.py", "timeout": 180},
+    {"id": "nano-issue-reporter-js", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_issue_reporter_js.mjs", "timeout": 120},
+    {"id": "nano-sw-issue-reporting", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_nano_sw_issue_reporting.mjs", "timeout": 120}
   ]
 }
