@@ -12,6 +12,8 @@
 
   function B() { return window.VyomiBooster; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  // Errors are shown as a 5-second toast (shared implementation in booster-link.js), never inside the Mesh card.
+  function toast(text) { var b = B(); if (b && b.toast) b.toast(text); }
   function css() {
     var st = document.createElement("style");
     st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}"
@@ -57,7 +59,7 @@
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
   }
   function refresh() { var b = B(); return b ? Promise.all([b.loadAccount(), b.loadSession()]).then(paint, paint) : Promise.resolve(); }
-  function run(fn) { if (busy) return; busy = true; msg = ""; paint(); Promise.resolve().then(fn).catch(function () { msg = "Something went wrong. Try again."; }).then(function () { busy = false; return refresh(); }); }
+  function run(fn) { if (busy) return; busy = true; msg = ""; paint(); Promise.resolve().then(fn).catch(function () { toast("Something went wrong. Try again."); }).then(function () { busy = false; return refresh(); }); }
 
   // Agreement is stored per GitHub account and per terms version (bump TERMS_V when the wording changes: everyone sees it again).
   var TERMS_V = "v2";
@@ -70,7 +72,7 @@
       return b.sessionStart().then(function (r) {
         if (!r || r.cancelled) return;
         var er = !r.ok && r.j; if (!er) return;
-        if (er.action === "reconnect") view = "connect"; else msg = er.message || er.error || "Could not start the mesh.";
+        if (er.action === "reconnect") view = "connect"; else toast(er.message || er.error || "Could not start the mesh.");
       });
     });
   }
@@ -83,7 +85,7 @@
   function enable(trial) {
     run(function () {
       return api("/enable").then(function (r) {
-        if (!r.ok) { msg = r.j.message || "Could not turn on the mesh."; return; }
+        if (!r.ok) { toast(r.j.message || "Could not turn on the mesh."); return; }
         // Pro = ONE cloud: a fresh trial pins the cloud of the console it was started from
         if (trial && r.j.clouds === "one" && !r.j.primary_cloud && CLOUD) return api("/primary-cloud", { cloud: CLOUD });
       });
@@ -115,8 +117,7 @@
           + '<div class="cd" aria-live="off" title="Time left in this session">' + p2(Math.floor(sec / 3600)) + ':' + p2(Math.floor(sec % 3600 / 60)) + ':' + p2(sec % 60) + '</div><div class="cdl">session time left</div>';
       }
       else {
-        var er = (ss && stt === "failed" && ss.error) || (x && x.error);
-        line = er ? er.message : (x && x.ended_note) || (conn ? "Runs on the free quota of your own GitHub account." : "Connect your GitHub account to start.");
+        line = (x && x.ended_note) || (conn ? "Runs on the free quota of your own GitHub account." : "Connect your GitHub account to start.");
         btn = '<button class="go" data-ss ' + (busy ? "disabled" : "") + '>' + (conn ? "Join the Mesh" : "Connect GitHub & join") + '</button>';
       }
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? "Trial" : (a.tier || "pro")) + '</span></h4><p>' + esc(line) + '</p>';
