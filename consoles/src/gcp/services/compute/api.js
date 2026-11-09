@@ -328,3 +328,15 @@ export const serviceHealthStatus = () => restJson("GET", `${shBase()}/vyomiServi
 export const createServiceHealthEvent = (body) => restJson("POST", `${shBase()}/events`, { body });
 export const resolveServiceHealthEvent = (id) => restJson("POST", `${shBase()}/events/${e(id)}:resolve`, { body: {} });
 export const deleteServiceHealthEvent = (id) => restJson("DELETE", `${shBase()}/events/${e(id)}`);
+
+// ── Rollouts (rolling replace over the real managed instance groups) + Preview features (core/gcp_computesim_core) ──
+const gl = () => `${base()}/global`;
+export const listRolloutPlans = async () => (await restJson("GET", `${gl()}/rolloutPlans`)).items || [];
+export const insertRolloutPlan = (body) => restJson("POST", `${gl()}/rolloutPlans`, { body });
+export const deleteRolloutPlan = (id) => restJson("DELETE", `${gl()}/rolloutPlans/${e(id)}`);
+export const listRollouts = async () => (await restJson("GET", `${gl()}/rollouts`)).items || [];
+export const insertRollout = (body) => restJson("POST", `${gl()}/rollouts`, { body });
+export const rolloutVerb = (id, verb) => restJson("POST", `${gl()}/rollouts/${e(id)}:${verb}`, { body: {} });
+export const deleteRollout = (id) => restJson("DELETE", `${gl()}/rollouts/${e(id)}`);
+export const listPreviewFeatures = async () => (await restJson("GET", `/compute/beta/projects/${e(getProject())}/global/previewFeatures`)).items || [];
+export const setPreviewFeature = (name, activationStatus) => restJson("PATCH", `/compute/beta/projects/${e(getProject())}/global/previewFeatures/${e(name)}`, { body: { activationStatus } });

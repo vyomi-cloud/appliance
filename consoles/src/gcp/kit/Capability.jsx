@@ -105,7 +105,7 @@ export function CapabilityBadge({ id, host }) {
 export function CapabilityContainer({ id, title, description, actions, children, noBadge }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
-    return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
+    return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} outOfScope={!!c?.outOfScope} />;
   }
   return (
     <Section title={title} description={description} actions={actions}>

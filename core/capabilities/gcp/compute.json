@@ -567,15 +567,32 @@
   ]
  },
  "gcp.compute.rollouts": {
-  "title": "Rollouts",
+  "title": "Rollouts (rolling template rollout over managed instance groups)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Compute rollout plans orchestrate Google-managed product updates across waves; there is no managed fleet or update stream to roll out."
+   "Dev Simplified. REAL engine: a rollout rolls an instance template over the project's managed instance groups wave by wave through the MIG engine (PROACTIVE rolling replace: new instances are created, old ones deleted; Docker-backed containers where the appliance compute runtime is on), checks every new member is RUNNING after each wave, and rolls the group back to its previous template when a wave fails or on :rollback.",
+   "Waves advance on request (:advance); there is no time-based or metric-based validation, no org/folder-scoped plans, and Google-managed product updates are not rolled out. Plan waves select zones/regions plus the Vyomi field vyomiManagedInstanceGroups; rollout create takes the Vyomi field instanceTemplate."
   ],
-  "api": []
+  "api": [
+   "rolloutPlans.insert",
+   "rolloutPlans.get",
+   "rolloutPlans.list",
+   "rolloutPlans.delete",
+   "rollouts.insert (Vyomi: instanceTemplate)",
+   "rollouts.get",
+   "rollouts.list",
+   "rollouts.advance",
+   "rollouts.resume",
+   "rollouts.cancel",
+   "rollouts.rollback (Vyomi extension)",
+   "rollouts.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_computesim.py"
+  ]
  },
  "gcp.compute.security-risk-overview": {
   "title": "Security risk overview",
@@ -676,8 +693,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
+  "outOfScope": true,
   "limitations": [
-   "Bare Metal Solution provisions physical Oracle-certified servers in a Google-colocated facility with procurement and on-site maintenance workflows; there is no hardware (or meaningful software stand-in) to model."
+   "Bare Metal Solution is physical hardware in Google facilities; it has no local equivalent. For servers you can run locally, use Compute Engine VM instances."
   ]
  },
  "gcp.compute.committed-use-discounts": {
@@ -722,13 +740,21 @@
   ]
  },
  "gcp.compute.preview-features": {
-  "title": "Preview features (opt-in to pre-GA Compute Engine features)",
+  "title": "Preview features (enrol a project in pre-GA features)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "The catalog and enrollment are managed by Google per project and gate real backend rollouts; Vyomi has a single fixed feature set."
+   "Config only: a Vyomi-held catalogue of sample preview features. Enrolling (previewFeatures.update activationStatus) records the choice per project and returns it from get/list, but no Compute behaviour in Vyomi is gated by it; Google's real catalogue is not mirrored."
+  ],
+  "api": [
+   "previewFeatures.list",
+   "previewFeatures.get",
+   "previewFeatures.update (activationStatus)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_computesim.py"
   ]
  },
  "gcp.compute.opsagent_metrics": {
