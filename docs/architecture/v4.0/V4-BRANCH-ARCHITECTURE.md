@@ -57,7 +57,7 @@ Docker stack: core conformance, the live k3s tests (`VYOMI_LIVE_K3S=1 tests/conf
 saturated by parallel sessions and live k3s tests then time out.
 
 - **Every merge to the trunk (fast preflight):** relay tests (`test-booster-link`, `test-booster-shell`,
-  `test-booster-session-derived`, `test-mesh-ssh`), core conformance, `vendor_to_portal.py --check`, and the substrate tests for the
+  `test-booster-session-derived`, `test-mesh-ssh`), core conformance, `vendor_to_portal.py` (check-only; the script has no `--check` flag, `--apply` copies), and the substrate tests for the
   paths touched.
 - **Full `headless-smoke` (image + live k3s):** nightly, before the release cut, and before go-live. It must be green for both.
 - The live k3s tests live on branches not yet ported to the trunk, so the full gate exists only once those land.
@@ -117,18 +117,18 @@ finally by GitHub, which no session can bypass.
 |---|---|---|---|
 | 1 | **GitHub branch protection**: appliance `main` and portal `main` require a pull request and the owner's approval, no force-push, no deletion; `v4-on-main` and `v4-nano-portal`: no force-push, no deletion, status checks required | Hard; nothing bypasses it | Owner (repo admin); a script can be prepared for review first |
 | 2 | **Tag rule** for `v*` so only the owner creates release tags. `archive/*` tags are NOT protected: sessions create them when archiving a merged branch | Hard | Owner |
-| 3 | **Repo `CLAUDE.md`** at the root of both repos (on `v4-on-main` and `v4-nano-portal`) stating the flow, "branch from fresh `origin/v4-on-main`", the claims file, no `git add -A`, no bare `git stash` | Every session in any worktree of the repo loads it | Builder session |
+| 3 | **Repo `CLAUDE.md`** (built 2026-11-09) at the root of both repos (on `v4-on-main` and `v4-nano-portal`) stating the flow, "branch from fresh `origin/v4-on-main`", the claims file, no `git add -A`, no bare `git stash` | Every session in any worktree of the repo loads it | Builder session |
 | 4 | **User-level `~/.claude/CLAUDE.md`** with a short pointer to this doc, for sessions started in other folders | Soft | Builder session |
-| 5 | **Claude Code hooks** in the repo's `.claude/settings.json`: block `git push origin main`, force-push, tag pushes, `git add -A`, bare `git stash` | Automatic for Claude sessions only | Builder session |
-| 6 | **Committed git hooks** (`core.hooksPath`): `pre-push` refuses a branch not based on current `origin/v4-on-main`, runs `vendor_to_portal.py --check` and the relay tests (`test-booster-link`, `test-booster-shell`, `test-booster-session-derived`, `test-mesh-ssh`) | Covers humans too; each clone opts in | Builder session |
-| 7 | **`scripts/v4-session-start.sh <topic>`**: `git fetch`, creates `../appliance-<topic>` off `origin/v4-on-main` (or the portal equivalent off `origin/v4-nano-portal`), appends the claim | Convenience; makes the right thing the easy thing | Builder session |
-| 8 | **CI drift check**: `vendor_to_portal.py --check` fails the build when the portal copy differs from `wasm/` | Hard for Nano drift | Builder session |
+| 5 | **Claude Code hooks** (built: `.claude/settings.json` + `scripts/claude-hooks/v4-guard.py`) in the repo's `.claude/settings.json`: block `git push origin main`, force-push, tag pushes, `git add -A`, bare `git stash` | Automatic for Claude sessions only | Builder session |
+| 6 | **Committed git hooks** (`.githooks/pre-push`, enabled per clone by `scripts/v4-install-hooks.sh`): topic branches are NEVER blocked (a stale base only prints a warning, so work is never lost); `main`/`master` and tags (except `archive/*`) are refused; `v4-on-main`, `release/v4.0.0` and `v4-nano-portal` are refused unless `VYOMI_INTEGRATOR=1`, and then must fast-forward and (with `WS_PKG` set) pass the relay tests (`test-booster-link`, `test-booster-shell`, `test-booster-session-derived`, `test-mesh-ssh`) | Covers humans too; each clone opts in | Built (2026-11-09) |
+| 7 | **`scripts/v4-session-start.sh <topic>`** (built): `git fetch`, creates `../appliance-<topic>` off `origin/v4-on-main` (or the portal equivalent off `origin/v4-nano-portal`), appends the claim | Convenience; makes the right thing the easy thing | Builder session |
+| 8 | **CI drift check**: `vendor_to_portal.py` (check-only; the script has no `--check` flag, `--apply` copies) fails the build when the portal copy differs from `wasm/` | Hard for Nano drift | Builder session |
 
 Minimum set: 1, 3, 5, 6. Only layer 1 cannot be bypassed.
 
 ### 5.2 Claims file
 
-`docs/architecture/v4.0/SESSION-CLAIMS.md` on `v4-on-main`: one row per active topic with session, branch, repo, paths claimed,
+`docs/architecture/v4.0/SESSION-CLAIMS.md` on `v4-on-main` (created 2026-11-09, seeded with the active sessions): one row per active topic with session, branch, repo, paths claimed,
 start date. Add the row before editing; remove it when the branch merges. Before editing a path outside your own claim, read the
 file and ask the owner if it is claimed. Claims older than 7 days without a push are treated as stale.
 
