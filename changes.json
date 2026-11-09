@@ -1,16 +1,9 @@
 {
- "at": "2026-11-09T07:10:32+00:00",
+ "at": "2026-11-09T08:10:33+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "azure",
-   "service": "web",
-   "kind": "spec-commit",
-   "key": "azure:web:806490ed8e",
-   "title": "Azure web: JS fix unexpected model name for appservice (#47950)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/806490ed8ea740841a39f8f9cd907c6a5e113ee0",
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
+ ]
 }

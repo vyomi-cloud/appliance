@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-09T08:10:33+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (2): maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T07:10:32+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3008,3 @@ Tracking 3922 AWS + GCP operations, 17 Azure spec areas, 50 SDK/CLI packages and
 - · `announcement` [Launched] Generally Available: Azure Monitor Auxiliary Logs Plan support for Azure tables and plan switching ([link](https://azure.microsoft.com/updates?id=569904))
 - · `announcement` [Launched] Generally Available: Control plane metrics collection for AKS with Managed Prometheus ([link](https://azure.microsoft.com/updates?id=568830))
 - · `announcement` [Launched] Generally Available: Logical replication slot sync status metric for Azure PostgreSQL Flexible Server  ([link](https://azure.microsoft.com/updates?id=568414))
-- · `announcement` [Launched] Generally Available: Metrics usage insights for Azure Monitor workspace ([link](https://azure.microsoft.com/updates?id=577165))
-- · `release` cli:aws: 2.38.6 → 2.39.0
-
-Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-27T17:50:09+00:00
-
-Tracking 3922 AWS + GCP operations, 16 Azure spec areas, 50 SDK/CLI packages and 3 lifecycle feeds.
-
