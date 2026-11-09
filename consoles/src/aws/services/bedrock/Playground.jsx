@@ -33,7 +33,7 @@ export default function Playground() {
     <ContentLayout header={<Header variant="h1" description="Send a Converse request to a model in the Vyomi pool.">Chat / text playground</Header>}>
       <CapabilityContainer id="bedrock.runtime" title="Playground">
         <SpaceBetween size="m">
-          <FormField label="Model" description="Choose one of the ten pool models. Without a booster only the local small model answers; the others need the booster (Pro/Max)."><Select selectedOption={sel || null} onChange={({ detail }) => setModel(detail.selectedOption)} options={opts} statusType={models.loading ? "loading" : "finished"} ariaLabel="Model" /></FormField>
+          <FormField label="Model" description="Choose one of the ten pool models. Without the Mesh only the local small model answers; the others need the Mesh (Pro/Max)."><Select selectedOption={sel || null} onChange={({ detail }) => setModel(detail.selectedOption)} options={opts} statusType={models.loading ? "loading" : "finished"} ariaLabel="Model" /></FormField>
           <FormField label="System prompt - optional"><Textarea value={system} rows={2} onChange={({ detail }) => setSystem(detail.value)} ariaLabel="System prompt" /></FormField>
           <FormField label="Prompt"><Textarea value={prompt} rows={4} onChange={({ detail }) => setPrompt(detail.value)} ariaLabel="Prompt" /></FormField>
           <Box><Button variant="primary" loading={busy} disabled={!sel || !prompt} onClick={run}>Run</Button></Box>

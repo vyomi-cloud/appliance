@@ -60,4 +60,4 @@ Anything not truly implemented (persistent-volume data, ...) goes in `footer` as
 The in-browser path (Nano IndexedDB / dev server, `InMemoryKubeBackend`) is FIRST-CLASS for Free users: clusters are created and deleted
 through the normal ARM flow, namespaces/deployments/services are managed with kubectl (get/delete/apply/create/scale; there is no Deployment controller, pods are explicit objects and a Deployment reports FailedCreate as in `core/azure_aks_k8s_core.py`; Pods are Pending: no kubelet runs), the tree rides the cluster's ARM record so it persists with the
 rest of the Nano state, and backup/restore works fully. External clients such as Lens need a real API server: that is the
-additional `RealK8sBackend` (Pro/Max booster, k3s) behind the same interface - the in-browser UI says so honestly.
+additional `RealK8sBackend` (Pro/Max Mesh, k3s) behind the same interface - the in-browser UI says so honestly.

@@ -76,7 +76,7 @@ check("providers are the real open-model vendors", {m["vendor"] for m in CAT.MOD
 # ── availability: no booster -> only the local small model
 av = {m["modelId"].replace("vyomi.", ""): m["vyomiAvailability"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"]}
 check("no booster: only qwen2.5-3b available", [k for k, v in av.items() if v["available"]] == ["qwen2.5-3b"], av)
-check("no booster: the other nine say 'Needs Booster (Pro/Max)'", all(v["label"] == "Needs Booster (Pro/Max)" for k, v in av.items() if k != "qwen2.5-3b") and sum(1 for k in av if k != "qwen2.5-3b") == 9)
+check("no booster: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k != "qwen2.5-3b") and sum(1 for k in av if k != "qwen2.5-3b") == 9)
 check("Azure availability matches", {x["model"]["name"]: x["vyomiAvailability"]["available"] for x in az_acct} == {i: i == "qwen2.5-3b" for i in CAT.IDS})
 
 
