@@ -15,6 +15,7 @@ import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
@@ -68,7 +69,7 @@ export default function TopicBlade({ params, query }) {
       accesscontrol: () => <Iam name={name} a={t} />,
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <Diagnose t={t} rg={rg} name={name} />,
-      tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`} />,
+      tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`}><TasksPanel a={t} /></CapabilityContainer>,
       alerts: () => <Alerts t={t} />,
       metrics: () => <Metrics t={t} />,
       diagnosticsettings: () => <DiagnosticSettings t={t} />,

@@ -14,7 +14,7 @@ export default function TasksPanel({ a }) {
   const notify = useNotify();
   const { subscription: sub, resourceGroup: rg } = parseId(a.id);
   const base = `/subscriptions/${sub}/resourceGroups/${rg}/providers/Microsoft.Logic`;
-  const tpls = useAsync(() => restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Logic/vyomiTaskTemplates`, { query: { ...Q, resourceType: (a.id.match(/\/providers\/([^/]+\/[^/]+)/i) || [])[1] } }), [a.id]);
+  const tpls = useAsync(() => restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Logic/vyomiTaskTemplates`, { query: { ...Q, resourceType: ((a.id.match(/\/providers\/([^/]+\/[^/]+)/i) || [])[1] || (/^\/subscriptions\/[^/]+\/resourcegroups\/[^/]+$/i.test(a.id) ? "Microsoft.Resources/resourceGroups" : undefined)) } }), [a.id]);
   const wfs = useAsync(async () => {
     const all = (await restJson("GET", `${base}/workflows`, { query: Q })).value || [];
     return all.filter((w) => w.tags?.["vyomi-task-target"]?.toLowerCase() === a.id.toLowerCase());

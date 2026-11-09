@@ -41,6 +41,7 @@ VM, STORAGE, COSMOS, KV, SB, SQL, SQLDB, CAPP = (
     "microsoft.compute/virtualmachines", "microsoft.storage/storageaccounts", "microsoft.documentdb/databaseaccounts",
     "microsoft.keyvault/vaults", "microsoft.servicebus/namespaces", "microsoft.sql/servers", "microsoft.sql/servers/databases",
     "microsoft.app/containerapps")
+EG, RGT = "microsoft.eventgrid/topics", "microsoft.resources/resourcegroups"
 _FREQ = {"minute": "minutes", "hour": "hours", "day": "days", "week": "days"}
 
 _REC = {"frequency": "Day", "interval": 1}
@@ -114,6 +115,24 @@ TEMPLATES = [
     {"id": "sqldb-report", "title": "Capture the database's configuration", "resourceTypes": [SQLDB], "recurrence": {"frequency": "Day", "interval": 1},
      "description": "Reads the database into the run output.", "params": [],
      "actions": lambda rid, p: [("Get_database", "GET", rid, "2023-05-01-preview", None)]},
+    {"id": "eventgrid-subscriptions-report", "title": "Capture the topic's event subscriptions", "resourceTypes": [EG], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Lists the topic's event subscriptions (destination, filters) into the run output.", "params": [],
+     "actions": lambda rid, p: [("List_event_subscriptions", "GET", f"{rid}/providers/Microsoft.EventGrid/eventSubscriptions", "2022-06-15", None)]},
+    {"id": "eventgrid-disable-public-access", "title": "Disable public network access on a schedule", "resourceTypes": [EG], "recurrence": {"frequency": "Day", "interval": 1, "schedule": {"hours": [20], "minutes": [0]}},
+     "description": "Sets publicNetworkAccess to Disabled on the topic outside working hours.", "params": [],
+     "actions": lambda rid, p: [("Disable_public_access", "PATCH", rid, "2022-06-15", {"properties": {"publicNetworkAccess": "Disabled"}})]},
+    {"id": "eventgrid-enable-public-access", "title": "Enable public network access on a schedule", "resourceTypes": [EG], "recurrence": {"frequency": "Day", "interval": 1, "schedule": {"hours": [7], "minutes": [0]}},
+     "description": "Sets publicNetworkAccess back to Enabled at the start of the working day.", "params": [],
+     "actions": lambda rid, p: [("Enable_public_access", "PATCH", rid, "2022-06-15", {"properties": {"publicNetworkAccess": "Enabled"}})]},
+    {"id": "rg-resources-report", "title": "Capture the resource group's resources", "resourceTypes": [RGT], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Lists every resource in the group (type, location, tags) into the run output.", "params": [],
+     "actions": lambda rid, p: [("List_resources", "GET", f"{rid}/resources", "2021-04-01", None)]},
+    {"id": "rg-locks-report", "title": "Capture the resource group's locks", "resourceTypes": [RGT], "recurrence": {"frequency": "Day", "interval": 1},
+     "description": "Lists the management locks on the group into the run output.", "params": [],
+     "actions": lambda rid, p: [("List_locks", "GET", f"{rid}/providers/Microsoft.Authorization/locks", "2016-09-01", None)]},
+    {"id": "rg-set-tag", "title": "Stamp a tag on the resource group on a schedule", "resourceTypes": [RGT], "recurrence": {"frequency": "Week", "interval": 1},
+     "description": "Merges one tag into the group (for example a review date).", "params": [{"name": "tagName", "label": "Tag name", "required": True}, {"name": "tagValue", "label": "Tag value", "required": True}],
+     "actions": lambda rid, p: [("Set_tag", "PATCH", rid, "2021-04-01", {"tags": {p["tagName"]: p["tagValue"]}})]},
 ]
 
 

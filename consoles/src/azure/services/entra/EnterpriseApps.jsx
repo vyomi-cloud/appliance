@@ -41,8 +41,8 @@ export default function EnterpriseApps() {
           columns={COLUMNS}
           extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => navigate("entra", "appregistrations", "register")}>New application</ToolbarButton>}
         />
-        <NotSimulatedContainer title="More commands" feature="Download (Export), Preview info, Columns, Preview features, Got feedback?"
-          note="Download (Export). Preview info. Columns. Preview features. Got feedback? Coming soon." />
+        <NotSimulatedContainer title="More commands" feature="Preview info, Preview features, Got feedback?"
+          note="Preview info. Preview features. Got feedback? are not simulated in Vyomi. Download and column selection are in the grid's Export to CSV and Manage view commands." />
       </div>
     </EntraShell>
   );

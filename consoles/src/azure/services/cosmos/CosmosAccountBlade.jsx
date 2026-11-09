@@ -28,6 +28,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import DataExplorer from "./DataExplorer.jsx";
+import PowerBi from "./PowerBi.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
@@ -124,6 +125,7 @@ export default function CosmosAccountBlade({ params }) {
       datamigration: () => <DataMigration a={a} />,
       addfunction: () => <AddFunction a={a} />,
       tasks: () => <TasksPanel a={a} />,
+      powerbi: () => <PowerBi a={a} />,
       diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,

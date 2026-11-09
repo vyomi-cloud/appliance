@@ -111,3 +111,7 @@ export const listWorkspaces = async () =>
 const AP = "2022-11-20-preview";
 export const listAttackPaths = async () => (await restJson("GET", `${SEC()}/attackPaths`, { query: { "api-version": AP } })).value || [];
 export const exploreGraph = (body) => restJson("POST", `${SEC()}/cloudSecurityExplorer`, { query: { "api-version": AP }, body });
+
+// Dev Simplified insights: computed server-side from the live ARM state (core/azure_devsimplified_core.py)
+export const getInsight = (kind) =>
+  restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Vyomi/defenderInsights/${kind}`, { query: { "api-version": "2024-01-01" } });

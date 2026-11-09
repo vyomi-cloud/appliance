@@ -1,6 +1,7 @@
-import { AlertDetail, Alerts, Compliance, DefenderPlans, Environment, Inventory, NotSimulatedPanel, Overview, Posture, RecommendationDetail, Recommendations } from "./Pages.jsx";
+import { AlertDetail, Alerts, Compliance, DefenderPlans, Environment, Inventory, Overview, Posture, RecommendationDetail, Recommendations } from "./Pages.jsx";
 import { AttackPaths, CloudSecurityExplorer } from "./AttackPaths.jsx";
 import Automation from "./Automation.jsx";
+import { DefenderPanel } from "./DevSimplified.jsx";
 import { LABEL } from "./DefenderShell.jsx";
 
 const crumb = (text, href) => [{ text, href }];
@@ -24,6 +25,6 @@ export default {
     { pattern: "/defender/attackpath", component: AttackPaths, crumbs: () => crumb("Attack path analysis", "#/defender/attackpath") },
     { pattern: "/defender/explorer", component: CloudSecurityExplorer, crumbs: () => crumb("Cloud Security Explorer", "#/defender/explorer") },
     { pattern: "/defender/automation", component: Automation, crumbs: () => crumb("Workflow automation", "#/defender/automation") },
-    { pattern: "/defender/:panel", component: NotSimulatedPanel, crumbs: (p) => crumb(LABEL[p.panel] || p.panel, `#/defender/${p.panel}`) },
+    { pattern: "/defender/:panel", component: DefenderPanel, crumbs: (p) => crumb(LABEL[p.panel] || p.panel, `#/defender/${p.panel}`) },
   ],
 };

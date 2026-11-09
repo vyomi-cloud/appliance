@@ -49,8 +49,8 @@ export default function CustomDomains() {
           columns={COLUMNS}
           extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Add custom domain</ToolbarButton>}
         />
-        <NotSimulatedContainer title="More commands" feature="Diagnose and solve problems, Columns, Got feedback?"
-          note="Diagnose and solve problems. Columns. Got feedback? are not simulated in Vyomi." />
+        <NotSimulatedContainer title="More commands" feature="Diagnose and solve problems, Got feedback?"
+          note="Diagnose and solve problems. Got feedback? are not simulated in Vyomi. Column selection is in the grid's Manage view command." />
       </div>
       <Dialog open={adding} onOpenChange={(_, d) => setAdding(d.open)}>
         <DialogSurface aria-label="Add custom domain">

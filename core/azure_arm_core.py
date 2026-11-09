@@ -56,6 +56,11 @@ try:                                              # Azure Monitor workspaces + M
 except ImportError:
     import azure_monitorproducts_core as monprod_engine   # type: ignore
 
+try:                                              # Dev Simplified Defender insights + Fabric mirroring config (Microsoft.Vyomi)
+    from core import azure_devsimplified_core as devsimp_engine
+except ImportError:
+    import azure_devsimplified_core as devsimp_engine   # type: ignore
+
 try:                                              # Azure Monitor alerting (Microsoft.AlertsManagement: alerts, processing rules, Prometheus rule groups)
     from core import azure_alerts_core as alerts_engine
 except ImportError:
@@ -2013,6 +2018,12 @@ class AzureArm:
 
         if alerts_engine.handles(namespace, chain):
             return self._alerts(method, sub, rg, chain, payload, query)
+        if devsimp_engine.handles(namespace, chain):
+            r = devsimp_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)
+            if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE") and rg and len(chain) == 2:
+                self._record_activity(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Vyomi/fabricMirrors/{chain[1]}",
+                                      f"Microsoft.Vyomi/fabricMirrors/{'delete' if method == 'DELETE' else 'write'}", sub)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
         if monprod_engine.handles(namespace, chain):
             return self._monprod(method, sub, rg, namespace, chain, payload, query)
         if sa_engine.handles(namespace, chain):

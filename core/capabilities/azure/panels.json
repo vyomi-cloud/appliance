@@ -194,13 +194,16 @@
     ]
   },
   "azure.sql.integrations": {
-    "title": "Integrations (Stream Analytics, Fabric mirroring, Power Apps, Power Automate, Power BI)",
+    "title": "Integrations (Fabric mirroring, Power BI; Stream Analytics, Power Apps, Power Automate)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Fabric mirroring and the Power Platform (Power BI, Power Apps, Power Automate) are separate Microsoft SaaS products that Vyomi does not run; the blades say so. Data Sync is real (azure.sql.data_sync) and the connection string on the Connection strings blade is what those tools would use."
+      "Mirror database in Fabric is Dev Simplified: the mirroring settings and run state are stored as a Microsoft.Vyomi/fabricMirrors record (the SQL server and database must exist) with a simulated sync status; no Fabric workspace is contacted and no data is replicated. Power BI shows the connection details to paste into Power BI Desktop; there is no Power BI service. Power Apps and Power Automate stay not simulated. Data Sync is real (azure.sql.data_sync)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_devsimplified.py"
     ]
   },
   "azure.sql.database_watcher": {
@@ -231,7 +234,21 @@
       "tests/conformance/test_azure_services_depth.py"
     ]
   },
-  "azure.sql.always_encrypted": {"title": "Always Encrypted", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Column master key (a Key Vault key, validated) -> column encryption key (wrapped by Key Vault wrapKey) -> encrypted columns (Deterministic / Randomized). The server stores ciphertext only; the client-side driver is EMULATED in the simulator's query path (body columnEncryptionSetting: Enabled encrypts parameters bound to encrypted columns and decrypts results, unwrapping the CEK through Key Vault so a disabled CMK stops decryption). Without the setting plaintext writes are rejected and reads return ciphertext; LIKE / range / randomized-equality on an encrypted column are rejected.", "No real ODBC/JDBC driver is involved (TDS cannot traverse the relay); secure enclaves are not modelled; the cipher is an HMAC-SHA256 stream construction, not AEAD_AES_256_CBC_HMAC_SHA_256. Enforced identically on the offline appliance: the /azure-sql data plane is routed through the same azure_sql_core engine as Nano (proved over the offline HTTP wire in tests/conformance/test_azure_offline_wiring.py)."], "tests": ["tests/conformance/test_azure_sql_security_enforced.py", "tests/conformance/test_azure_offline_wiring.py"]},
+  "azure.sql.always_encrypted": {
+    "title": "Always Encrypted",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Column master key (a Key Vault key, validated) -> column encryption key (wrapped by Key Vault wrapKey) -> encrypted columns (Deterministic / Randomized). The server stores ciphertext only; the client-side driver is EMULATED in the simulator's query path (body columnEncryptionSetting: Enabled encrypts parameters bound to encrypted columns and decrypts results, unwrapping the CEK through Key Vault so a disabled CMK stops decryption). Without the setting plaintext writes are rejected and reads return ciphertext; LIKE / range / randomized-equality on an encrypted column are rejected.",
+      "No real ODBC/JDBC driver is involved (TDS cannot traverse the relay); secure enclaves are not modelled; the cipher is an HMAC-SHA256 stream construction, not AEAD_AES_256_CBC_HMAC_SHA_256. Enforced identically on the offline appliance: the /azure-sql data plane is routed through the same azure_sql_core engine as Nano (proved over the offline HTTP wire in tests/conformance/test_azure_offline_wiring.py)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_security_enforced.py",
+      "tests/conformance/test_azure_offline_wiring.py"
+    ]
+  },
   "azure.storage.private_endpoints": {
     "title": "Private endpoint connections",
     "level": {
@@ -248,11 +265,15 @@
   "azure.resourcegroups.tasks": {
     "title": "Resource group Tasks",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Tasks are Azure Automation / Logic Apps task templates run against the group; Vyomi simulates neither product, so there is nothing real to run. Force delete and Resource group insights are real (azure.resourcegroups.tools); plain delete of the group and its resources is real (azure.resourcegroups.rg.crud)."
+      "Tasks are Dev Simplified Logic App workflows (core/azure_tasks_core.py) run against the group: a Recurrence trigger plus Http-to-ARM actions that really run on the simulator's ARM (list resources or locks into the run output, stamp a tag). Azure Automation runbooks and Logic Apps connectors are not simulated, expressions are not evaluated, and Nano only fires schedules while the tab is open. Force delete and Resource group insights are real (azure.resourcegroups.tools)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_tasks_core.py",
+      "tests/conformance/test_azure_devsimplified.py"
     ]
   },
   "azure.acr.support_troubleshooting": {
@@ -299,11 +320,11 @@
   "azure.cosmos.powerbi": {
     "title": "Power BI integration",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Power BI is a separate Microsoft SaaS product; the blade offers no connector. Use Data Explorer or the SDK."
+      "Dev Simplified: Vyomi does not run Power BI and offers no connector. The blade shows the account endpoint and read-only connection string and generates CSV / JSON exports of the account's real databases and containers for loading into Power BI Desktop."
     ]
   },
   "azure.sql.data_sync": {

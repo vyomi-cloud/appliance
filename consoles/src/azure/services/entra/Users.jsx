@@ -7,6 +7,7 @@ import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
+import BulkOperations from "./BulkOperations.jsx";
 import EntraShell from "./EntraShell.jsx";
 import * as api from "./api.js";
 import { downloadCsv } from "./csv.js";
@@ -46,12 +47,13 @@ export default function Users() {
           columns={COLUMNS}
           extraCommands={<>
             <ToolbarButton icon={<Add20Regular />} onClick={() => navigate("entra", "users", "create")}>New user</ToolbarButton>
+            <BulkOperations users={data} onDone={reload} />
             <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadCsv("users.csv", COLUMNS, data || [])} disabled={!data?.length}>Download users (Preview)</ToolbarButton>
           </>}
           emptyAction={<Link href="#/entra/users/create">New user</Link>}
         />
-        <NotSimulatedContainer title="More commands" feature="Edit, Bulk operations, Per-user MFA, Got feedback?"
-          note="Edit (inline bulk edit). Bulk operations (CSV-driven create/update/delete). Per-user MFA. Got feedback? These are not simulated in Vyomi; edit a single user from its own page, and see Audit logs for a real record of changes." />
+        <NotSimulatedContainer title="More commands" feature="Edit, Per-user MFA, Got feedback?"
+          note="Edit (inline bulk edit). Per-user MFA. Got feedback? These are not simulated in Vyomi; edit a single user from its own page, and see Audit logs for a real record of changes." />
       </div>
     </EntraShell>
   );

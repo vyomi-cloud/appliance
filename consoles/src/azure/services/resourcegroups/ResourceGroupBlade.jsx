@@ -21,6 +21,7 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -130,6 +131,7 @@ export default function ResourceGroupBlade({ params }) {
       costalertspreview: () => <CostAlerts name={name} />,
       budgets: () => <Budgets name={name} />,
       insightspreview: () => <Insights name={name} />,
+      tasks: () => <CapabilityContainer id="azure.resourcegroups.tasks" title={`${name} | Tasks`}><TasksPanel a={a} /></CapabilityContainer>,
     }[panel];
     body = P ? P() : (
       <>

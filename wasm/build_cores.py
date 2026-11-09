@@ -140,7 +140,7 @@ CORES = [
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
     "azure_promql.py",                              # v4: PromQL-subset evaluator behind Prometheus rule groups + KEDA prometheus trigger — before azure_alerts_core
     "azure_alerts_core.py",                         # v4: Azure Monitor alert evaluation + processing rules (Microsoft.AlertsManagement) — after monitor/operationalinsights, before azure_arm_core
-    "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
+    "azure_monitorproducts_core.py", "azure_devsimplified_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",
     "azure_search_vector_core.py", "azure_search_core.py",
     "azure_storagemover_core.py",

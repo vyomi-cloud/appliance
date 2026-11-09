@@ -27,6 +27,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { PerformanceOverview, QueryPerformanceInsight, SqlAuditing } from "./SqlInsights.jsx";
+import { FabricMirror, PowerBiInfo } from "./Integrations.jsx";
 import { DatabaseWatcher, SyncDatabases } from "./SqlWatcherSync.jsx";
 import ComputeStorageFields from "./ComputeStorageFields.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -133,6 +134,8 @@ export default function SqlDatabaseBlade({ params }) {
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
       logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      mirrorfabric: () => <FabricMirror a={a} />,
+      powerbi: () => <PowerBiInfo a={a} />,
       streamanalytics: () => (
         <CapabilityContainer id="azure.streamanalytics.jobs" title={`${a.name} | Stream analytics (preview)`}>
           <p data-testid="sql-sa-panel">Azure Stream Analytics jobs process Blob input and write Blob output in Vyomi. A SQL database is not a supported streaming source or sink here, so a job cannot read from or write to <b>{a.name}</b>.</p>

@@ -155,10 +155,11 @@
   },
   "azure.eventgrid.topic.tools": {
    "title": "Tasks",
-   "level": { "nano": "not_simulated", "offline": "not_simulated" },
+   "level": { "nano": "limited", "offline": "limited" },
    "limitations": [
-    "Tasks (Azure DevOps/Boards work-item integration) depends on a real external product/account this simulator has no counterpart for. Diagnose and solve problems is real (azure.eventgrid.topic.diagnose) and Support + Troubleshooting is the shared support-request panel (azure.common.support)."
-   ]
+    "Tasks are Dev Simplified Logic App workflows (core/azure_tasks_core.py): a Recurrence trigger plus Http-to-ARM actions that really run against the simulator's ARM (disable/enable public network access, list event subscriptions into the run output). There is no Azure DevOps/Boards work-item integration, no e-mail or Teams connector, expressions are not evaluated, and Nano only fires schedules while the tab is open. Diagnose and solve problems is real (azure.eventgrid.topic.diagnose)."
+   ],
+   "tests": ["tests/conformance/test_azure_tasks_core.py", "tests/conformance/test_azure_devsimplified.py"]
   },
   "azure.eventgrid.topic.exporttemplate": {
     "title": "Export template (ARM template / Bicep / Terraform)",

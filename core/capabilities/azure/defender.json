@@ -124,13 +124,16 @@
  },
  "azure.defender.other": {
   "tier": "pro",
-  "title": "Getting started, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions",
+  "title": "Workload protections, Data security, Firewall Manager (Dev Simplified); Getting started, Workbooks, Community, Diagnose and solve problems, DevOps security, Security solutions",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "These pages depend on connected DevOps/data/firewall services, none of which Vyomi simulates (Attack path analysis, Cloud Security Explorer and Workflow automation are real; see azure.defender.attack_paths and azure.defender.automation)."
+   "Workload protections, Data security and Firewall Manager are Dev Simplified: configuration checks (public blob access, HTTPS-only, SQL/Cosmos public network access, Key Vault purge protection, open inbound NSG rules, per-plan resource counts) computed on every load from the simulated resources (core/azure_devsimplified_core.py). There is no sensitive-data scanning, traffic analysis or Microsoft threat intelligence. Getting started, Workbooks, Community, Diagnose and solve problems, DevOps security (no connected repositories) and Security solutions (Marketplace) stay not simulated. Attack path analysis, Cloud Security Explorer and Workflow automation are real; see azure.defender.attack_paths and azure.defender.automation."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_devsimplified.py"
   ]
  },
  "azure.defender.image_vulnerabilities": {
