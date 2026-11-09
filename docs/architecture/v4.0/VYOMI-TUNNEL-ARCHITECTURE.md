@@ -229,3 +229,72 @@ Built on the trunk's stream framework (`kind:"tcp"`); no new agent roles (the hu
 6. `vyomi-tunnel forward <vm> <local>:<remote>` for non-SSH TCP (HTTP/ws/db).
 7. Codespace host sshd target (section 9b, handed to another session for review/build).
 8. Per-stream bandwidth cap and audit log; a hosted TCP gateway remains optional post-v4 for zero-install.
+9. **Decide and record where the relay the Mesh agent dials runs.** `BOOSTER-CODESPACES-GITHUB-APP.md` 6.4 says the booster dials out to "our relay" and that the relay already ships inside the appliance image; the go-live checklist says to deploy `local-relay.mjs` behind wss://. No hosted instance exists (`relay.vyomi.cloud` is the Cloudflare Worker, which has no Mesh hub and answers 503 on `/booster`), and a laptop-local relay is not reachable from a Codespace. Until this is decided and built, no real Codespace can link. Also needed: the published `vyomi/appliance` image rebuilt so `/app/relay` exists (the 2026-11-10 `:latest` has none).
+
+---
+
+## 12-16. Restored sections
+
+> Restored 2026-11-10 from `archive/v4-tunnel-k3s-20261110` (commit `eacf1ecd`). They were dropped when the tunnel work was ported onto this trunk and the doc was rewritten. Status notes are on each heading. Section 12 (agent `role` label) conflicts with 9c, which deliberately adds **no** agent roles (the hub's `role` means runner-role tokens); decide which shape wins before building the runner agent. Sections 15 and 16 are still plan only.
+
+## 12. Agent roles and runner targets [planned; trunk chose a different shape, decision pending]
+
+A Pro/Max session can have several Mesh agents: one in the Codespace and one per GitHub runner that hosts a k3s cluster.
+
+- Agent registration gains a `role` label: `codespace`, `runner-<cluster>`. The hub keys agents by `(session_id, role)`. Today it keys by `session_id` only.
+- `/connect?vm=<target>&port=<p>[&role=<r>]`: default role is `codespace`; the client names the role for runner targets.
+  Targets resolve inside the agent that owns the role, so a name can never reach another role's network.
+- Reserved targets per agent: `host` (the machine's own sshd: `codespace` keeps working as an alias on the codespace role), `k3s` (the k3s
+  server container, API port 6443), and `vyomi-i-<id>` containers as today.
+- Runner agent lifecycle: started as a workflow step; dials OUT with the session token; the workflow ends when the agent exits, so the
+  agent lifetime is the job lifetime (max 6 h on a hosted runner, nothing can extend it).
+- Keys: the workflow receives the user's public key (and the keeper key when relevant) as dispatch inputs, appends them to `authorized_keys`, never logs them.
+- Caps: the 20-stream cap applies per session across roles; an audit line is written for every open of `host` and `k3s`.
+
+## 13. `vyomi-tunnel forward` — non-SSH TCP [built 2026-11-10, local tests only; see 9c]
+
+`vyomi-tunnel forward <target>[.<role>] <local>:<remote>` binds `127.0.0.1:<local>` and bridges each accepted connection to a `/connect`
+stream. This is what makes kubectl and Lens work: `forward <cluster> 6443:6443`, kubeconfig server `https://127.0.0.1:6443`.
+
+- Binds loopback only; refuses ports below 1024 unless told; exits with the same codes as `connect`.
+- The k3s API certificate must list `127.0.0.1` and the stable cluster name (k3s `--tls-san`), so no `insecure-skip-tls-verify`.
+- Runs while the process runs; reconnects streams, not the session; stops at `session_end`.
+
+## 14. Real k3s lifecycle (cloud skins AKS/EKS/GKE) [partly built: core/k3s_runtime.py, KubeBackend seam, EKS core; Nano side not built]
+
+One k3s per simulated cluster, same lifecycle on three substrates:
+
+| Substrate | Where k3s runs | How the API is reached |
+|---|---|---|
+| Booster, Codespace-local (default) | `rancher/k3s` privileged container on `vyomi-net` in the Codespace's Docker | agent resolves target `k3s` to the container |
+| Booster, runner | k3s container in the runner's Docker | runner agent, role `runner-<cluster>`, target `k3s` |
+| Offline appliance (Pro/Max) | container on the appliance's Docker | published port / compose network |
+
+- The cloud APIs (ARM, EKS, Container API) create/delete the k3s container(s), store the endpoint on the cluster resource, and serve
+  `get-credentials` / `update-kubeconfig` / `get-credentials` from a per-cluster kubeconfig (client cert, TLS SAN as in section 13).
+- `core/kube_state_core.py` `RealK8sBackend` (the seam left by the AKS backup work) implements `export_resources` / `apply` / `health` against the
+  real API; backups and restores then act on real objects.
+- Node pools >1 become k3s agent containers on the same network. Persistent volumes use a StorageClass backed by simulator storage so they
+  survive a runner handoff.
+- Cloud integrations (OIDC issuer, STS/Entra token exchange, load balancer and disk objects) resolve against the simulator cores over the tunnel.
+
+## 15. Runner handoff at ~5 h [planned]
+
+1. Controller (the session owner) dispatches runner B at about T+4h45m with the same cluster id.
+2. B's agent registers as `runner-<cluster>-b`; B joins as a second server (k3s started with `--cluster-init` from the start, embedded etcd).
+3. Drain and cordon A; wait for pods to be Ready on B; remove A from etcd; cancel A.
+4. The stable endpoint (role alias `runner-<cluster>`) is repointed to B's agent; clients reconnect, kubeconfig is unchanged.
+5. Objects and simulator-backed volumes survive; pods are recreated (as on any node replacement); `emptyDir`, `hostPath` and container filesystem writes do not.
+Fallback: snapshot (k3s data dir + volume data via the backup layer) at ~5 h and restore on B; pods restart, 1-3 min gap (not measured).
+Abort rule: if the controller is lost mid-handoff, A keeps running until its own timeout.
+
+## 16. Acceptance gates [none run yet]
+
+| Id | Check | Pass |
+|---|---|---|
+| T1 | Keeper through the 9b relay path against a real Codespace with a 5-minute idle setting | stays Running >= 3 periods on keeper traffic only; stops within 1 period after the keeper stops |
+| T2 | Fallback only if T1 fails: `gh codespace ssh -- echo` every ~240 s | same as T1 |
+| T3 | `ssh <cluster>.vyomi` to a runner host and `forward <cluster> 6443:6443` + `kubectl get nodes` | node Ready, no TLS bypass |
+| T4 | Lens connects through `forward` | cluster listed, workloads visible |
+| T5 | Handoff: app + PVC (file written) + Secret + CRD instance survive | object list equal, file present, app answers |
+| T6 | Tenant isolation: another account's token cannot open `host`/`k3s` of this session | 403 |
