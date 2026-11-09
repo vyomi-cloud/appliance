@@ -157,5 +157,20 @@ def _wait(r, n):
         time.time = orig
 
 
+def test_kubelet_label_rules():
+    """Found by the real-Codespace run 2026-11-10: the kubelet rejects --node-labels like kubernetes.io/role, so the agent crash-looped and no
+    node ever joined. Those labels must be applied with `kubectl label node` instead."""
+    k = k3s.kubelet_may_set
+    _check("kubernetes.io/role is NOT passed to the kubelet", not k("kubernetes.io/role"))
+    _check("k8s.io/* is NOT passed to the kubelet", not k("k8s.io/anything"))
+    _check("allowed kubernetes.io names stay on the kubelet", k("kubernetes.io/hostname") and k("node.kubernetes.io/instance-type")
+           and k("kubelet.kubernetes.io/x") and k("topology.kubernetes.io/zone"))
+    _check("cloud labels stay on the kubelet", k("kubernetes.azure.com/agentpool") and k("eks.amazonaws.com/nodegroup") and k("cloud.google.com/gke-nodepool") and k("agentpool"))
+    for cloud in ("azure", "aws", "gcp"):
+        bad = [x for x in k3s.node_labels(cloud, "p", "Standard_D2") if not k(x)]
+        _check("%s default labels: restricted ones are %s" % (cloud, bad or "none"), cloud != "azure" or bad == ["kubernetes.io/role"])
+
+
 if __name__ == "__main__":
     run()
+    test_kubelet_label_rules()

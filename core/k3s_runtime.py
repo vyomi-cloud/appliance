@@ -92,6 +92,20 @@ def node_labels(cloud, pool, vm_size=None, extra=None):
     return lab
 
 
+def kubelet_may_set(key):
+    """The kubelet refuses --node-labels in the kubernetes.io / k8s.io namespaces except under kubelet.* / node.* (and a short fixed set).
+    Anything else there (e.g. kubernetes.io/role) must be applied with `kubectl label node` after the node registers."""
+    dom = str(key).split("/", 1)[0] if "/" in str(key) else ""
+    if not dom:
+        return True
+    if dom in ("kubernetes.io", "k8s.io") or dom.endswith(".kubernetes.io") or dom.endswith(".k8s.io"):
+        return (dom in ("kubelet.kubernetes.io", "node.kubernetes.io") or dom.endswith(".kubelet.kubernetes.io") or dom.endswith(".node.kubernetes.io")
+                or str(key) in ("kubernetes.io/hostname", "kubernetes.io/arch", "kubernetes.io/os", "beta.kubernetes.io/arch", "beta.kubernetes.io/os",
+                                "beta.kubernetes.io/instance-type", "failure-domain.beta.kubernetes.io/zone", "failure-domain.beta.kubernetes.io/region",
+                                "topology.kubernetes.io/zone", "topology.kubernetes.io/region"))
+    return True
+
+
 _EFFECTS = {"NO_SCHEDULE": "NoSchedule", "PREFER_NO_SCHEDULE": "PreferNoSchedule", "NO_EXECUTE": "NoExecute"}
 
 
@@ -228,10 +242,15 @@ class K3sRuntime:
                 "--label", "vyomi.k3s=agent", "--label", "vyomi.k3s.name=" + server, "--label", "vyomi.k3s.pool=" + pool["name"],
                 "--label", "vyomi.k3s.index=%d" % idx, "--label", "vyomi.k3s.tag=" + tag,
                 "%s:%s" % (K3S_IMAGE_REPO, tag), "agent"]
+        late = {k: v for k, v in labels.items() if not kubelet_may_set(k)}
         for k, v in labels.items():
-            args += ["--node-label", "%s=%s" % (k, v)]
+            if k not in late:
+                args += ["--node-label", "%s=%s" % (k, v)]
         for t in pool.get("taints") or []:
             args += ["--node-taint", t]
+        if late:                                         # applied by ensure_late_labels once the node is Ready
+            at = args.index("%s:%s" % (K3S_IMAGE_REPO, tag))
+            args[at:at] = ["--label", "vyomi.k3s.latelabels=" + json.dumps(late)]
         self._must(args, None, 600)
         return an
 
@@ -374,11 +393,26 @@ class K3sRuntime:
 
     # ── post-ready platform objects: restricted user, StorageClasses ──
     def _post_ready(self, cloud, cluster_id):
-        for step in (self.ensure_user_rbac, self.ensure_storage):
+        for step in (self.ensure_late_labels, self.ensure_user_rbac, self.ensure_storage):
             try:
                 step(cloud, cluster_id)
             except Exception as e:
                 self.warnings.append("%s %s: %s" % (step.__name__, cluster_id, str(e)[:200]))
+
+    def ensure_late_labels(self, cloud, cluster_id):
+        """Apply the node labels the kubelet refused at registration (kubernetes.io/role ...), from each agent's vyomi.k3s.latelabels label."""
+        for an in self._agents(cloud, cluster_id):
+            rc, out, _ = self._d(["inspect", "-f", '{{index .Config.Labels "vyomi.k3s.latelabels"}}', an], None, 20)
+            raw = out.strip()
+            if rc != 0 or not raw or raw == "<no value>":
+                continue
+            try:
+                late = json.loads(raw)
+            except ValueError:
+                continue
+            if late:
+                self._must(["exec", server_name(cloud, cluster_id), "kubectl", "label", "node", an, "--overwrite",
+                            *["%s=%s" % (k, v) for k, v in late.items()]], None, 30)
 
     def ensure_user_rbac(self, cloud, cluster_id):
         y = """apiVersion: v1
