@@ -84,7 +84,7 @@ Announce nothing until all smoke checks pass and you say so.
 
 ### New or changed blockers
 1. Hosted Booster relay does not exist. `relay.vyomi.cloud` (Cloudflare Worker, `wasm/relay/worker.js`) is the Nano cloud tunnel and has no Booster routes; the Booster relay is the Node `local-relay.mjs` only. Decision needed: host the Node relay (small DO droplet, about $12-24/month) or port the Booster hub to a Durable Object.
-2. SSH access decision: phase 1 = `gh codespace ports forward` (boot runs the per-instance forwarder; Connect tab shows exact commands); phase 2 = hosted TCP SSH gateway (port per instance, sharding-ready, control plane in the portal). Both need: honour the key pair at launch (Docker VM backend ignores user keys today).
+2. SSH access DECIDED (2026-11-09, owner): v4.0.0 ships phase 1 only = `gh codespace ports forward` (boot runs the per-instance forwarder; Connect tab shows exact commands); phase 2 (post-v4, does NOT block the release) = hosted TCP SSH gateway (port per instance, sharding-ready, control plane in the portal). Both need: honour the key pair at launch (Docker VM backend ignores user keys today).
 3. 5-minute heartbeat rule ends the whole Mesh session when the Vyomi tab is closed; decide: keep, or replace by idle destroy/pause (+ `tmux`-backed shells).
 4. Keep-alive is unit-tested only. Live check needs a Codespace with sshd (devcontainer change synced to `vyomi-cloud/sandbox`) and proof that `gh` accepts a GitHub App user token (GitHub-login users hold an OAuth token with the `codespace` scope, which should work).
 5. Rerun the full Mesh E2E (GitHub login as admin@vyomi.cloud with EC2 + AI on all three clouds; Google/LinkedIn login + GitHub App connect) once a public tunnel/relay exists; local ngrok is gone.
