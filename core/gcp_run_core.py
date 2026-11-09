@@ -544,8 +544,51 @@ def _check_custom_audiences(v):
     return list(v)
 
 
+GPU_NOTE = "Dev Simplified - GPU simulated: no passthrough. The GPU configuration is validated and stored, but the revision is scheduled CPU-only; no NVIDIA device or CUDA runtime is available to the container."
+_GPU_ANN = "vyomi.dev/gpu-simulated"
+_GPU_TYPES = ("nvidia-l4",)
+_BYTES = {"": 1, "K": 10**3, "M": 10**6, "G": 10**9, "T": 10**12, "Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4}
+
+
+def _qty_bytes(v):
+    m = re.match(r"^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|K|M|G|T)?$", str(v))
+    return float(m.group(1)) * _BYTES[m.group(2) or ""] if m else 0
+
+
+def _cpu_cores(v):
+    v = str(v)
+    return float(v[:-1]) / 1000 if v.endswith("m") else float(v)
+
+
+def _check_gpu(spec):
+    """Accept + validate the GPU config (real Cloud Run v2 shape: template.nodeSelector.accelerator and a
+    nvidia.com/gpu container limit), then label the revision as simulated. Never runs CUDA."""
+    ns = spec.get("nodeSelector")
+    wants = [c for c in spec.get("containers") or [] if "nvidia.com/gpu" in ((c.get("resources") or {}).get("limits") or {})]
+    if ns is None and not wants:
+        return
+    acc = (ns or {}).get("accelerator") if isinstance(ns, dict) else None
+    if not acc:
+        raise _E(400, "INVALID_ARGUMENT", "template.nodeSelector.accelerator is required when a container requests nvidia.com/gpu.")
+    if acc not in _GPU_TYPES:
+        raise _E(400, "INVALID_ARGUMENT", "Unsupported GPU type %r. Vyomi accepts: %s." % (acc, ", ".join(_GPU_TYPES)))
+    if len(wants) != 1:
+        raise _E(400, "INVALID_ARGUMENT", "Exactly one container must set resources.limits['nvidia.com/gpu'] when nodeSelector.accelerator is set.")
+    lim = wants[0]["resources"]["limits"]
+    if str(lim["nvidia.com/gpu"]) != "1":
+        raise _E(400, "INVALID_ARGUMENT", "nvidia.com/gpu must be 1 (one GPU per instance).")
+    if _cpu_cores(lim.get("cpu", "1")) < 4:
+        raise _E(400, "INVALID_ARGUMENT", "GPU instances require at least 4 CPU.")
+    if _qty_bytes(lim.get("memory", "0")) < 16 * 1024**3:
+        raise _E(400, "INVALID_ARGUMENT", "GPU instances require at least 16Gi of memory.")
+    if spec.get("gpuZonalRedundancyDisabled") is not None and not isinstance(spec["gpuZonalRedundancyDisabled"], bool):
+        raise _E(400, "INVALID_ARGUMENT", "gpuZonalRedundancyDisabled must be a boolean.")
+    spec["annotations"] = {**(spec.get("annotations") or {}), _GPU_ANN: GPU_NOTE}
+
+
 def _validate_template_ext(spec, is_job, store, project, location):
     ann = spec.get("annotations") or {}
+    _check_gpu(spec)
     for c in spec.get("containers") or []:
         for key, which in (("startupProbe", "startup"), ("livenessProbe", "liveness")):
             if c.get(key) is not None:

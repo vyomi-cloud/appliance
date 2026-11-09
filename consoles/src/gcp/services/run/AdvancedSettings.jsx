@@ -21,6 +21,7 @@ export const emptyAdvanced = () => ({
   cmek: false, kmsKey: "",
   h2: false, affinity: false, vpcKind: "none", connector: "", network: "default", subnet: "", egress: "PRIVATE_RANGES_ONLY", tags: "", mesh: "",
   noDefaultUrl: false, audiences: "",
+  gpu: false,
 });
 
 const Group = ({ title, capId, children }) => (
@@ -55,6 +56,19 @@ export function EphemeralDisk({ a, set }) {
           <TextField size="small" label="Disk size" value={a.diskSize} onChange={(e) => set({ diskSize: e.target.value })} helperText="e.g. 10Gi" inputProps={{ "aria-label": "Disk size" }} sx={{ width: 180 }} />
           <TextField size="small" label="Mount path" value={a.diskPath} onChange={(e) => set({ diskPath: e.target.value })} inputProps={{ "aria-label": "Disk mount path" }} sx={{ width: 240 }} />
         </Stack>
+      )}
+    </Group>
+  );
+}
+
+export function GpuPanel({ a, set, capId }) {
+  return (
+    <Group title="GPU" capId={capId}>
+      <FormControlLabel control={<Checkbox size="small" checked={a.gpu} onChange={(e) => set({ gpu: e.target.checked })} />} label="Attach 1 NVIDIA L4 GPU per instance" />
+      {a.gpu && (
+        <Typography variant="body2" color="text.secondary" data-vyomi-gpu-note>
+          GPU simulated: no passthrough. Vyomi stores the GPU configuration (nodeSelector accelerator nvidia-l4, 4 CPU, 16Gi minimum) and schedules the instance CPU-only; no NVIDIA device or CUDA runtime is available.
+        </Typography>
       )}
     </Group>
   );
@@ -230,6 +244,12 @@ export function applyAdvanced(a, { container, template, body, gen1, region }) {
     mounts.push({ name: "cloudsql", mountPath: "/cloudsql" });
   }
   if (volumes.length) { template.volumes = volumes; container.volumeMounts = mounts; }
+  if (a.gpu) {
+    template.nodeSelector = { accelerator: "nvidia-l4" };
+    const lim = { ...(container.resources?.limits || {}) };
+    lim.cpu = "4"; lim.memory = "16Gi"; lim["nvidia.com/gpu"] = "1";
+    container.resources = { ...(container.resources || {}), limits: lim };
+  }
   if (a.startup.on) container.startupProbe = probeBody(a.startup);
   if (a.liveness.on) container.livenessProbe = probeBody(a.liveness);
   if (body) {

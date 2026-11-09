@@ -412,13 +412,21 @@
   ]
  },
  "gcp.run.gpu": {
-  "title": "GPU for Cloud Run services and jobs (NVIDIA L4)",
+  "title": "GPU for Cloud Run services and jobs (GPU simulated: no passthrough)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Cloud Run GPUs attach NVIDIA L4 hardware to a container instance; Vyomi runs containers on the host Docker engine with no GPU passthrough or scheduler."
+   "Dev Simplified - GPU simulated: no passthrough. Vyomi validates and stores the GPU configuration (template.nodeSelector.accelerator=nvidia-l4, resources.limits['nvidia.com/gpu']=1, at least 4 CPU and 16Gi memory, gpuZonalRedundancyDisabled) and returns it from the API, but the instance is scheduled CPU-only. No NVIDIA device, driver or CUDA runtime is present, so GPU workloads do not run accelerated. The revision carries the annotation vyomi.dev/gpu-simulated.",
+   "Only nvidia-l4 is accepted; GPU quota, zonal redundancy and GPU pricing are not modelled."
+  ],
+  "api": [
+   "services.create (template.nodeSelector.accelerator)",
+   "services.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_gpu.py"
   ]
  },
  "gcp.run.networking": {
