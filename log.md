@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-09T19:59:13+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 1 actionable.**
+- 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
+- · `announcement` Amazon Athena introduces system tables for observability, auditing, and usage analytics ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/athena-system-tables/))
+- · `announcement` Amazon EKS Auto Mode and Karpenter now support Dynamic Resource Allocation ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eks-auto-mode-karpenter-dra/))
+- · `announcement` Amazon MWAA Serverless now supports custom and provider package operators ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/mwaa-serverless-custom-operators/))
+- · `announcement` Amazon S3 Access Points for Amazon FSx are now available in additional AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/s3-access-points-fsx-regions/))
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T17:10:49+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,16 +3011,3 @@ Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
-### Upstream watch — 2026-10-27T23:50:17+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**6 change(s), 4 actionable.**
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-- · `spec-commit` Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643) ([link](https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457))
-- · `spec-commit` Azure storage: Update types and auth naming for .NET (#47667) ([link](https://github.com/Azure/azure-rest-api-specs/commit/548d44095be067632e36c74969cce42472ed1431))
-
-Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
