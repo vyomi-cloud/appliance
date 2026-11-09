@@ -610,6 +610,52 @@ def _delete(rec: dict, kind: str, ns: str | None, name: str) -> bool:
     return True
 
 
+# ── Deployment controller (pods derived from deployments) ────────────────────────────────
+def _tpl_hash(dep: dict) -> str:
+    return format(zlib.crc32(json.dumps(((dep.get("spec") or {}).get("template")) or {}, sort_keys=True).encode()), "08x") + "5d"
+
+
+def _reconcile(rec: dict) -> None:
+    """A tiny Deployment controller: every Deployment owns ``spec.replicas`` Pod objects named ``<deploy>-<template-hash>-<5 chars>``
+    (no ReplicaSet layer), scaling / template changes / deletion reconcile the owned Pods, and Pods whose Deployment is gone are
+    garbage-collected. The Pods are real stored objects but are never scheduled (status stays Pending, see NOT_SCHEDULED)."""
+    st = _store(rec)
+    objs = st["objects"]
+    deps = {(o["metadata"].get("namespace"), o["metadata"]["name"]): o for o in objs.values() if o.get("kind") == "Deployment"}
+    owned = {}
+    for k, o in list(objs.items()):
+        if o.get("kind") != "Pod":
+            continue
+        ref = next((r for r in (o["metadata"].get("ownerReferences") or []) if r.get("kind") == "Deployment"), None)
+        if ref is None:
+            continue
+        dep = deps.get((o["metadata"].get("namespace"), ref.get("name")))
+        if dep is None or dep["metadata"].get("uid") != ref.get("uid") or o["metadata"].get("labels", {}).get("pod-template-hash") != _tpl_hash(dep):
+            _delete(rec, "Pod", o["metadata"].get("namespace"), o["metadata"]["name"])
+            continue
+        owned.setdefault((dep["metadata"].get("namespace"), dep["metadata"]["name"]), []).append(o)
+    for (ns, name), dep in deps.items():
+        want = (dep.get("spec") or {}).get("replicas", 1)
+        want = want if isinstance(want, int) and want >= 0 else 1
+        have = sorted(owned.get((ns, name), []), key=lambda o: o["metadata"]["creationTimestamp"] + o["metadata"]["name"])
+        for o in have[want:]:
+            _delete(rec, "Pod", ns, o["metadata"]["name"])
+        tpl = (dep.get("spec") or {}).get("template") or {}
+        h = _tpl_hash(dep)
+        for _ in range(want - len(have)):
+            suffix = uuid.uuid4().hex[:5]
+            labels = dict((tpl.get("metadata") or {}).get("labels") or {})
+            labels["pod-template-hash"] = h
+            pod = {"apiVersion": "v1", "kind": "Pod",
+                   "metadata": {"name": f"{name}-{h[:9]}-{suffix}", "namespace": ns, "labels": labels,
+                                "ownerReferences": [{"apiVersion": "apps/v1", "kind": "Deployment", "name": name, "uid": dep["metadata"].get("uid"), "controller": True, "blockOwnerDeletion": True}]},
+                   "spec": copy.deepcopy(tpl.get("spec") or {})}
+            _put(rec, pod, "create")
+        n = len([1 for o in objs.values() if o.get("kind") == "Pod" and any(r.get("name") == name and r.get("kind") == "Deployment" for r in o["metadata"].get("ownerReferences") or []) and o["metadata"].get("namespace") == ns])
+        dep.setdefault("status", {})["replicas"] = n
+        dep["status"]["unavailableReplicas"] = n
+
+
 # ── kubectl ──────────────────────────────────────────────────────────────────────────────
 def _resource_label(rec: dict, kind: str) -> str:
     g = (_kind_spec(rec, kind) or (kind.lower(),))[0]
@@ -1050,6 +1096,7 @@ def run_command(rec: dict, command: str, context_b64: str | None = None) -> dict
         except KubectlError as e:
             logs.append(str(e).rstrip("\n") + "\n"); code = 1
             break
+    _reconcile(rec)
     return {"exitCode": code, "logs": "".join(logs), "changed": version(rec) != before}
 
 
@@ -1070,6 +1117,7 @@ def apply_manifests(rec: dict, docs: list, default_ns: str = "default", owner: t
     for d, obj in zip(docs, validated):
         res = _put(rec, obj, "apply", applied=d)
         out.append(f"{_resource_label(rec, obj['kind'])}/{obj['metadata']['name']} {res}")
+    _reconcile(rec)
     return out
 
 

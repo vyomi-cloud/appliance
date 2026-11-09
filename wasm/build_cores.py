@@ -135,7 +135,9 @@ CORES = [
     "azure_billing_ext_core.py",
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
-    "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
+    "azure_aks_k8s_core.py",
+    "kube_state_core.py",                           # cloud-agnostic Kubernetes state + KubeBackend seam (backup/restore)
+    "azure_dataprotection_core.py",                 # v4: Azure Backup for AKS (Microsoft.DataProtection)
     "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
     "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
     "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)
