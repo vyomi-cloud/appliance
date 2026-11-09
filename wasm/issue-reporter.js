@@ -158,10 +158,10 @@
     document.body.appendChild(o); return o;
   }
   var CARD = "background:#fff;color:#1f2933;max-width:520px;margin:16px;padding:24px 28px;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);line-height:1.5;font-size:14px";
-  var BTN = "font:inherit;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;border:1px solid #6b7280;background:#fff;color:#1f2933;margin-right:10px";
+  var BTN = "font:inherit;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;margin-right:10px";
   function showConsent() {
     var done = function (mode) { putMode(mode).then(function () { var o = document.getElementById("vyomi-consent"); if (o) o.remove(); }); };
-    var yes = el("button", { id: "vyomi-consent-yes", style: BTN + ";background:#2563eb;border-color:#2563eb;color:#fff", text: "Yes, file issues for me" });
+    var yes = el("button", { id: "vyomi-consent-yes", style: BTN + ";background:#000;border-color:#000;color:#fff", text: "Yes, file issues for me" });
     var no = el("button", { id: "vyomi-consent-no", style: BTN, text: "Not now" });
     yes.onclick = function () { done("named"); }; no.onclick = function () { done("anonymous"); };
     overlay("vyomi-consent", el("div", { style: CARD }, [
