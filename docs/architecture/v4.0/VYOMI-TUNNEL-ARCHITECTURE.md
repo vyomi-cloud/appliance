@@ -194,6 +194,20 @@ Test plan for the builder: extend `wasm/relay/test-mesh-ssh.mjs` with a fake hos
 `codespace`; check that the name is reserved, other accounts get 403, and that `docker exec` access works on a real Codespace once
 sshd and the key injection exist. Estimate: about half a day plus the live check.
 
+## 9c. Reserved targets, `forward` and the keeper - built 2026-11-10 (local tests only)
+
+Built on the trunk's stream framework (`kind:"tcp"`); no new agent roles (the hub's `role` means runner-role tokens, which is a different thing).
+
+- **Reserved targets**, answered by the agent before any container lookup, client port ignored (`resolveReserved` in `wasm/relay/booster-dial.mjs`):
+  `host` / `codespace` -> this machine's sshd (`VYOMI_HOST_SSH_ADDR`, default `host.docker.internal:22`); `vyomi-k3s-<10 hex>` -> that k3s API
+  server on port 6443 only (`core/k3s_runtime.py` `server_name`); `k3s` -> `VYOMI_K3S_ADDR` when set. A VM cannot shadow them. Each open is an audit log line.
+- **`vyomi-tunnel forward <target> <local>:<remote>`**: loopback listener, one `/connect` stream per accepted socket
+  (`vyomi-tunnel forward vyomi-k3s-<id> 6443:6443`, then `kubectl --server https://127.0.0.1:6443`).
+- **`vyomi-tunnel keep`** (`wasm/relay/keeper.mjs`): holds an ssh session to the Codespace host and writes a line about every 240 s (+/-10%) to renew GitHub's idle timer.
+- Tests: `test-tunnel-k3s.mjs` (19 checks), `test-keeper.mjs`. NOT verified: a real Codespace, a real k3s API through the tunnel, the T1 keeper acceptance gate.
+- **Still needed for a Pro/Max user to reach k3s from their machine:** sshd in the Codespace image (`vyomi-cloud/sandbox`) + the 9b host-sshd path;
+  reachability of `vyomi-net` from the agent container; kubeconfig `server:` rewrite to the forwarded port; the runner agent/handoff (not built).
+
 ## 10. Test coverage
 
 | Area | Test | Result |
