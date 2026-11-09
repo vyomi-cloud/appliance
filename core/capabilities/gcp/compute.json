@@ -47,7 +47,7 @@
   },
   "limitations": [
    "SSH (offline): the instance is a real Docker container with sshd. Setting the `ssh-keys` metadata (POST /api/gcp/compute/instances/{id}/ssh-keys, USERNAME:KEY lines) creates the user and authorizes the key in the guest the way the guest agent does, so `ssh -i key user@host -p port` really logs in; malformed lines are rejected. OS info (GET .../os-info) is read from the running guest (os-release, kernel, arch, memory, uptime). OS Login keys use the same path. On Nano, SSH is served by the in-browser VM (see gcp.compute.instances.nano_vm).",
-   "Screenshot: Simulated by Vyomi. instances.getScreenshot needs a framebuffer and stays FAILED_PRECONDITION on the API: instances (Docker containers offline, headless v86 VMs on Nano) have no virtual display. The console Screenshot tab instead renders the tail of the serial console onto an image (downloadable as PNG), labelled as Vyomi-rendered; it is not what a display would show.",
+   "Screenshot: Dev Simplified. instances.getScreenshot needs a framebuffer and stays FAILED_PRECONDITION on the API: instances (Docker containers offline, headless v86 VMs on Nano) have no virtual display. The console Screenshot tab instead renders the tail of the serial console onto an image (downloadable as PNG), labelled as Vyomi-rendered; it is not what a display would show.",
    "OS info / guest attributes: offline has no guest agent for getGuestAttributes (FAILED_PRECONDITION). On Nano (in-browser VMs on, instance RUNNING) a page-side guest agent (wasm/vm/nano-vm-host.js) reads os-release, uname, /proc/uptime and MemTotal from the VM over its ttyS0 shell once it boots and reports them: GET :osInfo answers with source=guest (the VM's Alpine, i686 kernel - not the boot image you picked) and getGuestAttributes serves them in the `vyomi` namespace (hostname, os-release, kernel, architecture, uptime-seconds, memory-kb) when enable-guest-attributes=TRUE, with queryPath/variableKey. The facts are a snapshot taken after boot (uptime is not live), the probe types one line into the VM shell (visible in an open terminal), and a VM that never reaches a shell prompt reports nothing. Verified against the core with the agent's report applied; the browser probe itself was not run in a real browser VM in this session."
   ],
   "api": [
@@ -631,7 +631,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Simulated by Vyomi: this is NOT Google's real status feed. Vyomi has no Google status source, so it reports the health of your simulated project only. Every simulated service is Available and the incident history is empty until you inject a test incident (here or via POST on the servicehealth events path); injected incidents can be updated, resolved and deleted so you can build against the Service Health API shape."
+   "Dev Simplified: this is NOT Google's real status feed. Vyomi has no Google status source, so it reports the health of your simulated project only. Every simulated service is Available and the incident history is empty until you inject a test incident (here or via POST on the servicehealth events path); injected incidents can be updated, resolved and deleted so you can build against the Service Health API shape."
   ],
   "api": [
    "events.list",
