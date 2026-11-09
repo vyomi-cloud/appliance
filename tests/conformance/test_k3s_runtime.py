@@ -6,30 +6,10 @@ import json
 import time
 
 from core import k3s_runtime as k3s
+from tests.conformance.k3s_fake import FakeDocker, KUBECONFIG
 from core import kube_state_core as kube
 from core import gcp_container_core as gke
 from core.azure_arm_core import AzureArm, DEFAULT_SUBSCRIPTION as S
-
-KUBECONFIG = """apiVersion: v1
-clusters:
-- cluster:
-    certificate-authority-data: Q0FEQVRB
-    server: https://127.0.0.1:6443
-  name: default
-contexts:
-- context:
-    cluster: default
-    user: default
-  name: default
-current-context: default
-kind: Config
-users:
-- name: default
-  user:
-    client-certificate-data: Q0VSVA==
-    client-key-data: S0VZ
-"""
-
 
 def _check(n, c):
     if not c:
@@ -46,73 +26,14 @@ def _obj(kind, name, ns=None, owner=False, **extra):
     return {"apiVersion": "v1", "kind": kind, "metadata": md, "status": {"x": 1}, **extra}
 
 
-class FakeDocker:
-    def __init__(self):
-        self.calls, self.containers, self.volumes, self.networks = [], {}, set(), set()
-        self.items = {}            # kubectl resource -> list of objects
-        self.applied, self.nodes_ready = [], 1
-
-    def __call__(self, args, stdin=None, timeout=120):
-        self.calls.append((list(args), stdin))
-        a = list(args)
-        if a[:2] == ["network", "inspect"]:
-            return (0 if a[2] in self.networks else 1), "", ""
-        if a[:2] == ["network", "create"]:
-            self.networks.add(a[2]); return 0, "", ""
-        if a[:2] == ["volume", "create"]:
-            self.volumes.add(a[-1]); return 0, "", ""
-        if a[:2] == ["volume", "ls"]:
-            return 0, "\n".join(sorted(self.volumes)) + "\n", ""
-        if a[:2] == ["volume", "rm"]:
-            self.volumes.discard(a[-1]); return 0, "", ""
-        if a[0] == "run":
-            name = a[a.index("--name") + 1]
-            self.containers[name] = a
-            return 0, "cid\n", ""
-        if a[:3] == ["inspect", "--type", "container"]:
-            return (0 if a[3] in self.containers else 1), "", ""
-        if a[0] == "ps":
-            if any(x.startswith("label=vyomi.k3s.name=") for x in a):
-                return 0, "\n".join(self.containers) + "\n", ""
-            return 0, "".join("%s\tazure\tcid\trunning\n" % n for n in self.containers if "agent" not in n), ""
-        if a[0] == "rm":
-            self.containers.pop(a[-1], None); return 0, "", ""
-        if a[0] == "port":
-            return 0, "127.0.0.1:49152\n", ""
-        if a[0] == "exec":
-            if "cat" in a and k3s.KUBECONFIG_PATH in a:
-                return 0, KUBECONFIG, ""
-            i = a.index("kubectl") if "kubectl" in a else None
-            if i is None:
-                return 0, "", ""
-            k = a[i + 1:]
-            if k[:2] == ["get", "--raw"]:
-                return 0, "ok", ""
-            if k[:2] == ["get", "nodes"]:
-                return 0, "\n".join("n%d Ready control-plane 1m v1" % j for j in range(self.nodes_ready)) + "\n", ""
-            if k[0] == "get":
-                return 0, json.dumps({"items": self.items.get(k[1], [])}), ""
-            if k[0] == "apply":
-                try:
-                    d = json.loads(stdin)
-                except ValueError:
-                    return 0, "applied (yaml)\n", ""
-                self.applied.append(d); return 0, "%s/%s serverside-applied\n" % (d["kind"].lower(), d["metadata"]["name"]), ""
-            if k[0] == "delete":
-                return 0, "deleted\n", ""
-            return 0, "ran %s\n" % " ".join(k), ""
-        return 0, "", ""
-
-
 def run():
     fd = FakeDocker()
     rt = k3s.K3sRuntime(docker=fd, sleep=lambda s: None)
 
     # ── lifecycle ──
-    fd.nodes_ready = 2
-    info = rt.create_cluster("azure", "/subs/x/aks1", "1.29.0", 2, ["aks1.hcp.azmk8s.io"], wait=True)
+    info = rt.create_cluster("azure", "/subs/x/aks1", "1.30.0", 2, ["aks1.hcp.azmk8s.io"], wait=True)
     name = k3s.server_name("azure", "/subs/x/aks1")
-    run_args = fd.containers[name]
+    run_args = fd.containers[name]["args"]
     _check("server named vyomi-k3s-<hash>", name.startswith("vyomi-k3s-") and info["name"] == name)
     _check("network vyomi-net created", k3s.NETWORK in fd.networks and run_args[run_args.index("--network") + 1] == k3s.NETWORK)
     _check("privileged + pinned image + persistent volume", "--privileged" in run_args and ("rancher/k3s:" + k3s.PINNED_K3S_VERSION) in run_args
@@ -120,14 +41,17 @@ def run():
     tail = run_args[run_args.index("server"):]
     _check("--cluster-init, 3 components disabled", "--cluster-init" in tail and all(tail[tail.index("--disable") + 2 * i + 1] in ("traefik", "servicelb", "metrics-server") for i in range(3)))
     _check("--tls-san 127.0.0.1 + stable name + extra", all(("--tls-san", x) in list(zip(tail, tail[1:])) for x in ("127.0.0.1", name, "aks1.hcp.azmk8s.io")))
-    _check("node_count=2 -> 1 agent", (name + "-agent-1") in fd.containers and len([c for c in fd.containers if "agent" in c]) == 1)
+    _check("control plane only (--disable-agent); node_count=2 -> 2 agents in the default pool", "--disable-agent" in tail and len(fd.agents()) == 2
+           and all(fd.containers[n]["labels"]["vyomi.k3s.pool"] == "nodepool1" for n in fd.agents()))
     _check("exists() / idempotent create", rt.exists("azure", "/subs/x/aks1") and rt.create_cluster("azure", "/subs/x/aks1")["name"] == name
-           and len([c for c in fd.containers if "agent" not in c]) == 1)
+           and len([c for c in fd.containers if c.count("-") == 2]) == 1)
     kc = rt.kubeconfig("azure", "/subs/x/aks1")
     _check("kubeconfig: client cert kept, server rewritten, context named", "client-certificate-data: Q0VSVA==" in kc and "server: https://127.0.0.1:49152" in kc and ("current-context: " + name) in kc)
     _check("kubeconfig custom server_url", "server: https://k3s.local:6443" in rt.kubeconfig("azure", "/subs/x/aks1", "https://k3s.local:6443"))
-    _check("list_clusters", rt.list_clusters() == [{"name": name, "cloud": "azure", "cluster": "cid", "state": "running"}])
+    _check("list_clusters", rt.list_clusters() == [{"name": name, "cloud": "azure", "cluster": "/subs/x/aks1", "state": "running"}])
+    fd.nodes_ready = 0
     _check("wait_ready times out when nodes never Ready", _raises(lambda: _wait(k3s.K3sRuntime(docker=fd, sleep=lambda s: None), 5)))
+    fd.nodes_ready = None
 
     # ── RealK8sBackend contract ──
     be = rt.backend_factory()("azure", "/subs/x/aks1")
@@ -174,7 +98,7 @@ def run():
         h("PUT", f"{R}/rg1", {"location": "eastus"}, "2021-04-01")
         CL = f"{R}/rg1/providers/Microsoft.ContainerService/managedClusters/aks1"
         r = h("PUT", CL, {"location": "eastus", "properties": {"kubernetesVersion": "1.29.0", "dnsPrefix": "a", "agentPoolProfiles": [{"name": "np", "count": 1, "vmSize": "Standard_B2s", "mode": "System"}]}}, "2024-09-02-preview")
-        _check("AKS PUT starts a k3s server container", r["status"] in (200, 201) and len([c for c in fd2.containers if "agent" not in c]) == 1)
+        _check("AKS PUT starts a k3s server container", r["status"] in (200, 201) and len([c for c in fd2.containers if c.count("-") == 2]) == 1)
         for _ in range(100):
             if h("GET", CL, None, "2024-09-02-preview")["body"]["properties"]["provisioningState"] == "Succeeded":
                 break
@@ -183,14 +107,17 @@ def run():
         rc = h("POST", CL + "/runCommand", {"command": "kubectl get pods"}, "2024-09-02-preview")["body"]["properties"]
         _check("runCommand executes the REAL kubectl (via docker exec)", rc["exitCode"] == 0 and any(c[0][0] == "exec" and "kubectl" in c[0] and "pods" in c[0] for c in fd2.calls))
         cred = h("POST", CL + "/listClusterUserCredential", None, "2024-09-02-preview")["body"]["kubeconfigs"][0]
-        _check("listClusterUserCredential returns the real kubeconfig", "client-certificate-data: Q0VSVA==" in base64.b64decode(cred["value"]).decode())
+        _check("listClusterUserCredential returns the restricted USER kubeconfig (token, no admin cert)", "token: user-token" in base64.b64decode(cred["value"]).decode()
+               and "client-key-data" not in base64.b64decode(cred["value"]).decode())
+        adm = h("POST", CL + "/listClusterAdminCredential", None, "2024-09-02-preview")["body"]["kubeconfigs"][0]
+        _check("listClusterAdminCredential returns the admin client-cert kubeconfig", "client-certificate-data: Q0VSVA==" in base64.b64decode(adm["value"]).decode())
         _check("AKS DELETE removes the k3s container + volume", h("DELETE", CL, None, "2024-09-02-preview")["status"] in (200, 202, 204) and not fd2.containers and not fd2.volumes)
 
         # ── GKE wiring ──
         store = gke.ContainerStore()
         gke.create_cluster(store, "p", "us-central1-a", {"cluster": {"name": "g1", "initialNodeCount": 1}})
         full = gke.cluster_name("p", "us-central1-a", "g1")
-        _check("GKE create starts k3s, status PROVISIONING|RUNNING", full in store.clusters and any("g1" not in c and c.startswith("vyomi-k3s-") for c in fd2.containers))
+        _check("GKE create starts k3s, status PROVISIONING|RUNNING", full in store.clusters and any(c.startswith("vyomi-k3s-") for c in fd2.containers))
         for _ in range(100):
             if store.clusters[full]["status"] == gke.RUNNING:
                 break
