@@ -3,7 +3,7 @@
  "default_chat": "qwen2.5-3b",
  "default_embed": "nomic-embed-text",
  "local_id": "qwen2.5-3b",
- "needs_booster": "Needs Booster (Pro/Max)",
+ "needs_booster": "Needs Mesh (Pro/Max)",
  "models": [
   {
    "id": "qwen2.5-3b",

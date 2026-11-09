@@ -74,7 +74,7 @@ export default function Studio() {
       <PageHeader title="Vertex AI Studio" actions={<CapabilityBadge id="gcp.vertex-ai.gemini" host="[data-vyomi-header]" />} />
       <LocalModelBar />
       <Stack spacing={3}>
-        <CapabilityContainer noBadge id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against one of the ten pool models. Without a booster only the local small model answers; the others need the booster (Pro/Max).">
+        <CapabilityContainer noBadge id="gcp.vertex-ai.gemini" title="Freeform prompt" description="generateContent against one of the ten pool models. Without the Mesh only the local small model answers; the others need the Mesh (Pro/Max).">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>
             <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{AI_CHAT.map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.id}) - {availText(av.data?.[m.id], m.id)}</MenuItem>)}</TextField>
             <TextField size="small" label="System instructions" value={system} onChange={(e) => setSystem(e.target.value)} multiline minRows={2} />

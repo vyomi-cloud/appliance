@@ -34,7 +34,7 @@ IDS = [m["id"] for m in MODELS]
 BY_ID = {m["id"]: m for m in MODELS}
 LOCAL_ID = "qwen2.5-3b"              # the only model that runs without a booster (the in-appliance small model)
 DEFAULT_CHAT, DEFAULT_EMBED = "qwen2.5-3b", "nomic-embed-text"
-NEEDS_BOOSTER = "Needs Booster (Pro/Max)"
+NEEDS_BOOSTER = "Needs Mesh (Pro/Max)"
 
 # Hidden compatibility map: cloud API id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest pattern.
 # Mirrors docker/booster-runner-llm/models.json "aliases" (drift-tested). Never listed by any console or list API.

@@ -31,7 +31,7 @@ export default function Overview() {
       <SpaceBetween size="l">
         <Container header={<Header variant="h2" actions={<Button loading={busy} onClick={check}>Check local model</Button>}>Local model</Header>}>
           <SpaceBetween size="s">
-            <Box>The pool lists ten open models. Without a booster only the small local model (Qwen2.5 3B: llama.cpp on the appliance, WebLLM in the browser on Nano when it is available) answers; the other nine need the booster (Pro/Max). Quality is toy-grade; use it to exercise prompts, RAG, agents and token accounting.</Box>
+            <Box>The pool lists ten open models. Without the Mesh only the small local model (Qwen2.5 3B: llama.cpp on the appliance, WebLLM in the browser on Nano when it is available) answers; the other nine need the Mesh (Pro/Max). Quality is toy-grade; use it to exercise prompts, RAG, agents and token accounting.</Box>
             {canWebLLM && <SpaceBetween direction="horizontal" size="xs"><Button onClick={enable}>Enable in-browser model (WebLLM)</Button>
               {webllm && (webllm.ok === false ? <StatusIndicator type="warning">{webllm.msg}</StatusIndicator> : <StatusIndicator type={webllm.ok ? "success" : "in-progress"}>{webllm.msg}</StatusIndicator>)}</SpaceBetween>}
             {st?.ok && <StatusIndicator type="success">Model answered ({st.backend})</StatusIndicator>}

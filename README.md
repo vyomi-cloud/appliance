@@ -253,7 +253,7 @@ Production deployment: [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYM
 Tier middleware enforces the gates server-side; standard SDKs work natively on every tier. Current pricing: [vyomi.cloud/pricing](https://vyomi.cloud/pricing) (USD, billed in INR).
 
 - **Free** — Vyomi Nano in your browser, no install, plus the self-hosted appliance on the Free tier.
-- **Lite** ($9/mo), **Pro** ($19/mo), **Max** ($29/mo) — self-hosted appliance tiers: more services, spaces and storage; Pro and Max add Docker compute and the booster; they differ in one way: **Pro gets every service on one cloud of your choice, Max gets all three clouds**. New offline activations start with a **14-day Pro trial**.
+- **Lite** ($9/mo), **Pro** ($19/mo), **Max** ($29/mo) — self-hosted appliance tiers: more services, spaces and storage; Pro and Max add Docker compute and the Mesh; they differ in one way: **Pro gets every service on one cloud of your choice, Max gets all three clouds**. New offline activations start with a **14-day Pro trial**.
 - **Enterprise** — cloud sandboxes for teams on GitHub Codespaces, pay per use; multi-tenant RBAC, SSO, audit sinks, air-gapped install.
 
 ## Conformance & testing

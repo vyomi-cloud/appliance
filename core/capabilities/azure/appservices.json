@@ -1,5 +1,6 @@
 {
  "$doc": "Vyomi capability registry \u2014 Azure App Services. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py \u2014 a claim the backend does not honour fails CI. GCP/Azure probes aren't understood by the shared probe() helper (it speaks AWS wire), so every claim here is proven by `tests` instead.",
+ "azure.appservices.webapp.capabilities": {"title": "Capabilities overview (feature status tiles)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Vyomi-simulated overview: each tile is computed from the app's own stored ARM state (slots, domains, HTTPS only, Always on, health check, identity, backup, VNet integration, logs). It is not the Azure portal's feature-recommendation service, so no Defender or Front Door upsell tiles are shown."], "api": ["sites Get", "sites/slots List", "sites/config/backup Get"], "tests": ["tests/conformance/test_azure_webapp_core.py"]},
  "azure.appservices.webapp.crud": {
   "title": "Web Apps (create, list, get, delete, start/stop/restart)",
   "level": {

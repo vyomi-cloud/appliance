@@ -58,7 +58,7 @@ export const NEEDS_SUBDOMAIN = new Set(["OpenAI", "AIServices", "ContentSafety",
 export const DEPLOY_SKUS = ["Standard", "GlobalStandard", "ProvisionedManaged", "GlobalProvisionedManaged", "DataZoneStandard", "GlobalBatch", "DeveloperTier"];
 // (format, name, version, maxCapacity) — the ten booster-mesh models (shared catalogue core/ai_model_catalog.py); format = real vendor
 export const MODELS = AI_MODELS.map((m) => [m.vendor, m.id, "1", 1000]);
-/** Live availability per model name (account models list); without a booster only the local small model is available. */
+/** Live availability per model name (account models list); without the Mesh only the local small model is available. */
 export const modelAvailability = async (rg, name) => {
   try { return Object.fromEntries(((await restJson("GET", `${ARM.path(rg, name)}/models`, { query: { "api-version": API_VERSION } })).value || []).map((x) => [x.model?.name, x.vyomiAvailability])); }
   catch { return {}; }

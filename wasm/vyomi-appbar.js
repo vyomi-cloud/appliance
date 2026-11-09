@@ -353,7 +353,7 @@
           if (r && r.cancelled) return;
           var er = r && !r.ok && r.j; if (!er) return;
           if (er.action === 'reconnect') { B.connectModal(true); }
-          else alert(er.message || er.error || 'Could not start the mesh.');
+          else B.toast(er.message || er.error || 'Could not start the mesh.');
         }, function () { paintBooster(); });
         return;
       }
