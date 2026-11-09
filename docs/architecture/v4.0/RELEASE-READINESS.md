@@ -94,3 +94,15 @@ Announce nothing until all smoke checks pass and you say so.
 4. Keep-alive is unit-tested only. Live check needs a Codespace with sshd (devcontainer change synced to `vyomi-cloud/sandbox`) and proof that `gh` accepts a GitHub App user token (GitHub-login users hold an OAuth token with the `codespace` scope, which should work).
 5. Rerun the full Mesh E2E (GitHub login as admin@vyomi.cloud with EC2 + AI on all three clouds; Google/LinkedIn login + GitHub App connect) once a public tunnel/relay exists; local ngrok is gone.
 6. Cleanup: about 10 old `vyomi-booster-*` Codespaces on vyomi-admin (storage quota).
+
+## Must ship together in v4.0.0 (owner decision, 2026-11-09)
+
+Each pair is useless or harmful if only one half ships. Do not release one half alone.
+
+| Feature | Appliance half | Portal half | State |
+|---|---|---|---|
+| Sandbox access gate (Codespace console privacy) | `v4/sandbox-access-gate` (core/sandbox_access.py, whoami label) | `portal/sandbox-open-gate` (`/sandbox/open/{ref}`, signed token) | both pushed + tested; NOT on a trunk. The portal gate redirects to `/_vy/access`, which older appliance images lack, so the appliance image must be released first or together. |
+| Automatic issue reporting + first-load consent (Nano + headless Pro/Max) | `v4/issue-reporting` (core, routes, SW, console build) | merged to `v4-nano-portal` (aa0248c) | portal done; appliance half waiting for the `v4-on-main` push. Then a vendor PR brings the Nano files into the portal. |
+
+Before go-live: merge the two appliance branches to `v4-on-main` (integrator push), run `node consoles/build.mjs` and commit the regenerated consoles, vendor PR for `app/nano/**`,
+register the Vyomi GitHub App and set its credentials on the portal (issue reporting "file under my account"), then fast-forward `v4-nano-portal` to `portal/sandbox-open-gate`.
