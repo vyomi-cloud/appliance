@@ -13,6 +13,8 @@
  */
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
+import dns from "node:dns/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { peekSessionEnd } from "./booster-session.mjs";
@@ -37,12 +39,25 @@ function localRequest(base, token, m) {
 }
 
 const MAX_STREAMS = Number(process.env.VYOMI_SHELL_MAX_PER_SESSION || 4);
+const MAX_TCP = Number(process.env.VYOMI_MAX_STREAMS || 20);
 const HIGH = 1024 * 1024, CHUNK = 48 * 1024, MAX_IN = 64 * 1024;
+
+/** Where does VM <name> listen? The Docker VM backend names containers  vyomi-i-<instance id>  (core/compute/backend.py) on the shared
+ *  `vyomi-net`, so this agent reaches them by Docker DNS name: no docker CLI or socket (this agent holds no Docker access).
+ *  Only those name patterns are ever looked up (never arbitrary hosts). Returns {host, port} or null. Override via `resolveVm`
+ *  (tests, an agent that runs on the host). */
+export const vmCandidates = (name) => /^[A-Za-z0-9._-]{1,80}$/.test(name) ? [`vyomi-i-${name}`, `vyomi-${name}`, name] : [];
+export async function resolveVmByDns(name, port = 22) {
+  for (const c of vmCandidates(name)) {
+    try { const r = await dns.lookup(c); if (r && r.address) return { host: c, port }; } catch { /* not a name on this network */ }
+  }
+  return null;
+}
 
 function wsBase(base) { const u = new URL(base); u.protocol = u.protocol === "https:" ? "wss:" : "ws:"; u.pathname = ""; u.search = ""; return u.toString().replace(/\/+$/, ""); }
 
 /** Start the link. Returns {stop(), done: Promise<"session_end"|"stopped">, state}. */
-export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000 }) {
+export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000, resolveVm = resolveVmByDns }) {
   const end = peekSessionEnd(token);
   let ws = null, stopped = false, resolveDone, timer = null, endTimer = null, backoff = minBackoffMs;
   const state = { linked: false, connects: 0 };
@@ -66,6 +81,27 @@ export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, 
     const onStream = (m) => {
       const sid = String(m.sid || ""); if (!sid) return;
       const lw = streams.get(sid);
+      if (m.op === "open" && m.kind === "tcp") {                 // raw TCP to a VM's sshd (vyomi-tunnel connect); same stream framing
+        if (lw) return;
+        const port = Number(m.port || 22);
+        if (streams.size >= MAX_TCP + MAX_STREAMS || !Number.isInteger(port) || port < 1 || port > 65535) return out({ type: "stream", op: "error", sid, code: "BadRequest", message: "tcp stream refused" });
+        const adapter = { readyState: 1, OPEN: 1, tcp: true, sock: null, send(b) { if (this.sock) this.sock.write(b); }, pause() { if (this.sock) this.sock.pause(); }, resume() { if (this.sock) this.sock.resume(); }, close() { if (this.sock) this.sock.end(); this.readyState = 3; } };
+        streams.set(sid, adapter);
+        resolveVm(String(m.vm || ""), port).then((t) => {
+          if (streams.get(sid) !== adapter) return;
+          if (!t) { streams.delete(sid); return out({ type: "stream", op: "error", sid, code: "NoSuchVm", message: "no such VM" }); }
+          const sock = net.connect({ host: t.host, port: t.port }); adapter.sock = sock; sock.setNoDelay(true);
+          sock.once("connect", () => out({ type: "stream", op: "opened", sid, container: String(m.vm) }));
+          let drain = null;
+          sock.on("data", (d) => {
+            for (let i = 0; i < d.length; i += CHUNK) out({ type: "stream", op: "data", sid, d: Buffer.from(d.subarray(i, i + CHUNK)).toString("base64") });
+            if (ws.bufferedAmount > HIGH && !drain) { sock.pause(); drain = setInterval(() => { if (ws.bufferedAmount < HIGH / 4 || ws.readyState !== ws.OPEN) { clearInterval(drain); drain = null; sock.resume(); } }, 50); }
+          });
+          sock.on("close", () => { clearInterval(drain); if (streams.get(sid) === adapter) { streams.delete(sid); out({ type: "stream", op: "close", sid, reason: "exit" }); } });
+          sock.on("error", () => { if (streams.get(sid) === adapter) { streams.delete(sid); out({ type: "stream", op: "error", sid, code: "VmUnreachable", message: "could not reach the VM" }); } try { sock.destroy(); } catch { /* */ } });
+        });
+        return;
+      }
       if (m.op === "open") {
         if (lw) return;
         if (streams.size >= MAX_STREAMS) return out({ type: "stream", op: "error", sid, code: "TooManyShells", message: "too many shells" });
