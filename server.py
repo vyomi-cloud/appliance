@@ -5222,6 +5222,40 @@ def _active_tier() -> str:
     return stored
 
 
+def _k8s_tier_provider():
+    """Active (tier, primary_cloud) for the managed-Kubernetes gate (core/k8s_tier_gate.py), or None when
+    tier enforcement is off (CLOUDLEARN_TIER_ENFORCE=0 -- the same dev/test escape hatch as every tier limit)."""
+    if os.environ.get("CLOUDLEARN_TIER_ENFORCE", "1").strip() in ("0", "false", ""):
+        return None
+    try:
+        primary = str((_tenant_dict(_active_tenant_id()) or {}).get("primary_cloud") or "")
+    except Exception:
+        primary = ""
+    tier = _active_tier()
+    try:
+        from core import booster_session as _bs
+        if _bs.role_is_booster() and (_bs.effective_tier() or tier) == "pro":
+            # Headless booster: the signed session token is the tier source, and SessionMiddleware already refuses every cloud but the
+            # Pro session's one (token primary_cloud, or the first cloud used). The tenant here has no primary_cloud, so do not
+            # let the gate's "primary cloud unset" rule lock a legitimate Pro booster out of its own cloud's Kubernetes.
+            return ("max", "")
+        if _bs.role_is_booster() and _bs.effective_tier():
+            tier = _bs.effective_tier()
+    except Exception:
+        pass
+    return (tier, primary)
+
+
+from core import k8s_tier_gate as _k8s_tier_gate  # noqa: E402
+_k8s_tier_gate.set_provider(_k8s_tier_provider)
+
+try:    # real k3s behind AKS/GKE clusters (offline appliance / booster only; no-op unless VYOMI_K8S_BACKEND=k3s)
+    from core import k3s_runtime as _k3s_runtime
+    _k3s_runtime.install_if_enabled()
+except Exception as _k3s_err:   # a missing docker CLI must never stop the appliance from booting
+    print("[k8s] k3s backend not installed:", _k3s_err)
+
+
 # Ordered level vocabulary for non-boolean feature flags. Each entry maps a
 # feature name to the policy's level values in ascending order (so `basic` is
 # weakest, `full_plus_import` strongest). Used by `_enforce_tier_feature(...,

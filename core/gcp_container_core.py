@@ -904,6 +904,12 @@ def _wants_int_enums(query):
 # ── dispatch ───────────────────────────────────────────────────────────────
 def dispatch(store, method, path, query=None, headers=None, body=b""):
     query = query or {}
+    from core import k8s_tier_gate as _tg
+    if _tg.classify(path) == "gcp":    # managed Kubernetes is Pro/Max/Enterprise only (incl. the /k8s/ kubectl data plane)
+        v = _tg.check("gcp")
+        if v:
+            d = _tg.denied_response("gcp", v)
+            return ContainerResponse(status=d["status"], headers={k: x for k, x in d["headers"].items() if k != "content-type"}, body=d["body"])
     r = _dispatch(store, method, path, query, headers or {}, body)
     if r.status == 200 and _wants_int_enums(query):
         try:

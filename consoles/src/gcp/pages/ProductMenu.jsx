@@ -24,7 +24,9 @@ export function recordVisit(id) {
 
 const byId = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
 
+import { useK8sLock, LockBadge } from "../../common/k8sTier.jsx";
 export default function ProductMenu({ open, onClose, active }) {
+  const k8s = useK8sLock("gcp");
   const [favs, setFavs] = useState(() => read("favorites", []));
   const [showRecent, setShowRecent] = useState(false);
   const toggle = (id) => { const f = favs.includes(id) ? favs.filter((x) => x !== id) : [...favs, id]; setFavs(f); write("favorites", f); };
@@ -35,7 +37,7 @@ export default function ProductMenu({ open, onClose, active }) {
   const Row = ({ p }) => (
     <ListItemButton selected={active === p.id} onClick={() => go(p)} sx={{ borderRadius: "0 20px 20px 0", mr: 1, py: 0.6 }}>
       <ListItemIcon sx={{ minWidth: 40 }}><p.icon fontSize="small" /></ListItemIcon>
-      <ListItemText primary={p.title} primaryTypographyProps={{ variant: "body2" }} />
+      <ListItemText primary={<>{p.title}{p.id === "kubernetes" && k8s.ready && k8s.locked && <LockBadge />}</>} primaryTypographyProps={{ variant: "body2" }} />
       <Tooltip title={favs.includes(p.id) ? "Remove from favorites" : "Add to favorites"}>
         <IconButton size="small" edge="end" onClick={(e) => { e.stopPropagation(); toggle(p.id); }} aria-label={`${favs.includes(p.id) ? "Unpin" : "Pin"} ${p.title}`}>
           {favs.includes(p.id) ? <StarIcon fontSize="small" sx={{ color: "primary.main" }} /> : <StarBorderIcon fontSize="small" />}

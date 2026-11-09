@@ -219,7 +219,7 @@ jobs:
           # passes the smoke above but is broken offline — so smoke the target cloud on server.py too.
           offline=0
           mkdir -p $RUNNER_TEMP/offline
-          CLOUDLEARN_STATE_FILE=$RUNNER_TEMP/offline/state.json VYOMI_NO_TELEMETRY=1 VYOMI_PERSIST_DEBOUNCE_MS=0 \
+          CLOUDLEARN_TIER_ENFORCE=0 CLOUDLEARN_STATE_FILE=$RUNNER_TEMP/offline/state.json VYOMI_NO_TELEMETRY=1 VYOMI_PERSIST_DEBOUNCE_MS=0 \
             python3 -m uvicorn server:app --host 127.0.0.1 --port 8791 > $RUNNER_TEMP/offline/server.log 2>&1 &
           for i in $(seq 120); do curl -sf -o /dev/null localhost:8791/v4/aws/ && break; sleep 1; done
           c=${{ steps.tg.outputs.cloud }}

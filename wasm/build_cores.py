@@ -37,6 +37,7 @@ CORES = [
     "dynamodb_expr.py",                             # DynamoDB expression engine (v4 C0: key/filter/condition/update/projection)
     "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
     "kms_keystore.py", "kms_core.py",               # KMS
+    "k8s_tier_gate.py",                             # managed-Kubernetes tier gate (Pro/Max/Enterprise only)
     "kv_store.py", "secrets_core.py",               # Secrets Manager
     "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py",                  # RDS
     "iam_store.py", "iam_core.py",                  # IAM
@@ -147,6 +148,7 @@ CORES = [
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
+    "kube_state_core.py",                           # v4: cloud-agnostic Kubernetes state + KubeBackend seam (imported by azure_arm_core/gcp_container_core; the k3s runtime is NOT here)
     "azure_aks_ext_core.py",                        # v4: AKS extensions + KEDA add-on/operator over the object store — before azure_cfgext_core/azure_arm_core
     "azure_webhost_core.py", "azure_autoscale_core.py",   # v4: App Service front door/app host + autoscale engine — after azure_webapp_core/kudu/webnet
     "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)

@@ -5,7 +5,9 @@ import { Glyph } from "../kit/common.jsx";
 import { TitleRow } from "../kit/ResourceBlade.jsx";
 import { CATEGORIES, SERVICES } from "../services/registry.js";
 
+import { useK8sLock, LockBadge } from "../../common/k8sTier.jsx";
 export default function AllServices() {
+  const k8s = useK8sLock("azure");
   const [q, setQ] = useState("");
   const f = q.trim().toLowerCase();
   const shown = SERVICES.filter((s) => !f || s.title.toLowerCase().includes(f) || s.category.toLowerCase().includes(f));
@@ -24,6 +26,7 @@ export default function AllServices() {
                 {xs.map((s) => (
                   <a key={s.id} className="vy-tile" style={{ width: 132 }} href={`#/${s.id}`}>
                     <Glyph id={s.icon} />{s.title}
+                    {s.id === "aks" && k8s.ready && k8s.locked && <LockBadge />}
                     {!s.load && <Badge size="small" appearance="tint" color="informative">classic console</Badge>}
                   </a>
                 ))}

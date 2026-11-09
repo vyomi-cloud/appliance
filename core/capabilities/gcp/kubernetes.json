@@ -1,5 +1,13 @@
 {
  "$doc": "Vyomi capability registry — GKE (Kubernetes Engine). One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py. GCP ids carry no AWS-shaped probe, so every supported level lists 'tests' instead.",
+ "$tier": {
+  "category": "kubernetes",
+  "unlocked_tiers": ["pro", "max", "enterprise"],
+  "locked_tiers": ["free", "nano", "micro", "lite"],
+  "pro_rule": "primary cloud only (Max/Enterprise: all three clouds)",
+  "denied_with": "403 PERMISSION_DENIED",
+  "enforced_by": "core/k8s_tier_gate.py + core/tier_policy.py (category kubernetes)"
+ },
  "gcp.kubernetes.cluster.crud": {
   "booster": true,
   "title": "Clusters (create, list, get, delete)",

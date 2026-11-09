@@ -80,14 +80,22 @@ SERVICE_CATEGORY = {
     "servicebus":      "queue",
     "cosmos":          "nosql",
     "eventgrid":       "eventing",
+    # Managed Kubernetes (v4) -- Pro / Max / Enterprise ONLY. Never part of Free, the API-only
+    # tiers (nano / micro / lite) or ALL_CATEGORIES below; see KUBERNETES_TIERS.
+    "aks":             "kubernetes",     # Azure Kubernetes Service (+ Flux, Backup for AKS)
+    "gke":             "kubernetes",     # Google Kubernetes Engine (+ kubectl data plane, Backup for GKE)
+    "eks":             "kubernetes",     # Amazon EKS (no console/core yet -- the key is mapped so the gate is ready)
 }
+
+KUBERNETES_CATEGORY = "kubernetes"
+KUBERNETES_TIERS = ("pro", "max", "enterprise")
 
 # Categories the FREE tier unlocks (everything else → locked behind paid tiers).
 FREE_UNLOCKED_CATEGORIES = {
     "compute", "serverless", "object_storage", "relational_db",
     "api_gateway", "iam", "network", "secrets", "kms", "queue",
 }
-FREE_LOCKED_CATEGORIES = {"nosql", "eventing"}
+FREE_LOCKED_CATEGORIES = {"nosql", "eventing", KUBERNETES_CATEGORY}
 
 # v2.2.0 — the conformance pack = every service category. The "API-only" tiers
 # (Nano, Lite) unlock the full pack but LOCK real-VM compute (EC2/VMs); the
@@ -283,7 +291,7 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "primary_cloud_required":      False,
         "providers":                   ["aws", "gcp", "azure"],
         "service_categories_unlocked": sorted(CONFORMANCE_NO_COMPUTE),
-        "service_categories_locked":   ["compute"],
+        "service_categories_locked":   ["compute", KUBERNETES_CATEGORY],
         "per_space_quantities":        _nano_quantities(),
         "max_vm_size_tier":            "small",
         "max_db_size_tier":            "small",
@@ -329,8 +337,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "max_spaces":                  3,
         "primary_cloud_required":      False,
         "providers":                   ["aws", "gcp", "azure"],
-        "service_categories_unlocked": "ALL",
-        "service_categories_locked":   [],
+        "service_categories_unlocked": sorted(ALL_CATEGORIES),   # NOT "ALL": Kubernetes stays locked on Micro
+        "service_categories_locked":   [KUBERNETES_CATEGORY],
         "per_space_quantities":        _micro_quantities(),
         "max_vm_size_tier":            "small",
         "max_db_size_tier":            "small",
@@ -378,7 +386,7 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "primary_cloud_required":      False,
         "providers":                   ["aws", "gcp", "azure"],
         "service_categories_unlocked": sorted(CONFORMANCE_NO_COMPUTE),
-        "service_categories_locked":   ["compute"],
+        "service_categories_locked":   ["compute", KUBERNETES_CATEGORY],
         "per_space_quantities":        _lite_quantities(),
         "max_vm_size_tier":            "small",
         "max_db_size_tier":            "medium",
@@ -657,6 +665,16 @@ def check_service(tier: str, service_key: str,
             "ok": False, "code": "tier_provider_locked",
             "reason": f"{request_cloud} not available on {tier_norm} tier",
             "upgrade_to": "pro" if tier_norm == "free" else "max",
+        }
+
+    # Managed Kubernetes: Pro / Max / Enterprise only -- checked BEFORE the "ALL" shortcut and
+    # independent of the per-tier category lists, so no legacy tier can leak it.
+    if SERVICE_CATEGORY.get(service_key) == KUBERNETES_CATEGORY and tier_norm not in KUBERNETES_TIERS:
+        return {
+            "ok": False, "code": "tier_service_locked",
+            "reason": f"{service_key} (managed Kubernetes) requires the Pro, Max or Enterprise tier; the active tier is {tier_norm.capitalize()}",
+            "upgrade_to": "pro", "service": service_key, "category": KUBERNETES_CATEGORY,
+            "required_tiers": list(KUBERNETES_TIERS),
         }
 
     # Service category gate.

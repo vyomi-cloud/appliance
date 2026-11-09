@@ -1313,10 +1313,20 @@ self.addEventListener("fetch", (event) => {
       if (apiPath === "/api/runtime/tier" && method === "GET") {
         const c = licenseClaims(await metaGet("license_jwt")) || await accountClaims();
         const t = (c && c.tier) || "free";
+        // Managed Kubernetes (AKS/GKE/EKS) is Pro/Max/Enterprise only; Pro gets its primary cloud. Same rule as
+        // core/k8s_tier_gate.py, which enforces it inside the Python cores; no licence = Free = locked.
+        const _t = String(t).toLowerCase(), _pc = (c && c.primary_cloud) || "";
+        const _k8s = {};
+        for (const cl of ["azure", "gcp", "aws"]) {
+          const ok = ["max", "enterprise"].includes(_t) || (_t === "pro" && _pc === cl);
+          _k8s[cl] = { locked: !ok, required_tiers: _t === "pro" ? ["max", "enterprise"] : ["pro", "max", "enterprise"],
+                       reason: ok ? "" : "Managed Kubernetes requires the Pro, Max or Enterprise plan (Pro: primary cloud only)." };
+        }
         // Pro = ONE cloud: same shape the appliance's /api/runtime/tier returns, so clouds.html / the cloud picker lock the other two.
         return json({ active_tier: t,
                       all_tiers: ["free", "lite", "pro", "max"],
                       primary_cloud: (c && c.primary_cloud) || "",
+                      kubernetes_locked: _k8s,
                       active_policy: { providers: t === "pro" && c && c.primary_cloud ? "primary_cloud_only" : "all" } });   // a Pro licence with no cloud yet is pinned on first use (booster-link.js)
       }
       if (apiPath === "/api/license/status" && method === "GET") {

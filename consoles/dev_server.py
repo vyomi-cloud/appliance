@@ -22,6 +22,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from core.aws_wire_router import AwsWireRouter  # noqa: E402
 from core.azure_arm_core import AzureArm  # noqa: E402
+from core import k8s_tier_gate as K8S_GATE  # noqa: E402
+
+# Managed-Kubernetes tier gate. Default: NOT enforced (every existing UI suite runs unchanged). `--tier free|nano|micro|lite|pro|max|enterprise`
+# (+ `--primary azure|gcp|aws` for pro) arms it; POST/GET /_dev/tier?tier=..&primary=.. switches it at runtime (used by the tier smoke).
+DEV_TIER = {"tier": None, "primary": ""}
+
+
+def _set_dev_tier(tier, primary=""):
+    DEV_TIER.update(tier=tier or None, primary=primary or "")
+    K8S_GATE.set_provider((lambda: (DEV_TIER["tier"], DEV_TIER["primary"])) if tier else None)
 
 # Headless 4.0.0 builds only wasm/v4 (Nano is the UI target); fall back to it when static/v4 is absent.
 STATIC = ROOT / "static" if (ROOT / "static" / "v4").is_dir() else ROOT / "wasm"
@@ -120,7 +130,21 @@ class Handler(BaseHTTPRequestHandler):
         data = json.dumps({"published": names}).encode()
         self.send_response(200); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
 
+    def _json(self, obj, status=200):
+        data = json.dumps(obj).encode()
+        self.send_response(status); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data))); self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
     def _go(self):
+        u = urlsplit(self.path)
+        if u.path == "/_dev/tier":
+            q = dict(parse_qsl(u.query))
+            if "tier" in q:
+                _set_dev_tier(q["tier"], q.get("primary", ""))
+            return self._json(dict(DEV_TIER))
+        if u.path.endswith("/api/runtime/tier"):    # the consoles read the plan here (appliance: routes/licensing.py; Nano: sw.js)
+            return self._json({"active_tier": DEV_TIER["tier"] or "max", "primary_cloud": DEV_TIER["primary"], "kubernetes_locked": K8S_GATE.ui_verdicts()})
         if self.path.startswith("/_dev/ec2-counters"):
             return self._dev_counters()
         if self.path.startswith("/_wire"):
@@ -138,6 +162,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8740)
     ap.add_argument("-q", action="store_true")
+    ap.add_argument("--tier", default="", help="arm the managed-Kubernetes tier gate as this plan (default: not enforced)")
+    ap.add_argument("--primary", default="", help="Pro primary cloud")
     a = ap.parse_args()
+    if a.tier:
+        _set_dev_tier(a.tier, a.primary)
     print(f"v4 consoles: http://127.0.0.1:{a.port}/v4/aws/   (/_wire → AwsWireRouter, in-memory)")
     ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()

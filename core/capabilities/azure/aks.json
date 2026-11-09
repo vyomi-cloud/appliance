@@ -1,5 +1,13 @@
 {
  "$doc": "Vyomi capability registry \u2014 Azure Kubernetes Service (AKS). See aws/s3.json for the contract.",
+ "$tier": {
+  "category": "kubernetes",
+  "unlocked_tiers": ["pro", "max", "enterprise"],
+  "locked_tiers": ["free", "nano", "micro", "lite"],
+  "pro_rule": "primary cloud only (Max/Enterprise: all three clouds)",
+  "denied_with": "403 FeatureNotAvailableForTier",
+  "enforced_by": "core/k8s_tier_gate.py + core/tier_policy.py (category kubernetes)"
+ },
  "azure.aks.cluster.crud": {
   "booster": true,
   "title": "Managed clusters (create, get, list, delete) over ARM",
