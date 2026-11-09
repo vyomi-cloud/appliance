@@ -1,6 +1,6 @@
 # v4/k8s-port
 
-Owner: <session / person> - Started: 2026-11-09 - Base: origin/v4-on-main (7f589cba) - Status: in progress
+Owner: k8s port session - Started: 2026-11-09 - Base: origin/v4-on-main (7f589cba) - Status: in progress
 
 ## Purpose
 Port the shared managed-Kubernetes platform layer on k3s (versions, node pools, stop/start, upgrade, workload identity, LoadBalancer, storage, user/admin credentials) and Amazon EKS (native REST API, get-token auth, node groups, AWS Backup for EKS) onto the trunk. Managed Kubernetes is Pro/Max/Enterprise only (core/k8s_tier_gate.py, already on the trunk).
@@ -21,4 +21,9 @@ Port the shared managed-Kubernetes platform layer on k3s (versions, node pools, 
 - [ ] EKS console browser check not done
 
 ## Testing
-<what was run, where (Nano on :8099 / headless Docker), and the result; what was NOT run>
+Run 2026-11-10 on Python 3.9 against a fake docker (no Docker needed):
+- `test_aws_eks_core` OK, `test_k3s_platform` OK, `test_k3s_runtime` OK, `test_k8s_tier_gate` 230 passed / 0 failed.
+- `test_capabilities.py`: 65 failing claims on this branch and the same 65 on `origin/v4-on-main` (64648525), so the branch adds none. Those 65 exist on the trunk (not diagnosed here).
+- Relay/Nano: `wasm/core` rebuilt (`build_cores.py`); import-closed check passed.
+
+NOT run: live k3s tests (`test_k3s_platform_live.py`, `test_aws_eks_live.py`; need a quiet Docker VM), the HTTP-middleware section of the gate test (`server.py` needs Python 3.10+), the EKS console smoke (`consoles/tests/smoke-aws-eks.mjs`), a browser check of the EKS console, and the EKS auth webhook (not built).
