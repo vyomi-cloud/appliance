@@ -1179,6 +1179,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-python-gcp-scheduler-pubsub",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "sdk",
+      "cmd": "python3 -m pip install -q google-cloud-pubsub >/dev/null 2>&1; VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_scheduler_pubsub_pysdk_api.py",
+      "timeout": 300
+    },
+    {
       "id": "offline-cli-gcp-scheduler-pubsub",
       "target": "offline",
       "cloud": "gcp",
