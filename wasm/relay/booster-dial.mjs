@@ -11,6 +11,7 @@
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
+import dns from "node:dns/promises";
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -35,20 +36,22 @@ function localRequest(base, token, m) {
   });
 }
 
-/** Where does VM <name> listen? Default: a Docker container named vyomi-<name> / <name> on this host (the Docker VM backend),
- *  returns {host, port}. Override with the `resolveVm` option (tests, other backends). Never resolves arbitrary hosts. */
-export function dockerResolve(name, port = 22) {
-  return new Promise((resolve) => {
-    if (!/^[A-Za-z0-9._-]{1,80}$/.test(name)) return resolve(null);
-    const tryName = (cands) => {
-      const c = cands.shift(); if (!c) return resolve(null);
-      execFile("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", c], { timeout: 5000 }, (err, out) => {
-        const ip = !err && String(out).trim().split(/\s+/).find(Boolean);
-        if (ip) resolve({ host: ip, port }); else tryName(cands);
-      });
-    };
-    tryName([`vyomi-${name}`, name]);
-  });
+/** Where does VM <name> listen?  The Docker VM backend names containers  vyomi-i-<instance id>  (core/compute/backend.py) and puts
+ *  them on the shared `vyomi-net`, where the agent's `link` container can reach them by Docker DNS name - so we try DNS first
+ *  (no docker CLI / socket needed there), then `docker inspect` for agents that run on the host.  Returns {host, port} or null.
+ *  Override with the `resolveVm` option (tests, other backends). Only these name patterns are ever tried: never arbitrary hosts. */
+export const vmCandidates = (name) => /^[A-Za-z0-9._-]{1,80}$/.test(name) ? [`vyomi-i-${name}`, `vyomi-${name}`, name] : [];
+export async function dockerResolve(name, port = 22) {
+  const cands = vmCandidates(name);
+  for (const c of cands) {
+    try { const r = await dns.lookup(c); if (r && r.address) return { host: c, port }; } catch { /* not a DNS name here */ }
+  }
+  for (const c of cands) {
+    const ip = await new Promise((resolve) => execFile("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", c],
+      { timeout: 5000 }, (err, out) => resolve(!err && String(out).trim().split(/\s+/).find(Boolean) || "")));
+    if (ip) return { host: ip, port };
+  }
+  return null;
 }
 
 /** Start the link. Returns {stop(), done: Promise<"session_end"|"stopped">, state}. */
