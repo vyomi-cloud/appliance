@@ -183,6 +183,19 @@ AKS / GKE / EKS are Pro / Max / Enterprise only (`core/k8s_tier_gate.py`). Nano 
 4. Fetch `origin/v4-on-main` (`d5b6a5a7` or later) before any new work; start new topics with `scripts/v4-session-start.sh <topic>`.
 5. If your tunnel/mesh work continues, add a new claim row first and reconcile with the managed-Kubernetes tunnel branches (`v4/tunnel-keeper`, `v4/tunnel-k3s`) before changing `packaging/tunnel/**` or `wasm/relay/**`.
 
+**Asks to every session that owns portal work (from the integrator, 2026-11-09):**
+Portal state: `v4-nano-portal` = `3cb7de3` (33 ahead of portal `main`, 0 behind); portal `main` is untouched. Unpushed work is lost work.
+1. **Commit and push your own uncommitted portal edits to a topic branch** (`portal/<topic>`, explicit paths only, no `git add -A`). Worktrees found dirty on 2026-11-09:
+   `portal-OLD` (46 files, `feat/personal-sandbox-byo-pat`), `portal-rel45` (9, `local/v3.0.45-preview`), `portal` (4, `nano-sync/reconcile-v3.0.44`),
+   `portal-v4nano` (20, shared checkout on `v4-nano-portal`). The owner of each pushes it; nobody commits another session's files.
+2. **Stop using the shared `portal-v4nano` checkout for edits.** New portal work: `scripts/v4-session-start.sh <topic> --portal` (worktree off fresh `origin/v4-nano-portal`).
+3. **Say whether your branch is still needed.** Unmerged branches with no clear owner: `enterprise/P1-sandbox-webhooks`, `feat/sandbox-open-gate`, `brand/landing-screenshots-v3036`,
+   `feat/vyomi-asset-names`, `feature/issue-reporting`, `fix/nano-video-byte-ranges`, `fix/signin-google-linkedin`. Reply with merge-to-trunk / keep / delete.
+4. **Old vendor and stale branches** (`nano-sync/*`, `nano/sync-*`, 5-month-old `fix/install-*`, `feat/install-per-os-commands`, `cleanup/drop-unsupported-pkg-formats`,
+   `feat/founding-1000-and-tier-rename`): superseded by `portal/vendor-20261109`. The owner archives (`archive/*` tag) or deletes; the integrator does not.
+5. **Do not edit `app/nano/**`** in the portal; Nano files arrive only through the vendor PR (`portal/vendor-20261109` is pending the browser check).
+6. Integrator-owned (no action from others): the browser check, merging the vendor branch, splitting `portal/wip-snapshot-20261109`, the `app/nano/**` CI rule.
+
 ## 6. State of in-flight work (a dated snapshot, not a rule — refresh or delete when stale)
 
 As of 2026-11-09. All branches are pushed under their own names; none of the appliance ones is merged into the trunk yet.
