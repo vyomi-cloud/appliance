@@ -17,8 +17,24 @@ const CLOUD_LABEL = { azure: "Azure Kubernetes Service (AKS)", gcp: "Google Kube
 const UNLOCKED = ["pro", "max", "enterprise"];
 export const UPGRADE_URL = "https://vyomi.cloud/pricing";
 
+// CI bypass (runners only): honoured on localhost / 127.0.0.1, never on a public host.  A Playwright run sets
+// localStorage.vyomi_ci_tier = "max" (addInitScript); nano-boot.js applies the same value to the Nano gate.
+function ciTier() {
+  try {
+    const h = location.hostname;
+    if (h !== "localhost" && h !== "127.0.0.1") return null;
+    return localStorage.getItem("vyomi_ci_tier") || null;
+  } catch (_) { return null; }
+}
+
 let cached = null;
 function loadTier() {
+  const ci = ciTier();
+  if (ci) {
+    const kl = {};
+    for (const c of ["azure", "gcp", "aws"]) kl[c] = { locked: !UNLOCKED.includes(ci), required_tiers: UNLOCKED, reason: "" };
+    return Promise.resolve({ active_tier: ci, primary_cloud: "", kubernetes_locked: kl });
+  }
   if (!cached) {
     const base = WIRE_BASE.replace(/\/_wire$/, "");
     cached = fetch(`${base}/api/runtime/tier`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);

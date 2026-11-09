@@ -51,6 +51,7 @@ if (!(await health()).ok) { console.log("FAIL: local relay did not start"); stop
 const { server, base } = await startServer(process.env.NANO_DIR);
 const browser = await chromium.launch();
 const context = await browser.newContext();
+await context.addInitScript(() => { try { localStorage.setItem("vyomi_ci_tier", "max"); } catch (_) {} });   // CI: managed-K8s gate bypass (localhost only)
 if (RELAY_PORT !== 8090) {   // the bundle auto-detects :8090; point it at a relay elsewhere (a dev's own tunnel keeps :8090)
   await context.addInitScript((r) => { for (const [k, v] of [["nano_local_health", r + "/health"], ["nano_local_ws", r.replace("http", "ws") + "/register"], ["nano_local_ext", r]]) localStorage.setItem(k, v); }, RELAY);
 }

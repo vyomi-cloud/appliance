@@ -299,6 +299,9 @@ _k8sg.arm_nano()
 `);
   const syncK8sTier = async () => {
     try {
+      // CI bypass (runners only; localhost): localStorage.vyomi_ci_tier, set by the Playwright init script.
+      const ci = (location.hostname === "localhost" || location.hostname === "127.0.0.1") ? localStorage.getItem("vyomi_ci_tier") : null;
+      if (ci) { py.runPython(`from core import k8s_tier_gate as _g; _g.set_tier(${JSON.stringify(ci)}, "")`); return; }
       const t = await (await fetch(BASE + "/api/runtime/tier", { cache: "no-store" })).json();
       py.runPython(`from core import k8s_tier_gate as _g; _g.set_tier(${JSON.stringify(String(t.active_tier || "free"))}, ${JSON.stringify(String(t.primary_cloud || ""))})`);
     } catch (_) { /* unknown tier -> stays Free (locked) */ }
