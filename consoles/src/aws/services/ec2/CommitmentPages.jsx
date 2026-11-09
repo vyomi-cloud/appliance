@@ -1,5 +1,5 @@
 /* EC2 Savings Plans and Capacity Manager - real pages over core/savingsplans_core.py (the savingsplans API plus two Vyomi views derived
- * from the running EC2 inventory). UltraServers stays a registered gap (no accelerator capacity to manage). */
+ * from the running EC2 inventory). UltraServers lives in UltraServersPage.jsx (Dev Simplified). */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
