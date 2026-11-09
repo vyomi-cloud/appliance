@@ -400,7 +400,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Control plane is real with AWS validation: subnet/VPC mappings must exist (one subnet per AZ), protection flags, UpdateToken optimistic concurrency, typed rule-group references, rule-group capacity, Suricata rule strings (sid required/unique), stateless priorities/match attributes, domain lists, resource policy JSON, logging destinations. The rule evaluator (stateless priority order + default actions, then stateful 5-tuple/Suricata/domain allow-deny) is wired into the shared netsim path on both substrates: a route whose target is a firewall endpoint (vpce- from DescribeFirewall / VPC endpoint associations) makes AnalyzeReachability and Network Insights run the packet through the firewall policy (NETWORK_FIREWALL_DROP names the rule), then forward via the firewall subnet's route table; NetworkFirewall.SimulateTraffic evaluates one packet (incl. HttpHost/TlsSni) directly. Not modelled: packet-level enforcement offline (such routes are enforced as drop with a warning), the return path through the endpoint, domain/SNI rules in AnalyzeReachability (no L7 context in a reachability query), alert/flow/TLS log delivery, TLS decryption. Container associations are not simulated."
+   "Control plane is real with AWS validation: subnet/VPC mappings must exist (one subnet per AZ), protection flags, UpdateToken optimistic concurrency, typed rule-group references, rule-group capacity, Suricata rule strings (sid required/unique), stateless priorities/match attributes, domain lists, resource policy JSON, logging destinations. The rule evaluator (stateless priority order + default actions, then stateful 5-tuple/Suricata/domain allow-deny) is wired into the shared netsim path on both substrates: a route whose target is a firewall endpoint (vpce- from DescribeFirewall / VPC endpoint associations) makes AnalyzeReachability and Network Insights run the packet through the firewall policy (NETWORK_FIREWALL_DROP names the rule), then forward via the firewall subnet's route table; NetworkFirewall.SimulateTraffic evaluates one packet (incl. HttpHost/TlsSni) directly. Not modelled: packet-level enforcement offline (such routes are enforced as drop with a warning), the return path through the endpoint, domain/SNI rules in AnalyzeReachability (no L7 context in a reachability query), alert/flow/TLS log delivery, TLS decryption. Container associations are a Vyomi-simulated control plane, see aws.vpc.network-firewall-containers."
   ],
   "tests": [
    "tests/conformance/test_vpc_sweepvpc_core.py",
@@ -493,17 +493,6 @@
    "tests/netsim/test_aws.py"
   ]
  },
- "aws.vpc.network-firewall-containers": {
-  "tier": "pro",
-  "title": "Network Firewall container associations",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
-  "limitations": [
-   "Container associations would attach Network Firewall to ECS/EKS node networking. Vyomi has no ECS or EKS compute for AWS, so there are no container ENIs to associate. Firewalls themselves are inspected inline in the netsim path (see aws.vpc.network-firewall); that applies to EC2 instances, not containers."
-  ]
- },
  "aws.vpc.multi-subnet-create": {
   "title": "Create several subnets in one console submit (a CreateSubnet call per subnet over the native wire)",
   "level": {
@@ -549,6 +538,44 @@
   ],
   "tests": [
    "tests/conformance/test_vpc_encryption_control.py"
+  ]
+ },
+ "aws.vpc.network-firewall-containers": {
+  "title": "Network Firewall container associations (Vyomi-simulated: firewall <-> EKS cluster node networks, SimulateContainerTraffic)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "AWS exposes no public API for container associations, so these are Vyomi simulator verbs (Create/Describe/List/DeleteContainerAssociation, SimulateContainerTraffic) on the Network Firewall endpoint. An association binds a firewall to an Amazon EKS cluster running in the firewall's VPC (or in a VPC with a VPC endpoint association for it); the cluster's subnets become the protected node networks and a simulated packet from them is evaluated against the firewall policy.",
+   "Not modelled: inline enforcement of real pod traffic (there is no packet path through the firewall endpoint for k3s containers), ECS (Vyomi has no ECS compute), and, on Nano, any cluster at all (EKS needs a real k3s control plane, which runs only on the offline appliance), so Nano can list associations but has no cluster to attach."
+  ],
+  "api": [
+   "CreateContainerAssociation",
+   "DescribeContainerAssociation",
+   "ListContainerAssociations",
+   "DeleteContainerAssociation",
+   "SimulateContainerTraffic"
+  ],
+  "tests": [
+   "tests/conformance/test_netfw_container_assoc.py"
+  ]
+ },
+ "aws.vpc.service-health": {
+  "title": "VPC service health dashboard and linked documentation, forums and issue reporting",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "DescribeVpcs",
+   "DescribeAvailabilityZones",
+   "DescribeNatGateways",
+   "ListFirewalls"
+  ],
+  "tests": [
+   "tests/conformance/test_netfw_container_assoc.py"
   ]
  }
 }

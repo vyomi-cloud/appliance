@@ -24,7 +24,7 @@ const page = (title, id) => () => (
 // DNS firewall
 
 // Network Firewall
-export const ContainerAssociations = page("Container associations", "aws.vpc.network-firewall-containers");
+// Container associations are real now (Vyomi-simulated control plane): ContainerAssociations.jsx.
 
 // Site-to-Site VPN / Client VPN
 

@@ -1510,6 +1510,18 @@ class AwsWireRouter:
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
         return self.handle(method, path, query, headers, body)
 
+    def _eks_cluster_info(self, name):
+        """{vpc_id, subnet_ids} of an EKS cluster in the account bag (Network Firewall container associations), or None."""
+        try:
+            from core import aws_eks_core
+            rec = aws_eks_core._st(self.s3.account)["clusters"].get(aws_eks_core._ck(aws_eks_core.REGION, name))
+        except Exception:
+            return None
+        if not rec or rec.get("status") == "DELETING":
+            return None
+        v = rec.get("resourcesVpcConfig") or {}
+        return {"vpc_id": v.get("vpcId"), "subnet_ids": list(v.get("subnetIds") or [])}
+
     # ── security scanning (core/secscan_core.py): audit feed + Security Hub / GuardDuty inputs ──
     def secscan_bag(self) -> dict:
         return self.s3.account.setdefault("secscan_root", {})
@@ -2392,7 +2404,7 @@ class AwsWireRouter:
                     _st, _doc = _fn(self.rds, self.ddb, target, payload)
                 r = _ty.SimpleNamespace(status=_st, headers={"x-amzn-errortype": _doc["__type"]} if _st >= 400 else {}, body=_doc)
             elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
-                r = netfw.dispatch(self.vpc, target, payload)
+                r = netfw.dispatch(self.vpc, target, payload, clusters=self._eks_cluster_info)
             elif svc == "dnsfw":   # Route 53 Resolver DNS Firewall (state in the VPC model)
                 r = dnsfw.dispatch(self.vpc, target, payload)
             elif svc == "organizations":   # AWS Organizations (state in the IAM store: extras["org"] + org_policies)

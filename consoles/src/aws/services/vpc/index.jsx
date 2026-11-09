@@ -17,6 +17,8 @@ import { VerifiedAccessInstances, VerifiedAccessTrustProviders, VerifiedAccessGr
 import Settings from "./Settings.jsx";
 import AllResources from "./AllResources.jsx";
 import * as Honest from "./HonestPages.jsx";
+import { ContainerAssociations } from "./ContainerAssociations.jsx";
+import VpcServiceHealth from "./ServiceHealth.jsx";
 import * as Lat from "./Lattice.jsx";
 import * as Vpn from "./VpnPages.jsx";
 import * as Nfw from "./NetworkFirewallPages.jsx";
@@ -174,7 +176,8 @@ export default {
     { pattern: "/vpc/tls-inspection-configurations", component: Nfw.TlsInspectionConfigurations, crumbs: () => [crumb("VPC", ""), crumb("TLS inspection configurations", "tls-inspection-configurations")] },
     { pattern: "/vpc/network-firewall-resource-groups", component: Nfw.NetworkFirewallResourceGroups, crumbs: () => [crumb("VPC", ""), crumb("Network Firewall resource groups", "network-firewall-resource-groups")] },
     { pattern: "/vpc/vpc-endpoint-associations", component: Nfw.VpcEndpointAssociations, crumbs: () => [crumb("VPC", ""), crumb("VPC endpoint associations", "vpc-endpoint-associations")] },
-    { pattern: "/vpc/container-associations", component: Honest.ContainerAssociations, crumbs: () => [crumb("VPC", ""), crumb("Container associations", "container-associations")] },
+    { pattern: "/vpc/service-health", component: VpcServiceHealth, crumbs: () => [crumb("VPC", ""), crumb("Service health dashboard", "service-health")] },
+    { pattern: "/vpc/container-associations", component: ContainerAssociations, crumbs: () => [crumb("VPC", ""), crumb("Container associations", "container-associations")] },
 
     { pattern: "/vpc/customer-gateways", component: Vpn.CustomerGateways, crumbs: () => [crumb("VPC", ""), crumb("Customer gateways", "customer-gateways")] },
     { pattern: "/vpc/virtual-private-gateways", component: Vpn.VirtualPrivateGateways, crumbs: () => [crumb("VPC", ""), crumb("Virtual private gateways", "virtual-private-gateways")] },
