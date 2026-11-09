@@ -1,15 +1,25 @@
 {
- "at": "2026-11-09T22:59:19+00:00",
+ "at": "2026-11-09T23:59:18+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "AWS IAM, Identity and Access Management",
+   "service": "Amazon S3",
    "kind": "announcement",
-   "key": "feed:aws:9890994b9441",
-   "title": "AWS STS now supports cross-partition federation for AWS identities",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-sts-cross-partition",
-   "detail": "AWS Security Token Service (AWS STS) now lets your workloads use their AWS Identity and Access Management (IAM) identity in one partition to get temporary credentials for an IAM role in a different partition, without storing long-term credentials, which can help improve your security posture. Partitions are groups of AWS Regions, such as the commercial and AWS GovCloud (US) Regions, and each partition has an independent instance of IAM, creating a hard boundary between them. Previously, organizations that run workloads across partitions commonly relied on long-term credentials, such as IAM use",
+   "key": "feed:aws:5abefd3e15c1",
+   "title": "AWS Glue adds 100 new native connectors for popular SaaS applications",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-glue-adds-100-new-native-connectors/",
+   "detail": "AWS Glue now supports 100 new native connectors that simplify access to data in popular SaaS and REST API-based applications. Previously, bringing data from SaaS applications into AWS required writing custom code. Now, teams can create a connection once in the AWS Glue Data Catalog and reuse it across ETL jobs with the same permissions model they already use for AWS Glue. The new connectors span generative AI, finance, payments, marketing, product analytics, human resources, engineering, IT operations, and collaboration tools. AI teams can bring usage and cost data from model providers such as",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Identity and Access Management",
+   "kind": "announcement",
+   "key": "feed:aws:8b20785c0d1e",
+   "title": "AWS Sign-In now supports OAuth 2.0 Token Exchange",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-signin-token-exchange/",
+   "detail": "AWS Sign-In now supports OAuth 2.0 Token Exchange (RFC 8693), enabling applications to exchange third-party OpenID Connect (OIDC) tokens for short-lived, AWS service-scoped OAuth access tokens. This allows customers to securely integrate third-party applications with supported AWS services without sharing AWS credentials, while maintaining access controls through AWS Identity and Access Management (IAM). This capability is available for supported AWS services that use AWS Sign-In OAuth , enabling customers to use existing identity providers to securely access AWS services without managing addi",
    "actionable": false
   }
  ],
