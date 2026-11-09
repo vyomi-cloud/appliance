@@ -230,16 +230,16 @@
       function setGrp(g, openIt) { g.classList.toggle('shut', !openIt); g.querySelector('.rd-cat').setAttribute('aria-expanded', openIt); }
       el.querySelectorAll('.rd-grp').forEach(function (g) {
         g.querySelector('.rd-cat').addEventListener('click', function () { if (rd.classList.contains('rd-hide')) { rd.classList.remove('rd-hide'); tog.setAttribute('aria-expanded', 'true'); setGrp(g, true); return; } setGrp(g, g.classList.contains('shut')); });
-        if (g.dataset.c === 'Additional wired APIs') setGrp(g, false);   // long tail of small APIs: collapsed until wanted
+        setGrp(g, false);   // every group starts collapsed; opening one is the user's choice
       });
       var tog = el.querySelector('.rd-tog');
       tog.addEventListener('click', function () { var c = rd.classList.toggle('rd-hide'); tog.setAttribute('aria-expanded', !c); });
       var LIM = 60;
-      function open(f, all) {
+      function open(f, all, init) {
         LIM = all ? 1e9 : 60;
         el.querySelectorAll('.rd-svc').forEach(function (b) { b.classList.toggle('on', b.dataset.f === f); });
         el.querySelectorAll('.rd-ops').forEach(function (d) { d.hidden = d.dataset.f !== f; });
-        var og = el.querySelector('.rd-svc[data-f="' + f + '"]'); if (og && og.closest('.rd-grp')) setGrp(og.closest('.rd-grp'), true);
+        var og = el.querySelector('.rd-svc[data-f="' + f + '"]'); if (og && og.closest('.rd-grp') && !init) setGrp(og.closest('.rd-grp'), true);
         body.innerHTML = '<p class="am-none">Loading…</p>';
         service(cloud, f).then(function (d) {
           var h = '', wires = [], n = 0, idx = '';
@@ -262,7 +262,7 @@
       }
       el.querySelectorAll('.rd-svc').forEach(function (b) { b.addEventListener('click', function () { open(b.dataset.f); }); });
       var firstReal = shown.filter(function (s) { return s.c !== 'Additional wired APIs'; })[0] || shown[0];
-      if (shown.length) open((want && shown.filter(function (s) { return s.f === want; })[0] ? want : firstReal.f));
+      if (shown.length) open((want && shown.filter(function (s) { return s.f === want; })[0] ? want : firstReal.f), false, true);
     }).catch(function () { el.innerHTML = '<div class="api-empty">Could not load the ' + esc(cloud.toUpperCase()) + ' reference (docs/index.json).</div>'; });
   }
 
