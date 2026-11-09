@@ -12,3 +12,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | tunnel redesign | (the tunnel session) | appliance | packaging/tunnel/**, wasm/relay/** | 2026-11-09 |
 | issue reporting | v4/issue-reporting | appliance | core/issue_report*.py, routes/issue_reporting.py, wasm/issue-reporter.js, wasm/sw.js, consoles/build.mjs, server.py (3 lines) | 2026-11-09 |
 | sandbox access gate | v4/sandbox-access-gate | appliance | core/sandbox_access.py, server.py (5 lines), wasm/vyomi-appbar.js (whoami label) | 2026-11-09 |
+| nano shared edits | v4/nano-shared-edits | appliance | wasm/booster-widget.js, wasm/clouds.html, wasm/v4/*/index.html | 2026-11-09 |

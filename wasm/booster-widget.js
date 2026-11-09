@@ -124,11 +124,8 @@
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
-    } else if (!a.trial_used) {                                     // Free tier, trial available
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free plan</span></h4><p>You\u2019re on the Free plan: everything runs in your browser. Try the Mesh with <b>Pro or Max free for 1 month</b>. It uses your own free GitHub quota.</p>';
-      act = '<button class="go" data-tr ' + (busy ? "disabled" : "") + '>' + (busy ? "Starting trial\u2026" : "Start 1-month free trial") + '</button><div class="sub">or <a href="' + PRICING + '" target="_blank" rel="noopener">compare plans</a></div>';
     } else {                                                        // trial used / expired
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free plan</span></h4><p>Your free trial has ended. Upgrade to Pro or Max to keep using the Mesh.</p>';
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">Upgrade to Pro / Max</a>';
     }
     card.innerHTML = '<div class="main">' + main + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div><div class="act">' + act + '</div>';

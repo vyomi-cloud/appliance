@@ -1345,35 +1345,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #app-main #spaces-card { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; margin-bottom: 30px !important; }
     html.vy-embed #app-main #spaces-card > .sc-head { border-bottom: 1px solid #e4e4e7 !important; margin-left: -24px !important; margin-right: -24px !important; padding-left: 24px !important; padding-right: 24px !important; width: auto; }
     html.vy-embed #app-main #spaces-card > .sc-head > .sc-title { border-bottom: 2px solid #000 !important; }
-    /* Spaces picker (pick=1): full width, light-black (#1b1e24) instead of white, high-contrast text and cards. */
-    html.vy-embed.vy-pickview, html.vy-embed.vy-pickview body { background: #1b1e24 !important; color: #e8eaee !important; }
-    html.vy-embed.vy-pickview #app-main .space-card, html.vy-embed.vy-pickview #app-main #spaces-grid .space-card { background: #262a32 !important; border: 1px solid #3a3f4a !important; color: #e8eaee !important; }
-    html.vy-embed.vy-pickview #app-main .space-card:hover, html.vy-embed.vy-pickview #app-main #spaces-grid .space-card:hover { background: #2d323c !important; border-color: #8b93a3 !important; }
-    html.vy-embed.vy-pickview #app-main .space-card.active { border: 1px solid #f4f5f7 !important; }
-    html.vy-embed.vy-pickview #app-main .space-card * { color: inherit; }
-    html.vy-embed.vy-pickview #app-main .sc-title, html.vy-embed.vy-pickview #app-main .sc-title h2 { color: #f4f5f7 !important; border-bottom-color: #f4f5f7 !important; }
-    html.vy-embed.vy-pickview #app-main .sc-title h2 .material-icons { color: #f4f5f7 !important; }
-    html.vy-embed.vy-pickview #app-main .sc-desc { color: #a6adba !important; }
-    html.vy-embed.vy-pickview #app-main #spaces-card > .sc-head { border-bottom-color: #3a3f4a !important; }
-    html.vy-embed.vy-pickview #app-main .prov-filter button, html.vy-embed.vy-pickview #app-main select { background: #262a32 !important; border-color: #3a3f4a !important; color: #e8eaee !important; }
-    html.vy-embed.vy-pickview #app-main a { color: #f4f5f7; }
-    html.vy-embed.vy-pickview #app-main [style*="background:#eff6ff"], html.vy-embed.vy-pickview #app-main [style*="background: #eff6ff"] { background: #262a32 !important; color: #e8eaee !important; border-color: #3a3f4a !important; }
+    /* Spaces picker (pick=1): full width, standard black & white theme (inherits vy-embed). */
     html.vy-embed.vy-pickview #view-spaces .container { max-width: none !important; margin: 0 !important; padding-left: 28px !important; padding-right: 28px !important; }   /* full width */
-    html.vy-embed.vy-pickview #app-main [style*="239, 246, 255"], html.vy-embed.vy-pickview #app-main [style*="eff6ff"] { background: #262a32 !important; color: #e8eaee !important; border-color: #3a3f4a !important; }
-    html.vy-embed.vy-pickview #app-main [style*="239, 246, 255"] *, html.vy-embed.vy-pickview #app-main [style*="eff6ff"] * { color: #e8eaee !important; }
-    html.vy-embed.vy-pickview #app-main .prov-select-wrap select, html.vy-embed.vy-pickview #app-main .prov-select-wrap { background: #262a32 !important; color: #e8eaee !important; border-color: #3a3f4a !important; }
-    html.vy-embed.vy-pickview #app-main .space-name { color: #f4f5f7 !important; }
-    html.vy-embed.vy-pickview #app-main .space-active-pill { background: #14351f !important; color: #8ee6a0 !important; border-color: #1f5a32 !important; }
-    html.vy-embed.vy-pickview #app-main .space-savings-track { background: #3a3f4a !important; }
-    html.vy-embed.vy-pickview #app-main .sp-tier { background: transparent !important; color: #e8eaee !important; border-top: 1px solid #3a3f4a !important; }
-    html.vy-embed.vy-pickview #app-main .space-savings-top .material-icons { color: #7ee08f !important; }
-    html.vy-embed.vy-pickview #spaces-card #prov-select, html.vy-embed.vy-pickview #spaces-card .prov-select-wrap select { background: #262a32 !important; color: #e8eaee !important; border: 1px solid #3a3f4a !important; }
-    html.vy-embed.vy-pickview #spaces-card .prov-select-wrap .material-icons { color: #a6adba !important; }
-    html.vy-embed.vy-pickview #app-main #spaces-card .space-card { border-color: #3a3f4a !important; }
-    html.vy-embed.vy-pickview #app-main #spaces-card .space-card:hover { border-color: #8b93a3 !important; }
-    html.vy-embed.vy-pickview #app-main #spaces-card .space-card.active { border-color: #f4f5f7 !important; }
-    html.vy-embed.vy-pickview #spaces-grid .space-card[data-provider="aws"] .space-logo svg path[fill="#fff"] { fill: #f4f5f7 !important; }   /* AWS wordmark: light on dark */
-    html.vy-embed.vy-pickview #spaces-grid .space-card .space-logo svg { filter: none !important; }
     html.vy-embed #app-main #spaces-card .space-card { background: #fff !important; border: 1px solid #d4d4d8 !important; border-radius: 14px !important; box-shadow: none !important; }
     html.vy-embed #app-main #spaces-card .space-card.active, html.vy-embed #app-main #spaces-card .space-card:hover { border-color: #000 !important; }
     html.vy-embed #app-main #spaces-card .space-card { filter: grayscale(1); }
