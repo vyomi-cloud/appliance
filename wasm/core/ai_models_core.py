@@ -1200,7 +1200,7 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         if inp in (None, "", []):
             return _a_err(400, "BadRequest", "'input' is a required property.", "input")
         e = llm.embed(inp if isinstance(inp, list) else [inp])
-        native = 768 if CAT.resolve("azure", model) == CAT.DEFAULT_EMBED else (3072 if "large" in model else 1536)
+        native = 768 if model in CAT._BYNAME and CAT.resolve("azure", model) == CAT.DEFAULT_EMBED else (3072 if "large" in model else 1536)
         dims = int(p.get("dimensions") or native)       # the real service returns its native width unless `dimensions` shortens it
         vecs = [llm._renorm(_fit_dims(v, dims)) for v in e["vectors"]]
         return _j(200, {"object": "list", "model": model, "usage": {"prompt_tokens": e["input_tokens"], "total_tokens": e["input_tokens"]},

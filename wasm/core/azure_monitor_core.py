@@ -856,6 +856,38 @@ def _hook_defs(state, scope_rid):
         return {}
 
 
+# ── APIM `Capacity` (Microsoft.ApiManagement/service, percent) ─────────────────────────────────────────
+# HONEST DERIVED LOAD ESTIMATE, NOT measured CPU/memory. Vyomi runs no real gateway hardware; Capacity is the
+# gateway requests Vyomi actually served in each interval (the service record's `_gw.log`, written by
+# core/azure_apim_gateway_core.py) divided by that core's NOMINAL per-unit throughput for the SKU x sku.capacity
+# (the same model as its Overview analytics gauge), capped at 100. No traffic reads 0 %. The Consumption tier is
+# serverless and has no Capacity metric (as in Azure).
+CAPACITY_METRIC = "Capacity"
+_APIM_TYPE = "microsoft.apimanagement/service"
+CAPACITY_NOTE = ("Load ESTIMATE derived from Vyomi gateway request counters (requests served per interval / nominal "
+                 "per-unit throughput of the SKU x scale units). Not measured CPU or memory load.")
+
+
+def _apim_capacity_basis(state, scope_rid):
+    """(tier, units, nominal_rps, log) for an APIM service that has a Capacity metric, else None (Consumption, other types)."""
+    rec = state.get(scope_rid.lower()) or {}
+    if str(rec.get("_type", "")).lower() != _APIM_TYPE:
+        return None
+    sku = rec.get("sku") or {}
+    tier = str(sku.get("name") or "Developer")
+    if tier.lower() == "consumption":
+        return None
+    try:
+        units = max(1, int(sku.get("capacity") or 1))
+    except (TypeError, ValueError):
+        units = 1
+    try:
+        from core import azure_apim_gateway_core as _gw
+    except ImportError:
+        import azure_apim_gateway_core as _gw          # type: ignore
+    return tier, units, float(_gw.NOMINAL_RPS.get(tier.lower(), 50)) * units, (rec.get("_gw") or {}).get("log") or []
+
+
 _RG_ID = re.compile(r"^/subscriptions/[^/]+/resourcegroups/[^/]+$", re.I)
 
 
@@ -902,6 +934,11 @@ def list_metric_definitions(state, scope_rid, blob_store=None, rg_exists=False):
     if not _scope_known(state, scope_rid, rg_exists):
         return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
     defs = [_metric_definition(scope_rid, _METRIC_NAME, _METRIC_DISPLAY, _METRIC_UNIT)]
+    if _apim_capacity_basis(state, scope_rid) is not None:
+        d = _metric_definition(scope_rid, CAPACITY_METRIC, "Capacity", "Percent")
+        d["primaryAggregationType"] = "Average"
+        d["displayDescription"] = CAPACITY_NOTE
+        defs.append(d)
     if _storage_account(state, scope_rid, blob_store) is not None:
         defs += [_metric_definition(scope_rid, n, n, u) for n, u in STORAGE_METRIC_UNITS.items()]
     for n, (u, kind) in _hook_defs(state, scope_rid).items():
@@ -930,7 +967,10 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
     storage_by_lower = {k.lower(): k for k in STORAGE_METRIC_UNITS} if acct is not None else {}
     hook_defs = _hook_defs(state, scope_rid)
     hook_by_lower = {k.lower(): k for k in hook_defs}
+    cap_basis = _apim_capacity_basis(state, scope_rid)
     for n in names:
+        if n.lower() == CAPACITY_METRIC.lower() and cap_basis is not None:
+            continue
         if n.lower() != _METRIC_NAME.lower() and n.lower() not in storage_by_lower and n.lower() not in hook_by_lower:
             return _err(400, "BadRequest",
                         f"Failed to find metric configuration for provider: microsoft.insights, "
@@ -1004,6 +1044,25 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
     for n in names:
         if n.lower() in storage_by_lower:
             value.append(_storage_metric_entry(scope_rid, storage_by_lower[n.lower()], stats, aggs, now))
+            continue
+        if n.lower() == CAPACITY_METRIC.lower() and cap_basis is not None:
+            tier, units, nominal, glog = cap_basis
+            counts = {}
+            for x in glog:
+                i = int((x["t"] - start.timestamp()) // (step_min * 60.0))
+                if x["t"] >= start.timestamp():
+                    counts[i] = counts.get(i, 0) + 1
+            data_c = []
+            for i, t in enumerate(buckets):    # every interval is reported: no gateway traffic is an honest 0 %
+                pct = round(min(100.0, 100.0 * (counts.get(i, 0) / (step_min * 60.0)) / nominal), 2)
+                dp = {"timeStamp": t.strftime("%Y-%m-%dT%H:%M:%SZ")}
+                for a in aggs:
+                    dp[a.lower()] = pct
+                data_c.append(dp)
+            value.append({"id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{CAPACITY_METRIC}", "type": "Microsoft.Insights/metrics",
+                          "name": {"value": CAPACITY_METRIC, "localizedValue": "Capacity"}, "unit": "Percent",
+                          "displayDescription": CAPACITY_NOTE + f" Basis: {tier} x {units} unit(s), nominal {nominal:g} req/s.",
+                          "timeseries": [{"metadatavalues": [], "data": data_c}]})
             continue
         if n.lower() in hook_by_lower:
             hn = hook_by_lower[n.lower()]

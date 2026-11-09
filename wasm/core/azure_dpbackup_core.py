@@ -78,6 +78,19 @@ def _k8s():
     return m
 
 
+def _real_backend(cluster):
+    """The cluster's REAL Kubernetes backend (k3s, installed by the offline appliance via kube_state_core.CLUSTER_RUNTIME), or None for the
+    stored-object cluster (Nano / default offline). Backups of a real cluster export through the KubeBackend seam, never the stored tree."""
+    try:
+        from core import kube_state_core as ks
+    except ImportError:
+        import kube_state_core as ks               # type: ignore
+    rt = ks.CLUSTER_RUNTIME
+    if rt is None or not rt.exists("azure", cluster["id"]):
+        return None
+    return ks.backend_for({}, "azure", cluster["id"], cluster, ks.BACKEND_FACTORY)
+
+
 def _now(delta_days: float = 0, delta_s: float = 0):
     t = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=delta_days, seconds=delta_s)
     return t.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -516,13 +529,17 @@ def snapshot_cluster(cluster, prm):
     inc, exc = set(prm["includedNamespaces"]), set(prm["excludedNamespaces"])
     inc_t, exc_t = set(prm["includedResourceTypes"]), set(prm["excludedResourceTypes"])
     objs, nss = [], []
-    for ns in (cluster.get("properties") or {}).get("namespaces") or []:
+    real = _real_backend(cluster)
+    exp = real.export_resources() if real is not None else None
+    if exp is not None and "default" not in [n["name"] for n in exp["namespaces"]]:
+        exp["namespaces"] = [{"name": "default", "labels": {}}] + exp["namespaces"]      # the in-memory tree lists `default` as a normal namespace
+    for ns in (exp["namespaces"] if exp is not None else (cluster.get("properties") or {}).get("namespaces") or []):
         n = ns.get("name")
         if (inc and n not in inc) or n in exc or n in SYSTEM_NS:
             continue
         nss.append({"name": n, "labels": dict(ns.get("labels") or {})})
     keep_ns = {n["name"] for n in nss}
-    for o in k8s.export_objects(cluster):
+    for o in (exp["objects"] if exp is not None else k8s.export_objects(cluster)):
         kind = o.get("kind")
         if kind == "Namespace" or kind in SKIP_KINDS:
             continue
@@ -660,12 +677,22 @@ def _restore(state, sub, vault, inst, payload, validate_only=False):
     if validate_only:
         return _ok({"objectType": "OperationJobExtendedInfo", "validated": True, "objectsToRestore": sum(1 for p in plan if p[0] == "obj")})
     k8s = _k8s()
-    existing_ns = {n.get("name") for n in (target.get("properties") or {}).get("namespaces") or []}
+    real = _real_backend(target)
+    existing_ns = set(real.list_namespaces()) if real is not None else {n.get("name") for n in (target.get("properties") or {}).get("namespaces") or []}
     created, skipped, patched, failed = [], [], [], []
     tprops = target.setdefault("properties", {})
     for kind, ns, item in plan:
         if kind == "ns":
-            if ns not in existing_ns:
+            if real is not None and (ns not in existing_ns or policy == "Patch"):
+                try:
+                    real.apply([{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": ns, "labels": dict(item.get("labels") or {})}}])
+                    (created if ns not in existing_ns else patched).append(f"namespace/{ns}")
+                    existing_ns.add(ns)
+                except Exception as e:
+                    failed.append(f"namespace/{ns}: {e}")
+            elif real is not None:
+                skipped.append(f"namespace/{ns}")
+            elif ns not in existing_ns:
                 tprops.setdefault("namespaces", []).append({"name": ns, "labels": item.get("labels") or {}})
                 existing_ns.add(ns)
                 created.append(f"namespace/{ns}")
@@ -681,7 +708,8 @@ def _restore(state, sub, vault, inst, payload, validate_only=False):
     for _, ns, o in ordered:
         md = o["metadata"]
         name = md["name"]
-        have_obj = [x for x in k8s.list_objects(target, o["kind"], ns if md.get("namespace") else None) if x["metadata"]["name"] == name]
+        have_obj = [x for x in (real.list(o["kind"], ns if md.get("namespace") else None) if real is not None
+                                else k8s.list_objects(target, o["kind"], ns if md.get("namespace") else None)) if x["metadata"]["name"] == name]
         label = f"{o['kind'].lower()}/{name}"
         if have_obj and policy == "Skip":
             skipped.append(label)
@@ -692,7 +720,10 @@ def _restore(state, sub, vault, inst, payload, validate_only=False):
         if md.get("namespace"):
             manifest["metadata"]["namespace"] = ns
         try:
-            k8s.apply_manifests(target, [manifest], default_ns=ns or "default")
+            if real is not None:
+                real.apply([manifest])
+            else:
+                k8s.apply_manifests(target, [manifest], default_ns=ns or "default")
             (patched if have_obj else created).append(label)
         except Exception as e:                      # one bad object does not abort the rest (Velero partial failure)
             failed.append(f"{label}: {e}")
