@@ -38,6 +38,39 @@ PORTAL      portal/<topic> (pushed at once) --PR--> v4-nano-portal --owner go, o
 SANDBOX     main only, by PR; the appliance pins the image tag
 ```
 
+## 1c. Current state of in-flight work (2026-11-09)
+
+All branches below are pushed to origin under their own names (nothing is lost). None is merged into `v4-on-main` yet.
+`v4-on-main` is at `265851d3`; `main` and the portal `v4-nano-portal` / `main` were not touched.
+
+**Appliance repo** (all cut from the old `release/v4.0.0-dev`, ~800 commits behind the trunk; each must be ported onto
+`origin/v4-on-main`, not merged as is)
+
+| Branch | Tip | Contents | Port status |
+|---|---|---|---|
+| `v4/gap-close` | `bf682812` | A1 + A2/A3 + A4 merged | A2/A3 are **already on the trunk** (hostname scope, create-database): drop. A4: port only what the trunk lacks. |
+| `v4/gap-A1` | `740844c7` | Azure Backup for AKS, shared kube layer | port (in progress on `v4/merge-to-main`) |
+| `v4/gap-A23`, `v4/gap-A4` | `aa2fe828`, `10f419b2` | App Services, APIM capacity | see `v4/gap-close` |
+| `v4/k3s-backend`, `v4/k8s-full` | `61d5a0ec` | real k3s runtime, `RealK8sBackend` (headless only) | port (in progress) |
+| `v4/k8s-tier-gate` | `f58f3c48` | Pro/Max gate for AKS/EKS/GKE | port (in progress) |
+| `v4/k8s-platform` | `6e1b64e1` | versions, pools, identity, LB, storage; live tests not green | port after the three above |
+| `v4/eks` | `3ad0fccc` | EKS core + console; live test partly passed | port after the three above |
+| `v4/tunnel-keeper`, `v4/tunnel-k3s` | `eacf1ecd`, `dbab8a5d` | keeper, agent roles, `forward` | **do not merge**: the trunk has a redesigned tunnel (stream framework, DNS-only resolver); reconcile separately |
+| `v4/docs-branch-arch` | this doc | branch architecture | merge when the owner approves 1a |
+| `v4/merge-to-main` | in progress | the port itself | push when the agent finishes |
+
+**Portal repo**
+
+| Branch | Tip | Contents | Status |
+|---|---|---|---|
+| `portal/wip-snapshot-20261109` | `193e505` | snapshot of the shared `portal-v4nano` working tree (Sandboxes grid, Git runners, Installation restyle, Mesh codespaces grid, plus other sessions' uncommitted edits) | **not for merge**; split per topic into `portal/<topic>` branches, then delete |
+
+Rules that follow from this table:
+- A branch cut from a stale base is ported by re-applying its intent onto a fresh `v4/<topic>` from `origin/v4-on-main`
+  (cherry-pick by file, rebuild the outputs), never by merging the stale line.
+- Before porting, grep the trunk for the feature; other sessions may already have landed it (A2/A3 were).
+- Open decisions: approve section 1a; name the integrator (until named, the owner is the integrator).
+
 ## 1b. Proposed structure (v2) — one trunk per repo, one release branch
 
 Status: PROPOSAL (2026-11-09), for the owner and the aligning session. If approved it replaces sections 2 and 3 where they differ
