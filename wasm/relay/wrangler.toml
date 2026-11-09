@@ -22,6 +22,15 @@ class_name = "RelaySession"
 tag = "v1"
 new_sqlite_classes = ["RelaySession"]
 
+# Per-IP cap for /egress (Nano VM package downloads). Optional: the Worker skips the check if the binding is absent.
+# UNVERIFIED syntax/plan limits: confirm with `wrangler deploy --dry-run` before the first deploy.
+[[ratelimits]]
+name = "EGRESS_LIMIT"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
 [vars]
 # Only this origin may register a tab (Origin header check in the Worker).
 ALLOWED_ORIGIN = "https://vyomi.cloud"

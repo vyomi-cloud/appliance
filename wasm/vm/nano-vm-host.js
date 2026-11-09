@@ -305,7 +305,7 @@
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through the tunnel's allow-listed egress (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the booster (Pro/Max).`,
+              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the booster (Pro/Max).`,
       };
     }
     return http(400, { detail: "unknown op " + op });
