@@ -75,6 +75,20 @@ async function gunzip(buf) {
 }
 
 // ── v86 ──────────────────────────────────────────────────────────────────
+// Package egress for the guest (pip / apk / git). Plan A: the hosted relay's /egress (no install needed);
+// Plan B: the local vyomi-tunnel relay passed in as inst.relay. Chosen once per boot/restore by probing Plan A.
+const HOSTED_EGRESS = "https://relay.vyomi.cloud";
+let egressBase = "";
+async function pickEgress() {
+  egressBase = "";
+  try {
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 4000);
+    const r = await fetch(HOSTED_EGRESS + "/egress?u=" + encodeURIComponent("http://pypi.org/simple/"), { method: "HEAD", cache: "no-store", signal: ac.signal });
+    clearTimeout(t);
+    if (r.ok) egressBase = HOSTED_EGRESS;     // 4xx/5xx or network error (route missing, origin refused, offline) -> Plan B
+  } catch (_) {}
+  return egressBase;
+}
 function makeEmulator(opts) {
   return new V86({
     wasm_path: HERE + "engine/v86.wasm",
@@ -86,7 +100,7 @@ function makeEmulator(opts) {
     disable_keyboard: true, disable_mouse: true, disable_speaker: true,
     uart1: true,
     // Guest HTTP goes out via the browser fetch; the CORS-less package mirrors are reached through the relay's allow-listed /egress.
-    net_device: { type: "virtio", relay_url: "fetch", ...(inst && inst.relay ? { cors_proxy: inst.relay.replace(/\/$/, "") + "/egress?u=" } : {}) },
+    net_device: { type: "virtio", relay_url: "fetch", ...(egressBase || (inst && inst.relay) ? { cors_proxy: (egressBase || inst.relay.replace(/\/$/, "")) + "/egress?u=" } : {}) },
     preserve_mac_from_state_image: true,
     ...opts,
   });
@@ -161,6 +175,7 @@ async function golden() {
     if (hit) return hit;
     const t0 = performance.now();
     resetAgent();
+    await pickEgress();
     const e = makeEmulator({ bzimage: { url: HERE + "image/vmlinuz" }, initrd: { url: HERE + "image/rootfs.cpio.gz" }, cmdline: CMDLINE });
     emu = e; wire(e);
     setState("booting", "first launch in this browser: cold-booting the VM image (once)");
@@ -182,6 +197,7 @@ async function bootFrom(gzState) {
   const t0 = performance.now();
   const raw = await gunzip(gzState);
   resetAgent();
+  await pickEgress();
   emu = makeEmulator({ initial_state: { buffer: raw } });
   wire(emu);
   await waitReady(emu);

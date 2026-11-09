@@ -13,6 +13,8 @@
 function b64encode(bytes) { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); }
 function b64decode(str) { const s = atob(str); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
 
+import { egress } from "./egress.mjs";
+
 const MAX_BODY = 6 * 1024 * 1024;   // 6 MiB request cap (413 above this)
 const MAX_PENDING = 64;             // per-session in-flight cap (429 above this)
 const REQ_TIMEOUT_MS = 20000;       // tab must answer within this (504 otherwise)
@@ -38,6 +40,28 @@ export default {
         return new Response("forbidden origin", { status: 403 });
       const stub = env.RELAY.get(env.RELAY.idFromName(session));
       return stub.fetch("https://do/register", { headers: forwardHeaders(request, "register") });
+    }
+
+    // Nano VM package egress: /egress?u=<url>. Allow-listed hosts only (egress.mjs); same Origin rule as /register;
+    // per-IP rate limit when the EGRESS_LIMIT binding exists. Must precede the /<session> catch-all below.
+    if (parts[0] === "egress") {
+      const origin = request.headers.get("Origin") || "";
+      const allowedHost = (env.ALLOWED_ORIGIN || "").replace(/^https?:\/\//, "");
+      const originOk = !env.ALLOWED_ORIGIN || !origin || origin === env.ALLOWED_ORIGIN
+        || (allowedHost && origin === "https://www." + allowedHost);
+      const cors = { "access-control-allow-origin": origin || "*", "access-control-allow-private-network": "true",
+                     "access-control-allow-headers": "*", "access-control-allow-methods": "GET, HEAD, POST, OPTIONS", "vary": "Origin" };
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+      if (!originOk) return new Response("forbidden origin", { status: 403, headers: cors });
+      if (env.EGRESS_LIMIT) {
+        const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+        const { success } = await env.EGRESS_LIMIT.limit({ key: ip });
+        if (!success) return new Response("egress rate limited", { status: 429, headers: { ...cors, "retry-after": "30" } });
+      }
+      const r = await egress(request);
+      const h = new Headers(r.headers);
+      for (const [k, v] of Object.entries(cors)) h.set(k, v);
+      return new Response(r.body, { status: r.status, headers: h });
     }
 
     // external app:  /<session>/<path...>
