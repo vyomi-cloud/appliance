@@ -156,7 +156,7 @@ sends a small write every ~240 s while a Mesh session is active.
   never log tokens, one probe in flight per Codespace, status exposed to the portal (`keepalive` in the session view).
 - Open: GitHub acceptable-use for sparse automated SSH; behaviour at thousands of sessions.
 
-## 9b. Codespace host sshd as a target — design for review [planned, nothing built]
+## 9b. Codespace host sshd as a target — design for review [agent side built, unit-tested; devcontainer/compose/boot/portal parts planned]
 
 Goal: `ssh codespace.vyomi` reaches the **Codespace host's own sshd** through the same `/connect` path, in addition to the Docker VMs.
 Requested 2026-11-09; handed to a separate session to review and build.
@@ -200,7 +200,7 @@ Commit `5de35d76` on `v4/tunnel-keeper` (`wasm/relay/keeper.mjs`, `test-keeper.m
 - Runs anywhere that holds the session token and can reach the relay (gateway host preferred; laptop works while it is open). It needs a
   dedicated keeper key, injected like the user's key by the 9b step 4 and removed at session end.
 
-## 12. Agent roles and runner targets [planned]
+## 12. Agent roles and runner targets [hub + agent built, unit-tested locally; runner workflow, keys and portal parts planned]
 
 A Pro/Max session can have several Mesh agents: one in the Codespace and one per GitHub runner that hosts a k3s cluster.
 
@@ -214,7 +214,7 @@ A Pro/Max session can have several Mesh agents: one in the Codespace and one per
 - Keys: the workflow receives the user's public key (and the keeper key when relevant) as dispatch inputs, appends them to `authorized_keys`, never logs them.
 - Caps: the 20-stream cap applies per session across roles; an audit line is written for every open of `host` and `k3s`.
 
-## 13. `vyomi-tunnel forward` — non-SSH TCP [planned]
+## 13. `vyomi-tunnel forward` — non-SSH TCP [built, unit-tested against a fake TCP echo; not run with kubectl/Lens]
 
 `vyomi-tunnel forward <target>[.<role>] <local>:<remote>` binds `127.0.0.1:<local>` and bridges each accepted connection to a `/connect`
 stream. This is what makes kubectl and Lens work: `forward <cluster> 6443:6443`, kubeconfig server `https://127.0.0.1:6443`.
@@ -258,6 +258,7 @@ Abort rule: if the controller is lost mid-handoff, A keeps running until its own
 | Worker `/egress` | `wasm/relay/test-worker-egress.mjs` | 9 checks pass |
 | Mesh SSH path + client + config | `wasm/relay/test-mesh-ssh.mjs` | 20 checks pass (round trip incl. 2 MB, parallel streams, stream cap, unknown VM, auth failures, agent drop, config edits) |
 | Booster HTTP link | `wasm/relay/test-booster-link.mjs` | passes (needs `WS_PKG`) |
+| Reserved targets, roles, forward, tenant isolation | `wasm/relay/test-tunnel-k3s.mjs` | 52 checks pass locally (fake TCP servers; no docker, no Codespace) |
 | Real Codespace + real sshd | — | **not run** |
 | Browser VM boot + pip/git via hosted `/egress` | — | **not run** |
 | Cloudflare deploy (`wrangler deploy --dry-run`, rate-limit binding syntax) | — | **not run** |
@@ -272,6 +273,25 @@ Abort rule: if the controller is lost mid-handoff, A keeps running until its own
 | T4 | Lens connects through `forward` | cluster listed, workloads visible |
 | T5 | Handoff: app + PVC (file written) + Secret + CRD instance survive | object list equal, file present, app answers |
 | T6 | Tenant isolation: another account's token cannot open `host`/`k3s` of this session | 403 |
+
+### Implementation notes (agent side, as built)
+
+- `booster-dial.mjs`: `resolveReserved()` runs before any resolver (a custom `resolveVm` cannot shadow `host`/`k3s`). `host` and `k3s` ignore the
+  client's requested port and always dial ONE configured address (`VYOMI_HOST_SSH_ADDR`, default `host.docker.internal:22`; `VYOMI_K3S_ADDR`, default
+  `vyomi-k3s:6443`). `codespace` is an alias of `host` on the `codespace` role only; on any other role it is refused. `vmCandidates` returns nothing for
+  reserved names; `isReservedName()` is exported for the backend/portal to refuse them as VM names (that enforcement is NOT in this repo yet).
+  Each open of host/k3s emits an audit line through the `audit` option (default: the agent log, prefixed `AUDIT`). Role comes from `role` / `VYOMI_AGENT_ROLE`.
+- `booster-hub.mjs`: agents keyed by `(session_id, role)`; the agent dials `/booster?role=<r>`; `/connect` takes `&role=` (default `codespace`; bad label 400,
+  no agent for that role 502). The Nano HTTP plane uses the `codespace` role only. A second dial for a taken `(session, role)` slot by a different account is refused (403).
+  The stream cap counts streams per session across all roles.
+- `mesh-cli.mjs`: `forward <target>[.<role>] <local>:<remote> [--role r] [--allow-privileged]`; `connect()` gained a `role` option (no CLI flag yet).
+  Because VM names may contain dots, `a.b` is read as target `a`, role `b`; `--role ""`-style explicit role overrides this.
+  Exit codes: 0 stopped / session_end, 1 fatal refusal (401/403/410) or cannot listen, 2 usage / not signed in / session ended. A refusal of a single stream
+  (502, 429) only drops that connection. Not implemented from section 13: reconnecting streams (each connection is its own stream, so a new connection simply re-dials).
+- Needed outside this repo section (not done): compose `extra_hosts: host.docker.internal:host-gateway` on `link`, `VYOMI_K3S_ADDR` if the container is not `vyomi-k3s`,
+  the sshd feature synced to `vyomi-cloud/sandbox`, authorized_keys injection in `boot-booster.sh`, the portal reserving the names, and the packaged
+  `vyomi-tunnel` binary (`packaging/tunnel/bin/vyomi-tunnel.mjs` carries no hub; only `mesh-cli.mjs` and the dispatcher list were updated there).
+- Dispatcher fix: `keep` and `forward` were not in the subcommand list of `local-relay.mjs` / `vyomi-tunnel.mjs`; added.
 
 ## 11. Still to build
 

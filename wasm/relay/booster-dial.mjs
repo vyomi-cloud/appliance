@@ -40,7 +40,22 @@ function localRequest(base, token, m) {
  *  them on the shared `vyomi-net`, where the agent's `link` container can reach them by Docker DNS name - so we try DNS first
  *  (no docker CLI / socket needed there), then `docker inspect` for agents that run on the host.  Returns {host, port} or null.
  *  Override with the `resolveVm` option (tests, other backends). Only these name patterns are ever tried: never arbitrary hosts. */
-export const vmCandidates = (name) => /^[A-Za-z0-9._-]{1,80}$/.test(name) ? [`vyomi-i-${name}`, `vyomi-${name}`, name] : [];
+/** Reserved target names (docs 9b/12). They are answered by the agent itself and are never looked up as containers, so a VM
+ *  can not shadow them; backends/portal must also refuse to create a VM with one of these names (isReservedName). */
+export const RESERVED = new Set(["host", "codespace", "k3s"]);
+export const isReservedName = (n) => RESERVED.has(String(n || "").toLowerCase());
+export const ROLE_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+const parseAddr = (s, defPort) => { const m = /^(.*?)(?::(\d{1,5}))?$/.exec(String(s)); return { host: m[1], port: Number(m[2] || defPort) }; };
+/** Reserved target -> {host, port, reserved} | null (not reserved) | false (reserved but not valid on this role).
+ *  `host` (alias `codespace`, codespace role only) = the machine's own sshd, VYOMI_HOST_SSH_ADDR (default host.docker.internal:22);
+ *  `k3s` = VYOMI_K3S_ADDR (default vyomi-k3s:6443). The client's requested port is ignored for these: they reach ONE fixed address. */
+export function resolveReserved(name, role = "codespace", env = process.env) {
+  const n = String(name || "").toLowerCase();
+  if (n === "host" || (n === "codespace" && role === "codespace")) return { ...parseAddr(env.VYOMI_HOST_SSH_ADDR || "host.docker.internal:22", 22), reserved: "host" };
+  if (n === "k3s") return { ...parseAddr(env.VYOMI_K3S_ADDR || "vyomi-k3s:6443", 6443), reserved: "k3s" };
+  return n === "codespace" ? false : null;
+}
+export const vmCandidates = (name) => /^[A-Za-z0-9._-]{1,80}$/.test(name) && !isReservedName(name) ? [`vyomi-i-${name}`, `vyomi-${name}`, name] : [];
 export async function dockerResolve(name, port = 22) {
   const cands = vmCandidates(name);
   for (const c of cands) {
@@ -55,13 +70,16 @@ export async function dockerResolve(name, port = 22) {
 }
 
 /** Start the link. Returns {stop(), done: Promise<"session_end"|"stopped">, state}. */
-export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000, resolveVm = dockerResolve }) {
+export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000, resolveVm = dockerResolve, role = "codespace", env = process.env, audit = null }) {
+  if (!ROLE_RE.test(role)) throw new Error("bad role label");
   const end = peekSessionEnd(token);
   const streams = new Map();     // sid -> net.Socket (TCP forwards to VM sshd)
   let ws = null, stopped = false, resolveDone, timer = null, endTimer = null, backoff = minBackoffMs;
   const state = { linked: false, connects: 0 };
   const done = new Promise((r) => { resolveDone = r; });
-  const url = /\/booster\/?$/.test(relayUrl) ? relayUrl : relayUrl.replace(/\/$/, "") + "/booster";
+  const base = /\/booster\/?$/.test(relayUrl) ? relayUrl : relayUrl.replace(/\/$/, "") + "/booster";
+  const url = base + (base.includes("?") ? "&" : "?") + "role=" + encodeURIComponent(role);
+  const auditLog = audit || ((m) => log("AUDIT " + m));
   const finish = (why) => {
     if (stopped) return; stopped = true; clearTimeout(timer); clearTimeout(endTimer);
     try { ws && ws.close(1000, why); } catch { /* */ }
@@ -81,7 +99,9 @@ export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, 
       }
       let m; try { m = JSON.parse(data.toString()); } catch { return; }
       if (m.type === "tcp-open") {
-        const target = await resolveVm(m.vm, m.port);
+        const rsv = resolveReserved(m.vm, role, env);       // checked BEFORE any container lookup; a custom resolver cannot shadow it
+        if (rsv) auditLog(`open ${rsv.reserved} role=${role} target=${m.vm} -> ${rsv.host}:${rsv.port} sid=${m.sid}`);
+        const target = rsv === false ? null : rsv || await resolveVm(m.vm, m.port);
         if (!target) { ws.send(JSON.stringify({ type: "tcp-error", sid: m.sid, reason: "no such VM" })); return; }
         const sock = net.connect({ host: target.host, port: target.port });
         sock.setNoDelay(true);
@@ -117,7 +137,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const relayUrl = process.env.VYOMI_RELAY_URL, token = process.env.VYOMI_BOOSTER_SESSION_TOKEN;
   if (!relayUrl || !token) { console.error("booster-dial: VYOMI_RELAY_URL and VYOMI_BOOSTER_SESSION_TOKEN are required"); process.exit(2); }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
-  const link = dial({ relayUrl, token, localUrl: process.env.VYOMI_BOOSTER_LOCAL_URL || "http://127.0.0.1:9000", WS,
+  const link = dial({ relayUrl, token, role: process.env.VYOMI_AGENT_ROLE || "codespace", localUrl: process.env.VYOMI_BOOSTER_LOCAL_URL || "http://127.0.0.1:9000", WS,
                       log: (m) => console.log("[booster-dial] " + m) });
   link.done.then((why) => { console.log("[booster-dial] ended: " + why); process.exit(why === "session_end" || why === "stopped" ? 0 : 1); });
 }

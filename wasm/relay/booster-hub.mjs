@@ -15,6 +15,8 @@ import { verify, SessionError } from "./booster-session.mjs";
 export const HEADER = "x-vyomi-session-token";
 const DEFAULT_ORIGINS = ["https://vyomi.cloud", "https://www.vyomi.cloud"];
 const MAX_STREAMS = Number(process.env.VYOMI_MAX_STREAMS || 20);   // per Mesh session
+const ROLE_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+const DEFAULT_ROLE = "codespace";
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SESSION_KEY || "",
@@ -22,7 +24,9 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
                             allowLoopback = process.env.VYOMI_RELAY_ALLOW_LOOPBACK === "1",
                             requestTimeoutMs = 30000, log = () => {} } = {}) {
   const allow = new Set(origins.length ? origins : DEFAULT_ORIGINS);
-  const boosters = new Map();          // session_id -> {ws, claims, timer, pending:Map, account}
+  const boosters = new Map();          // `${session_id}|${role}` -> {ws, claims, role, timer, pending:Map, streams}
+  const bkey = (sid, role = DEFAULT_ROLE) => `${sid}|${role}`;
+  const sessionStreams = (sid) => { let n = 0; for (const b of boosters.values()) if (b.claims.session_id === sid && b.streams) n += b.streams.size; return n; };
   const wss = new WebSocketServer({ noServer: true });
   const enabled = () => !!key;
 
@@ -39,14 +43,14 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     const a = req.headers["authorization"] || "";
     return /^Bearer /i.test(a) ? a.slice(7).trim() : "";
   }
-  function dropBooster(sid, reason) {
-    const b = boosters.get(sid); if (!b) return;
-    boosters.delete(sid); clearTimeout(b.timer);
+  function dropBooster(key, reason) {
+    const b = boosters.get(key); if (!b) return;
+    boosters.delete(key); clearTimeout(b.timer);
     for (const [, p] of b.pending) p({ status: 502, headers: { "content-type": "text/plain" }, body: Buffer.from("booster link closed: " + reason).toString("base64") });
     b.pending.clear();
     if (b.streams) { for (const st of [...b.streams.values()]) { try { st.cws.close(1012, reason); } catch { /* */ } } b.streams.clear(); }
     try { b.ws.close(4000, reason); } catch { /* already closed */ }
-    log(`booster ${sid} closed (${reason})`);
+    log(`booster ${key} closed (${reason})`);
   }
 
   /** WebSocket upgrade for /booster. Returns true if it took the socket. */
@@ -57,10 +61,14 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     let claims;
     try { claims = verify(bearer(req), key, nowS()); }
     catch (e) { reject(e instanceof SessionError ? e.status : 401, e.code || "BoosterSessionInvalid"); return true; }
+    const role = new URL(req.url, "http://x").searchParams.get("role") || DEFAULT_ROLE;
+    if (!ROLE_RE.test(role)) { reject(400, "BadRole"); return true; }
+    const prior = boosters.get(bkey(claims.session_id, role));
+    if (prior && prior.claims.sub !== claims.sub) { reject(403, "BoosterSessionMismatch"); return true; }
     wss.handleUpgrade(req, socket, head, (ws) => {
-      const sid = claims.session_id;
+      const sid = bkey(claims.session_id, role);
       if (boosters.has(sid)) dropBooster(sid, "replaced by a newer dial");
-      const entry = { ws, claims, pending: new Map(), timer: null };
+      const entry = { ws, claims, role, pending: new Map(), timer: null };
       entry.timer = setTimeout(() => dropBooster(sid, "session_end"), Math.max(0, claims.session_end * 1000 - Date.now()));
       boosters.set(sid, entry);
       log(`booster ${sid} (${claims.sub}) linked`);
@@ -83,7 +91,7 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
       });
       const gone = () => { if (boosters.get(sid) === entry) dropBooster(sid, "booster disconnected"); };
       ws.on("close", gone); ws.on("error", gone);
-      ws.send(JSON.stringify({ type: "linked", session_id: sid, session_end: claims.session_end }));
+      ws.send(JSON.stringify({ type: "linked", session_id: claims.session_id, role, session_end: claims.session_end }));
     });
     return true;
   }
@@ -102,7 +110,7 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     if (!originOk(origin)) return out(403, "OriginNotAllowed", `origin ${origin} is not allowed`);
     let claims;
     try { claims = verify(tok, key, nowS()); } catch (e) { return out(e.status || 401, e.code || "BoosterSessionInvalid", e.message); }
-    const b = boosters.get(claims.session_id);
+    const b = boosters.get(bkey(claims.session_id));   // the HTTP plane only ever talks to the codespace role
     if (!b || b.ws.readyState !== b.ws.OPEN) return out(502, "BoosterNotLinked", "no booster is linked for this session");
     if (b.claims.sub !== claims.sub) return out(403, "BoosterSessionMismatch", "session belongs to another account");
     const url = new URL(req.url, "http://x");
@@ -138,11 +146,13 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     const u = new URL(req.url, "http://x");
     const vm = u.searchParams.get("vm") || "", port = Number(u.searchParams.get("port") || 22);
     if (!/^[A-Za-z0-9._-]{1,80}$/.test(vm) || !(port > 0 && port < 65536)) { reject(400, "BadVm"); return true; }
-    const b = boosters.get(claims.session_id);
+    const role = u.searchParams.get("role") || DEFAULT_ROLE;
+    if (!ROLE_RE.test(role)) { reject(400, "BadRole"); return true; }
+    const b = boosters.get(bkey(claims.session_id, role));      // targets resolve only inside the agent that owns the role
     if (!b || b.ws.readyState !== b.ws.OPEN) { reject(502, "BoosterNotLinked"); return true; }
     if (b.claims.sub !== claims.sub) { reject(403, "BoosterSessionMismatch"); return true; }
     if (!b.streams) b.streams = new Map();
-    if (b.streams.size >= MAX_STREAMS) { reject(429, "TooManyStreams"); return true; }
+    if (sessionStreams(claims.session_id) >= MAX_STREAMS) { reject(429, "TooManyStreams"); return true; }
     connWss.handleUpgrade(req, socket, head, (cws) => {
       const sid = sidSeq++;
       const st = { cws, open: false, queue: [] };
@@ -162,7 +172,7 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
       });
       cws.on("close", () => close("closed")); cws.on("error", () => close("error"));
       b.ws.send(JSON.stringify({ type: "tcp-open", sid, vm, port }));
-      log(`stream ${sid} -> ${claims.session_id}/${vm}:${port}`);
+      log(`stream ${sid} -> ${claims.session_id}|${role}/${vm}:${port} (open now ${sessionStreams(claims.session_id)})`);
     });
     return true;
   }
