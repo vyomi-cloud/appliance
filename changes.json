@@ -1,29 +1,15 @@
 {
- "at": "2026-11-09T20:59:13+00:00",
+ "at": "2026-11-09T21:59:19+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.43.127",
-   "title": "pypi:boto3: 1.43.126 \u2192 1.43.127",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.43.127",
-   "title": "pypi:botocore: 1.43.126 \u2192 1.43.127",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "cli:aws",
-   "kind": "release",
-   "key": "ver:cli:aws:2.39.7",
-   "title": "cli:aws: 2.39.6 \u2192 2.39.7",
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:ba93ae5f65e0",
+   "title": "Introducing an open-source UI for graph analytics over data lakes with Amazon Neptune Analytics",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-graphover-datalakes-generally-available",
+   "detail": "Today, AWS is introducing an open-source solution with a local web UI that helps customers turn data lake records into graphs for analysis with Amazon Neptune Analytics. By projecting selected records and relationships, customers can investigate connections across tables and run graph algorithms without building their own ETL pipelines. For example, a customer could project accounts and transactions into a graph to explore how accounts are connected or identify communities that may warrant investigation. Doing this today often means writing queries to prepare node and relationship data, creati",
    "actionable": false
   }
  ],

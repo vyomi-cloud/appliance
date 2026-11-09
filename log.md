@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-09T21:59:19+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` Introducing an open-source UI for graph analytics over data lakes with Amazon Neptune Analytics ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-graphover-datalakes-generally-available))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T20:59:13+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3007,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T01:50:20+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `announcement` Amazon ECS now supports GPU sharing with NVIDIA Multi-Process Service (MPS) ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-ecs-gpu-sharing-nvidia-mps/))
-- · `release` pypi:azure-keyvault-secrets: 4.11.3 → 4.12.0
