@@ -20,7 +20,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 let preview = null;
 const up = async () => { try { return (await fetch(`${BASE}/nano/`, { redirect: "manual" })).status < 500; } catch { return false; } };
 if (!(await up())) {
-  preview = spawn("node", [join(here, "..", "nano_preview.mjs"), "--port", String(PORT)], { stdio: "ignore" });
+  preview = spawn("node", [join(here, "..", "nano_preview.mjs"), "--port", String(PORT), "--tier", "max"], { stdio: "ignore" });
   for (let i = 0; i < 40 && !(await up()); i++) await new Promise((r) => setTimeout(r, 500));
 }
 
