@@ -6,7 +6,7 @@
 <title>Vyomi · AWS</title>
 <meta name="vyomi-substrate" content="nano">
 <link rel="stylesheet" href="./main.css?v=69b76dfc95dd">
-<script src="../../booster-link.js?v=5e57d8fcf504"></script>
+<script src="../../booster-link.js?v=ab588c8d61b6"></script>
 <script type="module" src="../../nano-boot.js?v=74366b010a98"></script>
 </head>
 <body>
@@ -16,7 +16,8 @@
 <script>window.__VY_ASSET_BASE = "../../";</script>
 <script src="../../nano-video.js?v=3f2ae044e3d4"></script>
 <script src="../../nano-disk-chip.js?v=f97b0d596949"></script>
-<script src="../../vyomi-appbar.js?v=77c4fcf448ff" data-cloud="aws" data-clouds="../../clouds.html" defer></script>
+<script src="../../booster-widget.js?v=b9f9bff4e9b3" data-cloud="aws" defer></script>
+<script src="../../vyomi-appbar.js?v=09ed2e3e8cdf" data-cloud="aws" data-clouds="../../clouds.html" defer></script>
 <script type="module" src="./main.js?v=69b76dfc95dd"></script>
 <script>window.__NANO_BASE = "../..";</script>
 <style>
@@ -70,22 +71,6 @@
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
 </div>
-<script>
-// The tunnel bar starts right of the left side menu (never over it: the account menu /
-// Sign out lives at the side menu's foot) and follows it as it collapses or expands.
-(function(){
-  var foot = document.getElementById("nano-foot"); if(!foot) return;
-  function fit(){
-    var sb = document.getElementById("app-sidebar");
-    var r = (sb && sb.getClientRects().length) ? sb.getBoundingClientRect() : null;
-    foot.style.left = (r && r.width && r.left < 1 ? Math.round(r.right) : 0) + "px";
-  }
-  fit(); addEventListener("resize", fit); addEventListener("load", fit);
-  var sb = document.getElementById("app-sidebar");
-  if(sb && window.ResizeObserver) new ResizeObserver(fit).observe(sb);
-  new MutationObserver(fit).observe(document.body, { attributes: true, attributeFilter: ["class"] });
-})();
-</script>
 <script>
 (function(){
   var base = window.__NANO_BASE || "";
@@ -144,7 +129,7 @@
     epEl.title = external || "";
     // Persist the live endpoint so other views (e.g. the /docs/*/usage per-service
     // samples) can show the SAME relay URL even before their own channel connects.
-    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); }catch(_){} }
+    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); if(mode) localStorage.setItem(mode==="local"?"nano_local_ext":"nano_relay_cloud_ext", external); }catch(_){} }
     // Gentle GitHub-star nudge at natural moments: the first relayed request (a
     // "win") or the 30-min idle pause. Once per browser, dismissable, never blocks.
     if(served!=null && served>=1 && _prevServed<1) maybeNudge();

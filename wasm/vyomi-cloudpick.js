@@ -40,10 +40,10 @@
     });
   }
 
-  var CSS = '#vy-pick{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;background:#0b1020;font-family:Inter,system-ui,sans-serif}' +
+  var CSS = '#vy-pick{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;background:#1b1e24;font-family:Inter,system-ui,sans-serif}' +
     'html.vy-pickopen body>*:not(#vy-pick){visibility:hidden !important}' +
-    '#vy-pick .box{width:min(1100px,94vw);height:min(760px,90vh);background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}' +
-    '#vy-pick .hd{display:flex;align-items:center;height:46px;padding:0 18px;border-bottom:1px solid #e4e7ec;font:600 15px Inter,system-ui,sans-serif;color:#101828}' +
+    '#vy-pick .box{width:100vw;height:100vh;background:#1b1e24;border-radius:0;box-shadow:none;display:flex;flex-direction:column;overflow:hidden}' +
+    '#vy-pick .hd{display:flex;align-items:center;height:46px;padding:0 18px;border-bottom:1px solid #3a3f4a;font:600 15px Inter,system-ui,sans-serif;color:#f4f5f7}' +
     '#vy-pick iframe{flex:1;border:0;width:100%}';
 
   // First visit / stale default: the SAME Spaces dialog the drawer opens, but forced (no ✕, no Esc, opaque backdrop)

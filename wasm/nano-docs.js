@@ -221,8 +221,69 @@
     });
     return [rd, cr].filter(function (x, i, arr) { return x && arr.indexOf(x) === i; });
   }
+  // SDK & CLI usage shows exactly three tabs: CLI, SDK, curl. The per-language SDK snippets (Python, JavaScript) are stacked in
+  // the one SDK tab; a CLI entry with several flavours (e.g. Azure az rest + native) is stacked in the CLI tab. No new tab widget.
+  function threeTabs(list) {
+    var cli = [], sdk = [], curl = [];
+    list.forEach(function (s) {
+      var l = s[0] || '', head = (/^(Python|JavaScript)/.test(l) ? (l.indexOf('Python') === 0 ? '# ' : '// ') + l + '\n' : (/CLI|gcloud/i.test(l) && !/^(AWS CLI|gcloud)$/.test(l) ? '# ' + l + '\n' : ''));
+      if (/curl/i.test(l)) curl.push(s[1]);
+      else if (/^(Python|JavaScript)/.test(l)) sdk.push(head + s[1]);
+      else cli.push(head + s[1]);
+    });
+    var out = [];
+    if (cli.length) out.push(['CLI', cli.join('\n\n')]);
+    if (sdk.length) out.push(['SDK', sdk.join('\n\n')]);
+    if (curl.length) out.push(['curl', curl.join('\n\n')]);
+    return out.length ? out : list;
+  }
+  // Same markup as the first SDK & CLI usage card (clouds.html cardHtml): underline tabs + copy icon + bordered code block,
+  // so the host's existing .u-strip / .u-tab / .u-cp / pre.u-code styles apply unchanged (light + dark).
+  function usageTabs(list) {
+    var h = '<div class="u-strip" role="tablist">' + list.map(function (s, i) {
+      return '<button class="u-tab" type="button" role="tab" data-i="' + i + '" aria-selected="' + (i === 0) + '">' + esc(s[0]) + '</button>'; }).join('') +
+      '<button class="u-cp" type="button" title="Copy" aria-label="Copy"><span class="material-icons">content_copy</span></button></div>' +
+      '<pre class="u-code"><code>' + esc(list[0][1]) + '</code></pre>';
+    return { html: h, wire: function (root) {
+      var strip = root.querySelector('.u-strip'), code = root.querySelector('pre.u-code code'), cp = root.querySelector('.u-cp'), cur = 0;
+      strip.querySelectorAll('.u-tab').forEach(function (t) {
+        t.addEventListener('click', function () {
+          cur = +t.dataset.i; strip.querySelectorAll('.u-tab').forEach(function (x) { x.setAttribute('aria-selected', String(x === t)); }); code.textContent = list[cur][1];
+        });
+      });
+      cp.addEventListener('click', function () {
+        var ic = cp.querySelector('.material-icons');
+        if (navigator.clipboard) navigator.clipboard.writeText(list[cur][1]).then(function () { ic.textContent = 'check'; cp.style.color = '#60a5fa'; setTimeout(function () { ic.textContent = 'content_copy'; cp.style.color = ''; }, 1400); });
+      });
+    } };
+  }
+  // Service-specific icon for a registry card: same markup as the first cards (clouds.html svcIcon). AWS/Azure use Vyomi's icon set
+  // (service-icons.js); services without their own artwork get the set's generic glyph in the matching category colour. GCP uses Material glyphs.
+  var AWS_ID = [[/ec2|instance/, 'ec2'], [/lambda/, 'lambda'], [/\bs3\b|simple storage/, 's3'], [/dynamo/, 'dynamodb'], [/\brds\b|aurora/, 'rds'], [/api ?gateway|apigateway/, 'apigateway'],
+    [/\biam\b|identity/, 'iam'], [/\bkms\b|key management/, 'kms'], [/secrets/, 'secretsmanager'], [/\bsqs\b|queue/, 'sqs'], [/\bsns\b|notification/, 'sns'],
+    [/eventbridge/, 'eventbridge'], [/cloudwatch/, 'cloudwatch'], [/cloudformation/, 'cloudformation'], [/\bvpc\b/, 'vpc']];
+  var AWS_CAT = [[/s3|storage|efs|ebs|backup|glacier|fsx/, 'storage'], [/rds|dynamo|redis|elasticache|neptune|database|documentdb|timestream|memorydb|keyspaces/, 'database'],
+    [/ec2|lambda|batch|ecs|eks|container|fargate|lightsail|apprunner|app runner|compute|bedrock|sagemaker/, 'compute'], [/vpc|route ?53|cloudfront|elb|load balanc|gateway|dns|network|direct connect/, 'networking'],
+    [/athena|glue|kinesis|emr|opensearch|quicksight|redshift|analytics|firehose|msk/, 'analytics'], [/iam|kms|cognito|waf|shield|guardduty|secrets|security|acm|certificate|inspector|macie/, 'security'],
+    [/sns|sqs|eventbridge|step|\bmq\b|appsync|messag|pipes|scheduler/, 'integration'], [/cloudwatch|cloudformation|ssm|config|trail|organizations|x-ray|systems|marketplace|service catalog/, 'management']];
+  var AZ_ID = [[/blob|storage/, 'storage'], [/virtual machine|\bvms?\b/, 'vms'], [/\bsql\b/, 'sql'], [/cosmos/, 'cosmos'], [/key ?vault/, 'keyvaults'], [/service ?bus/, 'servicebus'],
+    [/function/, 'functionapp'], [/app ?service/, 'appservices'], [/virtual network|vnet/, 'vnets'], [/\bnsg|security group/, 'nsgs'], [/resource group/, 'resourcegroups'],
+    [/container registry|\bacr\b/, 'acr'], [/kubernetes|\baks\b/, 'aks'], [/api management|apim/, 'apim'], [/event ?grid/, 'eventgrid'], [/monitor|insights|log analytics/, 'monitor'],
+    [/entra|active directory|identity/, 'entra'], [/subscription/, 'subscriptions'], [/cost/, 'cost']];
+  var GCP_GL = [[/bigquery/, 'table_chart'], [/vertex|gemini|\bai\b|ml\b|model/, 'auto_awesome'], [/pub ?\/?sub/, 'hub'], [/firestore|datastore|spanner|bigtable|\bsql\b|database|alloydb/, 'storage'],
+    [/compute|\bvm\b|instance|gce/, 'memory'], [/function/, 'functions'], [/cloud run|\brun\b/, 'play_circle_filled'], [/build/, 'build'], [/deploy/, 'publish'], [/schedul/, 'schedule'],
+    [/artifact|registry/, 'inventory_2'], [/monitor|logging|trace|operations/, 'show_chart'], [/\biam\b|kms|secret|security|credential/, 'lock'], [/redis|memorystore/, 'bolt'],
+    [/network|vpc|dns|load ?balanc|armor/, 'lan'], [/kubernetes|gke|container/, 'dns'], [/storage|bucket/, 'cloud']];
+  function pick(table, t) { for (var i = 0; i < table.length; i++) if (table[i][0].test(t)) return table[i][1]; return null; }
+  function iconFor(cloud, title, file) {
+    var t = ((title || '') + ' ' + (file || '')).toLowerCase(), lib = window.VyomiServiceIcons, id;
+    if (cloud === 'gcp') return '<span class="u-svc-ic" aria-hidden="true"><span class="material-icons">' + (pick(GCP_GL, t) || 'cloud') + '</span></span>';
+    if (!lib) return '';
+    if (cloud === 'aws') { id = pick(AWS_ID, t); return '<span class="u-svc-ic" aria-hidden="true"><svg viewBox="0 0 24 24">' + lib.aws(id || 'other', id ? undefined : (pick(AWS_CAT, t) || 'other')) + '</svg></span>'; }
+    id = pick(AZ_ID, t); return '<span class="u-svc-ic" aria-hidden="true"><svg viewBox="0 0 24 24">' + lib.azure(id || 'other') + '</svg></span>';
+  }
   function renderUsage(el, cloud, EP) {
-    el.innerHTML = '<p class="sc-desc" style="margin:14px 0">Loading every ' + esc(cloud.toUpperCase()) + ' service…</p>';
+    el.innerHTML ='<p class="sc-desc" style="margin:14px 0">Loading every ' + esc(cloud.toUpperCase()) + ' service…</p>';
     index().then(function (ix) {
       var list = (ix.clouds[cloud] || []).filter(function (s) { return s.o > 0; });
       return Promise.all(list.map(function (s) { return service(cloud, s.f); })).then(function (docs) {
@@ -231,8 +292,8 @@
           var a = d.apis.filter(function (x) { return x.ops.length; })[0]; if (!a) return;
           var ops = pickOps(a); if (!ops.length) ops = [a.ops[0]];
           var list2 = []; ops.forEach(function (o) { snips(cloud, a, o, EP).forEach(function (s) { var ex = list2.filter(function (e) { return e[0] === s[0]; })[0]; if (ex) ex[1] += '\n\n' + s[1]; else list2.push([s[0], s[1]]); }); });
-          var c = codeTabs(list2);
-          h += '<div class="u-card nd-ucard" data-i="' + di + '"><div class="u-head"><h3>' + esc(d.title) + '</h3></div>' + c.html + '<div class="u-note">' + d.ops + ' operations · ' + ops.map(function (o) { return esc(o.n); }).join(', ') + ' shown — all in <b>API reference</b></div></div>';
+          var c = usageTabs(threeTabs(list2));
+          h += '<div class="u-card nd-ucard" data-i="' + di + '"><div class="u-head"><h3>' + iconFor(cloud, d.title, (list[di] || {}).f) + esc(d.title) + '</h3></div>' + c.html + '<div class="u-note">' + d.ops + ' operations · ' + ops.map(function (o) { return esc(o.n); }).join(', ') + ' shown — all in <b>API reference</b></div></div>';
           d._w = c.wire;
         });
         h += '</div>';
@@ -243,5 +304,5 @@
     }).catch(function () { el.innerHTML = ''; });
   }
 
-  window.NanoDocs = { renderApi: renderApi, renderUsage: renderUsage, _snips: snips, _index: index, _service: service };
+  window.NanoDocs = { renderApi: renderApi, renderUsage: renderUsage, _icon: iconFor, _snips: snips, _index: index, _service: service };
 })();
