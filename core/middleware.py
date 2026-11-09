@@ -17,7 +17,7 @@ import threading as _threading
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from core.app_context import (
     REQUEST_PROVIDER,
@@ -883,6 +883,16 @@ async def _tier_enforcement_middleware(request: Request, call_next):
             })
         except Exception:
             pass
+        if service_key in ("aks", "gke", "eks"):
+            # Managed Kubernetes: answer in the cloud's NATIVE error shape (ARM FeatureNotAvailableForTier /
+            # GCP PERMISSION_DENIED / EKS AccessDeniedException) so az / gcloud / SDKs surface a real error.
+            from core import k8s_tier_gate as _k8s
+            v = _k8s.verdict(tier, provider, primary_cloud)
+            if v is None:   # tier_policy and the gate disagree: stay closed with tier_policy's verdict
+                v = dict(result, active_tier=tier, required_tiers=["pro", "max", "enterprise"],
+                         upgrade_to=result.get("upgrade_to", "pro"))
+            nr = _k8s.denied_response(provider, v)
+            return Response(content=nr["body"], status_code=nr["status"], headers=nr["headers"])
         return JSONResponse(
             {"error": result},
             status_code=403,

@@ -242,6 +242,11 @@ def _sched_op(operation, name, body):
 
 def _gke_op(operation, name, body):
     """Kubernetes Engine console CRUD (+ resize/upgrade) over core/gcp_container_core."""
+    from core import k8s_tier_gate as _tg
+    _v = _tg.check("gcp")     # Nano: managed Kubernetes is Pro/Max/Enterprise only (fails closed to Free if the tier is unknown)
+    if _v:
+        return {"ok": False, "status": 403, "code": "PERMISSION_DENIED", "message": _v["reason"], "upgrade_to": _v["upgrade_to"],
+                "required_tiers": _v["required_tiers"], "active_tier": _v["active_tier"], "service": "gke"}
     store = _STORES["container"]
 
     def find(nm):

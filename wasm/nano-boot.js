@@ -89,7 +89,7 @@ const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
   "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
-  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
+  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "autoscaling_core.py", "gcp_gke_dataplane_core.py", "dlm_core.py", "ram_core.py", "dax_core.py",
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
@@ -258,7 +258,20 @@ async def _adisp(payload_json):
         return json.dumps(await _W.ahandle(d.get("params") or {}))
     return _disp(payload_json)
 import builtins; builtins._disp = _disp; builtins._adisp = _adisp
+# Managed Kubernetes (AKS/GKE/EKS) is Pro/Max/Enterprise only (core/k8s_tier_gate.py). Armed BEFORE any request is
+# served and FAILING CLOSED (Free) until the licence tier arrives from the service worker below.
+from core import k8s_tier_gate as _k8sg
+_k8sg.arm_nano()
 `);
+  const syncK8sTier = async () => {
+    try {
+      const t = await (await fetch(BASE + "/api/runtime/tier", { cache: "no-store" })).json();
+      py.runPython(`from core import k8s_tier_gate as _g; _g.set_tier(${JSON.stringify(String(t.active_tier || "free"))}, ${JSON.stringify(String(t.primary_cloud || ""))})`);
+    } catch (_) { /* unknown tier -> stays Free (locked) */ }
+  };
+  await syncK8sTier();
+  setInterval(syncK8sTier, 30000);
+  globalThis.vyomiSyncK8sTier = syncK8sTier;      // called after (de)activation so the gate follows the licence at once
   st.ok();
   // ── Local-LLM bridge (WebLLM) ───────────────────────────────────────
   // Bedrock / Vertex AI / Azure OpenAI answer from core/llm_core. On Nano the only possible model is one the BROWSER runs, so

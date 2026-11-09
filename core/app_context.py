@@ -1337,6 +1337,13 @@ def resolve_provider_service(request) -> tuple[str, str]:
     path = request.url.path
     target = request.headers.get("x-amz-target", "") or ""
 
+    # Managed Kubernetes (AKS / GKE / EKS, every plane) -> the "kubernetes" tier category
+    # (core/k8s_tier_gate.py owns the path table; core/tier_policy.py the policy).
+    from core import k8s_tier_gate as _k8s
+    _kc = _k8s.classify(path, request.headers)
+    if _kc:
+        return _kc, _k8s.SERVICE_KEY[_kc]
+
     # GCP REST paths
     if path.startswith("/compute/v1/"):
         return "gcp", "compute"

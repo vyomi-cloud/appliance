@@ -9,6 +9,7 @@ tab talks to the booster.**
 
 ## Agreed points
 - Tiers become portal-signed **entitlement flags** checked by the booster, not separate builds.
+- Managed Kubernetes (AKS / GKE / EKS) is Pro / Max / Enterprise only (Pro: its primary cloud); Free, nano, micro and lite are fully locked, in the appliance and in Nano alike — `core/tier_policy.py` category `kubernetes`, enforced by `core/k8s_tier_gate.py`.
   Substrates collapse to two: browser (Nano) and booster (headless offline appliance, same cores,
   so a superset of Nano). Consoles already speak native cloud APIs over `/_wire`; the service worker
   routes `/_wire` to Pyodide today and would route it to the booster when attached.

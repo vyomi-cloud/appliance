@@ -1266,6 +1266,10 @@ class AwsWireRouter:
         observability recorder, serves the /_obs OTLP / Jaeger / Prometheus surface, and refreshes the cloud metric
         stores from the measured series before a read of them."""
         import time as _t
+        from core import k8s_tier_gate as _tg
+        _denied = _tg.gate(path.split("?", 1)[0], headers)     # managed Kubernetes: Pro/Max/Enterprise only (all clouds)
+        if _denied:
+            return {"status": _denied["status"], "headers": _denied["headers"], "body": _denied["body"]}
         from core import observability_core as _obsc
         self._sched_pulse()
         p0 = path.split("?", 1)[0]

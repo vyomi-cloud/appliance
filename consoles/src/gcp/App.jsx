@@ -23,6 +23,7 @@ import { match, useRoute } from "../common/router.js";
 import { useNotify } from "../common/notify.jsx";
 import { makeTheme } from "./theme.js";
 import { PRODUCTS, classicHref, productFor } from "./services/registry.js";
+import { useK8sLock, K8sLocked } from "../common/k8sTier.jsx";
 import { useProject } from "./project.js";
 import { NotSimulated } from "./kit/common.jsx";
 import Home from "./pages/Home.jsx";
@@ -60,9 +61,11 @@ export default function App() {
   useEffect(() => { if (prod) recordVisit(prod.id); }, [prod?.id]);
   const [loaded, setLoaded] = useState({});
   const [loadErr, setLoadErr] = useState(null);
+  const k8sLock = useK8sLock("gcp");     // managed Kubernetes is Pro / Max / Enterprise only
+  const k8sBlocked = prod?.id === "kubernetes" && k8sLock.locked;
   useEffect(() => {
-    if (prod?.load && !loaded[prod.id]) prod.load().then((m) => setLoaded((l) => ({ ...l, [prod.id]: m.default })), setLoadErr);
-  }, [prod?.id]);
+    if (prod?.load && !loaded[prod.id] && !k8sBlocked) prod.load().then((m) => setLoaded((l) => ({ ...l, [prod.id]: m.default })), setLoadErr);
+  }, [prod?.id, k8sBlocked]);
 
   let content, nav;
   if (!route.parts.length) content = <Welcome onPicker={() => setPickerOpen(true)} />;
@@ -76,7 +79,9 @@ export default function App() {
         <NotSimulated feature={`The v4 ${prod.title} console`} note={<a href={classicHref(prod.classic)}>Open {prod.title} in the classic Vyomi console</a>} />
       </Box>
     );
-  } else if (loadErr) content = <Alert severity="error">Failed to load {prod.title}: {String(loadErr.message || loadErr)}</Alert>;
+  } else if (prod.id === "kubernetes" && !k8sLock.ready) content = <Box sx={{ textAlign: "center", py: 8 }}><CircularProgress /></Box>;
+  else if (k8sBlocked) content = <K8sLocked cloud="gcp" v={k8sLock} />;
+  else if (loadErr) content = <Alert severity="error">Failed to load {prod.title}: {String(loadErr.message || loadErr)}</Alert>;
   else if (!loaded[prod.id]) content = <Box sx={{ textAlign: "center", py: 8 }}><CircularProgress /></Box>;
   else { content = resolve(loaded[prod.id], route); nav = loaded[prod.id].nav; }
 

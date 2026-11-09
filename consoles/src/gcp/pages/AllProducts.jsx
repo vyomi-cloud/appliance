@@ -30,7 +30,9 @@ const write = (k, v) => { try { localStorage.setItem(`vyomi.v4.gcp.${k}`, JSON.s
 const anchor = (c) => `cat-${c.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
 const openHref = (p) => (p.load ? `#/${p.id}` : classicHref(p.classic));
 
+import { useK8sLock, LockBadge } from "../../common/k8sTier.jsx";
 export default function AllProducts() {
+  const k8s = useK8sLock("gcp");
   const [favs, setFavs] = useState(() => read("favorites", []));
   const [open, setOpen] = useState({});
   const cats = CATEGORIES.filter((c) => PRODUCTS.some((p) => p.category === c));
@@ -87,7 +89,7 @@ export default function AllProducts() {
                             {favs.includes(p.id) ? <StarIcon fontSize="small" sx={{ color: "primary.main" }} /> : <StarBorderIcon fontSize="small" />}
                           </IconButton>
                         </TableCell>
-                        <TableCell><Link href={openHref(p)} underline="always" variant="body2">{p.title}</Link></TableCell>
+                        <TableCell><Link href={openHref(p)} underline="always" variant="body2">{p.title}</Link>{p.id === "kubernetes" && k8s.ready && k8s.locked && <LockBadge />}</TableCell>
                         <TableCell><Typography variant="body2">{p.description}{p.load ? "" : " · classic console"}</Typography></TableCell>
                         <TableCell>
                           <Tooltip title="Documentation"><IconButton size="small" component="a" href="https://vyomi.cloud" target="_blank" rel="noopener noreferrer" aria-label={`${p.title} documentation`}><ArticleIcon fontSize="small" /></IconButton></Tooltip>

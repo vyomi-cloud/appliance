@@ -116,6 +116,10 @@ try:                                              # v4: Azure Backup + Site Reco
     from core import azure_backup_core as backup_engine
 except ImportError:
     import azure_backup_core as backup_engine      # type: ignore
+try:                                              # managed-Kubernetes tier gate (Pro/Max/Enterprise only)
+    from core import k8s_tier_gate as _k8s_gate
+except ImportError:
+    import k8s_tier_gate as _k8s_gate  # type: ignore
 try:                                              # v4: Azure Backup for AKS (Microsoft.DataProtection) over the shared kube state
     from core import azure_dataprotection_core as dataprotection
 except ImportError:
@@ -964,6 +968,10 @@ class AzureArm:
         """Every ARM request. Wraps the dispatcher with user-assigned identity validation/resolution that is
         generic over EVERY engine (generic catalog, web apps, Cognitive Services, Container Apps, App Configuration …)."""
         m = (method or "GET").upper()
+        denied = _k8s_gate.gate(str(path), cloud="azure") if _k8s_gate.classify(str(path)) == "azure" else None
+        if denied:   # managed Kubernetes is Pro/Max/Enterprise only -- every AKS plane, incl. nested template deployments
+            return {"status": denied["status"], "headers": {k: v for k, v in denied["headers"].items() if k != "content-type"},
+                    "body": json.loads(denied["body"])}
         ua = ((body or {}).get("identity") or {}).get("userAssignedIdentities") if m in ("PUT", "PATCH") and isinstance(body, dict) else None
         missing = missing_identity_ref(self.state, ua)
         if missing:

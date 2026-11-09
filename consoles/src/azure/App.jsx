@@ -19,6 +19,7 @@ import { DEFAULT_SUBSCRIPTION, getSubscriptionInfo, setSubscription } from "./ki
 import { Glyph, Loading, NotSimulated } from "./kit/common.jsx";
 import { SubscriptionCtx } from "./kit/subscription.js";
 import { SERVICES, byId, classicHref } from "./services/registry.js";
+import { useK8sLock, K8sLocked } from "../common/k8sTier.jsx";
 import Home from "./pages/Home.jsx";
 import AllServices from "./pages/AllServices.jsx";
 import ServiceNotSimulated from "./pages/ServiceNotSimulated.jsx";
@@ -63,9 +64,10 @@ export default function App() {
   const svcId = route.parts[0];
   const svc = byId[svcId];
   const [loaded, setLoaded] = useState({});
+  const k8sLock = useK8sLock("azure");     // managed Kubernetes is Pro / Max / Enterprise only
   useEffect(() => {
-    if (svc?.load && !loaded[svcId]) svc.load().then((m) => setLoaded((l) => ({ ...l, [svcId]: m.default })));
-  }, [svcId]);
+    if (svc?.load && !loaded[svcId] && !(svcId === "aks" && k8sLock.locked)) svc.load().then((m) => setLoaded((l) => ({ ...l, [svcId]: m.default })));
+  }, [svcId, svcId === "aks" && k8sLock.locked]);
 
   let content, crumbs = [];
   if (!svcId || svcId === "home") content = <Home />;
@@ -75,6 +77,8 @@ export default function App() {
     crumbs = [{ text: "All resources", href: "#/allresources" }];
   }
   else if (!svc) content = <div className="vy-page"><NotSimulated feature={`The service "${svcId}"`} /></div>;
+  else if (svcId === "aks" && !k8sLock.ready) content = <Loading />;
+  else if (svcId === "aks" && k8sLock.locked) { content = <K8sLocked cloud="azure" v={k8sLock} />; crumbs = [{ text: svc.title, href: `#/${svc.id}` }]; }
   else if (!svc.load) { content = <ServiceNotSimulated svc={svc} />; crumbs = [{ text: svc.title, href: `#/${svc.id}` }]; }
   else if (!loaded[svcId]) content = <Loading />;
   else {

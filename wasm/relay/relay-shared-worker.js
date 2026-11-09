@@ -28,7 +28,7 @@ const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
   "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
-  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
+  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
@@ -162,6 +162,9 @@ if _USE_PGLITE:
     from core.sql_store import PGliteSqlStore
     _STORES["rds"] = PGliteSqlStore()                     # RDS = real Postgres (shared seam)
 _ROUTER = AwsWireRouter(stores=_STORES)
+from core import k8s_tier_gate as _k8sg
+_k8sg.arm_nano()          # managed Kubernetes = Pro/Max/Enterprise; fails closed (Free) until the licence tier is read below
+def _set_k8s_tier(tier, primary): _k8sg.set_tier(tier, primary)
 def _capture(): return json.dumps(_persist.capture_registry())
 def _restore(blob_json):
     try: _persist.restore_registry(json.loads(blob_json or "{}"))
@@ -206,6 +209,17 @@ builtins._capture = _capture; builtins._restore = _restore
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
+    // Licence tier -> managed-Kubernetes gate. The SW keeps the portal-issued JWT in the same nano-spaces/meta store.
+    const _syncK8sTier = async () => {
+      let tier = "free", primary = "";
+      try {
+        const jwt = await idbGet("license_jwt");
+        const c = jwt ? JSON.parse(decodeURIComponent(escape(atob(jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))))) : null;
+        if (c && !(c.exp && c.exp * 1000 < Date.now())) { tier = c.tier || "free"; primary = c.primary_cloud || ""; }
+      } catch (_) { /* unreadable -> Free (locked) */ }
+      try { py.runPython(`_set_k8s_tier(${JSON.stringify(String(tier))}, ${JSON.stringify(String(primary))})`); } catch (_) {}
+    };
+    await _syncK8sTier(); setInterval(_syncK8sTier, 30000);
     // Live engine status for Dashboard > Service status (same check as nano-boot.js).
     const writeEngines = async () => {
       try { await idbPut("engines:relay", { ts: Date.now(), stores: JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())")) }); }

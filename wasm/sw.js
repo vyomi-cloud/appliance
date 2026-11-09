@@ -1163,9 +1163,18 @@ self.addEventListener("fetch", (event) => {
       // control-plane portal). The license JWT the portal issues drives the tier.
       if (apiPath === "/api/runtime/tier" && method === "GET") {
         const c = licenseClaims(await metaGet("license_jwt"));
+        // Managed Kubernetes (AKS/GKE/EKS) is Pro/Max/Enterprise only; Pro gets its primary cloud. Same rule as
+        // core/k8s_tier_gate.py, which enforces it inside the Python cores; no licence = Free = locked.
+        const _t = String((c && c.tier) || "free").toLowerCase(), _pc = (c && c.primary_cloud) || "";
+        const _k8s = {};
+        for (const cl of ["azure", "gcp", "aws"]) {
+          const ok = ["max", "enterprise"].includes(_t) || (_t === "pro" && _pc === cl);
+          _k8s[cl] = { locked: !ok, required_tiers: _t === "pro" ? ["max", "enterprise"] : ["pro", "max", "enterprise"],
+                       reason: ok ? "" : "Managed Kubernetes requires the Pro, Max or Enterprise plan (Pro: primary cloud only)." };
+        }
         return json({ active_tier: (c && c.tier) || "free",
                       all_tiers: ["free", "lite", "pro", "max"],
-                      primary_cloud: (c && c.primary_cloud) || "" });
+                      primary_cloud: _pc, kubernetes_locked: _k8s });
       }
       if (apiPath === "/api/license/status" && method === "GET") {
         const c = licenseClaims(await metaGet("license_jwt"));
