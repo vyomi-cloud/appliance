@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-09T07:10:32+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `spec-commit` Azure web: JS fix unexpected model name for appservice (#47950) ([link](https://github.com/Azure/azure-rest-api-specs/commit/806490ed8ea740841a39f8f9cd907c6a5e113ee0))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T06:10:30+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3007,3 @@ Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 Tracking 3922 AWS + GCP operations, 16 Azure spec areas, 50 SDK/CLI packages and 3 lifecycle feeds.
 
-**3 change(s), 0 actionable.**
-- · `spec-commit` Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643) ([link](https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457))
-- · `announcement` [In preview] Public Preview: Azure DNS enables DNS-based load balancing through Traffic Manager integration ([link](https://azure.microsoft.com/updates?id=565214))
-- · `announcement` [Launched] Generally Available: Azure DNS enables DNS-based load balancing through Traffic Manager linked records ([link](https://azure.microsoft.com/updates?id=573917))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-27T16:50:02+00:00
