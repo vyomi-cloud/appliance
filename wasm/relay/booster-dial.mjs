@@ -47,6 +47,19 @@ const HIGH = 1024 * 1024, CHUNK = 48 * 1024, MAX_IN = 64 * 1024;
  *  Only those name patterns are ever looked up (never arbitrary hosts). Returns {host, port} or null. Override via `resolveVm`
  *  (tests, an agent that runs on the host). */
 export const vmCandidates = (name) => /^[A-Za-z0-9._-]{1,80}$/.test(name) ? [`vyomi-i-${name}`, `vyomi-${name}`, name] : [];
+/** Reserved targets (docs 9b/12). Answered by the agent itself, BEFORE any container lookup, and the client's port is ignored: each reaches ONE fixed address.
+ *   host | codespace      -> this machine's own sshd, VYOMI_HOST_SSH_ADDR (default host.docker.internal:22)
+ *   vyomi-k3s-<10 hex>    -> that cluster's k3s API server (core/k3s_runtime.py server_name), port 6443 only
+ *   k3s                   -> VYOMI_K3S_ADDR, only when set (single-cluster hosts)
+ *  Returns {host, port, reserved} or null. */
+const parseAddr = (s, defPort) => { const m = /^(.*?)(?::(\d{1,5}))?$/.exec(String(s)); return { host: m[1], port: Number(m[2] || defPort) }; };
+export function resolveReserved(name, env = process.env) {
+  const n = String(name || "").toLowerCase();
+  if (n === "host" || n === "codespace") return { ...parseAddr(env.VYOMI_HOST_SSH_ADDR || "host.docker.internal:22", 22), reserved: "host" };
+  if (/^vyomi-k3s-[0-9a-f]{10}$/.test(n)) return { host: n, port: 6443, reserved: "k3s" };
+  if (n === "k3s" && env.VYOMI_K3S_ADDR) return { ...parseAddr(env.VYOMI_K3S_ADDR, 6443), reserved: "k3s" };
+  return null;
+}
 export async function resolveVmByDns(name, port = 22) {
   for (const c of vmCandidates(name)) {
     try { const r = await dns.lookup(c); if (r && r.address) return { host: c, port }; } catch { /* not a name on this network */ }
@@ -87,7 +100,9 @@ export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, 
         if (streams.size >= MAX_TCP + MAX_STREAMS || !Number.isInteger(port) || port < 1 || port > 65535) return out({ type: "stream", op: "error", sid, code: "BadRequest", message: "tcp stream refused" });
         const adapter = { readyState: 1, OPEN: 1, tcp: true, sock: null, send(b) { if (this.sock) this.sock.write(b); }, pause() { if (this.sock) this.sock.pause(); }, resume() { if (this.sock) this.sock.resume(); }, close() { if (this.sock) this.sock.end(); this.readyState = 3; } };
         streams.set(sid, adapter);
-        resolveVm(String(m.vm || ""), port).then((t) => {
+        const rsv = resolveReserved(String(m.vm || ""));
+        if (rsv) log(`open ${rsv.reserved} target=${m.vm} -> ${rsv.host}:${rsv.port} sid=${sid}`);          // audit line
+        (rsv ? Promise.resolve(rsv) : resolveVm(String(m.vm || ""), port)).then((t) => {
           if (streams.get(sid) !== adapter) return;
           if (!t) { streams.delete(sid); return out({ type: "stream", op: "error", sid, code: "NoSuchVm", message: "no such VM" }); }
           const sock = net.connect({ host: t.host, port: t.port }); adapter.sock = sock; sock.setNoDelay(true);

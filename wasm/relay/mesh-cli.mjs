@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import net from "node:net";
 import crypto from "node:crypto";
 import readline from "node:readline";
 import { spawn } from "node:child_process";
@@ -59,6 +60,55 @@ export function connect(vm, { port = 22, relay, token, WS, stdin = process.stdin
     ws.on("message", (d, isBinary) => { if (isBinary) stdout.write(d); });
     ws.on("close", (code) => finish(code === 1000 || code === 1005 ? 0 : 1));
     ws.on("error", (e) => { if (!refused) stderr.write(`vyomi-tunnel: ${e.message}\n`); finish(1); });
+  });
+}
+
+/** `forward`: listen on 127.0.0.1:<local>; each accepted socket becomes one /connect stream to <target>:<remote>.
+ *  Resolves {close(), done: Promise<exitCode>, port} once listening. Exit codes: 0 session_end / closed, 1 refused (401/403/410) or listener
+ *  error, 2 usage / not signed in / session ended. Refusal of a single stream (502, 429) only drops that connection. */
+export function forward(target, { local, remote, relay, token, WS, allowPrivileged = false, stderr = process.stderr } = {}) {
+  return new Promise((resolveStart) => {
+    const fail = (code, msg) => { if (msg) stderr.write(msg + "\n"); resolveStart({ close() {}, done: Promise.resolve(code), port: 0 }); };
+    if (!token) return fail(2, "vyomi-tunnel: not signed in. Run `vyomi-tunnel login` (and start Mesh in the Vyomi console).");
+    if (!/^[A-Za-z0-9._-]{1,80}$/.test(target || "")) return fail(2, "vyomi-tunnel: bad target");
+    if (!(Number.isInteger(local) && local >= 0 && local < 65536) || !(Number.isInteger(remote) && remote > 0 && remote < 65536)) return fail(2, "vyomi-tunnel: ports must be 1-65535");
+    if (local > 0 && local < 1024 && !allowPrivileged) return fail(2, "vyomi-tunnel: local ports below 1024 need --allow-privileged");
+    const end = tokenEnd(token);
+    if (Number.isFinite(end) && Date.now() >= end * 1000) return fail(2, "vyomi-tunnel: your Mesh session has ended. Start Mesh again, then run `vyomi-tunnel login`.");
+    const socks = new Set();
+    let resolveDone, finished = false, endTimer = null, started = false;
+    const done = new Promise((r) => { resolveDone = r; });
+    const srv = net.createServer();
+    const finish = (code, msg) => {
+      if (finished) return; finished = true; clearTimeout(endTimer);
+      if (msg) stderr.write(msg + "\n");
+      try { srv.close(); } catch { /* */ }
+      for (const x of socks) { try { x.destroy(); } catch { /* */ } }
+      resolveDone(code);
+    };
+    srv.on("error", (e) => { finish(1, `vyomi-tunnel: cannot listen on 127.0.0.1:${local}: ${e.message}`); if (!started) { started = true; resolveStart({ close() {}, done, port: 0 }); } });
+    srv.on("connection", (sock) => {
+      socks.add(sock); sock.setNoDelay(true);
+      const ws = new WS(`${wsUrl(relay)}/connect?vm=${encodeURIComponent(target)}&port=${remote}`, { headers: { authorization: `Bearer ${token}` } });
+      let open = false; const queue = [];
+      const drop = () => { socks.delete(sock); try { sock.destroy(); } catch { /* */ } try { ws.close(); } catch { /* */ } };
+      ws.on("unexpected-response", (_rq, res) => {
+        const why = { 401: "sign-in expired - run `vyomi-tunnel login`", 403: "not allowed for this session", 410: "Mesh session ended",
+                      502: "the Mesh agent is not running", 429: "too many open connections" }[res.statusCode] || "refused";
+        stderr.write(`vyomi-tunnel: ${target}: ${why} (HTTP ${res.statusCode})\n`);
+        drop(); if ([401, 403, 410].includes(res.statusCode)) finish(1);
+      });
+      ws.on("open", () => { open = true; for (const q of queue) ws.send(q, { binary: true }); queue.length = 0; });
+      ws.on("message", (d, isBinary) => { if (isBinary && !sock.destroyed) sock.write(d); });
+      ws.on("close", drop); ws.on("error", drop);
+      sock.on("data", (d) => { if (open) ws.send(d, { binary: true }); else queue.push(d); });
+      sock.on("close", drop); sock.on("error", drop);
+    });
+    srv.listen(local, "127.0.0.1", () => {
+      started = true;
+      if (Number.isFinite(end)) endTimer = setTimeout(() => finish(0, "vyomi-tunnel: Mesh session ended; forward stopped."), Math.max(0, end * 1000 - Date.now()));
+      resolveStart({ close: () => finish(0), done, port: srv.address().port });
+    });
   });
 }
 
@@ -123,6 +173,16 @@ export async function main(argv) {
     const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; }
     const { relay, token } = load();
     return connect(vm, { port: Number(rest[1] || 22), relay, token, WS });
+  }
+  if (cmd === "forward") {
+    const pos = rest.filter((x) => !x.startsWith("--"));
+    const m = /^(\d{1,5}):(\d{1,5})$/.exec(pos[1] || "");
+    if (!pos[0] || !m) { console.error("usage: vyomi-tunnel forward <target> <local>:<remote> [--allow-privileged]\n  e.g. vyomi-tunnel forward vyomi-k3s-<id> 6443:6443   (then kubectl --server https://127.0.0.1:6443)"); return 2; }
+    const { relay, token } = load();
+    const f = await forward(vmName(pos[0]), { local: Number(m[1]), remote: Number(m[2]), relay, token, WS, allowPrivileged: rest.includes("--allow-privileged") });
+    if (f.port) console.error(`forwarding 127.0.0.1:${f.port} -> ${vmName(pos[0])}:${m[2]} (Ctrl-C to stop)`);
+    for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
+    return f.done;
   }
   if (cmd === "login") {
     const i = rest.indexOf("--token");
