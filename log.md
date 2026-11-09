@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-09T02:10:18+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.google.cloud:google-cloud-firestore: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T01:13:51+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 3868 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and
 
 **4 change(s), 0 actionable.**
 - · `announcement` Google Kubernetes Engine: Feature (October 19, 2026) ([link](https://docs.cloud.google.com/release-notes#October_19_2026))
-- · `announcement` Google Kubernetes Engine: Feature (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
-- · `announcement` Google Kubernetes Engine: Fixed (October 20, 2026) ([link](https://docs.cloud.google.com/release-notes#October_20_2026))
-- · `announcement` Google Kubernetes Engine: Fixed (October 20, 2026) ([link](https://docs.cloud.google.com/release-notes#October_20_2026))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-27T09:55:12+00:00
-
-Tracking 3797 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
-
