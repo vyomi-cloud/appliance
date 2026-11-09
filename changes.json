@@ -1,6 +1,47 @@
 {
- "at": "2026-11-09T16:10:45+00:00",
+ "at": "2026-11-09T17:10:49+00:00",
  "baseline": false,
- "changes": [],
- "errors": []
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "storage/v1",
+   "kind": "operation-removed",
+   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
+   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
+   "detail": {
+    "params": [
+     "anywhereCacheId",
+     "bucket"
+    ],
+    "request": "",
+    "response": "AnywhereCache",
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:419532a3e9fa",
+   "title": "Introducing AWS Nitro Sandboxes on Amazon EKS, ECS and EC2 for hardware isolated pods, tasks and VMs",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/nitro-sandboxes-eks-ecs-ec2/",
+   "detail": "AWS Nitro Sandboxes are now available as lightweight VMs managed by the Nitro Hypervisor. You can use Nitro Sandboxes for an Amazon EKS pod, or Amazon ECS task, or lightweight Virtual Machines (VMs), including AI agents running inside them, in their own hardware-isolated virtual machine powered by the AWS Nitro System . Each workload gets the isolation boundary of a Nitro isolated virtual machine. This allows you to safely run untrusted, multi-tenant, or regulated workloads within the resources of a single instance. Nitro Sandboxes run on your EC2 instances with near-native EC2 performance and",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Secrets Manager",
+   "kind": "announcement",
+   "key": "feed:aws:5a72393fd7f9",
+   "title": "Amazon MWAA Serverless supports Apache Airflow connections and variables",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/mwaa-serverless-connections-variables/",
+   "detail": "Amazon Managed Workflows for Apache Airflow (Amazon MWAA) Serverless now supports Apache Airflow connections and variables, so your workflows can reach databases, APIs, and other external systems. You can manage credentials and configuration outside your workflow code. You store sensitive connections and variables in the secrets backend of your choice, such as AWS Secrets Manager, AWS Systems Manager Parameter Store, or your own custom backend, configure it on your workflow, and grant your workflow execution role access. Tasks retrieve them at run time through standard Apache Airflow methods. ",
+   "actionable": false
+  }
+ ],
+ "errors": [
+  "azure/monitor: HTTP Error 429: Too Many Requests"
+ ]
 }

@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-09T17:10:49+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` Amazon MWAA Serverless supports Apache Airflow connections and variables ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/mwaa-serverless-connections-variables/))
+- · `announcement` Introducing AWS Nitro Sandboxes on Amazon EKS, ECS and EC2 for hardware isolated pods, tasks and VMs ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/nitro-sandboxes-eks-ecs-ec2/))
+- · `operation-removed` GCP storage/v1: operation storage.anywhereCaches.pause removed
+
+Sources that failed this run (1): azure/monitor: HTTP Error 429: Too Many Requests
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T16:10:45+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3011,3 @@ Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `spec-commit` Azure storage: Update types and auth naming for .NET (#47667) ([link](https://github.com/Azure/azure-rest-api-specs/commit/548d44095be067632e36c74969cce42472ed1431))
 
 Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-27T22:50:16+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**7 change(s), 4 actionable.**
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
