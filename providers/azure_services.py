@@ -1541,6 +1541,11 @@ def core_arm():
         arm.kv_secrets_store = az_kv_secrets_store()
     except Exception:
         pass
+    try:   # IMDS token issue -> Entra "Managed identity sign-ins" row in this space's Graph store
+        from core.appliance_stores import graph_store
+        arm.graph_store = graph_store()
+    except Exception:
+        pass
     try:   # Azure SQL database export/import: the Azure SQL data plane (/azure-sql) + the Blob store
         from core.appliance_stores import az_blob_store, net_new_core_stores
         arm.sql_store = net_new_core_stores()["rds"]

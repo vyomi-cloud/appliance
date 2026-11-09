@@ -1441,6 +1441,15 @@ def run() -> int:
     arm.kv_secrets_store = kvstore
     # gvm's identity was turned back off in step 15 above — turn it on again for this flow.
     arm.handle("PATCH", gvm, {"api-version": AV}, {"identity": {"type": "SystemAssigned"}})
+    # Entra "Managed identity sign-ins": an IMDS token issued through Run command appends one row to the Graph store.
+    from core import azure_graph_core as _graph
+    _gs = _graph.GraphStore()
+    arm.graph_store = _gs
+    _runcmd(["curl -s -H Metadata:true 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/'"])
+    _mi = [x for x in _gs.sign_in_logs if x["signInEventTypes"] == ["managedIdentity"]]
+    _check("IMDS token issue appends a Managed identity sign-in row", len(_mi) == 1 and _mi[0]["appDisplayName"] == "gapvm" and bool(_mi[0]["servicePrincipalId"]))
+    arm.graph_store = None
+
     kv_script = imds_script + ['curl -H "Authorization: Bearer $TOKEN" "https://gapkv.vault.azure.net/secrets/dbpassword?api-version=7.4"']
     r = _runcmd(kv_script, gvm)
     _check("no role assignment yet -> the secret fetch is really denied",

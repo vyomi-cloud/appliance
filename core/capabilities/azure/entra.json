@@ -122,7 +122,9 @@
   "limitations": [
    "Service principal sign-ins are real: POST /{tenant}/oauth2/v2.0/token validates the caller's actual client secret (set by addPassword/removePassword on the app, core/azure_graph_core.py) and appends a success or failure row for that exact attempt — never sample data.",
    "User sign-ins (non-interactive) are real: the oauth2/v2.0/token password (ROPC) grant checks the directory user's actual password and appends a success/failure row (AADSTS50126 wrong password, 50034 unknown user, 50057 disabled). Refresh-token and MFA flows are not modelled.",
-   "'User sign-ins (interactive)' and 'Managed identity sign-ins' stay honestly empty — Vyomi has no interactive browser sign-in flow and no managed-identity token endpoint to drive them.",
+   "User sign-ins (interactive) are real but have no browser page: POST /{tenant}/oauth2/v2.0/authorize takes the credentials as form fields, checks the directory user's actual password (same AADSTS codes and Conditional Access evaluation as the password grant), appends an interactive row and returns a one-time authorization code (JSON, not a 302) that /oauth2/v2.0/token redeems with grant_type=authorization_code. There is no HTML sign-in page, MFA prompt or consent screen.",
+   "Managed identity sign-ins are real but come only from Vyomi's IMDS simulation: each token a VM's system-assigned identity obtains through Run command (169.254.169.254/metadata/identity/oauth2/token) appends one row. There is no IMDS endpoint reachable from inside a guest OS (no hypervisor), and user-assigned identities and other resource types (Functions, App Service) do not mint rows.",
+   "The sign-in logs toolbar's Columns (choose visible columns) and Troubleshoot (explains each failure's AADSTS code from a Vyomi-written table) work; Export Data Settings (streaming to Log Analytics or storage) and Got feedback? are not simulated.",
    "IP address and location are not derived from a real network topology; every row shows the simulator's own loopback address."
   ],
   "tests": [
@@ -153,7 +155,7 @@
   "limitations": [
    "Registration, listing and deletion of real device objects (GET/POST /v1.0/users/{id}/registeredDevices, GET/DELETE /v1.0/devices/{id}) is real and enforced — the Devices overview's alert counts and 'Download devices' export read this same live inventory, not stored config.",
    "Vyomi has no OS-level join client (Azure AD Join, Hybrid Join, workplace join) or VM login extension, so a device is registered directly rather than by an end-user signing in from it; isCompliant/isManaged are set by the admin at registration time rather than evaluated by a real MDM/Intune policy engine.",
-   "'BitLocker keys' stays an honest not-simulated gap: recovery-key escrow needs real disk encryption on real hardware, which a software simulator cannot provide."
+   "'BitLocker keys' is an escrow store only: GET/POST/DELETE /v1.0/informationProtection/bitlocker/recoveryKeys generate keys in the real recovery-password format, and every reveal is written to the audit log, but no disk is encrypted or locked by Vyomi, so a key cannot unlock anything."
   ],
   "tests": [
    "tests/conformance/test_azure_graph_core.py"
