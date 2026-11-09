@@ -68,7 +68,7 @@ saturated by parallel sessions and live k3s tests then time out.
 2. Vendor sync into `v4-nano-portal`; `--check` shows zero drift; test on `:8099` via `portal-run`.
 3. Reconcile and update `release/v4.0.0` from the trunk; bump `VERSION`; changelog and notes; run `release-checks` and the full `headless-smoke`.
 4. Owner go: merge `release/v4.0.0` into appliance `main`; the owner tags `v4.0.0`.
-5. If the Codespace devcontainer changed, update `vyomi-cloud/sandbox` and pin the tag.
+5. If `codespace/**` changed, run `codespace/publish.sh <sandbox checkout>`, open a PR to `vyomi-cloud/sandbox` `main`, and pin the tag. Never edit the sandbox repo directly: the appliance copy on `v4-on-main` is the only source, so the two cannot drift.
 6. Owner go: merge `v4-nano-portal` into portal `main` once (a single paid deploy).
 7. Smoke test; merge `main` back into the trunk.
 
@@ -154,7 +154,7 @@ runs the preflight (6), then runs the vendor step into `v4-nano-portal`. Two ses
 | `wasm/**` Nano bundle (incl. `vm/`, `vyomi-appbar.js`, `booster-link.js`, `clouds.html`, relay/Worker, `egress.mjs`) | `v4-on-main` | portal `app/nano/**` via `vendor_to_portal.py --apply` |
 | `packaging/tunnel/**`, `wasm/relay/mesh-cli.mjs`, relay hub/agent | `v4-on-main` | npm / Homebrew at release |
 | Portal pages and endpoints (`app/*.py`, `app/templates/**`: Mesh login, keep-alive, OAuth setup, tier mapping) | `v4-nano-portal` | portal `main` at go-live |
-| Codespace image (devcontainer, sshd feature, compose) | `vyomi-cloud/sandbox` | new Codespaces only |
+| Codespace image (devcontainer, sshd feature, compose) | **authored in the appliance `codespace/.devcontainer/` on `v4-on-main`**; published to `vyomi-cloud/sandbox` `main` by PR via `codespace/publish.sh` | new Codespaces only |
 
 ### 5.5 Session checklist (copy to any session that is finishing or starting work)
 
