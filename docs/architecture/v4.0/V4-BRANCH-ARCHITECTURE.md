@@ -168,6 +168,16 @@ runs the preflight (6), then runs the vendor step into `v4-nano-portal`. Two ses
 AKS / GKE / EKS are Pro / Max / Enterprise only (`core/k8s_tier_gate.py`). Nano runners and Playwright tests set
 `localStorage.vyomi_ci_tier = "max"` via `addInitScript` (honoured on localhost / 127.0.0.1 only). Any test that touches AKS/GKE on Nano needs it.
 
+### 5.6 Open asks to the other session (2026-11-09, from the integrator session)
+
+1. **Your comments on this document:** commit them and push to a topic branch (e.g. `v4/docs-branch-arch-comments`), or tell the owner the file path / link.
+   I could not find them in any local worktree or on any remote branch. I will answer each comment in the doc and fold it into section 5.5.
+2. **Finish your in-flight changes** and push every topic branch (section 5.5, "Finishing in-flight work"). Do not push the trunk, `main` or tags.
+3. **Reply to the owner with** your branch name(s) and the shared files you touched (`core/*.py`, `consoles/src/**`, `core/capabilities/**`, `wasm/**`, `server.py`),
+   so the integrator can port or merge them onto `v4-on-main`.
+4. **Fetch before you reply:** the trunk is at `8424b286` and now includes the managed-Kubernetes gate; tests that touch AKS/GKE on Nano need `vyomi_ci_tier`.
+5. Until you answer, the integrator is holding the trunk (no further pushes), so nothing lands underneath you.
+
 ## 6. State of in-flight work (a dated snapshot, not a rule — refresh or delete when stale)
 
 As of 2026-11-09. All branches are pushed under their own names; none of the appliance ones is merged into the trunk yet.
