@@ -86,6 +86,7 @@ from core import gcp_bigquery_core as gcp_bigquery
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_commit_core as gcp_commit
+from core import gcp_servicehealth_core as gcp_svchealth
 from core import gcp_apphub_core as gcp_apphub
 from core import gcp_clouddeploy_core as gcp_clouddeploy
 from core import gcp_backupdr_core as gcp_backupdr
@@ -101,6 +102,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_svchealth.PATH_RE.match(path.split("?", 1)[0]):
+        return "gcp-servicehealth"   # Personalized Service Health: SIMULATED per-service status + injectable test incidents (core/gcp_servicehealth_core)
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
             or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
         return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
@@ -2149,6 +2152,7 @@ class AwsWireRouter:
                 "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
                 "gcp-commit": (gcp_commit, self.gcp_compute_vm),
+                "gcp-servicehealth": (gcp_svchealth, self.gcp_compute_vm),
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
                 "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
                 "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),

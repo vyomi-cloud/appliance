@@ -2,7 +2,7 @@
  * lifecycle activity) + a real Serial port output tab (same activity, replayed as console
  * lines) + honest OS info/Screenshot tabs (no guest OS is modeled, so there's nothing to
  * report there). */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Stack, Tab, Tabs,
   TextField, Typography,
@@ -82,6 +82,37 @@ function SerialPortPanel({ zone, name }) {
           {data?.contents || "(no output yet)"}
         </Box>
       )}
+    </Stack>
+  );
+}
+
+/** Screenshot: Vyomi instances have no virtual display, so there is no framebuffer to capture. This renders the tail of the
+ * serial console (the same output as the Serial port output tab) onto a canvas, labelled as Vyomi-rendered, with a PNG download. */
+function ScreenshotPanel({ zone, name }) {
+  const { data, loading, error, reload } = useAsync(() => api.getSerialPortOutput(zone, name), [zone, name]);
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || !data) return;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.font = "14px monospace"; ctx.fillStyle = "#33ff66"; ctx.textBaseline = "top";
+    const rows = Math.floor((c.height - 28) / 17), cols = Math.floor((c.width - 16) / 8.4);
+    const lines = String(data.contents || "(no console output yet)").split("\n").flatMap((l) => l.match(new RegExp(`.{1,${cols}}`, "g")) || [""]);
+    lines.slice(-rows).forEach((l, i) => ctx.fillText(l, 8, 8 + i * 17));
+    ctx.fillStyle = "#888"; ctx.font = "11px sans-serif";
+    ctx.fillText("Simulated by Vyomi: rendered from the serial console, not a real display", 8, c.height - 18);
+  }, [data]);
+  const download = () => { const a = document.createElement("a"); a.href = ref.current.toDataURL("image/png"); a.download = `${name}-screenshot.png`; a.click(); };
+  return (
+    <Stack spacing={1.5}>
+      <Typography variant="body2" color="text.secondary">
+        Simulated by Vyomi. Instances have no virtual display, so there is no real screenshot. This image is rendered from the instance's serial console output.
+      </Typography>
+      <Box><Button size="small" startIcon={<RefreshIcon />} onClick={reload}>Capture again</Button> <Button size="small" onClick={download} disabled={!data}>Download PNG</Button></Box>
+      {error && <ErrorAlert error={error} title="Failed to capture" />}
+      {loading && !data && <CircularProgress size={20} />}
+      <Box component="canvas" ref={ref} width={800} height={480} aria-label="Serial console screenshot" sx={{ maxWidth: "100%", borderRadius: 1, border: 1, borderColor: "divider" }} />
     </Stack>
   );
 }
@@ -286,7 +317,7 @@ export default function InstanceDetail({ params }) {
       {tab === "OS info" && (
         <CapabilityContainer id="gcp.compute.instances.ssh_metadata" title="OS info"><OsInfoPanel zone={zone} name={name} /></CapabilityContainer>
       )}
-      {tab === "Screenshot" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="Screenshot" />}
+      {tab === "Screenshot" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="Screenshot"><ScreenshotPanel zone={zone} name={name} /></CapabilityContainer>}
 
       <DeleteDialog
         open={del} onClose={() => setDel(false)} title="Delete instance?" confirmText={name}
