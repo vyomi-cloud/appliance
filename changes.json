@@ -1,63 +1,29 @@
 {
- "at": "2026-11-09T19:59:13+00:00",
+ "at": "2026-11-09T20:59:13+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "storage/v1",
-   "kind": "operation-added",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:added",
-   "title": "GCP storage/v1: new operation storage.anywhereCaches.pause",
-   "detail": {
-    "params": [
-     "anywhereCacheId",
-     "bucket"
-    ],
-    "request": "",
-    "response": "AnywhereCache",
-    "http": "POST",
-    "deprecated": false
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:da7b86374f5d",
-   "title": "Amazon Athena introduces system tables for observability, auditing, and usage analytics",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/athena-system-tables/",
-   "detail": "Amazon Athena now offers system tables which automatically capture your usage data and make it available for observability, usage analysis, and audit use cases. When you enable system tables, usage data is available within minutes of query completion across your workgroups and stored as service-managed, read-only Iceberg tables on Amazon S3 Tables with configurable retention. You can query it directly with Athena, while AWS manages the tables for you, including schema definition, partitioning, compaction, and snapshot maintenance, removing all operational burden. Athena provides usage data thr",
+   "cloud": "sdk",
+   "service": "pypi:boto3",
+   "kind": "release",
+   "key": "ver:pypi:boto3:1.43.127",
+   "title": "pypi:boto3: 1.43.126 \u2192 1.43.127",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:5542d3d19454",
-   "title": "Amazon S3 Access Points for Amazon FSx are now available in additional AWS Regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/s3-access-points-fsx-regions/",
-   "detail": "You can now attach Amazon S3 Access Points to your Amazon FSx for NetApp ONTAP file systems in 4 additional AWS Regions, and to your Amazon FSx for OpenZFS file systems in 20 additional AWS Regions. With this capability, your file data in Amazon FSx is accessible for use with the broad range of artificial intelligence, machine learning, and analytics services and applications that work with S3, while your data continues to reside on your FSx file system. An S3 Access Point for Amazon FSx is an S3 endpoint that gives S3-based applications and services access to the data on your FSx file system ",
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.43.127",
+   "title": "pypi:botocore: 1.43.126 \u2192 1.43.127",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:abc5cb215edb",
-   "title": "Amazon EKS Auto Mode and Karpenter now support Dynamic Resource Allocation",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eks-auto-mode-karpenter-dra/",
-   "detail": "Amazon Elastic Kubernetes Service (Amazon EKS) now supports Dynamic Resource Allocation (DRA) for NVIDIA GPUs and Elastic Fabric Adapter (EFA) network devices when using Amazon EKS Auto Mode and Karpenter. You can now define the device attributes your Kubernetes workloads need with DRA, share GPU devices across Pods, and allocate topology-aligned GPU and EFA devices while Amazon EKS Auto Mode and Karpenter dynamically scale Amazon EC2 instances based on workload demand. With DRA, you define ResourceClaim or ResourceClaimTemplate objects that describe what GPU or EFA devices can be allocated to",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:d4ca9a6a42a1",
-   "title": "Amazon MWAA Serverless now supports custom and provider package operators",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/mwaa-serverless-custom-operators/",
-   "detail": "Amazon MWAA Serverless now supports operators from Apache Airflow provider packages, such as HTTP, Snowflake, or dbt, and custom operators that you write. This gives data engineers the flexibility to integrate with more systems and build specialized workflow tasks without provisioning infrastructure. To get started, add the provider package or your own operator to a code package, upload it to Amazon S3, and reference the operator in your workflow definition when you create or update a workflow. This feature is available in all AWS Regions where Amazon MWAA Serverless is available. For a list o",
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.39.7",
+   "title": "cli:aws: 2.39.6 \u2192 2.39.7",
    "actionable": false
   }
  ],
