@@ -30,14 +30,9 @@ spec:
     spec: {containers: [{name: web, image: nginx}]}
 ---
 apiVersion: v1
-kind: Pod
-metadata: {name: web-0, namespace: simulation-app, labels: {app: web}}
-spec: {containers: [{name: web, image: nginx}]}
----
-apiVersion: v1
-kind: Pod
-metadata: {name: web-1, namespace: simulation-app, labels: {app: web}}
-spec: {containers: [{name: web, image: nginx}]}
+kind: Service
+metadata: {name: web, namespace: simulation-app}
+spec: {selector: {app: web}, ports: [{port: 80}]}
 """
 
 
@@ -69,8 +64,11 @@ def run():
     I = P + "/backupInstances/aks-cluster-instance"
 
     _check("deploy app", "created" in kc("kubectl apply -f - <<EOF\n" + APP + "EOF"))
-    _check("kubectl get pods lists the app", "web-0" in kc("kubectl get pods -n simulation-app") and "web-1" in kc("kubectl get pods -n simulation-app"))
+    _check("kubectl get pods lists the app", kc("kubectl get pods -n simulation-app").count("Pending") == 2)
 
+    _check("scale deployment -> pods follow", "scaled" in kc("kubectl scale deployment web --replicas=3 -n simulation-app") and kc("kubectl get pods -n simulation-app").count("Pending") == 3)
+    kc("kubectl scale deployment web --replicas=2 -n simulation-app")
+    _check("scale down", kc("kubectl get pods -n simulation-app").count("Pending") == 2)
     dp.JOB_SECONDS = 0.6
     r = h("POST", I + "/backup", {"backupRuleOptions": {"ruleName": "BackupDaily", "triggerOption": {"retentionTagOverride": "Default"}}})
     _check("ad-hoc backup is async (202 + operation headers)", r["status"] == 202 and "operationStatus" in r["headers"]["Azure-AsyncOperation"])
@@ -84,7 +82,7 @@ def run():
     rps = h("GET", I + "/recoveryPoints")["body"]["value"]
     _check("one recovery point", len(rps) == 1)
     rp = rps[0]
-    _check("recovery point records the contents", rp["properties"]["vyomiContents"].get("pods") == 2 and rp["properties"]["vyomiContents"].get("deployments") == 1)
+    _check("recovery point records the contents", rp["properties"]["vyomiContents"].get("pods") == 2 and rp["properties"]["vyomiContents"].get("deployments") == 1 and rp["properties"]["vyomiContents"].get("services") == 1)
     art = rp["properties"]["vyomiArtifact"]
     _check("artifact is a real blob in the simulator Blob store", store.container_exists(f"{art['account']}/{art['container']}") and art["container"] == "aksbackup-sim-vault")
     _check("job Completed", h("GET", P + f"/backupJobs/{jid}")["body"]["properties"]["status"] == "Completed")
@@ -100,7 +98,7 @@ def run():
     _check("pods not back before the job completes", "No resources found" in kc("kubectl get pods -n simulation-app"))
     time.sleep(0.8)
     out = kc("kubectl get pods -n simulation-app")      # runCommand completes the due job first
-    _check("restore re-injected the pods", "web-0" in out and "web-1" in out)
+    _check("restore re-injected the pods", out.count("Pending") == 2)
     _check("restore re-injected the deployment", "web" in kc("kubectl get deployments -n simulation-app"))
     _check("restore operation Succeeded", h("GET", rop)["body"]["status"] == "Succeeded")
 
@@ -112,7 +110,7 @@ def run():
     time.sleep(0.8)
     dp.tick(a.state, store)
     out2 = h("POST", CL2 + "/runCommand", {"command": "kubectl get pods -n simulation-app"}, "2024-09-02-preview")["body"]["properties"]["logs"]
-    _check("pods exist in the second cluster", "web-0" in out2)
+    _check("pods exist in the second cluster", "Pending" in out2)
 
     # KubeBackend seam
     be = kube.backend_for({}, "aws", "eks-1")

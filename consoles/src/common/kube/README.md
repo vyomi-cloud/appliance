@@ -38,7 +38,7 @@ export_resources(namespaces=None) -> {namespaces, objects, counts}, health(), ku
   // kubectl: EITHER native (preferred when the cloud has an action that runs it)...
   kubectl: async (commandLine) => ({ exitCode, logs }),
   // ...OR a KubeStore the shared emulator runs over:
-  store: { list(kind, ns), apply(manifests) -> ["pod/x created"], delete(kind, name, ns), deleteNamespace(name) },
+  store: { list(kind, ns), apply(manifests) -> ["pod/x created"], delete(kind, name, ns), deleteNamespace(name), scale(name, ns, n) },
 
   // cloud CLI backup commands (vault create / adhoc backup / restore trigger ...). Return true if handled.
   commands: async (line, io) => { /* io.print(s) io.error(s) io.wait(ms) */ return handled; },
@@ -55,3 +55,10 @@ export_resources(namespaces=None) -> {namespaces, objects, counts}, health(), ku
 ```
 Native calls only: `commands`/`getBackup` must use the cloud's real API (ARM / AWS Backup / Backup for GKE), never a bespoke `/api/*`.
 Anything not truly implemented (persistent-volume data, ...) goes in `footer` as a capability-registry-driven NotSimulated panel.
+
+## Substrates
+The in-browser path (Nano IndexedDB / dev server, `InMemoryKubeBackend`) is FIRST-CLASS for Free users: clusters are created and deleted
+through the normal ARM flow, namespaces/deployments/services are managed with kubectl (get/delete/apply/create/scale), the Deployment controller in
+`core/azure_aks_k8s_core.py` derives the Pods (Pending: no kubelet runs), the tree rides the cluster's ARM record so it persists with the
+rest of the Nano state, and backup/restore works fully. External clients such as Lens need a real API server: that is the
+additional `RealK8sBackend` (Pro/Max booster, k3s) behind the same interface - the in-browser UI says so honestly.

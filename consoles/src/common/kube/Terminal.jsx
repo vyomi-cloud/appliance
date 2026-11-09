@@ -3,7 +3,7 @@
  * Imperative handle: ref.current.exec("kubectl get pods") echoes the command like a typed line, so the dashboard's quick
  * buttons run real commands visibly. */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { runKubectl } from "./kubectl.js";
+import { front, run as backendRun, credentials } from "./controlPlane.js";
 
 const CSS = `
 .vk-term{background:#0c0c0c;color:#d4d4d4;font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border-radius:6px;display:flex;flex-direction:column;min-height:0;height:100%}
@@ -32,12 +32,13 @@ const Terminal = forwardRef(function Terminal({ adapter, onCommandDone }, ref) {
     setBusy(true);
     try {
       if (cmd === "clear") setLines([]);
-      else if (cmd === "help") print((adapter.help || []).concat(["kubectl get|delete|apply|create ...   (-n/--namespace, -A, -o wide|json|yaml|name)", "clear                      clear the screen"]).join("\n"));
+      else if (cmd === "help") print((adapter.help || []).concat([...(adapter.cluster ? ["kubectl config get-contexts|current-context|use-context|view --minify, kubectl cluster-info|version|get nodes|logs <pod>", "az aks get-credentials -g <rg> -n <cluster> | aws eks update-kubeconfig --name <c> | gcloud container clusters get-credentials <c>   (switch context)"] : []),"kubectl get|describe|delete|apply|create|scale ...   (-n/--namespace, -A, -o wide|json|yaml|name)", "clear                      clear the screen"]).join("\n"));
       else if (cmd.startsWith("kubectl")) {
-        const r = adapter.kubectl ? await adapter.kubectl(cmd) : await runKubectl(adapter.store, cmd);
+        const r = (adapter.cluster && (await front(adapter, cmd))) || (await backendRun(adapter, cmd));
         if (r.logs) print(r.logs, r.exitCode ? "err" : "");
       } else {
-        const handled = adapter.commands ? await adapter.commands(cmd, { print: (s) => print(s), error: (s) => print(s, "err"), wait: (ms) => new Promise((r) => setTimeout(r, ms)) }) : false;
+        const io0 = { print: (x) => print(x), error: (x) => print(x, "err") };
+        const handled = (adapter.cluster && credentials(adapter, cmd, io0)) || (adapter.commands ? await adapter.commands(cmd, { print: (x) => print(x), error: (x) => print(x, "err"), wait: (ms) => new Promise((r) => setTimeout(r, ms)) }) : false);
         if (!handled) print(`${cmd.split(/\s+/)[0]}: command not found (this terminal understands kubectl and ${adapter.cliName || "the cloud CLI"} backup commands; type 'help')`, "err");
       }
     } catch (e) { print(e.message || String(e), "err"); }

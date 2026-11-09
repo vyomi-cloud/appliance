@@ -116,6 +116,10 @@ try:                                              # v4: Azure Backup + Site Reco
     from core import azure_backup_core as backup_engine
 except ImportError:
     import azure_backup_core as backup_engine      # type: ignore
+try:                                              # v4: Azure Backup for AKS (Microsoft.DataProtection) over the shared kube state
+    from core import azure_dataprotection_core as dataprotection
+except ImportError:
+    import azure_dataprotection_core as dataprotection  # type: ignore
 try:                                              # v4: Azure SQL copy / PITR / restore / geo-replication / LTR over the SqlStore data plane
     from core import azure_sqlbackup_core as sqlbk
 except ImportError:
@@ -1937,6 +1941,9 @@ class AzureArm:
         if ns == "microsoft.recoveryservices" and (rg is not None or len(chain) == 1 or (chain and chain[0].lower() == "locations")):
             r = backup_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base,
                                        arm_put=lambda rid, api, body: self.handle("PUT", rid, {"api-version": api}, body))
+            return {"status": r["status"], "headers": r.get("headers") or {}, "body": r["body"]}
+        if ns == "microsoft.dataprotection" and (rg is not None or len(chain) == 1 or (chain and chain[0].lower() == "locations")):
+            r = dataprotection.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
             return {"status": r["status"], "headers": r.get("headers") or {}, "body": r["body"]}
         if ns == "microsoft.marketplace":
             r = market_engine.catalog(chain, query)
@@ -4037,6 +4044,7 @@ class AzureArm:
             # kubectl against the cluster's Kubernetes object store (core/azure_aks_k8s_core.py):
             # objects are stored, never scheduled — no kubelet or container runtime runs.
             started = _now()
+            dataprotection.tick(self.state, self.blob_store)    # complete any due Azure Backup for AKS backup/restore job first
             res = k8s_engine.run_command(rec, str(command), (payload or {}).get("context"))
             if res["changed"]:
                 sub = parent_rid.split("/")[2] if parent_rid.count("/") >= 2 else DEFAULT_SUBSCRIPTION

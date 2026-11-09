@@ -1,7 +1,7 @@
 /* kubectl emulator for clouds whose cluster has no native "run a command" action. It parses the command and answers it from a
  * KubeStore (see README.md) -- the same interface the offline appliance's real k3s backend implements, so the terminal never
  * knows where cluster state lives. Output text follows real kubectl ("No resources found in <ns> namespace.").
- * Supported: get | delete | apply -f (JSON/`---` docs, `-f -` heredoc) | create namespace|deployment, with -n/--namespace, -A/--all-namespaces,
+ * Supported: get | delete | scale | apply -f (JSON/`---` docs, `-f -` heredoc) | create namespace|deployment, with -n/--namespace, -A/--all-namespaces,
  * -o wide|json|yaml|name, kinds namespaces/ns, deployments/deploy, pods/po, services/svc, configmaps/cm, secrets, `all`.
  * Anything else fails with exit 1 and an honest reason -- never a fake success. */
 const KINDS = {
@@ -136,6 +136,23 @@ async function exec(store, args, stdin) {
       return (await store.apply([{ apiVersion: "apps/v1", kind: "Deployment", metadata: { name, namespace: f.n || "default", labels: lab }, spec: { replicas: f.replicas ?? 1, selector: { matchLabels: lab }, template: { metadata: { labels: lab }, spec: { containers: [{ name: f.image.split(":")[0].split("/").pop(), image: f.image }] } } } }])).join("\n") + "\n";
     }
     throw new Error(`error: unknown command "${what || ""}" for "kubectl create" (the in-browser emulator supports: namespace, deployment)`);
+  }
+  if (verb === "api-resources") {
+    const rows = [["NAME", "SHORTNAMES", "APIVERSION", "NAMESPACED", "KIND"], ["configmaps", "cm", "v1", "true", "ConfigMap"], ["namespaces", "ns", "v1", "false", "Namespace"], ["pods", "po", "v1", "true", "Pod"], ["secrets", "", "v1", "true", "Secret"], ["services", "svc", "v1", "true", "Service"], ["deployments", "deploy", "apps/v1", "true", "Deployment"]];
+    return table(rows);
+  }
+  if (verb === "describe") {
+    const [kind, nsd] = kindOf(f.pos[0] || ""); const name = f.pos[1];
+    const o = (await store.list(kind, nsd ? f.n || "default" : null)).find((x) => x.metadata.name === name);
+    if (!o) throw new Error(`Error from server (NotFound): ${PLURAL[kind]} "${name}" not found`);
+    const md = o.metadata;
+    return `Name:         ${md.name}\n${nsd ? `Namespace:    ${md.namespace}\n` : ""}Labels:       ${Object.entries(md.labels || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "<none>"}\nStatus:       ${o.status?.phase || ""}\n${yaml({ spec: o.spec || {} })}\n`;
+  }
+  if (verb === "scale") {
+    const [kind] = kindOf(f.pos[0].split("/")[0]); const name = f.pos[0].includes("/") ? f.pos[0].split("/")[1] : f.pos[1];
+    if (kind !== "Deployment" || !store.scale) throw new Error("error: only `kubectl scale deployment <name> --replicas=N` is supported");
+    if (!(await store.scale(name, f.n || "default", f.replicas))) throw new Error(`Error from server (NotFound): deployments.apps "${name}" not found`);
+    return `deployment.apps/${name} scaled\n`;
   }
   throw new Error(`error: "kubectl ${verb}" is not simulated by Vyomi (supported: get, delete, apply, create); there is no running container or API server behind this cluster for logs/exec/port-forward.`);
 }
