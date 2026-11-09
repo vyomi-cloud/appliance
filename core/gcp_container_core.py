@@ -435,6 +435,43 @@ def create_cluster(store, project, location, payload):
 
 # ── REAL Kubernetes (k3s) behind a GKE cluster: only when the offline appliance installed kube_state.CLUSTER_RUNTIME
 # (VYOMI_K8S_BACKEND=k3s); the substrate-free core only calls the hook and never imports Docker. ──
+def _real_pools(c):
+    """GKE nodePools -> runtime pool dicts (cloud.google.com/gke-nodepool label, machineType, config.labels / config.taints)."""
+    out = []
+    for p in c.get("nodePools") or []:
+        cfg = p.get("config") or {}
+        out.append({"name": p["name"], "count": pool_node_count(p), "vmSize": cfg.get("machineType"),
+                    "labels": cfg.get("labels") or {}, "taints": cfg.get("taints") or []})
+    return out
+
+
+def _real_sync(c, full):
+    """Reconcile the real node pools with c["nodePools"] in the background (create/delete pool, setSize, ...)."""
+    rt = kube_state.CLUSTER_RUNTIME
+    if rt is None or not rt.exists("gcp", full):
+        return
+    import threading
+    threading.Thread(target=lambda: rt.sync_pools("gcp", full, _real_pools(c)), daemon=True, name="gke-real-pools").start()
+
+
+def _real_upgrade(c, full):
+    rt = kube_state.CLUSTER_RUNTIME
+    if rt is None or not rt.exists("gcp", full):
+        return
+    import threading
+
+    def _run():
+        try:
+            c["status"] = "RECONCILING"
+            info = rt.upgrade_cluster("gcp", full, c.get("currentMasterVersion"))
+            c["currentMasterVersion"] = c["currentNodeVersion"] = info["actualVersion"]
+            c["status"] = RUNNING
+        except Exception as e:
+            c["status"] = "ERROR"
+            c["statusMessage"] = str(e)[:300]
+    threading.Thread(target=_run, daemon=True, name="gke-real-upgrade").start()
+
+
 def _real_create(c, full, nodes):
     rt = kube_state.CLUSTER_RUNTIME
     if rt is None:
@@ -454,7 +491,7 @@ def _real_create(c, full, nodes):
         else:
             _c["statusMessage"] = "k3s control plane failed to become ready"
     try:
-        rt.create_cluster("gcp", full, c.get("initialClusterVersion"), nodes, [c.get("endpoint") or ""], on_ready=ready)
+        rt.create_cluster("gcp", full, c.get("initialClusterVersion"), nodes, [c.get("endpoint") or ""], on_ready=ready, pools=_real_pools(c) or None)
     except Exception as e:
         c["status"] = "ERROR"
         c["statusMessage"] = str(e)[:300]
@@ -487,6 +524,7 @@ def update_cluster(store, project, location, cid, payload):
             raise _E(400, "INVALID_ARGUMENT", "Master version %r is unsupported." % u["desiredMasterVersion"])
         c["currentMasterVersion"] = v or VALID_VERSIONS[0]
         op_type, changed = "UPGRADE_MASTER", True
+        _real_upgrade(c, cluster_name(project, location, cid))
     if "desiredNodeVersion" in u:
         v = next((x for x in VALID_VERSIONS if x.startswith(u["desiredNodeVersion"])), None)
         if u["desiredNodeVersion"] != "-" and not v:
@@ -584,6 +622,7 @@ def create_pool(store, project, location, cid, payload):
     if any(p["name"] == spec["name"] for p in c["nodePools"]):
         raise _E(409, "ALREADY_EXISTS", "Already exists: %s/nodePools/%s." % (cluster_name(project, location, cid), spec["name"]))
     c["nodePools"].append(_make_pool(project, location, cid, spec, version=c["currentNodeVersion"]))
+    _real_sync(c, cluster_name(project, location, cid))
     return _operation(store, project, location, "CREATE_NODE_POOL", "clusters/%s/nodePools/%s" % (cid, spec["name"]))
 
 
@@ -593,6 +632,7 @@ def delete_pool(store, project, location, cid, pid):
     if len(c["nodePools"]) == 1 and not (c.get("autopilot") or {}).get("enabled"):
         raise _E(400, "FAILED_PRECONDITION", "Cannot delete the last node pool of a cluster; delete the cluster instead.")
     c["nodePools"].remove(p)
+    _real_sync(c, cluster_name(project, location, cid))
     return _operation(store, project, location, "DELETE_NODE_POOL", "clusters/%s/nodePools/%s" % (cid, pid))
 
 
@@ -607,6 +647,7 @@ def pool_setting(store, project, location, cid, pid, verb, payload):
         if p.get("autoscaling", {}).get("enabled"):
             raise _E(400, "FAILED_PRECONDITION", "Cannot resize node pool %s while autoscaling is enabled." % pid)
         p["initialNodeCount"] = n
+        _real_sync(c, cluster_name(project, location, cid))
         return _operation(store, project, location, "SET_NODE_POOL_SIZE", target)
     if verb == "setAutoscaling":
         p["autoscaling"] = _norm_autoscaling(payload.get("autoscaling") or {})
@@ -1198,6 +1239,17 @@ def _clusters(store, method, project, location, rest, verb, payload, legacy, que
         raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on cluster." % method)
     if rest[1] == "k8s":
         c = _get(store, project, location, cid)
+        rt = kube_state.CLUSTER_RUNTIME
+        full = cluster_name(project, location, cid)
+        if rt is not None and rt.exists("gcp", full):          # a REAL cluster: the path after /k8s/ goes to its k3s API server, not the simulated store
+            if not rt.is_ready("gcp", full):
+                raise _E(400, "FAILED_PRECONDITION", "Cluster %s is %s; its API server is not ready." % (cid, c.get("status")))
+            path = "/" + "/".join(rest[2:])
+            if query:
+                from urllib.parse import urlencode
+                path += "?" + urlencode(query if isinstance(query, dict) else dict(query))
+            status, kbody = rt.api_request("gcp", full, method, path, payload if method in ("POST", "PUT", "PATCH", "DELETE") and payload else None)
+            return ContainerResponse(status=status, body=json.dumps(kbody).encode() if not isinstance(kbody, str) else kbody.encode())
         cs = k8s_core.ensure_cluster(store.k8s, cluster_name(project, location, cid))
         try:
             body = _dispatch_k8s(cs, c, method, rest[2:], payload)
