@@ -55,17 +55,23 @@ sshd. The tunnel, the relay and the Mesh agent carry encrypted bytes only, so th
 | `/vm?vm=<id>&port=22` | browser VM worker | local relay opens a host port 22000-22999 and bridges TCP to the VM | loopback only | [built+tested] (local relay only) |
 | `/db` | browser DB worker | same for DB ports 25000-25999 | loopback only | [built+tested] (local relay only) |
 | `/booster` | Mesh agent | agent links to the hub; hub forwards HTTP to the Codespace simulator | Bearer session token | [built+tested] |
-| `/connect?vm=&port=` | laptop | raw TCP stream to a VM behind the same session's agent | Bearer session token | [built+tested] (Node relay only) |
+| `/shell` | Nano tab | interactive PTY into a Docker VM (other session's work; first-message token auth) | token in first message | [built+tested] (Node relay only) |
+| `/connect?vm=&port=` | laptop | raw TCP stream to a VM behind the same session's agent (stream framework, `kind:"tcp"`) | Bearer session token, role-less | [built+tested] (Node relay only) |
 | `/egress?u=` | browser VM host | allow-listed GET/HEAD/POST fetch for pip/apk/git | Origin check + per-IP limit | [built+tested] in Worker (9 checks); not deployed |
 
 ## 4. Mesh SSH data path
 
-Frames between the hub and the Mesh agent (one WebSocket, many streams):
+TCP streams ride the hub's existing **stream framework** (the same one the Nano "Open shell" PTY uses, see the header of
+`booster-hub.mjs`), distinguished by `kind:"tcp"`:
 
-- control (JSON text): `{type:"tcp-open", sid, vm, port}` hub→agent; `{type:"tcp-opened"|"tcp-error"|"tcp-close", sid}` agent→hub;
-  `{type:"tcp-close", sid}` either way.
-- data (binary): `[u32 big-endian sid][payload]` in both directions.
-- laptop↔hub: the `/connect` WebSocket carries raw bytes as binary messages, no framing (one WebSocket = one stream).
+- hub→agent (JSON on the agent's one WSS): `{type:"stream", op:"open", kind:"tcp", sid, vm, port}`, then `data{d:b64}`, `pause`,
+  `resume`, `close`.
+- agent→hub: `opened{container}`, `data{d:b64}`, `close{reason}`, `error{code,message}`.
+- laptop↔hub (`/connect`): raw bytes as binary WebSocket messages, one WebSocket = one stream; the hub never sends JSON to a `tcp`
+  client. The client splits writes into 32 KiB messages (the hub caps frames at 64 KiB).
+- Backpressure (pause/resume when the tab or link is slow), the open timeout (20 s), the token-expiry close (4410) and the idle timer
+  come from the shared framework. TCP streams use a longer idle limit (`VYOMI_TCP_IDLE_MS`, default 1 h; ssh keepalives count as traffic).
+- Caps: `VYOMI_MAX_STREAMS` (default 20) TCP streams per Mesh session, separate from the 4-shell cap.
 
 Steps for `ssh my-vm.vyomi`:
 
@@ -74,8 +80,9 @@ Steps for `ssh my-vm.vyomi`:
    with `Authorization: Bearer <token>`.
 3. The hub verifies the token (signature, audience, expiry, tier Pro/Max/enterprise), looks up the agent by `session_id`,
    requires the same account (`sub`), enforces the stream cap, and sends `tcp-open` to the agent.
-4. The agent resolves the VM to an address (Docker DNS for `vyomi-i-<id>`, then `docker inspect`), opens TCP to port 22, and
-   answers `tcp-opened`. Bytes sent early by the laptop are queued until then. If nothing answers in 20 s the stream is closed.
+4. The agent resolves the VM by Docker DNS name (`vyomi-i-<id>`, `vyomi-<name>`, `<name>`; no Docker CLI or socket, per the booster
+   rule that the agent holds no Docker access), opens TCP to port 22 and answers `opened`. Bytes sent early by the laptop are queued
+   at the hub until then. If nothing answers in 20 s the stream is closed.
 5. `ssh`'s own handshake and key auth now run end to end with the VM's sshd.
 6. Either side closing ends the stream and sends `tcp-close`. If the agent drops or the session ends, all its streams close.
 
@@ -125,7 +132,7 @@ config change happens only in `login`/`config`, with a prompt.
   wrong audience, future `iat`, expired, non-Pro/Max/enterprise tiers.
 - A `/connect` client can only reach the agent of **its own session** and only if the account matches.
 - Mesh agent opens outbound only: the Codespace publishes no port.
-- Resolver only tries `vyomi-i-<name>`, `vyomi-<name>`, `<name>` (name matched against `[A-Za-z0-9._-]{1,80}`): it cannot be pointed at
+- The agent holds no Docker access: the resolver only tries `vyomi-i-<name>`, `vyomi-<name>`, `<name>` (name matched against `[A-Za-z0-9._-]{1,80}`): it cannot be pointed at
   arbitrary hosts. VM port is 1-65535 but only on VM containers.
 - Caps: 20 streams per Mesh session (`VYOMI_MAX_STREAMS`), 20 s open timeout, token `session_end` closes the link.
 - `/egress`: allow-list only, no IPs/localhost, GET/HEAD/POST, Origin check, per-IP rate limit (Workers binding, optional).
@@ -193,7 +200,7 @@ sshd and the key injection exist. Estimate: about half a day plus the live check
 |---|---|---|
 | Worker `/egress` | `wasm/relay/test-worker-egress.mjs` | 9 checks pass |
 | Mesh SSH path + client + config | `wasm/relay/test-mesh-ssh.mjs` | 20 checks pass (round trip incl. 2 MB, parallel streams, stream cap, unknown VM, auth failures, agent drop, config edits) |
-| Booster HTTP link | `wasm/relay/test-booster-link.mjs` | passes (needs `WS_PKG`) |
+| Booster HTTP link, shell streams, derived session keys | `test-booster-link.mjs`, `test-booster-shell.mjs`, `test-booster-session-derived.mjs` | pass after the merge onto v4-on-main (needs `WS_PKG`; shell test needs a Python with uvicorn) |
 | Real Codespace + real sshd | — | **not run** |
 | Browser VM boot + pip/git via hosted `/egress` | — | **not run** |
 | Cloudflare deploy (`wrangler deploy --dry-run`, rate-limit binding syntax) | — | **not run** |
