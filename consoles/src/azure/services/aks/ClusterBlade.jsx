@@ -38,6 +38,7 @@ import SharedAdvisor from "../../kit/Advisor.jsx";
 import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { AksKeda, AksNetworkingSettings, AksExtensions } from "../../kit/ConfigPages.jsx";
+import BackupPanel from "./BackupPanel.jsx";
 import { AksGitOps, AksAutomatedDeployments } from "../../kit/GitOpsPages.jsx";
 import { AksBackup } from "../../kit/BackupPages.jsx";
 
@@ -118,7 +119,7 @@ export default function ClusterBlade({ params, query }) {
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
       applicationscaling: () => <AksKeda a={a} reload={reload} />,
       extensionsapplications: () => <AksExtensions a={a} />,
-      backup: () => <AksBackup a={a} />,
+      backup: () => <><BackupPanel a={a} /><AksBackup a={a} /></>,
       gitops: () => <AksGitOps a={a} />,
       automateddeployments: () => <AksAutomatedDeployments a={a} />,
       policies: () => <PolicyPanel rg={a.resourceGroup || String(a.id).split('/')[4]} resourceId={a.id} title={`${a.name} | Policies`} />,

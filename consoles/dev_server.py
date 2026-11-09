@@ -23,7 +23,8 @@ sys.path.insert(0, str(ROOT))
 from core.aws_wire_router import AwsWireRouter  # noqa: E402
 from core.azure_arm_core import AzureArm  # noqa: E402
 
-STATIC = ROOT / "static"
+# Headless 4.0.0 builds only wasm/v4 (Nano is the UI target); fall back to it when static/v4 is absent.
+STATIC = ROOT / "static" if (ROOT / "static" / "v4").is_dir() else ROOT / "wasm"
 # Azure ARM (/subscriptions/*) is not in AwsWireRouter. Nano sends /_wire/subscriptions/* to
 # the same substrate-free AzureArm core (wasm/sw.js handleWire → the azure/_arm tuple) and the
 # appliance serves it with providers/azure_services.handle_arm (which AzureArm ports), so the
