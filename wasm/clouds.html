@@ -1162,7 +1162,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .rd-tog { position: sticky; top: 8px; float: left; z-index: 3; margin: 8px 0 0 8px; width: 30px; height: 30px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; cursor: pointer; background-image: linear-gradient(#475467,#475467), linear-gradient(#475467,#475467), linear-gradient(#475467,#475467); background-repeat: no-repeat; background-size: 14px 2px; background-position: center 9px, center 14px, center 19px; }
     #view-api .rd-tog:hover { background-color: #f2f4f7; }
     #view-api .rd-intro { padding-left: 50px; }
-    #view-api .rd.rd-hide { grid-template-columns: minmax(0, 1fr); } #view-api .rd.rd-hide .rd-nav { display: none; }
+    #view-api .rd-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-right: 9px; }
+    #view-api .rd-cat > span { flex: 1; }
+    /* collapsed: a slim rail of group icons only */
+    #view-api .rd.rd-hide { grid-template-columns: 56px minmax(0, 1fr); }
+    #view-api .rd.rd-hide .rd-cat { justify-content: center; padding: 12px 0; } #view-api .rd.rd-hide .rd-cat > span, #view-api .rd.rd-hide .rd-chev, #view-api .rd.rd-hide .rd-grp-b { display: none; }
+    #view-api .rd.rd-hide .rd-ic { margin: 0; width: 20px; height: 20px; } #view-api .rd.rd-hide .rd-cat:hover { background: #eee; }
     #view-api .rd-more { padding: 12px 28px; margin: 0; font-size: 12.5px; color: #667085; }
 
     /* API reference: cloud tabs live in a header bar; the doc fills the full height, no search box */

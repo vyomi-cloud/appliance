@@ -184,6 +184,23 @@
 
 
   /* ── Redoc-style API reference (three panes: nav | description + parameters | samples) ───────────────────────── */
+  var RD_IC = [
+    [/machine|ai\b|ai \+/i, 'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z'],
+    [/analytic/i, 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
+    [/integration|messag/i, 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
+    [/ci\/cd/i, 'M17 4l3 3-3 3M20 7H9a5 5 0 0 0-5 5M7 20l-3-3 3-3M4 17h11a5 5 0 0 0 5-5'],
+    [/compute/i, 'M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4'],
+    [/container/i, 'M12 3l8 4v10l-8 4-8-4V7zM4 7l8 4 8-4M12 11v10'],
+    [/database/i, 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6'],
+    [/identity|security/i, 'M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z'],
+    [/manage|operation|observ/i, 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4'],
+    [/network/i, 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18'],
+    [/serverless/i, 'M13 2L4 14h7l-1 8 9-12h-7z'],
+    [/storage/i, 'M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3H4zM4 14h16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM7 8h.01M7 17h.01'],
+    [/additional/i, 'M12 5v14M5 12h14'],
+    [/./, 'M4 5h16v14H4zM4 10h16']
+  ];
+  function rdIcon(c) { for (var i = 0; i < RD_IC.length; i++) if (RD_IC[i][0].test(c)) return '<svg viewBox="0 0 24 24" class="rd-ic" aria-hidden="true"><path d="' + RD_IC[i][1] + '"/></svg>'; return ''; }
   function rdOp(cloud, a, o, EP, id) {
     var sn = snips(cloud, a, o, EP), ct = codeTabs(sn);
     var left = '<h3 class="rd-h"><span class="api-m ' + o.m.toLowerCase() + '">' + o.m + '</span> ' + esc(o.n) + '</h3>' +
@@ -203,7 +220,7 @@
       var cats = {}; list.forEach(function (s) { if (!q || s.t.toLowerCase().indexOf(q) >= 0) (cats[s.c] = cats[s.c] || []).push(s); });
       var shown = list.filter(function (s) { return !q || s.t.toLowerCase().indexOf(q) >= 0; });
       var nav = '<nav class="rd-nav" aria-label="Services">' + (Object.keys(cats).sort().map(function (c) {
-        return '<div class="rd-grp" data-c="' + esc(c) + '"><button type="button" class="rd-cat" aria-expanded="true"><span>' + esc(c) + '</span><i class="rd-chev"></i></button><div class="rd-grp-b">' + cats[c].map(function (s) {
+        return '<div class="rd-grp" data-c="' + esc(c) + '"><button type="button" class="rd-cat" aria-expanded="true" title="' + esc(c) + '">' + rdIcon(c) + '<span>' + esc(c) + '</span><i class="rd-chev"></i></button><div class="rd-grp-b">' + cats[c].map(function (s) {
           return '<button type="button" class="rd-svc" data-f="' + esc(s.f) + '"><span>' + esc(s.t) + '</span><em>' + s.o + '</em></button><div class="rd-ops" data-f="' + esc(s.f) + '" hidden></div>';
         }).join('') + '</div></div>';
       }).join('') || '<p class="am-none">No services match.</p>') + '</nav>';
@@ -212,10 +229,11 @@
       var body = el.querySelector('.rd-body'), main = el.querySelector('.rd-main'), rd = el.querySelector('.rd');
       function setGrp(g, openIt) { g.classList.toggle('shut', !openIt); g.querySelector('.rd-cat').setAttribute('aria-expanded', openIt); }
       el.querySelectorAll('.rd-grp').forEach(function (g) {
-        g.querySelector('.rd-cat').addEventListener('click', function () { setGrp(g, g.classList.contains('shut')); });
+        g.querySelector('.rd-cat').addEventListener('click', function () { if (rd.classList.contains('rd-hide')) { rd.classList.remove('rd-hide'); tog.setAttribute('aria-expanded', 'true'); setGrp(g, true); return; } setGrp(g, g.classList.contains('shut')); });
         if (g.dataset.c === 'Additional wired APIs') setGrp(g, false);   // long tail of small APIs: collapsed until wanted
       });
-      el.querySelector('.rd-tog').addEventListener('click', function (e) { var c = rd.classList.toggle('rd-hide'); e.currentTarget.setAttribute('aria-expanded', !c); });
+      var tog = el.querySelector('.rd-tog');
+      tog.addEventListener('click', function () { var c = rd.classList.toggle('rd-hide'); tog.setAttribute('aria-expanded', !c); });
       var LIM = 60;
       function open(f, all) {
         LIM = all ? 1e9 : 60;
