@@ -15,6 +15,18 @@ One small Node program (`packaging/tunnel/`, npm `vyomi-tunnel`, Homebrew tap `v
 The tunnel never terminates SSH. `ssh` does the handshake, key authentication and encryption end to end with the VM's
 sshd. The tunnel, the relay and the Mesh agent carry encrypted bytes only, so they cannot read the user's key or data.
 
+## 1b. The three tunnels (product decision, 2026-11-10)
+
+vyomi-tunnel must support exactly three kinds of target:
+
+| # | Tunnel | Reaches | Path | Status on this trunk |
+|---|---|---|---|---|
+| 1 | To the **Codespace** | the Codespace host's sshd (reserved target `host` / `codespace`) | `/connect` to the Mesh agent, which answers the reserved name (section 9c) | built, local tests only; needs sshd in the Codespace image (now in the appliance copy; sandbox PR pending) |
+| 2 | To a **browser VM** | an instance running in the Nano tab (v86) | VM worker -> local relay `/vm`, then `127.0.0.1:22000-22999` (section 5) | built+tested on the local relay; hosted relay version planned |
+| 3 | To **Docker inside the Codespace** | `vyomi-i-<id>` instance containers and the k3s API (`vyomi-k3s-<id>`, port 6443) | `/connect` to the Mesh agent, which resolves the name on `vyomi-net` (sections 4, 9c) | built+tested (Mesh SSH, 20 checks) and `forward` for k3s (19 checks); no real Codespace run yet |
+
+Tunnels 1 and 3 both depend on the Mesh agent being linked to a relay the Codespace can reach (open item 9 in section 11). Tunnel 2 does not: it runs entirely on the laptop.
+
 ## 2. Components
 
 ```
