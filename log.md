@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-09T22:59:19+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` AWS STS now supports cross-partition federation for AWS identities ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-sts-cross-partition))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-09T21:59:19+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3007,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-10-28T03:50:20+00:00
 
 Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T02:50:20+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-

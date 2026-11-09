@@ -1,15 +1,15 @@
 {
- "at": "2026-11-09T21:59:19+00:00",
+ "at": "2026-11-09T22:59:19+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon S3",
+   "service": "AWS IAM, Identity and Access Management",
    "kind": "announcement",
-   "key": "feed:aws:ba93ae5f65e0",
-   "title": "Introducing an open-source UI for graph analytics over data lakes with Amazon Neptune Analytics",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-graphover-datalakes-generally-available",
-   "detail": "Today, AWS is introducing an open-source solution with a local web UI that helps customers turn data lake records into graphs for analysis with Amazon Neptune Analytics. By projecting selected records and relationships, customers can investigate connections across tables and run graph algorithms without building their own ETL pipelines. For example, a customer could project accounts and transactions into a graph to explore how accounts are connected or identify communities that may warrant investigation. Doing this today often means writing queries to prepare node and relationship data, creati",
+   "key": "feed:aws:9890994b9441",
+   "title": "AWS STS now supports cross-partition federation for AWS identities",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-sts-cross-partition",
+   "detail": "AWS Security Token Service (AWS STS) now lets your workloads use their AWS Identity and Access Management (IAM) identity in one partition to get temporary credentials for an IAM role in a different partition, without storing long-term credentials, which can help improve your security posture. Partitions are groups of AWS Regions, such as the commercial and AWS GovCloud (US) Regions, and each partition has an independent instance of IAM, creating a hard boundary between them. Previously, organizations that run workloads across partitions commonly relied on long-term credentials, such as IAM use",
    "actionable": false
   }
  ],
