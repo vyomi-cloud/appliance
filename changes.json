@@ -1,6 +1,8 @@
 {
- "at": "2026-11-08T23:09:10+00:00",
+ "at": "2026-11-09T00:09:11+00:00",
  "baseline": false,
  "changes": [],
- "errors": []
+ "errors": [
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
+ ]
 }
