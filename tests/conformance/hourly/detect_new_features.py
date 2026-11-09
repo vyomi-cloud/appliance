@@ -105,6 +105,14 @@ def console_features(target: str, cloud: str) -> list[dict]:
     return feats
 
 
+PRIVATE_HELPERS = {
+    "apigatewayv2_core.py": {"CreateGrand", "CreateMapping", "CreateVpclink", "GetChild", "GetGrand"},
+    "cloudwatch_core.py": {"StateReasonData", "StateUpdatedTimestamp"},
+    "lambda_core.py": {"InvokeRaw"},
+    "sns_core.py": {"PublishToEndpoint", "PublishToPhone", "PublishToTopic", "SubscribeResult"},
+}
+
+
 def _ops_in(path: str) -> set[str]:
     """Operation names an engine implements: PascalCase keys of its dispatch
     tables (AWS JSON/query cores) plus verb-named handlers (REST cores)."""
@@ -139,6 +147,9 @@ def _ops_in(path: str) -> set[str]:
         # functions outside it (private helpers like _create_grand, _publish_to_topic) are
         # internals, not operations a client can call.
         ops -= {v for v in fn_ops.values() if v not in keys_all}
+    # Internal helpers (verified: none is routed or dispatched as an SDK call) in cores whose
+    # handlers are wired by route/lambda, so the dispatch-table rule above cannot see them.
+    ops -= PRIVATE_HELPERS.get(os.path.basename(path), set())
     if os.path.basename(path) == "stepfunctions_core.py":
         # ASL Choice-state comparators (NumericEquals, IsPresent...) are state-language
         # operators, not Step Functions API operations.
