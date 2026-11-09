@@ -203,18 +203,25 @@
       var cats = {}; list.forEach(function (s) { if (!q || s.t.toLowerCase().indexOf(q) >= 0) (cats[s.c] = cats[s.c] || []).push(s); });
       var shown = list.filter(function (s) { return !q || s.t.toLowerCase().indexOf(q) >= 0; });
       var nav = '<nav class="rd-nav" aria-label="Services">' + (Object.keys(cats).sort().map(function (c) {
-        return '<div class="rd-cat">' + esc(c) + '</div>' + cats[c].map(function (s) {
+        return '<div class="rd-grp" data-c="' + esc(c) + '"><button type="button" class="rd-cat" aria-expanded="true"><span>' + esc(c) + '</span><i class="rd-chev"></i></button><div class="rd-grp-b">' + cats[c].map(function (s) {
           return '<button type="button" class="rd-svc" data-f="' + esc(s.f) + '"><span>' + esc(s.t) + '</span><em>' + s.o + '</em></button><div class="rd-ops" data-f="' + esc(s.f) + '" hidden></div>';
-        }).join('');
+        }).join('') + '</div></div>';
       }).join('') || '<p class="am-none">No services match.</p>') + '</nav>';
-      el.innerHTML = '<div class="rd">' + nav + '<div class="rd-main"><div class="rd-intro"><h2>' + esc(cloud === 'aws' ? 'AWS' : cloud === 'gcp' ? 'Google Cloud' : 'Azure') + ' API reference</h2>' +
+      el.innerHTML = '<div class="rd">' + nav + '<div class="rd-main"><button type="button" class="rd-tog" title="Hide / show the service list" aria-label="Toggle service list" aria-expanded="true"></button><div class="rd-intro"><h2>' + esc(cloud === 'aws' ? 'AWS' : cloud === 'gcp' ? 'Google Cloud' : 'Azure') + ' API reference</h2>' +
         '<p>' + list.length + ' services · ' + list.reduce(function (n, s) { return n + s.o; }, 0) + ' operations that answer on this simulator · endpoint <code>' + esc(EP) + '</code>. Pick a service on the left.</p></div><div class="rd-body"></div></div></div>';
-      var body = el.querySelector('.rd-body'), main = el.querySelector('.rd-main');
+      var body = el.querySelector('.rd-body'), main = el.querySelector('.rd-main'), rd = el.querySelector('.rd');
+      function setGrp(g, openIt) { g.classList.toggle('shut', !openIt); g.querySelector('.rd-cat').setAttribute('aria-expanded', openIt); }
+      el.querySelectorAll('.rd-grp').forEach(function (g) {
+        g.querySelector('.rd-cat').addEventListener('click', function () { setGrp(g, g.classList.contains('shut')); });
+        if (g.dataset.c === 'Additional wired APIs') setGrp(g, false);   // long tail of small APIs: collapsed until wanted
+      });
+      el.querySelector('.rd-tog').addEventListener('click', function (e) { var c = rd.classList.toggle('rd-hide'); e.currentTarget.setAttribute('aria-expanded', !c); });
       var LIM = 60;
       function open(f, all) {
         LIM = all ? 1e9 : 60;
         el.querySelectorAll('.rd-svc').forEach(function (b) { b.classList.toggle('on', b.dataset.f === f); });
         el.querySelectorAll('.rd-ops').forEach(function (d) { d.hidden = d.dataset.f !== f; });
+        var og = el.querySelector('.rd-svc[data-f="' + f + '"]'); if (og && og.closest('.rd-grp')) setGrp(og.closest('.rd-grp'), true);
         body.innerHTML = '<p class="am-none">Loading…</p>';
         service(cloud, f).then(function (d) {
           var h = '', wires = [], n = 0, idx = '';
@@ -236,7 +243,8 @@
         });
       }
       el.querySelectorAll('.rd-svc').forEach(function (b) { b.addEventListener('click', function () { open(b.dataset.f); }); });
-      if (shown.length) open((want && shown.filter(function (s) { return s.f === want; })[0] ? want : shown[0].f));
+      var firstReal = shown.filter(function (s) { return s.c !== 'Additional wired APIs'; })[0] || shown[0];
+      if (shown.length) open((want && shown.filter(function (s) { return s.f === want; })[0] ? want : firstReal.f));
     }).catch(function () { el.innerHTML = '<div class="api-empty">Could not load the ' + esc(cloud.toUpperCase()) + ' reference (docs/index.json).</div>'; });
   }
 
