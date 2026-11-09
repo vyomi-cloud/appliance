@@ -147,6 +147,27 @@ runs the preflight (6), then runs the vendor step into `v4-nano-portal`. Two ses
 | Portal pages and endpoints (`app/*.py`, `app/templates/**`: Mesh login, keep-alive, OAuth setup, tier mapping) | `v4-nano-portal` | portal `main` at go-live |
 | Codespace image (devcontainer, sshd feature, compose) | `vyomi-cloud/sandbox` | new Codespaces only |
 
+### 5.5 Session checklist (copy to any session that is finishing or starting work)
+
+**Finishing in-flight work**
+1. `git fetch origin`; trunks are `origin/v4-on-main` (appliance) and `origin/v4-nano-portal` (portal).
+2. Commit with explicit paths only (never `git add -A` / `.`; never a bare `git stash`, use a WIP commit).
+3. Push your topic branch now and after every batch: `git push -u origin v4/<topic>` (portal: `portal/<topic>`). No approval needed.
+   Never force-push. If a rebase makes the push fail, push under a new name (`v4/<topic>-r2`).
+4. Do NOT push `v4-on-main`, `release/v4.0.0`, `v4-nano-portal`, `main` or any tag (integrator / owner only; portal `main` auto-deploys and costs money).
+5. Tell the owner your branch name and the shared files you touched (`core/*.py`, `consoles/src/**`, `core/capabilities/**`, `wasm/**`, `server.py`); the integrator ports or merges it.
+6. A branch cut from an old base is ported, not merged: never merge the trunk into it, never hand-merge `wasm/v4`, `static/v4`, `wasm/core`
+   (rebuild: `cd consoles && node build.mjs`, `python3 wasm/build_cores.py`).
+
+**Starting new work**
+1. `scripts/v4-session-start.sh <topic>` (portal: `--portal`) creates a worktree off a fresh trunk.
+2. Add your row to `SESSION-CLAIMS.md` before editing shared paths.
+3. Grep `origin/v4-on-main` for the gap first; another session may have landed it.
+
+**Managed Kubernetes gate (landed 2026-11-09, `8424b286`)**
+AKS / GKE / EKS are Pro / Max / Enterprise only (`core/k8s_tier_gate.py`). Nano runners and Playwright tests set
+`localStorage.vyomi_ci_tier = "max"` via `addInitScript` (honoured on localhost / 127.0.0.1 only). Any test that touches AKS/GKE on Nano needs it.
+
 ## 6. State of in-flight work (a dated snapshot, not a rule — refresh or delete when stale)
 
 As of 2026-11-09. All branches are pushed under their own names; none of the appliance ones is merged into the trunk yet.
