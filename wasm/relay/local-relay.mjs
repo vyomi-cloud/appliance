@@ -31,6 +31,7 @@
  */
 import { egress } from "./egress.mjs";
 import { createHub } from "./booster-hub.mjs";
+import { createSshHub, createSshTransport } from "./mesh-ssh.mjs";
 import { createRunnerLlmHub } from "./runner-llm-hub.mjs";
 import { createMeshHub } from "./booster-mesh.mjs";
 import { Readable } from "node:stream";
@@ -62,7 +63,10 @@ const pending = new Map();     // id -> {resolve}
 // their auto-reconnect).
 const tabs = new Set();        // live registrant sockets, insertion-ordered
 // Booster link (outbound-dialed booster <-> token-paired clients). Inert unless VYOMI_BOOSTER_SESSION_KEY is set.
-const hub = createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
+// VYOMI_MESH_CODESPACE=<name>: the link runs on THIS machine over the user's own `gh codespace ssh` session (mesh-ssh.mjs); the Codespace dials nothing.
+const hub = process.env.VYOMI_MESH_CODESPACE
+  ? createSshHub({ WebSocketServer, transport: createSshTransport({ codespace: process.env.VYOMI_MESH_CODESPACE, log: (m) => console.log("[relay] " + m) }), log: (m) => console.log("[relay] " + m) })
+  : createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
 // Remote-LLM plane (spike, inert unless VYOMI_BOOSTER_SESSION_KEY is set): a GitHub-Actions runner dials OUT to /llm-runner;
 // the booster reaches it with plain HTTP under /llm/*.
 const llmHub = createRunnerLlmHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
