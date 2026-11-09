@@ -175,6 +175,14 @@ AKS / GKE / EKS are Pro / Max / Enterprise only (`core/k8s_tier_gate.py`). Nano 
 - **Open (integrator):** scratch-portal browser check (step 6 of `P1-NANO-BACKPORT.md`), then the first vendor PR on `portal/vendor-<date>`, then the CI rule that fails portal PRs touching `app/nano/**` other than vendor PRs.
 - **Open (owner):** GitHub branch protection + `v*` tag rule; name the integrator.
 
+**Asks to the P1 / mesh-tunnel session (from the integrator, 2026-11-09):**
+1. Confirm you have **no other unpushed or unmerged branches**; list any by name. This was the only one found.
+2. `v4/p1-nano-backport` was applied to the trunk by cherry-pick (so git does not show it as merged). Delete the remote branch and your worktree
+   `appliance-p1-nano-backport`: `git push origin --delete v4/p1-nano-backport` is allowed for your own topic branch.
+3. Do **not** edit `app/nano/**` in the portal and do not touch `portal/vendor-20261109`; the integrator owns the vendor merge and the browser check (step 6 of `P1-NANO-BACKPORT.md`).
+4. Fetch `origin/v4-on-main` (`d5b6a5a7` or later) before any new work; start new topics with `scripts/v4-session-start.sh <topic>`.
+5. If your tunnel/mesh work continues, add a new claim row first and reconcile with the managed-Kubernetes tunnel branches (`v4/tunnel-keeper`, `v4/tunnel-k3s`) before changing `packaging/tunnel/**` or `wasm/relay/**`.
+
 ## 6. State of in-flight work (a dated snapshot, not a rule — refresh or delete when stale)
 
 As of 2026-11-09. All branches are pushed under their own names; none of the appliance ones is merged into the trunk yet.
