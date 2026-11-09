@@ -47,7 +47,8 @@ function Settings({ a, onChanged }) {
     stack: STACKS.find(([, l]) => l === p?.gitHubActionConfiguration?.codeConfiguration?.runtimeStack)?.[0] || "python", version: p?.gitHubActionConfiguration?.codeConfiguration?.runtimeVersion || "" };
   const set = (k, v) => setF({ ...cur, [k]: v });
   const REPO = ["gh", "git", "azrepos", "bitbucket"];
-  const scm = `https://${a.name}.scm.azurewebsites.net`;
+  const dh = a.properties?.defaultHostName || `${a.name}.azurewebsites.net`;  // honours the unique-hostname scope
+  const scm = `https://${dh.replace(/^([^.]+)\./, "$1.scm.")}`;
   const patchWeb = (props) => restJson("PATCH", `${a.id}/config/web`, { query: q, body: { properties: props } });
   const yaml = p?.gitHubActionConfiguration?.workflowYaml;
   const save = async () => {

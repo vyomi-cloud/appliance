@@ -3,7 +3,7 @@
  * a PUT on the site that references it. */
 import { useEffect, useState } from "react";
 import {
-  Button, Checkbox, Input, Link, Radio, RadioGroup, Select, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow,
+  Button, Checkbox, Input, Link, Radio, RadioGroup, Select, Switch, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow,
 } from "@fluentui/react-components";
 import { Delete20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
@@ -17,6 +17,9 @@ import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { setPricing } from "../defender/api.js";
+import * as sqlApi from "../sql/api.js";
+import * as cosmosApi from "../cosmos/api.js";
+import { COSMOS_NAME_RE, ENGINES, SQL_NAME_RE, SQL_PLANS, provisionDatabase } from "./dbProvision.js";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
@@ -27,12 +30,16 @@ export default function CreateWebApp() {
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listSites(), [sub.id]);
   const plans = useAsync(() => api.listPlans(), [sub.id]);
+  const sqlServers = useAsync(() => sqlApi.listServers(), [sub.id]);
+  const cosmosAccounts = useAsync(() => cosmosApi.listAccounts(), [sub.id]);
   const [newRg, setNewRg] = useState(null);
   const [f, setF] = useState({
     resourceGroup: DEFAULT_RG, name: "", location: "eastus",
     publish: "Code", runtimeStack: "PYTHON|3.12", os: "Linux",
     planChoice: "__new", newPlanName: "", planSku: "B1", zoneRedundant: "Disabled",
-    createDatabase: false,
+    secureHostname: false, hostScope: "TenantReuse",
+    createDatabase: false, engine: "sql", sqlChoice: "__new", sqlServer: "", sqlLogin: "", sqlPassword: "", sqlPasswordConfirm: "", sqlPlan: "Basic",
+    cosmosChoice: "__new", cosmosAccount: "", databaseName: "",
     containerImageSource: "Quickstart", containerImage: "",
     continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main", ghToken: "",
     publicAccess: true, networkInjection: false,
@@ -87,7 +94,22 @@ export default function CreateWebApp() {
           <Input id="wa-name" value={f.name} onChange={set("name")} aria-label="Name" contentAfter=".azurewebsites.net" />
           {nameError && <div style={{ color: "var(--colorPaletteRedForeground1)", fontSize: 12, marginTop: 4 }}>{nameError}</div>}
         </FormRow>
-        <NotSimulatedContainer title="Secure unique default hostname on." feature="Secure unique default hostname on." note={"Vyomi always uses the exact name you choose; there is no name-collision suffix to secure."} />
+        <FormRow label="Secure unique default hostname on." htmlFor="wa-securehost">
+          <Switch id="wa-securehost" checked={f.secureHostname} onChange={(_, d) => setF((x) => ({ ...x, secureHostname: d.checked }))} label={f.secureHostname ? "On" : "Off"} aria-label="Secure unique default hostname on." />
+          {f.secureHostname && (
+            <Select style={{ marginTop: 6 }} value={f.hostScope} onChange={set("hostScope")} aria-label="Domain name label scope">
+              <option value="TenantReuse">Tenant reuse</option>
+              <option value="SubscriptionReuse">Subscription reuse</option>
+              <option value="ResourceGroupReuse">Resource group reuse</option>
+              <option value="NoReuse">No reuse</option>
+            </Select>
+          )}
+          <div style={{ fontSize: 12, marginTop: 4 }} data-testid="host-help">
+            {f.secureHostname
+              ? `Default host name will be ${f.name || "<name>"}-<hash>.${f.location}-01.azurewebsites.net. The hash is stable for the same app name within the chosen scope (and differs across scopes); "No reuse" gets a different hash every time. Azure does not publish its hash algorithm, so Vyomi's hash values are not identical to the ones real Azure generates.`
+              : `Off: the default host name is exactly ${f.name || "<name>"}.azurewebsites.net.`}
+          </div>
+        </FormRow>
         <FormRow label="Publish" required>
           <RadioGroup value={f.publish} onChange={set("publish")} aria-label="Publish">
             <Radio value="Code" label="Code" />
@@ -139,8 +161,79 @@ export default function CreateWebApp() {
     </>
   );
 
+  const sqlList = sqlServers.data || [];
+  const cosmosList = cosmosAccounts.data || [];
+  const sqlExisting = sqlList.find((x) => x.name === f.sqlChoice);
+  const databaseErrors = () => {
+    const e = [];
+    if (!f.createDatabase) return e;
+    if (!f.databaseName) e.push("Database name is required.");
+    if (f.engine === "sql") {
+      if (f.sqlChoice === "__new" && !SQL_NAME_RE.test(f.sqlServer)) e.push("Server name must be lowercase letters, numbers and hyphens.");
+      if (!f.sqlLogin) e.push("Server admin login is required.");
+      if (!f.sqlPassword) e.push("Password is required.");
+      if (f.sqlChoice === "__new" && f.sqlPassword !== f.sqlPasswordConfirm) e.push("Passwords don't match.");
+    } else if (f.cosmosChoice === "__new" && !COSMOS_NAME_RE.test(f.cosmosAccount)) e.push("Account name must be 3-44 lowercase letters, numbers or hyphens.");
+    return e;
+  };
   const database = (
-    <NotSimulatedContainer title="Database" feature="Create a Database" note={"Provisioning a linked database from the Web App wizard is not modelled; create one directly in the SQL/Cosmos DB lens instead."} />
+    <>
+      <FormSection title="Database" description="Optionally create a database for this app. Vyomi creates it through the same ARM calls the SQL and Cosmos DB lenses use and stores the connection string in the app's Environment variables > Connection strings.">
+        <FormRow label="Create a Database">
+          <Checkbox checked={f.createDatabase} onChange={chk("createDatabase")} aria-label="Create a Database" />
+        </FormRow>
+        {f.createDatabase && (
+          <>
+            <FormRow label="Engine" required htmlFor="wa-db-engine">
+              <Select id="wa-db-engine" value={f.engine} onChange={set("engine")} aria-label="Engine">
+                {ENGINES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </Select>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Vyomi can provision Azure SQL Database and Azure Cosmos DB for NoSQL here; MySQL / PostgreSQL flexible server, Cosmos DB for MongoDB and Azure Cache for Redis are not available.</div>
+            </FormRow>
+            {f.engine === "sql" ? (
+              <>
+                <FormRow label="Server name" required htmlFor="wa-db-server">
+                  <Select id="wa-db-server" value={f.sqlChoice} onChange={(_, d) => setF((x) => ({ ...x, sqlChoice: d.value, sqlLogin: sqlList.find((q) => q.name === d.value)?.properties?.administratorLogin || x.sqlLogin }))} aria-label="Server name">
+                    <option value="__new">(New) server</option>
+                    {sqlList.map((q) => <option key={q.id} value={q.name}>{q.name}</option>)}
+                  </Select>
+                  {f.sqlChoice === "__new" && <Input style={{ marginTop: 6 }} value={f.sqlServer} onChange={(_, d) => setF((x) => ({ ...x, sqlServer: d.value.toLowerCase() }))} placeholder="New server name" contentAfter=".database.windows.net" aria-label="New server name" />}
+                </FormRow>
+                <FormRow label="Database name" required htmlFor="wa-db-name">
+                  <Input id="wa-db-name" value={f.databaseName} onChange={set("databaseName")} aria-label="Database name" />
+                </FormRow>
+                <FormRow label="Server admin login" required htmlFor="wa-db-login"><Input id="wa-db-login" value={f.sqlLogin} onChange={set("sqlLogin")} aria-label="Server admin login" /></FormRow>
+                <FormRow label="Password" required htmlFor="wa-db-pw">
+                  <Input id="wa-db-pw" type="password" value={f.sqlPassword} onChange={set("sqlPassword")} aria-label="Password" />
+                  {sqlExisting && <div style={{ fontSize: 12, marginTop: 4 }}>Azure never returns a server's password; enter the existing admin password so it can be placed in the connection string.</div>}
+                </FormRow>
+                {f.sqlChoice === "__new" && (
+                  <FormRow label="Confirm password" required htmlFor="wa-db-pw2"><Input id="wa-db-pw2" type="password" value={f.sqlPasswordConfirm} onChange={set("sqlPasswordConfirm")} aria-label="Confirm password" /></FormRow>
+                )}
+                <FormRow label="Hosting plan" required htmlFor="wa-db-plan">
+                  <Select id="wa-db-plan" value={f.sqlPlan} onChange={set("sqlPlan")} aria-label="Database hosting plan">
+                    {SQL_PLANS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </Select>
+                </FormRow>
+              </>
+            ) : (
+              <>
+                <FormRow label="Account name" required htmlFor="wa-db-acct">
+                  <Select id="wa-db-acct" value={f.cosmosChoice} onChange={set("cosmosChoice")} aria-label="Cosmos DB account">
+                    <option value="__new">(New) account</option>
+                    {cosmosList.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </Select>
+                  {f.cosmosChoice === "__new" && <Input style={{ marginTop: 6 }} value={f.cosmosAccount} onChange={(_, d) => setF((x) => ({ ...x, cosmosAccount: d.value.toLowerCase() }))} placeholder="New account name" contentAfter=".documents.azure.com" aria-label="New Cosmos DB account name" />}
+                </FormRow>
+                <FormRow label="Database name" required htmlFor="wa-db-name">
+                  <Input id="wa-db-name" value={f.databaseName} onChange={set("databaseName")} aria-label="Database name" />
+                </FormRow>
+              </>
+            )}
+          </>
+        )}
+      </FormSection>
+    </>
   );
 
   const container = (
@@ -249,9 +342,11 @@ export default function CreateWebApp() {
         <h3>Details</h3>
         {dl([["Subscription", sub.displayName || sub.id], ["Resource Group", rg || "--"]])}
         <h3>Instance Details</h3>
-        {dl([["Name", f.name || "--"], ["Publish", f.publish], ["Runtime stack", api.RUNTIMES.find(([, v]) => v === f.runtimeStack)?.[0]], ["Operating System", f.os], ["Region", regionLabel]])}
+        {dl([["Name", f.name || "--"], ["Publish", f.publish], ["Runtime stack", api.RUNTIMES.find(([, v]) => v === f.runtimeStack)?.[0]], ["Operating System", f.os], ["Region", regionLabel], ["Secure unique default hostname", f.secureHostname ? `On (${f.hostScope})` : "Off"]])}
         <h3>App Service Plan (New)</h3>
         {dl([["Name", f.planChoice === "__new" ? f.newPlanName || "--" : f.planChoice], ["Sku and size", f.planSku], ["Zone redundancy", f.zoneRedundant]])}
+        {f.createDatabase && (<><h3>Database</h3>
+        {dl([["Engine", ENGINES.find(([k]) => k === f.engine)?.[1]], ["Server / account", f.engine === "sql" ? (f.sqlChoice === "__new" ? `(new) ${f.sqlServer || "--"}` : f.sqlChoice) : (f.cosmosChoice === "__new" ? `(new) ${f.cosmosAccount || "--"}` : f.cosmosChoice)], ["Database name", f.databaseName || "--"]])}</>)}
         <h3>Monitor + secure</h3>
         {dl([["Application Insights", yes(f.appInsights === "Yes")], ["Microsoft Defender for App Service", yes(f.defender)]])}
         <h3>Deployment</h3>
@@ -270,6 +365,8 @@ export default function CreateWebApp() {
         });
         planId = plan.id;
       }
+      let dbOut = null;
+      if (f.createDatabase) dbOut = await provisionDatabase(f, { rg, location: f.location });
       const siteConfig = {
         linuxFxVersion: f.os === "Linux" ? (f.publish === "Container" ? `DOCKER|${f.containerImage || "mcr.microsoft.com/appsvc/staticsite:latest"}` : f.runtimeStack) : "",
         netFrameworkVersion: f.os === "Windows" ? "v4.0" : "v4.0",
@@ -279,9 +376,13 @@ export default function CreateWebApp() {
       await api.createSite(rg, f.name, {
         location: f.location, kind: f.os === "Linux" ? "app,linux" : "app",
         tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
-        properties: { serverFarmId: planId, siteConfig, publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled",
+        properties: { serverFarmId: planId, siteConfig, ...(f.secureHostname ? { autoGeneratedDomainNameLabelScope: f.hostScope } : {}), publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled",
           ...(f.inject ? { virtualNetworkSubnetId: f.injectSubnet || subnets.data?.[0]?.id } : {}) },
       });
+      if (dbOut) {
+        const have = await api.getConnectionStrings(rg, f.name);
+        await api.updateConnectionStrings(rg, f.name, { ...have, ...dbOut.connectionStrings });
+      }
       if (f.continuousDeployment === "Enable" && f.ghRepo) {
         await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, ...(f.ghToken ? { vyomiAccessToken: f.ghToken } : {}), gitHubActionConfiguration: {
           codeConfiguration: { runtimeStack: (f.runtimeStack || "").split("|")[0].toLowerCase() || "python", runtimeVersion: (f.runtimeStack || "").split("|")[1] }, isLinux: f.os === "Linux" } });
@@ -297,7 +398,7 @@ export default function CreateWebApp() {
       title="Create Web App" closeHref="#/appservices" glyph={<Glyph id="appservices" />}
       tabs={[
         { id: "basics", label: "Basics", content: basics, validate: basicsErrors },
-        { id: "database", label: "Database", content: database },
+        { id: "database", label: "Database", content: database, validate: databaseErrors },
         { id: "container", label: "Container", content: container },
         { id: "deployment", label: "Deployment", content: deployment },
         { id: "networking", label: "Networking", content: networking },

@@ -106,12 +106,18 @@ def _dep_view(rec, d):
     return {"id": f"{rec['id']}/deployments/{d['id']}", "name": d["id"], "type": "Microsoft.Web/sites/deployments", "properties": d}
 
 
+def _scm_host(rec):
+    d = (rec.get("properties") or {}).get("defaultHostName") or f"{rec['name']}.azurewebsites.net"
+    first, _, rest = d.partition(".")
+    return f"{first}.scm.{rest}"
+
+
 def _creds(rec, s):
     pw = _h(rec["id"], "pubpw", s["passwordGen"])
     return {"id": f"{rec['id']}/config/publishingcredentials", "name": "publishingcredentials", "type": "Microsoft.Web/sites/config",
             "properties": {"name": f"${rec['name']}", "publishingUserName": f"${rec['name']}", "publishingPassword": pw,
                            "publishingPasswordHash": _h(pw, n=16), "publishingPasswordHashSalt": _h(rec["id"], "salt", n=8),
-                           "scmUri": f"https://${rec['name']}:{pw}@{rec['name']}.scm.azurewebsites.net"}}
+                           "scmUri": f"https://${rec['name']}:{pw}@{_scm_host(rec)}"}}
 
 
 def dispatch(state, rec, rest, method, payload):
