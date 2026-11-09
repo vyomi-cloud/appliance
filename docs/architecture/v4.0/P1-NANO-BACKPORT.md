@@ -95,3 +95,17 @@ a back-port; the vendor PR brings them over.
 
 All markers above are present in `wasm/`, both files pass `node --check`, the scratch-portal run shows the behaviour in step 6,
 `v4/p1-nano-backport` is pushed, and the integrator has merged it.
+
+## Status and owner-question defaults (2026-11-09)
+
+Back-port is done and pushed: `v4/p1-nano-backport` at 6cdbbb18 (`wasm/vyomi-appbar.js`, `wasm/booster-link.js`). `node --check` passes and
+`test-booster-link`, `test-booster-shell` and `test-mesh-ssh` pass. The scratch-portal browser run (step 6) has NOT been done; the integrator
+or the vendor-PR author should do it. Not ported: the `#vy-so` z-index change, the open-spaces/open-marketplace handlers, and the
+Booster-to-Mesh wording rename outside the new blocks. The trunk's own unreachable/stale-state logic in `booster-link.js` was kept.
+
+Defaults chosen (the owner may overrule):
+1. `booster-widget.js` stays portal-only. Not moved to `wasm/`; the vendor script does not touch it.
+2. Use the existing `APPLIANCE_SYNC.json`. Do not add `app/nano/.vendored-from`.
+
+Integrator next steps: merge `v4/p1-nano-backport` into `v4-on-main`; remove the `mesh/tunnel` claim row from `SESSION-CLAIMS.md`;
+make the first vendor PR on `portal/vendor-<date>`; then add the CI rule for `app/nano/**`.
