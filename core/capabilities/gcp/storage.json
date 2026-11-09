@@ -203,11 +203,26 @@
     "tests": ["tests/conformance/test_gcs_bucket_config_core.py"]
   },
   "gcp.storage.object-enrichments": {
-    "title": "Object enrichments (Smart Storage — Document AI classification/extraction on upload)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": [
-      "Enrichments run Document AI (and other Vertex AI pipelines) against newly uploaded objects; Vyomi has no ML inference engine to classify or extract from object content."
-    ]
+   "title": "Object enrichments (local extraction on upload)",
+   "level": {
+    "nano": "limited",
+    "offline": "limited"
+   },
+   "limitations": [
+    "Dev Simplified. REAL local extraction, not Document AI: a rule (bucket, optional prefix/suffix) runs extractors over the bytes of each newly uploaded object and writes the results into the object's custom metadata as vyomi-enrich-* keys: size, SHA-256 and magic-byte type; text/JSON/CSV facts (chars, words, lines, preview, JSON shape, CSV rows and header); PNG/JPEG/GIF/BMP/WebP pixel dimensions; PDF page count and title; and, on hosts with tesseract installed (not Nano), OCR text for images.",
+    "Not in scope: Document AI / Vertex AI classification, entity or form extraction. Extraction runs synchronously on upload and reads at most the first 8 MiB; it is not triggered by existing objects unless a rule's :run is called. Rules use the Vyomi path /storage/v1/b/{bucket}/vyomiEnrichmentRules."
+   ],
+   "api": [
+    "vyomiEnrichmentRules.list (Vyomi extension)",
+    "vyomiEnrichmentRules.insert (Vyomi extension)",
+    "vyomiEnrichmentRules.delete (Vyomi extension)",
+    "vyomiEnrichmentRules.run (Vyomi extension)",
+    "objects.insert (triggers enrichment)",
+    "objects.get (metadata)"
+   ],
+   "tests": [
+    "tests/conformance/test_gcp_enrich.py"
+   ]
   },
   "gcp.storage.interoperability": {
     "title": "Interoperable access (HMAC keys for service/user accounts)",

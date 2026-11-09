@@ -87,6 +87,7 @@ from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_commit_core as gcp_commit
 from core import gcp_servicehealth_core as gcp_svchealth
+from core import gcp_enrich_core as gcp_enrich   # Storage object enrichments: real local extraction on upload
 from core import gcp_computesim_core as gcp_compsim   # Compute rollouts (real, over MIGs) + preview-feature enrolment records
 from core import gcp_apphub_core as gcp_apphub
 from core import gcp_clouddeploy_core as gcp_clouddeploy
@@ -103,6 +104,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_enrich.PATH_RE.match(path.split("?", 1)[0]):
+        return "gcp-enrich"   # Storage object-enrichment rules (core/gcp_enrich_core; hooked on upload below)
     if gcp_compsim.PATH_RE.match(path.split("?", 1)[0]):
         return "gcp-computesim"   # rolloutPlans/rollouts over the real MIG engine + previewFeatures (core/gcp_computesim_core)
     if gcp_svchealth.PATH_RE.match(path.split("?", 1)[0]):
@@ -2170,6 +2173,7 @@ class AwsWireRouter:
                 "gcp-commit": (gcp_commit, self.gcp_compute_vm),
                 "gcp-servicehealth": (gcp_svchealth, self.gcp_compute_vm),
                 "gcp-computesim": (gcp_compsim, self.gcp_compute_vm),
+                "gcp-enrich": (gcp_enrich, self.gcs),
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
                 "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
                 "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),
@@ -2226,11 +2230,14 @@ class AwsWireRouter:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   resolver=lambda ref: gcp_ar.resolve_image_digest(self.gcp_ar, ref),
                                   vuln=self._ca_vuln_occurrences)
+            elif svc == "gcp-enrich":   # rules are stored on the GCS store; :run reads/patches real objects
+                r = mod.dispatch(self, method, path, query or {}, headers or {}, bytes(body))
             elif svc == "gcp-run":   # real mutations + Eventarc deliveries -> real Cloud Logging entries
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   log_fn=self._run_log, topic_exists=self._run_topic_exists)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            gcp_enrich.after_upload(self, svc, method, path, query, r)   # enrichment rules run on new objects (metadata written back)
             nano_triggers.after_gcp(self, svc, method, path, query, bytes(body), r)   # uploads / publishes fire Eventarc triggers
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
