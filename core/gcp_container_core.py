@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from core import gcp_gke_dataplane_core as k8s_core
+from core import kube_state_core as kube_state
 
 RUNNING, PROVISIONING, STOPPING, RECONCILING, ERROR, DEGRADED = (
     "RUNNING", "PROVISIONING", "STOPPING", "RECONCILING", "ERROR", "DEGRADED")
@@ -428,7 +429,49 @@ def create_cluster(store, project, location, payload):
     if not auto:
         c["initialNodeCount"] = sum(pool_node_count(p) for p in pools)
     store.clusters[full] = c
+    _real_create(c, full, sum(pool_node_count(p) for p in pools) or 1)
     return _operation(store, project, location, "CREATE_CLUSTER", "clusters/" + cid)
+
+
+# ── REAL Kubernetes (k3s) behind a GKE cluster: only when the offline appliance installed kube_state.CLUSTER_RUNTIME
+# (VYOMI_K8S_BACKEND=k3s); the substrate-free core only calls the hook and never imports Docker. ──
+def _real_create(c, full, nodes):
+    rt = kube_state.CLUSTER_RUNTIME
+    if rt is None:
+        return
+    c["status"] = PROVISIONING
+
+    def ready(ok, info, _c=c):
+        _c["status"] = RUNNING if ok else "ERROR"
+        if ok:
+            _c["currentMasterVersion"] = _c["currentNodeVersion"] = info.get("actualVersion")
+            try:
+                for line in rt.kubeconfig("gcp", full).splitlines():
+                    if "certificate-authority-data:" in line:
+                        _c["masterAuth"] = {"clusterCaCertificate": line.split(":", 1)[1].strip()}
+            except Exception:
+                pass
+        else:
+            _c["statusMessage"] = "k3s control plane failed to become ready"
+    try:
+        rt.create_cluster("gcp", full, c.get("initialClusterVersion"), nodes, [c.get("endpoint") or ""], on_ready=ready)
+    except Exception as e:
+        c["status"] = "ERROR"
+        c["statusMessage"] = str(e)[:300]
+
+
+def get_credentials(store, project, location, cid):
+    """Vyomi extension ``POST clusters/{c}:getCredentials`` (what `gcloud container clusters get-credentials` assembles from the
+    cluster's endpoint + masterAuth, handed over ready-made): the real k3s kubeconfig + masterAuth. Needs the k3s backend."""
+    c = _get(store, project, location, cid)
+    full = cluster_name(project, location, cid)
+    rt = kube_state.CLUSTER_RUNTIME
+    if rt is None or not rt.exists("gcp", full):
+        raise _E(412, "FAILED_PRECONDITION", "This cluster has no real Kubernetes API server (needs the k3s backend: VYOMI_K8S_BACKEND=k3s on the offline appliance).")
+    if c.get("status") != RUNNING or not rt.is_ready("gcp", full):
+        raise _E(400, "FAILED_PRECONDITION", "Cluster %s is %s; its API server is not ready." % (cid, c.get("status")))
+    return {"kubeconfig": rt.kubeconfig("gcp", full), "endpoint": "https://127.0.0.1:" + rt.host_port("gcp", full),
+            "masterAuth": dict(c.get("masterAuth") or {})}
 
 
 def update_cluster(store, project, location, cid, payload):
@@ -486,11 +529,19 @@ def update_cluster(store, project, location, cid, payload):
 def delete_cluster(store, project, location, cid):
     _get(store, project, location, cid)
     del store.clusters[cluster_name(project, location, cid)]
+    rt = kube_state.CLUSTER_RUNTIME
+    if rt is not None:
+        try:
+            rt.delete_cluster("gcp", cluster_name(project, location, cid))
+        except Exception:
+            pass
     return _operation(store, project, location, "DELETE_CLUSTER", "clusters/" + cid)
 
 
 def cluster_setting(store, project, location, cid, verb, payload):
     c = _get(store, project, location, cid)
+    if verb == "getCredentials":
+        return get_credentials(store, project, location, cid)
     if verb == "setResourceLabels":
         labels = payload.get("resourceLabels")
         _check_labels(labels if labels is not None else {})
