@@ -2,8 +2,10 @@
 
 The full rule is `docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md` (owner-approved 2026-11-09). Read it. The short version:
 
-1. **`v4-on-main` is the trunk and the source of truth for v4.** Every new branch starts from a fresh `origin/v4-on-main`:
-   `scripts/v4-session-start.sh <topic>` (portal: `--portal`). Never branch from `release/v4.0.0-dev` (superseded).
+0. **STEP ZERO, before anything else: run `scripts/v4-session-start.sh <topic>`** (portal: `--portal`). It creates the worktree and branch off a
+   fresh trunk, adds your claim row and the branch document. Never create a topic branch or worktree by hand (`git worktree add`, `git checkout -b`).
+1. **`v4-on-main` is the trunk and the source of truth for v4.** Every new branch starts from a fresh `origin/v4-on-main`
+   (portal: `origin/v4-nano-portal`). Never branch from `release/v4.0.0-dev` (superseded).
 2. **One worktree per session and topic.** Never edit another session's worktree or branch. Add your row to
    `docs/architecture/v4.0/SESSION-CLAIMS.md` before editing shared paths, and read it before touching someone else's.
 3. **Push your topic branch at once and after every batch** (`git push -u origin v4/<topic>`). Nothing is ever lost, no approval needed.

@@ -74,9 +74,11 @@ saturated by parallel sessions and live k3s tests then time out.
 
 ## 3. Rules
 
-1. **Branch from the trunk.** `git fetch`; `git worktree add ../appliance-<topic> -b v4/<topic> origin/v4-on-main` (portal:
-   `../portal-<topic>`, `-b portal/<topic>`, `origin/v4-nano-portal`). Before building a gap, grep `origin/v4-on-main` for it: other
-   sessions may have landed it already.
+1. **Step zero: start every topic with `scripts/v4-session-start.sh <topic>`** (portal: `--portal`). It fetches, creates the worktree and
+   branch off a fresh `origin/v4-on-main` (portal: `origin/v4-nano-portal`), appends your row to `SESSION-CLAIMS.md` and creates the branch
+   document (rule 11). Do not create topic branches or worktrees by hand (`git worktree add`, `git checkout -b`): that skips the claim row and
+   the branch document. Before building a gap, grep `origin/v4-on-main` for it: other sessions may have landed it already.
+   (Integrator-only work such as fast-forwarding the trunk or applying a doc change is exempt, but any real topic work is not.)
 2. **Shared files change only on the trunk.** `core/*.py`, `consoles/src/**`, `core/capabilities/**`, the Nano core lists and the
    `wasm/` bundle are never hand-edited on `v4-nano-portal`. If a Nano or headless need changes shared code, land it on
    `v4-on-main` first.
