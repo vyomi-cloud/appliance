@@ -345,7 +345,7 @@ def _create_cluster(st, region, p, ctx):
                 _rec["status"] = "FAILED"
                 _rec["health"] = {"issues": [{"code": "Other", "message": "The k3s control plane failed to become ready.", "resourceIds": []}]}
     try:
-        rt.create_cluster("aws", arn, version, 1, (), on_ready=ready)
+        rt.create_cluster("aws", arn, version, 0, (), on_ready=ready, pools=[])
     except Exception as e:
         del st["clusters"][_ck(region, name)]
         raise EksError("ServerException", "Could not start the Kubernetes control plane: %s" % str(e)[:300])

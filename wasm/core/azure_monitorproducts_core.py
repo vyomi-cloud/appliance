@@ -1,3 +1,5 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """Azure Monitor companion products - control plane only (``Microsoft.Monitor``, ``Microsoft.Dashboard``). Substrate-free (no fastapi / sockets / subprocess), so the same file runs offline and in Nano.
 
     Microsoft.Monitor/accounts           Azure Monitor workspace behind Managed Prometheus (api 2023-04-03)
