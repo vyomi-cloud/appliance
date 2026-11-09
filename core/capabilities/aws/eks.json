@@ -1,0 +1,207 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Amazon EKS. See aws/s3.json for the contract. EKS is backed by a REAL k3s control plane (core/k3s_runtime.py) on the offline appliance / booster only.",
+ "eks.cluster.lifecycle": {
+  "title": "Clusters: CreateCluster, DescribeCluster, ListClusters, DeleteCluster (CREATING -> ACTIVE against a real k3s API server)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Each cluster is a real single-server k3s control plane in Docker; status is ACTIVE when its /readyz answers, and endpoint + certificateAuthority.data are that server's own. Nano (in-browser) has no Kubernetes control plane: a real k3s API server runs only on the offline appliance / booster (VYOMI_K8S_BACKEND=k3s with Docker). CreateCluster answers a native ServiceUnavailableException that says so.",
+   "k3s runs ONE pinned Kubernetes release whatever `version` was requested; the requested version is what the EKS API reports (kubectl version shows the real one).",
+   "The k3s server node also appears in `kubectl get nodes` and schedules workloads (a real EKS control plane is invisible); serviceIpv4Cidr is the k3s default 10.43.0.0/16 unless you request another one, which is stored but not applied.",
+   "The cluster endpoint is a published localhost port (https://127.0.0.1:<port>), not an <id>.gr7.<region>.eks.amazonaws.com host; the OIDC issuer is a Vyomi URL whose discovery document is not served."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py",
+   "tests/conformance/test_aws_eks_live.py"
+  ]
+ },
+ "eks.cluster.validation": {
+  "title": "Request validation (role ARN, two-AZ subnets checked against the simulator VPC, name/version rules, duplicate names, delete guards)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The role's trust policy and permissions are not evaluated; subnets/security groups are checked against the simulator's EC2 model when it is linked."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.cluster.updates": {
+  "title": "UpdateClusterVersion, UpdateClusterConfig, DescribeUpdate, ListUpdates",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Updates are tracked records that complete after a short delay; the version step rules (one minor at a time) and no-op rejections match EKS, but the running k3s is not upgraded or restarted and logging/endpoint-access settings are stored, not enforced."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.cluster.tags": {
+  "title": "Tags on clusters, node groups, Fargate profiles, add-ons, access entries (TagResource, UntagResource, ListTagsForResource)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.nodegroups": {
+  "title": "Managed node groups: create, describe, list, update-config (scale, labels, taints), update-version, delete -> real k3s agent nodes",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Each node is a real privileged k3s agent container labelled eks.amazonaws.com/nodegroup, capacityType and node.kubernetes.io/instance-type, with your labels and taints; scaling really adds/removes containers. No EC2 instances or Auto Scaling groups are created, instanceTypes/amiType/diskSize are recorded (and the first instance type is a label) but do not size anything, and a cluster is capped at 3 worker nodes (VYOMI_EKS_MAX_NODES) because every node is a ~400 MB container.",
+   "update-version changes the recorded version/releaseVersion only. A node group must be deleted before its cluster."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py",
+   "tests/conformance/test_aws_eks_live.py"
+  ]
+ },
+ "eks.fargate": {
+  "title": "Fargate profiles (create, describe, list, delete)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Profiles are validated and stored (CREATING -> ACTIVE) but Vyomi has no Fargate data plane: pods matching a selector are not scheduled differently."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.addons.k3s_provided": {
+  "title": "Add-ons k3s provides (coredns, kube-proxy) reported installed",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "coredns is the CoreDNS deployment k3s ships and kube-proxy is embedded in the k3s server (no DaemonSet); their addonVersion is the EKS catalogue version for the cluster's Kubernetes minor, not the image k3s actually runs."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.addons.managed": {
+  "title": "Managed add-ons (vpc-cni, aws-ebs-csi-driver, aws-efs-csi-driver, snapshot-controller, eks-pod-identity-agent, metrics-server, cloudwatch-observability, adot): create, describe, update, delete, versions, configuration schema",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Create/update/delete follow the EKS lifecycle and version-compatibility rules, but nothing is deployed into the cluster: k3s uses flannel and local-path storage instead of the VPC CNI and EBS CSI."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.access_entries": {
+  "title": "Access entries and access policies (create, update, delete, associate / disassociate policy, list)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Entries (including the cluster-creator admin entry) and policy associations are stored with EKS's validation. core/aws_eks_auth.py maps a verified `aws eks get-token` identity to a Kubernetes user and groups from them, but kubectl against the k3s endpoint is only gated by them once the platform layer wires the token webhook into the k3s API server (docs/architecture/v4.0/EKS-AUTH.md); until then the k3s admin client certificate is the only credential."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.auth.get_token": {
+  "title": "aws eks get-token / update-kubeconfig token verification (presigned STS GetCallerIdentity, x-k8s-aws-id bound to the cluster)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Tokens minted by the real AWS CLI are verified (signature, 60 s expiry cap, 15 minute age, cluster binding) against the simulator's IAM access keys and mapped through access entries, as an authenticator webhook would; assumed-role (temporary) credentials need an STS-session-aware resolver, and the aws-auth ConfigMap (CONFIG_MAP mode) is not read."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.oidc_providers": {
+  "title": "OIDC identity provider configs (associate, describe, list, disassociate)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored with EKS's rules (one per cluster, https issuer); the issuer is not wired into the k3s API server's OIDC flags."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.logging": {
+  "title": "Control plane logging settings (types enabled/disabled)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and reported; the k3s server does not ship these log types to CloudWatch Logs."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.backup": {
+  "title": "AWS Backup for EKS: back up a cluster's Kubernetes objects to a vault, list recovery points, restore into a cluster",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Through the AWS Backup API (StartBackupJob / StartRestoreJob): captures user namespaces and their namespaced objects from the real API server as a JSON artifact in the simulator S3 and re-applies them with server-side apply. Persistent-volume data, PVs, CRDs/custom resources, Events and system namespaces are not captured; plans are not run on their cron schedule."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.kubectl": {
+  "title": "Vyomi kubectl terminal (POST /clusters/{name}/vyomi/kubectl, console only)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "EKS has no API for running kubectl, so this is a Vyomi-exclusive action that execs kubectl inside the cluster's k3s server container; it is not part of the AWS API."
+  ],
+  "tests": [
+   "tests/conformance/test_aws_eks_core.py"
+  ]
+ },
+ "eks.irsa_pod_identity": {
+  "title": "IAM roles for service accounts (OIDC discovery document) and EKS Pod Identity associations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "tests": []
+ },
+ "eks.auto_mode": {
+  "title": "EKS Auto Mode (computeConfig, storageConfig, managed Karpenter) and Hybrid / Outposts clusters",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "tests": []
+ }
+}

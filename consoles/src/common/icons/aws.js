@@ -25,6 +25,8 @@ export const AWS_ICONS = {
   s3: ["storage", '<ellipse cx="12" cy="7.5" rx="6.5" ry="2"/><path d="M5.5 7.5l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h6.8a1.5 1.5 0 0 0 1.5-1.3l1.6-10.2"/>'],
   // key/value table: grid with a key column
   dynamodb: ["database", '<rect x="5" y="5.5" width="14" height="13" rx="1.5"/><path d="M5 9.8h14M5 14.2h14M10 9.8v8.7"/>'],
+  // Kubernetes cluster: a hexagon (control plane) with three worker nodes
+  eks: ["containers", '<path d="M12 4.4l5.9 3.4v6.8L12 18l-5.9-3.4V7.8z"/><circle cx="12" cy="11.2" r="1.7"/><path d="M12 12.9V18M10.5 10.3 6.1 7.8M13.5 10.3l4.4-2.5"/>'],
   // processor chip with pins
   ec2: ["compute", '<rect x="7.5" y="7.5" width="9" height="9" rx="1"/><rect x="10.3" y="10.3" width="3.4" height="3.4" fill="#fff" stroke="none"/><path d="M10 4.6v2.9M14 4.6v2.9M10 16.5v2.9M14 16.5v2.9M4.6 10h2.9M4.6 14h2.9M16.5 10h2.9M16.5 14h2.9"/>'],
   // lambda-like stroke: a function letter

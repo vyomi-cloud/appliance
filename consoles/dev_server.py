@@ -32,6 +32,9 @@ ARM = AzureArm()
 # Shared with the router (stores= seam) so the Blob core can read CORS/lifecycle/static-website
 # config back out of ARM's `blobServices/default` / `managementPolicies/default` records.
 ROUTER = AwsWireRouter(stores={"az_arm": ARM})
+# VYOMI_K8S_BACKEND=k3s (needs Docker): install the real-Kubernetes runtime so AKS/GKE/EKS clusters created through this server are real k3s clusters.
+from core import k3s_runtime  # noqa: E402
+k3s_runtime.install_if_enabled()
 
 
 class Handler(BaseHTTPRequestHandler):

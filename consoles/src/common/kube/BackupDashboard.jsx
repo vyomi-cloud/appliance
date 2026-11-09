@@ -62,7 +62,7 @@ export default function BackupDashboard({ adapter }) {
         <button className="vk-btn primary" data-testid="deploy-mock" onClick={() => run(adapter.deployCommand || APPLY_MOCK)}>Deploy mock application</button>
         <button className="vk-btn danger" data-testid="inject-disaster" onClick={() => run(adapter.disasterCommand || DISASTER)}>Inject disaster (delete namespace)</button>
         <button className="vk-btn" onClick={refresh}>Refresh</button>
-        <span className="vk-muted">Pods are Pending: Vyomi stores Kubernetes objects but runs no kubelet or containers.</span>
+        <span className="vk-muted">{adapter.podsNote ?? "Pods are Pending: Vyomi stores Kubernetes objects but runs no kubelet or containers."}</span>
       </div>
       {error && <div className="vk-card" style={{ borderColor: "#a4262c" }}>{error}</div>}
       <div className="vk-split">
