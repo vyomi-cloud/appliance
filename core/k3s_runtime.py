@@ -245,10 +245,10 @@ class K3sRuntime:
     def create_cluster(self, cloud, cluster_id, version=None, node_count=1, tls_sans=(), on_ready=None, wait=False, ready_timeout=300,
                        pools=None, oidc=None):
         """Start (idempotently) a k3s control plane + one agent per node-pool node. ``pools`` = [{name,count,vmSize,labels,taints}]; omitted ->
-        one default pool of ``node_count`` nodes. Returns immediately with the cluster info unless ``wait``;
+        one default pool of ``node_count`` nodes; ``[]`` -> control plane only (EKS: nodes exist only once a node group is created). Returns immediately with the cluster info unless ``wait``;
         ``on_ready(ok: bool, info: dict)`` is called from a background thread once the API + every node is Ready."""
         name = server_name(cloud, cluster_id)
-        plist = [normalize_pool(cloud, p) for p in (pools or [{"name": None, "count": max(1, int(node_count or 1))}])]
+        plist = [normalize_pool(cloud, p) for p in (pools if pools is not None else [{"name": None, "count": max(1, int(node_count or 1))}])]
         tag, res = self._tag_for(cloud, version)
         total = sum(p["count"] for p in plist)
         info = {"name": name, "cloud": cloud, "cluster": cluster_id, "image": "%s:%s" % (K3S_IMAGE_REPO, tag), "k3sVersion": tag,
