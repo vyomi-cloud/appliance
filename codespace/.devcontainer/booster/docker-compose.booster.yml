@@ -47,6 +47,9 @@ services:
       VYOMI_BOOSTER_SESSION_TOKEN: ${VYOMI_BOOSTER_SESSION_TOKEN:-}
       VYOMI_BOOSTER_LOCAL_URL: http://simulator:9000
       WS_PKG: /app/relay/node_modules/ws
+      # Reserved Mesh target `host`/`codespace` = this Codespace's sshd (the devcontainer sshd feature listens on 2222).
+      VYOMI_HOST_SSH_ADDR: ${VYOMI_HOST_SSH_ADDR:-host.docker.internal:2222}
+    extra_hosts: ["host.docker.internal:host-gateway"]
   # ---- AI pack (profile "ai"; boot-booster.sh starts it only after the simulator ADMITS the models) -------------------------
   # Two llama.cpp servers (one model per process) behind a tiny OpenAI-compatible gateway. Models are pulled on first start
   # by llama-server's -hf into the ai-models volume (cached across stop/resume of the same Codespace). No published ports.
