@@ -67,7 +67,7 @@ export function GpuPanel({ a, set, capId }) {
       <FormControlLabel control={<Checkbox size="small" checked={a.gpu} onChange={(e) => set({ gpu: e.target.checked })} />} label="Attach 1 NVIDIA L4 GPU per instance" />
       {a.gpu && (
         <Typography variant="body2" color="text.secondary" data-vyomi-gpu-note>
-          GPU simulated: no passthrough. Vyomi stores the GPU configuration (nodeSelector accelerator nvidia-l4, 4 CPU, 16Gi minimum) and schedules the instance CPU-only; no NVIDIA device or CUDA runtime is available.
+          Vyomi stores the GPU configuration (nodeSelector accelerator nvidia-l4, 4 CPU, 16Gi minimum) and runs the revision CPU-only. The revision's vyomi.dev/gpu-status annotation says whether this host has a GPU ("No GPU on this host" when it does not); CUDA is never emulated.
         </Typography>
       )}
     </Group>

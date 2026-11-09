@@ -544,8 +544,10 @@ def _check_custom_audiences(v):
     return list(v)
 
 
-GPU_NOTE = "Dev Simplified - GPU simulated: no passthrough. The GPU configuration is validated and stored, but the revision is scheduled CPU-only; no NVIDIA device or CUDA runtime is available to the container."
-_GPU_ANN = "vyomi.dev/gpu-simulated"
+GPU_NO_HOST = "No GPU on this host: the GPU configuration is validated and stored, and the revision runs CPU-only. No CUDA is available."
+GPU_HOST = "Host NVIDIA container runtime detected, but this build does not pass the GPU through to Cloud Run revisions: the configuration is stored and the revision runs CPU-only."
+_GPU_ANN = "vyomi.dev/gpu-status"
+_GPU_PROBE = {}
 _GPU_TYPES = ("nvidia-l4",)
 _BYTES = {"": 1, "K": 10**3, "M": 10**6, "G": 10**9, "T": 10**12, "Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4}
 
@@ -560,9 +562,30 @@ def _cpu_cores(v):
     return float(v[:-1]) / 1000 if v.endswith("m") else float(v)
 
 
+def host_gpu():
+    """True when this host's Docker engine has an NVIDIA runtime (VYOMI_HOST_GPU=1/0 overrides). Cached; never raises.
+    Under Pyodide/Nano there is no subprocess, so a browser host never has one."""
+    if "v" in _GPU_PROBE:
+        return _GPU_PROBE["v"]
+    import os
+    env = os.environ.get("VYOMI_HOST_GPU")
+    if env in ("0", "1"):
+        _GPU_PROBE["v"] = env == "1"
+        return _GPU_PROBE["v"]
+    ok = False
+    try:
+        import subprocess
+        out = subprocess.run(["docker", "info", "--format", "{{json .Runtimes}}"], capture_output=True, text=True, timeout=5).stdout
+        ok = "nvidia" in out.lower()
+    except Exception:   # noqa: BLE001 - no docker / no subprocess: no GPU
+        ok = False
+    _GPU_PROBE["v"] = ok
+    return ok
+
+
 def _check_gpu(spec):
     """Accept + validate the GPU config (real Cloud Run v2 shape: template.nodeSelector.accelerator and a
-    nvidia.com/gpu container limit), then label the revision as simulated. Never runs CUDA."""
+    nvidia.com/gpu container limit), then record an explicit host GPU status on the revision. Never fakes CUDA."""
     ns = spec.get("nodeSelector")
     wants = [c for c in spec.get("containers") or [] if "nvidia.com/gpu" in ((c.get("resources") or {}).get("limits") or {})]
     if ns is None and not wants:
@@ -583,7 +606,7 @@ def _check_gpu(spec):
         raise _E(400, "INVALID_ARGUMENT", "GPU instances require at least 16Gi of memory.")
     if spec.get("gpuZonalRedundancyDisabled") is not None and not isinstance(spec["gpuZonalRedundancyDisabled"], bool):
         raise _E(400, "INVALID_ARGUMENT", "gpuZonalRedundancyDisabled must be a boolean.")
-    spec["annotations"] = {**(spec.get("annotations") or {}), _GPU_ANN: GPU_NOTE}
+    spec["annotations"] = {**(spec.get("annotations") or {}), _GPU_ANN: GPU_HOST if host_gpu() else GPU_NO_HOST}
 
 
 def _validate_template_ext(spec, is_job, store, project, location):
