@@ -31,11 +31,11 @@ def call(method, path, body=None, query=None):
 s, d = call("GET", f"{B}/events")
 check("empty incident history by default", s == 200 and d.get("events") == [], d)
 s, d = call("GET", f"{B}/vyomiServiceStatus")
-check("every simulated service AVAILABLE by default", s == 200 and d["services"] and all(x["status"] == "AVAILABLE" for x in d["services"]) and d["source"] == "Simulated by Vyomi", d)
+check("every simulated service AVAILABLE by default", s == 200 and d["services"] and all(x["status"] == "AVAILABLE" for x in d["services"]) and d["source"] == "Dev Simplified", d)
 
 s, d = call("POST", f"{B}/events", {"title": "Compute degraded", "products": ["Compute Engine"], "severity": "OUTAGE", "locations": ["us-central1"]})
 eid = d.get("name", "").rsplit("/", 1)[-1]
-check("inject incident", s == 200 and d["state"] == "ACTIVE" and d["vyomiSimulated"] is True and d["vyomiSource"] == "Simulated by Vyomi", d)
+check("inject incident", s == 200 and d["state"] == "ACTIVE" and d["vyomiSimulated"] is True and d["vyomiSource"] == "Dev Simplified", d)
 s, d = call("GET", f"{B}/events", query={"filter": "state=ACTIVE"})
 check("list ACTIVE", s == 200 and len(d["events"]) == 1, d)
 s, d = call("GET", f"{B}/vyomiServiceStatus")
