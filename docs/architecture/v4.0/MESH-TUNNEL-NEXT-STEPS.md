@@ -3,6 +3,8 @@
 Author: the mesh/tunnel session, which is now concluded. Design lives in `VYOMI-TUNNEL-ARCHITECTURE.md`; this file lists only what is still to do.
 Nothing here is verified live unless it says so. Nothing goes to `main`, tags or deploys without the owner's go.
 
+Naming: the product is **Vyomi Mesh** everywhere user-facing. Some code identifiers still say `booster` on the trunk (files `wasm/relay/booster-*.mjs`, `booster-link.js`, env `BOOSTER_RELAY_URL`, the `/booster` relay path). They are kept as-is so nothing breaks; a rename of those is a separate, tested change. Use "Mesh" in any new text, UI or docs.
+
 ## Landed on the trunk
 Mesh SSH over the relay (`wasm/relay/booster-hub.mjs` `/connect`, `booster-dial.mjs` TCP forward, `mesh-cli.mjs` connect/login/config, `test-mesh-ssh.mjs`),
 Worker `/egress` + browser-VM use of it, tunnel architecture doc, P1 Nano back-port (`vyomi-appbar.js`, `booster-link.js`).
