@@ -18,7 +18,7 @@ import * as runApi from "../run/api.js";
 import * as cbApi from "../cloudbuild/api.js";
 import { getProject } from "../../project.js";
 import ImagePicker from "../run/ImagePicker.jsx";
-import { applyAdvanced, AutoscalingFactors, CloudSqlPanel, CustomUrlsPanel, NetworkingPanel, EphemeralDisk, HealthChecks, SecurityPanel, useAdvanced, VolumesPanel } from "../run/AdvancedSettings.jsx";
+import { applyAdvanced, AutoscalingFactors, CloudSqlPanel, CustomUrlsPanel, NetworkingPanel, EphemeralDisk, GpuPanel, HealthChecks, SecurityPanel, useAdvanced, VolumesPanel } from "../run/AdvancedSettings.jsx";
 
 const SourceOpt = ({ title, children }) => (
   <Box>
@@ -263,7 +263,7 @@ export default function CreateService({ query }) {
                 <TextField label="Container command" value={command} onChange={(e) => setCommand(e.target.value)} helperText="Leave blank to use the entry point command defined in the container image." />
                 <TextField label="Container arguments" value={args} onChange={(e) => setArgs(e.target.value)} helperText="Comma-separated. Arguments passed to the entry point command." />
                 <EphemeralDisk a={adv} set={setAdv} />
-                <CapabilityContainer id="gcp.run.gpu" title="GPU" />
+                <GpuPanel a={adv} set={setAdv} capId="gcp.run.gpu" />
                 <HealthChecks a={adv} set={setAdv} />
                 <Box>
                   <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Variables & Secrets</Typography>

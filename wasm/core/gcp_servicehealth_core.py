@@ -7,7 +7,7 @@ Substrate-independent (stdlib only; Pyodide-loadable). State on the Compute (VM)
 There is no real Google status source behind Vyomi, so nothing here reports on Google's infrastructure. The feed
 describes the *simulated project*: per-service status for the services Vyomi simulates, an incident history that is
 EMPTY by default, and a way to inject / resolve test incidents so applications can be built against the shape of
-the real API. Every event carries `vyomiSimulated: true` and `vyomiSource: "Simulated by Vyomi"`.
+the real API. Every event carries `vyomiSimulated: true` and `vyomiSource: "Dev Simplified"`.
 
 Wire (servicehealth.googleapis.com v1, project scope, location `global`):
   GET    /v1/projects/{p}/locations/global/events[?filter=state=ACTIVE|CLOSED&pageSize&pageToken]
@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime, timezone
 
 _LOCK = threading.RLock()
-SOURCE = "Simulated by Vyomi"
+SOURCE = "Dev Simplified"
 PATH_RE = re.compile(r"^/v1/projects/[^/]+/locations/global/(events|vyomiServiceStatus)([/:?]|$)")
 
 SERVICES = [

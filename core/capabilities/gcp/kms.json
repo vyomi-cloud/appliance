@@ -104,8 +104,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
+  "outOfScope": true,
   "limitations": [
-   "HSM keys are generated and held inside FIPS 140-2 Level 3 hardware modules and External keys live in a third-party key manager (EKM); Vyomi's key material always lives in its own software store, so offering these levels would misrepresent where the key is held."
+   "FIPS 140-2 hardware security modules and external key managers cannot be reproduced locally; software-protection keys remain the supported level."
   ]
  },
  "gcp.kms.import": {

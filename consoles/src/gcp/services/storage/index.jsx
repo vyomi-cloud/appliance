@@ -1,3 +1,4 @@
+import ObjectEnrichments from "./Enrichments.jsx";
 import DashboardIcon from "@mui/icons-material/esm/Dashboard.js";
 import InventoryIcon from "@mui/icons-material/esm/Inventory.js";
 import BarChartIcon from "@mui/icons-material/esm/BarChart.js";
@@ -13,7 +14,7 @@ import BucketDetail from "./BucketDetail.jsx";
 import ObjectDetail from "./ObjectDetail.jsx";
 import BatchOperations from "./BatchOperations.jsx";
 import InsightsDatasets from "./InsightsDatasets.jsx";
-import { Overview, Monitoring, Settings, Advisor, StorageIntelligenceConfiguration, ObjectEnrichments } from "./Dashboards.jsx";
+import { Overview, Monitoring, Settings, Advisor, StorageIntelligenceConfiguration } from "./Dashboards.jsx";
 
 export default {
   nav: [

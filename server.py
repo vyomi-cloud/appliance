@@ -13893,6 +13893,21 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     count = max(min_count, max_count)
     image_id = str(params.get("ImageId", "ami-amzn2023"))
     instance_type = str(params.get("InstanceType", "t3.micro"))
+    # Capacity Reservation / Capacity Block targeting (core/ec2_ultraservers_core.admit_launch): the launch really consumes the
+    # reservation, counted against the Docker-backed instances already launched into it; refused with AWS's native errors.
+    _cr_target = str(params.get("CapacityReservationSpecification.CapacityReservationTarget.CapacityReservationId") or "")
+    if _cr_target:
+        from core import ec2_ultraservers_core as _cb
+        _core_model = _Ec2CoreSpaceStore()._vpc_model
+        if _core_model is None:
+            return _ec2_error_response("InvalidCapacityReservationId.NotFound", f"The capacity reservation ID '{_cr_target}' does not exist", 400)
+        _used = sum(1 for _i in ec2_state["instances"].values()
+                    if _i.get("capacity_reservation_id") == _cr_target and _i.get("state") in ("pending", "running"))
+        try:
+            _cb.admit_launch(_core_model, _cr_target, instance_type,
+                             str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "")) or ""), count, _used)
+        except _cb._Err as _cexc:
+            return _ec2_error_response(_cexc.code, _cexc.message, _cexc.status)
     try:   # booster: the real EC2 capacity error, synchronously, before any record exists
         _booster_capacity_precheck("aws", instance_type, count, str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "-"))))
     except Exception as _bexc:
@@ -13931,6 +13946,11 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         # The start is async (non-blocking), so the SDK response isn't delayed.
         instance = api_ec2_create_instance(req, auto_start=True)
         instance["monitoring"] = str(params.get("Monitoring.Enabled", "")).lower() == "true"
+        if _cr_target:
+            instance["capacity_reservation_id"] = _cr_target
+            _live = ec2_state["instances"].get(instance.get("instance_id"))
+            if isinstance(_live, dict):
+                _live["capacity_reservation_id"] = _cr_target
         launched.append(instance)
 
     def build(root: ET.Element) -> None:

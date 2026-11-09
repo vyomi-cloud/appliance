@@ -55,7 +55,7 @@ CORES = [
     "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
     "gcp_trace_core.py",                            # GCP: Cloud Trace spans, Trace scopes, Log scopes
     "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py",                           # GCP: App Hub applications (Application monitoring)
-    "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py",                   # GCP: simulated zonal capacity pools + Capacity advisor; CUDs, Migrate to VMs, Cloud TPU
+    "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py",                   # GCP: simulated zonal capacity pools + Capacity advisor; CUDs, Migrate to VMs, Cloud TPU
     "gcp_osconfig_core.py",                         # GCP: VM Manager (OS Config patch jobs/deployments, OS policy assignments, VM extension policies)
     "gcp_hybrid_core.py",                           # GCP: BYOIP prefixes + Interconnect / VLAN attachments (control plane)
     "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code
@@ -84,7 +84,7 @@ CORES = [
     "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
-    "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
+    "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)

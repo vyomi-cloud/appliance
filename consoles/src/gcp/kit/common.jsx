@@ -7,13 +7,13 @@
 import { Alert, Box, Chip, Divider, Paper, Stack, Typography } from "@mui/material";
 
 /** A feature the real console has but Vyomi does not back with a real backend. */
-export function NotSimulated({ feature, note, compact }) {
+export function NotSimulated({ feature, note, compact, outOfScope }) {
   return (
     <Box className="vyomi-ns-container" data-vyomi-not-simulated={feature}
       sx={{ p: compact ? 1.5 : 3, textAlign: compact ? "left" : "center", color: "text.secondary" }}>
       <Stack spacing={0.75} alignItems={compact ? "flex-start" : "center"}>
-        <Chip size="small" label="Coming soon" sx={{ fontWeight: 500 }} />
-        <Typography variant="body2" color="inherit">{feature} isn't backed by a Vyomi backend yet.</Typography>
+        <Chip size="small" label={outOfScope ? "Not in scope" : "Coming soon"} sx={{ fontWeight: 500 }} />
+        <Typography variant="body2" color="inherit">{outOfScope ? `${feature} is not in scope for Vyomi.` : `${feature} isn't backed by a Vyomi backend yet.`}</Typography>
         {note && <Typography variant="caption" color="inherit">{note}</Typography>}
       </Stack>
     </Box>
@@ -21,10 +21,10 @@ export function NotSimulated({ feature, note, compact }) {
 }
 
 /** A whole section (title + body) that is a declared gap. */
-export function NotSimulatedContainer({ title, feature, note, description }) {
+export function NotSimulatedContainer({ title, feature, note, description, outOfScope }) {
   return (
     <Section title={title} description={description} className="vyomi-container" dataNs={feature || title}>
-      <NotSimulated feature={feature || title} note={note} compact />
+      <NotSimulated feature={feature || title} note={note} compact outOfScope={outOfScope} />
     </Section>
   );
 }

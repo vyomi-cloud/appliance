@@ -29,10 +29,11 @@ import Settings from "./Settings.jsx";
 import { gapById, gapRoutes } from "./GapPages.jsx";
 import { EXT_PAGE_IDS as EXT_BASE } from "./Ext.jsx";
 import { Patch, OsPolicies, VmExtensionPolicies } from "./VmManager.jsx";
+import { Rollouts, PreviewFeatures } from "./ComputeSim.jsx";
 import { CommittedUseDiscounts, CapacityAdvisor, MigrateToVms, Tpus, VmInventory, VmReports } from "./Commit.jsx";
 
 const EXT_PAGE_IDS = { ...EXT_BASE, patch: Patch, "os-policies": OsPolicies, "vm-extension-policies": VmExtensionPolicies,
-  "committed-use-discounts": CommittedUseDiscounts, "capacity-advisor": CapacityAdvisor, "migrate-to-virtual-machines": MigrateToVms, tpus: Tpus, "vm-inventory": VmInventory, "vm-reports": VmReports };
+  "committed-use-discounts": CommittedUseDiscounts, "capacity-advisor": CapacityAdvisor, "migrate-to-virtual-machines": MigrateToVms, tpus: Tpus, "vm-inventory": VmInventory, "vm-reports": VmReports, rollouts: Rollouts, "preview-features": PreviewFeatures };
 
 const link = (id, overrides) => { const g = gapById(id); return g ? { text: g[1], href: `#/compute/${g[2]}`, icon: g[3], ...overrides } : null; };
 

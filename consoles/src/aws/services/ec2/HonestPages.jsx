@@ -13,5 +13,4 @@ const page = (title, body) => () => (
 const honest = (title, feature) => page(title, <NotSimulatedContainer title={title} feature={feature} />);
 const capability = (title, id) => page(title, <CapabilityContainer id={id} title={title} />);
 
-export const UltraServers = capability("UltraServers", "ec2.purchasing.ultraservers");
 

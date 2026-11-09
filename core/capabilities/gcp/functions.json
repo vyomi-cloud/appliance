@@ -213,15 +213,23 @@
   ]
  },
   "gcp.functions.gpu": {
-    "booster": true,
-    "title": "GPU for Cloud Run functions",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "GPU-backed functions run on NVIDIA L4 hardware; Vyomi has no GPU passthrough or scheduler."
-    ]
+   "booster": true,
+   "title": "GPU (config stored; CPU-only unless the host has a GPU)",
+   "level": {
+    "nano": "limited",
+    "offline": "limited"
+   },
+   "limitations": [
+    "Dev Simplified. The GPU configuration (template.nodeSelector.accelerator=nvidia-l4, resources.limits['nvidia.com/gpu']=1, at least 4 CPU and 16Gi, gpuZonalRedundancyDisabled) is validated and stored and returned from the API. The revision carries the annotation vyomi.dev/gpu-status: 'No GPU on this host' (revision runs CPU-only, no CUDA) or, when the host Docker engine has an NVIDIA runtime, a note saying it was detected. This build does not pass a GPU through to Cloud Run revisions, so nothing runs accelerated either way.",
+    "Only nvidia-l4 is accepted; GPU quota, zonal redundancy and GPU pricing are not modelled. Nano (browser) never has a GPU."
+   ],
+   "api": [
+    "services.create (template.nodeSelector.accelerator)",
+    "services.get"
+   ],
+   "tests": [
+    "tests/conformance/test_gcp_run_gpu.py"
+   ]
   },
   "gcp.functions.networking": {
     "title": "Networking (HTTP/2 end-to-end, session affinity, VPC egress, service mesh, custom audiences)",
