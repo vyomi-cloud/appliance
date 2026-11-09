@@ -117,11 +117,8 @@ def run():
     be.apply([{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "x"}}])
     _check("InMemoryKubeBackend export/delete/apply cycle", be.export_resources()["counts"]["namespaces"] == 1 and be.delete_namespace("x") and be.export_resources()["counts"]["namespaces"] == 0)
     _check("health", be.health()["status"] == "Healthy")
-    try:
-        kube.RealK8sBackend().export_resources(); ok = False
-    except NotImplementedError:
-        ok = True
-    _check("RealK8sBackend is an unimplemented seam", ok)
+    real = kube.RealK8sBackend(lambda argv, stdin=None, workdir=None, timeout=120: (1, "", "connection refused"))
+    _check("RealK8sBackend is wired (unreachable API server -> health Unreachable; live behaviour: test_k3s_runtime / test_k3s_live)", real.health()["status"] == "Unreachable")
 
     # cleanup rules
     _check("delete instance", h("DELETE", I)["status"] == 200)

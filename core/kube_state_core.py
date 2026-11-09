@@ -158,12 +158,168 @@ class InMemoryKubeBackend(KubeBackend):
 
 
 class RealK8sBackend(KubeBackend):
-    """SEAM ONLY -- the offline appliance's real API server (k3s container + kubeconfig). Implemented by a later agent: every method
-    must talk to the cluster's API server (nothing may assume state lives in this process), `export_resources` must return the same
-    document shape as InMemoryKubeBackend (so recovery points are portable between substrates), and `apply` must be server-side apply."""
+    """A REAL Kubernetes API server (the cluster's k3s container, see core/k3s_runtime.py). Every method talks to the API server through
+    ``runner(argv, stdin=None, workdir=None, timeout=120) -> (returncode, stdout, stderr)`` -- a ``kubectl <argv>`` executed inside the
+    cluster's server container -- so nothing assumes state lives in this process. ``export_resources`` returns the same document shape as
+    InMemoryKubeBackend (recovery points are portable between substrates); ``apply`` is server-side apply.
 
-    def __init__(self, kubeconfig: str | None = None):
-        self.kubeconfig = kubeconfig
+    Honest limits of the export (same as the in-memory snapshot): no PV data / PVs / Events / CRDs / custom resources / system namespaces;
+    objects owned by a controller (ReplicaSets, controller Pods, CronJob Jobs), the per-namespace ``kube-root-ca.crt`` ConfigMap, the
+    ``default`` ServiceAccount, service-account-token Secrets and the ``kubernetes`` Service are skipped because the cluster regenerates them."""
+
+    EXPORT_KINDS = ("Service", "ConfigMap", "Secret", "ServiceAccount", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob",
+                    "Role", "RoleBinding", "NetworkPolicy", "Ingress", "PersistentVolumeClaim", "Pod")
+    _MUTATING = ("apply", "create", "delete", "scale", "patch", "label", "annotate", "set", "edit", "replace", "rollout", "expose", "run",
+                 "taint", "cordon", "uncordon", "drain", "autoscale")
+
+    def __init__(self, runner, ns_timeout=180, file_writer=None):
+        self.runner = runner
+        self.file_writer = file_writer          # (files: dict, workdir: str) -> None; materialises runCommand context files
+        self.ns_timeout = ns_timeout
+
+    # -- helpers --
+    def _get_json(self, resource, namespace=None):
+        argv = ["get", resource, "-o", "json"] + (["-n", namespace] if namespace else ["-A"])
+        rc, out, err = self.runner(argv)
+        if rc != 0:
+            raise RuntimeError("kubectl get %s failed: %s" % (resource, (err or out).strip()[:300]))
+        return json.loads(out or "{}").get("items") or []
+
+    @staticmethod
+    def _resource(kind):
+        g, _v, plural, _s, _n = engine.KINDS[kind] if kind in engine.KINDS else ("", [], kind.lower() + "s", [], True)
+        return plural + ("." + g if g else "")
+
+    def list_namespaces(self):
+        return [i["metadata"]["name"] for i in self._get_json("namespaces")]
+
+    def list(self, kind, namespace=None):
+        return self._get_json(self._resource(kind), namespace)
+
+    def apply(self, manifests):
+        docs = copy.deepcopy([m for m in manifests if m])
+        docs.sort(key=lambda d: 0 if d.get("kind") == "Namespace" else 1)          # namespaces first
+        out = []
+        for d in docs:       # one apply per object: a Namespace must exist (and be Active) before its objects are applied
+            rc, so, se = self.runner(["apply", "--server-side", "--force-conflicts", "-f", "-"], json.dumps(d), None, 120)
+            if rc != 0:
+                raise engine.KubectlError((se or so).strip())
+            out.extend(l.strip() for l in so.splitlines() if l.strip())
+        return out
+
+    def delete(self, kind, name, namespace=None):
+        argv = ["delete", self._resource(kind), name, "--ignore-not-found=false"] + (["-n", namespace] if namespace else [])
+        return self.runner(argv)[0] == 0
+
+    def delete_namespace(self, name):
+        return self.runner(["delete", "namespace", name, "--wait=true", "--timeout=%ds" % self.ns_timeout], None, None, self.ns_timeout + 30)[0] == 0
+
+    def export_resources(self, namespaces=None):
+        ns_items = self._get_json("namespaces")
+        user_ns = [n for n in ns_items if n["metadata"]["name"] not in SYSTEM_NAMESPACES and n["metadata"]["name"] != "default"]
+        keep = {n["metadata"]["name"] for n in user_ns} | {"default"}
+        snap_ns = [{"name": n["metadata"]["name"], "labels": {k: v for k, v in (n["metadata"].get("labels") or {}).items()
+                                                               if not k.startswith("kubernetes.io/")}} for n in user_ns]
+        objects = []
+        for kind in self.EXPORT_KINDS:
+            for o in self._get_json(self._resource(kind)):
+                md = o.get("metadata") or {}
+                if md.get("namespace") not in keep or md.get("ownerReferences"):
+                    continue
+                if (kind == "ConfigMap" and md.get("name") == "kube-root-ca.crt") or (kind == "ServiceAccount" and md.get("name") == "default") \
+                        or (kind == "Secret" and o.get("type") == "kubernetes.io/service-account-token") \
+                        or (kind == "Service" and md.get("namespace") == "default" and md.get("name") == "kubernetes"):
+                    continue
+                objects.append(self._clean(o))
+        snap = {"kind": "VyomiKubeSnapshot", "version": 1, "namespaces": snap_ns, "objects": objects}
+        if namespaces is not None:
+            snap["namespaces"] = [n for n in snap_ns if n["name"] in namespaces]
+            snap["objects"] = [o for o in objects if o["metadata"].get("namespace") in namespaces]
+        snap["counts"] = counts(snap)
+        return snap
+
+    @staticmethod
+    def _clean(o):
+        d = copy.deepcopy(o)
+        d.pop("status", None)
+        md = d.get("metadata") or {}
+        for f in _STRIP_META + ("selfLink",):
+            md.pop(f, None)
+        for a in ("kubectl.kubernetes.io/last-applied-configuration", "deployment.kubernetes.io/revision"):
+            (md.get("annotations") or {}).pop(a, None)
+        if not md.get("annotations"):
+            md.pop("annotations", None)
+        spec = d.get("spec") or {}
+        kind = d.get("kind")
+        if kind == "PersistentVolumeClaim":
+            spec.pop("volumeName", None)
+            ann = md.get("annotations") or {}
+            for a in [a for a in ann if a.startswith("pv.kubernetes.io/")]:
+                ann.pop(a)
+            if "annotations" in md and not md["annotations"]:
+                md.pop("annotations")
+        if kind == "Service":
+            for f in ("clusterIP", "clusterIPs"):
+                spec.pop(f, None)
+        if kind == "Pod":
+            spec.pop("nodeName", None)
+        return d
+
+    def health(self):
+        rc, out, err = self.runner(["get", "--raw", "/readyz"], None, None, 20)
+        if rc != 0:
+            return {"status": "Unreachable", "backend": "k3s", "error": (err or out).strip()[:200]}
+        try:
+            c = {"namespaces": len(self._get_json("namespaces")), "pods": len(self._get_json("pods"))}
+        except Exception:
+            c = {}
+        return {"status": "Healthy", "backend": "k3s", **c}
+
+    def kubectl(self, command, context_b64=None):
+        """runCommand against the real cluster: kubectl lines only (no shell -- argv is exec'd), `cat <<EOF | kubectl ...` and heredocs
+        feed stdin, context-zip files are materialised in a scratch dir. Returns {exitCode, logs, changed}."""
+        import shlex
+        try:
+            files = engine._unzip(context_b64)
+        except engine.KubectlError as e:
+            return {"exitCode": 1, "logs": str(e) + "\n", "changed": False}
+        workdir = None
+        if files:
+            import uuid
+            workdir = "/tmp/runcmd-" + uuid.uuid4().hex[:12]
+            if self.file_writer is None:
+                return {"exitCode": 1, "logs": "error: this backend cannot stage runCommand context files\n", "changed": False}
+            self.file_writer(files, workdir)
+        logs, code, changed = [], 0, False
+        for line, stdin in engine._split_commands(command or ""):
+            if "|" in line:
+                left, right = [s.strip() for s in line.split("|", 1)]
+                if left.startswith("cat") and not left[3:].strip():
+                    line = right
+                else:
+                    logs.append("sh: pipelines other than `cat <<EOF | kubectl ...` are not supported: %s\n" % line)
+                    code = 1
+                    break
+            try:
+                args = shlex.split(line)
+            except ValueError as e:
+                logs.append("sh: syntax error: %s\n" % e)
+                code = 2
+                break
+            if not args:
+                continue
+            if args[0] != "kubectl":
+                logs.append("sh: %s: command not found (runCommand runs kubectl against this cluster)\n" % args[0])
+                code = 127
+                break
+            rc, so, se = self.runner(args[1:], stdin, workdir, 120)
+            logs.append(so + se)
+            if rc != 0:
+                code = rc
+                break
+            if len(args) > 1 and args[1] in self._MUTATING:
+                changed = True
+        return {"exitCode": code, "logs": "".join(logs), "changed": changed}
 
 
 def backend_for(store: dict, cloud: str, cluster_id: str, rec: dict | None = None, factory=None) -> KubeBackend:
@@ -176,5 +332,6 @@ def backend_for(store: dict, cloud: str, cluster_id: str, rec: dict | None = Non
     return InMemoryKubeBackend(holder(store, cloud, cluster_id, rec))
 
 
-# offline appliance hook: set to a callable (cloud, cluster_id) -> KubeBackend | None
-BACKEND_FACTORY = None
+# offline appliance hooks (installed by core/k3s_runtime.install() when VYOMI_K8S_BACKEND=k3s):
+BACKEND_FACTORY = None      # callable (cloud, cluster_id) -> KubeBackend | None
+CLUSTER_RUNTIME = None      # the k3s lifecycle (create_cluster / delete_cluster / kubeconfig / exists ...); None on Nano + dev defaults

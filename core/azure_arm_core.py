@@ -165,6 +165,11 @@ except ImportError:
     import azure_aks_k8s_core as k8s_engine        # type: ignore
     import kubescape_core as kubescape_engine      # type: ignore
 
+try:                                              # cluster runtime hook (core/k3s_runtime.py on the offline appliance; None elsewhere)
+    from core import kube_state_core as kube_state
+except ImportError:
+    import kube_state_core as kube_state           # type: ignore
+
 try:                                              # VM size catalog (vcpu/ram/family per real Azure size name)
     from core import instance_catalog
 except ImportError:
@@ -1835,6 +1840,8 @@ class AzureArm:
                     if blocked:
                         return blocked
             rec = self.state.pop(key, None)
+            if rec is not None:
+                self._aks_real_delete(rec)
             if rec is not None and sqlbk.handles(rec.get("_type") or ""):
                 sqlbk.on_delete(self.state, rec, self.sql_store, self.blob_store)
             if rec is not None:
@@ -3221,8 +3228,41 @@ class AzureArm:
             # cluster, from the moment it comes up — same seeding convention as the default
             # namespaces above (properties.namespaces, via the catalog defaults).
             k8s_engine.seed_storage_classes(rec)
+            self._aks_real_create(rec)
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
+
+    # ── REAL Kubernetes (k3s) behind an AKS cluster: only when the offline appliance installed kube_state.CLUSTER_RUNTIME
+    # (VYOMI_K8S_BACKEND=k3s). The substrate-free core never imports Docker; it only calls the hook. ──
+    def _aks_real_create(self, rec):
+        rt = kube_state.CLUSTER_RUNTIME
+        if rt is None:
+            return
+        props = rec.setdefault("properties", {})
+        nodes = sum(int(p.get("count") or 1) for p in props.get("agentPoolProfiles") or []) or 1
+        props["provisioningState"] = "Creating"
+
+        def ready(ok, info, _props=props):
+            _props["provisioningState"] = "Succeeded" if ok else "Failed"
+            if ok:
+                _props["currentKubernetesVersion"] = info.get("actualVersion")
+        try:
+            rt.create_cluster("azure", rec["id"], props.get("kubernetesVersion"), nodes, [props.get("fqdn") or ""], on_ready=ready)
+        except Exception as e:
+            props["provisioningState"] = "Failed"
+            props["provisioningError"] = str(e)[:300]
+
+    def _aks_real_delete(self, rec):
+        rt = kube_state.CLUSTER_RUNTIME
+        if rt is not None and (rec.get("_type") or "").lower() == "microsoft.containerservice/managedclusters":
+            try:
+                rt.delete_cluster("azure", rec["id"])
+            except Exception:
+                pass
+
+    def _aks_real(self, rec):
+        rt = kube_state.CLUSTER_RUNTIME
+        return rt if rt is not None and rt.exists("azure", rec["id"]) else None
 
     # ── IPAM pool allocation (Microsoft.Network/networkManagers/{nm}/ipamPools/{pool}) ────
     # A vnet created/updated with properties.addressSpace.ipamPoolPrefixAllocations (the real
@@ -4043,8 +4083,14 @@ class AzureArm:
             # objects are stored, never scheduled — no kubelet or container runtime runs.
             started = _now()
             dataprotection.tick(self.state, self.blob_store)    # complete any due Azure Backup for AKS backup/restore job first
-            res = k8s_engine.run_command(rec, str(command), (payload or {}).get("context"))
-            if res["changed"]:
+            real = self._aks_real(rec)
+            if real is not None:                                 # a REAL k3s cluster: kubectl runs against its API server
+                if not real.is_ready("azure", rec["id"]):
+                    return _err(409, "ClusterNotReady", "The cluster is still provisioning; its Kubernetes API server is not ready yet.")
+                res = kube_state.backend_for({}, "azure", rec["id"], rec, kube_state.BACKEND_FACTORY).kubectl(str(command), (payload or {}).get("context"))
+            else:
+                res = k8s_engine.run_command(rec, str(command), (payload or {}).get("context"))
+            if res["changed"] and real is None:
                 sub = parent_rid.split("/")[2] if parent_rid.count("/") >= 2 else DEFAULT_SUBSCRIPTION
                 if security_engine.plan_on(self.state, sub, "Containers"):
                     kubescape_engine.on_objects_changed(rec, rec.get("id") or parent_rid)
@@ -4056,6 +4102,13 @@ class AzureArm:
             return _ok({"id": rid, "properties": result, **result})
         if action in ("listclusterusercredential", "listclusteradmincredential"):
             user = "clusterUser" if action == "listclusterusercredential" else "clusterAdmin"
+            real = self._aks_real(rec)
+            if real is not None:                                 # the real k3s kubeconfig (client-certificate auth; admin == user: no AAD/RBAC mapping)
+                if not real.is_ready("azure", rec["id"]):
+                    return _err(409, "ClusterNotReady", "The cluster is still provisioning; credentials are not available yet.")
+                import base64
+                kc = real.kubeconfig("azure", rec["id"])
+                return _ok({"kubeconfigs": [{"name": user, "value": base64.b64encode(kc.encode()).decode()}]})
             fqdn = props.get("fqdn") or f"{cluster_name}.hcp.azmk8s.io"
             kubeconfig = (
                 "apiVersion: v1\nkind: Config\nclusters:\n- name: " + cluster_name +
