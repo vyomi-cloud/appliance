@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-09 17:12 UTC · refreshes after every pipeline run_
+_Updated 2026-11-09 17:47 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -217,7 +217,7 @@ Built by the agent ahead of everything else, then **reviewed and merged by a per
 
 | Feature | Stage | Review PR |
 |---|---|---|
-| Automatic issue reporting from Nano, offline and sandboxes (user's GitHub account, bot fallback) [#187](https://github.com/vyomi-cloud/appliance/issues/187) | 👀 In review | [PR #189](https://github.com/vyomi-cloud/appliance/pull/189) |
+| Automatic issue reporting from Nano, offline and sandboxes (user's GitHub account, bot fallback) [#187](https://github.com/vyomi-cloud/appliance/issues/187) | 🛠 Building | [PR #189](https://github.com/vyomi-cloud/appliance/pull/189) |
 
 ## Backend upgrades
 
