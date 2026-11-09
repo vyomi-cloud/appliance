@@ -356,7 +356,7 @@ def _azure_service(path, lheaders, query):
     p0 = path.split("?", 1)[0]
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
-    if re.search(r"/oauth2(/v2\.0)?/token$", p0):
+    if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0):
         return "az-graph"
     p = path
     if p.startswith("/devstoreaccount1/"):     # Azurite account prefix
@@ -819,6 +819,7 @@ class AwsWireRouter:
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
+        self.az_arm.graph_store = self.az_graph   # IMDS token issue -> Entra Managed identity sign-ins row
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         # EventBridge shares the messaging store (rule targets deliver into the real SQS/SNS).
