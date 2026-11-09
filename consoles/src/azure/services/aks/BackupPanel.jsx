@@ -12,7 +12,7 @@ export default function BackupPanel({ a }) {
       <>
         <div className="vk-card" data-testid="backend-note" style={{ fontSize: 12.5 }}>
           <b>In-browser cluster (emulated k3s-flavoured control plane).</b> This cluster's Kubernetes objects live in Vyomi's in-browser store and persist across reloads. External Kubernetes
-          clients such as Lens or kubectl on your machine cannot connect to it; that needs the booster, which backs a cluster with a real API server.
+          clients such as Lens or kubectl on your machine cannot connect to it; that needs the Mesh, which backs a cluster with a real API server.
         </div>
         <CapabilityContainer id="azure.aks.backup" title="What a backup captures" >
           <div style={{ fontSize: 12.5 }}>User namespaces and their namespaced objects, stored as a JSON blob in the simulator's Blob store.</div>

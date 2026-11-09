@@ -7,7 +7,7 @@ import { availText } from "../../../common/aiModels.js";
 export default function Models() {
   const t = useAsync(() => api.listModels(), []);
   return (
-    <ResourceTable resourceName="Foundation models" description="The ten open models of the Vyomi model pool. Only the small local model runs without a booster; the rest need the booster (Pro/Max)."
+    <ResourceTable resourceName="Foundation models" description="The ten open models of the Vyomi model pool. Only the small local model runs without the Mesh; the rest need the Mesh (Pro/Max)."
       items={t.data || []} loading={t.loading} error={t.error} onRefresh={t.reload} trackBy="modelId" filterPlaceholder="Find models"
       columns={[
         { id: "name", header: "Model", isRowHeader: true, sortingField: "modelName", cell: (m) => m.modelName },

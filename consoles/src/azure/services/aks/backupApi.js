@@ -135,7 +135,7 @@ export function makeAdapter(cluster) {
     cliName: "az dataprotection",
     cluster: { cloud: "azure", name: cluster.name, resourceGroup: cluster.resourceGroup, location: cluster.location, k8sVersion: cluster.k8sVersion, createdAt: cluster.createdAt },
     terminalTitle: `${cluster.name} - kubectl + az dataprotection`,
-    banner: `Connected to ${cluster.name} (current context: ${cluster.name}).\nThis cluster is an EMULATED k3s-flavoured control plane running in your browser (a 64-bit k3s cannot run here): kubectl is answered through the AKS runCommand action, pods are never scheduled, and kubectl/Lens on your own machine cannot connect to it (that needs the booster).\n'az dataprotection' calls Microsoft.DataProtection over ARM. Type 'help'.\n`,
+    banner: `Connected to ${cluster.name} (current context: ${cluster.name}).\nThis cluster is an EMULATED k3s-flavoured control plane running in your browser (a 64-bit k3s cannot run here): kubectl is answered through the AKS runCommand action, pods are never scheduled, and kubectl/Lens on your own machine cannot connect to it (that needs the Mesh).\n'az dataprotection' calls Microsoft.DataProtection over ARM. Type 'help'.\n`,
     help: [
       "az dataprotection backup-vault create --vault-name <v> [-g rg] [-l location]   create the vault (+ default policy + backup instance 'aks-cluster-instance')",
       "az dataprotection backup-vault show|list|delete --vault-name <v>",

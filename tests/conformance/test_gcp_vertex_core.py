@@ -42,7 +42,7 @@ st, b = call("GET", "/v1/publishers/-/models")
 check("Model Garden lists exactly the ten pool models", st == 200 and sorted(m["name"].split("/")[-1] for m in b["publisherModels"]) == sorted(CAT.IDS), b)
 check("Model Garden availability: only the local small model without a booster", {m["name"].split("/")[-1] for m in b["publisherModels"] if m["vyomiAvailability"]["available"]} == {"qwen2.5-3b"})
 st, b = call("GET", "/v1/publishers/qwen/models/qwen2.5-7b")
-check("Model Garden get", st == 200 and b["launchStage"] == "GA" and b["vyomiAvailability"]["label"] == "Needs Booster (Pro/Max)", b)
+check("Model Garden get", st == 200 and b["launchStage"] == "GA" and b["vyomiAvailability"]["label"] == "Needs Mesh (Pro/Max)", b)
 check("Model Garden has no gemini/claude entries", call("GET", "/v1/publishers/google/models/gemini-2.5-pro")[0] == 404 and call("GET", "/v1/publishers/anthropic/models")[1]["publisherModels"] == [])
 check("Model Garden unknown -> 404", call("GET", "/v1/publishers/google/models/nope")[0] == 404)
 

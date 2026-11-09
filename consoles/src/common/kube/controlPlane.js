@@ -2,7 +2,7 @@
  * kubeconfig contexts (one per cluster, named like each cloud CLI generates), cluster-info, version (client + server), get nodes
  * (a single k3s control-plane node), logs (synthetic, labelled) and the cloud "get-credentials" commands that switch context.
  * It is a REAL emulation of the answers, not a real k3s: a 64-bit k3s cannot run in the browser, and nothing outside the browser tab
- * (Lens, kubectl on your machine) can connect to it -- that needs the booster (RealK8sBackend). All text says so where it matters.
+ * (Lens, kubectl on your machine) can connect to it -- that needs the Mesh (RealK8sBackend). All text says so where it matters.
  *
  * Adapter.cluster = { cloud: "azure"|"aws"|"gcp", name, resourceGroup?, location|region|zone, account?, project?, createdAt?, k8sVersion? } */
 import { tokenize, runKubectl } from "./kubectl.js";
@@ -62,7 +62,7 @@ export async function front(adapter, line) {
   }
   if (verb === "cluster-info") {
     if (args[1] === "dump") return bad("error: cluster-info dump is not simulated");
-    return ok(`Kubernetes control plane is running at ${server(c)}\nCoreDNS is running at ${server(c)}/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy\nMetrics-server is running at ${server(c)}/api/v1/namespaces/kube-system/services/https:metrics-server:https/proxy\n\nThis is an emulated k3s-flavoured control plane inside your browser; it is not reachable from kubectl or Lens on your machine (that needs the booster).\n`);
+    return ok(`Kubernetes control plane is running at ${server(c)}\nCoreDNS is running at ${server(c)}/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy\nMetrics-server is running at ${server(c)}/api/v1/namespaces/kube-system/services/https:metrics-server:https/proxy\n\nThis is an emulated k3s-flavoured control plane inside your browser; it is not reachable from kubectl or Lens on your machine (that needs the Mesh).\n`);
   }
   if (verb === "version") {
     const sv = k3sVersion(c);

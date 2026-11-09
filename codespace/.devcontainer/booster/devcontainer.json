@@ -1,5 +1,5 @@
 {
-  "name": "Vyomi Booster (headless, 2-core)",
+  "name": "Vyomi Mesh (headless, 2-core)",
   "//": "Pro/Max booster pack: compute + AI only, NO UI, NO forwarded port. Nano is the UI; the booster dials OUT to the relay with the signed session token. 2-core so the 40h/60h allowance fits GitHub's 120 core-hour free quota (design: docs/architecture/v4.0/BOOSTER-CODESPACES-GITHUB-APP.md).",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
   "//sshd": "The sshd feature (port 2222) makes `gh codespace ssh` work and gives the Mesh agent reserved host/codespace target (VYOMI_HOST_SSH_ADDR) an sshd to reach. Keep this comment at top level: a key inside `features` breaks Codespace creation.",

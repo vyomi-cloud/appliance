@@ -101,7 +101,7 @@
 
 /* Models panel: the booster's AI model pool (10 open models). Feeds on GET /api/booster/models
  *   {models:[{id,name,role,tag,state,tokens_per_s_indicative,endpoints:{bedrock,vertex,azure}}], window_deadline | window:{deadline,left_s,label}}
- * 404 / no booster -> clearly labelled sample data and the test-chat box is hidden. Development and accuracy checks only; no benchmark claims. */
+ * 404 / no Mesh -> clearly labelled sample data and the test-chat box is hidden. Development and accuracy checks only; no benchmark claims. */
 (function () {
   var MOCK = [
     ["qwen2.5-3b", "Qwen2.5 3B", "Fast chat", "qwen2.5:3b"], ["nomic-embed-text", "Nomic Embed Text", "Embeddings", "nomic-embed-text"],
@@ -142,7 +142,7 @@
       if (!data) { root.textContent = "Loading models..."; return; }
       var dl = deadlineOf(data), sample = !!data.sample;
       var h = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><strong>Model pool</strong><span class="vm-left" style="color:var(--vm-sub,#5f6b7a)">' + (dl ? fmt(dl - Date.now() / 1000) : "") + "</span></div>";
-      if (sample) h += '<div style="padding:6px 10px;border:1px dashed var(--vm-line,#e5e7eb);border-radius:6px;margin-bottom:8px;color:var(--vm-sub,#5f6b7a);font-size:12px">Sample data: the model pool is not attached. Start the booster (Pro or Max) to see live models.</div>';
+      if (sample) h += '<div style="padding:6px 10px;border:1px dashed var(--vm-line,#e5e7eb);border-radius:6px;margin-bottom:8px;color:var(--vm-sub,#5f6b7a);font-size:12px">Sample data: the model pool is not attached. Start the Mesh (Pro or Max) to see live models.</div>';
       h += '<div style="border:1px solid var(--vm-line,#e5e7eb);border-radius:8px;overflow:hidden">';
       (data.models || []).forEach(function (m, i) {
         var ready = m.state === "ready" && !sample && m.tag !== "nomic-embed-text";
@@ -171,7 +171,7 @@
         window.VyomiBooster.apiFetch("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: id, messages: [{ role: "user", content: q }], stream: false }) })
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (r) { out.textContent = r.ok && r.j.choices ? r.j.choices[0].message.content : ((r.j && r.j.error && (r.j.error.message || r.j.error.code)) || "The model is not ready yet. Try again shortly."); })
-          .catch(function () { out.textContent = "Could not reach the booster."; });
+          .catch(function () { out.textContent = "Could not reach the Mesh."; });
       }
     });
     function load() { if (!root.isConnected && data) { clearInterval(timer); clearInterval(tick); return; } getModels().then(function (j) { data = j; if (!root.querySelector("input:focus")) paint(); }); }
