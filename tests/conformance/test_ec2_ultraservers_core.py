@@ -1,13 +1,23 @@
-"""Dev Simplified EC2 Capacity Blocks + UltraServers (core/ec2_ultraservers_core): AWS validation rules and the clock-driven lifecycle.
+"""EC2 Capacity Blocks (core/ec2_ultraservers_core): bookings that REALLY reserve capacity. A block creates a real EC2 Capacity
+Reservation; RunInstances (EC2 Query, the engine Nano runs and the offline appliance's core path uses) consumes it, is refused
+when it is full / not started / expired, and terminating frees it. Pool accounting is checked against the host-sized pool.
+UltraServers / accelerator types are Not in scope and must say so.
 
-Run: PYTHONPATH=. ../appliance/.venv/bin/python tests/conformance/test_ec2_ultraservers_core.py
+Run: PYTHONPATH=. python3 tests/conformance/test_ec2_ultraservers_core.py
 """
 import json
+import os
+import re
 import time
+import types
 
-from core.aws_wire_router import AwsWireRouter
+os.environ["VYOMI_CAPACITY_POOL_MB"] = "8192"
 
-AUTH = "AWS4-HMAC-SHA256 Credential=T/20261110/us-east-1/vyomi-ultraservers/aws4_request, SignedHeaders=host, Signature=0"
+from core import ec2_ops_core  # noqa: F401  (installs the RunInstances reservation wrapper)
+from core import ec2_ultraservers_core as cb
+from core import vpc_core as vpc
+
+s = types.SimpleNamespace()
 
 
 def _check(name, cond, detail=""):
@@ -16,70 +26,118 @@ def _check(name, cond, detail=""):
     print(f"  ok  {name}")
 
 
-def call(r, op, body=None):
-    o = r.handle("POST", "/" + op, {}, {"authorization": AUTH, "content-type": "application/json"}, json.dumps(body or {}).encode())
-    return o["status"], json.loads(o["body"])
+def blk(op, body=None, now=None):
+    r = cb.dispatch(s, "POST", "/" + op, json.dumps(body or {}).encode(), now=now)
+    return r["status"], json.loads(r["body"])
+
+
+def ec2(p, status=200):
+    r = vpc.dispatch(s, p)
+    if r.status != status:
+        raise AssertionError((p.get("Action"), r.status, r.body))
+    return r.body
+
+
+def xid(body, tag):
+    m = re.search(f"<{tag}>(.*?)</{tag}>", body)
+    return m.group(1) if m else None
+
+
+def launch(cr, n=1, itype="t3.small", expect=200):
+    return ec2({"Action": "RunInstances", "ImageId": IMG, "InstanceType": itype, "MinCount": str(n), "MaxCount": str(n),
+                "CapacityReservationSpecification.CapacityReservationTarget.CapacityReservationId": cr}, expect)
+
+
+IMG = None
 
 
 def main():
-    r = AwsWireRouter()
-    _check("missing type", call(r, "DescribeCapacityBlockOfferings", {})[0] == 400)
-    _check("unknown type", call(r, "DescribeCapacityBlockOfferings", {"InstanceType": "m5.large"})[0] == 400)
-    _check("bad duration (15 days)", call(r, "DescribeCapacityBlockOfferings", {"InstanceType": "p5.48xlarge", "InstanceCount": 1, "CapacityDurationDays": 15})[0] == 400)
-    _check("count too large", call(r, "DescribeCapacityBlockOfferings", {"InstanceType": "p5.48xlarge", "InstanceCount": 65, "CapacityDurationDays": 1})[0] == 400)
-    _check("range in the past", call(r, "DescribeCapacityBlockOfferings", {"InstanceType": "p5.48xlarge", "InstanceCount": 1, "CapacityDurationDays": 1, "StartDateRange": 1000})[0] == 400)
+    global IMG
+    # --- not in scope: accelerator types / UltraServers
+    st, v = blk("DescribeCapacityBlockOfferings", {"InstanceType": "p5.48xlarge", "InstanceCount": 1, "CapacityDurationDays": 1})
+    _check("p5 -> UnsupportedOperation, says Not in scope", st == 400 and v["__type"] == "UnsupportedOperation" and "not in scope" in v["message"])
+    _check("UltraServer type rejected", blk("DescribeCapacityBlockOfferings", {"InstanceType": "u-p6e-gb200x72", "InstanceCount": 1, "CapacityDurationDays": 7})[0] == 400)
+    _check("DescribeUltraServers is not an operation", blk("DescribeUltraServers")[0] == 404)
+    # --- validation
+    _check("missing type", blk("DescribeCapacityBlockOfferings", {})[0] == 400)
+    _check("bad duration", blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "CapacityDurationDays": 15})[0] == 400)
+    _check("bad count", blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "InstanceCount": 0, "CapacityDurationDays": 1})[0] == 400)
+    _check("past range", blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "CapacityDurationDays": 1, "StartDateRange": 1000})[0] == 400)
+    img = ec2({"Action": "DescribeImages"})
+    IMG = xid(img, "imageId")
 
-    s, v = call(r, "DescribeCapacityBlockOfferings", {"UltraServerType": "u-p6e-gb200x72", "UltraServerCount": 1, "CapacityDurationDays": 7})
-    _check("ultraserver offerings", s == 200 and len(v["capacityBlockOfferings"]) == 3 and v["capacityBlockOfferings"][0]["source"] == "Dev Simplified")
+    # --- an immediate block of 2 x t3.small (2 GiB each)
+    st, v = blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "InstanceCount": 2, "CapacityDurationDays": 1})
+    _check("offerings", st == 200 and len(v["capacityBlockOfferings"]) == 3, str(v))
     off = v["capacityBlockOfferings"][0]
-    s, b = call(r, "PurchaseCapacityBlock", {"CapacityBlockOfferingId": off["capacityBlockOfferingId"]})
-    cb = b["capacityBlock"]
-    _check("purchase", s == 200 and cb["instanceCount"] == 18 and cb["acceleratorCount"] == 72 and cb["state"] in ("scheduled", "active"))
-    _check("double purchase rejected", call(r, "PurchaseCapacityBlock", {"CapacityBlockOfferingId": off["capacityBlockOfferingId"]})[0] == 400)
-    _check("unknown offering 404", call(r, "PurchaseCapacityBlock", {"CapacityBlockOfferingId": "cbo-nope"})[0] == 404)
+    st, b = blk("PurchaseCapacityBlock", {"CapacityBlockOfferingId": off["capacityBlockOfferingId"]})
+    cbk = b["capacityBlock"]
+    _check("purchase -> active, reserves 4096 MB", st == 200 and cbk["state"] == "active" and cbk["reservedMemoryMb"] == 4096, str(cbk))
+    _check("double purchase rejected", blk("PurchaseCapacityBlock", {"CapacityBlockOfferingId": off["capacityBlockOfferingId"]})[0] == 400)
+    cr = cbk["capacityReservationId"]
+    d = ec2({"Action": "DescribeCapacityReservations", "CapacityReservationId.1": cr})
+    _check("a REAL EC2 capacity reservation exists", "<state>active</state>" in d and "<totalInstanceCount>2</totalInstanceCount>" in d and "<availableInstanceCount>2</availableInstanceCount>" in d)
 
-    s, u = call(r, "DescribeUltraServers")
-    _check("one ultraserver with 18 hosts", s == 200 and len(u["ultraServers"]) == 1 and u["ultraServers"][0]["hostCount"] == 18 and u["ultraServers"][0]["acceleratorCount"] == 72)
+    # --- RunInstances really consumes it
+    i1 = xid(launch(cr), "instanceId")
+    _check("launch consumes (1 left)", "<availableInstanceCount>1</availableInstanceCount>" in ec2({"Action": "DescribeCapacityReservations", "CapacityReservationId.1": cr}))
+    _check("status shows 1 used of 2", blk("DescribeCapacityBlockStatus")[1]["capacityBlockStatuses"][0]["totalUsedCapacity"] == 1)
+    _check("wrong type refused", "InvalidParameterValue" in launch(cr, itype="t3.micro", expect=400))
+    i2 = xid(launch(cr), "instanceId")
+    _check("full reservation refuses a launch", "InsufficientInstanceCapacity" in launch(cr, expect=400))
+    ec2({"Action": "TerminateInstances", "InstanceId.1": i1})
+    _check("terminate frees capacity", "<availableInstanceCount>1</availableInstanceCount>" in ec2({"Action": "DescribeCapacityReservations", "CapacityReservationId.1": cr}))
+    launch(cr)
 
-    # instance-type block is not an UltraServer
-    s, v = call(r, "DescribeCapacityBlockOfferings", {"InstanceType": "p5.48xlarge", "InstanceCount": 2, "CapacityDurationDays": 14})
-    s, b2 = call(r, "PurchaseCapacityBlock", {"CapacityBlockOfferingId": v["capacityBlockOfferings"][1]["capacityBlockOfferingId"]})
-    _check("p5 block 16 GPUs", b2["capacityBlock"]["acceleratorCount"] == 16)
-    _check("ultraservers list unchanged", len(call(r, "DescribeUltraServers")[1]["ultraServers"]) == 1)
-    _check("filter by state", len(call(r, "DescribeCapacityBlocks", {"States": ["expired"]})[1]["capacityBlocks"]) == 0)
-    _check("bad state", call(r, "DescribeCapacityBlocks", {"States": ["bogus"]})[0] == 400)
+    # --- pool accounting (pool 8192 MB, 4096 booked now)
+    st, v = blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "InstanceCount": 2, "CapacityDurationDays": 1})
+    _check("second 4096 MB fits the pool", st == 200)
+    blk("PurchaseCapacityBlock", {"CapacityBlockOfferingId": v["capacityBlockOfferings"][0]["capacityBlockOfferingId"]})
+    st, v = blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "InstanceCount": 2, "CapacityDurationDays": 1,
+                                                    "EndDateRange": time.time() + 86400 + 3600})
+    _check("pool full over that window -> InsufficientCapacity", st == 400 and v["__type"] == "InsufficientCapacity", str(v))
+    _check("request bigger than the whole pool", blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.small", "InstanceCount": 64, "CapacityDurationDays": 1})[1]["__type"] == "InsufficientCapacity")
 
-    # lifecycle with a controlled clock
-    from core import ec2_ultraservers_core as c
-    store = r.vpc
-    t0 = time.time()
-    bid = b2["capacityBlock"]["capacityBlockId"]
-    far = t0 + 30 * 86400
-    st = c.dispatch(store, "POST", "/DescribeCapacityBlocks", b"{}", now=far)
-    states = {x["capacityBlockId"]: x["state"] for x in json.loads(st["body"])["capacityBlocks"]}
-    _check("all expired after 30 days", set(states.values()) == {"expired"}, str(states))
-    ex = c.dispatch(store, "POST", "/ExtendCapacityBlock", json.dumps({"CapacityBlockId": bid, "CapacityBlockExtensionDurationDays": 7}).encode(), now=far)
-    _check("cannot extend expired", ex["status"] == 400)
-    _check("cannot release expired", call_at(c, store, "VyomiCancelCapacityBlock", {"CapacityBlockId": bid}, far) == 400)
-    mid = b2["capacityBlock"]
-    start = time.mktime(time.strptime(mid["startDate"][:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone
-    _check("extend active", call_at(c, store, "ExtendCapacityBlock", {"CapacityBlockId": bid, "CapacityBlockExtensionDurationDays": 7}, start + 3600) == 200)
-    _check("extend invalid days", call_at(c, store, "ExtendCapacityBlock", {"CapacityBlockId": bid, "CapacityBlockExtensionDurationDays": 20}, start + 3600) == 400)
-    # a fresh scheduled block can be released
-    s, v = call(r, "DescribeCapacityBlockOfferings", {"InstanceType": "trn2.48xlarge", "InstanceCount": 1, "CapacityDurationDays": 1,
-                                                       "StartDateRange": time.time() + 5 * 86400, "EndDateRange": time.time() + 9 * 86400})
-    s, b3 = call(r, "PurchaseCapacityBlock", {"CapacityBlockOfferingId": v["capacityBlockOfferings"][0]["capacityBlockOfferingId"]})
-    _check("future block scheduled", b3["capacityBlock"]["state"] == "scheduled")
-    s, rel = call(r, "VyomiCancelCapacityBlock", {"CapacityBlockId": b3["capacityBlock"]["capacityBlockId"]})
-    _check("release scheduled", s == 200 and rel["capacityBlock"]["state"] == "cancelled")
-    _check("status op", call(r, "DescribeCapacityBlockStatus")[0] == 200)
-    ov = call(r, "VyomiOverview")[1]
-    _check("overview", ov["blocksByState"]["cancelled"] == 1 and len(ov["supportedTypes"]) >= 10 and ov["source"] == "Dev Simplified")
+    # --- scheduled block: not usable until it starts; release works
+    st, v = blk("DescribeCapacityBlockOfferings", {"InstanceType": "t3.micro", "InstanceCount": 1, "CapacityDurationDays": 1,
+                                                    "StartDateRange": time.time() + 5 * 86400, "EndDateRange": time.time() + 9 * 86400})
+    st, b3 = blk("PurchaseCapacityBlock", {"CapacityBlockOfferingId": v["capacityBlockOfferings"][0]["capacityBlockOfferingId"]})
+    c3 = b3["capacityBlock"]
+    _check("future block scheduled", c3["state"] == "scheduled")
+    _check("launch into scheduled reservation refused", "CapacityReservationIncorrectState" in launch(c3["capacityReservationId"], itype="t3.micro", expect=400))
+    _check("cannot extend a scheduled block", blk("ExtendCapacityBlock", {"CapacityBlockId": c3["capacityBlockId"], "CapacityBlockExtensionDurationDays": 7})[0] == 400)
+    st, rel = blk("VyomiCancelCapacityBlock", {"CapacityBlockId": c3["capacityBlockId"]})
+    _check("release scheduled", st == 200 and rel["capacityBlock"]["state"] == "cancelled")
+
+    # --- the block starts later (clock moves): scheduled -> active through settle
+    m = vpc._model(s)
+    m["capacity_blocks"]["blocks"][c3["capacityBlockId"]]["state"] = "ok"      # un-release for the clock test
+    m["capacity_reservations"][c3["capacityReservationId"]]["state"] = "scheduled"
+    t_mid = m["capacity_blocks"]["blocks"][c3["capacityBlockId"]]["start"] + 60
+    _check("scheduled -> active at start", blk("DescribeCapacityBlocks", {"CapacityBlockIds": [c3["capacityBlockId"]]}, now=t_mid)[1]["capacityBlocks"][0]["state"] == "active")
+    _check("extend an active block", blk("ExtendCapacityBlock", {"CapacityBlockId": c3["capacityBlockId"], "CapacityBlockExtensionDurationDays": 7}, now=t_mid)[0] == 200)
+    t_end = m["capacity_blocks"]["blocks"][c3["capacityBlockId"]]["end"] + 60
+    _check("expires on schedule", blk("DescribeCapacityBlocks", {"CapacityBlockIds": [c3["capacityBlockId"]]}, now=t_end)[1]["capacityBlocks"][0]["state"] == "expired")
+    _check("reservation expired with it", m["capacity_reservations"][c3["capacityReservationId"]]["state"] == "expired")
+
+    # --- offline appliance hook (same rules over Docker-backed instance counts)
+    ok = cb.admit_launch(m, cr, "t3.small", "", 1, used=1)
+    _check("admit_launch allows within capacity", ok == cr)
+    for used, count, code in ((2, 1, "InsufficientInstanceCapacity"), (0, 3, "InsufficientInstanceCapacity")):
+        try:
+            cb.admit_launch(m, cr, "t3.small", "", count, used=used)
+            raise AssertionError("expected refusal")
+        except cb._Err as e:
+            _check(f"admit_launch refuses used={used} count={count}", e.code == code)
+    try:
+        cb.admit_launch(m, c3["capacityReservationId"], "t3.micro", "", 1, used=0)
+        raise AssertionError("expected refusal")
+    except cb._Err as e:
+        _check("admit_launch refuses an expired block", e.code == "CapacityReservationIncorrectState")
+
+    ov = blk("VyomiOverview")[1]
+    _check("overview has pool + not-in-scope text", ov["poolMb"] == 8192 and "not in scope" in ov["notInScope"] and ov["blocksByState"]["active"] >= 2)
     print("PASS")
-
-
-def call_at(c, store, op, body, now):
-    return c.dispatch(store, "POST", "/" + op, json.dumps(body).encode(), now=now)["status"]
 
 
 if __name__ == "__main__":

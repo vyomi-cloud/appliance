@@ -690,17 +690,13 @@
   ]
  },
  "ec2.purchasing.ultraservers": {
-  "title": "UltraServers and Capacity Blocks",
+  "title": "UltraServers",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
   "limitations": [
-   "Dev Simplified: Capacity Block offerings (accelerator instance types and UltraServer types, instance or UltraServer count, 1-14 day or weekly durations up to 182 days, start within 8 weeks), PurchaseCapacityBlock, DescribeCapacityBlocks, DescribeCapacityBlockStatus, DescribeUltraServers (domains with member hosts) and ExtendCapacityBlock are validated against AWS's rules, and a block moves scheduled -> active -> expired with the clock. Vyomi adds a release action for a block that has not started (real AWS cannot cancel one).",
-   "There is no accelerator hardware, GPU/Trainium fabric or real capacity market: offerings come from a fixed catalogue with illustrative prices, a block holds no capacity, RunInstances is not coupled to it, and nothing is billed. Accelerator instance types cannot be launched in Vyomi."
-  ],
-  "tests": [
-   "tests/conformance/test_ec2_ultraservers_core.py"
+   "Not in scope: UltraServers and accelerator (GPU/Trainium) capacity are physical hardware in AWS data centres. Vyomi offers Capacity Blocks and Capacity Reservations for the instance types its Docker-backed pool runs."
   ]
  },
  "ec2.purchasing.capacity-manager": {
@@ -821,6 +817,20 @@
   ],
   "tests": [
    "tests/conformance/test_imagebuilder_core.py"
+  ]
+ },
+ "ec2.purchasing.capacity-blocks": {
+  "title": "Capacity Blocks",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: a Capacity Block books instances for a time window against the host's instance pool (sized from physical RAM, VYOMI_CAPACITY_POOL_MB); a booking that does not fit the memory already booked over the same window is refused (InsufficientCapacity). Each block creates a real Capacity Reservation that RunInstances consumes: scheduled until the start, active during the window, expired at the end; launches into it are counted and refused when it is full, not started or expired, and terminating instances frees capacity. On the offline appliance the launches are the Docker-backed instances.",
+   "Dev Simplified: any instance type Vyomi can launch can be booked (AWS limits Capacity Blocks to ML accelerator types); offerings are generated (three zones, illustrative prices) and nothing is billed; instances are not auto-terminated when a block ends; a block can be released before it starts (AWS cannot cancel one)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ultraservers_core.py"
   ]
  }
 }

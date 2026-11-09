@@ -1,25 +1,29 @@
 # GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
 # Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
-"""EC2 Capacity Blocks for ML and UltraServers - a Dev Simplified capacity-block market (SigV4 signing name `vyomi-ultraservers`,
-rest-json: every operation is `POST /<Operation>`).
+"""EC2 Capacity Blocks - time-boxed bookings that REALLY reserve capacity from the Docker-backed instance pool
+(SigV4 signing name `vyomi-ultraservers`, rest-json: every operation is `POST /<Operation>`).
 
-Substrate-independent (no fastapi / boto3; loads under Pyodide); state lives in the shared EC2/VPC model
-(`model["capacity_blocks"]`) so it persists on both substrates.
+Substrate-independent (no fastapi / boto3; loads under Pyodide); state lives in the shared EC2/VPC model:
+`model["capacity_blocks"]` (the bookings) and, for each booking, a REAL EC2 Capacity Reservation in
+`model["capacity_reservations"]` (core/ec2_ops_core). That reservation is what RunInstances consumes:
 
-Real here: DescribeCapacityBlockOfferings (accelerator instance types and UltraServer types, instance/UltraServer count, duration rules,
-start-date window), PurchaseCapacityBlock (an offering id is validated and priced, then stored), DescribeCapacityBlocks /
-DescribeCapacityBlockStatus / DescribeUltraServers (UltraServer domains with their member hosts), ExtendCapacityBlock, and a lifecycle that
-follows the clock: scheduled -> active -> expired, with a Vyomi-only VyomiCancelCapacityBlock that releases a block that has not started
-(real AWS capacity blocks cannot be cancelled once bought).
+  * Nano: ec2_ops_core's RunInstances wrapper rejects a launch that targets a scheduled/expired/full reservation
+    (CapacityReservationIncorrectState / InsufficientInstanceCapacity) and counts running instances against it.
+  * Offline appliance: server.py's native RunInstances calls `admit_launch()` below, which applies the same rules and counts
+    the Docker-backed instances launched against the reservation.
 
-Honest limits: there is NO accelerator hardware, no GPU/Trainium fabric and no real capacity market. Offerings are generated
-deterministically from a fixed catalogue with illustrative prices; a block holds no capacity and RunInstances is not coupled to it.
-Nothing is invoiced or charged.
+Real here: the pool is sized from the host (physical RAM share, env VYOMI_CAPACITY_POOL_MB) and every booking is checked against the
+memory of the instances already booked over the same window (InsufficientCapacity when it does not fit); a block is
+scheduled -> active -> expired on the clock and its reservation follows; launches consume and terminations free capacity.
+
+Dev Simplified vs AWS: any instance type the simulator can launch can be booked (AWS limits Capacity Blocks to ML accelerator
+types); prices are illustrative and nothing is billed; there is one price per offering, no auction. Accelerator instance types
+and UltraServers (multi-host GPU domains) are NOT IN SCOPE: they are physical hardware in AWS data centres.
 """
 from __future__ import annotations
 
-import hashlib
 import json
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -29,19 +33,9 @@ _DAY = 86400
 _MAX_AHEAD = 56 * _DAY      # AWS: start within 8 weeks
 _MAX_DAYS = 182
 LABEL = "Dev Simplified"
-
-# type -> (accelerator, accelerators/host, per-host hourly USD (illustrative), max hosts per block)
-_HOST_TYPES = {
-    "p5.48xlarge": ("NVIDIA H100", 8, 31.46, 64), "p5e.48xlarge": ("NVIDIA H200", 8, 35.0, 64), "p5en.48xlarge": ("NVIDIA H200", 8, 38.0, 64),
-    "p4d.24xlarge": ("NVIDIA A100", 8, 11.2, 64), "p4de.24xlarge": ("NVIDIA A100 80GB", 8, 14.0, 64),
-    "trn1.32xlarge": ("AWS Trainium", 16, 10.7, 64), "trn2.48xlarge": ("AWS Trainium2", 16, 17.9, 64),
-}
-# UltraServer type -> (instance type of each host, hosts, accelerators total, accelerator, per-host hourly USD)
-_ULTRA = {
-    "u-p6e-gb200x72": ("p6e-gb200.36xlarge", 18, 72, "NVIDIA GB200 NVL72", 7.0),
-    "u-p6e-gb200x36": ("p6e-gb200.36xlarge", 9, 36, "NVIDIA GB200 NVL36", 7.0),
-    "u-trn2uxl": ("trn2u.48xlarge", 4, 64, "AWS Trainium2 (64-chip UltraServer)", 18.5),
-}
+NOT_IN_SCOPE = ("UltraServers and accelerator (GPU/Trainium) capacity are physical hardware in AWS data centres, so they are not in scope; "
+                "Vyomi offers Capacity Blocks and Capacity Reservations for the instance types its Docker-backed pool runs.")
+_ACCEL_PREFIX = ("p2", "p3", "p4", "p5", "p6", "g3", "g4", "g5", "g6", "trn", "inf", "dl", "u-")
 _STATES = ("scheduled", "active", "expired", "cancelled")
 
 
@@ -73,20 +67,40 @@ def _parse_ts(v, field):
         raise _Err("ValidationException", f"{field} must be an ISO-8601 timestamp or epoch seconds")
 
 
+def pool_mb() -> int:
+    """Memory (MB) of the instance pool: env VYOMI_CAPACITY_POOL_MB, else half the host's physical RAM, else 8 GiB (browser)."""
+    try:
+        v = int(os.environ.get("VYOMI_CAPACITY_POOL_MB", "0"))
+        if v > 0:
+            return v
+    except ValueError:
+        pass
+    try:
+        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024 * 1024) // 2)
+    except (AttributeError, ValueError, OSError):
+        return 8192
+
+
+def _mem_mb(itype):
+    return int(float(_V()._INSTANCE_TYPES[itype]["mem"]) * 1024)
+
+
+def _rate(itype):
+    try:
+        try:
+            from core import cost_model
+        except ImportError:
+            import cost_model  # type: ignore
+        return float(cost_model.vm_hourly_rate("aws", itype))
+    except Exception:
+        return 0.05
+
+
 def _st(model) -> dict:
     s = model.setdefault("capacity_blocks", {})
     s.setdefault("blocks", {})
     s.setdefault("offerings", {})
     return s
-
-
-def _catalogue():
-    out = {}
-    for t, (acc, per, rate, mx) in _HOST_TYPES.items():
-        out[t] = {"kind": "instance", "hostType": t, "hosts": 1, "accelerator": acc, "accelerators": per, "hostRate": rate, "max": mx}
-    for u, (ht, hosts, accs, acc, rate) in _ULTRA.items():
-        out[u] = {"kind": "ultraserver", "hostType": ht, "hosts": hosts, "accelerator": acc, "accelerators": accs, "hostRate": rate, "max": 8}
-    return out
 
 
 def _valid_duration(days):
@@ -101,34 +115,51 @@ def _state(b, now):
     return "active" if now < b["end"] else "expired"
 
 
-def _view(b, now):
-    cat = _catalogue()[b["type"]]
-    v = {"capacityBlockId": b["id"], "capacityReservationId": b["reservationId"], "state": _state(b, now), "availabilityZone": b["az"],
-         "startDate": _iso(b["start"]), "endDate": _iso(b["end"]), "durationDays": b["days"],
-         "purchaseTime": _iso(b["created"]), "upfrontFee": f"{b['fee']:.2f}", "currencyCode": "USD",
-         "tags": [{"key": k, "value": x} for k, x in b.get("tags", {}).items()],
-         "source": LABEL}
-    if cat["kind"] == "ultraserver":
-        v.update({"ultraServerType": b["type"], "ultraServerCount": b["count"], "instanceType": cat["hostType"],
-                  "instanceCount": b["count"] * cat["hosts"], "acceleratorCount": b["count"] * cat["accelerators"]})
-    else:
-        v.update({"instanceType": b["type"], "instanceCount": b["count"], "acceleratorCount": b["count"] * cat["accelerators"]})
-    v["acceleratorName"] = cat["accelerator"]
-    return v
+def settle(model, now=None):
+    """Move every block's Capacity Reservation along the clock (scheduled -> active -> expired / cancelled)."""
+    now = time.time() if now is None else now
+    crs = model.setdefault("capacity_reservations", {})
+    for b in _st(model)["blocks"].values():
+        cr = crs.get(b["reservationId"])
+        if cr is not None and cr.get("state") != "cancelled":
+            cr["state"] = _state(b, now)
+            cr["start_date"], cr["end_date"] = b["start"], b["end"]
+            cr["total"] = b["count"]
+
+
+def _view(model, b, now):
+    cr = model.get("capacity_reservations", {}).get(b["reservationId"], {})
+    return {"capacityBlockId": b["id"], "capacityReservationId": b["reservationId"], "state": _state(b, now), "availabilityZone": b["az"],
+            "instanceType": b["type"], "instanceCount": b["count"], "startDate": _iso(b["start"]), "endDate": _iso(b["end"]),
+            "durationDays": b["days"], "purchaseTime": _iso(b["created"]), "upfrontFee": f"{b['fee']:.2f}", "currencyCode": "USD",
+            "reservedMemoryMb": b["count"] * _mem_mb(b["type"]), "source": LABEL, "reservationState": cr.get("state")}
+
+
+def _launchable(t):
+    return t in _V()._INSTANCE_TYPES and not t.startswith(_ACCEL_PREFIX)
+
+
+def _booked_mb(model, lo, hi, now, skip=None):
+    tot = 0
+    for b in _st(model)["blocks"].values():
+        if b["id"] == skip or _state(b, now) in ("expired", "cancelled"):
+            continue
+        if b["start"] < hi and b["end"] > lo:
+            tot += b["count"] * _mem_mb(b["type"])
+    return tot
 
 
 def op_describe_offerings(model, p, now):
-    cat = _catalogue()
-    t = p.get("InstanceType") or p.get("UltraServerType")
+    t = p.get("InstanceType")
     if not t:
-        raise _Err("MissingParameter", "The request must contain the parameter InstanceType or UltraServerType")
-    if t not in cat:
-        raise _Err("InvalidParameterValue", f"{t} is not a capacity-block instance or UltraServer type. Supported: {', '.join(sorted(cat))}")
-    c = cat[t]
-    count = p.get("UltraServerCount") if c["kind"] == "ultraserver" and "UltraServerCount" in p else p.get("InstanceCount", 1)
-    days = p.get("CapacityDurationDays", 1)
-    if not isinstance(count, int) or isinstance(count, bool) or count < 1 or count > c["max"]:
-        raise _Err("InvalidParameterValue", f"Count must be between 1 and {c['max']} for {t}")
+        raise _Err("MissingParameter", "The request must contain the parameter InstanceType")
+    if t.startswith(_ACCEL_PREFIX) or t not in _V()._INSTANCE_TYPES:
+        if t.startswith(_ACCEL_PREFIX):
+            raise _Err("UnsupportedOperation", f"{t}: {NOT_IN_SCOPE}")
+        raise _Err("InvalidParameterValue", f"{t} is not an instance type this simulator can launch")
+    count, days = p.get("InstanceCount", 1), p.get("CapacityDurationDays", 1)
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1 or count > 64:
+        raise _Err("InvalidParameterValue", "InstanceCount must be between 1 and 64")
     if not _valid_duration(days):
         raise _Err("InvalidParameterValue", "CapacityDurationDays must be 1-14 days, or a multiple of 7 up to 182 days")
     lo = _parse_ts(p.get("StartDateRange"), "StartDateRange") or now
@@ -141,20 +172,24 @@ def op_describe_offerings(model, p, now):
     if hi - lo < days * _DAY:
         raise _Err("InvalidParameterValue", "The start/end date range must be at least as long as the requested duration")
     offs = []
+    need = count * _mem_mb(t)
+    if need > pool_mb():
+        raise _Err("InsufficientCapacity", f"{count} x {t} needs {need} MB but the host's instance pool is {pool_mb()} MB")
     for i, az in enumerate((f"{_REGION}a", f"{_REGION}b", f"{_REGION}c")):
         start = int(lo) + i * _DAY
         if start + days * _DAY > hi:
             start = int(lo)
-        fee = round(c["hostRate"] * c["hosts"] * count * days * 24 * (0.92 + 0.04 * i), 2)
-        oid = "cbo-" + hashlib.sha1(f"{t}|{count}|{days}|{az}|{start}".encode()).hexdigest()[:17]
-        o = {"capacityBlockOfferingId": oid, "availabilityZone": az, "startDate": _iso(start), "endDate": _iso(start + days * _DAY),
-             "capacityBlockDurationDays": days, "upfrontFee": f"{fee:.2f}", "currencyCode": "USD", "tenancy": "default", "source": LABEL}
-        if c["kind"] == "ultraserver":
-            o.update({"ultraServerType": t, "ultraServerCount": count, "instanceType": c["hostType"]})
-        else:
-            o.update({"instanceType": t, "instanceCount": count})
-        offs.append(o)
+        end = start + days * _DAY
+        if _booked_mb(model, start, end, now) + need > pool_mb():
+            continue
+        fee = round(_rate(t) * count * days * 24 * (0.92 + 0.04 * i), 2)
+        oid = "cbo-" + uuid.uuid4().hex[:17]
+        offs.append({"capacityBlockOfferingId": oid, "availabilityZone": az, "instanceType": t, "instanceCount": count,
+                     "startDate": _iso(start), "endDate": _iso(end), "capacityBlockDurationDays": days, "upfrontFee": f"{fee:.2f}",
+                     "currencyCode": "USD", "tenancy": "default", "source": LABEL})
         _st(model)["offerings"][oid] = {"type": t, "count": count, "days": days, "az": az, "start": float(start), "fee": fee}
+    if not offs:
+        raise _Err("InsufficientCapacity", "The pool is already booked for that window; try a later start date or fewer instances")
     return {"capacityBlockOfferings": offs}
 
 
@@ -170,15 +205,17 @@ def op_purchase(model, p, now):
         raise _Err("InvalidCapacityBlockOffering.Expired", "The offering's start time has passed; describe offerings again.")
     if any(b["offering"] == oid and b["state"] != "cancelled" for b in s["blocks"].values()):
         raise _Err("CapacityBlockOffering.AlreadyPurchased", "This offering was already purchased.")
-    bid = "cb-" + uuid.uuid4().hex[:17]
-    tags = {}
-    for spec in p.get("TagSpecifications") or []:
-        for t in spec.get("Tags") or []:
-            tags[t.get("Key")] = t.get("Value", "")
-    s["blocks"][bid] = {"id": bid, "reservationId": "cr-" + uuid.uuid4().hex[:17], "offering": oid, "type": o["type"], "count": o["count"],
-                        "az": o["az"], "days": o["days"], "start": o["start"], "end": o["start"] + o["days"] * _DAY, "fee": o["fee"],
-                        "created": now, "state": "ok", "tags": tags}
-    return {"capacityBlock": _view(s["blocks"][bid], now)}
+    end = o["start"] + o["days"] * _DAY
+    if _booked_mb(model, o["start"], end, now) + o["count"] * _mem_mb(o["type"]) > pool_mb():
+        raise _Err("InsufficientCapacity", "The pool was booked by another block since this offering was described")
+    bid, crid = "cb-" + uuid.uuid4().hex[:17], "cr-" + uuid.uuid4().hex[:17]
+    s["blocks"][bid] = {"id": bid, "reservationId": crid, "offering": oid, "type": o["type"], "count": o["count"], "az": o["az"],
+                        "days": o["days"], "start": o["start"], "end": end, "fee": o["fee"], "created": now, "state": "ok"}
+    model.setdefault("capacity_reservations", {})[crid] = {
+        "id": crid, "type": o["type"], "az": o["az"], "platform": "Linux/UNIX", "total": o["count"], "state": "scheduled", "created": now,
+        "start_date": o["start"], "end_date": end, "end_date_type": "limited", "match": "targeted", "tags": {}, "block_id": bid}
+    settle(model, now)
+    return {"capacityBlock": _view(model, s["blocks"][bid], now)}
 
 
 def _get(model, bid):
@@ -189,11 +226,10 @@ def _get(model, bid):
 
 
 def _select(model, p, now):
-    s = _st(model)
     ids = p.get("CapacityBlockIds")
     for i in ids or []:
         _get(model, i)
-    out = [b for b in s["blocks"].values() if not ids or b["id"] in ids]
+    out = [b for b in _st(model)["blocks"].values() if not ids or b["id"] in ids]
     states = p.get("States")
     if states:
         bad = [x for x in states if x not in _STATES]
@@ -204,40 +240,24 @@ def _select(model, p, now):
 
 
 def op_describe_blocks(model, p, now):
-    return {"capacityBlocks": [_view(b, now) for b in _select(model, p, now)]}
+    settle(model, now)
+    return {"capacityBlocks": [_view(model, b, now) for b in _select(model, p, now)]}
 
 
 def op_describe_status(model, p, now):
+    settle(model, now)
     out = []
     for b in _select(model, p, now):
         st = _state(b, now)
-        c = _catalogue()[b["type"]]
-        hosts = b["count"] * c["hosts"]
-        up = st == "active"
-        out.append({"capacityBlockId": b["id"], "state": st, "totalCapacity": hosts, "totalAvailableCapacity": hosts if up else 0,
-                    "totalUnavailableCapacity": 0, "interconnectStatus": "ok" if up else "insufficient-data"})
+        used = _used_by_model(model, b["reservationId"])
+        total = b["count"] if st == "active" else 0
+        out.append({"capacityBlockId": b["id"], "state": st, "totalCapacity": total, "totalUsedCapacity": used if st == "active" else 0,
+                    "totalAvailableCapacity": max(total - used, 0)})
     return {"capacityBlockStatuses": out}
 
 
-def op_describe_ultraservers(model, p, now):
-    cat = _catalogue()
-    out = []
-    for b in _select(model, p, now):
-        c = cat[b["type"]]
-        if c["kind"] != "ultraserver":
-            continue
-        st = _state(b, now)
-        for u in range(b["count"]):
-            uid = f"us-{b['id'][3:11]}{u:02d}"
-            hosts = [{"hostId": f"{uid}-h{h:02d}", "instanceType": c["hostType"], "acceleratorCount": c["accelerators"] // c["hosts"],
-                      "status": "healthy" if st == "active" else "not-ready"} for h in range(c["hosts"])]
-            out.append({"ultraServerId": uid, "ultraServerType": b["type"], "capacityBlockId": b["id"], "availabilityZone": b["az"],
-                        "state": st, "acceleratorCount": c["accelerators"], "acceleratorName": c["accelerator"],
-                        "hostCount": c["hosts"], "hosts": hosts, "startDate": _iso(b["start"]), "endDate": _iso(b["end"]), "source": LABEL})
-    ids = p.get("UltraServerIds")
-    if ids:
-        out = [x for x in out if x["ultraServerId"] in ids]
-    return {"ultraServers": out}
+def _used_by_model(model, crid):
+    return sum(1 for i in model.get("instances", {}).values() if i.get("capacity_reservation_id") == crid and i.get("state") in ("pending", "running"))
 
 
 def op_extend(model, p, now):
@@ -249,10 +269,12 @@ def op_extend(model, p, now):
         raise _Err("IncorrectState", "Only an active capacity block can be extended")
     if b["days"] + add > _MAX_DAYS:
         raise _Err("InvalidParameterValue", f"A capacity block can last at most {_MAX_DAYS} days in total")
-    c = _catalogue()[b["type"]]
+    if _booked_mb(model, b["end"], b["end"] + add * _DAY, now, skip=b["id"]) + b["count"] * _mem_mb(b["type"]) > pool_mb():
+        raise _Err("InsufficientCapacity", "The pool is booked by another block during the extension window")
     b["days"] += add
     b["end"] += add * _DAY
-    b["fee"] = round(b["fee"] + c["hostRate"] * c["hosts"] * b["count"] * add * 24, 2)
+    b["fee"] = round(b["fee"] + _rate(b["type"]) * b["count"] * add * 24, 2)
+    settle(model, now)
     return {"capacityBlockExtension": {"capacityBlockId": b["id"], "extendedDays": add, "newEndDate": _iso(b["end"])}}
 
 
@@ -261,40 +283,49 @@ def op_cancel(model, p, now):
     if _state(b, now) != "scheduled":
         raise _Err("IncorrectState", "Only a block that has not started can be released in Vyomi (real AWS capacity blocks cannot be cancelled)")
     b["state"] = "cancelled"
-    return {"capacityBlock": _view(b, now)}
+    cr = model.get("capacity_reservations", {}).get(b["reservationId"])
+    if cr is not None:
+        cr["state"] = "cancelled"
+    return {"capacityBlock": _view(model, b, now)}
 
 
 def op_overview(model, p, now):
-    cat = _catalogue()
+    settle(model, now)
     by = {k: 0 for k in _STATES}
-    accs = us = 0
+    booked = 0
     for b in _st(model)["blocks"].values():
         st = _state(b, now)
         by[st] += 1
-        if st == "active":
-            accs += b["count"] * cat[b["type"]]["accelerators"]
-            us += b["count"] if cat[b["type"]]["kind"] == "ultraserver" else 0
-    return {"asOf": _iso(now), "source": LABEL, "blocksByState": by, "activeAccelerators": accs, "activeUltraServers": us,
-            "supportedTypes": [{"type": t, "kind": c["kind"], "accelerator": c["accelerator"], "acceleratorsPerUnit": c["accelerators"],
-                                "hostsPerUnit": c["hosts"], "maxUnits": c["max"]} for t, c in cat.items()]}
-
-
-def _tag(model, p, now, add):
-    b = _get(model, p.get("ResourceId"))
-    tags = b.setdefault("tags", {})
-    for t in p.get("Tags") or []:
-        if add:
-            tags[t.get("Key")] = t.get("Value", "")
-        else:
-            tags.pop(t.get("Key"), None)
-    return {}
+        if st in ("active", "scheduled"):
+            booked += b["count"] * _mem_mb(b["type"])
+    types = [{"type": t, "memoryMb": _mem_mb(t), "vcpu": v["vcpu"], "maxUnits": max(1, min(64, pool_mb() // _mem_mb(t)))}
+             for t, v in _V()._INSTANCE_TYPES.items() if _launchable(t)]
+    return {"asOf": _iso(now), "source": LABEL, "blocksByState": by, "poolMb": pool_mb(), "bookedMb": booked,
+            "supportedTypes": types, "notInScope": NOT_IN_SCOPE}
 
 
 _OPS = {"DescribeCapacityBlockOfferings": op_describe_offerings, "PurchaseCapacityBlock": op_purchase, "DescribeCapacityBlocks": op_describe_blocks,
-        "DescribeCapacityBlockStatus": op_describe_status, "DescribeUltraServers": op_describe_ultraservers, "ExtendCapacityBlock": op_extend,
-        "VyomiCancelCapacityBlock": op_cancel, "VyomiOverview": op_overview,
-        "CreateTags": lambda m, p, n: _tag(m, p, n, True), "DeleteTags": lambda m, p, n: _tag(m, p, n, False)}
-_MUTATING = {"DescribeCapacityBlockOfferings", "PurchaseCapacityBlock", "ExtendCapacityBlock", "VyomiCancelCapacityBlock", "CreateTags", "DeleteTags"}
+        "DescribeCapacityBlockStatus": op_describe_status, "ExtendCapacityBlock": op_extend, "VyomiCancelCapacityBlock": op_cancel,
+        "VyomiOverview": op_overview}
+_MUTATING = {"DescribeCapacityBlockOfferings", "PurchaseCapacityBlock", "ExtendCapacityBlock", "VyomiCancelCapacityBlock"}
+
+
+def admit_launch(model, target, itype, az, count, used, now=None):
+    """Offline appliance RunInstances hook: the EC2 Capacity Reservation rules for a launch that targets `target`.
+    `used` = Docker-backed instances currently pending/running against that reservation. Returns the reservation id or raises
+    a (code, message) via _Err; the caller turns it into the native EC2 error."""
+    now = time.time() if now is None else now
+    settle(model, now)
+    cr = model.get("capacity_reservations", {}).get(str(target))
+    if cr is None:
+        raise _Err("InvalidCapacityReservationId.NotFound", f"The capacity reservation ID '{target}' does not exist")
+    if cr["state"] != "active":
+        raise _Err("CapacityReservationIncorrectState", f"The capacity reservation {target} is {cr['state']}.")
+    if cr["type"] != itype or (az and az != cr["az"]):
+        raise _Err("InvalidParameterValue", "The launch does not match the reservation's instance type / Availability Zone.")
+    if cr["total"] - used < count:
+        raise _Err("InsufficientInstanceCapacity", f"Capacity reservation {target} has only {max(cr['total'] - used, 0)} available instance(s).")
+    return cr["id"]
 
 
 def dispatch(vpc_store, method: str, path: str, body: bytes, now: float | None = None) -> dict:
