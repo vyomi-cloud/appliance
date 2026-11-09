@@ -156,6 +156,37 @@ sends a small write every ~240 s while a Mesh session is active.
   never log tokens, one probe in flight per Codespace, status exposed to the portal (`keepalive` in the session view).
 - Open: GitHub acceptable-use for sparse automated SSH; behaviour at thousands of sessions.
 
+## 9b. Codespace host sshd as a target — design for review [planned, nothing built]
+
+Goal: `ssh codespace.vyomi` reaches the **Codespace host's own sshd** through the same `/connect` path, in addition to the Docker VMs.
+Requested 2026-11-09; handed to a separate session to review and build.
+
+What it needs:
+1. **sshd on the host.** The booster devcontainer already lists the `ghcr.io/devcontainers/features/sshd:1` feature
+   (`codespace/.devcontainer/booster/devcontainer.json`, local); it must be synced to `vyomi-cloud/sandbox` (new Codespaces only).
+2. **Reserved target name** (proposal: `codespace`, or `host`) handled by the agent resolver in `booster-dial.mjs`
+   (`dockerResolve`/`vmCandidates`) before the container lookup. It must not be creatable as a VM name; the portal's
+   unique-VM-name rule has to reserve it.
+3. **Network reach from the `link` container to the host.** The agent runs in a container on `vyomi-net`
+   (`docker-compose.booster.yml`, service `link`); options: `extra_hosts: host.docker.internal:host-gateway`, or the bridge gateway
+   IP, or `network_mode: host` for `link` (changes how it reaches `simulator:9000`, so prefer the first).
+4. **A key the host trusts.** Pass the user's public key from the portal at session start and have the boot script
+   (`boot-booster.sh`) append it to the Codespace user's `authorized_keys`; remove it at session end. Password auth stays off.
+5. **Client:** no protocol change. The hub, `/connect` and `vyomi-tunnel connect` already carry any `vm` name and port.
+   `Host *.vyomi` covers `codespace.vyomi`.
+
+Security: host sshd gives access to the Docker socket (effectively root inside that Codespace). Acceptable because the Codespace is the
+user's own and the hub already requires token + same account + same session. Keep the existing 20-stream cap; log opens of the
+reserved target; do not expose it to any other account or to shared/enterprise tenancy without a separate decision.
+
+Not a TTL renewal: a connection that leaves the Codespace to our relay and returns does not count as SSH activity for GitHub's idle
+timer (only a session through GitHub's own channel, e.g. `gh codespace ssh`, does; see section 9). The keeper must keep using that
+path. This feature is for access and debugging.
+
+Test plan for the builder: extend `wasm/relay/test-mesh-ssh.mjs` with a fake host sshd (TCP echo) and a resolver returning it for
+`codespace`; check that the name is reserved, other accounts get 403, and that `docker exec` access works on a real Codespace once
+sshd and the key injection exist. Estimate: about half a day plus the live check.
+
 ## 10. Test coverage
 
 | Area | Test | Result |
@@ -175,4 +206,5 @@ sends a small write every ~240 s while a Mesh session is active.
 4. Honour the user's key pair at VM launch (the Docker backend injects a generated key).
 5. Keeper (section 9), live verification, devcontainer sync to `vyomi-cloud/sandbox`.
 6. `vyomi-tunnel forward <vm> <local>:<remote>` for non-SSH TCP (HTTP/ws/db).
-7. Per-stream bandwidth cap and audit log; a hosted TCP gateway remains optional post-v4 for zero-install.
+7. Codespace host sshd target (section 9b, handed to another session for review/build).
+8. Per-stream bandwidth cap and audit log; a hosted TCP gateway remains optional post-v4 for zero-install.
