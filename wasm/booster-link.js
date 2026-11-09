@@ -152,6 +152,7 @@
     } else if (vboost) { vboost = null; delete state[SESSION_ID]; }
     var now = JSON.stringify(sess && { s: sess.session && sess.session.state, e: sess.error && sess.error.code, n: sess.ended_note });
     if (prev !== now) emit("vyomi-booster-session", { session: sess });
+    ensureHeartbeat();
     render();
   }
   function loadSession() {
@@ -169,7 +170,7 @@
   }
   function renderChip() {
     if (!document.body) return;
-    if (!sess) { kill("vyb-chip"); return; }
+    if (!sess || document.querySelector('script[src*="booster-widget"]')) { kill("vyb-chip"); return; }   // the console widget shows this state
     var x = sess.session, st = x && x.state, err = (st === "failed" && x.error) ? x.error : sess.error, link = stateOf(SESSION_ID);
     var text, cls = "vyb-c-off", action = "";
     if (st === "running") {
@@ -181,8 +182,11 @@
     else if (err) { cls = "vyb-c-err"; text = "Booster: " + err.message; action = err.action || "retry"; }
     else if (st === "ended" && sess.ended_note) { text = sess.ended_note; action = "restart"; }
     else { text = "Booster off · " + (sess.hours_remaining != null ? sess.hours_remaining + " h left this month" : "start it from your dashboard"); action = "restart"; }
+    var dismissible = !!action && st !== "running" && st !== "pending" && st !== "starting" && st !== "stopping", dkey = "vyb-dismissed";
+    try { if (dismissible && sessionStorage.getItem(dkey) === text) { kill("vyb-chip"); return; } if (!dismissible) sessionStorage.removeItem(dkey); } catch (_) {}
     var c = el("vyb-chip", "vyb-chip " + cls); c.className = "vyb-chip " + cls; c.setAttribute("role", "status"); c.setAttribute("data-state", st || "off"); c.setAttribute("data-link", link);
-    c.innerHTML = "<span>" + esc(text) + "</span>" + (action ? "<a data-vyb-keep href='/dashboard#booster-session' target='_blank' rel='noopener'>" + esc(ACTION_TEXT[action] || "Open dashboard") + "</a>" : "");
+    c.innerHTML = "<span>" + esc(text) + "</span>" + (action ? "<a data-vyb-keep href='/dashboard#booster-session' target='_blank' rel='noopener'>" + esc(ACTION_TEXT[action] || "Open dashboard") + "</a>" : "") + (dismissible ? "<button type='button' data-vyb-keep data-vyb-close aria-label='Dismiss' style='margin-left:10px;background:none;border:0;color:inherit;font-size:16px;cursor:pointer;line-height:1'>\u00d7</button>" : "");
+    var xb = c.querySelector("[data-vyb-close]"); if (xb) xb.onclick = function (ev) { ev.preventDefault(); ev.stopPropagation(); try { sessionStorage.setItem(dkey, text); } catch (_) {} kill("vyb-chip"); };
   }
 
   // ── pairing ─────────────────────────────────────────────────────────
@@ -408,13 +412,113 @@
   }
   function sessionLive() { return !!shellBooster(); }
 
+  // ── Start / Stop from the console (same portal API the legacy dashboard card used) ──────────────────────────────────────────
+  var hbTimer = null;
+  function portalApi(path, method) {
+    return realFetch("/api/booster/" + path, { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j || {} }; }); });
+  }
+  function ensureHeartbeat() {            // the portal ends a session whose Vyomi tab has been closed for 5 minutes: the open console is that tab
+    var on = !!(sess && sess.active);
+    if (on && !hbTimer) hbTimer = setInterval(function () { if (sess && sess.active) portalApi("heartbeat", "POST"); else ensureHeartbeat(); }, 60000);
+    else if (!on && hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+  }
+  // Terms dialog, themed per console: AWS Cloudscape modal · GCP Material 3 dialog · Azure Fluent 2 dialog.
+  function cloudOf() { var m = /\/v4\/(aws|gcp|azure)\b/.exec(location.pathname) || /(aws|gcp|azure)-console/.exec(location.pathname); return m ? m[1] : "aws"; }
+  function dialogCss() {
+    if (document.getElementById("vyb-tm-css")) return;
+    var st = document.createElement("style"); st.id = "vyb-tm-css";
+    st.textContent = ".vyb-tm-o{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center}"
+      + ".vyb-tm{box-sizing:border-box;width:min(520px,92vw);max-height:90vh;overflow:auto;background:#fff;position:relative}"
+      + ".vyb-tm h3{margin:0}.vyb-tm .tm-x{position:absolute;top:14px;right:14px;border:0;background:none;cursor:pointer;font-size:18px;line-height:1;color:#5f6b7a}"
+      + ".vyb-tm p{margin:0 0 12px;line-height:1.5}.vyb-tm .tm-f{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}.vyb-tm .tm-fine{font-size:12px}"
+      + ".vyb-tm button.tm{cursor:pointer;font:inherit}"
+      // AWS · Cloudscape
+      + ".vyb-tm-o[data-cloud=aws]{background:rgba(35,47,62,.6)}"
+      + ".vyb-tm[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;color:#0f141a;border-radius:8px;box-shadow:0 4px 20px 1px rgba(0,28,36,.5);padding:0;font-size:14px}"
+      + ".vyb-tm[data-cloud=aws] .tm-h{padding:20px 52px 14px 24px;border-bottom:1px solid #e9ebed}.vyb-tm[data-cloud=aws] h3{font-size:22px;font-weight:700}"
+      + ".vyb-tm[data-cloud=aws] .tm-b{padding:18px 24px 0}.vyb-tm[data-cloud=aws] .tm-f{margin:0;padding:16px 24px 20px;border-top:0}"
+      + ".vyb-tm[data-cloud=aws] .tm-fine{color:#5f6b7a}.vyb-tm[data-cloud=aws] a{color:#0972d3}"
+      + ".vyb-tm[data-cloud=aws] .tm-no{border:2px solid #0972d3;background:#fff;color:#0972d3;border-radius:20px;padding:4px 18px;font-weight:700}"
+      + ".vyb-tm[data-cloud=aws] .tm-go{border:2px solid #ff9900;background:#ff9900;color:#0f141a;border-radius:20px;padding:4px 20px;font-weight:700}"
+      // GCP · Material 3
+      + ".vyb-tm-o[data-cloud=gcp]{background:rgba(32,33,36,.5)}"
+      + ".vyb-tm[data-cloud=gcp]{font-family:'Google Sans',Roboto,Arial,sans-serif;color:#1f1f1f;border-radius:28px;box-shadow:0 8px 24px rgba(0,0,0,.28);padding:24px 24px 20px;font-size:14px}"
+      + ".vyb-tm[data-cloud=gcp] h3{font-size:24px;font-weight:400;margin-bottom:16px}.vyb-tm[data-cloud=gcp] .tm-h{padding:0}.vyb-tm[data-cloud=gcp] .tm-x{display:none}"
+      + ".vyb-tm[data-cloud=gcp] p{color:#444746}.vyb-tm[data-cloud=gcp] .tm-fine{color:#5f6368}.vyb-tm[data-cloud=gcp] a{color:#0b57d0}"
+      + ".vyb-tm[data-cloud=gcp] .tm-no{border:0;background:none;color:#0b57d0;font-weight:500;padding:10px 16px;border-radius:20px}"
+      + ".vyb-tm[data-cloud=gcp] .tm-go{border:0;background:#0b57d0;color:#fff;font-weight:500;padding:10px 24px;border-radius:20px}"
+      // Azure · Fluent 2
+      + ".vyb-tm-o[data-cloud=azure]{background:rgba(0,0,0,.4)}"
+      + ".vyb-tm[data-cloud=azure]{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#242424;border-radius:8px;box-shadow:0 32px 64px rgba(0,0,0,.24),0 0 8px rgba(0,0,0,.2);padding:24px;font-size:14px}"
+      + ".vyb-tm[data-cloud=azure] h3{font-size:20px;font-weight:600;margin-bottom:12px}.vyb-tm[data-cloud=azure] .tm-h{padding:0}"
+      + ".vyb-tm[data-cloud=azure] p{color:#424242}.vyb-tm[data-cloud=azure] .tm-fine{color:#616161}.vyb-tm[data-cloud=azure] a{color:#0f6cbd}"
+      + ".vyb-tm[data-cloud=azure] .tm-no{border:1px solid #d1d1d1;background:#fff;color:#242424;font-weight:600;padding:5px 16px;border-radius:4px}"
+      + ".vyb-tm[data-cloud=azure] .tm-go{border:1px solid #0f6cbd;background:#0f6cbd;color:#fff;font-weight:600;padding:5px 16px;border-radius:4px}";
+    document.head.appendChild(st);
+  }
+  function termsModal() {                 // JS modal; resolves true on "Agree & start"
+    return new Promise(function (res) {
+      dialogCss(); var c = cloudOf();
+      var o = document.createElement("div"); o.className = "vyb-tm-o"; o.setAttribute("data-cloud", c); o.setAttribute("data-vyb-keep", "1");
+      o.innerHTML = '<div class="vyb-tm" data-cloud="' + c + '" role="dialog" aria-modal="true" aria-labelledby="vyb-tm-t">'
+        + '<button type="button" class="tm-x" data-no aria-label="Close">\u2715</button>'
+        + '<div class="tm-h"><h3 id="vyb-tm-t">Join the Vyomi Global Mesh</h3></div><div class="tm-b">'
+        + '<p>Vyomi Global Mesh operates on a <b>BYOC (Bring Your Own Cloud)</b> model, using the free GitHub quota associated with <b>your own account</b> at <b>no cost</b>.</p>'
+        + '<p>The Mesh will <b>stop once your free quota is exhausted</b>, unless you choose to continue and your GitHub account is linked to a Pro plan or a payment method.</p>'
+        + '<p class="tm-fine">Vyomi acts solely as the custodian of your free quota. All data inside the Mesh is deleted when it stops or reaches the 8-hour limit. <a href="/terms#booster" target="_blank" rel="noopener">Mesh terms</a></p></div>'
+        + '<div class="tm-f"><button type="button" class="tm tm-no" data-no>Cancel</button><button type="button" class="tm tm-go" data-go>Agree &amp; start</button></div></div>';
+      function done(v) { document.removeEventListener("keydown", key, true); o.remove(); res(v); }
+      function key(e) { if (e.key === "Escape") { e.stopPropagation(); done(false); } }
+      o.addEventListener("click", function (e) { if (e.target === o) done(false); });
+      o.querySelectorAll("[data-no]").forEach(function (n) { n.onclick = function () { done(false); }; });
+      o.querySelector("[data-go]").onclick = function () { done(true); };
+      document.addEventListener("keydown", key, true); document.body.appendChild(o); o.querySelector("[data-go]").focus();
+    });
+  }
+  function connectModal(reauth) {
+    if (window.VyomiBoosterWidget && document.getElementById("vy-bw")) { window.VyomiBoosterWidget.show("connect"); return; }         // JS modal: explain + send to GitHub (works for Google/LinkedIn logins: the link is stored against the Vyomi account)
+    var o = document.createElement("div"); o.setAttribute("data-vyb-keep", "1");
+    o.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(10,14,25,.55);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,sans-serif";
+    o.innerHTML = '<div role="dialog" aria-modal="true" style="background:#fff;color:#101828;width:min(440px,92vw);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.35);padding:24px">'
+      + '<h3 style="margin:0 0 10px;font-size:19px">' + (reauth ? "Reconnect GitHub" : "Connect your GitHub account") + '</h3>'
+      + '<p style="margin:0 0 10px;font-size:15px;line-height:1.5">The Mesh runs on the free Codespaces quota of <b>your own GitHub account</b>. Your Vyomi sign-in (Google, LinkedIn or any other) stays the same; we just link GitHub to it.</p>'
+      + '<p style="margin:0 0 18px;font-size:13px;line-height:1.5;color:#475467">No GitHub account yet? <a data-new href="https://github.com/signup" target="_blank" rel="noopener" style="color:#2f6fdc">Create a free one</a> (about 2 minutes), then come back and click Connect GitHub.</p>'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" data-no style="padding:9px 16px;border-radius:8px;border:1px solid #d0d5dd;background:#fff;color:#344054;font-size:14px;cursor:pointer">Cancel</button>'
+      + '<button type="button" data-go style="padding:9px 16px;border-radius:8px;border:0;background:#2f6fdc;color:#fff;font-size:14px;font-weight:600;cursor:pointer">Connect GitHub</button></div></div>';
+    function done() { document.removeEventListener("keydown", key, true); o.remove(); }
+    function key(e) { if (e.key === "Escape") { e.stopPropagation(); done(); } }
+    o.addEventListener("click", function (e) { if (e.target === o) done(); });
+    o.querySelector("[data-no]").onclick = done;
+    o.querySelector("[data-go]").onclick = function () { location.href = "/api/mesh/github/connect" + (reauth ? "?reauth=1" : ""); };
+    document.addEventListener("keydown", key, true); document.body.appendChild(o); o.querySelector("[data-go]").focus();
+  }
+  function termsAgreed() { var W = window.VyomiBoosterWidget; if (W) return W.agreed(); try { return localStorage.getItem("vy_booster_terms") === "1"; } catch (_) { return false; } }
+  function termsAccept() { var W = window.VyomiBoosterWidget; if (W) W.accept(); else { try { localStorage.setItem("vy_booster_terms", "1"); } catch (_) {} } }
+  function sessionStart() {
+    return (termsAgreed() ? Promise.resolve(true) : termsModal()).then(function (ok) {      // terms are a modal dialog, never inline
+      if (!ok) return { cancelled: true };
+      termsAccept();
+      return portalApi("start", "POST").then(function (r) { return loadSession().then(function () { return r; }); });
+    });
+  }
+  function sessionStop() { return portalApi("stop", "POST").then(function (r) { return loadSession().then(function () { return r; }); }); }
   window.VyomiBooster = {
+    connectModal: connectModal, confirmTerms: function () { return termsAgreed() ? Promise.resolve(true) : termsModal(); }, termsAccept: termsAccept, sessionStart: sessionStart, sessionStop: sessionStop,
     list: list, get: function (id) { var b = get(id); return b && Object.assign({}, b, { token: undefined }); }, pair: pair, unpair: unpair,
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
     homeOptions: homeOptions, defaultHome: defaultHome, cloudAllowed: cloudAllowed, planCloud: planCloud, pinCloud: pinCloud, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setBooster: setBooster, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
     session: function () { return sess; }, sessionBooster: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall, aiChip: aiChip,
     shellTarget: shellTarget, openShell: openShell, sessionLive: sessionLive,
+    // apiFetch(path, init): call the mesh's own API (e.g. /api/booster/models, /v1/chat/completions) with its token. Rejects when no mesh is reachable.
+    apiFetch: function (path, init) {
+      var b = vboost || load().filter(function (x) { return (state[x.id] || {}).base; })[0];
+      if (!b) return Promise.reject(new Error("no mesh"));
+      var base = (state[b.id] || {}).base || b.base; if (!base) return Promise.reject(new Error("no mesh"));
+      init = Object.assign({}, init); init.headers = Object.assign({ Authorization: "Bearer " + b.token }, init.headers || {});
+      return realFetch(base.replace(/\/+$/, "") + path, init);
+    },
     isBlocked: blocked, candidates: function (id) { var b = get(id); return b ? candidates(b) : []; },
   };
 

@@ -285,17 +285,68 @@
     var so = document.createElement('a'); so.href = '#'; so.setAttribute('data-act', 'signout'); so.setAttribute('role', 'menuitem'); so.style.display = 'none';
     so.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Sign out</span>';
     var hr = document.createElement('div'); hr.className = 'vy-hr';
-    [who$, act, gh, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
+    var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'booster'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
+    function paintBooster() {
+      var B = window.VyomiBooster, x = B && B.session && B.session(); if (!x || !x.entitled) { bo.style.display = 'none'; return; }
+      var ss = x.session, live = !!x.active, label, tip = '';
+      if (!x.github || !x.github.connected) label = 'Mesh \u00b7 Connect GitHub';
+      else if (live) { var sec = ss.countdown_seconds | 0; label = (ss.state === 'running' ? 'Leave the Mesh \u00b7 ' + Math.floor(sec / 3600) + 'h ' + String(Math.floor(sec % 3600 / 60)).padStart(2, '0') + 'm left' : 'Mesh starting\u2026 (Stop)'); }
+      else label = 'Join the Mesh \u00b7 ' + (x.hours_remaining != null ? x.hours_remaining + ' h left' : '');
+      bo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>' + esc(label) + '</span>'; bo.style.display = '';
+    }
+    window.addEventListener('vyomi-booster-session', paintBooster); setInterval(paintBooster, 15000);
+    [who$, act, bo, gh, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
     function closeMenu() { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (menu.classList.contains('open')) { closeMenu(); return; }
       var r = btn.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
-      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); paintBooster();
     });
-    document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
+    // The v4 consoles render their own account chip (AWS "Account" button, GCP avatar, Azure .vy-account) after this script runs, so the
+    // header button above may never attach. Make those native chips open the same Vyomi account menu (with Sign out).
+    document.addEventListener('click', function (e) {
+      var chip = e.target.closest && e.target.closest('button[aria-label="Account"],[aria-label="Vyomi · local simulator"],button.vy-account');
+      if (!chip || btn.isConnected) return;
+      e.preventDefault(); e.stopPropagation();
+      if (menu.classList.contains('open')) { closeMenu(); return; }
+      paintBooster(); var r = chip.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+      menu.classList.add('open');
+    }, true);
+    document.addEventListener('click', function (e) { if (!menu.contains(e.target) && !(e.target.closest && e.target.closest('button[aria-label="Account"],[aria-label="Vyomi · local simulator"],button.vy-account'))) closeMenu(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    // Show the signed-in user (avatar / initial + name) on each console's own account chip, like old Nano's header avatar.
+    var skinBusy = false;
+    function avHtml(sz) {
+      var em = prof.email || who || '';
+      if (prof.avatar) return '<img src="' + esc(prof.avatar) + '" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">';
+      return esc((em || '?').charAt(0).toUpperCase());
+    }
+    function skin() {
+      if (skinBusy || !(authed || prof.email)) return; skinBusy = true;
+      try {
+        var em = prof.email || who || '', nm = prof.name || (em ? em.split('@')[0] : 'Account');
+        var circ = function (sz) { return 'display:inline-flex;align-items:center;justify-content:center;width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;overflow:hidden;background:#4d8cf3;color:#fff;font:700 ' + Math.round(sz * .5) + 'px/1 sans-serif;flex:none;vertical-align:middle'; };
+        var aws = document.querySelector('button[aria-label="Account"]');
+        if (aws) {
+          var tn = null; var w = document.createTreeWalker(aws, NodeFilter.SHOW_TEXT); while (w.nextNode()) { if (/\S/.test(w.currentNode.nodeValue) && !w.currentNode.parentElement.closest('[data-vy-av]')) { tn = w.currentNode; break; } }
+          if (tn && tn.nodeValue.trim() !== nm) tn.nodeValue = nm;
+          var ex = aws.querySelector('[data-vy-av]'); if (!ex) { ex = document.createElement('span'); ex.setAttribute('data-vy-av', '1'); ex.style.cssText = circ(24) + ';margin-right:8px'; aws.insertBefore(ex, aws.firstChild); }
+          if (ex.getAttribute('data-k') !== (prof.avatar || em)) { ex.innerHTML = avHtml(); ex.setAttribute('data-k', prof.avatar || em); }
+        }
+        var g = document.querySelector('[aria-label="Vyomi \u00b7 local simulator"]');
+        if (g && g.getAttribute('data-k') !== (prof.avatar || em)) { g.innerHTML = avHtml(); g.setAttribute('data-k', prof.avatar || em); g.title = em; g.style.overflow = 'hidden'; }
+        var az = document.querySelector('button.vy-account');
+        if (az) {
+          var ini = az.querySelector('.fui-Avatar__initials'); if (ini && ini.getAttribute('data-k') !== (prof.avatar || em)) { ini.innerHTML = avHtml(); ini.setAttribute('data-k', prof.avatar || em); }
+          az.querySelectorAll('*').forEach(function (n) { if (n.children.length === 0) { var t = n.textContent.trim(); if (/@simulator\.local$/i.test(t) && t !== em) n.textContent = em; else if (/^VYOMI SIMULATOR/i.test(t)) n.textContent = nm; } });
+        }
+      } catch (e) {}
+      skinBusy = false;
+    }
+    try { new MutationObserver(function () { clearTimeout(window.__vySkinT); window.__vySkinT = setTimeout(skin, 150); }).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
     function paintAcct() {
+      setTimeout(skin, 0);
       var t = st.trial, ic = '<svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z"/></svg>';
       if (t && t.active) { act.title = 'Free trial running — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>' + String(st.tier || 'pro').toUpperCase() + ' trial · Upgrade</span>'; }
       else if (t && t.ended) { act.title = 'Your free trial has ended — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>Trial ended · Upgrade</span>'; }
@@ -345,6 +396,19 @@
       var ac = l.getAttribute('data-act');
       if (ac === 'activate') { e.preventDefault(); openView('acct', 'Activate this appliance', true); return; }
       if (ac === 'upgrade') { e.preventDefault(); window.open((st.trial && st.trial.upgrade_url) || 'https://vyomi.cloud/pricing', '_blank', 'noopener'); return; }
+      if (ac === 'booster') {
+        e.preventDefault(); var B = window.VyomiBooster, x = B && B.session && B.session(); if (!B || !x) return;
+        if (!x.github || !x.github.connected) { B.connectModal(false); return; }
+        var live = !!x.active, span = l.querySelector('span'); if (span) span.textContent = live ? 'Stopping\u2026' : 'Starting\u2026';
+        (live ? B.sessionStop() : B.sessionStart()).then(function (r) {
+          paintBooster();
+          if (r && r.cancelled) return;
+          var er = r && !r.ok && r.j; if (!er) return;
+          if (er.action === 'reconnect') { B.connectModal(true); }
+          else alert(er.message || er.error || 'Could not start the mesh.');
+        }, function () { paintBooster(); });
+        return;
+      }
       if (ac === 'signout') { e.preventDefault(); signOut(); return; }
       if (!l.getAttribute('data-v')) return;
       e.preventDefault();
