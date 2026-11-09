@@ -10,24 +10,26 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 
 /** A feature the real console has but Vyomi does not back with a real backend.
  *  Rendered visibly — a fake success would be a UI-conformance failure. */
-export function NotSimulated({ feature, note }) {
+export function NotSimulated({ feature, note, outOfScope, nanoOnly }) {
+  const label = outOfScope ? "Not in scope" : nanoOnly ? "Not on Nano" : "Coming soon";
+  const line = outOfScope ? `${feature} is not in scope for Vyomi.` : nanoOnly ? `${feature} needs the offline appliance (it runs real containers) and is not available in the browser.` : `${feature} isn't backed by a Vyomi backend yet.`;
   return (
     <Box padding="l" textAlign="center" color="text-body-secondary" data-vyomi-not-simulated={feature}>
       <SpaceBetween size="xs">
-        <Badge color="grey">Coming soon</Badge>
-        <Box variant="p" color="inherit">{feature} isn't backed by a Vyomi backend yet.</Box>
+        <Badge color="grey">{label}</Badge>
+        <Box variant="p" color="inherit">{line}</Box>
         {note && <Box variant="small" color="inherit">{note}</Box>}
       </SpaceBetween>
     </Box>
   );
 }
 
-export function NotSimulatedContainer({ title, feature, note }) {
+export function NotSimulatedContainer({ title, feature, note, outOfScope, nanoOnly }) {
   // data-vyomi-gap-box marks the exact boundary of a declared gap for the UI-conformance checker.
   return (
     <div data-vyomi-gap-box="">
     <Container header={<Header variant="h2">{title}</Header>}>
-      <NotSimulated feature={feature || title} note={note} />
+      <NotSimulated feature={feature || title} note={note} outOfScope={outOfScope} nanoOnly={nanoOnly} />
     </Container>
     </div>
   );

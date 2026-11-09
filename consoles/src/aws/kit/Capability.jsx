@@ -48,7 +48,7 @@ export function capability(id) {
     if (typeof console !== "undefined") console.warn(`[vyomi] unknown capability id ${id}`);
     return null;
   }
-  return { ...e, id, level: e.level?.[SUBSTRATE] || e.level?.offline || "not_simulated" };
+  return { ...e, id, offlineLevel: e.level?.offline, level: e.level?.[SUBSTRATE] || e.level?.offline || "not_simulated" };
 }
 
 const LABEL = { limited: "Dev Simplified", config_only: "Config only" };
@@ -96,7 +96,7 @@ export function CapabilityBadge({ id }) {
 export function CapabilityContainer({ id, title, description, actions, counter, children, noBadge }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
-    return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
+    return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} outOfScope={!!c?.outOfScope} nanoOnly={!!c && !c.outOfScope && c.offlineLevel && c.offlineLevel !== "not_simulated"} />;
   }
   return (
     <Container header={<Header variant="h2" counter={counter} description={description} actions={actions}>{title}</Header>}>
