@@ -183,6 +183,30 @@ def run(store=None):
     nonint = [x for x in logs if x["signInEventTypes"] == ["nonInteractiveUser"]]
     _check("sign-in log has the 4 non-interactive user rows (1 success, 3 failures)", len(nonint) == 4 and sum(1 for x in nonint if x["status"]["errorCode"] == 0) == 1)
     _check("the password never leaves the API", "S3cret" not in call("GET", "/v1.0/users").body.decode())
+
+    # Interactive sign-in (authorization-code flow) + Managed identity sign-ins (IMDS simulation)
+    def form(path, **kw):
+        from urllib.parse import urlencode
+        return graph.dispatch(s, "POST", path, {}, {}, urlencode(kw).encode())
+
+    call("PATCH", f"/v1.0/users/{body(call('GET', '/v1.0/users/bob@vyomilearn.onmicrosoft.com'))['id']}", {"accountEnabled": True})
+    AZ = "/t/oauth2/v2.0/authorize"
+    r = form(AZ, client_id="cid", username="bob@vyomilearn.onmicrosoft.com", password="S3cret!pass", scope="openid")
+    _check("authorize with the right password -> 200 + one-time code", r.status == 200 and body(r)["code"].startswith("vyomi.code."))
+    code = body(r)["code"]
+    _check("code redeemed at the token endpoint -> 200", form("/t/oauth2/v2.0/token", grant_type="authorization_code", client_id="cid", code=code).status == 200)
+    _check("code is single use", form("/t/oauth2/v2.0/token", grant_type="authorization_code", client_id="cid", code=code).status == 400)
+    code2 = body(form(AZ, client_id="cid", username="bob@vyomilearn.onmicrosoft.com", password="S3cret!pass"))["code"]
+    _check("code is bound to its client_id", form("/t/oauth2/v2.0/token", grant_type="authorization_code", client_id="other", code=code2).status == 400)
+    _check("authorize wrong password -> AADSTS50126", "AADSTS50126" in form(AZ, client_id="cid", username="bob@vyomilearn.onmicrosoft.com", password="x").body.decode())
+    _check("authorize unknown user -> AADSTS50034", "AADSTS50034" in form(AZ, client_id="cid", username="nobody@vyomilearn.onmicrosoft.com", password="x").body.decode())
+    logs = body(call("GET", "/v1.0/auditLogs/signIns"))["value"]
+    inter = [x for x in logs if x["signInEventTypes"] == ["interactiveUser"]]
+    _check("interactive rows: 2 successes + 2 failures, isInteractive true",
+           len(inter) == 4 and sum(1 for x in inter if x["status"]["errorCode"] == 0) == 2 and all(x["isInteractive"] for x in inter))
+    s.managed_identity_sign_in("pid-1", "vm-1", "https://management.azure.com/")
+    mi = [x for x in body(call("GET", "/v1.0/auditLogs/signIns"))["value"] if x["signInEventTypes"] == ["managedIdentity"]]
+    _check("managed identity row recorded with its resource", len(mi) == 1 and mi[0]["servicePrincipalId"] == "pid-1" and mi[0]["resourceDisplayName"].startswith("https://management"))
     return s
 
 

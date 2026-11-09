@@ -88,6 +88,7 @@ from core import gcp_bigquery_core as gcp_bigquery
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_commit_core as gcp_commit
+from core import gcp_servicehealth_core as gcp_svchealth
 from core import gcp_apphub_core as gcp_apphub
 from core import gcp_clouddeploy_core as gcp_clouddeploy
 from core import gcp_backupdr_core as gcp_backupdr
@@ -103,6 +104,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_svchealth.PATH_RE.match(path.split("?", 1)[0]):
+        return "gcp-servicehealth"   # Personalized Service Health: SIMULATED per-service status + injectable test incidents (core/gcp_servicehealth_core)
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
             or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
         return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
@@ -353,7 +356,7 @@ def _azure_service(path, lheaders, query):
     p0 = path.split("?", 1)[0]
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
-    if re.search(r"/oauth2(/v2\.0)?/token$", p0):
+    if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0):
         return "az-graph"
     p = path
     if p.startswith("/devstoreaccount1/"):     # Azurite account prefix
@@ -816,6 +819,7 @@ class AwsWireRouter:
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
+        self.az_arm.graph_store = self.az_graph   # IMDS token issue -> Entra Managed identity sign-ins row
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         # EventBridge shares the messaging store (rule targets deliver into the real SQS/SNS).
@@ -2151,6 +2155,7 @@ class AwsWireRouter:
                 "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
                 "gcp-commit": (gcp_commit, self.gcp_compute_vm),
+                "gcp-servicehealth": (gcp_svchealth, self.gcp_compute_vm),
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
                 "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
                 "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),

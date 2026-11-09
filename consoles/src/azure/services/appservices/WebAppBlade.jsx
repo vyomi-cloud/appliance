@@ -7,6 +7,7 @@ import { AppRestoreDialog } from "../../kit/BackupPages.jsx";
 import { ResourceMetrics, ResourceLogs, ResourceNotifications, ResourceAlerts } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import Networking from "./Networking.jsx";
+import CapabilitiesTab from "./CapabilitiesTab.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -239,7 +240,7 @@ function Overview({ a, reload, self }) {
       )}
       {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "logs" && <ResourceLogs id={a.id} name={a.name} title="Logs" />}
-      {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
+      {tab === "capabilities" && <CapabilitiesTab a={a} self={self} />}
       {tab === "notifications" && <ResourceNotifications id={a.id} name={a.name} title={null} />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 

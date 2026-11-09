@@ -319,3 +319,12 @@ export const listTpuTypes = async (zone) => (await restJson("GET", `${tpu(zone)}
 export const listTpuRuntimes = async (zone) => (await restJson("GET", `${tpu(zone)}/runtimeVersions`)).runtimeVersions || [];
 export const listInventories = async () => (await restJson("GET", `${osc()}/locations/-/instances/-/inventories`)).inventories || [];
 export const patchReport = () => restJson("GET", `${osc()}/patchReport`);
+
+// ── Service Health (servicehealth v1; SIMULATED by Vyomi - core/gcp_servicehealth_core) ──
+const shBase = () => `/v1/projects/${e(getProject())}/locations/global`;
+export const SERVICE_HEALTH_LOCATIONS = ["global", "us-central1", "us-east1", "us-east4", "us-west1", "europe-west1", "europe-west4", "asia-east1", "asia-southeast1", "asia-northeast1"];
+export const serviceHealthEvents = async () => (await restJson("GET", `${shBase()}/events`, { query: { pageSize: 200 } })).events || [];
+export const serviceHealthStatus = () => restJson("GET", `${shBase()}/vyomiServiceStatus`);
+export const createServiceHealthEvent = (body) => restJson("POST", `${shBase()}/events`, { body });
+export const resolveServiceHealthEvent = (id) => restJson("POST", `${shBase()}/events/${e(id)}:resolve`, { body: {} });
+export const deleteServiceHealthEvent = (id) => restJson("DELETE", `${shBase()}/events/${e(id)}`);

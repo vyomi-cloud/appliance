@@ -2387,6 +2387,39 @@ try {
   await shot("28-resource-manager-deleted");
   }
 
+  // Compute Overview: SIMULATED Service Health feed (gcp.compute.incidents) - empty by default, inject via UI, resolve via UI,
+  // cross-checked over the servicehealth v1 events path.
+  {
+    const SHB = `/v1/projects/${PROJ}/locations/global`;
+    for (const ev of (await wjson(`${SHB}/events`)).events || []) await wire(`${SHB}/events/${ev.name.split("/").pop()}`, { method: "DELETE" });
+    await page.goto(UI + "#/compute");
+    await page.getByText("Simulated by Vyomi").first().waitFor({ timeout: 15000 });
+    await page.getByText("No active incidents").waitFor({ timeout: 10000 });
+    check("Compute overview: simulated service health, no incidents by default", true);
+    await page.getByRole("button", { name: "Inject test incident" }).click();
+    await page.getByLabel("Title").fill("Smoke outage");
+    await page.getByRole("dialog").getByRole("button", { name: "Inject" }).click();
+    await page.getByText("1 active incident").waitFor({ timeout: 10000 });
+    const shEv = (await wjson(`${SHB}/events?filter=state%3DACTIVE`)).events || [];
+    check("injected incident via UI -> servicehealth events.list", shEv.length === 1 && shEv[0].title === "Smoke outage" && shEv[0].vyomiSimulated === true, JSON.stringify(shEv).slice(0, 200));
+    await page.getByRole("button", { name: "Resolve", exact: true }).click();
+    await page.getByText("No active incidents").waitFor({ timeout: 10000 });
+    const shClosed = (await wjson(`${SHB}/events?filter=state%3DCLOSED`)).events || [];
+    check("resolve via UI -> event CLOSED over native wire", shClosed.length === 1 && shClosed[0].detailedState === "RESOLVED");
+    await wire(`${SHB}/events/${shClosed[0].name.split("/").pop()}`, { method: "DELETE" });
+    await shot("29-compute-service-health");
+    // Instance Screenshot tab: serial-console render labelled Simulated by Vyomi (no framebuffer exists).
+    const SSN = `v4-gcp-shot-${Date.now() % 100000}`;
+    await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: SSN, machineType: "zones/us-central1-a/machineTypes/e2-micro", disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }], networkInterfaces: [{ network: "global/networks/default" }] }) });
+    await page.goto(UI + `#/compute/instances/us-central1-a/${SSN}`);
+    await page.getByRole("tab", { name: "Screenshot" }).click();
+    await page.getByLabel("Serial console screenshot").waitFor({ timeout: 15000 });
+    await page.getByText(/Simulated by Vyomi\./).first().waitFor({ timeout: 5000 });
+    check("instance Screenshot tab renders a Simulated-by-Vyomi serial-console image", true);
+    await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances/${SSN}`, { method: "DELETE" });
+  }
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar
