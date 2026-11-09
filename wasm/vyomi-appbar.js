@@ -46,8 +46,12 @@
     '#vy-modal.open{display:flex}' +
     '#vy-modal .box{width:min(1100px,94vw);height:min(760px,90vh);background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}' +
     '#vy-modal .hd{display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 18px;border-bottom:1px solid #e4e7ec;font:600 15px Inter,system-ui,sans-serif;color:#101828}' +
-    '#vy-modal .hd button{margin-left:auto;width:32px;height:32px;border:0;border-radius:50%;background:none;cursor:pointer;font-size:20px;color:#475467}' +
-    '#vy-modal .hd button:hover{background:#f2f4f7}' +
+    '#vy-modal .hd{position:relative}#vy-modal .hd>button{margin-left:auto;width:32px;height:32px;border:0;border-radius:50%;background:none;cursor:pointer;font-size:20px;color:#475467}' +
+    '#vy-modal .hd>button:hover{background:#f2f4f7}' +
+    '#vy-hd-tabs{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);gap:4px;padding:3px;border:1px solid #d0d5dd;border-radius:999px;background:#fff}' +
+    '#vy-modal.api #vy-hd-tabs{display:inline-flex}' +
+    '#vy-hd-tabs button{border:0;background:none;border-radius:999px;padding:4px 14px;font:600 12.5px Inter,system-ui,sans-serif;color:#475467;cursor:pointer}' +
+    '#vy-hd-tabs button.on{background:#000;color:#fff}' +
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
     '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
@@ -159,16 +163,20 @@
       if (j && (j.sandbox || j.restricted)) { closeCap(); expBtn.remove(); cap.remove(); window.__vySandbox = true; }
     }).catch(function () {});
     var m = document.createElement('div'); m.id = 'vy-modal';
-    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
+    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
     var fr = m.querySelector('iframe');
     function close() { m.classList.remove('open'); fr.removeAttribute('src'); }
     m.addEventListener('click', function (e) { if (e.target === m) close(); });
-    m.querySelector('.hd button').addEventListener('click', close);
+    m.querySelector('.hd>button').addEventListener('click', close);
+    m.querySelectorAll('#vy-hd-tabs button').forEach(function (b) { b.addEventListener('click', function () {
+      m.querySelectorAll('#vy-hd-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      try { fr.contentWindow.__apiCloud(b.dataset.c); } catch (e) {} }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
     function openView(view, title, small) {
       m.querySelector('#vy-modal-t').textContent = title;
-      m.classList.toggle('sm', !!small);
+      m.classList.toggle('sm', !!small); m.classList.toggle('api', view === 'api');
+      m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
       fr.src = CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
       m.classList.add('open');
     }
