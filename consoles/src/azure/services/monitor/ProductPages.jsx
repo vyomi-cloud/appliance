@@ -11,9 +11,9 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorBar, InfoBar, Loading } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { listResourceGroups, locationLabel, LOCATIONS } from "../../kit/arm.js";
+import { getSubscription, listResourceGroups, locationLabel, LOCATIONS } from "../../kit/arm.js";
 import GrafanaPanel from "./GrafanaPanel.jsx";
-import { deleteGrafana, deleteMonitorAccount, listActivityLog, listGrafana, listMonitorAccounts, putGrafana, putMonitorAccount } from "./api.js";
+import { deleteAzureLocalCluster, deleteScomInstance, listAzureLocalClusters, listScomInstances, putAzureLocalCluster, putScomInstance, deleteGrafana, deleteMonitorAccount, listActivityLog, listGrafana, listMonitorAccounts, putGrafana, putMonitorAccount } from "./api.js";
 
 const Row = ({ label, children }) => <div className="vy-form-row"><label>{label}</label><div>{children}</div></div>;
 
@@ -171,6 +171,97 @@ export function DashboardsWithGrafana() {
           </>
         )}
         <InfoBar>This dashboard is rendered by Vyomi itself from the real Activity log. It is not Grafana: Vyomi runs no Grafana server and no Prometheus data source.</InfoBar>
+      </CapabilityContainer>
+    </MonitorShell>
+  );
+}
+
+/* Azure Local (Microsoft.AzureStackHCI/clusters). Vyomi-simulated cluster records: the user declares the nodes; there is no
+ * hardware, Arc agent or telemetry, so the page lists the inventory and the declared node specs and says so. */
+export function AzureLocal() {
+  const notify = useNotify();
+  const list = useAsync(listAzureLocalClusters, []);
+  const [form, setForm] = useState(null);
+  const set = (p) => setForm((f) => ({ ...f, ...p }));
+  const create = async () => {
+    const nodes = Array.from({ length: Number(form.nodes) || 0 }, (_, i) => ({ name: `${form.name}-node${i + 1}`, id: i + 1 }));
+    try { await putAzureLocalCluster(form.rg, form.name, { location: form.region, properties: { reportedProperties: { nodes } } }); notify.success(`Azure Local cluster '${form.name}' created.`, "Create succeeded"); setForm(null); list.reload(); }
+    catch (e) { notify.error(e, "Failed to create the Azure Local cluster"); }
+  };
+  return (
+    <MonitorShell active="insights-azurelocal" pageTitle="Azure Local">
+      <CapabilityContainer id="azure.monitor.azure_local_insights" title="Azure Local clusters">
+        {form ? (
+          <section className="vy-form-section" aria-label="Create Azure Local cluster">
+            <h3>Create a simulated Azure Local cluster</h3>
+            <RgLocation f={form} set={set} />
+            <Field label="Cluster name (3-15 characters)"><Input value={form.name} onChange={(_, d) => set({ name: d.value })} aria-label="Cluster name" /></Field>
+            <Field label="Nodes (0 leaves it NotYetRegistered)"><Input type="number" value={String(form.nodes)} onChange={(_, d) => set({ nodes: d.value })} aria-label="Node count" /></Field>
+            <div className="vy-cmdbar"><Button appearance="primary" disabled={!form.name} onClick={create}>Create</Button> <Button onClick={() => setForm(null)}>Cancel</Button></div>
+          </section>
+        ) : (
+          <BrowseGrid resourceName="Azure Local cluster" rowKey={(r) => r.id} items={list.data || []} loading={list.loading} error={list.error} onRefresh={list.reload}
+            onCreate={() => setForm({ name: "", rg: "cloudlearn-rg", region: "eastus", nodes: 2 })}
+            onDelete={async (rows) => { try { await Promise.all(rows.map((r) => deleteAzureLocalCluster(r.resourceGroup, r.name))); } catch (e) { notify.error(e, "Failed to delete"); } list.reload(); }}
+            csvName="azure-local-clusters.csv"
+            columns={[
+              { key: "name", label: "Name" }, { key: "rg", label: "Resource group", value: (r) => r.resourceGroup },
+              { key: "loc", label: "Location", value: (r) => locationLabel(r.location) },
+              { key: "st", label: "Status", value: (r) => r.properties.status },
+              { key: "n", label: "Nodes", value: (r) => (r.properties.reportedProperties?.nodes || []).map((n) => `${n.name} (${n.coreCount} cores, ${n.memoryInGiB} GiB)`).join(", ") || "--" },
+              { key: "ver", label: "Cluster version", value: (r) => r.properties.reportedProperties?.clusterVersion },
+            ]} />
+        )}
+        <InfoBar>Clusters here are Vyomi-simulated ARM records (Microsoft.AzureStackHCI/clusters): the nodes are the ones you declare. There is no Azure Local hardware, Arc agent or health and performance telemetry behind them.</InfoBar>
+      </CapabilityContainer>
+    </MonitorShell>
+  );
+}
+
+/* Azure Monitor SCOM managed instance (Microsoft.Scom/managedInstances): a validated ARM record. */
+export function ScomManagedInstance() {
+  const notify = useNotify();
+  const list = useAsync(listScomInstances, []);
+  const [form, setForm] = useState(null);
+  const set = (p) => setForm((f) => ({ ...f, ...p }));
+  const sub = getSubscription();
+  const create = async () => {
+    try {
+      await putScomInstance(form.rg, form.name, { location: form.region, properties: { dbInstanceId: form.db, vNetSubnetId: form.subnet,
+        domainControllerProperties: { dnsServer: form.dns, domainName: form.domain }, gmsaAccounts: form.gmsa ? [form.gmsa] : [] } });
+      notify.success(`SCOM managed instance '${form.name}' created.`, "Create succeeded"); setForm(null); list.reload();
+    } catch (e) { notify.error(e, "Failed to create the SCOM managed instance"); }
+  };
+  return (
+    <MonitorShell active="scommanagedinstance" pageTitle="Azure Monitor SCOM managed instance">
+      <CapabilityContainer id="azure.monitor.scom_managed_instance" title="SCOM managed instances">
+        {form ? (
+          <section className="vy-form-section" aria-label="Create SCOM managed instance">
+            <h3>Create a SCOM managed instance</h3>
+            <RgLocation f={form} set={set} />
+            <Field label="Instance name (3-24 characters)"><Input value={form.name} onChange={(_, d) => set({ name: d.value })} aria-label="Instance name" /></Field>
+            <Field label="SQL managed instance resource id"><Input value={form.db} onChange={(_, d) => set({ db: d.value })} aria-label="SQL managed instance id" /></Field>
+            <Field label="Virtual network subnet resource id"><Input value={form.subnet} onChange={(_, d) => set({ subnet: d.value })} aria-label="Subnet id" /></Field>
+            <Field label="DNS server"><Input value={form.dns} onChange={(_, d) => set({ dns: d.value })} aria-label="DNS server" /></Field>
+            <Field label="Domain name"><Input value={form.domain} onChange={(_, d) => set({ domain: d.value })} aria-label="Domain name" /></Field>
+            <Field label="gMSA account (optional)"><Input value={form.gmsa} onChange={(_, d) => set({ gmsa: d.value })} aria-label="gMSA account" /></Field>
+            <div className="vy-cmdbar"><Button appearance="primary" disabled={!form.name || !form.db || !form.subnet || !form.dns || !form.domain} onClick={create}>Create</Button> <Button onClick={() => setForm(null)}>Cancel</Button></div>
+          </section>
+        ) : (
+          <BrowseGrid resourceName="SCOM managed instance" rowKey={(r) => r.id} items={list.data || []} loading={list.loading} error={list.error} onRefresh={list.reload}
+            onCreate={() => setForm({ name: "", rg: "cloudlearn-rg", region: "eastus", db: `/subscriptions/${sub}/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/managedInstances/sqlmi`,
+              subnet: `/subscriptions/${sub}/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vnet/subnets/default`, dns: "10.0.0.4", domain: "corp.local", gmsa: "" })}
+            onDelete={async (rows) => { try { await Promise.all(rows.map((r) => deleteScomInstance(r.resourceGroup, r.name))); } catch (e) { notify.error(e, "Failed to delete"); } list.reload(); }}
+            csvName="scom-managed-instances.csv"
+            columns={[
+              { key: "name", label: "Name" }, { key: "rg", label: "Resource group", value: (r) => r.resourceGroup },
+              { key: "loc", label: "Location", value: (r) => locationLabel(r.location) },
+              { key: "domain", label: "Domain", value: (r) => r.properties.domainControllerProperties?.domainName },
+              { key: "db", label: "SQL managed instance", value: (r) => (r.properties.dbInstanceId || "").split("/").pop() },
+              { key: "ep", label: "Management endpoint", value: (r) => r.properties.managementEndpoint },
+            ]} />
+        )}
+        <InfoBar>The instance is a validated ARM record (SQL managed instance id, subnet and domain settings). No System Center management server, SQL managed instance or Active Directory domain runs behind it, so nothing is actually monitored.</InfoBar>
       </CapabilityContainer>
     </MonitorShell>
   );

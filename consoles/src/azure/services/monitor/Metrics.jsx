@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
-import { Button, Select, Tab, TabList } from "@fluentui/react-components";
+import { Button, Checkbox, Input, Select, Tab, TabList } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
-import { listAllResources, listMetricDefinitions, getMetrics, LOCATIONS_OF, RESOURCE_TYPES } from "./api.js";
+import { listAllResources, listMetricDefinitions, getMetrics, metricFilter, listDashboards, getDashboard, putDashboard, deleteDashboard, LOCATIONS_OF, RESOURCE_TYPES } from "./api.js";
+import { listResourceGroups } from "../../kit/arm.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { Loading, NotSimulatedContainer } from "../../kit/common.jsx";
+import { Loading, ErrorBar } from "../../kit/common.jsx";
 
 const COLORS = ["#0078d4", "#d13438", "#107c10", "#8764b8"];
 
 function newRow(scope) {
-  return { id: Math.random().toString(36).slice(2), scope, namespace: "Platform", metric: "", aggregation: "Total", defs: null, series: null };
+  return { id: Math.random().toString(36).slice(2), scope, namespace: "Platform", metric: "", aggregation: "Total", defs: null, series: null, filters: [], splitBy: "", editor: "" };
 }
 
 /** A dependency-free inline chart (line or bar — real axis/points over real data, never a
  *  static image). The "Line chart" header button toggles between the two render modes. */
 function MetricChart({ rows, chartType }) {
   const w = 640, h = 180, pad = 28;
-  const allPoints = rows.flatMap((r) => (r.series || []));
+  const lines = rows.flatMap((r) => (r.series || []).map((s) => ({ ...s, key: `${r.id}-${s.label}` })));
+  const allPoints = lines.flatMap((l) => l.points);
   const max = Math.max(1, ...allPoints.map((p) => p.value));
   return (
     <svg width={w} height={h} role="img" aria-label={`Metric ${chartType} chart`}>
@@ -23,19 +25,19 @@ function MetricChart({ rows, chartType }) {
       <line x1={pad} y1={4} x2={pad} y2={h - pad} stroke="#ccc" />
       <text x={2} y={10} fontSize="10" fill="#666">{max}</text>
       <text x={2} y={h - pad} fontSize="10" fill="#666">0</text>
-      {rows.map((row, ri) => {
-        const pts = row.series || [];
+      {lines.map((row, ri) => {
+        const pts = row.points;
         if (pts.length < 2) return null;
         const stepX = (w - pad - 8) / (pts.length - 1);
         const yFor = (p) => h - pad - (p.value / max) * (h - pad - 8);
         if (chartType === "bar") {
-          const barW = Math.max(2, stepX / rows.length - 2);
+          const barW = Math.max(2, stepX / lines.length - 2);
           return pts.map((p, i) => (
-            <rect key={`${row.id}-${i}`} x={pad + i * stepX + ri * barW} y={yFor(p)} width={barW} height={h - pad - yFor(p)} fill={COLORS[ri % COLORS.length]} />
+            <rect key={`${row.key}-${i}`} x={pad + i * stepX + ri * barW} y={yFor(p)} width={barW} height={h - pad - yFor(p)} fill={COLORS[ri % COLORS.length]} />
           ));
         }
         const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${pad + i * stepX} ${yFor(p)}`).join(" ");
-        return <path key={row.id} d={d} fill="none" stroke={COLORS[ri % COLORS.length]} strokeWidth="2" />;
+        return <path key={row.key} d={d} fill="none" stroke={COLORS[ri % COLORS.length]} strokeWidth="2" />;
       })}
     </svg>
   );
@@ -51,12 +53,16 @@ function MetricRow({ row, resources, onChange, onRemove, removable }) {
 
   useEffect(() => {
     if (!row.scope || !row.metric) return;
-    getMetrics(row.scope, { metricnames: row.metric, aggregation: row.aggregation, interval: "PT1H" }).then((r) => {
-      const ts = r.value?.[0]?.timeseries?.[0]?.data || [];
+    const flt = row.metric === "ActivityOperations" ? metricFilter(row.filters, row.splitBy) : "";
+    getMetrics(row.scope, { metricnames: row.metric, aggregation: row.aggregation, interval: "PT1H", filter: flt }).then((r) => {
       const key = row.aggregation.toLowerCase();
-      onChange({ ...row, series: ts.map((p) => ({ t: p.timeStamp, value: p[key] ?? 0 })) });
-    }).catch(() => onChange({ ...row, series: [] }));
-  }, [row.scope, row.metric, row.aggregation]);
+      const series = (r.value?.[0]?.timeseries || []).map((t) => ({
+        label: (t.metadatavalues || []).map((m) => m.value).join(" / ") || row.metric,
+        points: (t.data || []).map((p) => ({ t: p.timeStamp, value: p[key] ?? 0 })),
+      }));
+      onChange({ ...row, series, error: "" });
+    }).catch((e) => onChange({ ...row, series: [], error: String(e.message || e) }));
+  }, [row.scope, row.metric, row.aggregation, JSON.stringify(row.filters), row.splitBy]);
 
   const resource = resources.find((r) => r.id === row.scope);
   return (
@@ -82,7 +88,125 @@ function MetricRow({ row, resources, onChange, onRemove, removable }) {
       </FormRow>
       {resource && <p style={{ fontSize: 12, margin: "4px 0 0" }}>
         Showing the real count of {resource.name}'s own Activity log operations, bucketed hourly.</p>}
+      {row.error && <ErrorBar error={row.error} title="Metric query failed" />}
+      {row.metric === "ActivityOperations" && <CapabilityContainer id="azure.monitor.metric_dimensions" title="Filters and splitting"><FilterSplit row={row} onChange={onChange} /></CapabilityContainer>}
       {removable && <Button appearance="subtle" onClick={onRemove}>Remove metric</Button>}
+    </div>
+  );
+}
+
+const DIMENSIONS = ["OperationName", "Status"];
+
+/** Add filter / Apply splitting for a metric's real dimensions (the Activity log columns being counted). The filter editor's
+ *  value list is whatever values the scope really has - discovered by splitting the metric by that dimension. */
+function FilterSplit({ row, onChange }) {
+  const [draft, setDraft] = useState({ dimension: "OperationName", operator: "eq", values: [] });
+  const [avail, setAvail] = useState([]);
+  useEffect(() => {
+    if (row.editor !== "filter") return;
+    getMetrics(row.scope, { metricnames: row.metric, aggregation: row.aggregation, filter: `${draft.dimension} eq '*'` })
+      .then((r) => setAvail([...new Set((r.value?.[0]?.timeseries || []).map((t) => t.metadatavalues?.[0]?.value).filter(Boolean))].sort()))
+      .catch(() => setAvail([]));
+  }, [row.editor, row.scope, draft.dimension]);
+  const toggle = (v) => setDraft({ ...draft, values: draft.values.includes(v) ? draft.values.filter((x) => x !== v) : [...draft.values, v] });
+  return (
+    <div data-testid="metric-filter-split" style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button appearance="subtle" onClick={() => onChange({ ...row, editor: row.editor === "filter" ? "" : "filter" })}>Add filter</Button>
+        <Button appearance="subtle" onClick={() => onChange({ ...row, editor: row.editor === "split" ? "" : "split" })}>Apply splitting</Button>
+        {row.filters.map((f, i) => (
+          <span key={i} className="vy-pill vy-pill-static" data-testid="metric-filter-pill">
+            {f.dimension} {f.operator === "ne" ? "!=" : "="} {f.values.join(", ")}{" "}
+            <a href="#/monitor/metrics" aria-label={`Remove filter ${f.dimension}`} onClick={(e) => { e.preventDefault(); onChange({ ...row, filters: row.filters.filter((_, j) => j !== i) }); }}>x</a>
+          </span>
+        ))}
+        {row.splitBy && <span className="vy-pill vy-pill-static" data-testid="metric-split-pill">Split by {row.splitBy}</span>}
+      </div>
+      {row.editor === "filter" && (
+        <div className="vy-form-row-group" style={{ border: "1px solid #ddd", padding: 8, marginTop: 6 }}>
+          <FormRow label="Property">
+            <Select value={draft.dimension} onChange={(_, d) => setDraft({ dimension: d.value, operator: draft.operator, values: [] })} aria-label="Filter property">
+              {DIMENSIONS.map((d) => <option key={d}>{d}</option>)}
+            </Select>
+          </FormRow>
+          <FormRow label="Operator">
+            <Select value={draft.operator} onChange={(_, d) => setDraft({ ...draft, operator: d.value })} aria-label="Filter operator">
+              <option value="eq">=</option><option value="ne">!=</option>
+            </Select>
+          </FormRow>
+          <FormRow label="Values">
+            {avail.length === 0 ? <span className="vy-muted">No values yet - this scope has no recorded operations.</span>
+              : avail.map((v) => <div key={v}><Checkbox label={v} checked={draft.values.includes(v)} onChange={() => toggle(v)} /></div>)}
+          </FormRow>
+          <Button appearance="primary" disabled={!draft.values.length}
+            onClick={() => { onChange({ ...row, editor: "", filters: [...row.filters.filter((f) => f.dimension !== draft.dimension), draft] }); setDraft({ ...draft, values: [] }); }}>Apply filter</Button>
+        </div>
+      )}
+      {row.editor === "split" && (
+        <div className="vy-form-row-group" style={{ border: "1px solid #ddd", padding: 8, marginTop: 6 }}>
+          <FormRow label="Values">
+            <Select value={row.splitBy} onChange={(_, d) => onChange({ ...row, splitBy: d.value, editor: "" })} aria-label="Split by">
+              <option value="">(none)</option>
+              {DIMENSIONS.map((d) => <option key={d}>{d}</option>)}
+            </Select>
+          </FormRow>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Save to dashboard: writes (or updates) a real Microsoft.Portal/dashboards resource carrying this chart as a metrics part;
+ *  the pinned charts it holds are listed (and removable) underneath. */
+function SaveToDashboard({ rows }) {
+  const [open, setOpen] = useState(false);
+  const [rgs, setRgs] = useState([]);
+  const [rg, setRg] = useState("");
+  const [name, setName] = useState("metrics-dashboard");
+  const [msg, setMsg] = useState("");
+  const [dashboards, setDashboards] = useState([]);
+  const refresh = () => listDashboards().then(setDashboards).catch(() => setDashboards([]));
+  useEffect(() => { listResourceGroups().then((r) => { setRgs(r); if (r[0]) setRg((v) => v || r[0].name); }).catch(() => {}); refresh(); }, []);
+  const save = async () => {
+    setMsg("");
+    try {
+      let cur = { properties: { lenses: [], metadata: {} } };
+      try { cur = await getDashboard(rg, name); } catch { /* new dashboard */ }
+      const lenses = JSON.parse(JSON.stringify(cur.properties?.lenses?.length ? cur.properties.lenses : [{ order: 0, parts: [] }]));
+      const first = lenses[0];
+      first.parts = first.parts || [];
+      for (const r of rows) {
+        first.parts.push({ position: { x: (first.parts.length % 3) * 4, y: Math.floor(first.parts.length / 3) * 4, colSpan: 4, rowSpan: 3 },
+          metadata: { type: "Extension/HubsExtension/PartType/MonitorChartPart",
+            inputs: [{ name: "options", value: { chart: { title: `${r.metric} (${r.aggregation})`, metrics: [{ resourceMetadata: { id: r.scope }, name: r.metric, aggregationType: r.aggregation,
+              filterCollection: r.filters, splitBy: r.splitBy }] } } }] } });
+      }
+      await putDashboard(rg, name, { location: cur.location || "global", tags: cur.tags, properties: { lenses, metadata: cur.properties?.metadata || {} } });
+      setMsg(`Saved ${rows.length} chart${rows.length === 1 ? "" : "s"} to dashboard ${name}.`);
+      refresh();
+    } catch (e) { setMsg(`Save failed: ${e.message || e}`); }
+  };
+  return (
+    <div data-testid="metric-dashboards" style={{ marginTop: 12 }}>
+      <Button appearance="subtle" onClick={() => setOpen(!open)}>Save to dashboard</Button>
+      {open && (
+        <div className="vy-form-row-group" style={{ border: "1px solid #ddd", padding: 8, marginTop: 6 }}>
+          <FormRow label="Resource group">
+            <Select value={rg} onChange={(_, d) => setRg(d.value)} aria-label="Dashboard resource group">{rgs.map((g) => <option key={g.name}>{g.name}</option>)}</Select>
+          </FormRow>
+          <FormRow label="Dashboard name"><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Dashboard name" /></FormRow>
+          <Button appearance="primary" disabled={!rg || !name} onClick={save}>Pin to dashboard</Button>
+        </div>
+      )}
+      {msg && <p role="status" data-testid="metric-dashboard-msg">{msg}</p>}
+      {dashboards.length > 0 && (
+        <ul data-testid="metric-dashboard-list" style={{ marginTop: 8 }}>
+          {dashboards.map((d) => (
+            <li key={d.id}>{d.name} ({d.resourceGroup}) - {(d.properties?.lenses || []).reduce((n, l) => n + (l.parts || []).length, 0)} pinned chart(s){" "}
+              <Button size="small" appearance="subtle" onClick={() => deleteDashboard(d.resourceGroup, d.name).then(refresh)}>Delete</Button></li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -165,7 +289,7 @@ export default function Metrics() {
                   <Button onClick={() => setChartType(chartType === "line" ? "bar" : "line")}>{chartType === "line" ? "Line chart" : "Bar chart"}</Button>
                 </div>
                 <div style={{ marginTop: 12 }}><MetricChart rows={rows} chartType={chartType} /></div>
-                <NotSimulatedContainer title="Coming soon" note="Add filter, Apply splitting, Save to dashboard — Vyomi has no metric dimensions and no custom-dashboard resource to save a chart into." />
+                <CapabilityContainer id="azure.monitor.metrics_dashboards" title="Dashboards"><SaveToDashboard rows={rows} /></CapabilityContainer>
               </>
             )}
           </CapabilityContainer>

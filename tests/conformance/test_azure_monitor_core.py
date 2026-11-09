@@ -173,6 +173,27 @@ check("metric definitions lists the one real metric", r["status"] == 200
 r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "interval": "PT1H"})
 check("metrics data has one real operation (the VM create) somewhere in its series", r["status"] == 200
       and sum(p["total"] for p in r["body"]["value"][0]["timeseries"][0]["data"]) == 1, r["body"])
+# Metric dimensions (Add filter / Apply splitting): OperationName + Status are the real columns of the Activity log rows being counted.
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metricDefinitions", {"api-version": "2018-01-01"})
+check("ActivityOperations definition advertises its real dimensions", [d["value"] for d in r["body"]["value"][0]["dimensions"]] == ["OperationName", "Status"], r["body"])
+r = arm.handle("PUT", mvm, {"api-version": "2023-09-01"}, {"location": "eastus", "properties": {"x": 1}})
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "$filter": "OperationName eq '*'"})
+ts = r["body"]["value"][0]["timeseries"]
+check("splitting by OperationName yields one series per operation, labelled by metadatavalues", r["status"] == 200 and len(ts) >= 1
+      and all(t["metadatavalues"][0]["name"]["value"] == "operationname" and t["metadatavalues"][0]["value"] for t in ts)
+      and sum(p["total"] for t in ts for p in t["data"]) >= 2, r["body"])
+opname = ts[0]["metadatavalues"][0]["value"]
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "$filter": f"OperationName eq '{opname}'"})
+only = sum(p["total"] for p in r["body"]["value"][0]["timeseries"][0]["data"])
+r2 = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "$filter": f"OperationName ne '{opname}'"})
+rest = sum(p["total"] for p in r2["body"]["value"][0]["timeseries"][0]["data"])
+r3 = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01"})
+allc = sum(p["total"] for p in r3["body"]["value"][0]["timeseries"][0]["data"])
+check("Add filter eq/ne partitions the unfiltered count exactly", only >= 1 and only + rest == allc, (only, rest, allc))
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "$filter": "Status eq 'Failed'"})
+check("filter on a value with no rows is a real zero series, not an error", r["status"] == 200 and sum(p["total"] for p in r["body"]["value"][0]["timeseries"][0]["data"]) == 0, r["body"])
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "$filter": "Bogus eq 'x'"})
+check("filter on an unknown dimension -> 400", r["status"] == 400, r["body"])
 r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "metricnames": "NotReal"})
 check("unknown metric name → 400", r["status"] == 400, r["body"])
 r = arm.handle("GET", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/nope/providers/Microsoft.Insights/metrics",

@@ -13,10 +13,7 @@ import SupportPanel from "../../kit/SupportPanel.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 /** [route id, exact page title (after "Monitor | "), capability id]. */
-const GAPS = [
-  ["insights-azurelocal", "Azure Local", "azure.monitor.azure_local_insights"],
-  ["scommanagedinstance", "Azure Monitor SCOM managed instance", "azure.monitor.scom_managed_instance"],
-];
+const GAPS = [];   // Azure Local + SCOM managed instance have real pages now (ProductPages.jsx)
 
 function GapPage({ active, title, capId }) {
   return (

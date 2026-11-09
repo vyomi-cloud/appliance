@@ -53,6 +53,35 @@ check("after removing the integration the delete succeeds and the managed DCR is
       r["status"] == 200 and arm.handle("GET", f"/subscriptions/{SUB}{dcr_id.split(SUB)[1]}", {"api-version": "2023-03-11"}, None)["status"] == 404, r)
 check("grafana delete", h("DELETE", f"{GR}/graf1", "2023-09-01")["status"] == 200 and h("GET", f"{GR}/graf1", "2023-09-01")["status"] == 404)
 
+# SCOM managed instance (control-plane record) + Azure Local cluster (Vyomi-simulated record)
+SC = f"/resourceGroups/{RG}/providers/Microsoft.Scom/managedInstances"
+HC = f"/resourceGroups/{RG}/providers/Microsoft.AzureStackHCI/clusters"
+SQLMI = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Sql/managedInstances/sqlmi1"
+SUBNET = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Network/virtualNetworks/vn1/subnets/s1"
+good = {"location": "eastus", "properties": {"dbInstanceId": SQLMI, "vNetSubnetId": SUBNET,
+        "domainControllerProperties": {"dnsServer": "10.0.0.4", "domainName": "corp.local"}, "gmsaAccounts": ["scomgmsa"]}}
+r = h("PUT", f"{SC}/scom1", "2023-07-07-preview", good)
+check("SCOM managed instance created with management endpoint, SQL MI + subnet recorded", r["status"] in (200, 201)
+      and r["body"]["properties"]["dbInstanceId"] == SQLMI and r["body"]["properties"]["managementEndpoint"].startswith("https://scom1-"), r["body"])
+check("SCOM instance without a SQL MI id is rejected", h("PUT", f"{SC}/scom2", "2023-07-07-preview", {"location": "eastus", "properties": {"vNetSubnetId": SUBNET, "domainControllerProperties": {"dnsServer": "x", "domainName": "y"}}})["status"] == 400)
+check("SCOM instance without domain controller settings is rejected", h("PUT", f"{SC}/scom2", "2023-07-07-preview", {"location": "eastus", "properties": {"dbInstanceId": SQLMI, "vNetSubnetId": SUBNET}})["status"] == 400)
+check("SCOM instance listed (RG + subscription scope)", len(h("GET", SC, "2023-07-07-preview")["body"]["value"]) == 1
+      and len(h("GET", "/providers/Microsoft.Scom/managedInstances", "2023-07-07-preview")["body"]["value"]) == 1)
+check("SCOM instance delete", h("DELETE", f"{SC}/scom1", "2023-07-07-preview")["status"] == 200 and h("GET", f"{SC}/scom1", "2023-07-07-preview")["status"] == 404)
+
+r = h("PUT", f"{HC}/local1", "2024-04-01", {"location": "eastus"})
+check("Azure Local cluster without nodes is NotYetRegistered", r["status"] in (200, 201) and r["body"]["properties"]["status"] == "NotYetRegistered", r["body"])
+r = h("PUT", f"{HC}/local2", "2024-04-01", {"location": "eastus", "properties": {"reportedProperties": {"nodes": [{"name": "n1"}, {"name": "n2", "coreCount": 32}]}}})
+check("Azure Local cluster with declared nodes is ConnectedRecently and lists them", r["body"]["properties"]["status"] == "ConnectedRecently"
+      and [n["name"] for n in r["body"]["properties"]["reportedProperties"]["nodes"]] == ["n1", "n2"]
+      and "Vyomi-simulated" in r["body"]["properties"]["simulation"], r["body"])
+r = h("PATCH", f"{HC}/local1", "2024-04-01", {"properties": {"reportedProperties": {"nodes": [{"name": "a"}]}}})
+check("registering nodes on an existing cluster flips it to ConnectedRecently", r["body"]["properties"]["status"] == "ConnectedRecently", r["body"])
+check("Azure Local bad node rejected", h("PUT", f"{HC}/local3", "2024-04-01", {"location": "eastus", "properties": {"reportedProperties": {"nodes": [{}]}}})["status"] == 400)
+check("Azure Local clusters listed", len(h("GET", "/providers/Microsoft.AzureStackHCI/clusters", "2024-04-01")["body"]["value"]) == 2)
+check("Azure Local delete", h("DELETE", f"{HC}/local1", "2024-04-01")["status"] == 200 and h("GET", f"{HC}/local1", "2024-04-01")["status"] == 404)
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 
 

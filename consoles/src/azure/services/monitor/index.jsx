@@ -33,7 +33,7 @@ import ServiceHealth from "./ServiceHealth.jsx";
 import Pipelines from "./Pipelines.jsx";
 import { RESOURCE_TYPES } from "./api.js";
 import { gapRoutes } from "./StaticPages.jsx";
-import { DashboardsWithGrafana, ManagedGrafana, ManagedPrometheus } from "./ProductPages.jsx";
+import { AzureLocal, DashboardsWithGrafana, ManagedGrafana, ManagedPrometheus, ScomManagedInstance } from "./ProductPages.jsx";
 
 const crumb = (text, href) => [{ text, href: `#/monitor/${href}` }];
 const rt = (provider, type) => RESOURCE_TYPES.find((r) => r.provider === provider && r.type === type);
@@ -74,6 +74,8 @@ export default {
     { pattern: "/monitor/insightshub", component: InsightsHub, crumbs: () => crumb("Insights Hub", "insightshub") },
     { pattern: "/monitor/changeanalysis", component: ChangeAnalysis, crumbs: () => crumb("Change Analysis", "changeanalysis") },
     { pattern: "/monitor/managedprometheus", component: ManagedPrometheus, crumbs: () => crumb("Managed Prometheus", "managedprometheus") },
+    { pattern: "/monitor/insights-azurelocal", component: AzureLocal, crumbs: () => crumb("Azure Local", "insights-azurelocal") },
+    { pattern: "/monitor/scommanagedinstance", component: ScomManagedInstance, crumbs: () => crumb("Azure Monitor SCOM managed instance", "scommanagedinstance") },
     { pattern: "/monitor/managedgrafana", component: ManagedGrafana, crumbs: () => crumb("Azure Managed Grafana", "managedgrafana") },
     { pattern: "/monitor/workbooks", component: Workbooks, crumbs: () => crumb("Gallery", "workbooks") },
     { pattern: "/monitor/createworkbook", component: CreateWorkbook, crumbs: () => crumb("New workbook", "createworkbook") },

@@ -80,9 +80,8 @@
     "title": "Metrics charts (metric definitions and time-series values)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Exactly one real metric exists per resource — \"Activity operations\", a genuine count of that resource's own Activity log rows (never synthetic/random data), bucketed over the requested interval.",
-      "Average/Minimum/Maximum report the same per-bucket count as Total/Count (there is only one real sample per bucket) — Azure's richer resource-specific metric catalogs (CPU, requests, throughput, …) are not reproduced.",
-      "Not simulated: Add filter, Apply splitting, Save to dashboard — Vyomi has no metric dimensions and no custom-dashboard resource to save a chart into."
+      "Exactly one real metric exists per resource — \"Activity operations\", a genuine count of that resource's own Activity log rows (never synthetic/random data), bucketed over the requested interval. Its dimensions (OperationName, Status) are those rows' own columns.",
+      "Average/Minimum/Maximum report the same per-bucket count as Total/Count (there is only one real sample per bucket) — Azure's richer resource-specific metric catalogs (CPU, requests, throughput, …) are not reproduced."
     ],
     "api": ["Resources.List", "Metrics.ListDefinitions", "Metrics.List"],
     "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
@@ -198,9 +197,11 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.azure_local_insights": {
-    "title": "Azure Local insights",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Local (hybrid hardware) is out of scope for a cloud simulator."]
+    "title": "Azure Local (Microsoft.AzureStackHCI/clusters) inventory",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": ["Vyomi-simulated cluster records: you declare the nodes; there is no Azure Local hardware, Arc agent, or health/performance telemetry, so no live cluster metrics are shown."],
+    "api": ["Clusters.CreateOrUpdate", "Clusters.List", "Clusters.Delete"],
+    "tests": ["tests/conformance/test_azure_monitorproducts.py"]
   },
   "azure.monitor.managed_prometheus": {
     "title": "Managed Prometheus (Azure Monitor workspaces)",
@@ -232,9 +233,11 @@
     ]
   },
   "azure.monitor.scom_managed_instance": {
-    "title": "Azure Monitor SCOM managed instance",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["SCOM managed instance is out of scope for a simulator."]
+    "title": "Azure Monitor SCOM managed instance (create, list, delete)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": ["The instance is stored and validated as an ARM resource (SQL managed instance id, subnet, domain controller settings); no System Center management server, SQL managed instance or Active Directory domain runs behind it, so nothing is monitored."],
+    "api": ["ManagedInstances.CreateOrUpdate", "ManagedInstances.List", "ManagedInstances.Delete"],
+    "tests": ["tests/conformance/test_azure_monitorproducts.py"]
   },
   "azure.monitor.diagnostic_settings": {
     "title": "Diagnostic settings (per-resource logs/metrics routing: resource picker + create/list/delete)",
@@ -335,5 +338,40 @@
     "limitations": [],
     "api": ["Alerts.GetHistory"],
     "tests": ["tests/conformance/test_azure_alerts_core.py"]
+  },
+  "azure.monitor.metric_dimensions": {
+    "title": "Metric dimensions — Add filter and Apply splitting (OperationName, Status)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Only the Activity operations metric has dimensions; the storage/APIM/Cosmos metrics carry none."
+    ],
+    "api": [
+      "Metrics.List ($filter)",
+      "Metrics.ListDefinitions (dimensions)"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_monitor_core.py"
+    ]
+  },
+  "azure.monitor.metrics_dashboards": {
+    "title": "Save to dashboard (Microsoft.Portal/dashboards with a metrics chart part)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "The dashboard is a real ARM resource other tools can read and write; Vyomi has no portal dashboard canvas to render it, so the Metrics page lists the pinned charts."
+    ],
+    "api": [
+      "Dashboards.CreateOrUpdate",
+      "Dashboards.List",
+      "Dashboards.Delete"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_monitor_core.py"
+    ]
   }
 }

@@ -209,9 +209,26 @@ export const METRICS_API_VERSION = "2018-01-01";
 export const listMetricDefinitions = async (resourceId) =>
   (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/metricDefinitions`,
     { query: { "api-version": METRICS_API_VERSION } })).value || [];
-export const getMetrics = (resourceId, { metricnames, aggregation = "Total", interval = "PT1H", timespan } = {}) =>
+export const getMetrics = (resourceId, { metricnames, aggregation = "Total", interval = "PT1H", timespan, filter } = {}) =>
   restJson("GET", `${resourceId}/providers/Microsoft.Insights/metrics`,
-    { query: { "api-version": METRICS_API_VERSION, metricnames, aggregation, interval, ...(timespan ? { timespan } : {}) } });
+    { query: { "api-version": METRICS_API_VERSION, metricnames, aggregation, interval, ...(timespan ? { timespan } : {}), ...(filter ? { $filter: filter } : {}) } });
+
+/** Azure metrics `$filter` from the chart's Add filter rows + Apply splitting dimension, e.g.
+ *  `(OperationName eq 'a' or OperationName eq 'b') and Status eq '*'`. Splitting is `Dim eq '*'`. */
+export function metricFilter(filters = [], splitBy = "") {
+  const terms = filters.filter((f) => f.dimension && f.values?.length).map((f) =>
+    f.operator === "ne" ? f.values.map((v) => `${f.dimension} ne '${v}'`).join(" and ")
+      : `(${f.values.map((v) => `${f.dimension} eq '${v}'`).join(" or ")})`);
+  if (splitBy) terms.push(`${splitBy} eq '*'`);
+  return terms.join(" and ");
+}
+
+// ── Save to dashboard: a real Microsoft.Portal/dashboards resource in the ARM store, one metrics-chart part per pin ──
+export const DASHBOARDS = armType("Microsoft.Portal", "dashboards", "2022-12-01-preview");
+export const listDashboards = async () => (await DASHBOARDS.list()).map(withRg);
+export const getDashboard = (rg, name) => DASHBOARDS.get(rg, name).then(withRg);
+export const putDashboard = (rg, name, body) => DASHBOARDS.put(rg, name, body);
+export const deleteDashboard = (rg, name) => DASHBOARDS.remove(rg, name);
 
 // ── data collection rule associations (Microsoft.Insights/dataCollectionRuleAssociations) —
 // the real extension resource behind "Observability agents (preview)": links a target resource
@@ -257,3 +274,13 @@ export const deleteMonitorAccount = (rg, name) => MONITOR_ACCOUNTS.remove(rg, na
 export const listGrafana = async () => (await GRAFANA.list()).map(withRg);
 export const putGrafana = (rg, name, body) => GRAFANA.put(rg, name, body);
 export const deleteGrafana = (rg, name) => GRAFANA.remove(rg, name);
+
+// ── Azure Local clusters + SCOM managed instances (core/azure_monitorproducts_core.py) ──
+export const AZURE_LOCAL = armType("Microsoft.AzureStackHCI", "clusters", "2024-04-01");
+export const SCOM_INSTANCES = armType("Microsoft.Scom", "managedInstances", "2023-07-07-preview");
+export const listAzureLocalClusters = async () => (await AZURE_LOCAL.list()).map(withRg);
+export const putAzureLocalCluster = (rg, name, body) => AZURE_LOCAL.put(rg, name, body);
+export const deleteAzureLocalCluster = (rg, name) => AZURE_LOCAL.remove(rg, name);
+export const listScomInstances = async () => (await SCOM_INSTANCES.list()).map(withRg);
+export const putScomInstance = (rg, name, body) => SCOM_INSTANCES.put(rg, name, body);
+export const deleteScomInstance = (rg, name) => SCOM_INSTANCES.remove(rg, name);

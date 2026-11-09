@@ -1,9 +1,9 @@
-# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
-# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """Azure Monitor companion products - control plane only (``Microsoft.Monitor``, ``Microsoft.Dashboard``). Substrate-free (no fastapi / sockets / subprocess), so the same file runs offline and in Nano.
 
     Microsoft.Monitor/accounts           Azure Monitor workspace behind Managed Prometheus (api 2023-04-03)
     Microsoft.Dashboard/grafana          Azure Managed Grafana workspace (api 2023-09-01)
+    Microsoft.Scom/managedInstances      Azure Monitor SCOM managed instance, control plane record (api 2023-07-07-preview)
+    Microsoft.AzureStackHCI/clusters     Azure Local cluster, Vyomi-simulated record + nodes (api 2024-04-01)
 
 Real behaviour: name rules, SKU / version enums, generated endpoint hostnames, system-assigned identity, a Monitor
 account really creates its managed Data Collection Endpoint and Data Collection Rule (Microsoft.Insights, in the
@@ -12,8 +12,10 @@ integrations are validated against real Monitor accounts. Deleting a Monitor acc
 a Grafana workspace is refused.
 
 NOT modelled (no engine behind them): Prometheus scraping/ingestion/PromQL (the query endpoint exists but nothing is
-ever ingested), a running Grafana server (the endpoint is a stable name, not a live web app). SCOM managed
-instances are not modelled at all (they need a SQL managed instance and an Active Directory domain Vyomi has none of). ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}``.
+ever ingested), a running Grafana server (the endpoint is a stable name, not a live web app). A SCOM managed instance is
+stored and validated as an ARM resource (SQL MI id, subnet id, domain settings) but NO System Center management server, SQL
+managed instance or Active Directory domain runs behind it; an Azure Local cluster is a Vyomi-simulated record (declared nodes,
+no hardware, no Arc agent, no telemetry). ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}``.
 """
 from __future__ import annotations
 
@@ -22,7 +24,8 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-API_VERSIONS = {"microsoft.monitor": "2023-04-03", "microsoft.dashboard": "2023-09-01"}
+API_VERSIONS = {"microsoft.monitor": "2023-04-03", "microsoft.dashboard": "2023-09-01", "microsoft.scom": "2023-07-07-preview",
+                "microsoft.azurestackhci": "2024-04-01"}
 API_VERSION = API_VERSIONS["microsoft.monitor"]
 DEFAULT_LOCATION = "eastus"
 GRAFANA_SKUS = ("Standard", "Essential")
@@ -33,6 +36,8 @@ _TENANT = "00000000-0000-0000-0000-000000000000"
 _TYPES = {  # (namespace lower, collection lower) -> canonical type string
     ("microsoft.monitor", "accounts"): "Microsoft.Monitor/accounts",
     ("microsoft.dashboard", "grafana"): "Microsoft.Dashboard/grafana",
+    ("microsoft.scom", "managedinstances"): "Microsoft.Scom/managedInstances",
+    ("microsoft.azurestackhci", "clusters"): "Microsoft.AzureStackHCI/clusters",
 }
 
 
@@ -267,8 +272,104 @@ def _put_grafana(state, sub, rg, rid, name, payload, method):
     return rec, False
 
 
+# ═══════════════════════════ Azure Monitor SCOM managed instance ═════════════════
+_SQLMI_ID = re.compile(r"^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Sql/managedInstances/[^/]+$", re.I)
+_SUBNET_ID = re.compile(r"^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Network/virtualNetworks/[^/]+/subnets/[^/]+$", re.I)
+
+
+def _put_scom(state, sub, rg, rid, name, payload, method):
+    _check_name(name, "SCOM managed instance", 3, 24)
+    rec = state.get(rid.lower())
+    if rec is None and method == "PATCH":
+        raise _E(404, "ResourceNotFound", f"The Resource 'Microsoft.Scom/managedInstances/{name}' under resource group '{rg}' was not found.")
+    pay = payload.get("properties") or {}
+    if rec is None:
+        if not payload.get("location"):
+            raise _bad("The location property is required for this definition.", "LocationRequired")
+        db = pay.get("dbInstanceId")
+        if not isinstance(db, str) or not _SQLMI_ID.match(db):
+            raise _bad("properties.dbInstanceId must be the resource id of a Microsoft.Sql/managedInstances instance (the SCOM operational/data warehouse databases live there).", "InvalidDbInstanceId")
+        subnet = pay.get("vNetSubnetId")
+        if not isinstance(subnet, str) or not _SUBNET_ID.match(subnet):
+            raise _bad("properties.vNetSubnetId must be the resource id of a virtual network subnet.", "InvalidSubnetId")
+        dc = pay.get("domainControllerProperties") or {}
+        for k in ("dnsServer", "domainName"):
+            if not dc.get(k):
+                raise _bad(f"properties.domainControllerProperties.{k} is required.", "InvalidDomainControllerProperties")
+        loc = payload["location"]
+        tok = _h(rid, n=8)
+        rec = {"id": rid, "name": name, "type": "Microsoft.Scom/managedInstances", "location": loc, "tags": dict(payload.get("tags") or {}),
+               "properties": {"provisioningState": "Succeeded", "dbInstanceId": db, "vNetSubnetId": subnet,
+                              "domainControllerProperties": {"dnsServer": dc["dnsServer"], "domainName": dc["domainName"], "ouPath": dc.get("ouPath", "")},
+                              "gmsaAccounts": list(pay.get("gmsaAccounts") or []),
+                              "managementEndpoint": f"https://{name}-{tok}.scom.{loc}.azure.com",
+                              "instanceStatus": "Vyomi-simulated: no System Center management server is running"},
+               "systemData": _sysdata(), "_type": "Microsoft.Scom/managedInstances", "_sub": sub, "_rg": rg}
+        rec["identity"] = _identity(payload, rid) or {"type": "None"}
+        state[rid.lower()] = rec
+        return rec, True
+    if "tags" in payload:
+        rec["tags"] = dict(payload.get("tags") or {})
+    if "gmsaAccounts" in pay:
+        rec["properties"]["gmsaAccounts"] = list(pay.get("gmsaAccounts") or [])
+    rec["systemData"]["lastModifiedAt"] = _now()
+    return rec, False
+
+
+# ═══════════════════════════ Azure Local (Microsoft.AzureStackHCI/clusters) ═════
+_HCI_STATUS = ("NotYetRegistered", "ConnectedRecently", "NotConnectedRecently", "Disconnected", "Error")
+
+
+def _hci_nodes(pay_nodes):
+    out = []
+    for i, n in enumerate(pay_nodes or []):
+        if not isinstance(n, dict) or not n.get("name"):
+            raise _bad(f"reportedProperties.nodes[{i}] needs a 'name'.", "InvalidNode")
+        out.append({"id": int(n.get("id") or i + 1), "name": n["name"], "manufacturer": n.get("manufacturer", "Vyomi (simulated)"),
+                    "model": n.get("model", "Simulated node"), "osName": n.get("osName", "Azure Stack HCI"), "osVersion": n.get("osVersion", "10.0.25398.0"),
+                    "coreCount": int(n.get("coreCount") or 16), "memoryInGiB": int(n.get("memoryInGiB") or 128)})
+    return out
+
+
+def _put_hci(state, sub, rg, rid, name, payload, method):
+    _check_name(name, "Azure Local cluster", 3, 15)
+    rec = state.get(rid.lower())
+    if rec is None and method == "PATCH":
+        raise _E(404, "ResourceNotFound", f"The Resource 'Microsoft.AzureStackHCI/clusters/{name}' under resource group '{rg}' was not found.")
+    pay = payload.get("properties") or {}
+    rp = pay.get("reportedProperties") or {}
+    if rec is None:
+        if not payload.get("location"):
+            raise _bad("The location property is required for this definition.", "LocationRequired")
+        nodes = _hci_nodes(rp.get("nodes"))
+        reg = _now() if nodes else None
+        rec = {"id": rid, "name": name, "type": "Microsoft.AzureStackHCI/clusters", "location": payload["location"], "tags": dict(payload.get("tags") or {}),
+               "properties": {"provisioningState": "Succeeded", "status": "ConnectedRecently" if nodes else "NotYetRegistered",
+                              "cloudId": str(uuid.uuid5(uuid.NAMESPACE_URL, rid)), "aadTenantId": pay.get("aadTenantId") or _TENANT,
+                              "aadClientId": pay.get("aadClientId") or str(uuid.uuid5(uuid.NAMESPACE_URL, rid + "#aad")),
+                              "registrationTimestamp": reg, "lastSyncTimestamp": reg, "billingModel": "Pay-as-you-go",
+                              "reportedProperties": {"clusterName": name, "clusterId": str(uuid.uuid5(uuid.NAMESPACE_URL, rid + "#c")),
+                                                     "clusterVersion": "10.2408.0.29", "nodes": nodes, "diagnosticLevel": "Basic",
+                                                     "imdsAttestation": "Disabled"},
+                              "simulation": "Vyomi-simulated cluster record: no hardware, no Arc agent, no telemetry"},
+               "systemData": _sysdata(), "_type": "Microsoft.AzureStackHCI/clusters", "_sub": sub, "_rg": rg}
+        state[rid.lower()] = rec
+        return rec, True
+    if "tags" in payload:
+        rec["tags"] = dict(payload.get("tags") or {})
+    if "nodes" in rp:
+        rec["properties"]["reportedProperties"]["nodes"] = _hci_nodes(rp.get("nodes"))
+        if rec["properties"]["reportedProperties"]["nodes"] and rec["properties"]["status"] == "NotYetRegistered":
+            rec["properties"]["status"] = "ConnectedRecently"
+            rec["properties"]["registrationTimestamp"] = rec["properties"]["lastSyncTimestamp"] = _now()
+    if pay.get("status"):
+        rec["properties"]["status"] = _enum(pay["status"], "status", _HCI_STATUS)
+    rec["systemData"]["lastModifiedAt"] = _now()
+    return rec, False
+
+
 # ═══════════════════════════ dispatch ════════════════════════════════════════════
-_PUT = {"microsoft.monitor": _put_account, "microsoft.dashboard": _put_grafana}
+_PUT = {"microsoft.monitor": _put_account, "microsoft.dashboard": _put_grafana, "microsoft.scom": _put_scom, "microsoft.azurestackhci": _put_hci}
 
 
 def dispatch(state, method, sub, rg, namespace, chain, payload=None, query=None, base=""):
@@ -319,4 +420,4 @@ def _dispatch(state, method, sub, rg, namespace, chain, payload):
 
 def resource_types():
     return [("Microsoft.Monitor/accounts", "2023-04-03"), ("Microsoft.Dashboard/grafana", "2023-09-01"),
-            ("Microsoft.Scom/managedInstances", "2023-07-07-preview")]
+            ("Microsoft.Scom/managedInstances", "2023-07-07-preview"), ("Microsoft.AzureStackHCI/clusters", "2024-04-01")]

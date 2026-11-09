@@ -818,6 +818,33 @@ _METRIC_NAME = "ActivityOperations"
 _METRIC_DISPLAY = "Activity operations"
 _METRIC_UNIT = "Count"
 _METRIC_AGGS = ("Total", "Count", "Average", "Minimum", "Maximum")
+# ActivityOperations is a count of Activity log rows, so its real dimensions are those rows' own columns.
+_METRIC_DIMS = ("OperationName", "Status")
+_FILTER_TERM = re.compile(r"^\s*(OperationName|Status)\s+(eq|ne)\s+'([^']*)'\s*$", re.I)
+
+
+def parse_metric_filter(flt):
+    """Azure's metrics `$filter`: `Dim eq 'v' [or Dim eq 'w'] and Dim2 eq '*'` -> ({dim: ('eq'|'ne', [values])}, [split dims]).
+    `eq '*'` means "split by this dimension" (Apply splitting). Returns (None, error) on an unsupported dimension."""
+    conds, split = {}, []
+    if not flt or not str(flt).strip():
+        return conds, split
+    for term in re.split(r"\s+and\s+", str(flt).strip(), flags=re.I):
+        alts = re.split(r"\s+or\s+", term.strip("() "), flags=re.I)
+        for alt in alts:
+            m = _FILTER_TERM.match(alt.strip("() "))
+            if not m:
+                return None, f"The filter '{alt.strip()}' is invalid. Supported dimensions for this metric: {', '.join(_METRIC_DIMS)}; operators eq/ne."
+            dim = next(d for d in _METRIC_DIMS if d.lower() == m.group(1).lower())
+            op, val = m.group(2).lower(), m.group(3)
+            if val == "*":
+                if dim not in split:
+                    split.append(dim)
+            else:
+                conds.setdefault(dim, (op, []))[1].append(val)
+    return conds, split
+
+
 METRICS_API_VERSION = "2018-01-01"
 STORAGE_METRIC_UNITS = {
     "UsedCapacity": "Bytes", "BlobCount": "Count", "ContainerCount": "Count",
@@ -934,6 +961,8 @@ def list_metric_definitions(state, scope_rid, blob_store=None, rg_exists=False):
     if not _scope_known(state, scope_rid, rg_exists):
         return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
     defs = [_metric_definition(scope_rid, _METRIC_NAME, _METRIC_DISPLAY, _METRIC_UNIT)]
+    defs[0]["isDimensionRequired"] = False
+    defs[0]["dimensions"] = [{"value": d, "localizedValue": d} for d in _METRIC_DIMS]   # real columns of the Activity log rows being counted
     if _apim_capacity_basis(state, scope_rid) is not None:
         d = _metric_definition(scope_rid, CAPACITY_METRIC, "Capacity", "Percent")
         d["primaryAggregationType"] = "Average"
@@ -975,6 +1004,12 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
             return _err(400, "BadRequest",
                         f"Failed to find metric configuration for provider: microsoft.insights, "
                         f"metric name: {n}, metric namespace: Platform.")
+    mflt = query.get("$filter") or query.get("filter")
+    conds, split = parse_metric_filter(mflt)
+    if conds is None:
+        return _err(400, "BadRequest", split)
+    if (conds or split) and any(n.lower() != _METRIC_NAME.lower() for n in names):
+        return _err(400, "BadRequest", f"Only the {_METRIC_NAME} metric has dimensions ({', '.join(_METRIC_DIMS)}); remove the filter for the other metrics.")
     interval = query.get("interval") or "PT1H"
     if interval not in WINDOW_SIZES:
         return _err(400, "BadRequest",
@@ -1005,7 +1040,7 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
         return _err(400, "BadRequest", "The requested timespan/interval produces too many data points (max 500).")
     scope_key = scope_rid.lower().rstrip("/")
     in_rg = _is_rg(scope_rid)  # a resource group's metric counts every operation under it
-    timestamps = []
+    events = []
     for r in state.values():
         if str(r.get("_type", "")).lower() != "microsoft.insights/eventtypes":
             continue
@@ -1014,29 +1049,38 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
             continue
         ts = _parse_metric_iso(r.get("eventTimestamp"))
         if ts is not None:
-            timestamps.append(ts)
+            events.append((ts, {"OperationName": str((r.get("operationName") or {}).get("value", "")),
+                                "Status": str((r.get("status") or {}).get("value", ""))}))
     step = timedelta(minutes=step_min)
     buckets = [start + step * i for i in range(n_buckets)]
-    counts = [0] * len(buckets)
-    for ts in timestamps:
-        if ts < start or ts > end:
+
+    def _keep(dims):   # Add filter: eq (any listed value) / ne (none of them), case-insensitive like Azure
+        for dim, (op, vals) in conds.items():
+            hit = dims[dim].lower() in [v.lower() for v in vals]
+            if hit != (op == "eq"):
+                return False
+        return True
+
+    groups = {}   # split-key tuple -> counts per bucket ((): the unsplit series)
+    for ts, dims in events:
+        if ts < start or ts > end or not _keep(dims):
             continue
         idx = min(int((ts - start).total_seconds() // (step_min * 60)), len(buckets) - 1)
-        counts[idx] += 1
-    data = []
-    for t, c in zip(buckets, counts):
-        point = {"timeStamp": t.strftime("%Y-%m-%dT%H:%M:%SZ")}
-        if "Total" in aggs:
-            point["total"] = c
-        if "Count" in aggs:
-            point["count"] = c
-        if "Average" in aggs:
-            point["average"] = c
-        if "Minimum" in aggs:
-            point["minimum"] = c
-        if "Maximum" in aggs:
-            point["maximum"] = c
-        data.append(point)
+        groups.setdefault(tuple(dims[d] for d in split), [0] * len(buckets))[idx] += 1
+    if not groups:
+        groups[tuple("" for _ in split)] = [0] * len(buckets)
+
+    def _series(counts):
+        out = []
+        for t, c in zip(buckets, counts):
+            point = {"timeStamp": t.strftime("%Y-%m-%dT%H:%M:%SZ")}
+            for a in aggs:
+                point[{"Total": "total", "Count": "count", "Average": "average", "Minimum": "minimum", "Maximum": "maximum"}[a]] = c
+            out.append(point)
+        return out
+
+    timeseries = [{"metadatavalues": [{"name": {"value": d.lower(), "localizedValue": d.lower()}, "value": v} for d, v in zip(split, key)],
+                   "data": _series(cnt)} for key, cnt in sorted(groups.items())]
     stats = blob_engine.account_metrics(blob_store, acct) if any(n.lower() in storage_by_lower for n in names) else None
     if stats is not None:
         stats = _with_request_stats(stats, acct)
@@ -1092,7 +1136,7 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
             "displayDescription": "Count of real Azure Resource Manager write/delete operations Vyomi "
                                    "recorded against this resource (from its own Activity log).",
             "unit": _METRIC_UNIT,
-            "timeseries": [{"metadatavalues": [], "data": data}],
+            "timeseries": timeseries,
         })
     return _ok({"cost": 0, "timespan": f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 "interval": interval, "namespace": "Platform", "resourceregion": "", "value": value})
