@@ -179,7 +179,7 @@
       var aiText = aiChip(link === "connected" ? (state[SESSION_ID] || {}).status : null); if (aiText) text += " · " + aiText;
     } else if (st === "pending" || st === "starting") { cls = "vyb-c-warn"; text = "Mesh starting… (about 2 minutes)"; }
     else if (st === "stopping") { cls = "vyb-c-warn"; text = "Mesh stopping…"; }
-    else if (err) { cls = "vyb-c-err"; text = "Mesh: " + err.message; action = err.action || "retry"; }
+    else if (err) { cls = "vyb-c-err"; text = "Mesh: could not start"; action = err.action || "retry"; }
     else if (st === "ended" && sess.ended_note) { text = sess.ended_note; action = "restart"; }
     else { text = "Mesh off · " + (sess.hours_remaining != null ? sess.hours_remaining + " h left this month" : "start it from your dashboard"); action = "restart"; }
     var dismissible = !!action && st !== "running" && st !== "pending" && st !== "starting" && st !== "stopping", dkey = "vyb-dismissed";
@@ -507,8 +507,25 @@
     });
   }
   function sessionStop() { return portalApi("stop", "POST").then(function (r) { return loadSession().then(function () { return r; }); }); }
+  // One error toast for every Mesh surface (widget, app bar, chip): fixed top-right, disappears after 5 seconds.
+  var toastEl = null, toastTimer = 0;
+  function toast(text) {
+    if (!text || !document.body) return;
+    if (!document.getElementById("vy-bw-toast-css")) {
+      var st = document.createElement("style"); st.id = "vy-bw-toast-css";
+      st.textContent = "#vy-bw-toast{position:fixed;top:16px;right:16px;z-index:2147483000;max-width:min(420px,calc(100vw - 32px));padding:12px 16px;border-radius:10px;"
+        + "background:#fff;color:#111;border:1px solid #d0d5dd;border-left:4px solid #b42318;box-shadow:0 8px 24px rgba(0,0,0,.18);font:13px/1.45 system-ui,sans-serif;"
+        + "opacity:0;transform:translateY(-6px);transition:opacity .2s,transform .2s;pointer-events:none}#vy-bw-toast.on{opacity:1;transform:none}";
+      document.head.appendChild(st);
+    }
+    if (!toastEl) { toastEl = document.createElement("div"); toastEl.id = "vy-bw-toast"; toastEl.setAttribute("role", "alert"); document.body.appendChild(toastEl); }
+    toastEl.textContent = String(text);
+    toastEl.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("on"); }, 5000);
+  }
   window.VyomiBooster = {
-    connectModal: connectModal, confirmTerms: function () { return termsAgreed() ? Promise.resolve(true) : termsModal(); }, termsAccept: termsAccept, sessionStart: sessionStart, sessionStop: sessionStop,
+    toast: toast, connectModal: connectModal, confirmTerms: function () { return termsAgreed() ? Promise.resolve(true) : termsModal(); }, termsAccept: termsAccept, sessionStart: sessionStart, sessionStop: sessionStop,
     list: list, get: function (id) { var b = get(id); return b && Object.assign({}, b, { token: undefined }); }, pair: pair, unpair: unpair,
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
