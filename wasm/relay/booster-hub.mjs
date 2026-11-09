@@ -14,6 +14,7 @@ import { verify, SessionError } from "./booster-session.mjs";
 
 export const HEADER = "x-vyomi-session-token";
 const DEFAULT_ORIGINS = ["https://vyomi.cloud", "https://www.vyomi.cloud"];
+const MAX_STREAMS = Number(process.env.VYOMI_MAX_STREAMS || 20);   // per Mesh session
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SESSION_KEY || "",
@@ -43,6 +44,7 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     boosters.delete(sid); clearTimeout(b.timer);
     for (const [, p] of b.pending) p({ status: 502, headers: { "content-type": "text/plain" }, body: Buffer.from("booster link closed: " + reason).toString("base64") });
     b.pending.clear();
+    if (b.streams) { for (const st of [...b.streams.values()]) { try { st.cws.close(1012, reason); } catch { /* */ } } b.streams.clear(); }
     try { b.ws.close(4000, reason); } catch { /* already closed */ }
     log(`booster ${sid} closed (${reason})`);
   }
@@ -62,8 +64,20 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
       entry.timer = setTimeout(() => dropBooster(sid, "session_end"), Math.max(0, claims.session_end * 1000 - Date.now()));
       boosters.set(sid, entry);
       log(`booster ${sid} (${claims.sub}) linked`);
-      ws.on("message", (data) => {
+      ws.on("message", (data, isBinary) => {
+        if (isBinary) {                                           // [u32 sid][payload] from the VM -> laptop
+          const st = entry.streams && entry.streams.get(data.readUInt32BE(0));
+          if (st && st.cws.readyState === st.cws.OPEN) st.cws.send(data.subarray(4), { binary: true });
+          return;
+        }
         let m; try { m = JSON.parse(data.toString()); } catch { return; }
+        if (m.type === "tcp-opened" || m.type === "tcp-error" || m.type === "tcp-close") {
+          const st = entry.streams && entry.streams.get(m.sid);
+          if (!st) return;
+          if (m.type === "tcp-opened") { st.open = true; clearTimeout(st.timer); for (const f of st.queue) ws.send(f); st.queue = []; }
+          else st.close(m.type === "tcp-error" ? "error" : "closed");
+          return;
+        }
         const done = entry.pending.get(m.id);
         if (done) { entry.pending.delete(m.id); done(m); }
       });
@@ -109,5 +123,49 @@ export function createHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SES
     return true;
   }
 
-  return { upgrade, http, enabled, linked: () => [...boosters.keys()], close: () => { for (const sid of [...boosters.keys()]) dropBooster(sid, "relay shutdown"); } };
+  /** WebSocket upgrade for /connect?vm=<name>: a laptop (`vyomi-tunnel connect`) asks for a raw TCP stream to a VM behind the
+   *  booster of the SAME session (token.session_id). Bytes flow as binary WS messages both ways; booster side uses
+   *  [u32 sid][payload] frames and {type:"tcp-open"|"tcp-opened"|"tcp-error"|"tcp-close", sid}. Returns true if it took the socket. */
+  const connWss = new WebSocketServer({ noServer: true });
+  let sidSeq = 1;
+  function connect(req, socket, head) {
+    const reject = (status, code) => { try { socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`); } catch { /* */ } socket.destroy(); };
+    if (!enabled()) { reject(503, "BoosterLinkDisabled"); return true; }
+    if (!originOk(req.headers.origin)) { reject(403, "OriginNotAllowed"); return true; }
+    let claims;
+    try { claims = verify(bearer(req), key, nowS()); }
+    catch (e) { reject(e instanceof SessionError ? e.status : 401, e.code || "BoosterSessionInvalid"); return true; }
+    const u = new URL(req.url, "http://x");
+    const vm = u.searchParams.get("vm") || "", port = Number(u.searchParams.get("port") || 22);
+    if (!/^[A-Za-z0-9._-]{1,80}$/.test(vm) || !(port > 0 && port < 65536)) { reject(400, "BadVm"); return true; }
+    const b = boosters.get(claims.session_id);
+    if (!b || b.ws.readyState !== b.ws.OPEN) { reject(502, "BoosterNotLinked"); return true; }
+    if (b.claims.sub !== claims.sub) { reject(403, "BoosterSessionMismatch"); return true; }
+    if (!b.streams) b.streams = new Map();
+    if (b.streams.size >= MAX_STREAMS) { reject(429, "TooManyStreams"); return true; }
+    connWss.handleUpgrade(req, socket, head, (cws) => {
+      const sid = sidSeq++;
+      const st = { cws, open: false, queue: [] };
+      b.streams.set(sid, st);
+      const close = (why) => {
+        if (!b.streams.delete(sid)) return;
+        clearTimeout(st.timer);
+        try { if (b.ws.readyState === b.ws.OPEN) b.ws.send(JSON.stringify({ type: "tcp-close", sid })); } catch { /* */ }
+        try { cws.close(why === "error" ? 1011 : 1000, why); } catch { /* */ }
+      };
+      st.close = close;
+      st.timer = setTimeout(() => { if (!st.open) close("error"); }, 20000);   // booster/VM never answered
+      cws.on("message", (data, isBinary) => {
+        if (!isBinary) return;
+        const frame = Buffer.allocUnsafe(4 + data.length); frame.writeUInt32BE(sid, 0); Buffer.from(data).copy(frame, 4);
+        if (st.open) b.ws.send(frame); else st.queue.push(frame);
+      });
+      cws.on("close", () => close("closed")); cws.on("error", () => close("error"));
+      b.ws.send(JSON.stringify({ type: "tcp-open", sid, vm, port }));
+      log(`stream ${sid} -> ${claims.session_id}/${vm}:${port}`);
+    });
+    return true;
+  }
+
+  return { upgrade, connect, http, enabled, linked: () => [...boosters.keys()], close: () => { for (const sid of [...boosters.keys()]) dropBooster(sid, "relay shutdown"); } };
 }

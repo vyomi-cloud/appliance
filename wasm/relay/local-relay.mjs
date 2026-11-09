@@ -40,6 +40,12 @@ import { createRequire } from "node:module";
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
+// Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status
+if (["login", "config", "connect", "status"].includes(process.argv[2])) {
+  const { main } = await import("./mesh-cli.mjs");
+  process.exit(await main(process.argv.slice(2)));
+}
+
 const VERSION = "1.2.0";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN
@@ -165,6 +171,7 @@ const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/booster") { hub.upgrade(req, socket, head); return; }
+  if (p === "/connect") { hub.connect(req, socket, head); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));

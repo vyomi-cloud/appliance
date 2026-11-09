@@ -10,6 +10,8 @@
  */
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { peekSessionEnd } from "./booster-session.mjs";
@@ -33,9 +35,26 @@ function localRequest(base, token, m) {
   });
 }
 
+/** Where does VM <name> listen? Default: a Docker container named vyomi-<name> / <name> on this host (the Docker VM backend),
+ *  returns {host, port}. Override with the `resolveVm` option (tests, other backends). Never resolves arbitrary hosts. */
+export function dockerResolve(name, port = 22) {
+  return new Promise((resolve) => {
+    if (!/^[A-Za-z0-9._-]{1,80}$/.test(name)) return resolve(null);
+    const tryName = (cands) => {
+      const c = cands.shift(); if (!c) return resolve(null);
+      execFile("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", c], { timeout: 5000 }, (err, out) => {
+        const ip = !err && String(out).trim().split(/\s+/).find(Boolean);
+        if (ip) resolve({ host: ip, port }); else tryName(cands);
+      });
+    };
+    tryName([`vyomi-${name}`, name]);
+  });
+}
+
 /** Start the link. Returns {stop(), done: Promise<"session_end"|"stopped">, state}. */
-export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000 }) {
+export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, log = () => {}, minBackoffMs = 500, maxBackoffMs = 15000, resolveVm = dockerResolve }) {
   const end = peekSessionEnd(token);
+  const streams = new Map();     // sid -> net.Socket (TCP forwards to VM sshd)
   let ws = null, stopped = false, resolveDone, timer = null, endTimer = null, backoff = minBackoffMs;
   const state = { linked: false, connects: 0 };
   const done = new Promise((r) => { resolveDone = r; });
@@ -43,7 +62,7 @@ export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, 
   const finish = (why) => {
     if (stopped) return; stopped = true; clearTimeout(timer); clearTimeout(endTimer);
     try { ws && ws.close(1000, why); } catch { /* */ }
-    state.linked = false; resolveDone(why);
+    state.linked = false; for (const sk of streams.values()) { try { sk.destroy(); } catch { /* */ } } streams.clear(); resolveDone(why);
   };
   if (Number.isFinite(end)) endTimer = setTimeout(() => finish("session_end"), Math.max(0, end * 1000 - Date.now()));
   const connect = () => {
@@ -52,14 +71,31 @@ export function dial({ relayUrl, token, localUrl = "http://127.0.0.1:9000", WS, 
     state.connects++;
     ws = new WS(url, { headers: { authorization: `Bearer ${token}` } });
     ws.on("open", () => { backoff = minBackoffMs; });
-    ws.on("message", async (data) => {
+    ws.on("message", async (data, isBinary) => {
+      if (isBinary) {                                         // [u32 sid][payload] laptop -> VM
+        const sock = streams.get(data.readUInt32BE(0)); if (sock) sock.write(data.subarray(4));
+        return;
+      }
       let m; try { m = JSON.parse(data.toString()); } catch { return; }
+      if (m.type === "tcp-open") {
+        const target = await resolveVm(m.vm, m.port);
+        if (!target) { ws.send(JSON.stringify({ type: "tcp-error", sid: m.sid, reason: "no such VM" })); return; }
+        const sock = net.connect({ host: target.host, port: target.port });
+        sock.setNoDelay(true);
+        streams.set(m.sid, sock);
+        sock.once("connect", () => ws.send(JSON.stringify({ type: "tcp-opened", sid: m.sid })));
+        sock.on("data", (d) => { const f = Buffer.allocUnsafe(4 + d.length); f.writeUInt32BE(m.sid, 0); d.copy(f, 4); if (ws.readyState === 1) ws.send(f); });
+        const end = (kind) => { if (!streams.delete(m.sid)) return; try { if (ws.readyState === 1) ws.send(JSON.stringify({ type: kind, sid: m.sid })); } catch { /* */ } };
+        sock.on("close", () => end("tcp-close")); sock.on("error", () => { end("tcp-error"); try { sock.destroy(); } catch { /* */ } });
+        return;
+      }
+      if (m.type === "tcp-close") { const sock = streams.get(m.sid); if (sock) { streams.delete(m.sid); sock.end(); } return; }
       if (m.type === "linked") { state.linked = true; log("linked to relay"); return; }
       if (m.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
       if (m.id && m.method) ws.send(JSON.stringify(await localRequest(localUrl, token, m)));
     });
     const retry = () => {
-      state.linked = false;
+      state.linked = false; for (const sk of streams.values()) { try { sk.destroy(); } catch { /* */ } } streams.clear();
       if (stopped) return;
       timer = setTimeout(connect, backoff); backoff = Math.min(maxBackoffMs, backoff * 2);
     };
