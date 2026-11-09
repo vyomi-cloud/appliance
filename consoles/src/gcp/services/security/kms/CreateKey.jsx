@@ -54,7 +54,7 @@ export default function CreateKey({ query }) {
       await api.createKey(ring.location, ring.keyRing, name, {
         purpose,
         ...(material === "IMPORTED" ? { importOnly: true } : {}),
-        versionTemplate: { algorithm: "GOOGLE_SYMMETRIC_ENCRYPTION" },
+        versionTemplate: { algorithm: "GOOGLE_SYMMETRIC_ENCRYPTION", protectionLevel: protection },
         ...(rotationPeriod ? { rotationPeriod, nextRotationTime: new Date((startDate ? new Date(startDate).getTime() : Date.now()) + Number(rotationPeriod.replace("s", "")) * 1000).toISOString() } : {}),
         destroyScheduledDuration: `${Math.max(1, Number(destroyDays) || 30) * 86400}s`,
         ...(labels.length ? { labels: Object.fromEntries(labels.map((l) => [l.key, l.value])) } : {}),
@@ -86,13 +86,15 @@ export default function CreateKey({ query }) {
       <Divider />
 
       <Step title="Protection level">
-        <RadioGroup value={protection} onChange={(e) => setProtection(e.target.value)} aria-label="Protection level">
-          <FormControlLabel value="SOFTWARE" control={<Radio size="small" />} label="Software" />
-          <FormControlLabel value="HSM" disabled control={<Radio size="small" />} label="HSM" />
-          <FormControlLabel value="EXTERNAL" disabled control={<Radio size="small" />} label="External" />
-          <FormControlLabel value="EXTERNAL_VPC" disabled control={<Radio size="small" />} label="External via VPC" />
-        </RadioGroup>
-        <CapabilityContainer id="gcp.kms.hsm-protection" title="HSM, External and External via VPC protection levels" />
+        <CapabilityContainer id="gcp.kms.hsm-protection" title="HSM protection level">
+          <RadioGroup value={protection} onChange={(e) => setProtection(e.target.value)} aria-label="Protection level">
+            <FormControlLabel value="SOFTWARE" control={<Radio size="small" />} label="Software" />
+            <FormControlLabel value="HSM" control={<Radio size="small" />} label="HSM (software-backed in Vyomi)" />
+            <FormControlLabel value="EXTERNAL" disabled control={<Radio size="small" />} label="External (not simulated)" />
+            <FormControlLabel value="EXTERNAL_VPC" disabled control={<Radio size="small" />} label="External via VPC (not simulated)" />
+          </RadioGroup>
+          {protection === "HSM" && <Typography variant="body2" color="text.secondary">Dev Simplified: the key is stored with protectionLevel HSM but is held in Vyomi's software key store. No hardware module is involved and it is not FIPS validated.</Typography>}
+        </CapabilityContainer>
       </Step>
       <Divider />
 

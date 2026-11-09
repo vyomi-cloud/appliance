@@ -263,6 +263,13 @@ def _key_ring_view(name: str, entry: dict) -> dict:
     return {"name": name, "createTime": entry.get("createTime", _now())}
 
 
+_HSM_NOTE = "Dev Simplified: HSM protection level is software-backed in Vyomi - no hardware security module holds this key and it is not FIPS 140-2/140-3 validated."
+
+
+def _level_of(meta: dict) -> str:
+    return "HSM" if (meta or {}).get("protectionLevel") == "HSM" else "SOFTWARE"
+
+
 def _version_name(key_name: str, ver: str) -> str:
     return f"{key_name}/cryptoKeyVersions/{ver}"
 
@@ -273,6 +280,7 @@ def _version_view(key_name: str, ver: str, entry: dict) -> dict:
         "state": entry.get("state", "ENABLED"),
         "protectionLevel": entry.get("protectionLevel", "SOFTWARE"),
         "algorithm": entry.get("algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
+        **({"vyomiNote": _HSM_NOTE} if entry.get("protectionLevel") == "HSM" else {}),
         "createTime": entry.get("createTime", _now()),
         "generateTime": entry.get("createTime", _now()),
         **{k: entry[k] for k in ("destroyTime", "destroyEventTime") if entry.get(k)},
@@ -296,7 +304,7 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
         "purpose": _enum(meta.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
         "createTime": meta.get("createTime", _now()),
         "versionTemplate": {
-            "protectionLevel": "SOFTWARE",
+            "protectionLevel": _level_of(meta),
             "algorithm": _enum(meta.get("algorithm"), _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
         },
     }
@@ -304,6 +312,8 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
         view["primary"] = _version_view(name, primary, versions.get(primary, {}))
     if meta.get("importOnly"):
         view["importOnly"] = True
+    if _level_of(meta) == "HSM":
+        view["vyomiNote"] = _HSM_NOTE
     if meta.get("labels"):
         view["labels"] = dict(meta["labels"])
     if meta.get("rotationPeriod"):
@@ -493,7 +503,7 @@ def _version_material(store: KeyStore, name: str, ver: str):
 def _new_version(store: KeyStore, name: str, meta: dict) -> str:
     versions = meta.setdefault("versions", {})
     ver = str(max([int(v) for v in versions] + [0]) + 1)
-    versions[ver] = {"state": "ENABLED", "createTime": _now()}
+    versions[ver] = {"state": "ENABLED", "createTime": _now(), "protectionLevel": _level_of(meta)}
     store.material[_vmat_key(name, ver)] = store.engine.new_key_material()
     return ver
 
@@ -858,14 +868,23 @@ def dispatch(store: KeyStore, method: str, path: str,
             name = f"{ring_name}/cryptoKeys/{key_id}"
             if store.key_exists(name):
                 return _err(409, "ALREADY_EXISTS", f"CryptoKey {name} already exists.")
+            vt = payload.get("versionTemplate") or {}
+            lvl = str(vt.get("protectionLevel") or "SOFTWARE")
+            if lvl in ("EXTERNAL", "EXTERNAL_VPC"):
+                return _err(400, "INVALID_ARGUMENT",
+                            "protectionLevel %s is not simulated: Vyomi has no external key manager. SOFTWARE and HSM (software-backed in Vyomi) are accepted." % lvl)
+            if lvl not in ("SOFTWARE", "HSM", "PROTECTION_LEVEL_UNSPECIFIED"):
+                return _err(400, "INVALID_ARGUMENT", "versionTemplate.protectionLevel must be SOFTWARE or HSM.")
+            lvl = "HSM" if lvl == "HSM" else "SOFTWARE"
             now = _now()
             meta = {
+                "protectionLevel": lvl,
                 "purpose": _enum(payload.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
                 "algorithm": _enum((payload.get("versionTemplate", {}) or {}).get("algorithm"),
                                    _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
                 "createTime": now,
                 "primary": "1",
-                "versions": {"1": {"state": "ENABLED", "createTime": now}},
+                "versions": {"1": {"state": "ENABLED", "createTime": now, "protectionLevel": lvl}},
             }
             skip = str(query.get("skipInitialVersionCreation", "")).lower() == "true"
             if payload.get("importOnly") or skip:
@@ -977,7 +996,7 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _json(200, {"cryptoKeyVersions": items})
         if len(segs) == 9 and method == "POST":      # create a new version with its OWN key material
             next_id = str(max((int(v) for v in versions), default=0) + 1)
-            versions[next_id] = {"state": "ENABLED", "createTime": _now()}
+            versions[next_id] = {"state": "ENABLED", "createTime": _now(), "protectionLevel": _level_of(meta)}
             store.material[_version_name(key_name, next_id)] = store.engine.new_key_material()
             _save()
             return _json(200, _version_view(key_name, next_id, versions[next_id]))
@@ -1183,7 +1202,7 @@ def _encrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = N
         "name": vname,
         "ciphertext": _b64e(blob),
         "ciphertextCrc32c": str(crc32c(blob)),
-        "protectionLevel": "SOFTWARE",
+        "protectionLevel": _level_of(meta),
     }
     if payload.get("plaintextCrc32c") not in (None, ""):
         if str(payload["plaintextCrc32c"]) != str(crc32c(plaintext)):
@@ -1211,7 +1230,7 @@ def _decrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = N
         legacy = store.legacy_decrypt(name, blob)
         if legacy is not None:
             return _json(200, {"plaintext": _b64e(legacy), "plaintextCrc32c": str(crc32c(legacy)),
-                               "usedPrimary": True, "protectionLevel": "SOFTWARE"})
+                               "usedPrimary": True, "protectionLevel": _level_of(meta)})
     key_part, _, ver_part = (embedded or "").partition("/cryptoKeyVersions/")
     if embedded and key_part != name:
         return _err(400, "INVALID_ARGUMENT",
@@ -1230,4 +1249,4 @@ def _decrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = N
         return _err(400, "INVALID_ARGUMENT", "Decryption failed: the ciphertext is invalid.")
     used_primary = (ver_part or str(meta.get("primary", "1"))) == str(meta.get("primary", "1"))
     return _json(200, {"plaintext": _b64e(plaintext), "plaintextCrc32c": str(crc32c(plaintext)),
-                       "usedPrimary": used_primary, "protectionLevel": "SOFTWARE"})
+                       "usedPrimary": used_primary, "protectionLevel": _level_of(meta)})
