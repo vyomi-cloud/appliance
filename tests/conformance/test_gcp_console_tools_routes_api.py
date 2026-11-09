@@ -30,15 +30,25 @@ s, b = call("GET", "/api/gcp/console/enforcement")
 check("enforcement GET shape", s == 200 and {"iam", "vpc"} <= set(b))
 s, b2 = call("POST", "/api/gcp/console/enforcement", {"iam": b["iam"], "vpc": b["vpc"]})
 check("enforcement POST round-trips", s == 200 and b2["iam"] == b["iam"] and b2["vpc"] == b["vpc"])
-for tool in ("gcloud", "gcutil"):
-    s, b = call("GET", f"/api/providers/gcp/{tool}")
+TOOL_PATHS = {
+    "gcloud": ("/api/providers/gcp/gcloud", "/api/providers/gcp/gcloud/resolve"),
+    "gcutil": ("/api/providers/gcp/gcutil", "/api/providers/gcp/gcutil/resolve"),
+}
+for tool, (info_path, resolve_path) in TOOL_PATHS.items():
+    s, b = call("GET", info_path)
     check(f"{tool} info", s == 200 and b.get("provider") == "gcp" and b.get("tool") == tool)
-    s, b = call("POST", f"/api/providers/gcp/{tool}/resolve", {"command": f"{tool} compute instances list"})
+    s, b = call("POST", resolve_path, {"command": f"{tool} compute instances list"})
     check(f"{tool} resolve echoes command", s == 200 and b.get("provider") == "gcp" and "command" in b)
-for lang in ("java", "go", "python", "nodejs"):
-    s, b = call("GET", f"/api/providers/gcp/sdk/{lang}")
+SDK_PATHS = {
+    "java": ("/api/providers/gcp/sdk/java", "/api/providers/gcp/sdk/java/snippet"),
+    "go": ("/api/providers/gcp/sdk/go", "/api/providers/gcp/sdk/go/snippet"),
+    "python": ("/api/providers/gcp/sdk/python", "/api/providers/gcp/sdk/python/snippet"),
+    "nodejs": ("/api/providers/gcp/sdk/nodejs", "/api/providers/gcp/sdk/nodejs/snippet"),
+}
+for lang, (info_path, snippet_path) in SDK_PATHS.items():
+    s, b = call("GET", info_path)
     check(f"sdk {lang} info", s == 200 and b.get("provider") == "gcp" and b.get("endpoint"))
-    s, b = call("GET", f"/api/providers/gcp/sdk/{lang}/snippet")
+    s, b = call("GET", snippet_path)
     check(f"sdk {lang} snippet", s == 200 and b.get("language") == lang and b.get("snippet"))
 s, _ = call("GET", "/api/gcp/extras-config/not-a-stub")
 check("extras-config unknown stub is 404", s == 404)
