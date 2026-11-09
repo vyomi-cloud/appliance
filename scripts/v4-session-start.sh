@@ -16,8 +16,36 @@ git fetch -q origin
 git rev-parse --verify -q "$branch" >/dev/null 2>&1 && { echo "branch $branch already exists locally"; exit 1; }
 git worktree add "$dir" -b "$branch" "$base"
 ( cd "$dir" && [ -x scripts/v4-install-hooks.sh ] && scripts/v4-install-hooks.sh || true )
+# Branch document (rule 11): architecture, design decisions, open issues. Committed with the branch, kept after it merges.
+if [ "$repo" = portal ]; then doc="$dir/docs/branches/$topic.md"; else doc="$dir/docs/architecture/v4.0/branches/$topic.md"; fi
+if [ ! -e "$doc" ]; then
+  mkdir -p "$(dirname "$doc")"
+  cat > "$doc" <<DOCEND
+# $branch
+
+Owner: <session / person> - Started: $(date +%Y-%m-%d) - Base: $base ($(git rev-parse --short "$base")) - Status: in progress
+
+## Purpose
+<one paragraph: what this branch delivers and why>
+
+## Architecture
+<what is built and where: components, files and paths, data flow, interfaces with other parts of v4>
+
+## Design decisions
+| Decision | Alternatives rejected | Why |
+|---|---|---|
+| <what was chosen> | <what was not> | <reason> |
+
+## Open issues
+- [ ] <unfinished, unverified or deferred item> (owner: <who>)
+
+## Testing
+<what was run, where (Nano on :8099 / headless Docker), and the result; what was NOT run>
+DOCEND
+fi
 echo
 echo "Created $dir on $branch from $base ($(git rev-parse --short "$base"))."
 echo "Add this row to docs/architecture/v4.0/SESSION-CLAIMS.md (on the trunk) before editing shared paths:"
 echo "| <session> | $branch | $repo | <paths you will edit> | $(date +%Y-%m-%d) |"
+echo "Fill in the branch document (architecture, design decisions, open issues): ${doc#$dir/}"
 echo "Push the topic branch at once: git push -u origin $branch"

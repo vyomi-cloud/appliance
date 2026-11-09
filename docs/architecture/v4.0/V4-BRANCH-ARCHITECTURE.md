@@ -94,6 +94,13 @@ saturated by parallel sessions and live k3s tests then time out.
    only. Never force-push any shared branch. `main` and tags: the owner's go only.
 10. **A branch cut from a stale base is ported, not merged:** re-apply its intent onto a fresh topic branch from the trunk
     (cherry-pick by file, rebuild the outputs). A merge pulls in old release-prep commits.
+11. **Every topic branch carries a branch document.** `scripts/v4-session-start.sh` creates it from a template:
+    appliance `docs/architecture/v4.0/branches/<topic>.md`, portal `docs/branches/<topic>.md`. It records the **architecture**
+    (what is built and where), the **design decisions** (what was chosen, the alternatives rejected and why) and the **open issues**
+    (what is unfinished, unverified or deferred, with an owner). Commit it with the first push, update it with every batch, and
+    have it complete before the branch is merged. It is merged with the branch and kept after the branch is deleted, so the reasoning
+    survives; the integrator does not merge a branch whose document is missing or still the empty template. The pre-push hook warns
+    on a topic branch that has no document.
 
 ## 4. Why sessions conflict, and the fix for each (observed 2026-11-09)
 
@@ -152,6 +159,7 @@ runs the preflight (6), then runs the vendor step into `v4-nano-portal`. Two ses
 **Finishing in-flight work**
 1. `git fetch origin`; trunks are `origin/v4-on-main` (appliance) and `origin/v4-nano-portal` (portal).
 2. Commit with explicit paths only (never `git add -A` / `.`; never a bare `git stash`, use a WIP commit).
+   Update your branch document (rule 11): architecture, design decisions, open issues.
 3. Push your topic branch now and after every batch: `git push -u origin v4/<topic>` (portal: `portal/<topic>`). No approval needed.
    Never force-push. If a rebase makes the push fail, push under a new name (`v4/<topic>-r2`).
 4. Do NOT push `v4-on-main`, `release/v4.0.0`, `v4-nano-portal`, `main` or any tag (integrator / owner only; portal `main` auto-deploys and costs money).
@@ -162,6 +170,7 @@ runs the preflight (6), then runs the vendor step into `v4-nano-portal`. Two ses
 **Starting new work**
 1. `scripts/v4-session-start.sh <topic>` (portal: `--portal`) creates a worktree off a fresh trunk.
 2. Add your row to `SESSION-CLAIMS.md` before editing shared paths.
+   Fill in the branch document the script created (rule 11) and commit it with your first push.
 3. Grep `origin/v4-on-main` for the gap first; another session may have landed it.
 
 **Managed Kubernetes gate (landed 2026-11-09, `8424b286`)**

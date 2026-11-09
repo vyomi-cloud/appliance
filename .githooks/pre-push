@@ -33,7 +33,11 @@ while read local_ref local_sha remote_ref remote_sha; do
       fi
       ;;
     *)
-      # topic branch: warn when the base is stale, never block
+      # topic branch: warn when the base is stale or the branch document is missing; never block
+      topic=${branch#*/}
+      if ! git ls-tree -r --name-only "$local_sha" 2>/dev/null | grep -Eq "(^|/)branches/$topic\.md$"; then
+        echo "pre-push: note - $branch has no branch document (docs/architecture/v4.0/branches/$topic.md or docs/branches/$topic.md); add it (rule 11: architecture, design decisions, open issues)"
+      fi
       if git rev-parse --verify -q origin/v4-on-main >/dev/null 2>&1 && ! git merge-base --is-ancestor origin/v4-on-main "$local_sha" 2>/dev/null; then
         behind=$(git rev-list --count "$local_sha"..origin/v4-on-main 2>/dev/null)
         echo "pre-push: note - $branch is $behind commit(s) behind origin/v4-on-main (pushed anyway; rebase or port before it goes to the trunk)"
