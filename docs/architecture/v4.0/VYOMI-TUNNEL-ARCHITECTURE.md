@@ -27,6 +27,25 @@ vyomi-tunnel must support exactly three kinds of target:
 
 Tunnels 1 and 3 both depend on the Mesh agent being linked to a relay the Codespace can reach (open item 9 in section 11). Tunnel 2 does not: it runs entirely on the laptop.
 
+## 1c. Link direction (decision 2026-11-10): the link always runs on the laptop
+
+The Codespace dials nothing. A Codespace cannot reach a laptop, but a laptop can reach a Codespace, so the laptop's `vyomi-tunnel` opens ONE ssh
+session to the Codespace host (the sshd devcontainer feature) and carries all three tunnels over it:
+
+| Tunnel | Over the one ssh session |
+|---|---|
+| 1. Codespace | the session itself (shell, scp) and the keeper's idle-timer writes |
+| 3. Docker in the Codespace | `-L`/`-W` to the instance container's address on `vyomi-net` (the tunnel resolves the name with `docker inspect` over the same session), k3s API on 6443 |
+| Nano compute calls | the local relay proxies Nano's HTTP to the simulator at `<container-ip>:9000` through a forward |
+
+Consequences: no hosted relay and no `wss://` endpoint for the Mesh, no `BOOSTER_RELAY_URL`, no outbound `link` container (removed from
+`codespace/.devcontainer/booster/`), no inbound port. Authentication to the Codespace is the user's own GitHub login (`gh codespace ssh`).
+Open: a portal-minted short-lived credential instead of `gh` (not built). Proven by hand on 2026-11-10: `gh codespace ssh -- -N -L 9009:<simulator
+container ip>:9000` gave `200` on `/healthz` from the laptop. Not yet built: the tunnel's own ssh transport (`connect`/`forward`/relay upstream
+over `gh codespace ssh`), the resolver moving from the agent (`booster-dial.mjs` `resolveReserved`) to the laptop, the DNS-rebinding Host allow-list for
+forwarded requests, and removing `booster-dial.mjs` from the image once the new transport replaces it. Section 11 item 9 (where the relay runs) is answered by
+this section; sections 2 to 4 still describe the outbound design until the transport is built.
+
 ## 2. Components
 
 ```
@@ -241,7 +260,7 @@ Built on the trunk's stream framework (`kind:"tcp"`); no new agent roles (the hu
 6. `vyomi-tunnel forward <vm> <local>:<remote>` for non-SSH TCP (HTTP/ws/db).
 7. Codespace host sshd target (section 9b, handed to another session for review/build).
 8. Per-stream bandwidth cap and audit log; a hosted TCP gateway remains optional post-v4 for zero-install.
-9. **Decide and record where the relay the Mesh agent dials runs.** `BOOSTER-CODESPACES-GITHUB-APP.md` 6.4 says the booster dials out to "our relay" and that the relay already ships inside the appliance image; the go-live checklist says to deploy `local-relay.mjs` behind wss://. No hosted instance exists (`relay.vyomi.cloud` is the Cloudflare Worker, which has no Mesh hub and answers 503 on `/booster`), and a laptop-local relay is not reachable from a Codespace. Until this is decided and built, no real Codespace can link. Also needed: the published `vyomi/appliance` image rebuilt so `/app/relay` exists (the 2026-11-10 `:latest` has none).
+9. **[Answered in 1c: the link runs on the laptop, nothing is hosted.]** Originally: decide where the relay the Mesh agent dials runs. `BOOSTER-CODESPACES-GITHUB-APP.md` 6.4 says the booster dials out to "our relay" and that the relay already ships inside the appliance image; the go-live checklist says to deploy `local-relay.mjs` behind wss://. No hosted instance exists (`relay.vyomi.cloud` is the Cloudflare Worker, which has no Mesh hub and answers 503 on `/booster`), and a laptop-local relay is not reachable from a Codespace. Until this is decided and built, no real Codespace can link. Also needed: the published `vyomi/appliance` image rebuilt so `/app/relay` exists (the 2026-11-10 `:latest` has none).
 
 ---
 
