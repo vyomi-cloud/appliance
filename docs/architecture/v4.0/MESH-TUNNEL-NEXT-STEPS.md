@@ -33,3 +33,11 @@ Worker `/egress` + browser-VM use of it, tunnel architecture doc, P1 Nano back-p
 - `v4/vm-egress`: superseded (its features were re-applied to the trunk); safe to delete.
 - `v4/docs-branch-arch`: already on the trunk; safe to delete.
 - `fix/nano-tunnel-arm`: WIP Nano CLI check (28/62); owner unclear.
+
+## Asks to the next session / integrator
+1. **Merge this file** into `v4-on-main` (topic branch `v4/mesh-next-steps`), then delete that branch and the `appliance-mesh-next-steps` worktree. Its author is gone; the integrator can do this.
+2. **Before any tunnel or relay work:** fetch `origin/v4-on-main`, start with `scripts/v4-session-start.sh <topic>`, add a claim row to `SESSION-CLAIMS.md`, and reconcile with `v4/tunnel-keeper` and `v4/tunnel-k3s` before touching `packaging/tunnel/**` or `wasm/relay/**`. Run `test-booster-link`, `test-booster-shell`, `test-booster-session-derived` and `test-mesh-ssh` (`WS_PKG=<repo>/relay-deps/ws`) before pushing relay changes.
+3. **Decide the leftover `booster` identifiers** (files, `BOOSTER_RELAY_URL`, `/booster` path, `vyomi-booster-*` Codespaces): rename in one tested change, or declare them permanent. Until then keep them.
+4. **Own the browser check** of the back-ported appbar/link UI (step 6 of `P1-NANO-BACKPORT.md`), the first vendor PR and the `app/nano/**` CI rule. These were already assigned to the integrator.
+5. **Decide the branches left:** keep `docs/v4-release-plan-mesh` until `RELEASE-READINESS.md` reaches the trunk or `release/v4.0.0`; check whether `fix/nano-tunnel-arm` still has an owner.
+6. **Owner (not a session):** GitHub branch protection and the `v*` tag rule; name the integrator; OK the `vyomi-cloud/sandbox` sync; the DO env and GitHub App secret items above.
