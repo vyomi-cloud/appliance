@@ -182,6 +182,64 @@
     }).catch(function () { el.innerHTML = '<div class="api-empty">Could not load the ' + esc(cloud.toUpperCase()) + ' reference (docs/index.json).</div>'; });
   }
 
+
+  /* ── Redoc-style API reference (three panes: nav | description + parameters | samples) ───────────────────────── */
+  function rdOp(cloud, a, o, EP, id) {
+    var sn = snips(cloud, a, o, EP), ct = codeTabs(sn);
+    var left = '<h3 class="rd-h"><span class="api-m ' + o.m.toLowerCase() + '">' + o.m + '</span> ' + esc(o.n) + '</h3>' +
+      (o.d ? '<p class="rd-d">' + esc(o.d) + '</p>' : '') +
+      (o.llm ? '<p class="rd-d">Needs the local model: start it with <code>vyomi llm start</code>; answers 503 until then.</p>' : '') +
+      '<div class="rd-k">Parameters</div>' + paramTable(cloud, o);
+    var right = '<div class="rd-wire"><code>' + esc(wireLine(cloud, a, o)) + '</code></div>' +
+      (o['in'] && Object.keys(o['in']).length ? '<div class="rd-k">Request example</div><pre class="api-pre"><code>' + esc(J(o['in'])) + '</code></pre>' : '') +
+      '<div class="rd-k">Response example</div><pre class="api-pre"><code>' + esc(J(o.out && Object.keys(o.out).length ? o.out : {})) + '</code></pre>' +
+      '<div class="rd-k">CLI &amp; SDKs</div>' + ct.html;
+    return { html: '<section class="rd-op" id="' + id + '"><div class="rd-l">' + left + '</div><div class="rd-r">' + right + '</div></section>', wire: ct.wire };
+  }
+  function renderRedoc(el, cloud, filter, EP, want) {
+    el.innerHTML = '<div class="api-empty">Loading ' + esc(cloud.toUpperCase()) + ' reference…</div>';
+    index().then(function (ix) {
+      var list = (ix.clouds[cloud] || []).filter(function (s) { return s.o > 0 || s.ft > 0; }), q = (filter || '').toLowerCase();
+      var cats = {}; list.forEach(function (s) { if (!q || s.t.toLowerCase().indexOf(q) >= 0) (cats[s.c] = cats[s.c] || []).push(s); });
+      var shown = list.filter(function (s) { return !q || s.t.toLowerCase().indexOf(q) >= 0; });
+      var nav = '<nav class="rd-nav" aria-label="Services">' + (Object.keys(cats).sort().map(function (c) {
+        return '<div class="rd-cat">' + esc(c) + '</div>' + cats[c].map(function (s) {
+          return '<button type="button" class="rd-svc" data-f="' + esc(s.f) + '"><span>' + esc(s.t) + '</span><em>' + s.o + '</em></button><div class="rd-ops" data-f="' + esc(s.f) + '" hidden></div>';
+        }).join('');
+      }).join('') || '<p class="am-none">No services match.</p>') + '</nav>';
+      el.innerHTML = '<div class="rd">' + nav + '<div class="rd-main"><div class="rd-intro"><h2>' + esc(cloud === 'aws' ? 'AWS' : cloud === 'gcp' ? 'Google Cloud' : 'Azure') + ' API reference</h2>' +
+        '<p>' + list.length + ' services · ' + list.reduce(function (n, s) { return n + s.o; }, 0) + ' operations that answer on this simulator · endpoint <code>' + esc(EP) + '</code>. Pick a service on the left.</p></div><div class="rd-body"></div></div></div>';
+      var body = el.querySelector('.rd-body'), main = el.querySelector('.rd-main');
+      var LIM = 60;
+      function open(f, all) {
+        LIM = all ? 1e9 : 60;
+        el.querySelectorAll('.rd-svc').forEach(function (b) { b.classList.toggle('on', b.dataset.f === f); });
+        el.querySelectorAll('.rd-ops').forEach(function (d) { d.hidden = d.dataset.f !== f; });
+        body.innerHTML = '<p class="am-none">Loading…</p>';
+        service(cloud, f).then(function (d) {
+          var h = '', wires = [], n = 0, idx = '';
+          d.apis.forEach(function (a, ai) {
+            var ops = a.ops; if (!ops.length) return;
+            h += '<h2 class="rd-api" id="rd-a' + ai + '">' + esc(a.title) + (a.version && cloud !== 'aws' ? ' ' + esc(a.version) : '') + ' <small>' + (a.style ? esc(a.style) + ' · ' : '') + a.wired + ' of ' + a.total + ' operations served</small></h2>';
+            idx += '<a href="#rd-a' + ai + '" class="rd-api-l">' + esc(a.title) + '</a>';
+            ops.slice(0, LIM).forEach(function (o, oi) { var id = 'rd-' + ai + '-' + oi, r = rdOp(cloud, a, o, EP, id); h += r.html; wires.push(r.wire); n++; idx += '<a href="#' + id + '"><i class="api-m ' + o.m.toLowerCase() + '">' + o.m + '</i>' + esc(o.n) + '</a>'; });
+            if (ops.length > LIM) h += '<p class="rd-more">Showing the first ' + LIM + ' of ' + ops.length + ' operations. <button type="button" class="nd-tab rd-all" data-f="' + esc(f) + '">Show all ' + ops.length + '</button></p>';
+            if ((a.unwired || []).length) h += '<details class="nd-unw"><summary>' + a.unwired.length + ' operations of this API are not served by this simulator yet</summary><p>' + a.unwired.map(esc).join(' · ') + '</p></details>';
+          });
+          if (d.data && d.data.length) h += '<h2 class="rd-api">Data plane</h2><table class="am-t"><tr><th>API</th><th>Example</th><th>Client</th></tr>' + d.data.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td><code class="am-inline">' + esc(x.u.replace('{EP}', EP)) + '</code></td><td>' + esc(x.c || '') + '</td></tr>'; }).join('') + '</table>';
+          body.innerHTML = '<h1 class="rd-title">' + esc(d.title) + '</h1>' + h;
+          wires.forEach(function (w) { w(body); });
+          var ob = el.querySelector('.rd-ops[data-f="' + f + '"]'); ob.innerHTML = idx;
+          ob.onclick = function (e) { var a = e.target.closest('a'); if (!a) return; e.preventDefault(); var t = body.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ block: 'start' }); };
+          body.querySelectorAll('.rd-all').forEach(function (b) { b.onclick = function () { open(b.dataset.f, true); }; });
+          main.scrollTop = 0; try { el.closest('#app-main, body').scrollTop = 0; } catch (_) {}
+        });
+      }
+      el.querySelectorAll('.rd-svc').forEach(function (b) { b.addEventListener('click', function () { open(b.dataset.f); }); });
+      if (shown.length) open((want && shown.filter(function (s) { return s.f === want; })[0] ? want : shown[0].f));
+    }).catch(function () { el.innerHTML = '<div class="api-empty">Could not load the ' + esc(cloud.toUpperCase()) + ' reference (docs/index.json).</div>'; });
+  }
+
   function svcBody(body, cloud, d, EP, q) {
     var h = '';
     d.apis.forEach(function (a, ai) {
@@ -304,5 +362,5 @@
     }).catch(function () { el.innerHTML = ''; });
   }
 
-  window.NanoDocs = { renderApi: renderApi, renderUsage: renderUsage, _icon: iconFor, _snips: snips, _index: index, _service: service };
+  window.NanoDocs = { renderApi: renderApi, renderRedoc: renderRedoc, renderUsage: renderUsage, _icon: iconFor, _snips: snips, _index: index, _service: service };
 })();

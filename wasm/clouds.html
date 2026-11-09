@@ -1128,6 +1128,35 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .api-op .s { font-size: 11px; color: #8b8ba7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
     #view-api .api-caret { margin-left: auto; flex: none; color: #8b8ba7; font-size: 20px; transition: transform .15s ease; }
     #view-api .api-op-wrap.open .api-caret { transform: rotate(180deg); color: #cdd8e6; }
+
+    /* Redoc-style API reference: nav | description + parameters | dark samples pane */
+    #view-api .rd { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 0; border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden; background: #fff; color: #18181b; text-align: left; }
+    #view-api .rd-nav { border-right: 1px solid #e4e7ec; background: #fafafa; max-height: calc(100vh - 210px); overflow: auto; padding: 8px 0; position: sticky; top: 0; }
+    #view-api .rd-cat { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; padding: 12px 16px 4px; }
+    #view-api .rd-svc { display: flex; width: 100%; justify-content: space-between; gap: 8px; align-items: center; background: none; border: 0; text-align: left; padding: 7px 16px; font: 600 13px inherit; font-family: inherit; color: #18181b; cursor: pointer; }
+    #view-api .rd-svc em { font-style: normal; font-size: 11px; color: #667085; }
+    #view-api .rd-svc:hover { background: #f0f0f2; } #view-api .rd-svc.on { background: #000; color: #fff; } #view-api .rd-svc.on em { color: #d4d4d8; }
+    #view-api .rd-ops a { display: flex; gap: 8px; align-items: center; padding: 4px 16px 4px 22px; font-size: 12px; color: #344054; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #view-api .rd-ops a:hover { background: #eee; } #view-api .rd-ops .rd-api-l { font-weight: 700; color: #18181b; padding-left: 16px; margin-top: 4px; }
+    #view-api .rd-ops i.api-m { min-width: 36px; font-size: 8.5px; padding: 2px 4px; font-style: normal; }
+    #view-api .rd-main { min-width: 0; max-height: calc(100vh - 210px); overflow: auto; }
+    #view-api .rd-intro, #view-api .rd-title, #view-api .rd-api { padding: 18px 28px 0; margin: 0; }
+    #view-api .rd-intro h2 { margin: 0 0 4px; font-size: 20px; } #view-api .rd-intro p { margin: 0 0 8px; color: #667085; font-size: 13px; }
+    #view-api .rd-title { font-size: 26px; font-weight: 800; letter-spacing: -.01em; } #view-api .rd-api { font-size: 17px; margin-top: 22px; padding-bottom: 8px; border-bottom: 1px solid #e4e7ec; } #view-api .rd-api small { font-size: 11.5px; color: #667085; font-weight: 500; margin-left: 8px; }
+    #view-api .rd-op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid #eef0f3; scroll-margin-top: 0; }
+    #view-api .rd-l { padding: 22px 28px; min-width: 0; } #view-api .rd-r { background: #0e1322; color: #cdd8e6; padding: 22px 24px; min-width: 0; }
+    #view-api .rd-h { margin: 0 0 8px; font-size: 16px; font-family: ui-monospace, Menlo, monospace; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; word-break: break-all; }
+    #view-api .rd-d { color: #475467; font-size: 13.5px; line-height: 1.55; margin: 0 0 10px; }
+    #view-api .rd-k { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; margin: 14px 0 6px; } #view-api .rd-r .rd-k { color: #8b95aa; }
+    #view-api .rd-l table.am-t { width: 100%; border-collapse: collapse; font-size: 12.5px; } #view-api .rd-l .am-t td, #view-api .rd-l .am-t th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef0f3; color: #344054; } #view-api .rd-l .am-t th { color: #667085; font-size: 11px; }
+    #view-api .rd-l .am-req { color: #b42318; font-size: 10.5px; margin-left: 4px; }
+    #view-api .rd-wire { display: flex; gap: 8px; align-items: center; background: #05071a; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 8px 10px; overflow: auto; } #view-api .rd-wire code { font-size: 12px; white-space: pre; color: #e4e4e7; background: none; }
+    #view-api .rd-r pre.api-pre { background: #05071a; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; padding: 10px 12px; overflow: auto; margin: 4px 0 8px; max-height: 300px; } #view-api .rd-r pre.api-pre code { font-size: 11.5px; line-height: 1.5; color: #cdd8e6; background: none; white-space: pre; }
+    #view-api .rd-r .nd-tab { color: #a1a1aa; border-color: rgba(255,255,255,.18); } #view-api .rd-r .nd-tab.on { background: #fff !important; color: #000 !important; border-color: #fff !important; } #view-api .rd-r .nd-cp { color: #a1a1aa; border-color: rgba(255,255,255,.18); }
+    #view-api .rd .nd-unw { margin: 10px 28px; font-size: 12.5px; color: #475467; }
+    #view-api .rd-more { padding: 12px 28px; margin: 0; font-size: 12.5px; color: #667085; }
+    @media (max-width: 1100px) { #view-api .rd-op { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { #view-api .rd { grid-template-columns: 1fr; } #view-api .rd-nav { position: static; max-height: 220px; border-right: 0; border-bottom: 1px solid #e4e7ec; } #view-api .rd-main { max-height: none; } }
     /* generated API reference + per-service SDK/CLI cards (nano-docs.js) */
     .nd-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 6px; }
     .nd-tab { border: 1px solid rgba(255,255,255,0.14); background: none; color: #a1a1aa; border-radius: 999px; padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
@@ -3193,7 +3222,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (window.NanoDocs){   // generated reference (wasm/docs) — works offline in Nano, no /openapi-*.json needed
           curCloud = cloud;
           document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
-          NanoDocs.renderApi(document.getElementById('api-body'), cloud, filter, apiEndpoint());
+          NanoDocs.renderRedoc(document.getElementById('api-body'), cloud, filter, apiEndpoint());
           return;
         }
         curCloud = cloud;
