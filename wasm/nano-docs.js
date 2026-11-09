@@ -233,6 +233,7 @@
         setGrp(g, false);   // every group starts collapsed; opening one is the user's choice
       });
       var tog = el.querySelector('.rd-tog');
+      rd.classList.add('rd-hide'); tog.setAttribute('aria-expanded', 'false');   // the service list starts as the icon rail
       tog.addEventListener('click', function () { var c = rd.classList.toggle('rd-hide'); tog.setAttribute('aria-expanded', !c); });
       var LIM = 60;
       function open(f, all, init) {
