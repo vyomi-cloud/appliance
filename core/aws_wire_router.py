@@ -478,6 +478,7 @@ _SIGNING = {
     "ec2-instance-connect": "eic",   # EC2 Instance Connect SendSSHPublicKey (JSON 1.1) -> core/ec2_instance_connect_core over the EC2 model
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
+    "vyomi-ultraservers": "vyomi-ultraservers",   # Dev Simplified EC2 Capacity Blocks + UltraServers (rest-json POST /<Operation>) -> core/ec2_ultraservers_core over the EC2 model
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
     "bedrock-agentcore": "agentcore",   # Bedrock AgentCore control plane + gateway MCP endpoint -> core/bedrock_agents_core (S3 + Lambda stores)
     "glue": "glue", "redshift-data": "redshift-data",
@@ -1885,6 +1886,10 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", "application/json")
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "vyomi-ultraservers":
+            from core import ec2_ultraservers_core
+            return ec2_ultraservers_core.dispatch(self.vpc, method, path, bytes(body))
 
         if svc == "savingsplans":
             from core import savingsplans_core

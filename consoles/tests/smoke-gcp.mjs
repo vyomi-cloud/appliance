@@ -2393,7 +2393,7 @@ try {
     const SHB = `/v1/projects/${PROJ}/locations/global`;
     for (const ev of (await wjson(`${SHB}/events`)).events || []) await wire(`${SHB}/events/${ev.name.split("/").pop()}`, { method: "DELETE" });
     await page.goto(UI + "#/compute");
-    await page.getByText("Simulated by Vyomi").first().waitFor({ timeout: 15000 });
+    await page.getByText("Dev Simplified").first().waitFor({ timeout: 15000 });
     await page.getByText("No active incidents").waitFor({ timeout: 10000 });
     check("Compute overview: simulated service health, no incidents by default", true);
     await page.getByRole("button", { name: "Inject test incident" }).click();
@@ -2408,14 +2408,14 @@ try {
     check("resolve via UI -> event CLOSED over native wire", shClosed.length === 1 && shClosed[0].detailedState === "RESOLVED");
     await wire(`${SHB}/events/${shClosed[0].name.split("/").pop()}`, { method: "DELETE" });
     await shot("29-compute-service-health");
-    // Instance Screenshot tab: serial-console render labelled Simulated by Vyomi (no framebuffer exists).
+    // Instance Screenshot tab: serial-console render labelled Dev Simplified (no framebuffer exists).
     const SSN = `v4-gcp-shot-${Date.now() % 100000}`;
     await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: SSN, machineType: "zones/us-central1-a/machineTypes/e2-micro", disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }], networkInterfaces: [{ network: "global/networks/default" }] }) });
     await page.goto(UI + `#/compute/instances/us-central1-a/${SSN}`);
     await page.getByRole("tab", { name: "Screenshot" }).click();
     await page.getByLabel("Serial console screenshot").waitFor({ timeout: 15000 });
-    await page.getByText(/Simulated by Vyomi\./).first().waitFor({ timeout: 5000 });
+    await page.getByText(/Dev Simplified\./).first().waitFor({ timeout: 5000 });
     check("instance Screenshot tab renders a Simulated-by-Vyomi serial-console image", true);
     await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances/${SSN}`, { method: "DELETE" });
   }

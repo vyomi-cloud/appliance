@@ -1,5 +1,5 @@
 # Vyomi Booster — headless. Simulator only (compute + AI); no host ports are published.
-# Access is exclusively via the outbound relay link started by boot-booster.sh.
+# Access is exclusively over the user's ssh session (sshd devcontainer feature): the laptop's vyomi-tunnel connects IN. The Codespace dials nothing.
 name: vyomi-booster
 networks:
   vyomi-net:
@@ -15,7 +15,7 @@ services:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_DISTRIBUTION_MODE: developer
       VYOMI_ROLE: booster
-      # the outbound link forwards with Host: simulator:9000 (the compose service name); the booster's DNS-rebinding guard must allow it
+      # requests arrive through the user's ssh forward with Host: simulator:9000 or the forwarded address; the booster's DNS-rebinding guard must allow them
       VYOMI_BOOSTER_HOSTS: simulator
       VYOMI_COMPUTE_BACKEND: docker
       VYOMI_INSTANCE_NETWORK: vyomi-net
@@ -32,24 +32,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - booster-data:/data
-  # Outbound-only link: dials the relay over WSS with the session token (no inbound/published port anywhere).
-  # Needs wasm/relay/{booster-dial,booster-session}.mjs + ws in the appliance image under /app/relay.
-  link:
-    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
-    profiles: ["link"]
-    networks: [vyomi-net]
-    depends_on: [simulator]
-    restart: "no"
-    working_dir: /app/relay
-    entrypoint: ["node", "/app/relay/booster-dial.mjs"]
-    environment:
-      VYOMI_RELAY_URL: ${VYOMI_RELAY_URL:-}
-      VYOMI_BOOSTER_SESSION_TOKEN: ${VYOMI_BOOSTER_SESSION_TOKEN:-}
-      VYOMI_BOOSTER_LOCAL_URL: http://simulator:9000
-      WS_PKG: /app/relay/node_modules/ws
-      # Reserved Mesh target `host`/`codespace` = this Codespace's sshd (the devcontainer sshd feature listens on 2222).
-      VYOMI_HOST_SSH_ADDR: ${VYOMI_HOST_SSH_ADDR:-host.docker.internal:2222}
-    extra_hosts: ["host.docker.internal:host-gateway"]
   # ---- AI pack (profile "ai"; boot-booster.sh starts it only after the simulator ADMITS the models) -------------------------
   # Two llama.cpp servers (one model per process) behind a tiny OpenAI-compatible gateway. Models are pulled on first start
   # by llama-server's -hf into the ai-models volume (cached across stop/resume of the same Codespace). No published ports.

@@ -489,7 +489,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Spot requests, Reserved Instances, Capacity Reservations and Dedicated Hosts are real (see their own entries). Savings Plans and Capacity Manager are limited-real (see their entries); UltraServers is not simulated.",
+   "Spot requests, Reserved Instances, Capacity Reservations and Dedicated Hosts are real (see their own entries). Savings Plans and Capacity Manager are limited-real (see their entries); UltraServers and Capacity Blocks are Dev Simplified (see their entry).",
    "There is no billing; prices are illustrative."
   ],
   "tests": [
@@ -677,12 +677,17 @@
  },
  "ec2.migration.application-migration-service": {
   "title": "Migrate a server (AWS Application Migration Service)",
-  "level": {"nano": "limited", "offline": "limited"},
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "Real on both substrates: the mgn rest-json API (replication configuration templates, source servers, per-server replication and launch configuration, StartTest / StartCutover / ChangeServerLifeCycleState / FinalizeCutover / TerminateTargetInstances / MarkAsArchived / DisconnectFromService / DeleteSourceServer, jobs and job logs) with AWS's lifecycle state machine and ConflictException / ValidationException errors, and cross-resource checks of subnets, security groups and instance types against the EC2 model. Test and cutover launch a REAL EC2 instance (right-sized, STARTED or STOPPED, tagged with the MGN source server) from an image registered out of the source server's synthetic replicated disks; TerminateTargetInstances really terminates it.",
    "Replication is records only: no agent runs on a source machine (servers are registered with the Vyomi-only RegisterSourceServer action, the stand-in for installing the agent) and no disk data is copied, so dataReplicationState advances with elapsed time, not transferred bytes, and the launched instance boots the synthetic image, not the source OS. Post-launch actions, applications/waves and conversion servers are not modelled."
   ],
-  "tests": ["tests/conformance/test_mgn_core.py"]
+  "tests": [
+   "tests/conformance/test_mgn_core.py"
+  ]
  },
  "ec2.purchasing.ultraservers": {
   "title": "UltraServers",
@@ -691,7 +696,7 @@
    "offline": "not_simulated"
   },
   "limitations": [
-   "UltraServers are multi-host accelerator domains (for example 72-GPU GB200 NVL72 systems) bought as Capacity Blocks; Vyomi has no accelerator instance types, no Capacity Block market and no fabric to model, so there is nothing real to manage here. Use Capacity Reservations for reserved capacity of the instance types Vyomi does run."
+   "Not in scope: UltraServers and accelerator (GPU/Trainium) capacity are physical hardware in AWS data centres. Vyomi offers Capacity Blocks and Capacity Reservations for the instance types its Docker-backed pool runs."
   ]
  },
  "ec2.purchasing.capacity-manager": {
@@ -764,7 +769,7 @@
   ]
  },
  "ec2.image-builder": {
-  "title": "EC2 Image Builder \u2014 components (YAML documents), image recipes, infrastructure/distribution configurations, pipelines and image builds producing an AMI",
+  "title": "EC2 Image Builder — components (YAML documents), image recipes, infrastructure/distribution configurations, pipelines and image builds producing an AMI",
   "level": {
    "nano": "limited",
    "offline": "limited"
@@ -812,6 +817,20 @@
   ],
   "tests": [
    "tests/conformance/test_imagebuilder_core.py"
+  ]
+ },
+ "ec2.purchasing.capacity-blocks": {
+  "title": "Capacity Blocks",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: a Capacity Block books instances for a time window against the host's instance pool (sized from physical RAM, VYOMI_CAPACITY_POOL_MB); a booking that does not fit the memory already booked over the same window is refused (InsufficientCapacity). Each block creates a real Capacity Reservation that RunInstances consumes: scheduled until the start, active during the window, expired at the end; launches into it are counted and refused when it is full, not started or expired, and terminating instances frees capacity. On the offline appliance the launches are the Docker-backed instances.",
+   "Dev Simplified: any instance type Vyomi can launch can be booked (AWS limits Capacity Blocks to ML accelerator types); offerings are generated (three zones, illustrative prices) and nothing is billed; instances are not auto-terminated when a block ends; a block can be released before it starts (AWS cannot cancel one)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ultraservers_core.py"
   ]
  }
 }

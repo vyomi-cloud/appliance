@@ -496,6 +496,9 @@ def _cr_used(m, cr):
 def _cr_settle(m):
     now = time.time()
     for cr in _bag(m, "capacity_reservations").values():
+        sd = cr.get("start_date")   # Capacity Block reservations (core/ec2_ultraservers_core) start in the future
+        if sd and cr["state"] in ("scheduled", "active"):
+            cr["state"] = "scheduled" if now < sd else "active"
         if cr["state"] == "active" and cr["end_date"] and now >= cr["end_date"]:
             cr["state"] = "expired"
 
@@ -505,7 +508,7 @@ def _cr_xml(m, cr):
     return _xml({"capacityReservationId": cr["id"], "capacityReservationArn": f"arn:aws:ec2:us-east-1:123456789012:capacity-reservation/{cr['id']}",
                  "ownerId": "123456789012", "instanceType": cr["type"], "instancePlatform": cr["platform"], "availabilityZone": cr["az"],
                  "tenancy": "default", "totalInstanceCount": cr["total"], "availableInstanceCount": max(cr["total"] - used, 0) if cr["state"] == "active" else 0,
-                 "ebsOptimized": False, "ephemeralStorage": False, "state": cr["state"], "startDate": _iso(cr["created"]),
+                 "ebsOptimized": False, "ephemeralStorage": False, "state": cr["state"], "startDate": _iso(cr.get("start_date") or cr["created"]),
                  "endDate": _iso(cr["end_date"]) if cr["end_date"] else None, "endDateType": cr["end_date_type"],
                  "instanceMatchCriteria": cr["match"], "createDate": _iso(cr["created"]), **_tags(cr["tags"])}, "item")
 

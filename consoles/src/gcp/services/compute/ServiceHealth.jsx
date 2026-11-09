@@ -1,6 +1,6 @@
 /* Google Cloud incidents - a SIMULATED Service Health feed (core/gcp_servicehealth_core) over the servicehealth v1
  * events REST path. Not Google's real status: it reports the simulated project, starts empty, and lets you inject,
- * update, resolve and delete test incidents. Everything shown is labelled "Simulated by Vyomi". */
+ * update, resolve and delete test incidents. Everything shown is labelled "Dev Simplified". */
 import { useState } from "react";
 import { Alert, Box, Button, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
@@ -41,14 +41,14 @@ export default function ServiceHealth() {
       </>}>
       <Stack spacing={2}>
         <Alert severity="info" icon={false} sx={{ py: 0.5 }}>
-          <b>Simulated by Vyomi.</b> This is not Google's status feed. It reports the health of your simulated project: every
+          <b>Dev Simplified.</b> This is not Google's status feed. It reports the health of your simulated project: every
           service is Available and there is no incident history until you inject a test incident.
         </Alert>
         <ErrorAlert error={error} title="Could not load the service health feed" />
         <Box>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
             {active.length ? `${active.length} active incident${active.length === 1 ? "" : "s"}` : "No active incidents"}
-            {" "}<Chip size="small" variant="outlined" label="Simulated by Vyomi" />
+            {" "}<Chip size="small" variant="outlined" label="Dev Simplified" />
           </Typography>
           {shown.length === 0 ? (
             <Typography variant="body2" color="text.secondary">

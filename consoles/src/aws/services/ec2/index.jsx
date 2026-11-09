@@ -25,6 +25,7 @@ import { LifecycleManager, CreateLifecyclePolicy } from "./LifecycleManager.jsx"
 import { AutoScalingGroups, AutoScalingGroupDetail, CreateAutoScalingGroup } from "./AutoScaling.jsx";
 import * as Honest from "./HonestPages.jsx";
 import * as Commit from "./CommitmentPages.jsx";
+import * as Ultra from "./UltraServersPage.jsx";
 import * as Ops from "./OpsPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/ec2/${path.join("/")}` });
@@ -94,7 +95,7 @@ export default {
     { pattern: "/ec2/reserved-instances", component: Ops.ReservedInstances, crumbs: () => [crumb("EC2", ""), crumb("Reserved Instances", "reserved-instances")] },
     { pattern: "/ec2/dedicated-hosts", component: Ops.DedicatedHosts, crumbs: () => [crumb("EC2", ""), crumb("Dedicated Hosts", "dedicated-hosts")] },
     { pattern: "/ec2/capacity-reservations", component: Ops.CapacityReservations, crumbs: () => [crumb("EC2", ""), crumb("Capacity Reservations", "capacity-reservations")] },
-    { pattern: "/ec2/ultraservers", component: Honest.UltraServers, crumbs: () => [crumb("EC2", ""), crumb("UltraServers", "ultraservers")] },
+    { pattern: "/ec2/ultraservers", component: Ultra.UltraServers, crumbs: () => [crumb("EC2", ""), crumb("UltraServers", "ultraservers")] },
     { pattern: "/ec2/capacity-manager", component: Commit.CapacityManager, crumbs: () => [crumb("EC2", ""), crumb("Capacity Manager", "capacity-manager")] },
 
     { pattern: "/ec2/amis", component: Amis, crumbs: () => [crumb("EC2", ""), crumb("AMIs", "amis")] },

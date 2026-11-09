@@ -42,34 +42,26 @@ arm_expiry() {
 }
 expire() {
   post /api/booster/session/ended "{\"codespace_id\":\"$CODESPACE\",\"reason\":\"ttl\"}"
-  docker compose -f "$COMPOSE" --profile link --profile ai down 2>/dev/null || true
+  docker compose -f "$COMPOSE" --profile ai down 2>/dev/null || true
   date -u +%FT%TZ > "$RUN_DIR/EXPIRED"; log "session ended — stack stopped (idle timeout will stop the Codespace)."
 }
 
-# Outbound relay link (no inbound port): only when the portal supplied a relay URL + session token.
-start_link() {
-  if [ -n "${VYOMI_RELAY_URL:-}" ] && [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ]; then
-    docker compose -f "$COMPOSE" --profile link up -d link && log "relay link dialling out to $VYOMI_RELAY_URL"
-  else
-    log "no VYOMI_RELAY_URL / VYOMI_BOOSTER_SESSION_TOKEN - relay link not started."
-  fi
-}
+# No outbound link: the Codespace never dials anything. The laptop's vyomi-tunnel connects IN over ssh (the sshd devcontainer feature) and
+# reaches the simulator (http://<container-ip>:9000), Docker instances and k3s through that one session. Nothing is published.
 
 # Fetch the signed session token + this session's key from the portal (GitHub-verified by CODESPACE_NAME: the portal checks that
 # codespace is Available for the owning user). Retries while the portal learns the codespace is up. Needs no secret on this box.
 fetch_session() {
   [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ] && [ -n "${VYOMI_BOOSTER_SESSION_KEY:-}" ] && return 0
-  local out tok key end rel i
+  local out tok key end i
   for i in 1 2 3 4 5 6 7 8 9 10; do
     out=$(curl -fsS -m 10 -G "$PORTAL/api/booster/session/token" --data-urlencode "codespace_id=$CODESPACE" 2>/dev/null) && {
       tok=$(printf '%s' "$out" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
       key=$(printf '%s' "$out" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
       end=$(printf '%s' "$out" | sed -n 's/.*"session_end":\([0-9]*\).*/\1/p')
-      rel=$(printf '%s' "$out" | sed -n 's/.*"relay_url":"\([^"]*\)".*/\1/p')
       if [ -n "$tok" ] && [ -n "$key" ]; then
         export VYOMI_BOOSTER_SESSION_TOKEN="$tok" VYOMI_BOOSTER_SESSION_KEY="$key"
         [ -n "$end" ] && export VYOMI_BOOSTER_SESSION_END="$end"
-        [ -z "${VYOMI_RELAY_URL:-}" ] && [ -n "$rel" ] && export VYOMI_RELAY_URL="$rel"   # the portal says where to dial out to
         log "session token fetched."; return 0
       fi; }
     sleep 6
@@ -117,7 +109,6 @@ start_stack() {
     if docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 3 http://localhost:9000/healthz >/dev/null 2>&1; then
       post /api/booster/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
       start_ai
-      start_link
       log "booster ready."; return 0
     fi; sleep 3
   done
