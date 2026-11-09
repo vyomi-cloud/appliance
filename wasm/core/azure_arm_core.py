@@ -1160,6 +1160,7 @@ class AzureArm:
         self.sub_names: dict = {}               # subscription id (lower) -> displayName (Microsoft.Subscription/rename)
         self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
+        self.graph_store = None                  # set by the router/registry: this space's Entra GraphStore (Managed identity sign-ins)
         self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
         self.sql_store = None                    # set by the platform: the Azure SQL data plane's SqlStore (database export/import)
         self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
@@ -4508,6 +4509,9 @@ class AzureArm:
             else:
                 token = f"vyomi.{uuid.uuid4().hex}"
                 self._vm_tokens[token] = {"principalId": principal_id, "resource": resource, "vmRid": rec["id"]}
+                gs = getattr(self, "graph_store", None)   # Entra "Managed identity sign-ins": one real row per IMDS token issued
+                if gs is not None:
+                    gs.managed_identity_sign_in(principal_id, rec.get("name") or rec["id"].rsplit("/", 1)[-1], resource)
                 out.append(json.dumps({"access_token": token, "client_id": principal_id, "expires_in": "3599",
                                        "expires_on": str(int(datetime.datetime.now(datetime.timezone.utc).timestamp()) + 3599),
                                        "resource": resource, "token_type": "Bearer"}))

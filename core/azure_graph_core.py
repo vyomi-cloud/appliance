@@ -159,6 +159,7 @@ class GraphStore:
         }
         self.audit_logs: list[dict] = []
         self.sign_in_logs: list[dict] = []
+        self.auth_codes: dict[str, dict] = {}      # one-time authorization codes minted by /oauth2/v2.0/authorize (interactive sign-in)
         # Security defaults (Entra ID | Properties' "Manage security defaults" panel,
         # azure.entra.security_defaults): a real Graph policy document, stored and
         # returned exactly as set — Vyomi has no interactive sign-in flow to enforce the
@@ -216,6 +217,46 @@ class GraphStore:
             "clientAppUsed": "Other clients",
             "signInEventTypes": ["nonInteractiveUser"],
             "isInteractive": False,
+            "conditionalAccessStatus": ca,
+            "authenticationRequirement": "singleFactorAuthentication",
+            "status": {"errorCode": 0 if success else error_code, "failureReason": None if success else failure_reason, "additionalDetails": None},
+        })
+
+
+    def managed_identity_sign_in(self, principal_id: str, name: str, resource: str, app_id: str = "") -> None:
+        """A real "Managed identity sign-ins" row — appended only when Vyomi's IMDS simulation
+        (the ARM core's VM Run command, ``169.254.169.254/metadata/identity/oauth2/token``) hands a
+        managed identity a token, so every row reflects an actual token issued to a resource."""
+        self.sign_in_logs.insert(0, {
+            "id": _guid(), "createdDateTime": _now(),
+            "userDisplayName": None, "userPrincipalName": None,
+            "servicePrincipalId": principal_id, "servicePrincipalName": name,
+            "appDisplayName": name, "appId": app_id or principal_id,
+            "resourceDisplayName": resource, "resourceId": resource,
+            "ipAddress": "127.0.0.1", "location": {"city": None, "state": None, "countryOrRegion": None},
+            "clientAppUsed": "Other clients",
+            "signInEventTypes": ["managedIdentity"],
+            "isInteractive": False,
+            "conditionalAccessStatus": "notApplied",
+            "authenticationRequirement": "singleFactorAuthentication",
+            "status": {"errorCode": 0, "failureReason": None, "additionalDetails": None},
+        })
+
+    def interactive_sign_in(self, user: dict | None, upn: str, app_id: str, success: bool, error_code: int, failure_reason: str | None, ca: str = "notApplied") -> None:
+        """A real "User sign-ins (interactive)" row — appended only by /oauth2/v2.0/authorize
+        (the authorization-code request an interactive sign-in page posts), after the password was
+        really checked against the directory user."""
+        app = next((a for a in self.applications.values() if a["appId"] == app_id), None)
+        self.sign_in_logs.insert(0, {
+            "id": _guid(), "createdDateTime": _now(),
+            "userDisplayName": (user or {}).get("displayName"), "userPrincipalName": (user or {}).get("userPrincipalName") or upn,
+            "userId": (user or {}).get("id"),
+            "appDisplayName": (app or {}).get("displayName") or "Public client",
+            "appId": app_id,
+            "ipAddress": "127.0.0.1", "location": {"city": None, "state": None, "countryOrRegion": None},
+            "clientAppUsed": "Browser",
+            "signInEventTypes": ["interactiveUser"],
+            "isInteractive": True,
             "conditionalAccessStatus": ca,
             "authenticationRequirement": "singleFactorAuthentication",
             "status": {"errorCode": 0 if success else error_code, "failureReason": None if success else failure_reason, "additionalDetails": None},
@@ -700,8 +741,10 @@ def _token(store: GraphStore, method: str, body: bytes) -> Response:
     client_id = form.get("client_id", "")
     if form.get("grant_type") == "password":
         return _token_password(store, form, client_id)
+    if form.get("grant_type") == "authorization_code":
+        return _token_auth_code(store, form, client_id)
     if form.get("grant_type") != "client_credentials":
-        return _oauth_err(400, "unsupported_grant_type", "Vyomi simulates the client_credentials and password (ROPC) grants only; there is no interactive browser flow.")
+        return _oauth_err(400, "unsupported_grant_type", "Vyomi simulates the client_credentials, password (ROPC) and authorization_code grants (code from /oauth2/v2.0/authorize).")
     app = next((a for a in store.applications.values() if a["appId"] == client_id), None)
     if not app:
         store.sign_in(None, client_id, False, 700016, "Application not found in the directory.")
@@ -751,6 +794,52 @@ def _token_password(store: GraphStore, form: dict, client_id: str) -> Response:
                        "access_token": token, "scope": form.get("scope", "")})
 
 
+def _authorize(store: GraphStore, method: str, body: bytes) -> Response:
+    """Interactive sign-in: the authorization-code request an Entra sign-in page posts. There is no
+    HTML sign-in page here, so the credentials arrive as form fields (client_id, username, password,
+    scope, redirect_uri, state) and the one-time ``code`` is returned as JSON instead of a 302. The
+    password is really checked and the attempt is recorded as an *interactive* user sign-in; the
+    code is then redeemed at /oauth2/v2.0/token with grant_type=authorization_code."""
+    if method != "POST":
+        return _err(405, "Request_UnsupportedQuery", method)
+    from urllib.parse import parse_qs
+    form = {k: v[0] for k, v in parse_qs((body or b"").decode("utf-8")).items()}
+    client_id, upn = form.get("client_id", ""), form.get("username", "")
+    user = next((u for u in store.users.values() if u["userPrincipalName"].lower() == upn.lower()), None)
+    if user is None:
+        store.interactive_sign_in(None, upn, client_id, False, 50034, "The user does not exist in the directory.")
+        return _oauth_err(400, "invalid_grant", f"AADSTS50034: The user account {upn} does not exist in the directory.")
+    if user.get("accountEnabled") is False:
+        store.interactive_sign_in(user, upn, client_id, False, 50057, "The user account is disabled.")
+        return _oauth_err(400, "invalid_grant", "AADSTS50057: The user account is disabled.")
+    if not form.get("password") or user.get("_password") != form.get("password"):
+        store.interactive_sign_in(user, upn, client_id, False, 50126, "Error validating credentials due to invalid username or password.")
+        return _oauth_err(400, "invalid_grant", "AADSTS50126: Error validating credentials due to invalid username or password.")
+    blocked = ext.enforce_signin(store, user, client_id)
+    if blocked:
+        code, msg, _ = blocked
+        store.interactive_sign_in(user, upn, client_id, False, code, msg.split(": ", 1)[-1], ca="failure")
+        return _oauth_err(400 if code != 53003 else 403, "interaction_required" if code in (50076, 53000) else "access_denied", msg)
+    store.interactive_sign_in(user, upn, client_id, True, 0, None, ca="success" if getattr(store, "ca_policies", None) else "notApplied")
+    code = "vyomi.code." + uuid.uuid4().hex
+    store.auth_codes[code] = {"client_id": client_id, "upn": user["userPrincipalName"], "scope": form.get("scope", ""), "at": time.time()}
+    for k in [k for k, v in store.auth_codes.items() if time.time() - v["at"] > 600]:
+        store.auth_codes.pop(k, None)
+    return _json(200, {"code": code, "state": form.get("state", ""), "redirect_uri": form.get("redirect_uri", "")})
+
+
+def _token_auth_code(store: GraphStore, form: dict, client_id: str) -> Response:
+    """Redeem a one-time authorization code (single use, 10 minutes, bound to the client_id)."""
+    entry = store.auth_codes.pop(form.get("code", ""), None)
+    if not entry or time.time() - entry["at"] > 600:
+        return _oauth_err(400, "invalid_grant", "AADSTS70000: The provided authorization code is invalid, expired or already redeemed.")
+    if entry["client_id"] != client_id:
+        return _oauth_err(400, "invalid_grant", "AADSTS70000: The authorization code was issued to a different client.")
+    token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
+    return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
+                       "access_token": token, "scope": entry["scope"]})
+
+
 def _ext(res) -> Response:
     status, obj = res
     return Response(status=status) if obj is None else _json(status, obj)
@@ -768,6 +857,8 @@ def dispatch(store: GraphStore, method: str, path: str,
     raw_segs = [s for s in p.split("/") if s != ""]
     if raw_segs and raw_segs[-1] == "token" and "oauth2" in raw_segs:
         return _token(store, method, body)
+    if raw_segs and raw_segs[-1] == "authorize" and "oauth2" in raw_segs:
+        return _authorize(store, method, body)
     if p.startswith("/v1.0"):
         p = p[len("/v1.0"):]
     elif p.startswith("/beta"):

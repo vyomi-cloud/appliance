@@ -66,6 +66,20 @@ export const updateDirectorySettings = (body) => graph("PATCH", "/settings/direc
 export const listAuditLogs = async () => (await graph("GET", "/auditLogs/directoryAudits")).value || [];
 export const listSignInLogs = async () => (await graph("GET", "/auditLogs/signIns")).value || [];
 
+/** Interactive sign-in: the authorization-code request (POST /oauth2/v2.0/authorize) then redeem the
+ * one-time code at the token endpoint. Appends a real "User sign-ins (interactive)" row either way. */
+export async function signInInteractive(username, password) {
+  const post = async (path, params) => {
+    const res = await fetch(`${WIRE_BASE}/${DEFAULT_TENANT_ID}/oauth2/v2.0/${path}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params).toString() });
+    const text = await res.text(); const data = text ? JSON.parse(text) : {};
+    if (!res.ok) throw Object.assign(new Error(data.error_description || data.error), { code: data.error });
+    return data;
+  };
+  const clientId = "04b07795-8ddb-461a-bbee-02f9e1bf7b46";
+  const { code } = await post("authorize", { client_id: clientId, response_type: "code", username, password, scope: "https://graph.microsoft.com/.default", redirect_uri: "http://localhost" });
+  return post("token", { grant_type: "authorization_code", client_id: clientId, code });
+}
+
 /** Resource-owner password grant (MSAL acquire_token_by_username_password): a REAL password check
  * against the directory user; appends a real "User sign-ins (non-interactive)" row either way. */
 export async function signInWithPassword(username, password) {

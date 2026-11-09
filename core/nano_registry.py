@@ -147,6 +147,7 @@ def get() -> dict:
         _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
         _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        _REG["az_arm"].graph_store = _REG["az_graph"]   # IMDS token issue -> Entra Managed identity sign-ins row
         _REG["az_arm"].kv_secrets_store = _REG["az_kvsec"]   # APIM Key Vault named values resolve against this space's KV secrets
         try:   # customer-managed keys (Storage/Cosmos/SQL/Service Bus/App Config) are cross-checked against this space's Key Vault keys
             from core import azure_cfgext_core as _cfgx

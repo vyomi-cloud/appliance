@@ -1,5 +1,5 @@
 /* Overview dashboard — real resource counts from the native wire; the Google Cloud status
- * feed isn't modeled (Vyomi has no incidents of its own to report). */
+ * feed is a SIMULATED Vyomi feed (ServiceHealth.jsx), not Google's. */
 import { Box, Button, Paper, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import ListIcon from "@mui/icons-material/esm/List.js";
@@ -9,6 +9,7 @@ import { PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ServiceHealth from "./ServiceHealth.jsx";
 
 const Stat = ({ label, value }) => (
   <Paper variant="outlined" sx={{ p: 2, textAlign: "center", borderRadius: 2 }}>
@@ -34,7 +35,7 @@ export default function Overview() {
         <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
       </>} />
       <Stack spacing={2}>
-        <CapabilityContainer id="gcp.compute.incidents" title="Google Cloud incidents" />
+        <ServiceHealth />
         <Section title="Resource footprint">
           {error ? <Typography color="error" variant="body2">{error.message}</Typography> : (
             <Stack useFlexGap direction="row" spacing={2} flexWrap="wrap">
