@@ -1385,6 +1385,7 @@ def resolve_provider_service(request) -> tuple[str, str]:
     # Azure data-plane
     if path.startswith("/azure-data/"):
         if "/keyvault/" in path:   return "azure", "keyvault"
+        if path.startswith("/azure-data/apim/"): return "azure", "apim"
         if "/eventgrid/" in path:  return "azure", "eventgrid"
         if "/servicebus/" in path: return "azure", "servicebus"
         if "/cosmos/" in path:     return "azure", "cosmos"

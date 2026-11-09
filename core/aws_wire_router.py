@@ -295,6 +295,8 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
+    if p0.startswith("/azure-data/apim/"):
+        return "az-apim"   # API Management gateway data plane (core/azure_apim_gateway_core)
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/token$", p0):
@@ -1595,6 +1597,10 @@ class AwsWireRouter:
                 hdrs["content-type"] = media
             out_body = r.get("body")
             return {"status": r["status"], "headers": hdrs, "body": b"" if out_body is None else json.dumps(out_body).encode()}
+
+        if svc == "az-apim":   # API Management gateway: /azure-data/apim/{service}/{api-path...}
+            from core import azure_apim_gateway_core as _apimgw
+            return _apimgw.handle(self.az_arm.state, method, path, query or {}, lheaders)
 
         if svc and svc.startswith("az-"):   # Azure data plane — native azure-* SDK wire
             _az_core = {

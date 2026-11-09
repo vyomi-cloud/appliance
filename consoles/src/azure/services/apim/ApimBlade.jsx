@@ -23,6 +23,7 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
+import CapacityGauge from "./CapacityGauge.jsx";
 import Apis from "./Apis.jsx";
 import Products from "./Products.jsx";
 import Subscriptions from "./Subscriptions.jsx";
@@ -208,7 +209,9 @@ function Overview({ a, reload, self }) {
         </div>
       )}
       {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
-      {tab === "capacity" && <NotSimulatedContainer feature="The capacity gauge" />}
+      {tab === "capacity" && a.sku?.name === "Consumption"
+        ? <NotSimulatedContainer feature="The capacity gauge (the serverless Consumption tier has no scale units, so Azure shows no Capacity metric either)" />
+        : tab === "capacity" && <CapacityGauge id={a.id} />}
       {tab === "properties" && <PropertyList a={a} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="API Management service" names={[a.name]}

@@ -140,9 +140,18 @@
   "title": "Metrics, Logs, Analytics",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "These three dashboards are real — built over this service's actual stored data (API/product/subscription counts, active-subscription counts, and the real Activity log's management-plane write events) — but they are NOT the real APIM gateway metrics (Requests, Duration, Capacity). Vyomi's APIs never carry live gateway traffic, so there is no request/latency/capacity time-series to chart; Analytics likewise reports on real configuration (APIs by type, subscriptions by product) rather than real call volume."
+   "These three dashboards are real — built over this service's actual stored data (API/product/subscription counts, active-subscription counts, and the real Activity log's management-plane write events). Request and Duration gateway metrics beyond the derived Capacity estimate (see azure.apim.capacity) are not modeled in the dashboards; Analytics reports on real configuration (APIs by type, subscriptions by product) rather than call volume."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.capacity": {
+  "title": "Capacity metric + Overview capacity gauge (Microsoft.ApiManagement/service Capacity, percent) over the native ARM metrics API",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A DERIVED LOAD ESTIMATE, not measured CPU/memory: gateway requests Vyomi actually served per interval (requests through /azure-data/apim/{service}/..., counted by the request recorder) divided by a nominal per-unit throughput for the service's tier x scale units (Developer 10, Basic 20, Standard 50, Premium 100 req/s per unit - Vyomi's own model, not Microsoft's published numbers), capped at 100%. No gateway traffic reads 0%. The Consumption tier has no Capacity metric (as in Azure). Served via metricDefinitions/metrics on the native ARM route, so the SDK, CLI, Monitor > Metrics and the Overview gauge all show the same value."
+  ],
+  "api": ["MetricDefinitions.List", "Metrics.List"],
+  "tests": ["tests/conformance/test_azure_apim_capacity.py"]
  },
  "azure.apim.scaletier": {
   "title": "Scale out and up, Pricing tier (post-creation sku.name/sku.capacity over ARM)",

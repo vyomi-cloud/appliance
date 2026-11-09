@@ -150,6 +150,8 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
             i = low.index("providers")
             if i + 3 < len(segs):
                 return segs[i + 3], method.upper()
+        if low[:2] == ["azure-data", "apim"] and len(segs) >= 3:   # APIM gateway request (data plane), distinct from ARM calls on the service
+            return segs[2], "Gateway:" + method.upper()
         if low[:1] == ["azure-data"] and len(segs) >= 3 and segs[2] not in ("_",):
             return segs[2], method.upper()               # /azure-data/<svc>/<name>/...
         for k in ("accounts", "storageaccounts", "sites", "servers", "databaseaccounts", "service", "virtualmachines"):
@@ -1230,8 +1232,10 @@ AZURE_RESOURCE_METRICS = {
     "microsoft.appconfiguration/configurationstores": ({"appconfiguration", "az-appconfig"},
         {"HttpIncomingRequestCount": ("Count", "all"), "HttpIncomingRequestDuration": ("MilliSeconds", "avg_all")}),
     "microsoft.containerregistry/registries": ({"acr", "az-acr", "containerregistry"}, {}),
-    "microsoft.apimanagement/service": ({"apim"},
-        {"TotalRequests": ("Count", "all"), "FailedRequests": ("Count", "err"), "Duration": ("MilliSeconds", "avg_all")}),
+    "microsoft.apimanagement/service": ({"apim", "az-apim"},
+        {"TotalRequests": ("Count", "all"), "FailedRequests": ("Count", "err"), "Duration": ("MilliSeconds", "avg_all"),
+         # gateway-only request count (op "Gateway:*"): the real counter behind the derived Capacity estimate (azure_monitor_core)
+         "GatewayRequests": ("Count", "gw")}),
     "microsoft.web/sites": ({"functionapp", "appservice", "webapp"},
         {"Http4xx": ("Count", "e4"), "Http5xx": ("Count", "e5"), "HttpResponseTime": ("Seconds", "sec_all")}),
     "microsoft.sql/servers/databases": ({"sql", "az-sql"}, {}),
@@ -1274,6 +1278,8 @@ def azure_series(obs: ObsStore, rtype: str, name: str, metric: str, start: float
     for ts, c, s, r, op, st, ms, bi, bo in obs.recent:
         if c != "azure" or ts < start or ts > end or s not in services or op == "MonitorRead":
             continue
+        if kind == "gw" and not str(op).startswith("Gateway:"):
+            continue
         rl = (r or "").lower()
         if rl != nm and not (unique_of_type and rl in ("", "_")):
             continue
@@ -1281,7 +1287,7 @@ def azure_series(obs: ObsStore, rtype: str, name: str, metric: str, start: float
     out = []
     for i in sorted(buckets):
         rows = buckets[i]
-        if kind == "all":
+        if kind in ("all", "gw"):
             vals = [1.0] * len(rows)
         elif kind == "ok":
             vals = [1.0] * sum(1 for r in rows if r[0] < 400)
@@ -1308,7 +1314,7 @@ def azure_series(obs: ObsStore, rtype: str, name: str, metric: str, start: float
                 out.append({"ts": start + i * step, "total": 0.0, "count": 0, "average": 0.0, "minimum": 0.0, "maximum": 0.0})
             continue
         n = len(vals)
-        cnt_kind = kind in ("all", "ok", "e4", "e5", "err", "ru")
+        cnt_kind = kind in ("all", "gw", "ok", "e4", "e5", "err", "ru")
         out.append({"ts": start + i * step, "total": round(sum(vals), 3) if cnt_kind else round(sum(vals) / n, 3), "count": n,
                     "average": round(sum(vals) / n, 3), "minimum": round(min(vals), 3), "maximum": round(max(vals), 3)})
     return out
