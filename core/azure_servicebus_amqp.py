@@ -203,7 +203,12 @@ def message_from_amqp(store, parsed: dict, now: float) -> dict:
         v = parsed["body"][0]
         body = bytes(v) if isinstance(v, (bytes, bytearray)) else (v.encode("utf-8") if isinstance(v, str)
                                                                      else json.dumps(_plain(v)).encode())
-    mid = _idstr(props.get("message_id")) or str(_uuid.uuid4())
+    mid = _idstr(props.get("message_id"))
+    rest = parsed["rest"]
+    if not mid:     # the service assigns an id when the sender sent none (the JS SDK keys lock renewal on it)
+        mid = str(_uuid.uuid4())
+        rest = A.build_message(properties=dict(props, message_id=mid), application_properties=app or None,
+                               raw_body=parsed["raw_body"], footer=parsed["footer"] or None)
     anns = {k: v for k, v in parsed["message_annotations"].items()
             if str(k) not in ("x-opt-sequence-number", "x-opt-enqueued-time", "x-opt-locked-until",
                               "x-opt-enqueue-sequence-number")}
@@ -215,7 +220,7 @@ def message_from_amqp(store, parsed: dict, now: float) -> dict:
         "_id": _uuid.uuid4().hex, "SequenceNumber": None, "MessageId": mid, "body": body,
         "content_type": props.get("content_type") or "application/octet-stream",
         "properties": uprops, "EnqueuedTimeUtc": _iso(now), "DeliveryCount": 0, "_locked": None, "_deferred": False,
-        "_wire": parsed["rest"], "_anns": A.encode(anns) if anns else b"", "_enq": now,
+        "_wire": rest, "_anns": A.encode(anns) if anns else b"", "_enq": now,
         "_session": props.get("group_id"),
     }
     if ttl:
