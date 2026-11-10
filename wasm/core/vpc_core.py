@@ -408,6 +408,7 @@ def _describe_internet_gateways(store, params):
     ids = [v for k, v in params.items() if k.startswith("InternetGatewayId.")]
     rows = list(m["igws"].values())
     if ids:
+        _require_ids(ids, rows, "InvalidInternetGatewayID.NotFound", "internetGateway")
         rows = [g for g in rows if g["id"] in ids]
     return _envelope("DescribeInternetGateways", f"<internetGatewaySet>{''.join(_igw_xml(g) for g in rows)}</internetGatewaySet>")
 
@@ -495,11 +496,20 @@ def _create_route_table(store, params):
     return _envelope("CreateRouteTable", f"<routeTable>{_rt_xml(m['route_tables'][rt_id])[len('<item>'):-len('</item>')]}</routeTable>")
 
 
+def _require_ids(ids, rows, code, noun):
+    """Real EC2 fails a Describe* that names an id which does not exist (it never answers an empty list)."""
+    have = {r["id"] for r in rows}
+    missing = [i for i in ids if i not in have]
+    if missing:
+        raise VpcError(code, f"The {noun} ID{'s' if len(missing) > 1 else ''} '{', '.join(missing)}' do{'' if len(missing) > 1 else 'es'} not exist")
+
+
 def _describe_route_tables(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("RouteTableId.")]
     rows = list(m["route_tables"].values())
     if ids:
+        _require_ids(ids, rows, "InvalidRouteTableID.NotFound", "routeTable")
         rows = [rt for rt in rows if rt["id"] in ids]
     return _envelope("DescribeRouteTables", f"<routeTableSet>{''.join(_rt_xml(rt) for rt in rows)}</routeTableSet>")
 
@@ -786,6 +796,7 @@ def _describe_nat_gateways(store, params):
     ids = [v for k, v in params.items() if k.startswith("NatGatewayId.")]
     rows = list(m["nat_gateways"].values())
     if ids:
+        _require_ids(ids, rows, "NatGatewayNotFound", "NAT gateway")
         rows = [g for g in rows if g["id"] in ids]
     return _envelope("DescribeNatGateways", f"<natGatewaySet>{''.join(_natgw_xml(g) for g in rows)}</natGatewaySet>")
 
@@ -1078,6 +1089,7 @@ def _describe_vpcs(store, params):
     ids = [v for k, v in params.items() if k.startswith("VpcId.")]
     rows = list(m["vpcs"].values())
     if ids:
+        _require_ids(ids, rows, "InvalidVpcID.NotFound", "vpc")
         rows = [v for v in rows if v["id"] in ids]
     items = "".join(_vpc_xml(v, m) for v in rows)
     return _envelope("DescribeVpcs", f"<vpcSet>{items}</vpcSet>")
@@ -1109,6 +1121,7 @@ def _describe_subnets(store, params):
     ids = [v for k, v in params.items() if k.startswith("SubnetId.")]
     rows = list(m["subnets"].values())
     if ids:
+        _require_ids(ids, rows, "InvalidSubnetID.NotFound", "subnet")
         rows = [s for s in rows if s["id"] in ids]
     items = "".join(_subnet_xml(s) for s in rows)
     return _envelope("DescribeSubnets", f"<subnetSet>{items}</subnetSet>")
@@ -1605,6 +1618,7 @@ def _describe_vpc_endpoints(store, params):
     ids = [v for k, v in params.items() if k.startswith("VpcEndpointId.")]
     rows = list(m["vpc_endpoints"].values())
     if ids:
+        _require_ids(ids, rows, "InvalidVpcEndpointId.NotFound", "vpc endpoint")
         rows = [e for e in rows if e["id"] in ids]
     return _envelope("DescribeVpcEndpoints", f"<vpcEndpointSet>{''.join(_vpce_xml(e) for e in rows)}</vpcEndpointSet>")
 

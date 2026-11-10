@@ -1324,6 +1324,7 @@ def _record_invocation(fn, request_id, duration_ms, error, extra=None):
     row.update(extra or {})
     fn["invocations"].insert(0, row)
     del fn["invocations"][RECENT_INVOCATIONS_KEPT:]
+    fn["invocation_count"] = int(fn.get("invocation_count", 0)) + 1   # running total (only the last 20 rows are kept)
 
 
 class _Ctx(dict):
