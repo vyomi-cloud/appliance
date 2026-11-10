@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-10T15:59:39+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-10T14:59:46+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3006,3 @@ Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 Sources that failed this run (1): maven/com.azure:azure-cosmos: The read operation timed out
 
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T17:50:49+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
-- · `spec-commit` Azure servicebus: fix: improve Service Bus administration Swagger interoperability (#47269) ([link](https://github.com/Azure/azure-rest-api-specs/commit/1758295d22b6a143bb74383febd0c3f6bccfeda5))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

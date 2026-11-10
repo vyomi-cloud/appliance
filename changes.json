@@ -1,43 +1,6 @@
 {
- "at": "2026-11-10T14:59:46+00:00",
+ "at": "2026-11-10T15:59:39+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "storage/v1",
-   "kind": "operation-removed",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
-   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
-   "detail": {
-    "params": [
-     "anywhereCacheId",
-     "bucket"
-    ],
-    "request": "",
-    "response": "AnywhereCache",
-    "http": "POST",
-    "deprecated": false
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "cli:gcloud",
-   "kind": "release",
-   "key": "ver:cli:gcloud:593.0.0",
-   "title": "cli:gcloud: 592.0.0 \u2192 593.0.0",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:e613853d7e52",
-   "title": "CloudWatch PromQL alarms now support EC2 and Application Auto Scaling",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-alarms-autoscaling-group-actions",
-   "detail": "Amazon CloudWatch alarms that use Prometheus Query Language (PromQL) can now trigger Amazon EC2 and Application Auto Scaling step and simple scaling policies. You can scale your EC2 Auto Scaling groups on CloudWatch OpenTelemetry metrics using the same kind of PromQL queries you use for dashboards and alerting. In this release, PromQL alarms also support EC2 Auto Scaling simple and step scaling policies. Target tracking is not currently a supported policy type for PromQL alarms. Teams moving to OpenTelemetry can scale capacity on the same metrics as the rest of their monitoring, instead of kee",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
