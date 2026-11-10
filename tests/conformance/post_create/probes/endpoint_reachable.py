@@ -124,8 +124,8 @@ def azure_keyvault():
     check(uri.startswith(BASE), "vaultUri is on the simulator origin, not a fake azure hostname", uri)
     if not uri.startswith("http"):
         return
-    st, _, _ = http("PUT", uri.rstrip("/") + "/secrets/s1", {"value": "topsecret"})
-    st2, body, _ = http("GET", uri.rstrip("/") + "/secrets/s1")
+    st, _, _ = http("PUT", uri.rstrip("/") + "/secrets/s1?api-version=7.4", {"value": "topsecret"})
+    st2, body, _ = http("GET", uri.rstrip("/") + "/secrets/s1?api-version=7.4")
     check(st in (200, 201) and st2 == 200 and b"topsecret" in body, "set+get a secret through the shown vaultUri", f"{st} {st2} {body[:80]}")
 
 
