@@ -1,27 +1,6 @@
 {
- "at": "2026-11-10T00:59:29+00:00",
+ "at": "2026-11-10T01:59:25+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Identity and Access Management",
-   "kind": "announcement",
-   "key": "feed:aws:8e588b206383",
-   "title": "Amazon Bedrock AgentCore now offers a Web Search API",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-bedrock-agentcore-web-search-api/",
-   "detail": "Today, AWS announces the general availability of the Web Search API on Amazon Bedrock AgentCore, which lets you search the web with a single API call. Web Search on AgentCore has been available as an MCP tool through AgentCore Gateway. The new InvokeWebSearch API gives applications, custom agent loops, and data pipelines search results with no resources to create. The API returns ranked results from the Amazon-operated web index behind Web Search on AgentCore. Each result includes a text extract and, when available, the page title, URL, and publication time. You can filter each request by doma",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:c45aff83cb46",
-   "title": "Amazon CloudWatch Logs announces account-level retention policies",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-log-retention/",
-   "detail": "Amazon CloudWatch Logs now supports account-level retention policies, so you can use a single policy to set how long log data is kept across all or subset of log groups in an AWS account. Account-level policies allow platform and security teams to bring each log group in line with their retention standards. With today's launch, you can create policies that cover all log groups in the account or apply to a specific set of log groups with names that start with a prefix, such as /aws/lambda. You can additionally choose whether it applies to existing log groups or only new ones. When more than one",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
