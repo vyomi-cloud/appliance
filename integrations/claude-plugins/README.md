@@ -7,7 +7,7 @@ and wire your SDKs to the simulator for local runs.
 
 ## Install
 
-1. Install the Vyomi CLI (it provides the MCP server):
+1. Install the Vyomi CLI, **version 3.0.46 or later** (the first release with `vyomi mcp`, the MCP server):
    - macOS / Linux: `brew install vyomi-cloud/tap/vyomi-docker`
    - Windows: the MSI from the [latest release](https://github.com/vyomi-cloud/appliance/releases)
 2. In Claude Code:
@@ -17,6 +17,8 @@ and wire your SDKs to the simulator for local runs.
    ```
 3. Start the simulator with `vyomi up`, then ask Claude:
    *"Set this project up to run against Vyomi."*
+
+Check with `vyomi mcp --help`; if it prints the CLI usage instead, upgrade (`brew upgrade vyomi-docker`, or `brew upgrade vyomi` for the Max tier).
 
 Without the plugin you can register only the MCP server:
 `claude mcp add --scope user vyomi -- vyomi mcp`.

@@ -49,7 +49,8 @@ plugin) knows what Vyomi emulates and how to point code at it.
   for a real-cloud tool only if the user explicitly asks for the real cloud.
 - Services marked not emulated must not be silently pointed at Vyomi.
 - Respect the scan and env warnings; they describe real protocol limits.
-- If the `vyomi` MCP tools are unavailable, the CLI is probably not installed:
+- If the `vyomi` MCP tools are unavailable, the CLI is missing or older than
+  3.0.46 (the first release with `vyomi mcp`; `brew upgrade` fixes that), or not installed:
   macOS/Linux `brew install vyomi-cloud/tap/vyomi-docker`, Windows the MSI from
   https://github.com/vyomi-cloud/appliance/releases (see https://vyomi.cloud/downloads).
   Then restart Claude Code.
