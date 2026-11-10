@@ -540,5 +540,1048 @@
         ]
       }
     }
+  },
+  "ec2": {
+    "title": "Amazon EC2 (instances, EBS, AMIs, load balancing, Auto Scaling)",
+    "summary": "Vyomi implements the EC2 API in its own model (core/vpc_core.py and related cores); on the offline appliance each running instance is a Docker container with sshd, and in Nano it can optionally be a small Linux VM in the browser.",
+    "wire": [
+      "EC2 Query protocol + XML",
+      "ELBv2 Query",
+      "Auto Scaling Query",
+      "EC2 Instance Connect JSON",
+      "boto3 / aws-cli / Terraform with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "Vyomi EC2/VPC model (Python)",
+        "Docker (instance image vyomi/instance:ubuntu-24.04, sshd)",
+        "Docker bridge networks + nftables (optional netsim enforcement)"
+      ],
+      "notes": "The EC2 API state is in-house; RunInstances starts a real Docker container per instance (compute/backend.py, with LXD/Multipass as older runtimes). SSH, exec-based terminal, Instance Connect and per-container CPU/network/IO metrics are real; the container is a Linux userland, not an AMI."
+    },
+    "nano": {
+      "kind": "hybrid",
+      "tech": [
+        "Python EC2/VPC model in Pyodide",
+        "v86 x86 emulator + 21 MB Alpine image (opt-in)",
+        "SharedWorker per instance"
+      ],
+      "notes": "Instance records always work. With in-browser VMs turned on (localStorage nano_vm_compute=1) each instance is a real 32-bit Alpine Linux VM in the tab with an xterm.js serial console; without it Connect returns NoRuntime. No Docker, no EC2 Instance Connect delivery, no instance metrics."
+    },
+    "differs": [
+      "Offline instances are Docker containers sharing the host kernel, not AMI-based virtual machines; AMIs are a curated list (Amazon Linux, Ubuntu, Debian, RHEL, SUSE, Windows) and Windows/RDP is not offered.",
+      "Nano VMs are 32-bit x86 Alpine, not the chosen AMI; RAM is the disk (Stop saves it, Terminate discards it); no general internet egress; a background tab runs several times slower.",
+      "A running instance passes status checks immediately; nothing becomes impaired on its own.",
+      "Key pairs are key-shaped documents; SSH uses the appliance's shared key pair, not the one chosen at launch.",
+      "Instance metadata does not vend IAM role credentials.",
+      "Snapshots complete instantly; Elastic IPs are synthetic addresses.",
+      "CPU, network and EBS metrics exist only offline (sampled from the container); Nano publishes none.",
+      "Spot never interrupts, Reserved Instances and Savings Plans have no billing effect, prices are illustrative, and on the offline appliance launch coupling for Spot, Capacity Reservations, Dedicated Hosts and scheduled events does not apply to the Docker runtime.",
+      "ELB target health is deterministic and no L7 traffic flows through load balancers.",
+      "Auto Scaling step scaling always applies the first step; warm pools and mixed-instances policies are not modeled."
+    ],
+    "notInScope": [
+      "Real hypervisor (Nitro), GPU/Trainium, bare metal and UltraServers",
+      "Multi-AZ placement and real hardware faults",
+      "Real AMI Marketplace, billing and capacity markets",
+      "RDP/Windows guests, EBS volume durability and performance"
+    ],
+    "sources": [
+      "core/vpc_core.py",
+      "core/compute/backend.py",
+      "core/ec2_ops_core.py",
+      "core/ec2_metrics_core.py",
+      "core/elbv2_core.py",
+      "core/autoscaling_core.py",
+      "core/nano_vm_runtime_core.py",
+      "wasm/vm/nano-vm-host.js",
+      "core/netsim/enforce.py",
+      "core/capabilities/aws/ec2.json"
+    ],
+    "sub": {
+      "elbv2": {
+        "title": "Elastic Load Balancing v2",
+        "summary": "Load balancer, listener and target group control plane in Vyomi's own core with no L7 data plane.",
+        "wire": [
+          "ELBv2 Query + XML (2015-12-01)"
+        ],
+        "offline": {
+          "kind": "inhouse",
+          "tech": [
+            "core/elbv2_core.py"
+          ],
+          "notes": "State in space-scoped state; target health derived from the EC2 instance state."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/elbv2_core.py in Pyodide"
+          ],
+          "notes": "Same core in the tab."
+        },
+        "differs": [
+          "No traffic is balanced; target health is deterministic.",
+          "Attributes such as idle timeout are stored without behaviour; mutual TLS is never enforced."
+        ],
+        "notInScope": [
+          "Real load balancer nodes, TLS termination and request metrics"
+        ],
+        "sources": [
+          "core/elbv2_core.py",
+          "core/capabilities/aws/ec2.json"
+        ]
+      },
+      "autoscaling": {
+        "title": "EC2 Auto Scaling",
+        "summary": "Group and policy engine in Vyomi's own core that launches and terminates instances through the EC2 model.",
+        "wire": [
+          "Auto Scaling Query + XML (2011-01-01)"
+        ],
+        "offline": {
+          "kind": "inhouse",
+          "tech": [
+            "core/autoscaling_core.py"
+          ],
+          "notes": "Scaling acts on the same instance model, so scaled instances become Docker containers offline."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/autoscaling_core.py in Pyodide"
+          ],
+          "notes": "Same core; instances are records (VMs only if in-browser VMs are on)."
+        },
+        "differs": [
+          "Scheduled actions and instance refresh are evaluated lazily, not on a clock.",
+          "Step scaling applies its first step; target tracking nudges by one instance."
+        ],
+        "notInScope": [
+          "Warm pools, mixed-instances policies, real capacity"
+        ],
+        "sources": [
+          "core/autoscaling_core.py",
+          "core/capabilities/aws/ec2.json"
+        ]
+      },
+      "dlm": {
+        "title": "Amazon Data Lifecycle Manager",
+        "summary": "Snapshot/AMI lifecycle policies in Vyomi's own core, evaluated lazily.",
+        "wire": [
+          "DLM REST + JSON"
+        ],
+        "offline": {
+          "kind": "inhouse",
+          "tech": [
+            "core/dlm_core.py"
+          ],
+          "notes": "Creates and prunes snapshots/AMIs through the EC2 model."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/dlm_core.py in Pyodide"
+          ],
+          "notes": "Same core."
+        },
+        "differs": [
+          "Only hourly Interval cadence is modeled; policies run when read, not on a live clock."
+        ],
+        "notInScope": [
+          "Cross-account sharing and fast snapshot restore"
+        ],
+        "sources": [
+          "core/dlm_core.py",
+          "core/capabilities/aws/ec2.json"
+        ]
+      },
+      "imagebuilder": {
+        "title": "EC2 Image Builder",
+        "summary": "Image Builder API in Vyomi's own core; builds run for real only on the offline appliance through a container builder.",
+        "wire": [
+          "imagebuilder REST + JSON"
+        ],
+        "offline": {
+          "kind": "hybrid",
+          "tech": [
+            "core/imagebuilder_core.py",
+            "Docker BuildKit via core/ci_core"
+          ],
+          "notes": "Recipe steps ExecuteBash, UpdateOS, Reboot and CreateFile are compiled to a Dockerfile and built from a base image already on the host."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/imagebuilder_core.py in Pyodide"
+          ],
+          "notes": "Records only: every build ends FAILED with 'No container builder on this substrate'."
+        },
+        "differs": [
+          "Other actions (S3Download, WebDownload, PowerShell...) fail the build.",
+          "Pipeline schedules never fire; builds run synchronously."
+        ],
+        "notInScope": [
+          "Build instances in EC2",
+          "Windows image builds"
+        ],
+        "sources": [
+          "core/imagebuilder_core.py",
+          "core/ci_core.py",
+          "core/capabilities/aws/ec2.json"
+        ]
+      },
+      "mgn": {
+        "title": "AWS Application Migration Service",
+        "summary": "Migration lifecycle in Vyomi's own core; no replication agent and no data is copied.",
+        "wire": [
+          "mgn REST + JSON"
+        ],
+        "offline": {
+          "kind": "inhouse",
+          "tech": [
+            "core/mgn_core.py"
+          ],
+          "notes": "Test and cutover launch a real EC2 instance in the model from a synthetic AMI."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/mgn_core.py in Pyodide"
+          ],
+          "notes": "Same core."
+        },
+        "differs": [
+          "Source servers are registered with a Vyomi-only action; replication state advances on elapsed time."
+        ],
+        "notInScope": [
+          "Replication agent, disk data transfer"
+        ],
+        "sources": [
+          "core/mgn_core.py",
+          "core/capabilities/aws/ec2.json"
+        ]
+      },
+      "instance-connect": {
+        "title": "EC2 Instance Connect",
+        "summary": "SendSSHPublicKey validation in Vyomi's own core; key delivery works only offline.",
+        "wire": [
+          "AWSEC2InstanceConnectService JSON"
+        ],
+        "offline": {
+          "kind": "hybrid",
+          "tech": [
+            "core/ec2_instance_connect_core.py",
+            "Docker exec"
+          ],
+          "notes": "Appends the key to the container user's authorized_keys for 60 seconds."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/ec2_instance_connect_core.py in Pyodide"
+          ],
+          "notes": "Validates the request but there is no guest to deliver the key to."
+        },
+        "differs": [
+          "Offline sessions use the appliance's shared key pair."
+        ],
+        "notInScope": [
+          "Serial console to real hardware"
+        ],
+        "sources": [
+          "core/ec2_instance_connect_core.py",
+          "core/capabilities/aws/ec2.json"
+        ]
+      }
+    }
+  },
+  "vpc": {
+    "title": "Amazon VPC and networking",
+    "summary": "Vyomi models VPC resources in its own core and evaluates reachability with a shared network simulator (netsim); offline it can additionally enforce the rules on real packets with Docker bridges and nftables.",
+    "wire": [
+      "EC2 Query protocol + XML (VPC actions)",
+      "vpc-lattice REST",
+      "Network Firewall / Route 53 Resolver JSON",
+      "boto3 / aws-cli / Terraform with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "Vyomi VPC core + core/netsim (Python)",
+        "Docker bridge network per subnet",
+        "nftables (sidecar container, NET_ADMIN)"
+      ],
+      "notes": "Enforcement is opt-in (VYOMI_NETSIM_ENFORCE=1|auto) and applies only to instances on the Docker compute backend; with it off the rules are only evaluated by Reachability Analyzer."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python VPC core + netsim evaluator in Pyodide"
+      ],
+      "notes": "Control plane and logical evaluation only. No packets exist, so flow logs produce no records and NAT/IGW behaviour is evaluated, not enforced."
+    },
+    "differs": [
+      "Routes, security groups, NACLs, peering, NAT and transit gateway semantics are evaluated by netsim; packet enforcement exists only offline, only when enabled, and not for overlapping CIDRs across peered VPCs.",
+      "Elastic IP inbound DNAT is enforced only with VYOMI_NETSIM_INBOUND_DNAT=1.",
+      "Site-to-Site and Client VPN tunnels never come up and carry no packets; BGP routes are never learned.",
+      "Network Firewall, DNS Firewall, traffic mirroring, transit gateway policy tables and multicast are control-plane state with validation; no packets are inspected or mirrored.",
+      "NAT gateway metrics count evaluated connections, not real bytes.",
+      "Endpoints (PrivateLink) get ENIs and DNS names but do not proxy L7 traffic.",
+      "Only one Region (us-east-1) is modeled."
+    ],
+    "notInScope": [
+      "Real data-plane throughput, Nitro networking and Direct Connect",
+      "IPsec/IKE and OpenVPN peers",
+      "Cross-account PrivateLink consumers",
+      "Third-party integrations (Aviatrix, Kentik)"
+    ],
+    "sources": [
+      "core/vpc_core.py",
+      "core/vpc_extras_core.py",
+      "core/vpc_vpn_core.py",
+      "core/netfw_core.py",
+      "core/dnsfw_core.py",
+      "core/vpc_lattice_core.py",
+      "core/networkmanager_core.py",
+      "core/netsim/enforce.py",
+      "core/capabilities/aws/vpc.json",
+      "core/capabilities/aws/panels.json"
+    ],
+    "sub": {
+      "lattice": {
+        "title": "Amazon VPC Lattice",
+        "summary": "Control plane in Vyomi's own core plus an evaluated (not packet-level) data plane.",
+        "wire": [
+          "vpc-lattice REST + JSON",
+          "simulator verb POST /vyomi/invoke"
+        ],
+        "offline": {
+          "kind": "inhouse",
+          "tech": [
+            "core/vpc_lattice_core.py",
+            "core/vpc_lattice_dataplane.py"
+          ],
+          "notes": "Service DNS, listener rules and auth policies are evaluated in Python."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/vpc_lattice_core.py in Pyodide"
+          ],
+          "notes": "Same evaluation in the tab."
+        },
+        "differs": [
+          "Requests are evaluated through a Vyomi invoke verb, not routed over a real network."
+        ],
+        "notInScope": [
+          "Real Envoy-based data plane"
+        ],
+        "sources": [
+          "core/vpc_lattice_core.py",
+          "core/vpc_lattice_dataplane.py",
+          "core/capabilities/aws/vpc.json"
+        ]
+      },
+      "networkmanager": {
+        "title": "AWS Network Manager",
+        "summary": "Inventory and registration control plane only.",
+        "wire": [
+          "networkmanager REST + JSON"
+        ],
+        "offline": {
+          "kind": "inhouse",
+          "tech": [
+            "core/networkmanager_core.py"
+          ],
+          "notes": "Transit gateways are validated against the EC2 model."
+        },
+        "nano": {
+          "kind": "inhouse",
+          "tech": [
+            "core/networkmanager_core.py in Pyodide"
+          ],
+          "notes": "Same core."
+        },
+        "differs": [
+          "No topology telemetry, events, route analysis, Connect or Direct Connect associations."
+        ],
+        "notInScope": [
+          "Real SD-WAN device telemetry"
+        ],
+        "sources": [
+          "core/networkmanager_core.py",
+          "core/capabilities/aws/panels.json"
+        ]
+      }
+    }
+  },
+  "eks": {
+    "title": "Amazon EKS",
+    "summary": "On the offline appliance each EKS cluster is a real k3s Kubernetes control plane in Docker managed through Vyomi's EKS API; Nano has no Kubernetes.",
+    "wire": [
+      "EKS REST + JSON",
+      "Kubernetes API (kubectl, kubeconfig from the k3s endpoint)",
+      "aws eks get-token verification"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "k3s (Docker, one server container per cluster)",
+        "k3s agent containers as node group nodes",
+        "Vyomi EKS core (Python)"
+      ],
+      "notes": "Requires Docker and VYOMI_K8S_BACKEND=k3s. Cluster status follows the server's /readyz; node groups are privileged k3s agent containers. Managed add-ons, Fargate and logging are recorded configuration, not deployed."
+    },
+    "nano": {
+      "kind": "unavailable",
+      "tech": [
+        "EKS API core loads but no control plane"
+      ],
+      "notes": "No Kubernetes control plane runs in the browser; managed Kubernetes is gated to the Pro/Max/Enterprise tiers (core/k8s_tier_gate.py). Registry level for Nano is not_simulated."
+    },
+    "differs": [
+      "k3s runs one pinned Kubernetes version whatever version is requested; the API reports the requested one.",
+      "The control-plane node is visible in kubectl get nodes and schedules workloads.",
+      "The endpoint is a published localhost port, not an eks.amazonaws.com host; the OIDC issuer discovery document is not served.",
+      "Cluster and node group updates are tracked records; the running k3s is not upgraded.",
+      "Networking uses flannel and storage uses local-path, not the VPC CNI or EBS CSI.",
+      "Access entries are stored; kubectl is gated by them only once the token webhook is wired in.",
+      "IRSA, Pod Identity, EKS Auto Mode and Hybrid Nodes are not simulated."
+    ],
+    "notInScope": [
+      "Managed multi-AZ control plane and etcd",
+      "EC2 worker nodes, Fargate pod isolation",
+      "VPC CNI, EBS/EFS CSI drivers",
+      "IAM roles for service accounts"
+    ],
+    "sources": [
+      "core/aws_eks_core.py",
+      "core/aws_eks_auth.py",
+      "core/aws_eks_nodes.py",
+      "core/k3s_runtime.py",
+      "core/k8s_tier_gate.py",
+      "core/capabilities/aws/eks.json"
+    ]
+  },
+  "ecr": {
+    "title": "Amazon ECR",
+    "summary": "Vyomi implements the ECR API and the Docker/OCI registry v2 wire in its own core, storing manifests and layers in the simulator's S3.",
+    "wire": [
+      "ECR JSON 1.1 (AmazonEC2ContainerRegistry_V20150921)",
+      "Docker/OCI Registry HTTP API v2 (after aws ecr get-login-password)",
+      "Inspector2 findings"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "Vyomi ECR core (Python)",
+        "simulator S3 object store",
+        "Trivy container (optional scan engine)"
+      ],
+      "notes": "Blobs are keyed by digest in bucket vyomi-ecr-<account>. A registry:2 container is present in the compose full profile but the ECR core stores blobs itself; whether the registry wire is proxied to it is not verified."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python ECR core in Pyodide",
+        "in-memory S3 store",
+        "vyomi-advisory scan engine"
+      ],
+      "notes": "The registry wire is reachable only through the Nano relay or tunnel; a docker client cannot reach the browser tab directly, so use the ECR API (PutImage and layer upload) there."
+    },
+    "differs": [
+      "Layer tarballs are stored byte-for-byte and digest-verified but never unpacked or executed.",
+      "Scan findings come from a bundled advisory snapshot (a few dozen CVEs) or Trivy offline, not Amazon's feed.",
+      "Replication stays inside the simulator account; pull-through cache and cross-repository blob mount are not simulated.",
+      "GetDownloadUrlForLayer returns the registry blob URL, not a presigned S3 URL.",
+      "Lifecycle policies are evaluated on a tick or while the Nano page is open, not asynchronously within 24 hours."
+    ],
+    "notInScope": [
+      "Multi-Region image replication",
+      "Amazon Inspector's live vulnerability feed",
+      "Image signing with AWS Signer"
+    ],
+    "sources": [
+      "core/ecr_core.py",
+      "core/vuln_scan_core.py",
+      "providers/trivy_runner.py",
+      "core/capabilities/aws/ecr.json"
+    ]
+  },
+  "lambda": {
+    "title": "AWS Lambda",
+    "summary": "Vyomi implements the Lambda API in its own core and runs only Python handlers: in a separate Python process offline and in a restricted in-process sandbox in Nano.",
+    "wire": [
+      "Lambda REST + JSON (/2015-03-31/functions...)",
+      "boto3 / aws-cli / SDKs with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi Lambda core (Python)",
+        "separate Python subprocess per invocation (routes/aws_lambda_unified.py)"
+      ],
+      "notes": "Function code is written to lambda_functions/<name>/ and run in a subprocess with the function's environment, timeout and layers. No container or Firecracker is used."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python Lambda core in Pyodide",
+        "restricted exec sandbox"
+      ],
+      "notes": "Handler runs in a curated-builtins sandbox with a stdlib allow-list and no file, network or process access."
+    },
+    "differs": [
+      "Only Python executes; other runtimes can be selected and stored but Invoke still runs the source as Python.",
+      "Asynchronous invokes run immediately with a single attempt; there is no retry or backoff.",
+      "Layers are stored but not merged into the runtime; weighted alias routing is stored but not split.",
+      "Positive reserved concurrency is stored, not enforced (zero throttles).",
+      "SQS triggers fire synchronously; other event source types are stored without a poller unless wired through EventBridge, SNS or S3 notifications.",
+      "MicroVMs, capacity providers, network connectors and Lambda@Edge replicas are tracked records.",
+      "Code signing is enforced at deploy time only."
+    ],
+    "notInScope": [
+      "Firecracker microVM isolation and cold starts",
+      "Node.js, Java, .NET, Go and container image functions executing",
+      "Provisioned concurrency and SnapStart",
+      "Real VPC/EFS attachment"
+    ],
+    "sources": [
+      "core/lambda_core.py",
+      "routes/aws_lambda_unified.py",
+      "core/appliance_stores.py (lambda_store)",
+      "core/lambda_cicd_core.py",
+      "core/capabilities/aws/lambda.json"
+    ]
+  },
+  "apigateway": {
+    "title": "Amazon API Gateway (REST, HTTP, WebSocket)",
+    "summary": "Vyomi implements API Gateway control and data planes in its own cores; Lambda proxy integrations call Vyomi's Lambda core.",
+    "wire": [
+      "API Gateway v1 REST (/restapis...)",
+      "API Gateway v2 REST",
+      "boto3 / aws-cli / Terraform with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "Vyomi API Gateway cores (Python)",
+        "Caddy gateway (v2 execute-api listener, full profile)"
+      ],
+      "notes": "The v2 data plane is handled in apigatewayv2_gateway.py behind the shared Caddy listener; REST (v1) invoke is exercised through Test Invoke. Whether v1 stages are served over a host-based listener is not verified."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python API Gateway cores in Pyodide"
+      ],
+      "notes": "Control plane and in-core invoke (Test); real HTTP proxy and Lambda integrations run through the in-browser cores."
+    },
+    "differs": [
+      "AWS_IAM and Cognito authorizers are stored but not enforced on v1; only NONE is evaluated.",
+      "The execute-api invoke host is not resolvable from outside Vyomi; use Test or the appliance address.",
+      "Custom domains, client certificates and VPC links are stored; no ACM, Route 53 or NLB exists behind them.",
+      "WebSocket APIs have no connection registry or @connections management API.",
+      "Developer portals publish well-formed URLs that are not reachable."
+    ],
+    "notInScope": [
+      "Edge-optimized CloudFront distribution",
+      "Real mTLS, WAF, usage metering and billing",
+      "Cognito user pools behind authorizers"
+    ],
+    "sources": [
+      "core/apigateway_core.py",
+      "core/apigateway_gap_core.py",
+      "core/apigatewayv2_core.py",
+      "core/apigatewayv2_gateway.py",
+      "docker-compose.cloudlite.yml: vyomi-gateway",
+      "core/capabilities/aws/apigateway.json"
+    ]
+  },
+  "states": {
+    "title": "AWS Step Functions",
+    "summary": "Vyomi runs a real Amazon States Language interpreter in its own core, calling Vyomi's Lambda core for Task states.",
+    "wire": [
+      "Step Functions JSON 1.0 (AWSStepFunctions)",
+      "boto3 / aws-cli / SDKs with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi Step Functions core (Python)",
+        "Vyomi Lambda core"
+      ],
+      "notes": "State lives in the shared Step Functions store; Task states invoke the appliance's Lambda functions."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python Step Functions core in Pyodide"
+      ],
+      "notes": "Same interpreter; Task states invoke the in-browser Lambda sandbox."
+    },
+    "differs": [
+      "Wait states complete instantly instead of sleeping.",
+      "Logging is delivered when an execution finishes, not while it runs.",
+      "X-Ray tracing produces traces in Vyomi's X-Ray core only."
+    ],
+    "notInScope": [
+      "AWS-scale execution history retention and throughput"
+    ],
+    "sources": [
+      "core/stepfunctions_core.py",
+      "core/xray_core.py",
+      "core/capabilities/aws/states.json"
+    ]
+  },
+  "bedrock": {
+    "title": "Amazon Bedrock",
+    "summary": "Vyomi answers every Bedrock model call with one small local model (llama.cpp offline, WebLLM in the browser) behind Vyomi's own Bedrock, Agents, Knowledge Bases, Guardrails and AgentCore cores.",
+    "wire": [
+      "Bedrock Runtime REST (InvokeModel, Converse, streaming)",
+      "Bedrock Agents / Knowledge Bases REST",
+      "AgentCore REST + MCP JSON-RPC",
+      "boto3 / aws-cli / SDKs with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "Vyomi Bedrock cores (Python)",
+        "llama.cpp llama-server container (vyomi-llm; SmolLM2-360M-Instruct GGUF by default)",
+        "feature-hash embeddings when no embedding model"
+      ],
+      "notes": "The local model container is started explicitly (core/llm_runtime.py) and refuses to start below a free-disk guard. With no model running, calls fail with ModelNotReadyException; there is no canned fallback. Booster appliances use a different, larger model setup (not verified here)."
+    },
+    "nano": {
+      "kind": "hybrid",
+      "tech": [
+        "Python Bedrock cores in Pyodide",
+        "WebLLM (@mlc-ai/web-llm, WebGPU, loaded from a CDN)"
+      ],
+      "notes": "No model exists until the page enables the in-browser WebLLM model (needs WebGPU). The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
+    },
+    "differs": [
+      "Every model id (Claude, Nova, Titan, Llama, Mistral) is answered by the same small local model; quality is far below production models.",
+      "Images, documents, prompt caching and reasoning content are rejected with a validation error.",
+      "Knowledge bases ingest text files only and use exact cosine search; no managed vector store.",
+      "Agent action groups are stored but not invoked; AgentCore runtime runs a Vyomi agent spec, not your container.",
+      "Guardrails are deterministic word, topic and regex filters, not Bedrock's classifiers.",
+      "AgentCore gateway MCP endpoint is on the Vyomi wire path, not a *.gateway.bedrock-agentcore hostname."
+    ],
+    "notInScope": [
+      "Foundation models themselves (Anthropic, Amazon, Meta, Mistral weights)",
+      "Provisioned throughput, model customization and evaluation jobs",
+      "Bedrock billing and quotas"
+    ],
+    "sources": [
+      "core/llm_core.py",
+      "core/llm_runtime.py",
+      "core/ai_models_core.py",
+      "core/bedrock_agents_core.py",
+      "core/bedrock_guardrails_core.py",
+      "core/agent_spec_core.py",
+      "core/capabilities/aws/bedrock.json"
+    ]
+  },
+  "cloudformation": {
+    "title": "AWS CloudFormation",
+    "summary": "Vyomi implements CloudFormation in its own core and provisions only a fixed set of resource types through Vyomi's other service cores.",
+    "wire": [
+      "CloudFormation Query protocol + XML",
+      "boto3 / aws-cli / Terraform with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi CloudFormation core (Python)",
+        "SQLite kernel state store"
+      ],
+      "notes": "Stacks, change sets, stack sets and hooks live in space-scoped state; resources are created in the S3, DynamoDB, SNS, SQS, IAM and Logs cores."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python CloudFormation core in Pyodide"
+      ],
+      "notes": "Same core and the same resource set."
+    },
+    "differs": [
+      "Only AWS::S3::Bucket, DynamoDB::Table, SNS::Topic, SQS::Queue, IAM::Role, Logs::LogGroup and WaitCondition[Handle] are provisioned; a template with any other type fails and rolls back.",
+      "YAML support is a subset: multi-line short-form tag arguments are not supported.",
+      "Property-level drift is detected for a subset of properties; S3 buckets are existence-only.",
+      "StackSets record stack instances in the single account without creating real stacks in other accounts.",
+      "Hooks run one built-in check (required tags), not custom handler code.",
+      "Rollback triggers are evaluated once after the operation, with no monitoring window."
+    ],
+    "notInScope": [
+      "EC2, VPC, Lambda, RDS and other resource types in templates",
+      "Cross-account and cross-Region StackSet deployment",
+      "Third-party public registry extensions"
+    ],
+    "sources": [
+      "core/cloudformation_core.py",
+      "core/cloudformation_stacksets_core.py",
+      "core/cloudformation_registry_core.py",
+      "core/aws_codeconn_core.py",
+      "core/capabilities/aws/cloudformation.json"
+    ]
+  },
+  "cloudwatch": {
+    "title": "Amazon CloudWatch and CloudWatch Logs",
+    "summary": "Vyomi implements metrics, alarms, dashboards and Logs in its own cores, with alarms evaluated on every PutMetricData.",
+    "wire": [
+      "CloudWatch smithy-rpc-v2-cbor, JSON 1.0 and Query + XML",
+      "CloudWatch Logs JSON 1.1 (Logs_20140328)",
+      "boto3 / aws-cli / SDKs with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi CloudWatch and Logs cores (Python)",
+        "SQLite write-through store"
+      ],
+      "notes": "Metrics, alarms and log events persist through the file-backed substrate; EC2, S3, DynamoDB, SQS and RDS publish real datapoints from their own activity."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python CloudWatch and Logs cores in Pyodide",
+        "IndexedDB snapshot"
+      ],
+      "notes": "Same engines; only metrics that Nano services actually generate exist (for example no EC2 CPU series)."
+    },
+    "differs": [
+      "Alarm actions fire for SNS, Lambda, EC2 stop/terminate/reboot and Auto Scaling; EC2 Recover is not offered.",
+      "Anomaly detection is mean plus standard-deviation bands, not AWS's ML model.",
+      "Metrics Insights query supports a partial SQL subset; Logs Insights supports fields, filter, sort, limit, pattern and count stats only.",
+      "Live Tail polls FilterLogEvents instead of streaming.",
+      "Log transformers run four processors; data protection recognizes 8 managed identifiers.",
+      "Automatic dashboards exist only for services with real metric integrations (currently EC2)."
+    ],
+    "notInScope": [
+      "Cross-account and cross-Region observability",
+      "Synthetics canaries, RUM and Application Signals",
+      "Metric streams to Firehose",
+      "AWS billing"
+    ],
+    "sources": [
+      "core/cloudwatch_core.py",
+      "core/logs_core.py",
+      "core/persistent_store.py",
+      "core/observability_core.py",
+      "core/capabilities/aws/cloudwatch.json"
+    ]
+  },
+  "cost-explorer": {
+    "title": "AWS Cost Explorer",
+    "summary": "Vyomi computes what AWS would have charged from the simulator's own EC2, EBS and RDS inventory and uptime, using illustrative on-demand list prices.",
+    "wire": [
+      "Cost Explorer JSON 1.1 (AWSInsightsIndexService)",
+      "Vyomi-only VyomiGetSavings action"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "core/ce_core.py",
+        "core/cost_model.py"
+      ],
+      "notes": "Accrues hourly rates by real uptime of simulated resources."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "core/ce_core.py in Pyodide"
+      ],
+      "notes": "Same engine over the browser stores."
+    },
+    "differs": [
+      "Only EC2, EBS and RDS are metered; other services show no cost.",
+      "Prices are illustrative on-demand rates; nothing is billed.",
+      "Hourly granularity, tag and cost-category grouping, and ML forecasting are not modeled; forecasts extrapolate the current run rate.",
+      "Stopped instances accrue nothing from when they are observed stopped."
+    ],
+    "notInScope": [
+      "Real billing data, invoices, credits, Savings Plans amortization",
+      "Cost anomaly detection and budgets"
+    ],
+    "sources": [
+      "core/ce_core.py",
+      "core/cost_model.py",
+      "core/capabilities/aws/cost-explorer.json"
+    ]
+  },
+  "eventbridge": {
+    "title": "Amazon EventBridge",
+    "summary": "Vyomi implements event buses, rules, archives, Scheduler, Pipes and Schemas in its own cores on the same messaging store as SQS and SNS, so routed events are real deliveries.",
+    "wire": [
+      "EventBridge JSON 1.1 (AWSEvents)",
+      "Scheduler REST",
+      "Pipes REST",
+      "Schemas REST",
+      "boto3 / aws-cli / Terraform with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi EventBridge, Scheduler and Schemas cores (Python)",
+        "SQLite kernel state store",
+        "HTTP client for API destinations"
+      ],
+      "notes": "Targets SQS, SNS, Lambda, Step Functions and Kinesis are actually invoked. API destinations send real HTTP requests."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python EventBridge cores in Pyodide",
+        "InMemoryMessagingStore"
+      ],
+      "notes": "Same engines; Lambda targets run in the in-browser sandbox."
+    },
+    "differs": [
+      "Other target types (ECS, Batch, CodeBuild, API destinations on Nano...) are accepted and stored without being invoked, except API destinations offline.",
+      "Archives keep the bus's latest 500 events in a bounded log; replay is synchronous within that window.",
+      "Schedules fire the next time any Scheduler API call occurs after their due time, not on a clock.",
+      "Only SQS is a delivering Pipes source; filtering, enrichment and input templates are stored, not applied.",
+      "Global endpoints do no failover; partner event sources act within one account.",
+      "OAuth client-credentials for API destinations is not performed."
+    ],
+    "notInScope": [
+      "Cross-account and cross-Region event delivery",
+      "SaaS partner integrations at the source",
+      "AWS-managed aws.events schema registry"
+    ],
+    "sources": [
+      "core/eventbridge_core.py",
+      "core/scheduler_core.py",
+      "core/eventbridge_schemas_core.py",
+      "core/eventbridge_partner_core.py",
+      "core/appliance_stores.py (AppStateMessagingStore)",
+      "core/capabilities/aws/eventbridge.json"
+    ]
+  },
+  "kinesis": {
+    "title": "Amazon Kinesis Data Streams",
+    "summary": "Vyomi implements Kinesis Data Streams in its own core with real shard hashing, sequence numbers, iterators and split/merge.",
+    "wire": [
+      "Kinesis JSON 1.1 (Kinesis_20131202) and CBOR",
+      "boto3 / aws-cli / SDKs with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi Kinesis core (Python)",
+        "SQLite kernel state store"
+      ],
+      "notes": "Streams and record logs persist in the space-scoped state; routes/aws_kinesis.py serves the wire."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python Kinesis core in Pyodide",
+        "IndexedDB snapshot"
+      ],
+      "notes": "Same core in the tab."
+    },
+    "differs": [
+      "Resource policies are stored and returned but never evaluated.",
+      "Other differences from AWS (throughput limits, enhanced fan-out) are not listed in the registry and were not verified."
+    ],
+    "notInScope": [
+      "Shard throughput limits and billing",
+      "Multi-AZ durability",
+      "KCL lease tables beyond what DynamoDB provides"
+    ],
+    "sources": [
+      "core/kinesis_core.py",
+      "routes/aws_kinesis.py",
+      "core/capabilities/aws/kinesis.json"
+    ]
+  },
+  "malware-protection": {
+    "title": "GuardDuty Malware Protection for S3",
+    "summary": "Vyomi scans new S3 uploads with its own hash and literal-signature scanner, not an antivirus engine.",
+    "wire": [
+      "GuardDuty REST + JSON (Malware Protection plans)",
+      "GuardDutyMalwareScanStatus object tag"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "core/malware_scan_core.py (SHA-256 and literal signatures)"
+      ],
+      "notes": "Runs synchronously on upload, including zip members to two levels; raises an Object:S3/MaliciousFile finding."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "core/malware_scan_core.py in Pyodide"
+      ],
+      "notes": "Same scanner in the tab."
+    },
+    "differs": [
+      "Detects the EICAR and Vyomi test strings plus signatures the operator registers; no heuristics, behavioural analysis or vendor threat intelligence.",
+      "Covers only new uploads; objects over 64 MiB are reported unsupported.",
+      "No EventBridge scan-result events."
+    ],
+    "notInScope": [
+      "Real antivirus engines and threat intelligence",
+      "Scanning existing buckets on demand"
+    ],
+    "sources": [
+      "core/malware_scan_core.py",
+      "core/capabilities/aws/malware-protection.json"
+    ]
+  },
+  "panels": {
+    "title": "AWS Network Manager",
+    "summary": "Vyomi models Network Manager inventory and transit gateway registration in its own core, with no telemetry.",
+    "wire": [
+      "networkmanager REST + JSON"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "core/networkmanager_core.py"
+      ],
+      "notes": "Global networks, sites, devices, links and registrations persist in state; a registered transit gateway must exist in the EC2/VPC model."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "core/networkmanager_core.py in Pyodide"
+      ],
+      "notes": "Same core."
+    },
+    "differs": [
+      "No topology telemetry, events, route analysis, Connect attachments or Direct Connect/customer-gateway associations."
+    ],
+    "notInScope": [
+      "Real SD-WAN devices and live network telemetry"
+    ],
+    "sources": [
+      "core/networkmanager_core.py",
+      "core/capabilities/aws/panels.json"
+    ]
+  },
+  "redshift": {
+    "title": "Amazon Redshift",
+    "summary": "Vyomi implements the Redshift cluster API and Redshift Data API in its own core, running SQL on an in-memory SQLite engine.",
+    "wire": [
+      "Redshift Query protocol (2012-12-01)",
+      "Redshift Data API JSON",
+      "boto3 / aws-cli with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "Vyomi Redshift core (Python)",
+        "sqlite3 (in memory, statement log replayed after restart)"
+      ],
+      "notes": "State lives on the RDS store; writes are kept as a statement log and replayed when the engine is rebuilt."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python Redshift core in Pyodide",
+        "sqlite3"
+      ],
+      "notes": "Same core and engine in the tab."
+    },
+    "differs": [
+      "The SQL dialect is SQLite's: no distkey/sortkey, columnar storage, COPY/UNLOAD, Spectrum or stored procedures.",
+      "Node types and counts are metadata; no snapshots, resize or WLM.",
+      "The database is single-schema; public is accepted and ignored.",
+      "There is no Redshift console page yet; use the CLI or SDK."
+    ],
+    "notInScope": [
+      "Massively parallel columnar execution",
+      "Redshift Serverless and data sharing",
+      "Concurrency scaling and workload management"
+    ],
+    "sources": [
+      "core/redshift_core.py",
+      "core/zeroetl_core.py",
+      "core/capabilities/aws/redshift.json"
+    ]
+  },
+  "securityhub": {
+    "title": "AWS Security Hub and GuardDuty",
+    "summary": "Vyomi derives findings from the simulator's own resources and audit feed with deterministic rules, not from AWS threat intelligence.",
+    "wire": [
+      "Security Hub REST + JSON",
+      "GuardDuty REST + JSON"
+    ],
+    "offline": {
+      "kind": "inhouse",
+      "tech": [
+        "core/secscan_core.py rule engines",
+        "core/vuln_scan_core.py"
+      ],
+      "notes": "Posture rules run over stored resources; threat detection runs over the control-plane calls the appliance served."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "core/secscan_core.py in Pyodide"
+      ],
+      "notes": "Same rules over browser stores."
+    },
+    "differs": [
+      "Security Hub implements a small subset of Foundational Security Best Practices controls (S3.2, S3.4, S3.8, EC2.9, EC2.13, EC2.14, RDS.2, RDS.3, IAM.5, CloudTrail.1); no CIS or PCI standards and no cross-Region aggregation.",
+      "GuardDuty findings carry detector=vyomi-rules; there is no network flow, DNS or CloudTrail stream and no machine-learning detection.",
+      "CreateSampleFindings creates findings labelled [SAMPLE]."
+    ],
+    "notInScope": [
+      "GuardDuty ML anomaly detection, runtime monitoring, EBS malware scanning, S3/EKS/RDS protection plans",
+      "Multi-account administration",
+      "Third-party product integrations"
+    ],
+    "sources": [
+      "core/secscan_core.py",
+      "core/vuln_scan_core.py",
+      "core/capabilities/aws/securityhub.json"
+    ]
+  },
+  "ssm": {
+    "title": "AWS Systems Manager",
+    "summary": "Vyomi implements Parameter Store, Documents, Run Command, State Manager, Maintenance Windows, Patch Baselines and Session Manager in its own core without an SSM Agent fleet.",
+    "wire": [
+      "SSM JSON 1.1 (AmazonSSM)",
+      "boto3 / aws-cli / SDKs with only the endpoint changed"
+    ],
+    "offline": {
+      "kind": "hybrid",
+      "tech": [
+        "Vyomi SSM core (Python)",
+        "Vyomi KMS core (SecureString encryption)",
+        "Docker exec into instance containers (sessions)"
+      ],
+      "notes": "SecureString values are encrypted at rest with the KMS core. Running Docker instances register as managed nodes and Session Manager runs a command-at-a-time shell in the container."
+    },
+    "nano": {
+      "kind": "inhouse",
+      "tech": [
+        "Python SSM core in Pyodide",
+        "v86 VM shell (only when in-browser VMs are on)"
+      ],
+      "notes": "Parameter Store and documents work. Sessions work only from the console page against a running in-browser VM; the SDK/CLI relay answers TargetNotConnected."
+    },
+    "differs": [
+      "Run Command completes immediately as Success with no real command output.",
+      "State Manager associations never advance past Pending/Creating.",
+      "Patch baselines are stored and never evaluated against instance patch state.",
+      "The ssmmessages data channel is not served, so the AWS CLI session-manager-plugin cannot attach; use the console session or ssh."
+    ],
+    "notInScope": [
+      "SSM Agent on real instances",
+      "Patch scanning and installation",
+      "Automation runbooks against real resources"
+    ],
+    "sources": [
+      "core/ssm_core.py",
+      "core/ssm_gap_core.py",
+      "core/nano_vm_runtime_core.py",
+      "core/capabilities/aws/ssm.json"
+    ]
   }
 }
