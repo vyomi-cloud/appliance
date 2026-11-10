@@ -225,7 +225,7 @@
     var so = document.createElement('a'); so.href = '#'; so.setAttribute('data-act', 'signout'); so.setAttribute('role', 'menuitem'); so.style.display = 'none';
     so.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Sign out</span>';
     // vyomi-tunnel access key + secret (AWS-CLI style): created and downloaded on the portal, saved as ~/.vyomi/credentials
-    var tc = document.createElement('a'); tc.href = '/admin/account#tunnel-credentials'; tc.setAttribute('data-act', 'tunnel-credentials'); tc.setAttribute('role', 'menuitem'); tc.style.display = 'none';
+    var tc = document.createElement('a'); tc.href = '/admin/settings#tunnel-credentials'; tc.setAttribute('data-act', 'tunnel-credentials'); tc.setAttribute('role', 'menuitem'); tc.style.display = 'none';
     tc.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Tunnel credentials</span>';
     var hr = document.createElement('div'); hr.className = 'vy-hr';
     var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'mesh'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
