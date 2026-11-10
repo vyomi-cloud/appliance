@@ -132,7 +132,7 @@ services:
     restart: unless-stopped
 
   vyomi-sql-postgres:
-    image: postgres:16-alpine
+    image: ${VYOMI_POSTGRES_IMAGE:-vyomi/postgres:16-alpine-pgvector}
     networks: [vyomi-net]
     # Published on loopback so `psql` / app code on the user's machine can reach the managed
     # databases (RDS, Cloud SQL, Azure SQL). Uncommon default port so a local Postgres on 5432

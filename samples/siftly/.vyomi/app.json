@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "name": "siftly",
+  "resources": {
+    "postgres": {
+      "siftly": {
+        "user": "siftly",
+        "extensions": [
+          "vector",
+          "uuid-ossp"
+        ],
+        "settable_parameters": [
+          "session_replication_role"
+        ]
+      }
+    },
+    "blob": {
+      "siftlystore": {
+        "containers": [
+          { "name": "blog-images", "public_access": "blob" },
+          { "name": "brand-kit", "public_access": "blob" }
+        ]
+      },
+      "siftlylogos": {
+        "containers": [
+          { "name": "org-logos", "public_access": "blob" }
+        ]
+      }
+    },
+    "redis": {
+      "default": {}
+    },
+    "servicebus": {
+      "siftlyai": {
+        "topics": [
+          {
+            "name": "scrapper_responses",
+            "subscriptions": [
+              {
+                "name": "scrapper_responses",
+                "lock_duration": "PT60S",
+                "max_delivery_count": 10
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "backend/.env": {
+      "DB_HOST": "${postgres.siftly.host}",
+      "DB_PORT": "${postgres.siftly.port}",
+      "DB_USER": "${postgres.siftly.user}",
+      "DB_PASSWORD": "${postgres.siftly.password}",
+      "DB_NAME": "${postgres.siftly.database}",
+      "DB_SSL_MODE": "disable",
+      "AZURE_STORAGE_CONNECTION_STRING": "${blob.siftlystore.connection_string}",
+      "AZURE_ORG_LOGO_CONNECTION_STRING": "${blob.siftlylogos.connection_string}",
+      "REDIS_HOST": "${redis.default.host}",
+      "REDIS_PORT": "${redis.default.port}",
+      "REDIS_PASSWORD": "${redis.default.password}",
+      "REDIS_DB": "0",
+      "REDIS_SSL_ENABLED": "false",
+      "AZURE_SERVICEBUS_CONNECTION_STRING": "${servicebus.siftlyai.connection_string}"
+    },
+    "hocuspocus/.env": {
+      "DATABASE_URL": "${postgres.siftly.url}",
+      "COLLAB_JWT_SECRET": "${secret.collab_jwt}"
+    },
+    "siftly-agents-2/.env": {
+      "DB_HOST": "${postgres.siftly.host}",
+      "DB_PORT": "${postgres.siftly.port}",
+      "REDIS_URL": "${redis.default.url}",
+      "REDIS_SSL_ENABLED": "false"
+    }
+  }
+}

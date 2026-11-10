@@ -244,8 +244,8 @@ func (c *Config) invokeDockerSubstrate(action string, dcArgs []string) error {
 		lv.stepEnd()
 		lv.stepOK("start", "simulator "+composeVersion(cf)+" + core services")
 		wave2()
-		lv.waitReady("http://localhost:9000")
-		lv.ready("http://localhost:9000")
+		lv.waitReady(fmt.Sprintf("http://localhost:%d", c.simulatorPort()))
+		lv.ready(fmt.Sprintf("http://localhost:%d", c.simulatorPort()))
 		return nil
 	case "down", "stop":
 		return run("docker", append(append([]string{}, full...), "down")...)
