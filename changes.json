@@ -1,15 +1,65 @@
 {
- "at": "2026-11-10T04:59:23+00:00",
+ "at": "2026-11-10T05:59:27+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Amazon S3",
+   "cloud": "gcp",
+   "service": "Compute Engine",
    "kind": "announcement",
-   "key": "feed:aws:9760143886e5",
-   "title": "Amazon MWAA now supports DuckDB operators",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-mwaa-supports-duckdb-operators/",
-   "detail": "Amazon Managed Workflows for Apache Airflow (Amazon MWAA) now supports DuckDB operators. DuckDB is an embedded analytical database that lets customers perform data quality checks, summaries, and transformations on data from sources DuckDB supports, including Amazon S3. Native support is available for DuckDB on Amazon MWAA Provisioned environments running Apache Airflow 3.3.1. DuckDB comes preinstalled and preconfigured for AWS connections in the latest MWAA Airflow 3.3.1 update. After updating their MWAA environment to Airflow 3.3.1 and adding execution role access to their data stores, custom",
+   "key": "feed:gcp:574afa92316d",
+   "title": "Compute Engine: Feature (November 09, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_09_2026",
+   "detail": "Preview : To enforce VM extension configurations across multiple projects, you can create and manage global and zonal VM extension policies by using VM Extension Manager at the Google Cloud organization and folder levels. In addition, VM Extension Manager provides read-only get and list methods that let you view extension policies, supported VM extensions, and the runtime state of installed extensions on each Compute Engine instance. For more information, see the following documentation: About VM Extension Manager Install VM extensions by creating extension policies Manage VM extensions by usi",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:5e0eca71ae87",
+   "title": "Google Kubernetes Engine: Feature (November 09, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_09_2026",
+   "detail": "GKE Gateway now supports Server Name Indication (SNI)-based routing with TLS passthrough. You can use TLS protocol-specific rules to route incoming TLS streams from the Gateway to Kubernetes Services based on SNI without terminating TLS at the GKE Gateway load balancer. Application developers can create TLSRoute resources to expose secure TLS traffic to applications that run in the GKE cluster. Creating TLSRoute resources requires the Gateway API version 1.5.0 or later CRDs (Standard channel), which are installed in GKE version 1.35.2-gke.1842000 or later. This feature supports single-cluster ",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:8d33880faa78",
+   "title": "Google Kubernetes Engine: Feature (November 09, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_09_2026",
+   "detail": "Agent Substrate on GKE is now Generally Available (GA) for GKE Standard clusters running version 1.37 or later. Agent Substrate is an infrastructure layer designed for large-scale, high-density AI agent workloads, such as personal assistants and coding agents. Because interactive agents often remain idle while waiting for user input, running them on traditional microservice infrastructure can underutilize CPU and memory resources. Agent Substrate uses a lightweight control plane that bypasses standard Kubernetes Pod scheduling limits to provide fast sandbox provisioning and efficient suspend-a",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Memorystore for Redis",
+   "kind": "announcement",
+   "key": "feed:gcp:03d635ad23c2",
+   "title": "Memorystore for Redis: Feature (November 09, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_09_2026",
+   "detail": "Memorystore for Redis supports the CLIENT command and the following subcommands: CLIENT | CACHING CLIENT | GETNAME CLIENT | GETREDIR CLIENT | HELP CLIENT | ID CLIENT | INFO CLIENT | KILL CLIENT | LIST CLIENT | NO-TOUCH CLIENT | REPLY CLIENT | SETNAME CLIENT | TRACKING CLIENT | TRACKINGINFO For more information about the CLIENT command and its supported subcommands, see Supported and blocked commands . This feature is generally available (GA) .",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Virtual Private Cloud",
+   "kind": "announcement",
+   "key": "feed:gcp:28d1a84e3a79",
+   "title": "Virtual Private Cloud: Feature (November 09, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_09_2026",
+   "detail": "General Availability : You can create an internal range with the INTERNAL_ADDRESS purpose to allocate global internal IPv4 addresses for Private Service Connect endpoints that access global Google APIs . For more information, see Internal ranges for Private Service Connect endpoints .",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Compute Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:936fd032f284",
+   "title": "Compute Engine: Change (November 05, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_05_2026",
+   "detail": "M4N network performance improvements provide up to 400 Gbps maximum bandwidth for internal network communications, and up to 200 Gbps for external network communications. For more information, see M4N machine types .",
    "actionable": false
   }
  ],

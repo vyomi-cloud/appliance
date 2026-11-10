@@ -1,3 +1,17 @@
+### Upstream watch — 2026-11-10T05:59:27+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**6 change(s), 0 actionable.**
+- · `announcement` Compute Engine: Change (November 05, 2026) ([link](https://docs.cloud.google.com/release-notes#November_05_2026))
+- · `announcement` Compute Engine: Feature (November 09, 2026) ([link](https://docs.cloud.google.com/release-notes#November_09_2026))
+- · `announcement` Google Kubernetes Engine: Feature (November 09, 2026) ([link](https://docs.cloud.google.com/release-notes#November_09_2026))
+- · `announcement` Google Kubernetes Engine: Feature (November 09, 2026) ([link](https://docs.cloud.google.com/release-notes#November_09_2026))
+- · `announcement` Memorystore for Redis: Feature (November 09, 2026) ([link](https://docs.cloud.google.com/release-notes#November_09_2026))
+- · `announcement` Virtual Private Cloud: Feature (November 09, 2026) ([link](https://docs.cloud.google.com/release-notes#November_09_2026))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-10T04:59:23+00:00
 
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,13 +3011,4 @@ Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T09:50:33+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
-
-Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
 
