@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-10T10:59:30+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 1 actionable.**
+- 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
+- · `spec-commit` Azure resources: Use ResourceIdentifier for deployment prediction IDs in C# (#48093) ([link](https://github.com/Azure/azure-rest-api-specs/commit/f1bb6dfcb60fb3ad38532243e140b3287889a884))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-10T09:59:28+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3008,3 @@ Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
-### Upstream watch — 2026-10-28T13:50:42+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**13 change(s), 3 actionable.**
-- 🔧 `lifecycle` Google Kubernetes Engine: Change (October 27, 2026) ([link](https://docs.cloud.google.com/release-notes#October_27_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: No channel (deprecated) (October 27, 2026) ([link](https://docs.cloud.google.com/release-notes#October_27_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: Regular channel (October 27, 2026) ([link](https://docs.cloud.google.com/release-notes#October_27_2026))
-- · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
