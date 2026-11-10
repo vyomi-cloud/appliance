@@ -154,10 +154,12 @@ def apigw_stages(p):
     a = _api_find(str(p.get("id") or ""))
     if not a:
         return {"ok": False, "code": "NotFoundException"}
-    rows = [{"stage_name": n, "deployment_id": d.get("deploymentId", ""), "description": "",
+    # Stages are keyed by STAGE NAME in a["stages"]; a["deployments"] is keyed by deployment id (listing it showed
+    # random ids as stage names and no "prod").
+    rows = [{"stage_name": n, "deployment_id": s.get("deploymentId", ""), "description": s.get("description", ""),
              "invoke_url": f"https://{a['id']}.execute-api.us-east-1.amazonaws.com/{n}",
-             "created": a.get("created", "")}
-            for n, d in a["deployments"].items()]
+             "created": s.get("createdDate") or a.get("created", "")}
+            for n, s in (a.get("stages") or {}).items()]
     return {"ok": True, "stages": rows, "count": len(rows)}
 
 
