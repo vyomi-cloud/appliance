@@ -24,7 +24,7 @@ while read local_ref local_sha remote_ref remote_sha; do
       fi
       root=$(git rev-parse --show-toplevel)
       if [ -f "$root/wasm/relay/test-mesh-ssh.mjs" ] && command -v node >/dev/null 2>&1 && [ -n "$WS_PKG" ]; then
-        for t in test-booster-link test-booster-shell test-booster-session-derived test-mesh-ssh; do
+        for t in test-mesh-link test-mesh-shell test-mesh-session-derived test-mesh-ssh; do
           [ -f "$root/wasm/relay/$t.mjs" ] || continue
           (cd "$root/wasm/relay" && RELAY_PORT=${RELAY_PORT:-8791} node "$t.mjs" >/dev/null 2>&1) || { echo "pre-push: relay test $t failed"; fail=1; }
         done

@@ -228,23 +228,23 @@
     var tc = document.createElement('a'); tc.href = '/account/tunnel-credentials'; tc.target = '_blank'; tc.rel = 'noopener'; tc.setAttribute('data-act', 'tunnel-credentials'); tc.setAttribute('role', 'menuitem'); tc.style.display = 'none';
     tc.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Tunnel credentials</span>';
     var hr = document.createElement('div'); hr.className = 'vy-hr';
-    var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'booster'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
-    function paintBooster() {
-      var B = window.VyomiBooster, x = B && B.session && B.session(); if (!x || !x.entitled) { bo.style.display = 'none'; return; }
+    var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'mesh'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
+    function paintMesh() {
+      var B = window.VyomiMesh, x = B && B.session && B.session(); if (!x || !x.entitled) { bo.style.display = 'none'; return; }
       var ss = x.session, live = !!x.active, label, tip = '';
       if (!x.github || !x.github.connected) label = 'Mesh \u00b7 Connect GitHub';
       else if (live) { var sec = ss.countdown_seconds | 0; label = (ss.state === 'running' ? 'Leave the Mesh \u00b7 ' + Math.floor(sec / 3600) + 'h ' + String(Math.floor(sec % 3600 / 60)).padStart(2, '0') + 'm left' : 'Mesh starting\u2026 (Stop)'); }
       else label = 'Join the Mesh \u00b7 ' + (x.hours_remaining != null ? x.hours_remaining + ' h left' : '');
       bo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>' + esc(label) + '</span>'; bo.style.display = '';
     }
-    window.addEventListener('vyomi-booster-session', paintBooster); setInterval(paintBooster, 15000);
+    window.addEventListener('vyomi-mesh-session', paintMesh); setInterval(paintMesh, 15000);
     [who$, act, bo, gh, tc, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
     function closeMenu() { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (menu.classList.contains('open')) { closeMenu(); return; }
       var r = btn.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
-      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); paintBooster();
+      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); paintMesh();
     });
     // The v4 consoles render their own account chip (AWS "Account" button, GCP avatar, Azure .vy-account) after this script runs, so the
     // header button above may never attach. Make those native chips open the same Vyomi account menu (with Sign out).
@@ -253,7 +253,7 @@
       if (!chip || btn.isConnected) return;
       e.preventDefault(); e.stopPropagation();
       if (menu.classList.contains('open')) { closeMenu(); return; }
-      paintBooster(); var r = chip.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+      paintMesh(); var r = chip.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
       menu.classList.add('open');
     }, true);
     document.addEventListener('click', function (e) { if (!menu.contains(e.target) && !(e.target.closest && e.target.closest('button[aria-label="Account"],[aria-label="Vyomi · local simulator"],button.vy-account'))) closeMenu(); });
@@ -348,17 +348,17 @@
       var ac = l.getAttribute('data-act');
       if (ac === 'activate') { e.preventDefault(); openView('acct', 'Activate this appliance', true); return; }
       if (ac === 'upgrade') { e.preventDefault(); window.open((st.trial && st.trial.upgrade_url) || 'https://vyomi.cloud/pricing', '_blank', 'noopener'); return; }
-      if (ac === 'booster') {
-        e.preventDefault(); var B = window.VyomiBooster, x = B && B.session && B.session(); if (!B || !x) return;
+      if (ac === 'mesh') {
+        e.preventDefault(); var B = window.VyomiMesh, x = B && B.session && B.session(); if (!B || !x) return;
         if (!x.github || !x.github.connected) { B.connectModal(false); return; }
         var live = !!x.active, span = l.querySelector('span'); if (span) span.textContent = live ? 'Stopping\u2026' : 'Starting\u2026';
         (live ? B.sessionStop() : B.sessionStart()).then(function (r) {
-          paintBooster();
+          paintMesh();
           if (r && r.cancelled) return;
           var er = r && !r.ok && r.j; if (!er) return;
           if (er.action === 'reconnect') { B.connectModal(true); }
           else B.toast(er.message || er.error || 'Could not start the mesh.');
-        }, function () { paintBooster(); });
+        }, function () { paintMesh(); });
         return;
       }
       if (ac === 'signout') { e.preventDefault(); signOut(); return; }

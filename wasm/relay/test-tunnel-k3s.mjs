@@ -1,4 +1,4 @@
-/* Reserved targets + `vyomi-tunnel forward`, all local: relay (local-relay.mjs) + Mesh agent (booster-dial.mjs, default DNS resolver) + client (mesh-cli.mjs).
+/* Reserved targets + `vyomi-tunnel forward`, all local: relay (local-relay.mjs) + Mesh agent (mesh-dial.mjs, default DNS resolver) + client (mesh-cli.mjs).
  * WS_PKG=<path to ws> RELAY_PORT=8796 node wasm/relay/test-tunnel-k3s.mjs
  * Proves: resolveReserved answers host/codespace/k3s exactly and nothing else; `connect host` reaches the host sshd address; a reserved target
  * ignores the client's requested port; a VM can not shadow a reserved name; `forward` carries bytes both ways, handles two sockets, and
@@ -11,8 +11,8 @@ import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mint } from "./booster-session.mjs";
-import { dial, resolveReserved } from "./booster-dial.mjs";
+import { mint } from "./mesh-session.mjs";
+import { dial, resolveReserved } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
 const WS = require(process.env.WS_PKG || "ws");
@@ -45,7 +45,7 @@ for (const s of [hostSrv, k3sSrv, vmSrv]) await new Promise((r) => s.listen(0, "
 const hostPort = hostSrv.address().port, k3sPort = k3sSrv.address().port, vmPort = vmSrv.address().port;
 
 const child = spawn(process.execPath, [path.join(here, "local-relay.mjs")], {
-  env: { ...process.env, RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", VYOMI_BOOSTER_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1", NODE_PATH: process.env.NODE_PATH || "" },
+  env: { ...process.env, RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1", NODE_PATH: process.env.NODE_PATH || "" },
   stdio: ["ignore", "pipe", "pipe"] });
 let up = false; child.stdout.on("data", (d) => { if (String(d).includes("listening") || String(d).includes(String(PORT))) up = true; });
 for (let i = 0; i < 50 && !up; i++) await sleep(100);

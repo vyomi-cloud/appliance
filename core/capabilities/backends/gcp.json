@@ -1490,7 +1490,7 @@
  },
  "vertex-ai": {
   "title": "Vertex AI",
-  "summary": "Vyomi's own Vertex AI control plane stores resources, while Gemini and embedding calls are answered by one small local model (llama.cpp on the appliance or booster, WebLLM on Nano).",
+  "summary": "Vyomi's own Vertex AI control plane stores resources, while Gemini and embedding calls are answered by one small local model (llama.cpp on the appliance or mesh, WebLLM on Nano).",
   "wire": [
    "Vertex AI REST API v1/v1beta1 aiplatform.googleapis.com (endpoints, models, datasets, jobs, indexes, featureGroups, reasoningEngines, metadata)",
    "Gemini generateContent, streamGenerateContent, countTokens, embedContent",
@@ -1502,7 +1502,7 @@
    "kind": "hybrid",
    "tech": [
     "Python core (appliance simulator)",
-    "llama.cpp local model (booster/appliance)"
+    "llama.cpp local model (mesh/appliance)"
    ],
    "notes": "core/gcp_vertex_core.py is the control plane; inference goes through the local-LLM seam (core/ai_models_core.py). With no model running the API returns 503 UNAVAILABLE rather than a canned answer; embeddings fall back to a deterministic hash embedding (vyomi-hash-embed)."
   },

@@ -6,7 +6,7 @@ Owner: integrator session - Started: 2026-11-10 - Base: origin/v4-on-main (51efd
 Makes the appliance `codespace/.devcontainer/` the single source of the Codespace image. The sandbox repo had gained the sshd feature (PR #1) that the appliance copy lacked, while the appliance copy had the AI pack, LLM mesh and Azurite flags the sandbox lacked. This branch merges both into the appliance copy.
 
 ## Architecture
-`codespace/.devcontainer/booster/devcontainer.json` gains the sshd feature; `docker-compose.booster.yml` gains `VYOMI_HOST_SSH_ADDR` and `extra_hosts`. `codespace/publish.sh` copies the tree to a sandbox checkout, then a PR goes to `vyomi-cloud/sandbox`.
+`codespace/.devcontainer/mesh/devcontainer.json` gains the sshd feature; `docker-compose.mesh.yml` gains `VYOMI_HOST_SSH_ADDR` and `extra_hosts`. `codespace/publish.sh` copies the tree to a sandbox checkout, then a PR goes to `vyomi-cloud/sandbox`.
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |

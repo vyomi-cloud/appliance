@@ -1,5 +1,5 @@
 {
-  "$doc": "Review-in-one-place gating map (V4-BOOSTER-DESIGN-DISCUSSION.md sections 2 and 11). scripts/gen_tier_pills.py --apply writes `tier` / `booster` into each core/capabilities/<cloud>/<svc>.json entry; unnamed entries stay unset (= free). tier: pro = Pro and Max, max = Max only. booster: true = needs a booster (pill 'Booster', shown to Free as upsell). A rule key is an exact capability id, or a prefix ending in '*'. Edit here, then re-run --apply.",
+  "$doc": "Review-in-one-place gating map (V4-MESH-DESIGN-DISCUSSION.md sections 2 and 11). scripts/gen_tier_pills.py --apply writes `tier` / `mesh` into each core/capabilities/<cloud>/<svc>.json entry; unnamed entries stay unset (= free). tier: pro = Pro and Max, max = Max only. mesh: true = needs a mesh (pill 'Mesh', shown to Free as upsell). A rule key is an exact capability id, or a prefix ending in '*'. Edit here, then re-run --apply.",
   "rules": {
     "ec2.snapshots": {"tier": "pro"},
     "ec2.purchasing.capacity-reservations": {"tier": "pro"},
@@ -79,21 +79,21 @@
     "gcp.firestore.import-export": {"tier": "pro"},
     "gcp.memorystore.import-export": {"tier": "pro"},
 
-    "lambda.microvms": {"booster": true},
-    "bedrock.agentcore.runtime": {"booster": true},
-    "gcp.functions.gpu": {"booster": true},
-    "gcp.functions.jobs.crud": {"booster": true},
-    "gcp.functions.workerpools.crud": {"booster": true},
-    "azure.functionapp.function.invoke": {"booster": true},
-    "azure.containerapps.app.scale": {"booster": true},
-    "azure.containerapps.job.crud": {"booster": true},
-    "gcp.kubernetes.cluster.crud": {"booster": true},
-    "gcp.kubernetes.cluster.autopilot-create": {"booster": true},
-    "gcp.kubernetes.nodepool.crud": {"booster": true},
-    "gcp.kubernetes.workloads": {"booster": true},
-    "azure.aks.cluster.crud": {"booster": true},
-    "azure.aks.node_pools.crud": {"booster": true},
-    "azure.aks.workloads": {"booster": true},
-    "azure.aks.run_command": {"booster": true}
+    "lambda.microvms": {"mesh": true},
+    "bedrock.agentcore.runtime": {"mesh": true},
+    "gcp.functions.gpu": {"mesh": true},
+    "gcp.functions.jobs.crud": {"mesh": true},
+    "gcp.functions.workerpools.crud": {"mesh": true},
+    "azure.functionapp.function.invoke": {"mesh": true},
+    "azure.containerapps.app.scale": {"mesh": true},
+    "azure.containerapps.job.crud": {"mesh": true},
+    "gcp.kubernetes.cluster.crud": {"mesh": true},
+    "gcp.kubernetes.cluster.autopilot-create": {"mesh": true},
+    "gcp.kubernetes.nodepool.crud": {"mesh": true},
+    "gcp.kubernetes.workloads": {"mesh": true},
+    "azure.aks.cluster.crud": {"mesh": true},
+    "azure.aks.node_pools.crud": {"mesh": true},
+    "azure.aks.workloads": {"mesh": true},
+    "azure.aks.run_command": {"mesh": true}
   }
 }

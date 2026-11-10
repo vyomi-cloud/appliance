@@ -1,5 +1,5 @@
 """Native-SDK conformance for the two hosted-agent lanes (Dev Simplified), over real HTTP via core.wire_ingress, with the
-deterministic fake model server of llm_fakes.py behind the llm_core seam (the same lanes use the booster model when it is up):
+deterministic fake model server of llm_fakes.py behind the llm_core seam (the same lanes use the mesh model when it is up):
 
   GCP : Vertex AI Agent Engine reasoningEngines - google-cloud-aiplatform gapic clients (REST transport): create (LRO) / get /
         list / update / delete, ReasoningEngineExecutionServiceClient.query_reasoning_engine + stream_query_reasoning_engine,

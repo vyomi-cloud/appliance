@@ -4,11 +4,11 @@ Recorded 2026-11-07 with `./run_demo.sh --run --runs 3` (3 drivers x 3 scenarios
 (boto3 `bedrock-runtime`, google-genai `vertexai=True`, `openai.AzureOpenAI`) talk over real HTTP to `core.wire_ingress`, which talks to a real
 **Ollama** serving **qwen2.5:3b** (Q4_K_M, 1.9 GB) for chat and **nomic-embed-text** (274 MB) for embeddings. Database: local JSON file, reset before each run.
 
-Host: Apple-silicon MacBook, 16 GB RAM. That is **not** a booster (2 vCPU / 8 GB), so two passes were made:
+Host: Apple-silicon MacBook, 16 GB RAM. That is **not** a mesh (2 vCPU / 8 GB), so two passes were made:
 
 * **Pass A, laptop GPU (Metal):** the default Ollama configuration. Shows the best case.
-* **Pass B, CPU-only, 2 threads:** a derived model with `num_gpu 0` / `num_thread 2`. A closer proxy for a booster, but still an
-  optimistic one: Apple performance cores are much faster than a shared cloud vCPU, so real boosters will be slower still.
+* **Pass B, CPU-only, 2 threads:** a derived model with `num_gpu 0` / `num_thread 2`. A closer proxy for a mesh, but still an
+  optimistic one: Apple performance cores are much faster than a shared cloud vCPU, so real meshes will be slower still.
 
 ## Result
 
@@ -66,6 +66,6 @@ Full per-step traces (tool results included) are written by `./run_demo.sh --run
 
 ## Caveats
 
-* One machine, one model, one day, easy scenarios. Re-measure on a real booster before promising latency.
+* One machine, one model, one day, easy scenarios. Re-measure on a real mesh before promising latency.
 * Titan/Vertex/Azure embeddings were all served by nomic-embed-text (768-d, truncated by the seam to the requested 512 for Titan); `search_kb` reported `vector-search`, not the keyword fallback.
 * The CI test (`tests/conformance/test_example_agent_workflow.py`) uses a scripted fake model and says so; it is not evidence about model quality.

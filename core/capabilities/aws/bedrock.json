@@ -7,7 +7,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every model id is answered by one small local model (llama.cpp on the booster/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Images/documents, prompt caching and reasoning content are rejected with a validation error rather than ignored.",
+   "Every model id is answered by one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Images/documents, prompt caching and reasoning content are rejected with a validation error rather than ignored.",
    "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
   ],
   "tests": [
@@ -57,14 +57,14 @@
   ]
  },
  "bedrock.agentcore.runtime": {
-  "booster": true,
+  "mesh": true,
   "title": "AgentCore runtime (hosted agents) - Vyomi agent spec, Dev Simplified",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Dev Simplified: runtimes are control-plane records (CreateAgentRuntime/Get/List/Update/Delete, versions, runtime endpoints with DEFAULT, CREATING->READY) and InvokeAgentRuntime really runs an agent - but NOT your container. A runtime whose environmentVariables carry VYOMI_AGENT_SPEC (JSON: instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) is executed in-process as a tool-calling loop over the local model (llama.cpp on the booster/appliance, WebLLM on Nano; payload {\"prompt\": ...}, runtimeSessionId keeps multi-turn history, Accept: text/event-stream streams steps). A container-only runtime returns RuntimeClientError (424); no model running -> 503 ServiceUnavailableException, never a canned answer. Quality is toy-grade; no container/ECR pull, A2A/MCP-protocol runtimes, InvokeAgentRuntimeCommand, Memory, Identity or Observability. Webhook tools need network egress (not available in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. State is in the persisted account bag."
+   "Dev Simplified: runtimes are control-plane records (CreateAgentRuntime/Get/List/Update/Delete, versions, runtime endpoints with DEFAULT, CREATING->READY) and InvokeAgentRuntime really runs an agent - but NOT your container. A runtime whose environmentVariables carry VYOMI_AGENT_SPEC (JSON: instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) is executed in-process as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano; payload {\"prompt\": ...}, runtimeSessionId keeps multi-turn history, Accept: text/event-stream streams steps). A container-only runtime returns RuntimeClientError (424); no model running -> 503 ServiceUnavailableException, never a canned answer. Quality is toy-grade; no container/ECR pull, A2A/MCP-protocol runtimes, InvokeAgentRuntimeCommand, Memory, Identity or Observability. Webhook tools need network egress (not available in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. State is in the persisted account bag."
   ],
   "tests": [
    "tests/conformance/test_ai_agent_runtimes.py",

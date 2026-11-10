@@ -1,7 +1,7 @@
-/* Mesh SSH path end to end, all local: relay (local-relay.mjs) + Mesh agent (booster-dial.mjs) + `vyomi-tunnel connect` client
+/* Mesh SSH path end to end, all local: relay (local-relay.mjs) + Mesh agent (mesh-dial.mjs) + `vyomi-tunnel connect` client
  * (mesh-cli.mjs) + a fake VM sshd (TCP echo).  WS_PKG=<path to ws> RELAY_PORT=8795 node wasm/relay/test-mesh-ssh.mjs
  * Proves: bytes round-trip intact (incl. 2 MB), two streams stay independent, unknown VM fails, bad/foreign/expired tokens and
- * an unlinked booster are refused, the per-session stream cap holds, session_end drops open streams, and `config` is idempotent. */
+ * an unlinked mesh are refused, the per-session stream cap holds, session_end drops open streams, and `config` is idempotent. */
 import net from "node:net";
 import os from "node:os";
 import fs from "node:fs";
@@ -11,8 +11,8 @@ import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mint } from "./booster-session.mjs";
-import { dial } from "./booster-dial.mjs";
+import { mint } from "./mesh-session.mjs";
+import { dial } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
 const WS = require(process.env.WS_PKG || "ws");
@@ -34,7 +34,7 @@ await new Promise((r) => vm.listen(0, "127.0.0.1", r));
 const vmPort = vm.address().port;
 
 const child = spawn(process.execPath, [path.join(here, "local-relay.mjs")], {
-  env: { ...process.env, RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", VYOMI_BOOSTER_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1", VYOMI_MAX_STREAMS: "3", NODE_PATH: process.env.NODE_PATH || "" },
+  env: { ...process.env, RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1", VYOMI_MAX_STREAMS: "3", NODE_PATH: process.env.NODE_PATH || "" },
   stdio: ["ignore", "pipe", "pipe"] });
 let up = false; child.stdout.on("data", (d) => { if (String(d).includes("listening") || String(d).includes(String(PORT))) up = true; });
 for (let i = 0; i < 50 && !up; i++) await sleep(100);
@@ -80,7 +80,7 @@ check("unknown VM -> non-zero exit, no hang", c5 === 1, String(c5));
 // 6. auth failures
 let a = session(tok({ key: "wrong-key" })); check("bad signature refused", (await a.p) === 1 && /401|sign-in/.test(a.err()), a.err());
 a = session(tok({ sub: "someone-else" })); check("another account's token refused (403)", (await a.p) === 1 && /403/.test(a.err()), a.err());
-a = session(tok({ session_id: "no-booster" })); check("no linked Mesh for that session (502)", (await a.p) === 1 && /502|not running/.test(a.err()), a.err());
+a = session(tok({ session_id: "no-mesh" })); check("no linked Mesh for that session (502)", (await a.p) === 1 && /502|not running/.test(a.err()), a.err());
 a = session(tok({ session_end: nowS() - 5, iat: nowS() - 100 })); check("expired token refused before dialing", (await a.p) === 2 && /ended/.test(a.err()), a.err());
 a = session(""); check("no token -> asks to log in", (await a.p) === 2 && /login/.test(a.err()), a.err());
 

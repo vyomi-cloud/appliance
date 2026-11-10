@@ -79,8 +79,8 @@ try:
 except ImportError:  # Pyodide flat layout
     import ai_model_catalog as CAT  # type: ignore
 
-# Model Garden = the ten booster-mesh open models (core/ai_model_catalog.py), nothing else. (publisher, id, oss category, stage, title,
-# description, actions); every one is served (generate / embed) once its booster runner is up.
+# Model Garden = the ten mesh-llm open models (core/ai_model_catalog.py), nothing else. (publisher, id, oss category, stage, title,
+# description, actions); every one is served (generate / embed) once its mesh runner is up.
 PUBLISHER_MODELS = [(m["publisher"], m["id"], "GOOGLE_OWNED_OSS" if m["vendor"] == "Google" else "THIRD_PARTY_OWNED_OSS", "GA", m["name"], m["blurb"],
                      ["embed"] if m["kind"] == "embed" else ["generate"]) for m in CAT.MODELS]
 

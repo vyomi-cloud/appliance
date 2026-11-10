@@ -1150,7 +1150,7 @@
         "llama.cpp llama-server container (vyomi-llm; SmolLM2-360M-Instruct GGUF by default)",
         "feature-hash embeddings when no embedding model"
       ],
-      "notes": "The local model container is started explicitly (core/llm_runtime.py) and refuses to start below a free-disk guard. With no model running, calls fail with ModelNotReadyException; there is no canned fallback. Booster appliances use a different, larger model setup (not verified here)."
+      "notes": "The local model container is started explicitly (core/llm_runtime.py) and refuses to start below a free-disk guard. With no model running, calls fail with ModelNotReadyException; there is no canned fallback. Mesh appliances use a different, larger model setup (not verified here)."
     },
     "nano": {
       "kind": "hybrid",

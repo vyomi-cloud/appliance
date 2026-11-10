@@ -10,7 +10,7 @@ simulator HTTP API (Nano compute calls) over it. Browser VMs (tunnel 2) are unch
 ## Architecture
 - `wasm/relay/mesh-ssh.mjs`: `createSshTransport` (gh `--config` + ssh ControlMaster, one stream = `ssh -W ip:port`, ~0 ms once the master is up;
   names resolved with `docker inspect` over ssh, names regex-validated), `createSshHub` (drop-in for `createHub`: `/connect`, Mesh-plane HTTP -> simulator
-  container with `Host: simulator:9000`, `/shell` -> 501, `/booster` -> 410), `connectSsh` / `forwardSsh` for the CLI.
+  container with `Host: simulator:9000`, `/shell` -> 501, `/mesh` -> 410), `connectSsh` / `forwardSsh` for the CLI.
 - `local-relay.mjs`: `VYOMI_MESH_CODESPACE=<name>` selects the ssh hub. `mesh-cli.mjs`: `connect|forward ... --codespace <name>` (or the env) goes straight over ssh, no relay/token.
 
 ## User flow (credentials file, the AWS-CLI model; supersedes the earlier `login` flow)
@@ -49,12 +49,12 @@ Packaged copies of mesh-cli/mesh-ssh/gh-manager are in `packaging/tunnel/bin`; t
 | Short ControlPath dir under /tmp | os.tmpdir() | macOS unix-socket path limit (255 on exec with long tmpdir) |
 
 ## Open issues
-- [x] `/shell` PTY plane now carried over the ssh stream (tab <-> simulator `/booster/shell`); unit-tested, NOT yet live (Codespace was reaped by the idle timer, then came back without sshd)
-- [x] Image `COPY` fixed: ships mesh-ssh.mjs, runner-llm-hub.mjs, booster-mesh.mjs (trunk's local-relay imports them; the list lacked two); booster-dial.mjs no longer shipped
-- [ ] Image rebuild/publish so `vyomi/appliance` has /app/relay and the /booster/status route (owner go)
+- [x] `/shell` PTY plane now carried over the ssh stream (tab <-> simulator `/mesh/shell`); unit-tested, NOT yet live (Codespace was reaped by the idle timer, then came back without sshd)
+- [x] Image `COPY` fixed: ships mesh-ssh.mjs, runner-llm-hub.mjs, mesh-llm.mjs (trunk's local-relay imports them; the list lacked two); mesh-dial.mjs no longer shipped
+- [ ] Image rebuild/publish so `vyomi/appliance` has /app/relay and the /mesh/status route (owner go)
 - [ ] Live e2e of `/shell` + instance/k3s containers on a fresh Codespace, personal GitHub Free account (needs a new Mesh start)
 
 ## Testing
 Live against Codespace vyomi-mesh-jrjpj6jvggrvfqjjr: resolve host/simulator, CLI `connect host` and `forward` returned the sshd banner, WS `/connect`
 returned the banner, relay HTTP with the Mesh header reached the simulator (`/healthz` 200). Unit: `test-mesh-ssh-transport.mjs` (fake ssh) passes;
-test-mesh-ssh, test-booster-link, test-booster-shell, test-keeper still pass. NOT run: k3s/instance containers (none running), personal GitHub Free account.
+test-mesh-ssh, test-mesh-link, test-mesh-shell, test-keeper still pass. NOT run: k3s/instance containers (none running), personal GitHub Free account.

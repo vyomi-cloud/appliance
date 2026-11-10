@@ -11,8 +11,8 @@ var lifecycle = map[string]bool{
 // straight against the stack (mirrors the PS1's inner switch).
 func (c *Config) dispatchInner(cmd string, args []string) int {
 	switch cmd {
-	case "booster":
-		return c.boosterCmd(args)
+	case "mesh":
+		return c.meshCmd(args)
 	case "up":
 		return fail(c.invokeCompose("up", append([]string{"--build", "--force-recreate"}, args...)...))
 	case "down":
@@ -37,8 +37,8 @@ func (c *Config) dispatchInner(cmd string, args []string) int {
 // dispatchOuter serves the host launcher. Lifecycle commands route to the Docker
 // substrate when resolved to docker; everything else goes to the Multipass path.
 func (c *Config) dispatchOuter(cmd string, args []string) int {
-	if cmd == "booster" {
-		return c.boosterCmd(args)
+	if cmd == "mesh" {
+		return c.meshCmd(args)
 	}
 	if lifecycle[cmd] && c.resolveSubstrate() == "docker" {
 		return fail(c.invokeDockerSubstrate(cmd, args))

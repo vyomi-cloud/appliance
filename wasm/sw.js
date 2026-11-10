@@ -1346,7 +1346,7 @@ self.addEventListener("fetch", (event) => {
                       all_tiers: ["free", "lite", "pro", "max"],
                       primary_cloud: (c && c.primary_cloud) || "",
                       kubernetes_locked: _k8s,
-                      active_policy: { providers: t === "pro" && c && c.primary_cloud ? "primary_cloud_only" : "all" } });   // a Pro licence with no cloud yet is pinned on first use (booster-link.js)
+                      active_policy: { providers: t === "pro" && c && c.primary_cloud ? "primary_cloud_only" : "all" } });   // a Pro licence with no cloud yet is pinned on first use (mesh-link.js)
       }
       if (apiPath === "/api/license/status" && method === "GET") {
         const c = licenseClaims(await metaGet("license_jwt")) || await accountClaims();
@@ -1461,9 +1461,9 @@ self.addEventListener("fetch", (event) => {
         if (!["aws", "gcp", "azure"].includes(provider))
           return json({ ok: false, detail: { reason: "provider must be aws, gcp, or azure" } }, 400);
         const s = mkSpace(provider, (body.name || "").trim(), (body.region || "").trim());
-        // Booster pack: the space's home is fixed at creation (absent = this browser).
-        if (body.home && body.home.type === "booster" && body.home.booster_id)
-          s.home = { type: "booster", booster_id: String(body.home.booster_id), booster_name: String(body.home.booster_name || body.home.booster_id) };
+        // Mesh pack: the space's home is fixed at creation (absent = this browser).
+        if (body.home && body.home.type === "mesh" && body.home.mesh_id)
+          s.home = { type: "mesh", mesh_id: String(body.home.mesh_id), mesh_name: String(body.home.mesh_name || body.home.mesh_id) };
         try { await spacePut(s); await metaPut("active", s.space_id); }
         catch (e) { return json({ ok: false, detail: { reason: "could not persist space: " + e } }, 500); }
         nanoWsPush();   // fire-and-forget: keep the synced workspace current (no-op if signed out)

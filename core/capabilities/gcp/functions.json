@@ -155,7 +155,7 @@
   ]
  },
  "gcp.functions.jobs.crud": {
-  "booster": true,
+  "mesh": true,
   "title": "Jobs (create, list, run, delete)",
   "level": {
    "nano": "full",
@@ -174,7 +174,7 @@
   ]
  },
  "gcp.functions.workerpools.crud": {
-  "booster": true,
+  "mesh": true,
   "title": "Worker pools (create, list, delete)",
   "level": {
    "nano": "full",
@@ -213,7 +213,7 @@
   ]
  },
   "gcp.functions.gpu": {
-   "booster": true,
+   "mesh": true,
    "title": "GPU (config stored; CPU-only unless the host has a GPU)",
    "level": {
     "nano": "limited",

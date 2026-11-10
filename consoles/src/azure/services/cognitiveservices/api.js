@@ -56,7 +56,7 @@ export const KIND_LABEL = Object.fromEntries(Object.entries(TYPE_TO_KIND).map(([
 export const MODEL_KINDS = ["OpenAI", "AIServices"];
 export const NEEDS_SUBDOMAIN = new Set(["OpenAI", "AIServices", "ContentSafety", "FormRecognizer", "ComputerVision", "Face", "TextAnalytics", "HealthInsights", "ImmersiveReader"]);
 export const DEPLOY_SKUS = ["Standard", "GlobalStandard", "ProvisionedManaged", "GlobalProvisionedManaged", "DataZoneStandard", "GlobalBatch", "DeveloperTier"];
-// (format, name, version, maxCapacity) — the ten booster-mesh models (shared catalogue core/ai_model_catalog.py); format = real vendor
+// (format, name, version, maxCapacity) — the ten mesh-llm models (shared catalogue core/ai_model_catalog.py); format = real vendor
 export const MODELS = AI_MODELS.map((m) => [m.vendor, m.id, "1", 1000]);
 /** Live availability per model name (account models list); without the Mesh only the local small model is available. */
 export const modelAvailability = async (rg, name) => {

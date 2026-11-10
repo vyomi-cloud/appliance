@@ -100,7 +100,7 @@ export async function probeVm(nano, cfg, check) {
                   "for i in $(seq 1 40); do wget -qO- http://127.0.0.1:8080/index.html 2>/dev/null && exit 0; sleep 1; done; exit 1", 90000);
     check("a python http.server runs and answers inside the VM", r.rc === 0 && r.out.includes("nano-http-ok"), `rc=${r.rc} ${r.out.slice(-80)} ${r.err.slice(-120)}`);
 
-    // In-browser toolchain (all tiers): git + Python and two package managers (pip, apk). Every other language is the booster's job.
+    // In-browser toolchain (all tiers): git + Python and two package managers (pip, apk). Every other language is the mesh's job.
     r = ssh(argv, "git --version; python3 --version; pip --version; sudo apk --version", 60000);
     check("VM has git, Python 3, pip and apk (the in-browser toolchain)", r.rc === 0 && /git version \d/.test(r.out) && /Python 3\.\d+/.test(r.out) && /^pip \d/m.test(r.out) && /apk-tools \d/.test(r.out), `rc=${r.rc} ${r.out.slice(-200)} ${r.err.slice(-120)}`);
     r = ssh(argv, "mkdir -p /tmp/g && cd /tmp/g && git init -q . && git config user.email t@t && git config user.name t && echo hi > f && git add f && git commit -qm c && git log --oneline | wc -l && python3 -c 'import json,sqlite3,ssl;print(\"py-ok\")'", 90000);

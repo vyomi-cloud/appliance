@@ -16,7 +16,7 @@ Speaks the native EKS REST/JSON wire, so an unmodified ``aws eks ...`` / boto3 `
   Vyomi extension  POST /clusters/{n}/vyomi/kubectl   (the console's kubectl terminal / AWS Backup for EKS; EKS has no API to run kubectl)
 
 What is REAL: ``CreateCluster`` starts a real k3s control plane through ``kube_state_core.CLUSTER_RUNTIME`` (core/k3s_runtime.py, offline appliance /
-booster with ``VYOMI_K8S_BACKEND=k3s``); the cluster is CREATING until the API server answers /readyz, then ACTIVE with the real ``endpoint`` and
+mesh with ``VYOMI_K8S_BACKEND=k3s``); the cluster is CREATING until the API server answers /readyz, then ACTIVE with the real ``endpoint`` and
 ``certificateAuthority.data`` of that server. Managed node groups launch real k3s agent nodes labelled ``eks.amazonaws.com/nodegroup`` (core/aws_eks_nodes.py).
 Without that runtime (Nano, plain dev server) ``CreateCluster`` answers a native ``ServiceUnavailableException`` that says so -- nothing is faked.
 
@@ -278,7 +278,7 @@ def _create_cluster(st, region, p, ctx):
     rt = _runtime()
     if rt is None:
         raise EksError("ServiceUnavailableException",
-                       "Amazon EKS on Vyomi needs the Kubernetes backend: a real k3s control plane, which runs only on the offline appliance / booster "
+                       "Amazon EKS on Vyomi needs the Kubernetes backend: a real k3s control plane, which runs only on the offline appliance / mesh "
                        "(start it with VYOMI_K8S_BACKEND=k3s and Docker). This runtime (Nano / browser) has none, so the cluster was not created.")
     name = p.get("name")
     _require(p, "name", "roleArn", "resourcesVpcConfig")

@@ -1,8 +1,8 @@
-"""All three clouds list EXACTLY the same ten booster-mesh models (core/ai_model_catalog.py), nothing else.
+"""All three clouds list EXACTLY the same ten mesh-llm models (core/ai_model_catalog.py), nothing else.
 
 Checks: Bedrock ListFoundationModels, Vertex Model Garden + Gemini-API models.list, Azure location/account model catalogue; the shared
-catalogue agrees with docker/booster-runner-llm/models.json (ids + alias map) and the generated consoles JSON; availability states
-(no booster -> only qwen2.5-3b available; a booster pool reports starting/ready); legacy real-vendor ids still resolve through the
+catalogue agrees with docker/mesh-runner-llm/models.json (ids + alias map) and the generated consoles JSON; availability states
+(no mesh -> only qwen2.5-3b available; a mesh pool reports starting/ready); legacy real-vendor ids still resolve through the
 hidden alias map but ids outside the ten get each cloud's own not-found/validation error.
 
 Run: PYTHONPATH=. python3 tests/conformance/test_ai_model_catalog.py
@@ -37,8 +37,8 @@ def js(o):
 
 
 # ── catalogue vs the runner catalogue / generated console JSON
-cat = json.load(open(os.path.join(ROOT, "docker", "booster-runner-llm", "models.json")))
-check("catalogue ids == booster runner models.json ids (ten, same order)", list(cat["models"]) == CAT.IDS and len(CAT.IDS) == 10, list(cat["models"]))
+cat = json.load(open(os.path.join(ROOT, "docker", "mesh-runner-llm", "models.json")))
+check("catalogue ids == mesh runner models.json ids (ten, same order)", list(cat["models"]) == CAT.IDS and len(CAT.IDS) == 10, list(cat["models"]))
 check("hidden alias map == models.json aliases (all three clouds)", all(cat["aliases"][c] == CAT.ALIASES[c] for c in ("aws", "gcp", "azure")))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import gen_ai_model_catalog_json as G  # noqa: E402
@@ -73,10 +73,10 @@ every = json.dumps([aws, gcp, [x["model"] for x in az_loc]])
 check("no real-vendor model ids in any listing", not any(o in every for o in OLD), every[:200])
 check("providers are the real open-model vendors", {m["vendor"] for m in CAT.MODELS} == {"Alibaba", "Nomic AI", "Meta", "Google", "DeepSeek", "Mistral AI"})
 
-# ── availability: no booster -> only the local small model
+# ── availability: no mesh -> only the local small model
 av = {m["modelId"].replace("vyomi.", ""): m["vyomiAvailability"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"]}
-check("no booster: only qwen2.5-3b available", [k for k, v in av.items() if v["available"]] == ["qwen2.5-3b"], av)
-check("no booster: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k != "qwen2.5-3b") and sum(1 for k in av if k != "qwen2.5-3b") == 9)
+check("no mesh: only qwen2.5-3b available", [k for k, v in av.items() if v["available"]] == ["qwen2.5-3b"], av)
+check("no mesh: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k != "qwen2.5-3b") and sum(1 for k in av if k != "qwen2.5-3b") == 9)
 check("Azure availability matches", {x["model"]["name"]: x["vyomiAvailability"]["available"] for x in az_acct} == {i: i == "qwen2.5-3b" for i in CAT.IDS})
 
 
@@ -95,11 +95,11 @@ class FakeR:
         return FakePool()
 
 
-import core.booster_remote_llm as REAL  # noqa: E402
+import core.mesh_remote_llm as REAL  # noqa: E402
 _a, _p = REAL.active, REAL.pool
 REAL.active, REAL.pool = FakeR.active, FakeR.pool
 try:
-    check("booster mesh attached: pool state drives availability (ready / starting)", CAT.availability("qwen2.5-7b")["state"] == "ready" and CAT.availability("llama3.1-8b")["state"] == "starting"
+    check("mesh mesh attached: pool state drives availability (ready / starting)", CAT.availability("qwen2.5-7b")["state"] == "ready" and CAT.availability("llama3.1-8b")["state"] == "starting"
           and CAT.availability("qwen2.5-7b")["available"] and not CAT.availability("mistral-7b")["available"])
 finally:
     REAL.active, REAL.pool = _a, _p

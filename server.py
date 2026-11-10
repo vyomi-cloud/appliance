@@ -282,12 +282,12 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             gcp_resourcemanager, issue_reporting]:
     mod.register(app)
 
-# Booster pack (headless Pro/Max appliance): /booster/* status + pairing routes.
-from core import booster as _booster
-_booster.register(app)
-# Booster shell routes registered here (before the wire catch-all); the resolver is defined further down.
-from core import booster_shell as _booster_shell
-_booster_shell.register(app, lambda cloud, ref: _shell_container(cloud, ref))
+# Mesh pack (headless Pro/Max appliance): /mesh/* status + pairing routes.
+from core import mesh as _mesh
+_mesh.register(app)
+# Mesh shell routes registered here (before the wire catch-all); the resolver is defined further down.
+from core import mesh_shell as _mesh_shell
+_mesh_shell.register(app, lambda cloud, ref: _shell_container(cloud, ref))
 from core import feedback as _feedback
 _feedback.register(app)
 
@@ -1535,7 +1535,7 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
     method = request.method.upper()
     query = dict(request.query_params)
 
-    if path in {"/healthz", "/docs", "/redoc", "/openapi.json"} or path.startswith(("/ui", "/product", "/assets/", "/static/", "/favicon.ico", "/console", "/booster", "/docs/", "/api/tenants", "/api/instances", "/api/runtime")):
+    if path in {"/healthz", "/docs", "/redoc", "/openapi.json"} or path.startswith(("/ui", "/product", "/assets/", "/static/", "/favicon.ico", "/console", "/mesh", "/docs/", "/api/tenants", "/api/instances", "/api/runtime")):
         return None
     if path.startswith("/api/catalog") or path.startswith("/api/packs") or path.startswith("/api/license") or path.startswith("/api/runtime/bundles") or path.startswith("/api/deployments") or path.startswith("/api/actions"):
         return None
@@ -5251,13 +5251,13 @@ def _k8s_tier_provider():
         primary = ""
     tier = _active_tier()
     try:
-        from core import booster_session as _bs
-        if _bs.role_is_booster() and (_bs.effective_tier() or tier) == "pro":
-            # Headless booster: the signed session token is the tier source, and SessionMiddleware already refuses every cloud but the
+        from core import mesh_session as _bs
+        if _bs.role_is_mesh() and (_bs.effective_tier() or tier) == "pro":
+            # Headless mesh: the signed session token is the tier source, and SessionMiddleware already refuses every cloud but the
             # Pro session's one (token primary_cloud, or the first cloud used). The tenant here has no primary_cloud, so do not
-            # let the gate's "primary cloud unset" rule lock a legitimate Pro booster out of its own cloud's Kubernetes.
+            # let the gate's "primary cloud unset" rule lock a legitimate Pro mesh out of its own cloud's Kubernetes.
             return ("max", "")
-        if _bs.role_is_booster() and _bs.effective_tier():
+        if _bs.role_is_mesh() and _bs.effective_tier():
             tier = _bs.effective_tier()
     except Exception:
         pass
@@ -5267,7 +5267,7 @@ def _k8s_tier_provider():
 from core import k8s_tier_gate as _k8s_tier_gate  # noqa: E402
 _k8s_tier_gate.set_provider(_k8s_tier_provider)
 
-try:    # real k3s behind AKS/GKE clusters (offline appliance / booster only; no-op unless VYOMI_K8S_BACKEND=k3s)
+try:    # real k3s behind AKS/GKE clusters (offline appliance / mesh only; no-op unless VYOMI_K8S_BACKEND=k3s)
     from core import k3s_runtime as _k3s_runtime
     _k3s_runtime.install_if_enabled()
 except Exception as _k3s_err:   # a missing docker CLI must never stop the appliance from booting
@@ -8247,7 +8247,7 @@ def _docker_private_key_pem(instance: dict) -> bytes | None:
         return None
 
 
-def _booster_cloud_of(instance: dict) -> str:
+def _mesh_cloud_of(instance: dict) -> str:
     c = str(instance.get("cloud") or instance.get("provider") or "").lower()
     if c.startswith("gcp") or c.startswith("google"):
         return "gcp"
@@ -8274,8 +8274,8 @@ def _catalog_memory_mb(instance_type: str, cloud: str) -> int:
 
 
 def _docker_instance_memory_mb(instance: dict) -> int:
-    """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the booster cap).
-    Explicit memory wins; in booster mode the instance TYPE's real memory (catalog) is used and counted, else 1024."""
+    """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the mesh cap).
+    Explicit memory wins; in mesh mode the instance TYPE's real memory (catalog) is used and counted, else 1024."""
     try:
         explicit = int(instance.get("memory_mb") or instance.get("memory") or 0)
     except (TypeError, ValueError):
@@ -8283,11 +8283,11 @@ def _docker_instance_memory_mb(instance: dict) -> int:
     if explicit > 0:
         return explicit
     try:
-        from core import booster as _b
-        if _b.booster_mode():
+        from core import mesh as _b
+        if _b.mesh_mode():
             itype = (instance.get("instance_type") or instance.get("machine_type") or instance.get("machineType")
                      or instance.get("vm_size") or "")
-            cat = _catalog_memory_mb(itype, _booster_cloud_of(instance))
+            cat = _catalog_memory_mb(itype, _mesh_cloud_of(instance))
             if cat > 0:
                 return cat
     except Exception:
@@ -8295,62 +8295,62 @@ def _docker_instance_memory_mb(instance: dict) -> int:
     return 1024
 
 
-def _booster_capacity_precheck(cloud: str, instance_type: str = "", count: int = 1, zone: str = "-") -> None:
-    """Booster admission (named precheck for history): ATOMICALLY RESERVES `count` slots sized by the instance type's
-    real memory, or raises core.booster.BoosterCapacityError before any record exists. The slots are bound to the real
-    instance ids by _booster_claim() in the create core (same request context) and expire after a short TTL if the
-    create never completes. No-op outside booster mode."""
-    from core import booster as _booster
+def _mesh_capacity_precheck(cloud: str, instance_type: str = "", count: int = 1, zone: str = "-") -> None:
+    """Mesh admission (named precheck for history): ATOMICALLY RESERVES `count` slots sized by the instance type's
+    real memory, or raises core.mesh.MeshCapacityError before any record exists. The slots are bound to the real
+    instance ids by _mesh_claim() in the create core (same request context) and expire after a short TTL if the
+    create never completes. No-op outside mesh mode."""
+    from core import mesh as _mesh
     mem = _docker_instance_memory_mb({"instance_type": instance_type, "cloud": cloud})
-    slots = _booster.reserve_slots("compute", max(1, int(count or 1)), mem, cloud=cloud, zone=zone)
+    slots = _mesh.reserve_slots("compute", max(1, int(count or 1)), mem, cloud=cloud, zone=zone)
     if slots:
-        lst = _booster.REQUEST_SLOTS.get()
+        lst = _mesh.REQUEST_SLOTS.get()
         if lst is None:                    # not under the ASGI request scope (direct call): TTL expiry cleans up
             lst = []
-            _booster.REQUEST_SLOTS.set(lst)
+            _mesh.REQUEST_SLOTS.set(lst)
         lst.extend(slots)
 
 
-def _booster_claim(instance: dict, cloud: str = "", zone: str = "-") -> None:
+def _mesh_claim(instance: dict, cloud: str = "", zone: str = "-") -> None:
     """Create-core hook: bind the request's admission slot (or, on paths with no pre-check - REST, console - make a fresh
     atomic reservation) to this instance id. Raises HTTPException with the cloud's native capacity error."""
-    from core import booster as _booster
-    if not _booster.booster_mode():
+    from core import mesh as _mesh
+    if not _mesh.mesh_mode():
         return
-    cloud = cloud or _booster_cloud_of(instance)
+    cloud = cloud or _mesh_cloud_of(instance)
     mem = _docker_instance_memory_mb(instance)
-    slots = _booster.REQUEST_SLOTS.get()
+    slots = _mesh.REQUEST_SLOTS.get()
     try:
         if slots:
-            _booster.rebind("compute", slots.pop(0), str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
+            _mesh.rebind("compute", slots.pop(0), str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
         else:
-            _booster.allocate("compute", str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
+            _mesh.allocate("compute", str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
     except Exception as exc:
-        if exc.__class__.__name__ == "BoosterCapacityError":
+        if exc.__class__.__name__ == "MeshCapacityError":
             raise HTTPException(status_code=exc.status, detail=f"{exc.code}: {exc.message}")
         raise
 
 
-def _booster_resize_azure_vm(record: dict, vm_size: str) -> None:
-    """Booster: an Azure VM size change re-reserves under the new memory (atomic); raises BoosterCapacityError.
+def _mesh_resize_azure_vm(record: dict, vm_size: str) -> None:
+    """Mesh: an Azure VM size change re-reserves under the new memory (atomic); raises MeshCapacityError.
     A VM currently holding a reservation is resized in place; one that isn't running only gets a fit check."""
-    from core import booster as _booster
-    if not _booster.booster_mode():
+    from core import mesh as _mesh
+    if not _mesh.mesh_mode():
         return
     props = record.get("properties") if isinstance(record.get("properties"), dict) else {}
     rt = props.get("runtime") if isinstance(props.get("runtime"), dict) else {}
     iid = str(rt.get("instanceId") or "")
     mem = _docker_instance_memory_mb({"instance_type": vm_size, "cloud": "azure"})
     zone = str(record.get("location") or "-")
-    with _booster._LEDGER_LOCK:
-        held = iid in _booster._LEDGER["compute"]
+    with _mesh._LEDGER_LOCK:
+        held = iid in _mesh._LEDGER["compute"]
     if iid and held:
-        _booster.allocate("compute", iid, mem, cloud="azure", zone=zone)
+        _mesh.allocate("compute", iid, mem, cloud="azure", zone=zone)
     else:
-        _booster.can_allocate("compute", mem, cloud="azure", zone=zone)
+        _mesh.can_allocate("compute", mem, cloud="azure", zone=zone)
 
 
-def _booster_gcp_error_body(exc) -> dict:
+def _mesh_gcp_error_body(exc) -> dict:
     return {"error": {"code": exc.status, "message": exc.message,
                       "errors": [{"message": exc.message, "domain": "global", "reason": "zoneResourcePoolExhausted"}],
                       "status": "UNAVAILABLE",
@@ -8365,9 +8365,9 @@ def _docker_instance_obj(instance: dict):
         pubkey, _ = ensure_instance_ssh_key()
     except Exception:
         pubkey = None
-    from core.compute.backend import booster_toolchain_image
+    from core.compute.backend import mesh_toolchain_image
     image = (
-        booster_toolchain_image(instance)   # booster role + toolchain=all only; None otherwise
+        mesh_toolchain_image(instance)   # mesh role + toolchain=all only; None otherwise
         or str(instance.get("docker_image") or "").strip()
         or os.environ.get("VYOMI_INSTANCE_IMAGE")
         or "vyomi/instance:ubuntu-24.04"
@@ -8439,10 +8439,10 @@ def _start_docker_instance(instance: dict) -> dict:
     if _port_publish_enabled() and not str(instance.get("ssh_host_port") or "").strip().isdigit():
         instance["ssh_host_port"] = _allocate_host_port()
     inst = _docker_instance_obj(instance)
-    # Booster: instances count against the 70% host cap (compute share). Over it, the cloud's REAL capacity error
-    # (InsufficientInstanceCapacity / ZONE_RESOURCE_POOL_EXHAUSTED / AllocationFailed). No-op outside booster mode.
+    # Mesh: instances count against the 70% host cap (compute share). Over it, the cloud's REAL capacity error
+    # (InsufficientInstanceCapacity / ZONE_RESOURCE_POOL_EXHAUSTED / AllocationFailed). No-op outside mesh mode.
     try:
-        _booster_claim(instance, _booster_cloud_of(instance), str(instance.get("zone") or instance.get("availability_zone") or "-"))
+        _mesh_claim(instance, _mesh_cloud_of(instance), str(instance.get("zone") or instance.get("availability_zone") or "-"))
     except HTTPException:
         raise
     except Exception:
@@ -8453,8 +8453,8 @@ def _start_docker_instance(instance: dict) -> dict:
         _docker_compute().create(inst)
     except Exception as exc:
         try:    # failed launch holds no RAM
-            from core import booster as _booster
-            _booster.release("compute", str(instance.get("instance_id")))
+            from core import mesh as _mesh
+            _mesh.release("compute", str(instance.get("instance_id")))
         except Exception:
             pass
         raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
@@ -8482,9 +8482,9 @@ def _stop_docker_instance(instance: dict) -> dict:
         _docker_compute().stop(_docker_instance_obj(instance))
     except Exception as exc:
         raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
-    try:   # a stopped instance holds no RAM: give its share of the booster cap back
-        from core import booster as _booster
-        _booster.release("compute", str(instance.get("instance_id")))
+    try:   # a stopped instance holds no RAM: give its share of the mesh cap back
+        from core import mesh as _mesh
+        _mesh.release("compute", str(instance.get("instance_id")))
     except Exception:
         pass
     instance["state"] = "stopped"
@@ -8514,8 +8514,8 @@ def _reboot_docker_instance(instance: dict) -> dict:
 
 def _terminate_docker_instance(instance: dict) -> dict:
     try:
-        from core import booster as _booster
-        _booster.release("compute", str(instance.get("instance_id")))
+        from core import mesh as _mesh
+        _mesh.release("compute", str(instance.get("instance_id")))
     except Exception:
         pass
     try:
@@ -13122,7 +13122,7 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
             instance["private_ip"] = _vpc_core._allocate_private_ip(_probe, req.subnet_id)
         except Exception:
             pass
-    _booster_claim(instance, "aws", str(instance.get("availability_zone") or instance.get("zone") or "-"))
+    _mesh_claim(instance, "aws", str(instance.get("availability_zone") or instance.get("zone") or "-"))
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
@@ -13913,10 +13913,10 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
                              str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "")) or ""), count, _used)
         except _cb._Err as _cexc:
             return _ec2_error_response(_cexc.code, _cexc.message, _cexc.status)
-    try:   # booster: the real EC2 capacity error, synchronously, before any record exists
-        _booster_capacity_precheck("aws", instance_type, count, str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "-"))))
+    try:   # mesh: the real EC2 capacity error, synchronously, before any record exists
+        _mesh_capacity_precheck("aws", instance_type, count, str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "-"))))
     except Exception as _bexc:
-        if _bexc.__class__.__name__ != "BoosterCapacityError":
+        if _bexc.__class__.__name__ != "MeshCapacityError":
             raise
         return _ec2_error_response(_bexc.code, _bexc.message, _bexc.status)
     key_name = str(params.get("KeyName", ""))
@@ -14517,7 +14517,7 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         "console_prompt": _cmd_prompt({"runtime_backend": runtime_backend, "container_name": f"cloudlearn-{instance_id}", "container_id": ""}),
         "network_interfaces": network_interfaces_payload,
     }
-    _booster_claim(instance, "gcp", f"projects/{project}/zones/{zone}")
+    _mesh_claim(instance, "gcp", f"projects/{project}/zones/{zone}")
     return instance
 
 
@@ -15018,11 +15018,11 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
     _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
     _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
     try:
-        _booster_capacity_precheck("gcp", str(getattr(req, "machineType", "") or ""), 1, f"projects/{project}/zones/{zone}")
+        _mesh_capacity_precheck("gcp", str(getattr(req, "machineType", "") or ""), 1, f"projects/{project}/zones/{zone}")
     except Exception as _bexc:
-        if _bexc.__class__.__name__ != "BoosterCapacityError":
+        if _bexc.__class__.__name__ != "MeshCapacityError":
             raise
-        return JSONResponse(status_code=_bexc.status, content=_booster_gcp_error_body(_bexc))
+        return JSONResponse(status_code=_bexc.status, content=_mesh_gcp_error_body(_bexc))
     instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
     instance["runtime_bundle_id"] = _cloudsim_runtime_bundle("gcp_compute").get("id", "")
     instance["runtime_bundle_name"] = _cloudsim_runtime_bundle("gcp_compute").get("name", "")
@@ -25327,7 +25327,7 @@ def _migrate_dynamodb_local_once():
         print(f"[ddb-migrate] skipped: {_e}")
 
 
-# Booster shell: PTY into a Docker VM (vyomi-i-* on vyomi-net) for the Nano console's "Open shell" (core/booster_shell.py).
+# Mesh shell: PTY into a Docker VM (vyomi-i-* on vyomi-net) for the Nano console's "Open shell" (core/mesh_shell.py).
 def _shell_container(cloud: str, ref: str):
     """Resolve an instance id / VM name from THIS appliance's records to its Docker container name (never trust a client-sent name)."""
     inst, _ = _find_instance_across_spaces(cloud, ref)
@@ -25343,12 +25343,12 @@ def _shell_container(cloud: str, ref: str):
     return str(inst.get("container_name") or inst.get("container_id") or "") or None
 
 
-# Booster pack: headless guard (404 JSON for UI paths when booster mode is on). Added before the
+# Mesh pack: headless guard (404 JSON for UI paths when mesh mode is on). Added before the
 # /_wire rewrite so the rewrite stays outermost and `/_wire/ui` is blocked as `/ui`.
-app.add_middleware(_booster.HeadlessMiddleware)
-# Booster ROLE (VYOMI_ROLE=booster): nothing is served without a valid signed session token; Pro = one cloud; refuses all after session_end.
-from core import booster_session as _booster_session
-app.add_middleware(_booster_session.SessionMiddleware)
+app.add_middleware(_mesh.HeadlessMiddleware)
+# Mesh ROLE (VYOMI_ROLE=mesh): nothing is served without a valid signed session token; Pro = one cloud; refuses all after session_end.
+from core import mesh_session as _mesh_session
+app.add_middleware(_mesh_session.SessionMiddleware)
 
 # v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
 try:

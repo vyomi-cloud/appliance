@@ -100,7 +100,7 @@ const wsOk = await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${por
 assert.equal(wsOk, "abc");
 const refused = await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${port}/connect?vm=host`, { headers: { origin: "https://evil.example" } }); w.on("unexpected-response", (_q, r) => res(r.statusCode)); w.on("error", () => {}); });
 assert.equal(refused, 403);
-// /shell: tab <-> simulator's /booster/shell WS over a stream (stub transport -> real local ws server standing in for the simulator)
+// /shell: tab <-> simulator's /mesh/shell WS over a stream (stub transport -> real local ws server standing in for the simulator)
 const sim = http.createServer(); const simWss = new WebSocketServer({ server: sim }); const seen = [];
 simWss.on("connection", (ws, rq) => { seen.push(rq.url); ws.send(JSON.stringify({ t: "opened", container: "vyomi-i-x" })); ws.on("message", (d, b) => ws.send(b ? Buffer.concat([Buffer.from("echo:"), d]) : JSON.stringify({ t: "resize-ack" }))); });
 await new Promise((r) => sim.listen(0, "127.0.0.1", r));

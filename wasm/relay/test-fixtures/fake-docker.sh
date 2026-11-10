@@ -1,5 +1,5 @@
 #!/bin/sh
-# Test double for the docker CLI used by core/booster_shell.py. Records argv; `exec` runs a local sh on the PTY we were given.
+# Test double for the docker CLI used by core/mesh_shell.py. Records argv; `exec` runs a local sh on the PTY we were given.
 [ -n "$VYOMI_FAKE_DOCKER" ] && echo "$*" >> "$VYOMI_FAKE_DOCKER"
 eval "last=\${$#}"
 case "$1" in

@@ -1,4 +1,4 @@
-"""Docker-driven k3s lifecycle: one REAL Kubernetes (k3s) per managed cluster (AKS / EKS / GKE) on the offline appliance / booster.
+"""Docker-driven k3s lifecycle: one REAL Kubernetes (k3s) per managed cluster (AKS / EKS / GKE) on the offline appliance / mesh.
 
 OFFLINE-ONLY module (shells out to the ``docker`` CLI). It is deliberately NOT part of the Pyodide/Nano core set
 (``wasm/build_cores.py``): the substrate-free cores (azure_arm_core, gcp_container_core, kube_state_core) only see the

@@ -1,5 +1,5 @@
 {
- "$doc": "Vyomi capability registry \u2014 Amazon EKS. See aws/s3.json for the contract. EKS is backed by a REAL k3s control plane (core/k3s_runtime.py) on the offline appliance / booster only.",
+ "$doc": "Vyomi capability registry \u2014 Amazon EKS. See aws/s3.json for the contract. EKS is backed by a REAL k3s control plane (core/k3s_runtime.py) on the offline appliance / mesh only.",
  "eks.cluster.lifecycle": {
   "title": "Clusters: CreateCluster, DescribeCluster, ListClusters, DeleteCluster (CREATING -> ACTIVE against a real k3s API server)",
   "level": {
@@ -7,7 +7,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Each cluster is a real single-server k3s control plane in Docker; status is ACTIVE when its /readyz answers, and endpoint + certificateAuthority.data are that server's own. Nano (in-browser) has no Kubernetes control plane: a real k3s API server runs only on the offline appliance / booster (VYOMI_K8S_BACKEND=k3s with Docker). CreateCluster answers a native ServiceUnavailableException that says so.",
+   "Each cluster is a real single-server k3s control plane in Docker; status is ACTIVE when its /readyz answers, and endpoint + certificateAuthority.data are that server's own. Nano (in-browser) has no Kubernetes control plane: a real k3s API server runs only on the offline appliance / mesh (VYOMI_K8S_BACKEND=k3s with Docker). CreateCluster answers a native ServiceUnavailableException that says so.",
    "k3s runs ONE pinned Kubernetes release whatever `version` was requested; the requested version is what the EKS API reports (kubectl version shows the real one).",
    "The k3s server node also appears in `kubectl get nodes` and schedules workloads (a real EKS control plane is invisible); serviceIpv4Cidr is the k3s default 10.43.0.0/16 unless you request another one, which is stored but not applied.",
    "The cluster endpoint is a published localhost port (https://127.0.0.1:<port>), not an <id>.gr7.<region>.eks.amazonaws.com host; the OIDC issuer is a Vyomi URL whose discovery document is not served."

@@ -1,0 +1,65 @@
+# Vyomi Mesh — headless. Simulator only (compute + AI); no host ports are published.
+# Access is exclusively over the user's ssh session (sshd devcontainer feature): the laptop's vyomi-tunnel connects IN. The Codespace dials nothing.
+name: vyomi-mesh
+networks:
+  vyomi-net:
+    name: vyomi-net
+services:
+  simulator:
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    pull_policy: always
+    user: "0:0"
+    networks: [vyomi-net]
+    expose: ["9000"]
+    environment:
+      CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      CLOUDLEARN_DISTRIBUTION_MODE: developer
+      VYOMI_ROLE: mesh
+      # requests arrive through the user's ssh forward with Host: simulator:9000 or the forwarded address; the mesh's DNS-rebinding guard must allow them
+      VYOMI_MESH_HOSTS: simulator
+      VYOMI_COMPUTE_BACKEND: docker
+      VYOMI_INSTANCE_NETWORK: vyomi-net
+      VYOMI_LICENSE_JWT: ${VYOMI_LICENSE_JWT:-}
+      VYOMI_INSTALL_ID: ${CODESPACE_NAME:-vyomi-mesh}
+      # Signed session token from the portal + the shared verification key: the simulator refuses everything without
+      # them, serves one cloud on Pro, and refuses all after session_end (core/mesh_session.py).
+      VYOMI_MESH_SESSION_TOKEN: ${VYOMI_MESH_SESSION_TOKEN:-}
+      VYOMI_MESH_SESSION_KEY: ${VYOMI_MESH_SESSION_KEY:-}
+      # AI pack: the model ids to ADMIT against the AI RAM bucket (core/mesh_ai.py). The mesh appliance then points
+      # VYOMI_LLM_ENDPOINT at the `llm` gateway below; WebLLM stays the Nano-only fallback.
+      VYOMI_MESH_AI_MODEL: ${VYOMI_MESH_AI_MODEL:-qwen2.5-3b}
+      VYOMI_MESH_AI_EMBED: ${VYOMI_MESH_AI_EMBED:-bge-small}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - mesh-data:/data
+  # ---- AI pack (profile "ai"; boot-mesh.sh starts it only after the simulator ADMITS the models) -------------------------
+  # Two llama.cpp servers (one model per process) behind a tiny OpenAI-compatible gateway. Models are pulled on first start
+  # by llama-server's -hf into the ai-models volume (cached across stop/resume of the same Codespace). No published ports.
+  llm-chat:
+    image: ${VYOMI_LLM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    volumes: [ai-models:/root/.cache]
+    # --jinja: native tool-call templates; -np 1: one slot on 2 cores (queue upstream); --cache-reuse: keep the shared prompt prefix
+    command: ["-hf", "${VYOMI_AI_CHAT_HF:-Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M}", "--host", "0.0.0.0", "--port", "8080",
+              "-c", "${VYOMI_AI_CHAT_CTX:-4096}", "--jinja", "-np", "1", "--cache-reuse", "256", "-t", "2", "--alias", "${VYOMI_MESH_AI_MODEL:-qwen2.5-3b}"]
+  llm-embed:
+    image: ${VYOMI_LLM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    profiles: ["ai"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    volumes: [ai-models:/root/.cache]
+    command: ["-hf", "${VYOMI_AI_EMBED_HF:-CompendiumLabs/bge-small-en-v1.5-gguf:Q8_0}", "--host", "0.0.0.0", "--port", "8080",
+              "--embeddings", "-c", "${VYOMI_AI_EMBED_CTX:-512}", "-np", "1", "-t", "1"]
+  llm:
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    profiles: ["ai"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    working_dir: /app
+    entrypoint: ["python", "-m", "core.mesh_llm_gateway"]
+    environment: { CHAT_URL: "http://llm-chat:8080", EMBED_URL: "http://llm-embed:8080", PORT: "8080" }
+volumes:
+  mesh-data:
+  ai-models:

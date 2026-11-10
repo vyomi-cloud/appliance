@@ -1,12 +1,12 @@
 # GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
 # Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
-"""The ONE AI model catalogue every AI console / API lane shows: the ten booster LLM-mesh models.
+"""The ONE AI model catalogue every AI console / API lane shows: the ten mesh LLM-mesh models.
 
 Single source for: Bedrock ListFoundationModels/GetFoundationModel, Vertex Model Garden (publisher models), Azure OpenAI /
 AI Foundry model catalogue + deployments, the Agent Spec / AgentCore / Agent Engine / Guardrails model pickers (they read the
 backend lists), on BOTH substrates (offline appliance + Nano/Pyodide: this module is pure stdlib and ships as a Nano core).
 
-Runner side (docker/booster-runner-llm/models.json) owns ollama tags / RAM / runner placement and the per-cloud alias map;
+Runner side (docker/mesh-runner-llm/models.json) owns ollama tags / RAM / runner placement and the per-cloud alias map;
 tests/conformance/test_ai_model_catalog.py fails if the ids or the alias map here drift from it. Display names / blurbs mirror
 the portal /models page.
 
@@ -34,12 +34,12 @@ MODELS = [dict(id=r[0], name=r[1], vendor=r[2], publisher=r[3], kind=r[4], size=
                pooled=r[0] == "qwen3-30b") for r in _ROWS]
 IDS = [m["id"] for m in MODELS]
 BY_ID = {m["id"]: m for m in MODELS}
-LOCAL_ID = "qwen2.5-3b"              # the only model that runs without a booster (the in-appliance small model)
+LOCAL_ID = "qwen2.5-3b"              # the only model that runs without a mesh (the in-appliance small model)
 DEFAULT_CHAT, DEFAULT_EMBED = "qwen2.5-3b", "nomic-embed-text"
-NEEDS_BOOSTER = "Needs Mesh (Pro/Max)"
+NEEDS_MESH = "Needs Mesh (Pro/Max)"
 
 # Hidden compatibility map: cloud API id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest pattern.
-# Mirrors docker/booster-runner-llm/models.json "aliases" (drift-tested). Never listed by any console or list API.
+# Mirrors docker/mesh-runner-llm/models.json "aliases" (drift-tested). Never listed by any console or list API.
 ALIASES = {
     "aws": {
         "meta.llama*": "llama3.1-8b", "mistral.*": "mistral-7b", "mistral.mistral-large*": "qwen2.5-7b", "google.gemma*": "gemma2-9b",
@@ -94,12 +94,12 @@ def cloud_id(cloud, mid):
 
 
 def availability(mid):
-    """{'state': available | needs_booster | starting | ready | stopped, 'label', 'available': bool}.
-    No booster: only the local small model is available. With the booster LLM mesh attached the pool reports each model."""
+    """{'state': available | needs_mesh | starting | ready | stopped, 'label', 'available': bool}.
+    No mesh: only the local small model is available. With the mesh LLM mesh attached the pool reports each model."""
     st = None
     try:
         try:
-            from core import booster_remote_llm as R
+            from core import mesh_remote_llm as R
         except ImportError:
             R = None
         pool = R.pool() if R is not None and R.active() else None
@@ -115,7 +115,7 @@ def availability(mid):
         return {"state": "stopped", "label": "Stopped", "available": False}
     if mid == LOCAL_ID:
         return {"state": "available", "label": "Available", "available": True}
-    return {"state": "needs_booster", "label": NEEDS_BOOSTER, "available": False}
+    return {"state": "needs_mesh", "label": NEEDS_MESH, "available": False}
 
 
 def listing(cloud):

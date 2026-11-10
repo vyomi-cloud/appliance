@@ -12,7 +12,7 @@ from core import ai_model_catalog as C  # noqa: E402
 
 def doc():
     return {"_comment": "GENERATED from core/ai_model_catalog.py by scripts/gen_ai_model_catalog_json.py - do not edit.",
-            "default_chat": C.DEFAULT_CHAT, "default_embed": C.DEFAULT_EMBED, "local_id": C.LOCAL_ID, "needs_booster": C.NEEDS_BOOSTER,
+            "default_chat": C.DEFAULT_CHAT, "default_embed": C.DEFAULT_EMBED, "local_id": C.LOCAL_ID, "needs_mesh": C.NEEDS_MESH,
             "models": [{k: m[k] for k in ("id", "name", "vendor", "publisher", "kind", "size", "role", "blurb", "tag", "pooled")} for m in C.MODELS]}
 
 

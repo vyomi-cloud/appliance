@@ -22,7 +22,7 @@ SANDBOX     vyomi-cloud/sandbox (Codespace image): main only, by PR; the applian
 | Branch | Repo | Role | Takes |
 |---|---|---|---|
 | `v4/<topic>` | appliance | one per session and topic, from a fresh trunk | any change; lives at most 3 days, rebased daily |
-| `v4-on-main` | appliance | the trunk | shared cores, consoles, registry, headless code (k3s runtime, booster image, tunnel and relay), the `wasm/` Nano bundle, tests, docs |
+| `v4-on-main` | appliance | the trunk | shared cores, consoles, registry, headless code (k3s runtime, mesh image, tunnel and relay), the `wasm/` Nano bundle, tests, docs |
 | `release/v4.0.0` | appliance | the release cut | version bump, changelog, release checks, fixes only. The branch already exists on origin and holds commits the trunk lacks: reconcile it with the trunk before the freeze instead of cutting a new one. Nobody pushes to it outside this flow. |
 | `main` | appliance | go-live | merges from `release/v4.0.0` on the owner's go; the owner tags `v4.0.0` (the tag builds the images); then `main` merges back into the trunk so `VERSION` matches |
 | `portal/<topic>` | portal | one per session and topic | portal-only code: pages, endpoints, Mesh login, keep-alive, VM-name reservation, key injection, runner dispatch, tier-to-licence mapping |
@@ -51,13 +51,13 @@ SANDBOX     vyomi-cloud/sandbox (Codespace image): main only, by PR; the applian
 
 ### 2.2 Headless gate (`headless-smoke`)
 
-A CI job, and the same script locally (`scripts/v4-headless-smoke.sh`), that builds the booster image from the trunk and runs the real
+A CI job, and the same script locally (`scripts/v4-headless-smoke.sh`), that builds the mesh image from the trunk and runs the real
 Docker stack: core conformance, the live k3s tests (`VYOMI_LIVE_K3S=1 tests/conformance/test_k3s_live.py`,
 `test_k3s_platform_live.py`, `test_aws_eks_live.py`) and the relay tests. It needs a quiet machine: the shared Docker VM is
 saturated by parallel sessions and live k3s tests then time out.
 
-- **Every merge to the trunk (fast preflight):** relay tests (`test-booster-link`, `test-booster-shell`,
-  `test-booster-session-derived`, `test-mesh-ssh`), core conformance, `vendor_to_portal.py` (check-only; the script has no `--check` flag, `--apply` copies), and the substrate tests for the
+- **Every merge to the trunk (fast preflight):** relay tests (`test-mesh-link`, `test-mesh-shell`,
+  `test-mesh-session-derived`, `test-mesh-ssh`), core conformance, `vendor_to_portal.py` (check-only; the script has no `--check` flag, `--apply` copies), and the substrate tests for the
   paths touched.
 - **Full `headless-smoke` (image + live k3s):** nightly, before the release cut, and before go-live. It must be green for both.
 - The live k3s tests live on branches not yet ported to the trunk, so the full gate exists only once those land.
@@ -110,7 +110,7 @@ saturated by parallel sessions and live k3s tests then time out.
 |---|---|---|
 | Several sessions edit one worktree | `portal-v4nano` had 18 uncommitted files from at least three sessions; changes had to be staged hunk by hunk | One worktree per session and topic. A shared checkout (the one serving `:8099`) is run-only and never edited. |
 | Stale base | A branch cut from a local `release/v4.0.0` that was 43 commits behind origin was 48 behind the trunk; 3 relay files conflicted | Branch from fresh `origin/v4-on-main` (rule 1), keep branches short-lived, rebase daily, merge to the trunk often. |
-| Same file in two places | Portal `vyomi-appbar.js` / `booster-link.js` / `clouds.html` differ from `wasm/` by ~209 / ~206 / ~974 lines; `vendor_to_portal.py --apply` would overwrite portal-side edits | Every file has one owner (section 5). Nano files are edited only under `wasm/` and reach the portal through the vendor script. Back-port portal-ahead edits to the trunk before the next `--apply`. |
+| Same file in two places | Portal `vyomi-appbar.js` / `mesh-link.js` / `clouds.html` differ from `wasm/` by ~209 / ~206 / ~974 lines; `vendor_to_portal.py --apply` would overwrite portal-side edits | Every file has one owner (section 5). Nano files are edited only under `wasm/` and reach the portal through the vendor script. Back-port portal-ahead edits to the trunk before the next `--apply`. |
 | Two sessions in one area, unaware | Relay stream framework, host/k3s reserved targets | Claims file (section 5.2). |
 | Parallel pushes to the trunk | Cherry-picking onto a trunk that moved under the branch | One integrator merges to the trunk (section 5.3); others push topic branches. |
 
@@ -129,7 +129,7 @@ finally by GitHub, which no session can bypass.
 | 3 | **Repo `CLAUDE.md`** (built 2026-11-09) at the root of both repos (on `v4-on-main` and `v4-nano-portal`) stating the flow, "branch from fresh `origin/v4-on-main`", the claims file, no `git add -A`, no bare `git stash` | Every session in any worktree of the repo loads it | Builder session |
 | 4 | **User-level `~/.claude/CLAUDE.md`** with a short pointer to this doc, for sessions started in other folders | Soft | Builder session |
 | 5 | **Claude Code hooks** (built: `.claude/settings.json` + `scripts/claude-hooks/v4-guard.py`) in the repo's `.claude/settings.json`: block `git push origin main`, force-push, tag pushes, `git add -A`, bare `git stash` | Automatic for Claude sessions only | Builder session |
-| 6 | **Committed git hooks** (`.githooks/pre-push`, enabled per clone by `scripts/v4-install-hooks.sh`): topic branches are NEVER blocked (a stale base only prints a warning, so work is never lost); `main`/`master` and tags (except `archive/*`) are refused; `v4-on-main`, `release/v4.0.0` and `v4-nano-portal` are refused unless `VYOMI_INTEGRATOR=1`, and then must fast-forward and (with `WS_PKG` set) pass the relay tests (`test-booster-link`, `test-booster-shell`, `test-booster-session-derived`, `test-mesh-ssh`) | Covers humans too; each clone opts in | Built (2026-11-09) |
+| 6 | **Committed git hooks** (`.githooks/pre-push`, enabled per clone by `scripts/v4-install-hooks.sh`): topic branches are NEVER blocked (a stale base only prints a warning, so work is never lost); `main`/`master` and tags (except `archive/*`) are refused; `v4-on-main`, `release/v4.0.0` and `v4-nano-portal` are refused unless `VYOMI_INTEGRATOR=1`, and then must fast-forward and (with `WS_PKG` set) pass the relay tests (`test-mesh-link`, `test-mesh-shell`, `test-mesh-session-derived`, `test-mesh-ssh`) | Covers humans too; each clone opts in | Built (2026-11-09) |
 | 7 | **`scripts/v4-session-start.sh <topic>`** (built): `git fetch`, creates `../appliance-<topic>` off `origin/v4-on-main` (or the portal equivalent off `origin/v4-nano-portal`), appends the claim | Convenience; makes the right thing the easy thing | Builder session |
 | 8 | **CI drift check**: `vendor_to_portal.py` (check-only; the script has no `--check` flag, `--apply` copies) fails the build when the portal copy differs from `wasm/` | Hard for Nano drift | Builder session |
 
@@ -151,7 +151,7 @@ runs the preflight (6), then runs the vendor step into `v4-nano-portal`. Two ses
 | Files | Edited only in | Reaches |
 |---|---|---|
 | `core/*.py`, `consoles/src/**`, `core/capabilities/**`, Nano core lists | `v4-on-main` | `release/v4.0.0` then `main`; portal via build + vendor |
-| `wasm/**` Nano bundle (incl. `vm/`, `vyomi-appbar.js`, `booster-link.js`, `clouds.html`, relay/Worker, `egress.mjs`) | `v4-on-main` | portal `app/nano/**` via `vendor_to_portal.py --apply` |
+| `wasm/**` Nano bundle (incl. `vm/`, `vyomi-appbar.js`, `mesh-link.js`, `clouds.html`, relay/Worker, `egress.mjs`) | `v4-on-main` | portal `app/nano/**` via `vendor_to_portal.py --apply` |
 | `packaging/tunnel/**`, `wasm/relay/mesh-cli.mjs`, relay hub/agent | `v4-on-main` | npm / Homebrew at release |
 | Portal pages and endpoints (`app/*.py`, `app/templates/**`: Mesh login, keep-alive, OAuth setup, tier mapping) | `v4-nano-portal` | portal `main` at go-live |
 | Codespace image (devcontainer, sshd feature, compose) | **authored in the appliance `codespace/.devcontainer/` on `v4-on-main`**; published to `vyomi-cloud/sandbox` `main` by PR via `codespace/publish.sh` | new Codespaces only |
@@ -181,8 +181,8 @@ AKS / GKE / EKS are Pro / Max / Enterprise only (`core/k8s_tier_gate.py`). Nano 
 
 ### 5.6 Hand-off log (2026-11-09)
 
-- **P1 Nano back-port: done and merged to the trunk** (`v4/p1-nano-backport`: `wasm/vyomi-appbar.js`, `wasm/booster-link.js`; details and defaults in `P1-NANO-BACKPORT.md`). Claim row removed.
-- **Owner defaults accepted:** `booster-widget.js` stays portal-only; `APPLIANCE_SYNC.json` is the vendor marker (no `.vendored-from`).
+- **P1 Nano back-port: done and merged to the trunk** (`v4/p1-nano-backport`: `wasm/vyomi-appbar.js`, `wasm/mesh-link.js`; details and defaults in `P1-NANO-BACKPORT.md`). Claim row removed.
+- **Owner defaults accepted:** `mesh-widget.js` stays portal-only; `APPLIANCE_SYNC.json` is the vendor marker (no `.vendored-from`).
 - **Open (integrator):** scratch-portal browser check (step 6 of `P1-NANO-BACKPORT.md`), then the first vendor PR on `portal/vendor-<date>`, then the CI rule that fails portal PRs touching `app/nano/**` other than vendor PRs.
 - **Open (owner):** GitHub branch protection + `v*` tag rule; name the integrator.
 
@@ -230,7 +230,7 @@ As of 2026-11-09. All branches are pushed under their own names; none of the app
 
 | Id | Branch / area | Contents | Status |
 |---|---|---|---|
-| P1 | Nano files edited in the portal: `app/nano/vyomi-appbar.js`, `booster-link.js`, `clouds.html` (and the Mesh widget) | logout, avatar, dismissible notices, Mesh widget; they differ from `wasm/` by roughly 200, 200 and 1000 lines | **Unprotected.** `vendor_to_portal.py --apply` would overwrite them. Before the first vendor PR: run `--check`, classify each drifted file (mine / another session's / unclear), back-port the portal-ahead edits to the trunk, then enable the `app/nano/**` CI rule. |
+| P1 | Nano files edited in the portal: `app/nano/vyomi-appbar.js`, `mesh-link.js`, `clouds.html` (and the Mesh widget) | logout, avatar, dismissible notices, Mesh widget; they differ from `wasm/` by roughly 200, 200 and 1000 lines | **Unprotected.** `vendor_to_portal.py --apply` would overwrite them. Before the first vendor PR: run `--check`, classify each drifted file (mine / another session's / unclear), back-port the portal-ahead edits to the trunk, then enable the `app/nano/**` CI rule. |
 | P2 | `portal/wip-snapshot-20261109` | snapshot of the shared `portal-v4nano` working tree (Sandboxes grid, Git runners, Installation restyle, Mesh codespaces grid, plus other sessions' uncommitted edits) | **not for merge**; split per topic into `portal/<topic>` branches, then delete |
 | P3 | `v4-nano-portal` | Mesh rename and GitHub-App routes, SSH keep-alive probe, OAuth setup page, browser-VM egress sync | pushed; portal `main` untouched |
 

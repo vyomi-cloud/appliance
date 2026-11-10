@@ -38,7 +38,7 @@
   ]
  },
  "azure.functionapp.function.invoke": {
-  "booster": true,
+  "mesh": true,
   "title": "Function Test/Run (real sandboxed execution)",
   "level": {
    "nano": "limited",

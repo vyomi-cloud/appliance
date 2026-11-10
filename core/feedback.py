@@ -1,4 +1,4 @@
-"""POST /api/feedback — the console's "Share feedback" box on the offline appliance / booster.
+"""POST /api/feedback — the console's "Share feedback" box on the offline appliance / mesh.
 
 Notes are appended to <state dir>/feedback.jsonl (one JSON per line); nothing leaves the machine from here. Size-limited, rate-limited,
 and only the fields the widget sends are kept."""

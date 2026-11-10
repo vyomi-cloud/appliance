@@ -5,7 +5,7 @@ export const stat = (s) => (
 );
 import { DEFAULT_CHAT, DEFAULT_EMBED, availText } from "../../../common/aiModels.js";
 
-// The ten booster-mesh models (core/ai_model_catalog.py); Bedrock lists them as vyomi.<id>.
+// The ten mesh-llm models (core/ai_model_catalog.py); Bedrock lists them as vyomi.<id>.
 export const NOVA = `vyomi.${DEFAULT_CHAT}`;
 export const modelArn = (id) => `arn:aws:bedrock:us-east-1::foundation-model/${id}`;
 export const TITAN = modelArn(`vyomi.${DEFAULT_EMBED}`);

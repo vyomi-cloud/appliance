@@ -24,16 +24,16 @@ from pathlib import Path
 DEFAULT_INSTANCE_IMAGE = os.environ.get("VYOMI_INSTANCE_IMAGE", "vyomi/instance:ubuntu-24.04")
 
 
-BOOSTER_LANG_IMAGE_DEFAULT = "vyomi/booster-lang:latest"
+MESH_LANG_IMAGE_DEFAULT = "vyomi/mesh-lang:latest"
 
 
-def booster_toolchain_image(meta: dict | None) -> str | None:
-    """Booster-only per-instance toolchain selection (docs/architecture/v4.0/BOOSTER-LANGUAGES.md, option 1).
+def mesh_toolchain_image(meta: dict | None) -> str | None:
+    """Mesh-only per-instance toolchain selection (docs/architecture/v4.0/MESH-LANGUAGES.md, option 1).
 
-    Returns the all-languages image (env VYOMI_BOOSTER_LANG_IMAGE, default vyomi/booster-lang:latest) when
-    VYOMI_ROLE=booster AND the instance asks for it via `toolchain=all` (instance field, label, or tag).
-    Otherwise None -> caller keeps the normal image, so non-booster behaviour is unchanged."""
-    if (os.environ.get("VYOMI_ROLE") or "").strip().lower() != "booster" or not isinstance(meta, dict):
+    Returns the all-languages image (env VYOMI_MESH_LANG_IMAGE, default vyomi/mesh-lang:latest) when
+    VYOMI_ROLE=mesh AND the instance asks for it via `toolchain=all` (instance field, label, or tag).
+    Otherwise None -> caller keeps the normal image, so non-mesh behaviour is unchanged."""
+    if (os.environ.get("VYOMI_ROLE") or "").strip().lower() != "mesh" or not isinstance(meta, dict):
         return None
     want = meta.get("toolchain")
     for bag in (meta.get("labels"), meta.get("tags")):
@@ -46,7 +46,7 @@ def booster_toolchain_image(meta: dict | None) -> str | None:
                          if isinstance(t, dict) and (t.get("Key") or t.get("key")) == "toolchain"), None)
     if str(want or "").strip().lower() != "all":
         return None
-    return os.environ.get("VYOMI_BOOSTER_LANG_IMAGE") or BOOSTER_LANG_IMAGE_DEFAULT
+    return os.environ.get("VYOMI_MESH_LANG_IMAGE") or MESH_LANG_IMAGE_DEFAULT
 
 
 @dataclass

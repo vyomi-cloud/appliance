@@ -305,7 +305,7 @@
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the booster (Pro/Max).`,
+              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the mesh (Pro/Max).`,
       };
     }
     return http(400, { detail: "unknown op " + op });
@@ -350,24 +350,24 @@
     const userHint = { aws: "ec2-user (Amazon Linux AMIs) or ubuntu (Ubuntu AMIs)", gcp: "the user from your ssh-keys metadata (default gcpuser)", azure: "the VM's adminUsername (default azureuser)" }[cloud];
     async function paint() {
       wrap.innerHTML = "";
-      // Booster first: with a running Codespace booster, compute lives there as Docker VMs and "Open shell" must reach THAT VM, never the in-browser one.
-      const VB = window.VyomiBooster;
+      // Mesh first: with a running Codespace mesh, compute lives there as Docker VMs and "Open shell" must reach THAT VM, never the in-browser one.
+      const VB = window.VyomiMesh;
       if (VB && VB.sessionLive && VB.sessionLive() && !readReg()[vmId(cloud, ref)]) {
         const t = await VB.shellTarget(cloud, ref);
         if (!wrap.isConnected) return;
-        if (t.ok) { wrap.append(boosterShellBox(cloud, ref, t.container)); return; }
+        if (t.ok) { wrap.append(meshShellBox(cloud, ref, t.container)); return; }
         if (t.down || t.code === "InstanceNotRunning") {
           const down = !!t.down;
-          const box = h("div", { style: S.box + ";" + S.warn, "data-nano-booster-msg": down ? "down" : "stopped" },
-            h("div", { style: S.title }, down ? "Codespace booster unreachable" : "VM is not running"),
-            h("div", { style: S.sub }, down ? "Your shell opens in the Docker VM inside your Codespace, which cannot be reached right now. The in-browser VM is not used for booster instances. Retrying automatically."
+          const box = h("div", { style: S.box + ";" + S.warn, "data-nano-mesh-msg": down ? "down" : "stopped" },
+            h("div", { style: S.title }, down ? "Codespace mesh unreachable" : "VM is not running"),
+            h("div", { style: S.sub }, down ? "Your shell opens in the Docker VM inside your Codespace, which cannot be reached right now. The in-browser VM is not used for mesh instances. Retrying automatically."
                                             : "Start the instance, then open the shell again (it opens inside your Codespace VM)."),
             h("button", { style: S.btn, onclick: paint }, "Retry now"));
           wrap.append(box);
           setTimeout(() => { if (wrap.isConnected && box.isConnected) paint(); }, 5000);
           return;
         }
-        // not on the booster (InstanceNotFound / ContainerNotAllowed / no shell support): fall through to the in-browser VM
+        // not on the mesh (InstanceNotFound / ContainerNotAllowed / no shell support): fall through to the in-browser VM
       }
       wrap.append(h("div", { style: S.box },
         h("div", { style: S.title }, "In-browser VM"),
@@ -406,7 +406,7 @@
       // Browser shell: a real terminal (xterm.js) on the VM's serial console (ttyS0 -> /bin/sh). No tunnel needed.
       wrap.append(shellBox(cloud, ref));
       wrap.append(h("div", { style: S.sub }, "Limits: 32-bit x86 only; RAM is the VM's disk (Stop saves it, Terminate discards it); " +
-        "a background tab runs the VM several times slower; toolchain is git + Python (pip, apk) — package downloads need vyomi-tunnel running (allow-listed hosts only). Other languages run on the booster."));
+        "a background tab runs the VM several times slower; toolchain is git + Python (pip, apk) — package downloads need vyomi-tunnel running (allow-listed hosts only). Other languages run on the mesh."));
     }
     paint();
     return wrap;
@@ -462,15 +462,15 @@
     return box;
   }
 
-  // ── Codespace shell: xterm.js attached to a PTY in the booster's Docker VM (stream path via the relay; wasm/booster-link.js openShell) ──
+  // ── Codespace shell: xterm.js attached to a PTY in the mesh's Docker VM (stream path via the relay; wasm/mesh-link.js openShell) ──
   const bshells = new Map();   // vm id -> {conn, term, el}: survives console re-renders like the in-browser terminals
-  function boosterShellBox(cloud, ref, container) {
+  function meshShellBox(cloud, ref, container) {
     const id = vmId(cloud, ref);
-    const status = h("div", { style: S.sub + ";font-weight:600", "data-nano-booster-status": "1" }, "Connecting to your Codespace VM " + container + "...");
-    const holder = h("div", { "data-nano-shell": "1", "data-nano-shell-kind": "booster", style: "background:#0c0c0c;border-radius:6px;padding:6px;min-height:120px" });
-    const reBtn = h("button", { style: S.btn + ";display:none;margin-top:6px", "data-nano-booster-reconnect": "1" }, "Reconnect");
+    const status = h("div", { style: S.sub + ";font-weight:600", "data-nano-mesh-status": "1" }, "Connecting to your Codespace VM " + container + "...");
+    const holder = h("div", { "data-nano-shell": "1", "data-nano-shell-kind": "mesh", style: "background:#0c0c0c;border-radius:6px;padding:6px;min-height:120px" });
+    const reBtn = h("button", { style: S.btn + ";display:none;margin-top:6px", "data-nano-mesh-reconnect": "1" }, "Reconnect");
     const fsBtn = h("button", { style: S.btn + ";float:right", title: "Full screen (Esc to exit)", "data-nano-shell-fs": "1" }, "Full screen");
-    const box = h("div", { style: S.box + ";" + S.ok, "data-nano-booster-shell": container },
+    const box = h("div", { style: S.box + ";" + S.ok, "data-nano-mesh-shell": container },
       h("div", { style: S.title }, "Shell", fsBtn),
       status,
       h("div", { style: S.sub }, "A real terminal inside the Docker VM on your Codespace (" + { aws: "EC2 instance ", gcp: "Compute Engine instance ", azure: "Azure VM " }[cloud] + ref + ", container " + container + "). Not the in-browser VM. Click inside and type."),
@@ -487,14 +487,14 @@
     const onFs = () => { if (!holder.isConnected) { document.removeEventListener("fullscreenchange", onFs); return; } setTimeout(fit, 80); };
     document.addEventListener("fullscreenchange", onFs);
     const setStatus = (text, ok) => { status.textContent = text; status.style.color = ok === false ? "#d13212" : ok ? "#1d8102" : ""; };
-    const MSG = { BoosterDown: "The Codespace booster is not reachable. Your VM keeps running there; reconnect when the booster is back.",
-                  BoosterSessionExpired: "The booster session has ended, so the shell was closed.", IdleTimeout: "Shell closed after being idle.",
-                  InstanceNotRunning: "The VM is not running. Start it, then reconnect.", BoosterLinkClosed: "The booster link dropped. Reconnect when it is back." };
+    const MSG = { MeshDown: "The Codespace mesh is not reachable. Your VM keeps running there; reconnect when the mesh is back.",
+                  MeshSessionExpired: "The mesh session has ended, so the shell was closed.", IdleTimeout: "Shell closed after being idle.",
+                  InstanceNotRunning: "The VM is not running. Start it, then reconnect.", MeshLinkClosed: "The mesh link dropped. Reconnect when it is back." };
     function connect(t) {
       t.term.write("\r\n\x1b[90m[connecting to " + container + " in your Codespace...]\x1b[0m\r\n");
       setStatus("Connecting to your Codespace VM " + container + "...");
       reBtn.style.display = "none";
-      t.conn = window.VyomiBooster.openShell(cloud, ref, {
+      t.conn = window.VyomiMesh.openShell(cloud, ref, {
         cols: t.term.cols, rows: t.term.rows,
         onOpen: (c) => setStatus("Connected to your Codespace VM " + (c || container), true),
         onData: (u8) => t.term.write(u8),
@@ -563,8 +563,8 @@
   // rewritten to "stopped" (VM compute off / VM not running: start it manually from Connect) or "pending" (booting).
   // The SDK/CLI/service-worker paths never go through this fetch, so their instance states are unchanged.
   const vmPower = (cloud, ref) => {
-    // A running Codespace booster owns compute: its instances are Docker VMs there, not in-browser VMs, so the store's state stands.
-    if (window.VyomiBooster && window.VyomiBooster.sessionLive && window.VyomiBooster.sessionLive() && !readReg()[vmId(cloud, ref)]) return "running";
+    // A running Codespace mesh owns compute: its instances are Docker VMs there, not in-browser VMs, so the store's state stands.
+    if (window.VyomiMesh && window.VyomiMesh.sessionLive && window.VyomiMesh.sessionLive() && !readReg()[vmId(cloud, ref)]) return "running";
     if (!enabled()) return "stopped";
     const s = (handles.get(vmId(cloud, ref)) || {}).status;
     const st = s && s.state;

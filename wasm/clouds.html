@@ -5,7 +5,7 @@
   <script>if(/[?&]pick=1/.test(location.search))document.documentElement.classList.add("vy-pickview");</script>
   <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
-  <script src="booster-link.js"></script>
+  <script src="mesh-link.js"></script>
   <script src="nano-connect.js"></script>
   <script src="nano-docs.js?v=icons2"></script>
   <script>
@@ -3555,7 +3555,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (meta) { const dot = meta.querySelector('.dot'); if (dot && dot.nextSibling) dot.nextSibling.textContent = n + ' resource' + (n === 1 ? '' : 's'); }
       });
     }
-    window.addEventListener('vyomi-booster-state', () => { if (window.loadSpaces) loadSpaces(); });
+    window.addEventListener('vyomi-mesh-state', () => { if (window.loadSpaces) loadSpaces(); });
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
       if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }  // no leaked timers on re-render
@@ -3667,7 +3667,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
               </div>
               <div class="space-meta">
                 ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
-                ${ window.VyomiBooster && (VyomiBooster.list().length || s.home) ? VyomiBooster.badgeHtml(s) : '' }
+                ${ window.VyomiMesh && (VyomiMesh.list().length || s.home) ? VyomiMesh.badgeHtml(s) : '' }
               </div>
               <div class="space-savings" title="What you'd pay ${ provider.toUpperCase() } for this space's live resources — saved by running in your browser ($0)">
                 <div class="space-savings-top">
@@ -3714,9 +3714,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       return _tierPolicy;
     }
 
-    // Pro = ONE cloud: the portal account record (VyomiBooster) is authoritative when present; else the licence policy below.
+    // Pro = ONE cloud: the portal account record (VyomiMesh) is authoritative when present; else the licence policy below.
     async function _cloudGate(provider, policy) {
-      const B = window.VyomiBooster;
+      const B = window.VyomiMesh;
       if (B && B.loadAccount && !B.account()) { try { await B.loadAccount(); } catch (_) {} }
       if (B && B.cloudAllowed && !B.cloudAllowed(provider)) return false;
       if (!_canAccessProvider(provider, policy)) return false;
@@ -3739,12 +3739,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     function openClModal(provider, policy) {
       const tier   = (policy && policy.active_tier) || 'free';
       const ap     = (policy && policy.active_policy) || {};
-      const primary= ((window.VyomiBooster && VyomiBooster.planCloud && VyomiBooster.planCloud()) || (policy && policy.primary_cloud) || ap.primary_cloud || '—');
+      const primary= ((window.VyomiMesh && VyomiMesh.planCloud && VyomiMesh.planCloud()) || (policy && policy.primary_cloud) || ap.primary_cloud || '—');
       const label  = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
       document.getElementById('cl-modal-sub').textContent =
         `Your ${tier.charAt(0).toUpperCase()+tier.slice(1)} plan doesn't include ${label[provider]||provider}.`;
       let ctx = `<div>Active plan: <strong>${tier.charAt(0).toUpperCase()+tier.slice(1)}</strong></div>`;
-      if ((ap.providers === 'primary_cloud_only' || (window.VyomiBooster && VyomiBooster.planCloud && VyomiBooster.planCloud())) && primary && primary !== '—') {
+      if ((ap.providers === 'primary_cloud_only' || (window.VyomiMesh && VyomiMesh.planCloud && VyomiMesh.planCloud())) && primary && primary !== '—') {
         ctx += `<div style="margin-top:4px">Primary cloud: <strong>${label[primary]||primary}</strong></div>`;
       }
       ctx += `<div style="margin-top:8px">Upgrade to <strong>Max</strong> for all 3 clouds simultaneously.</div>`;
@@ -3788,7 +3788,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         return;
       }
       try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', spaceId); } catch (_) {}
-      try { const sp = (window._vySpaces || {})[spaceId]; if (sp && window.VyomiBooster) VyomiBooster.setActive(sp); } catch (_) {}
+      try { const sp = (window._vySpaces || {})[spaceId]; if (sp && window.VyomiMesh) VyomiMesh.setActive(sp); } catch (_) {}
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }

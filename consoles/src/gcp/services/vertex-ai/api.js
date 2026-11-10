@@ -3,7 +3,7 @@ import { restJson } from "../../../common/wire.js";
 import { getProject } from "../../project.js";
 
 export const LOCATION = "us-central1";
-// the ten booster-mesh models (core/ai_model_catalog.py, shared catalogue); the publisher segment is the model's own vendor
+// the ten mesh-llm models (core/ai_model_catalog.py, shared catalogue); the publisher segment is the model's own vendor
 import { AI_CHAT, AI_EMBED, byId } from "../../../common/aiModels.js";
 export const GEMINI = AI_CHAT.map((m) => m.id);     // chat model ids (name kept for the Studio imports)
 export const EMBED = AI_EMBED.map((m) => m.id);

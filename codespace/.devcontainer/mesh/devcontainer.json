@@ -1,0 +1,17 @@
+{
+  "name": "Vyomi Mesh (headless, 2-core)",
+  "//": "Pro/Max mesh pack: compute + AI only, NO UI, NO forwarded port. Nano is the UI; the mesh dials OUT to the relay with the signed session token. 2-core so the 40h/60h allowance fits GitHub's 120 core-hour free quota (design: docs/architecture/v4.0/MESH-CODESPACES-GITHUB-APP.md).",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "//sshd": "The sshd feature (port 2222) makes `gh codespace ssh` work and gives the Mesh agent reserved host/codespace target (VYOMI_HOST_SSH_ADDR) an sshd to reach. Keep this comment at top level: a key inside `features` breaks Codespace creation.",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": true, "version": "latest" },
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+  "postCreateCommand": "bash .devcontainer/mesh/boot-mesh.sh up",
+  "postStartCommand": "bash .devcontainer/mesh/boot-mesh.sh resume",
+  "capAdd": ["NET_ADMIN"],
+  "//capAdd": "LLM mesh (docs/architecture/v4.0/MESH-LLM-MESH.md): the mesh joins the WireGuard star with mesh-up.sh (kernel wg, else wireguard-go). docker-in-docker already runs the container privileged (so /dev/net/tun exists); NET_ADMIN is declared explicitly so it still works if that feature changes. Nothing is published.",
+  "containerEnv": { "VYOMI_ROLE": "mesh" },
+  "remoteEnv": { "VYOMI_MESH_MAX_SESSION": "8h", "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud", "VYOMI_BILLING": "free_personal_quota" },
+  "hostRequirements": { "cpus": 2, "memory": "8gb", "storage": "32gb" }
+}

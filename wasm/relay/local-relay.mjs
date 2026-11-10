@@ -30,10 +30,10 @@
  *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
 import { egress } from "./egress.mjs";
-import { createHub } from "./booster-hub.mjs";
+import { createHub } from "./mesh-hub.mjs";
 import { createSshHub, createSshTransport } from "./mesh-ssh.mjs";
 import { createRunnerLlmHub } from "./runner-llm-hub.mjs";
-import { createMeshHub } from "./booster-mesh.mjs";
+import { createMeshHub } from "./mesh-llm.mjs";
 import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
@@ -69,13 +69,13 @@ const pending = new Map();     // id -> {resolve}
 // tab answers consistently — no need to force-close others (which would war with
 // their auto-reconnect).
 const tabs = new Set();        // live registrant sockets, insertion-ordered
-// Booster link (outbound-dialed booster <-> token-paired clients). Inert unless VYOMI_BOOSTER_SESSION_KEY is set.
+// Mesh link (outbound-dialed mesh <-> token-paired clients). Inert unless VYOMI_MESH_SESSION_KEY is set.
 // VYOMI_MESH_CODESPACE=<name>: the link runs on THIS machine over the user's own `gh codespace ssh` session (mesh-ssh.mjs); the Codespace dials nothing.
 const hub = process.env.VYOMI_MESH_CODESPACE
   ? createSshHub({ WebSocketServer, WebSocket, transport: createSshTransport({ codespace: process.env.VYOMI_MESH_CODESPACE, log: (m) => console.log("[relay] " + m) }), log: (m) => console.log("[relay] " + m) })
   : createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
-// Remote-LLM plane (spike, inert unless VYOMI_BOOSTER_SESSION_KEY is set): a GitHub-Actions runner dials OUT to /llm-runner;
-// the booster reaches it with plain HTTP under /llm/*.
+// Remote-LLM plane (spike, inert unless VYOMI_MESH_SESSION_KEY is set): a GitHub-Actions runner dials OUT to /llm-runner;
+// the mesh reaches it with plain HTTP under /llm/*.
 const llmHub = createRunnerLlmHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
 // LLM mesh (WireGuard star over WebSocket): only active when VYOMI_MESH=1 (the hub needs NET_ADMIN + wireguard-tools).
 const meshHub = process.env.VYOMI_MESH === "1" ? createMeshHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) }) : null;
@@ -115,9 +115,9 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "amqp", ...(hub.enabled() ? ["booster-link", "booster-shell"] : [])],
-      booster_sessions: hub.enabled() ? hub.linked().length : undefined,
-      booster_streams: hub.enabled() ? hub.streams() : undefined,
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "amqp", ...(hub.enabled() ? ["mesh-link", "mesh-shell"] : [])],
+      mesh_sessions: hub.enabled() ? hub.linked().length : undefined,
+      mesh_streams: hub.enabled() ? hub.streams() : undefined,
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
       dbs: [...vmHosts.values()].filter((v) => v.db).map((v) => ({ db: v.vm, engine: v.engine, host_port: v.hostPort })),
     }));
@@ -144,7 +144,7 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     if (meshHub && meshHub.http(req, res)) return;               // LLM mesh peer table (/mesh/_peers)
     if (llmHub.http(req, res, Buffer.concat(chunks))) return;   // remote-LLM plane (/llm/*)
-    if (hub.http(req, res, Buffer.concat(chunks))) return;     // booster plane (carries X-Vyomi-Session-Token)
+    if (hub.http(req, res, Buffer.concat(chunks))) return;     // mesh plane (carries X-Vyomi-Session-Token)
     const tab = pickTab();
     if (!tab) {
       cors(res, 503, { "content-type": "text/plain" });
@@ -191,7 +191,7 @@ const wss = new WebSocketServer({ noServer: true });
 const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
-  if (p === "/booster") { hub.upgrade(req, socket, head); return; }
+  if (p === "/mesh") { hub.upgrade(req, socket, head); return; }
   if (p === "/shell") { hub.shellUpgrade(req, socket, head); return; }
   if (p === "/connect") { hub.connectUpgrade(req, socket, head); return; }
   if (p === "/mesh" && meshHub) { meshHub.upgrade(req, socket, head); return; }

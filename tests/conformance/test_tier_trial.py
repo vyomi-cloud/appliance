@@ -1,4 +1,4 @@
-"""Tier + booster trial + pills plumbing (in-process).
+"""Tier + mesh trial + pills plumbing (in-process).
 
 Run:  PYTHONPATH=. python3 tests/conformance/test_tier_trial.py   (non-zero exit on failure)
 """
@@ -18,7 +18,7 @@ from core import tier_policy as tp  # noqa: E402
 DAY = 86400
 T0 = 1_800_000_000.0
 EXP = T0 + 14 * DAY
-CLAIMS = {"tier": "free", "trial": True, "booster_trial_expires": EXP}
+CLAIMS = {"tier": "free", "trial": True, "mesh_trial_expires": EXP}
 FAILS: list[str] = []
 
 
@@ -57,36 +57,36 @@ def main() -> int:
         status(EXP + DAY, d)
         s = status(T0, d)
         check("rollback after expiry stays locked", s["state"] == "locked", str(s))
-        check("high-water record persisted", (Path(d) / "booster_clock.json").exists())
-        s = status(T0, d, claims={"tier": "pro", "booster_trial_expires": EXP})
+        check("high-water record persisted", (Path(d) / "mesh_clock.json").exists())
+        s = status(T0, d, claims={"tier": "pro", "mesh_trial_expires": EXP})
         check("paid entitlement overrides lock", s["state"] == "paid" and not s["locked"], str(s))
         s = status(T0, d, claims={})
         check("no claim -> none", s["state"] == "none", str(s))
-        out = lr.booster_status_summary({"license_claims": CLAIMS}, now=T0, data_dir=d)
-        check("booster_status_summary works", out["state"] == "locked", str(out))
-        check("claims payload carries booster_trial_expires",
-              lr.claims_to_tier_payload({"tier": "free", "booster_trial_expires": "x"})["booster_trial_expires"] == "x")
+        out = lr.mesh_status_summary({"license_claims": CLAIMS}, now=T0, data_dir=d)
+        check("mesh_status_summary works", out["state"] == "locked", str(out))
+        check("claims payload carries mesh_trial_expires",
+              lr.claims_to_tier_payload({"tier": "free", "mesh_trial_expires": "x"})["mesh_trial_expires"] == "x")
 
     # pills
     check("pill Pro", tp.pill_for({"tier": "pro"}) == "Pro")
     check("pill Max", tp.pill_for({"tier": "max"}) == "Max")
-    check("pill Booster wins", tp.pill_for({"tier": "pro", "booster": True}) == "Booster")
+    check("pill Mesh wins", tp.pill_for({"tier": "pro", "mesh": True}) == "Mesh")
     check("pill none (free/unset)", tp.pill_for({}) is None and tp.pill_for({"tier": "free"}) is None and tp.pill_for(None) is None)
     check("validator rejects bad tier", bool(tp.validate_entry_gating("x", {"tier": "gold"})))
-    check("validator rejects bad booster", bool(tp.validate_entry_gating("x", {"booster": "yes"})))
-    check("validator accepts good", not tp.validate_entry_gating("x", {"tier": "max", "booster": True}))
+    check("validator rejects bad mesh", bool(tp.validate_entry_gating("x", {"mesh": "yes"})))
+    check("validator accepts good", not tp.validate_entry_gating("x", {"tier": "max", "mesh": True}))
 
     # feature_allowed
-    pro_e, max_e, bst = {"tier": "pro"}, {"tier": "max"}, {"booster": True, "tier": "pro"}
+    pro_e, max_e, bst = {"tier": "pro"}, {"tier": "max"}, {"mesh": True, "tier": "pro"}
     check("free blocked on pro feature", not tp.feature_allowed("free", "aws", "ec2", entry=pro_e))
     check("free allowed on ungated", tp.feature_allowed("free", "aws", "s3", entry={}))
     check("pro allowed on primary cloud", tp.feature_allowed("pro", "aws", "ec2", entry=pro_e, primary_cloud="aws"))
     check("pro blocked off primary cloud", not tp.feature_allowed("pro", "gcp", "compute", entry=pro_e, primary_cloud="aws"))
     check("pro blocked on max feature", not tp.feature_allowed("pro", "aws", "iam", entry=max_e, primary_cloud="aws"))
     check("max allowed on all 3 clouds", all(tp.feature_allowed("max", c, "x", entry=max_e) for c in ("aws", "gcp", "azure")))
-    check("booster feature needs booster", not tp.feature_allowed("max", "aws", "x", entry=bst)
-          and tp.feature_allowed("max", "aws", "x", entry=bst, booster_available=True))
-    check("free never booster", not tp.feature_allowed("free", "aws", "x", entry=bst, booster_available=True))
+    check("mesh feature needs mesh", not tp.feature_allowed("max", "aws", "x", entry=bst)
+          and tp.feature_allowed("max", "aws", "x", entry=bst, mesh_available=True))
+    check("free never mesh", not tp.feature_allowed("free", "aws", "x", entry=bst, mesh_available=True))
     check("cloud counts free0/pro1/max3", (tp.FULL_CLOUDS["free"], tp.FULL_CLOUDS["pro"], tp.FULL_CLOUDS["max"]) == (0, 1, 3))
 
     # registry + generated manifest
@@ -100,14 +100,14 @@ def main() -> int:
                 continue
             bad += tp.validate_entry_gating(fid, ent)
             r = g.rule_for(fid, rules)
-            want = {k: r[k] for k in ("tier", "booster") if r and k in r}
-            have = {k: ent[k] for k in ("tier", "booster") if k in ent}
+            want = {k: r[k] for k in ("tier", "mesh") if r and k in r}
+            have = {k: ent[k] for k in ("tier", "mesh") if k in ent}
             if want != have:
                 bad.append(f"{fid}: registry {have} != _tiers.json {want}")
     check("registry matches _tiers.json and validates", not bad, "; ".join(bad[:5]))
     man = json.loads((ROOT / "wasm" / "tier-pills.json").read_text())
     check("manifest up to date", g.main.__module__ and man == g.build())
-    check("manifest maps known ids", man["pills"].get("gcp.kubernetes.workloads") == "Booster"
+    check("manifest maps known ids", man["pills"].get("gcp.kubernetes.workloads") == "Mesh"
           and man["pills"].get("dynamodb.backups") == "Pro" and man["pills"].get("iam.organizations.policies") == "Pro")
     check("core CRUD ungated", "ec2.instances.lifecycle" not in man["pills"] and "s3.bucket.crud" not in man["pills"])
 

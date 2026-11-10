@@ -38,7 +38,7 @@ export function classifyTargets(text) {
   return out;
 }
 
-/** Find the user's Mesh Codespace on their own account: the newest running (or starting) one named vyomi-mesh-* / vyomi-booster-*. */
+/** Find the user's Mesh Codespace on their own account: the newest running (or starting) one named vyomi-mesh-* / vyomi-mesh-*. */
 export async function findCodespace(ghBin, spawn = nodeSpawn) {
   const text = await new Promise((resolve, reject) => {
     let out = "", err = "";
@@ -47,7 +47,7 @@ export async function findCodespace(ghBin, spawn = nodeSpawn) {
     c.on("error", reject); c.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error((err || "gh codespace list failed").trim().slice(0, 200)))));
   });
   let list; try { list = JSON.parse(text); } catch { list = []; }
-  const mine = list.filter((c) => /^vyomi-(mesh|booster)-/.test(c.name || ""));
+  const mine = list.filter((c) => /^vyomi-mesh-/.test(c.name || ""));
   const rank = { Available: 0, Starting: 1, Queued: 1, Provisioning: 1 };
   const live = mine.filter((c) => c.state in rank).sort((a, b) => rank[a.state] - rank[b.state] || String(b.createdAt).localeCompare(String(a.createdAt)));
   if (!live.length) throw new Error(mine.length ? "your Mesh Codespace is stopped. Start Mesh in the Vyomi console, then retry." : "no Mesh Codespace found on your GitHub account. Start Mesh in the Vyomi console first.");
@@ -127,7 +127,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     return NAME.test(out) ? out : null;
   }
 
-  /** Where does <name> listen, from the Codespace host's point of view? Same names and fixed ports as booster-dial's resolver. */
+  /** Where does <name> listen, from the Codespace host's point of view? Same names and fixed ports as mesh-dial's resolver. */
   async function resolve(name, port = 22) {
     const n = String(name || "").toLowerCase();
     if (n === "host" || n === "codespace") return { host: "127.0.0.1", port: hostSshPort, reserved: "host" };
@@ -183,7 +183,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     const sock = await open(t.host, t.port);
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) if (!HOP.has(k)) headers[k] = v;
-    headers.host = `simulator:${simulatorPort}`;                // the simulator's DNS-rebinding guard allows its own service name (VYOMI_BOOSTER_HOSTS)
+    headers.host = `simulator:${simulatorPort}`;                // the simulator's DNS-rebinding guard allows its own service name (VYOMI_MESH_HOSTS)
     headers["content-length"] = String(body.length);
     const out = http.request({ method: req.method, path: req.url, headers, createConnection: () => sock }, (r) => {
       const h = {};
@@ -211,7 +211,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
   return { resolve, open, exec, list, stopAt, onStop: (h) => stopHandlers.push(h), simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
 }
 
-/** A drop-in for booster-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.
+/** A drop-in for mesh-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.
  *  The laptop is the trust boundary here (the ssh session is the user's own), so there is no session token; browser callers
  *  are still limited to the allow-listed origins. */
 export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, transport, log = () => {},
@@ -258,7 +258,7 @@ export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, tran
 
 
   /** /shell (the Nano tab's terminal): first message is the JSON auth {cloud, ref, cols, rows}; bytes then flow tab <-> the simulator's own
-   *  /booster/shell WebSocket, reached over an ssh stream (the simulator resolves the container itself and uses its own session token). */
+   *  /mesh/shell WebSocket, reached over an ssh stream (the simulator resolves the container itself and uses its own session token). */
   function shellUpgrade(req, socket, head) {
     if (!originOk(req.headers.origin)) { reject(socket, 403, "OriginNotAllowed"); return true; }
     if (!WSClient) { reject(socket, 501, "MeshShellUnavailable"); return true; }
@@ -286,7 +286,7 @@ export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, tran
           const t = await transport.simulatorTarget(); if (!t) return fail("MeshSimulatorDown", "the simulator is not running in the Codespace", 4502);
           sock = await transport.open(t.host, t.port);
           const q = new URLSearchParams({ cloud, ref, cols: String(a.cols ?? ""), rows: String(a.rows ?? "") });
-          sim = new WSClient(`ws://simulator:9000/booster/shell?${q}`, { createConnection: () => sock, maxPayload: 1024 * 1024 });
+          sim = new WSClient(`ws://simulator:9000/mesh/shell?${q}`, { createConnection: () => sock, maxPayload: 1024 * 1024 });
           sim.on("open", () => { for (const [d, b] of queue) sim.send(d, { binary: b }); queue.length = 0; });
           sim.on("message", (d, b) => { last = Date.now(); try { tab.send(d, { binary: b }); } catch { /* */ } });
           sim.on("close", () => end()); sim.on("error", () => end());

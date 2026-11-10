@@ -1,11 +1,11 @@
-/* Remote-LLM plane of the relay (SPIKE, off unless VYOMI_BOOSTER_SESSION_KEY is set AND a runner dials in).
+/* Remote-LLM plane of the relay (SPIKE, off unless VYOMI_MESH_SESSION_KEY is set AND a runner dials in).
  *
  * GitHub-Actions runners (user's own account, one per RUNNER id of the catalogue, each serving one or more models through
  * Ollama) dial OUT to  wss://<relay>/llm-runner  with a runner-role session token (Authorization: Bearer ...,
- * claims.role === "llm-runner", claims.model === <runner id>, same session_id/sub as the booster's token). The booster -
+ * claims.role === "llm-runner", claims.model === <runner id>, same session_id/sub as the mesh's token). The mesh -
  * which also only makes outbound calls - reaches them with plain HTTP:
  *
- *     <relay>/llm/v1/chat/completions     + X-Vyomi-Session-Token: <booster token>  + X-Vyomi-Llm-Model: <runner id>
+ *     <relay>/llm/v1/chat/completions     + X-Vyomi-Session-Token: <mesh token>  + X-Vyomi-Llm-Model: <runner id>
  *     <relay>/llm/_status                 -> {runners: {<id>: ready|starting|stale}, rotating: {<id>: true}}
  *
  * ROTATION (hosted-runner jobs die at 6 h): a SECOND runner dialling for the same (session, runner id) is held as `next`;
@@ -17,18 +17,18 @@
  *   relay -> runner  {id, method, path, headers, body(b64)}  {type:"cancel", id}  {type:"drain"}
  *   runner -> relay  {id, type:"head", status, headers} {id, type:"chunk", body(b64)} {id, type:"end"}  (streamed)
  *                    {type:"ready"} once Ollama/llama-server is healthy      {type:"hb", busy} every ~15 s
- * Every relay-generated error carries  x-vyomi-hub: 1  so the booster can tell "runner not there" from a model error.
+ * Every relay-generated error carries  x-vyomi-hub: 1  so the mesh can tell "runner not there" from a model error.
  * Tokens never appear in logs here.
  */
 import crypto from "node:crypto";
-import { verify, SessionError } from "./booster-session.mjs";
+import { verify, SessionError } from "./mesh-session.mjs";
 
 export const HEADER = "x-vyomi-session-token";
 export const ROLE = "llm-runner";
 const MAX_BODY = 8 * 1024 * 1024;
 const DRAIN_FORCE_MS = 60000;
 
-export function createRunnerLlmHub({ WebSocketServer, key = process.env.VYOMI_BOOSTER_SESSION_KEY || "",
+export function createRunnerLlmHub({ WebSocketServer, key = process.env.VYOMI_MESH_SESSION_KEY || "",
                                      requestTimeoutMs = Number(process.env.VYOMI_LLM_REQUEST_TIMEOUT_MS || 300000),
                                      hbStaleMs = Number(process.env.VYOMI_LLM_HB_STALE_MS || 45000), log = () => {} } = {}) {
   const active = new Map();            // key -> entry serving requests
@@ -65,12 +65,12 @@ export function createRunnerLlmHub({ WebSocketServer, key = process.env.VYOMI_BO
   /** WebSocket upgrade for /llm-runner. */
   function upgrade(req, socket, head) {
     const reject = (status, code) => { try { socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`); } catch { /* */ } socket.destroy(); };
-    if (!enabled()) { reject(503, "BoosterLinkDisabled"); return true; }
+    if (!enabled()) { reject(503, "MeshLinkDisabled"); return true; }
     let claims;
     const a = req.headers["authorization"] || "";
     try { claims = verify(/^Bearer /i.test(a) ? a.slice(7).trim() : "", key, nowS()); }
-    catch (e) { reject(e instanceof SessionError ? e.status : 401, e.code || "BoosterSessionInvalid"); return true; }
-    if (claims.role !== ROLE) { reject(403, "BoosterSessionWrongRole"); return true; }   // a booster token cannot pose as a runner
+    catch (e) { reject(e instanceof SessionError ? e.status : 401, e.code || "MeshSessionInvalid"); return true; }
+    if (claims.role !== ROLE) { reject(403, "MeshSessionWrongRole"); return true; }   // a mesh token cannot pose as a runner
     wss.handleUpgrade(req, socket, head, (ws) => {
       const k = rkey(claims.session_id, claims.model);
       const entry = { ws, claims, pending: new Map(), timer: null, ready: false, lastSeen: Date.now(), draining: false };
@@ -102,7 +102,7 @@ export function createRunnerLlmHub({ WebSocketServer, key = process.env.VYOMI_BO
 
   const stateOf = (x) => (!x ? "absent" : Date.now() - x.lastSeen > hbStaleMs ? "stale" : x.ready ? "ready" : "starting");
 
-  /** HTTP: /llm/* (booster -> runner) and /llm/_status. Returns true if it answered/forwarded. */
+  /** HTTP: /llm/* (mesh -> runner) and /llm/_status. Returns true if it answered/forwarded. */
   function http(req, res, body) {
     const url = new URL(req.url, "http://x");
     if (!(url.pathname === "/llm" || url.pathname.startsWith("/llm/"))) return false;
@@ -112,10 +112,10 @@ export function createRunnerLlmHub({ WebSocketServer, key = process.env.VYOMI_BO
       res.end(JSON.stringify({ error: { ok: false, code, reason: msg, message: msg, type: "unavailable" } }));
       return true;
     };
-    if (!enabled()) return out(503, "BoosterLinkDisabled", "relay has no session key");
+    if (!enabled()) return out(503, "MeshLinkDisabled", "relay has no session key");
     let claims;
-    try { claims = verify(req.headers[HEADER] || "", key, nowS()); } catch (e) { return out(e.status || 401, e.code || "BoosterSessionInvalid", e.message); }
-    if (claims.role) return out(403, "BoosterSessionWrongRole", "runner-role token cannot call the LLM plane");
+    try { claims = verify(req.headers[HEADER] || "", key, nowS()); } catch (e) { return out(e.status || 401, e.code || "MeshSessionInvalid", e.message); }
+    if (claims.role) return out(403, "MeshSessionWrongRole", "runner-role token cannot call the LLM plane");
     const path = url.pathname.slice(4) || "/";
     const rid = String(req.headers["x-vyomi-llm-model"] || "");
     const r = active.get(rkey(claims.session_id, rid));
@@ -129,7 +129,7 @@ export function createRunnerLlmHub({ WebSocketServer, key = process.env.VYOMI_BO
     }
     const stale = r && (Date.now() - r.lastSeen > hbStaleMs);
     if (!r || r.ws.readyState !== r.ws.OPEN) return out(502, "RunnerNotLinked", "no LLM runner is linked for this session");
-    if (r.claims.sub !== claims.sub) return out(403, "BoosterSessionMismatch", "session belongs to another account");
+    if (r.claims.sub !== claims.sub) return out(403, "MeshSessionMismatch", "session belongs to another account");
     if (stale) return out(503, "RunnerStale", "LLM runner missed its heartbeat");
     if (!r.ready) return out(503, "RunnerNotReady", "LLM runner is still loading the model");
     if (body.length > MAX_BODY) return out(413, "BodyTooLarge", "request too large");

@@ -257,7 +257,7 @@ def main() -> int:
         for fid, ent in reg.items():
             if fid.startswith("$"):
                 continue
-            # Optional v4 gating fields (tier: free|pro|max, booster: bool) are validated
+            # Optional v4 gating fields (tier: free|pro|max, mesh: bool) are validated
             # here but never change which claims pass.
             gating_errs = validate_entry_gating(fid, ent)
             if gating_errs:

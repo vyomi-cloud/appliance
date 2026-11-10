@@ -76,7 +76,7 @@ try:
 except ImportError:  # Pyodide flat layout
     import ai_model_catalog as CAT  # type: ignore
 
-# (format, name, version, max capacity, capabilities): the ten booster-mesh open models only (core/ai_model_catalog.py).
+# (format, name, version, max capacity, capabilities): the ten mesh-llm open models only (core/ai_model_catalog.py).
 # format = the model's real vendor. Legacy OpenAI names (gpt-4o, o1 ...) are not listed; _find_model still resolves them via
 # the hidden alias map so deployments created by existing SDK/IaC code keep working.
 _CHAT_CAPS = ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")

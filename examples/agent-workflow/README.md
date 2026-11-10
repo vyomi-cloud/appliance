@@ -53,10 +53,10 @@ Nano's AI engines run in your browser tab; local SDK calls reach them through `v
 `VYOMI_ENDPOINT` to the URL the tunnel prints. NOT verified by this sample: the Nano tab has no 3B-class model today, so expect the
 plumbing to work and the model to be far weaker than below. See the Nano docs for the tunnel's current port and limitations.
 
-### Against a booster
-A booster is a 2-core / 8 GB compute+AI appliance (Codespaces `basicLinux32gb`-class host, only the booster services). It binds the same
-endpoints on its own port; export `VYOMI_ENDPOINT` to the booster URL (local `<id>.local.vyomi.cloud` -> 127.0.0.1, or the relay URL).
-Nothing in the example changes. NOT verified here either: this sample was run on a laptop, not a booster.
+### Against a mesh
+A mesh is a 2-core / 8 GB compute+AI appliance (Codespaces `basicLinux32gb`-class host, only the mesh services). It binds the same
+endpoints on its own port; export `VYOMI_ENDPOINT` to the mesh URL (local `<id>.local.vyomi.cloud` -> 127.0.0.1, or the relay URL).
+Nothing in the example changes. NOT verified here either: this sample was run on a laptop, not a mesh.
 
 ## Model recommendations (from `docs/architecture/v4.0/AI-PACK-AUDIT.md` section 3)
 
@@ -67,15 +67,15 @@ Nothing in the example changes. NOT verified here either: this sample was run on
 | Higher fidelity (opt-in) | Qwen2.5-7B Q4 (~4.7 GB) | does not fit comfortably on 8 GB next to compute; minutes per agent loop |
 | Embeddings | nomic-embed-text v1.5 (274 MB) or bge-small-en-v1.5 (~130 MB) | replaces the labelled hash fallback |
 
-**The 8 GB / Qwen2.5-3B-Q4 decision:** the booster host has 8 GB; the AI share of the capped budget has to leave room for the compute
-engines (the booster docs budget ~5 GB for compute containers). A 3B model at Q4 is ~2 GB of weights plus KV cache at `-c 4096-8192`,
+**The 8 GB / Qwen2.5-3B-Q4 decision:** the mesh host has 8 GB; the AI share of the capped budget has to leave room for the compute
+engines (the mesh docs budget ~5 GB for compute containers). A 3B model at Q4 is ~2 GB of weights plus KV cache at `-c 4096-8192`,
 so it fits with an embedding model loaded beside it, while a 7B Q4 does not. CPU speed, not RAM, is the constraint.
 
 ## Honest expectations
 
 - **Speed.** On a 2-core CPU expect roughly 5-30 s per agent step with a 3B model (prompt processing dominates: every step re-sends the
   system prompt, the tool schemas and the history). A typical triage question is 2 steps (tool call, then answer). `SAMPLE-RUN.md` has
-  measured numbers: a laptop GPU is several times faster than a booster; the CPU-limited pass is the closer proxy.
+  measured numbers: a laptop GPU is several times faster than a mesh; the CPU-limited pass is the closer proxy.
 - **Flakiness.** 1-3B models sometimes skip the tool and answer from imagination, print the call as text, emit malformed JSON, pick the wrong
   tool or invent argument values. Parallel tool calls and nested schemas fail more often. This is a good way to test that *your* loop handles
   tool_use/toolResult, retries and error results; it is not a way to measure agent quality.

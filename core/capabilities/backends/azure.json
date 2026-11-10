@@ -245,7 +245,7 @@
     "llama.cpp (llama-server container vyomi-llm)",
     "Python (core/ai_models_core.py, azure_openai_agents_core.py)"
    ],
-   "notes": "The local-LLM seam starts a llama.cpp server container on demand (default model HuggingFaceTB SmolLM2-360M-Instruct Q8_0, overridable); the booster appliance path may use a larger model, which was not verified here. With no model running the data plane returns the native 503."
+   "notes": "The local-LLM seam starts a llama.cpp server container on demand (default model HuggingFaceTB SmolLM2-360M-Instruct Q8_0, overridable); the mesh appliance path may use a larger model, which was not verified here. With no model running the data plane returns the native 503."
   },
   "nano": {
    "kind": "hybrid",
@@ -762,7 +762,7 @@
    "tech": [
     "Python sandbox (core/function_shims.py, azure_webhost_core.py)"
    ],
-   "notes": "Only the Python programming model with a main(req) entry point runs, in a restricted sandbox with no filesystem, network or process access and a curated standard library. The HTTP and Cosmos DB change-feed triggers execute; queue, blob, timer and Service Bus triggers never fire. Invocation is tier-flagged as needing a booster in the tier map."
+   "notes": "Only the Python programming model with a main(req) entry point runs, in a restricted sandbox with no filesystem, network or process access and a curated standard library. The HTTP and Cosmos DB change-feed triggers execute; queue, blob, timer and Service Bus triggers never fire. Invocation is tier-flagged as needing a mesh in the tier map."
   },
   "nano": {
    "kind": "inhouse",

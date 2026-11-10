@@ -1,5 +1,5 @@
 """Real-SDK conformance for the per-cloud AI *agent* lanes (Dev Simplified), over real HTTP via core.wire_ingress, backed by a
-deterministic OpenAI-compatible fake model server (tests/conformance/llm_fakes.py). The same lanes route to the real booster
+deterministic OpenAI-compatible fake model server (tests/conformance/llm_fakes.py). The same lanes route to the real mesh
 model through core/llm_core when it is up; this suite proves the WIRE, not model quality.
 
   Bedrock : InvokeModelWithResponseStream real incremental event-stream (Claude/Nova/Titan/Llama/Mistral), Guardrails

@@ -34,7 +34,7 @@
   "title": "Chat playground (Azure OpenAI data plane)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Sends chat/completions to the deployment through the real Azure OpenAI wire; the answer comes from one small local model (llama.cpp on the booster/appliance, WebLLM on Nano when the page registers it), so quality is toy-grade and no model running returns the native 503 ServiceUnavailable instead of an answer. Function calling, json_schema output and streaming (include_usage) work; no image/audio, 'On your data', content filters or fine-tuning."
+   "Sends chat/completions to the deployment through the real Azure OpenAI wire; the answer comes from one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers it), so quality is toy-grade and no model running returns the native 503 ServiceUnavailable instead of an answer. Function calling, json_schema output and streaming (include_usage) work; no image/audio, 'On your data', content filters or fine-tuning."
   ],
   "tests": ["tests/conformance/test_local_llm_seam.py", "tests/conformance/test_ai_sdk_tools.py"]
  },

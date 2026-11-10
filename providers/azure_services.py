@@ -1190,25 +1190,25 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
                 pass
         if (method == "PUT" and key not in _state
                 and full_type.lower() == "microsoft.compute/virtualmachines"):
-            try:   # booster: AllocationFailed (409) before the VM record exists
+            try:   # mesh: AllocationFailed (409) before the VM record exists
                 import server as _s
                 _hw = ((payload.get("properties") or {}).get("hardwareProfile") or {}) if isinstance(payload.get("properties"), dict) else {}
-                _s._booster_capacity_precheck("azure", str(_hw.get("vmSize") or "") if isinstance(_hw, dict) else "", 1,
+                _s._mesh_capacity_precheck("azure", str(_hw.get("vmSize") or "") if isinstance(_hw, dict) else "", 1,
                                               str(payload.get("location") or "-"))
             except Exception as _bexc:
-                if _bexc.__class__.__name__ != "BoosterCapacityError":
+                if _bexc.__class__.__name__ != "MeshCapacityError":
                     raise
                 return JSONResponse(status_code=_bexc.status, content={"error": {"code": _bexc.code, "message": _bexc.message}})
         if (method in ("PUT", "PATCH") and key in _state
                 and full_type.lower() == "microsoft.compute/virtualmachines"):
-            try:   # booster: a resize must fit the budget too (AllocationFailed 409); atomic, replaces this VM's own share
+            try:   # mesh: a resize must fit the budget too (AllocationFailed 409); atomic, replaces this VM's own share
                 import server as _s
                 _hw = ((payload.get("properties") or {}).get("hardwareProfile") or {}) if isinstance(payload.get("properties"), dict) else {}
                 _size = str(_hw.get("vmSize") or "") if isinstance(_hw, dict) else ""
                 if _size:
-                    _s._booster_resize_azure_vm(_state[key], _size)
+                    _s._mesh_resize_azure_vm(_state[key], _size)
             except Exception as _bexc:
-                if _bexc.__class__.__name__ != "BoosterCapacityError":
+                if _bexc.__class__.__name__ != "MeshCapacityError":
                     raise
                 return JSONResponse(status_code=_bexc.status, content={"error": {"code": _bexc.code, "message": _bexc.message}})
         from core import azure_arm_ext_core as _ext

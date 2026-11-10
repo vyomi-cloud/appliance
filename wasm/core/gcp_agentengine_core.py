@@ -4,7 +4,7 @@
 
 Control plane  : POST .../reasoningEngines (LRO) / GET / list / PATCH (LRO) / DELETE (LRO) + the operations those return.
 Execution plane: POST ...reasoningEngines/ID:query and :streamQuery against a Vyomi agent spec (core/agent_spec_core) -
-                 a tool-calling loop over the shared llm_core seam (fake/scripted model in tests, real model on the booster).
+                 a tool-calling loop over the shared llm_core seam (fake/scripted model in tests, real model on the mesh).
 
 The real service hosts a pickled Python class / packaged ADK app from GCS; the simulator cannot. The "agent" is a JSON Vyomi agent
 spec carried in the engine itself, either as ``spec.vyomiAgentSpec`` (REST) or - so the typed google-cloud-aiplatform gapic client

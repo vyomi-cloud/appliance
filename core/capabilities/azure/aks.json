@@ -9,7 +9,7 @@
   "enforced_by": "core/k8s_tier_gate.py + core/tier_policy.py (category kubernetes)"
  },
  "azure.aks.cluster.crud": {
-  "booster": true,
+  "mesh": true,
   "title": "Managed clusters (create, get, list, delete) over ARM",
   "level": {
    "nano": "full",
@@ -45,7 +45,7 @@
   ]
  },
  "azure.aks.node_pools.crud": {
-  "booster": true,
+  "mesh": true,
   "title": "Node pools (agentPools): add, list, scale, update image, delete",
   "level": {
    "nano": "full",
@@ -72,7 +72,7 @@
   ]
  },
  "azure.aks.run_command": {
-  "booster": true,
+  "mesh": true,
   "title": "Run command (az aks command invoke) \u2014 kubectl against the cluster's Kubernetes objects",
   "level": {
    "nano": "limited",
@@ -114,7 +114,7 @@
   ]
  },
  "azure.aks.workloads": {
-  "booster": true,
+  "mesh": true,
   "title": "Kubernetes objects: Workloads, Services and ingresses, Configuration (Deployments, Pods, Replica/Stateful/Daemon sets, Jobs, Cron jobs, Services, Ingresses, Config maps, Secrets)",
   "level": {
    "nano": "limited",

@@ -38,12 +38,12 @@ session to the Codespace host (the sshd devcontainer feature) and carries all th
 | 3. Docker in the Codespace | `-L`/`-W` to the instance container's address on `vyomi-net` (the tunnel resolves the name with `docker inspect` over the same session), k3s API on 6443 |
 | Nano compute calls | the local relay proxies Nano's HTTP to the simulator at `<container-ip>:9000` through a forward |
 
-Consequences: no hosted relay and no `wss://` endpoint for the Mesh, no `BOOSTER_RELAY_URL`, no outbound `link` container (removed from
-`codespace/.devcontainer/booster/`), no inbound port. Authentication to the Codespace is the user's own GitHub login (`gh codespace ssh`).
+Consequences: no hosted relay and no `wss://` endpoint for the Mesh, no `MESH_RELAY_URL`, no outbound `link` container (removed from
+`codespace/.devcontainer/mesh/`), no inbound port. Authentication to the Codespace is the user's own GitHub login (`gh codespace ssh`).
 Open: a portal-minted short-lived credential instead of `gh` (not built). Proven by hand on 2026-11-10: `gh codespace ssh -- -N -L 9009:<simulator
 container ip>:9000` gave `200` on `/healthz` from the laptop. Not yet built: the tunnel's own ssh transport (`connect`/`forward`/relay upstream
-over `gh codespace ssh`), the resolver moving from the agent (`booster-dial.mjs` `resolveReserved`) to the laptop, the DNS-rebinding Host allow-list for
-forwarded requests, and removing `booster-dial.mjs` from the image once the new transport replaces it. Section 11 item 9 (where the relay runs) is answered by
+over `gh codespace ssh`), the resolver moving from the agent (`mesh-dial.mjs` `resolveReserved`) to the laptop, the DNS-rebinding Host allow-list for
+forwarded requests, and removing `mesh-dial.mjs` from the image once the new transport replaces it. Section 11 item 9 (where the relay runs) is answered by
 this section; sections 2 to 4 still describe the outbound design until the transport is built.
 
 > **Implemented 2026-11-10 (`v4/mesh-ssh-transport`)**: the link runs on the laptop over the user's `gh codespace ssh` session (`wasm/relay/mesh-ssh.mjs`). Where §2-4 below describe the Codespace dialling out, the ssh transport supersedes it.
@@ -58,11 +58,11 @@ this section; sections 2 to 4 still describe the outbound design until the trans
  │ VS Code       │       └────────────────────────────────────────────────────────────┘
  │   │ProxyCmd   │                    ▲                   ▲                  ▲
  │ vyomi-tunnel  │── WS /connect ─────┘                   │                  │
- │   connect     │                                         │ WS /booster      │ WS /register, /vm, /db
+ │   connect     │                                         │ WS /mesh      │ WS /register, /vm, /db
  └───────────────┘                                         │ (outbound)       │ (outbound)
                                               ┌────────────┴─────┐      ┌─────┴───────────┐
                                               │ Mesh agent        │      │ Nano tab         │
-                                              │ (booster-dial.mjs │      │ (Pyodide cores,  │
+                                              │ (mesh-dial.mjs │      │ (Pyodide cores,  │
                                               │  in the Codespace)│      │  v86 VMs)        │
                                               └────────┬──────────┘      └─────┬────────────┘
                                                        │ TCP :22                │ virtual NIC
@@ -73,11 +73,11 @@ this section; sections 2 to 4 still describe the outbound design until the trans
 |---|---|---|---|
 | Local relay | `wasm/relay/local-relay.mjs` (packaged as `packaging/tunnel/bin/vyomi-tunnel.mjs`) | user's laptop | HTTP relay to the Nano tab, TCP bridge to browser VMs (`/vm`) and DBs (`/db`), `/egress`, Mesh hub |
 | Hosted relay | `wasm/relay/worker.js` + `wrangler.toml` | Cloudflare (`relay.vyomi.cloud`) | per-session HTTP relay to a Nano tab (Durable Object), `/egress` |
-| Mesh hub | `wasm/relay/booster-hub.mjs` | inside the Node relay | pairs a Mesh agent with the same session's clients; `/booster` + `/connect` |
-| Mesh agent | `wasm/relay/booster-dial.mjs` | `link` container in the Mesh Codespace | dials OUT to the relay with the signed session token; serves HTTP requests and opens TCP to VMs |
+| Mesh hub | `wasm/relay/mesh-hub.mjs` | inside the Node relay | pairs a Mesh agent with the same session's clients; `/mesh` + `/connect` |
+| Mesh agent | `wasm/relay/mesh-dial.mjs` | `link` container in the Mesh Codespace | dials OUT to the relay with the signed session token; serves HTTP requests and opens TCP to VMs |
 | SSH client | `wasm/relay/mesh-cli.mjs` (copied to `packaging/tunnel/bin/`) | user's laptop | `connect` / `login` / `config` / `status` |
 | Egress proxy | `wasm/relay/egress.mjs` | both relays | allow-listed package/git downloads for browser VMs |
-| Session token | `wasm/relay/booster-session.mjs` | hub, agent, client | signed `v1.<payload>.<hmac>` token, same format as `core/booster_session.py` |
+| Session token | `wasm/relay/mesh-session.mjs` | hub, agent, client | signed `v1.<payload>.<hmac>` token, same format as `core/mesh_session.py` |
 
 ## 3. Planes (what each WebSocket path does)
 
@@ -87,7 +87,7 @@ this section; sections 2 to 4 still describe the outbound design until the trans
 | `/<session>/…` | any HTTP client | external app talks to the tab through the hosted relay | session id | [built+tested] |
 | `/vm?vm=<id>&port=22` | browser VM worker | local relay opens a host port 22000-22999 and bridges TCP to the VM | loopback only | [built+tested] (local relay only) |
 | `/db` | browser DB worker | same for DB ports 25000-25999 | loopback only | [built+tested] (local relay only) |
-| `/booster` | Mesh agent | agent links to the hub; hub forwards HTTP to the Codespace simulator | Bearer session token | [built+tested] |
+| `/mesh` | Mesh agent | agent links to the hub; hub forwards HTTP to the Codespace simulator | Bearer session token | [built+tested] |
 | `/shell` | Nano tab | interactive PTY into a Docker VM (other session's work; first-message token auth) | token in first message | [built+tested] (Node relay only) |
 | `/connect?vm=&port=` | laptop | raw TCP stream to a VM behind the same session's agent (stream framework, `kind:"tcp"`) | Bearer session token, role-less | [built+tested] (Node relay only) |
 | `/egress?u=` | browser VM host | allow-listed GET/HEAD/POST fetch for pip/apk/git | Origin check + per-IP limit | [built+tested] in Worker (9 checks); not deployed |
@@ -95,7 +95,7 @@ this section; sections 2 to 4 still describe the outbound design until the trans
 ## 4. Mesh SSH data path
 
 TCP streams ride the hub's existing **stream framework** (the same one the Nano "Open shell" PTY uses, see the header of
-`booster-hub.mjs`), distinguished by `kind:"tcp"`:
+`mesh-hub.mjs`), distinguished by `kind:"tcp"`:
 
 - hub→agent (JSON on the agent's one WSS): `{type:"stream", op:"open", kind:"tcp", sid, vm, port}`, then `data{d:b64}`, `pause`,
   `resume`, `close`.
@@ -113,7 +113,7 @@ Steps for `ssh my-vm.vyomi`:
    with `Authorization: Bearer <token>`.
 3. The hub verifies the token (signature, audience, expiry, tier Pro/Max/enterprise), looks up the agent by `session_id`,
    requires the same account (`sub`), enforces the stream cap, and sends `tcp-open` to the agent.
-4. The agent resolves the VM by Docker DNS name (`vyomi-i-<id>`, `vyomi-<name>`, `<name>`; no Docker CLI or socket, per the booster
+4. The agent resolves the VM by Docker DNS name (`vyomi-i-<id>`, `vyomi-<name>`, `<name>`; no Docker CLI or socket, per the mesh
    rule that the agent holds no Docker access), opens TCP to port 22 and answers `opened`. Bytes sent early by the laptop are queued
    at the hub until then. If nothing answers in 20 s the stream is closed.
 5. `ssh`'s own handshake and key auth now run end to end with the VM's sshd.
@@ -187,7 +187,7 @@ requests do not. 240 minutes is the hard ceiling from the last counted activity.
 Plan [planned, not in the tunnel yet]: an SSH client component, "keeper", that holds a real SSH session to the Codespace and
 sends a small write every ~240 s while a Mesh session is active.
 
-- Today the portal worker does this with `gh codespace ssh -c <name> -- echo …` per running session (`app/booster_keepalive.py`,
+- Today the portal worker does this with `gh codespace ssh -c <name> -- echo …` per running session (`app/mesh_keepalive.py`,
   10 unit tests; **not verified against a real Codespace**; needs the sshd devcontainer feature synced to `vyomi-cloud/sandbox`
   and proof that `gh` accepts the stored token type).
 - Where the keeper runs is the open decision: (a) the portal worker on DO (current), (b) a small always-on host (the future
@@ -202,16 +202,16 @@ Goal: `ssh codespace.vyomi` reaches the **Codespace host's own sshd** through th
 Requested 2026-11-09; handed to a separate session to review and build.
 
 What it needs:
-1. **sshd on the host.** The booster devcontainer already lists the `ghcr.io/devcontainers/features/sshd:1` feature
-   (`codespace/.devcontainer/booster/devcontainer.json`, local); it must be synced to `vyomi-cloud/sandbox` (new Codespaces only).
-2. **Reserved target name** (proposal: `codespace`, or `host`) handled by the agent resolver in `booster-dial.mjs`
+1. **sshd on the host.** The mesh devcontainer already lists the `ghcr.io/devcontainers/features/sshd:1` feature
+   (`codespace/.devcontainer/mesh/devcontainer.json`, local); it must be synced to `vyomi-cloud/sandbox` (new Codespaces only).
+2. **Reserved target name** (proposal: `codespace`, or `host`) handled by the agent resolver in `mesh-dial.mjs`
    (`dockerResolve`/`vmCandidates`) before the container lookup. It must not be creatable as a VM name; the portal's
    unique-VM-name rule has to reserve it.
 3. **Network reach from the `link` container to the host.** The agent runs in a container on `vyomi-net`
-   (`docker-compose.booster.yml`, service `link`); options: `extra_hosts: host.docker.internal:host-gateway`, or the bridge gateway
+   (`docker-compose.mesh.yml`, service `link`); options: `extra_hosts: host.docker.internal:host-gateway`, or the bridge gateway
    IP, or `network_mode: host` for `link` (changes how it reaches `simulator:9000`, so prefer the first).
 4. **A key the host trusts.** Pass the user's public key from the portal at session start and have the boot script
-   (`boot-booster.sh`) append it to the Codespace user's `authorized_keys`; remove it at session end. Password auth stays off.
+   (`boot-mesh.sh`) append it to the Codespace user's `authorized_keys`; remove it at session end. Password auth stays off.
 5. **Client:** no protocol change. The hub, `/connect` and `vyomi-tunnel connect` already carry any `vm` name and port.
    `Host *.vyomi` covers `codespace.vyomi`.
 
@@ -231,7 +231,7 @@ sshd and the key injection exist. Estimate: about half a day plus the live check
 
 Built on the trunk's stream framework (`kind:"tcp"`); no new agent roles (the hub's `role` means runner-role tokens, which is a different thing).
 
-- **Reserved targets**, answered by the agent before any container lookup, client port ignored (`resolveReserved` in `wasm/relay/booster-dial.mjs`):
+- **Reserved targets**, answered by the agent before any container lookup, client port ignored (`resolveReserved` in `wasm/relay/mesh-dial.mjs`):
   `host` / `codespace` -> this machine's sshd (`VYOMI_HOST_SSH_ADDR`, default `host.docker.internal:22`); `vyomi-k3s-<10 hex>` -> that k3s API
   server on port 6443 only (`core/k3s_runtime.py` `server_name`); `k3s` -> `VYOMI_K3S_ADDR` when set. A VM cannot shadow them. Each open is an audit log line.
 - **`vyomi-tunnel forward <target> <local>:<remote>`**: loopback listener, one `/connect` stream per accepted socket
@@ -247,7 +247,7 @@ Built on the trunk's stream framework (`kind:"tcp"`); no new agent roles (the hu
 |---|---|---|
 | Worker `/egress` | `wasm/relay/test-worker-egress.mjs` | 9 checks pass |
 | Mesh SSH path + client + config | `wasm/relay/test-mesh-ssh.mjs` | 20 checks pass (round trip incl. 2 MB, parallel streams, stream cap, unknown VM, auth failures, agent drop, config edits) |
-| Booster HTTP link, shell streams, derived session keys | `test-booster-link.mjs`, `test-booster-shell.mjs`, `test-booster-session-derived.mjs` | pass after the merge onto v4-on-main (needs `WS_PKG`; shell test needs a Python with uvicorn) |
+| Mesh HTTP link, shell streams, derived session keys | `test-mesh-link.mjs`, `test-mesh-shell.mjs`, `test-mesh-session-derived.mjs` | pass after the merge onto v4-on-main (needs `WS_PKG`; shell test needs a Python with uvicorn) |
 | Real Codespace + real sshd | — | **not run** |
 | Browser VM boot + pip/git via hosted `/egress` | — | **not run** |
 | Cloudflare deploy (`wrangler deploy --dry-run`, rate-limit binding syntax) | — | **not run** |
@@ -255,14 +255,14 @@ Built on the trunk's stream framework (`kind:"tcp"`); no new agent roles (the hu
 ## 11. Still to build
 
 1. Portal: `/mesh/cli-login` (mint token, redirect to loopback) and a VM-list endpoint for the Connect tab.
-2. Hosted relay: port the Mesh hub (`/booster`, `/connect`) to the Cloudflare Durable Object with WebSocket hibernation.
+2. Hosted relay: port the Mesh hub (`/mesh`, `/connect`) to the Cloudflare Durable Object with WebSocket hibernation.
 3. Nano tab registers browser VMs with the hosted relay (one `ssh my-vm.vyomi` for both kinds).
 4. Honour the user's key pair at VM launch (the Docker backend injects a generated key).
 5. Keeper (section 9), live verification, devcontainer sync to `vyomi-cloud/sandbox`.
 6. `vyomi-tunnel forward <vm> <local>:<remote>` for non-SSH TCP (HTTP/ws/db).
 7. Codespace host sshd target (section 9b, handed to another session for review/build).
 8. Per-stream bandwidth cap and audit log; a hosted TCP gateway remains optional post-v4 for zero-install.
-9. **[Answered in 1c: the link runs on the laptop, nothing is hosted.]** Originally: decide where the relay the Mesh agent dials runs. `BOOSTER-CODESPACES-GITHUB-APP.md` 6.4 says the booster dials out to "our relay" and that the relay already ships inside the appliance image; the go-live checklist says to deploy `local-relay.mjs` behind wss://. No hosted instance exists (`relay.vyomi.cloud` is the Cloudflare Worker, which has no Mesh hub and answers 503 on `/booster`), and a laptop-local relay is not reachable from a Codespace. Until this is decided and built, no real Codespace can link. Also needed: the published `vyomi/appliance` image rebuilt so `/app/relay` exists (the 2026-11-10 `:latest` has none).
+9. **[Answered in 1c: the link runs on the laptop, nothing is hosted.]** Originally: decide where the relay the Mesh agent dials runs. `MESH-CODESPACES-GITHUB-APP.md` 6.4 says the mesh dials out to "our relay" and that the relay already ships inside the appliance image; the go-live checklist says to deploy `local-relay.mjs` behind wss://. No hosted instance exists (`relay.vyomi.cloud` is the Cloudflare Worker, which has no Mesh hub and answers 503 on `/mesh`), and a laptop-local relay is not reachable from a Codespace. Until this is decided and built, no real Codespace can link. Also needed: the published `vyomi/appliance` image rebuilt so `/app/relay` exists (the 2026-11-10 `:latest` has none).
 
 ---
 
@@ -299,8 +299,8 @@ One k3s per simulated cluster, same lifecycle on three substrates:
 
 | Substrate | Where k3s runs | How the API is reached |
 |---|---|---|
-| Booster, Codespace-local (default) | `rancher/k3s` privileged container on `vyomi-net` in the Codespace's Docker | agent resolves target `k3s` to the container |
-| Booster, runner | k3s container in the runner's Docker | runner agent, role `runner-<cluster>`, target `k3s` |
+| Mesh, Codespace-local (default) | `rancher/k3s` privileged container on `vyomi-net` in the Codespace's Docker | agent resolves target `k3s` to the container |
+| Mesh, runner | k3s container in the runner's Docker | runner agent, role `runner-<cluster>`, target `k3s` |
 | Offline appliance (Pro/Max) | container on the appliance's Docker | published port / compose network |
 
 - The cloud APIs (ARM, EKS, Container API) create/delete the k3s container(s), store the endpoint on the cluster resource, and serve

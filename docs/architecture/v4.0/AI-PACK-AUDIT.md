@@ -1,20 +1,20 @@
-# AI pack audit - Bedrock / Vertex AI / Azure AI on a booster-hosted local model
+# AI pack audit - Bedrock / Vertex AI / Azure AI on a mesh-hosted local model
 
 Status: AUDIT ONLY (2026-11-07), branch `v4/ai`. Nothing was built. Read from code at `origin/v4-on-main`.
 
 Purpose reminder: the AI pack is for DEV TESTING of agents and apps (wire shapes, tool loops, streaming, error codes, token
-accounting), not for model quality. Booster = 2-core / 32 GB CPU Codespace, no GPU, OpenAI-compatible endpoint from llama.cpp/Ollama.
+accounting), not for model quality. Mesh = 2-core / 32 GB CPU Codespace, no GPU, OpenAI-compatible endpoint from llama.cpp/Ollama.
 
 ## 0. How I verified
 
 - Read: `core/llm_core.py`, `core/llm_runtime.py`, `core/ai_models_core.py`, `core/bedrock_agents_core.py`, `core/gcp_vertex_core.py`,
   `core/azure_cognitiveservices_core.py`, `core/azure_search_vector_core.py`, `core/aws_wire_router.py` (routing at ~L119, L340,
-  L445, L1430, L1689-1706), `core/booster.py`, `wasm/booster-link.js`, `wasm/nano-boot.js` (L267+), `tests/conformance/test_local_llm_seam.py`.
+  L445, L1430, L1689-1706), `core/mesh.py`, `wasm/mesh-link.js`, `wasm/nano-boot.js` (L267+), `tests/conformance/test_local_llm_seam.py`.
 - Probed: called the dispatchers directly (`bedrock_dispatch`, `vertex_dispatch`, `azure_openai_dispatch`) with a stub
   `llm_core` backend, using `../s3_simulator/.venv/bin/python`. This confirms request-validation behaviour and status codes
   below (marked "probed"). Disk was 52 GB free.
 - NOT verified: no real boto3 / google-genai / openai SDK call over HTTP, no llama.cpp or Ollama run, no model speed
-  measurement (all tokens/sec numbers in section 3 are estimates from general knowledge, not measured here), no booster
+  measurement (all tokens/sec numbers in section 3 are estimates from general knowledge, not measured here), no mesh
   end-to-end session. `core/capabilities/*/{bedrock,vertex-ai,cognitiveservices}.json` are console-capability maps; I did not
   audit them for wire parity. No Foundry agents/threads/runs code exists to read (grep found none).
 
@@ -33,24 +33,24 @@ adapter in `core/ai_models_core.py` calls it. Backend selection, first match win
 `core/llm_runtime.py` starts one docker container `vyomi-llm` (llama.cpp `ghcr.io/ggml-org/llama.cpp:server`, default
 SmolLM2-360M-Instruct Q8_0, `-c 2048 --embeddings`, refuses under 20 GB free disk). This is the offline path only.
 
-Booster path today (`wasm/booster-link.js`): the Nano tab classifies calls as "compute" (`COMPUTE_SCOPE` includes
+Mesh path today (`wasm/mesh-link.js`): the Nano tab classifies calls as "compute" (`COMPUTE_SCOPE` includes
 `bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime|sagemaker`; `COMPUTE_PATH` includes
 `/publishers|/endpoints|/models`, `aiplatform`, `Microsoft.CognitiveServices|MachineLearningServices`) and forwards them to the
-paired booster / portal relay. So the routing for AI calls to the booster ALREADY exists in the browser. The booster itself is the
+paired mesh / portal relay. So the routing for AI calls to the mesh ALREADY exists in the browser. The mesh itself is the
 offline appliance, so those calls land in the same `ai_models_core` and use steps 3-4 above. WebLLM is therefore only the
-fallback when no booster is linked.
+fallback when no mesh is linked.
 
-What must change to route to a booster-hosted llama.cpp/Ollama:
+What must change to route to a mesh-hosted llama.cpp/Ollama:
 
-- Mostly configuration, not code: on the booster set `VYOMI_LLM_ENDPOINT` (llama.cpp `:8080` or Ollama `:11434`; both serve
+- Mostly configuration, not code: on the mesh set `VYOMI_LLM_ENDPOINT` (llama.cpp `:8080` or Ollama `:11434`; both serve
   `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`) and start the model there. Today nothing starts `vyomi-llm` inside a
-  booster session (no reference in booster boot code), and the Codespace is not necessarily a docker-compose host; decide
-  sidecar container vs host process. (Not verified how the booster appliance is launched in the Codespace.)
+  mesh session (no reference in mesh boot code), and the Codespace is not necessarily a docker-compose host; decide
+  sidecar container vs host process. (Not verified how the mesh appliance is launched in the Codespace.)
 - `llm_core.chat()` has no `tools`, no `stream`, no per-request model selection beyond the `model=` kwarg (which no adapter passes), no
   `response_format`, no `top_p`/`seed`. These must be added (section 2.0).
-- Do NOT make the booster depend on WebLLM; keep WebLLM as the no-booster Nano fallback and make `status()` report which one answered.
+- Do NOT make the mesh depend on WebLLM; keep WebLLM as the no-mesh Nano fallback and make `status()` report which one answered.
 - Model name leak: adapters ignore the requested cloud model id and answer with the one local model (documented honest limit). Keep, but surface the real model in a response header (e.g. `x-vyomi-local-model`) so tests can tell.
-- Wire router resource gate: `booster.py` has a 50% "ai" RAM bucket (`AI_SHARE`, `memory_split_mb["ai"]`, about 11 GB of 32 GB at the 70% cap) but nothing calls `allocate("ai", ...)`; model load is not admitted against it (grep: only definitions).
+- Wire router resource gate: `mesh.py` has a 50% "ai" RAM bucket (`AI_SHARE`, `memory_split_mb["ai"]`, about 11 GB of 32 GB at the 70% cap) but nothing calls `allocate("ai", ...)`; model load is not admitted against it (grep: only definitions).
 
 ## 2. Parity matrix
 
@@ -93,7 +93,7 @@ Legend: SERVED = works on the wire for text; PARTIAL = works with gaps; MISSING 
 | InvokeAgent | PARTIAL | eventstream `chunk` with attribution; model is called once with KB passages (L487-535). Action groups never invoked (no tool-call emission), no `returnControl`, no `trace`, no `sessionState`/session memory beyond request, no `InvokeInlineAgent`, no multi-agent collaboration |
 | AgentCore control plane (runtimes, gateways, targets) | SERVED | `agentcore_dispatch` L874+ |
 | AgentCore Gateway MCP (initialize, tools/list, tools/call) | PARTIAL | Lambda targets really invoked (L867); openApiSchema/smithyModel/mcpServer targets registered but not callable |
-| AgentCore InvokeAgentRuntime | MISSING (by design) | returns 424 `RuntimeClientError` (L892-896); no container runs. A booster could run it (agent container on the compute side) - see 4.6 |
+| AgentCore InvokeAgentRuntime | MISSING (by design) | returns 424 `RuntimeClientError` (L892-896); no container runs. A mesh could run it (agent container on the compute side) - see 4.6 |
 | AgentCore Memory, Identity, Code Interpreter, Browser, Observability | MISSING | not found in `bedrock_agents_core.py` |
 | SageMaker runtime `InvokeEndpoint` for a hosted open model | NOT AUDITED | `sagemaker` is classified compute in the link but I did not read a sagemaker adapter |
 
@@ -171,11 +171,11 @@ Reliability caveat: a 1.5-3B model emits malformed or hallucinated calls more of
 against the schema and return valid JSON always; (b) if llama.cpp returns plain text for a forced `tool_choice`, use a GBNF
 grammar (llama.cpp builds one from the tool schemas under `--jinja`) rather than faking a call.
 
-## 3. Model recommendation for a 2-core / 32 GB CPU booster
+## 3. Model recommendation for a 2-core / 32 GB CPU mesh
 
-Memory budget: the AI bucket is about 11 GB (70% cap x 50% AI share, `booster.py` L286). A single 3-4B Q4 model plus KV cache
+Memory budget: the AI bucket is about 11 GB (70% cap x 50% AI share, `mesh.py` L286). A single 3-4B Q4 model plus KV cache
 fits easily; a 7B Q4 (about 5 GB) fits; two loaded models fit if small. CPU, not RAM, is the constraint. All speeds below are
-rough ESTIMATES for 2 vCPU AVX2, llama.cpp, Q4_K_M, short context - NOT measured here; measure on a real booster before promising anything.
+rough ESTIMATES for 2 vCPU AVX2, llama.cpp, Q4_K_M, short context - NOT measured here; measure on a real mesh before promising anything.
 
 | Role | Model (GGUF) | Size | Est. gen speed | Est. prompt eval | Use |
 |---|---|---|---|---|---|
@@ -208,27 +208,27 @@ Effort in agent-days for one focused agent with the existing test harness (`test
 | 5 | Real streaming end to end for all three (Bedrock eventstream incl. InvokeModelWithResponseStream per-family chunks, Vertex SSE, Azure SSE) | time-to-first-token / cancellation tests | 2 | 1 | split inside items 2-4 |
 | 6 | Bedrock `InvokeAgent` with action groups (model emits tool call -> invoke Lambda action group -> feed result -> final answer; `returnControl`; `trace`; sessionState), `RetrieveAndGenerateStream`, `InvokeInlineAgent` | the Bedrock-native agent path; engine overlaps with item 2 | 4-5 | 1,2 | after 2 |
 | 7 | Azure AI Foundry Agent Service + classic Assistants (agents, threads, messages, runs with `requires_action` -> `submit_tool_outputs`, run steps, file/vector stores) and `/openai/v1/responses` | `azure-ai-projects` agents; one engine can serve assistants + agents + responses | 6-8 | 1,3 | yes, big |
-| 8 | Vertex Agent Engine (`reasoningEngines` create/query/streamQuery, simplest: store a pickled-agent record, run via compute booster) and RAG Engine (`ragCorpora`, importRagFiles, retrieveContexts) reusing the KB chunk/embed/kNN code | ADK deploy-and-query, RAG | 5-6 (RAG 2, engines 4) | 1,4 | yes (two sub-agents) |
-| 9 | Embedding upgrade: real embedding model (nomic/bge) in the booster, Titan v1/Cohere embed ids, `batchEmbedContents`, Azure `encoding_format`, dimensions rules | RAG quality plumbing; hash fallback is deterministic but semantically weak | 1-2 | 1 | yes |
+| 8 | Vertex Agent Engine (`reasoningEngines` create/query/streamQuery, simplest: store a pickled-agent record, run via compute mesh) and RAG Engine (`ragCorpora`, importRagFiles, retrieveContexts) reusing the KB chunk/embed/kNN code | ADK deploy-and-query, RAG | 5-6 (RAG 2, engines 4) | 1,4 | yes (two sub-agents) |
+| 9 | Embedding upgrade: real embedding model (nomic/bge) in the mesh, Titan v1/Cohere embed ids, `batchEmbedContents`, Azure `encoding_format`, dimensions rules | RAG quality plumbing; hash fallback is deterministic but semantically weak | 1-2 | 1 | yes |
 | 10 | Bedrock gaps: CountTokens, inference-profile list/get, ApplyGuardrail + Guardrails CRUD (regex/denied-topic/PII filters, deterministic; no ML content filters), `guardrailConfig` on Converse/Invoke, model catalogue refresh (Claude 3.7/4.x, Nova 2, Llama 3.x) | agents commonly guard + count tokens | 4 | 1,2 | yes |
-| 11 | Booster glue: start/stop llama-server/Ollama inside the booster session (`llm_runtime` variant without docker-compose network, disk guard exists), admit model RAM via `booster.allocate("ai", ...)`, `status()` surfaced in `/healthz` and Nano chip, model download/caching, health gating (`ModelNotReady` until warm), `VYOMI_LLM_ENDPOINT` auto-set | required for any of the above to run on a booster | 2-3 | none (can start now) | yes, with 1 |
-| 12 | AgentCore: InvokeAgentRuntime executing the user's agent container on the booster compute side, gateway openApi/mcpServer targets callable, Memory API | Bedrock AgentCore-native agents | 6-8 | 1,2,11 | yes, big |
+| 11 | Mesh glue: start/stop llama-server/Ollama inside the mesh session (`llm_runtime` variant without docker-compose network, disk guard exists), admit model RAM via `mesh.allocate("ai", ...)`, `status()` surfaced in `/healthz` and Nano chip, model download/caching, health gating (`ModelNotReady` until warm), `VYOMI_LLM_ENDPOINT` auto-set | required for any of the above to run on a mesh | 2-3 | none (can start now) | yes, with 1 |
+| 12 | AgentCore: InvokeAgentRuntime executing the user's agent container on the mesh compute side, gateway openApi/mcpServer targets callable, Memory API | Bedrock AgentCore-native agents | 6-8 | 1,2,11 | yes, big |
 | 13 | Vertex custom endpoint `:predict`/`:rawPredict`/`:chatCompletions` to the local model for deployed Model Garden models | makes "deploy llama on Vertex" tests work | 1-2 | 1 | yes |
-| 14 | Test layer: SDK-level conformance (boto3 `converse` tool loop, google-genai function calling, `openai.AzureOpenAI` tools) against a real llama-server in CI, with deterministic tiny model plus a scripted stub backend for hermetic runs | the proof; keep hermetic stub for PR CI, real model on the booster runner only | 3-4 | 2,3,4 | yes |
+| 14 | Test layer: SDK-level conformance (boto3 `converse` tool loop, google-genai function calling, `openai.AzureOpenAI` tools) against a real llama-server in CI, with deterministic tiny model plus a scripted stub backend for hermetic runs | the proof; keep hermetic stub for PR CI, real model on the mesh runner only | 3-4 | 2,3,4 | yes |
 
 Approximate total: 50-65 agent-days sequential; about 3 parallel lanes (AWS, GCP, Azure) after item 1 compress to roughly 3-4 weeks wall-clock.
 Suggested lanes: Foundation (1, 5, 9, 11) -> AWS lane (2, 6, 10, 12) / GCP lane (4, 8, 13) / Azure lane (3, 7) -> Tests (14).
 
-### 4.7 Token / usage accounting for the booster ledger
+### 4.7 Token / usage accounting for the mesh ledger
 
-Today: each adapter returns per-request usage (backend `usage` if present, else `ceil(chars/4)`), and `booster.py` only tracks RAM
+Today: each adapter returns per-request usage (backend `usage` if present, else `ceil(chars/4)`), and `mesh.py` only tracks RAM
 (`_LEDGER` kinds `compute|ai`); there is no token or request ledger, and no per-space attribution. Proposal:
 
 - `llm_core` emits a usage event `{ts, cloud, op, model_id_requested, local_model, input_tokens, output_tokens, latency_ms, status, space/account}` through a registered
-  sink; the booster registers a sink that keeps rolling counters and an event log, exposed by `/booster/...` status and the Nano chip.
+  sink; the mesh registers a sink that keeps rolling counters and an event log, exposed by `/mesh/...` status and the Nano chip.
 - Use the llama.cpp `usage`/`timings` fields (exact tokenizer counts); keep the `len/4` estimate only for WebLLM/no-usage backends and label it `estimated`.
 - Report cloud-shaped usage back to the SDK (already done) AND a simulated cost line (cloud list prices x tokens) for the cost meter; the real cost to us is wall-clock CPU, so also meter `compute_seconds`.
-- Ledger is a tally for display and fair-use caps (e.g. tokens per session hour), not billing; sessions already end on a timer (`booster-link.js` countdown).
+- Ledger is a tally for display and fair-use caps (e.g. tokens per session hour), not billing; sessions already end on a timer (`mesh-link.js` countdown).
 
 ## 5. Findings worth flagging
 
@@ -238,5 +238,5 @@ Today: each adapter returns per-request usage (backend `usage` if present, else 
 4. `google-genai` default (Developer API) path `/v1beta/models/...` is not served; only the Vertex form is. Also unverified with the real SDK.
 5. Streaming is cosmetic for all clouds. Fine for parsing tests; wrong for latency/cancel tests.
 6. AI RAM bucket exists but nothing admits models against it.
-7. Booster routing for AI calls is already in `booster-link.js`; the missing piece is starting a model on the booster and pointing `VYOMI_LLM_ENDPOINT` at it.
-8. Not verified: any real SDK round trip, llama.cpp/Ollama behaviour, tokens/sec, the booster boot path in a real Codespace, and the console capability JSONs.
+7. Mesh routing for AI calls is already in `mesh-link.js`; the missing piece is starting a model on the mesh and pointing `VYOMI_LLM_ENDPOINT` at it.
+8. Not verified: any real SDK round trip, llama.cpp/Ollama behaviour, tokens/sec, the mesh boot path in a real Codespace, and the console capability JSONs.

@@ -99,7 +99,7 @@
   };
 })();
 
-/* Models panel: the booster's AI model pool (10 open models). Feeds on GET /api/booster/models
+/* Models panel: the mesh's AI model pool (10 open models). Feeds on GET /api/mesh/models
  *   {models:[{id,name,role,tag,state,tokens_per_s_indicative,endpoints:{bedrock,vertex,azure}}], window_deadline | window:{deadline,left_s,label}}
  * 404 / no Mesh -> clearly labelled sample data and the test-chat box is hidden. Development and accuracy checks only; no benchmark claims. */
 (function () {
@@ -126,9 +126,9 @@
   }
   function fmt(sec) { if (sec <= 0) return "ended"; var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return h + "h " + (m < 10 ? "0" : "") + m + "m left"; }
   function getModels() {
-    var B = window.VyomiBooster;
-    var viaBooster = B && B.apiFetch ? B.apiFetch("/api/booster/models", { cache: "no-store" }).catch(function () { return null; }) : Promise.resolve(null);
-    return viaBooster.then(function (r) { if (r && r.ok) return r; return fetch("/api/booster/models", { credentials: "same-origin", cache: "no-store" }).catch(function () { return null; }); })
+    var B = window.VyomiMesh;
+    var viaMesh = B && B.apiFetch ? B.apiFetch("/api/mesh/models", { cache: "no-store" }).catch(function () { return null; }) : Promise.resolve(null);
+    return viaMesh.then(function (r) { if (r && r.ok) return r; return fetch("/api/mesh/models", { credentials: "same-origin", cache: "no-store" }).catch(function () { return null; }); })
       .then(function (r) { if (r && r.ok) return r.json().then(function (j) { return Array.isArray(j) ? { models: j } : j; }); return mockData(); })
       .catch(function () { return mockData(); });
   }
@@ -168,7 +168,7 @@
       if (id) {
         var box = root.querySelector('[data-box="' + id + '"]'), inp = box.querySelector("input"), out = box.querySelector(".vm-out"), q = inp.value.trim();
         if (!q) return; out.textContent = "..."; inp.value = "";
-        window.VyomiBooster.apiFetch("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: id, messages: [{ role: "user", content: q }], stream: false }) })
+        window.VyomiMesh.apiFetch("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: id, messages: [{ role: "user", content: q }], stream: false }) })
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (r) { out.textContent = r.ok && r.j.choices ? r.j.choices[0].message.content : ((r.j && r.j.error && (r.j.error.message || r.j.error.code)) || "The model is not ready yet. Try again shortly."); })
           .catch(function () { out.textContent = "Could not reach the Mesh."; });

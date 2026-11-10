@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the Nano in-browser VM guest image (v86, 32-bit x86): an Alpine i386
 # kernel (linux-virt) + a whole-rootfs initramfs with dropbear (SSH), busybox
-# httpd, sudo, python3 and git (Nano in-browser VMs ship git + Python for every tier; every other language runs on the booster). Run on the host:
+# httpd, sudo, python3 and git (Nano in-browser VMs ship git + Python for every tier; every other language runs on the mesh). Run on the host:
 #
 #   docker run --rm --platform linux/386 -v "$PWD/wasm/vm:/vm" alpine:3.21 sh /vm/build-image.sh
 #
@@ -12,7 +12,7 @@ set -eu
 WITH_PY="${WITH_PY:-1}"
 apk add --no-cache linux-virt cpio kmod >/dev/null
 # apk (package manager) + the standard CLI tools. In the browser the supported toolchain is git + Python (below); other languages are the
-# booster's job (64-bit Docker, latest versions). Anything else can still be `apk add`-ed over SSH, but it is not supported or tested here.
+# mesh's job (64-bit Docker, latest versions). Anything else can still be `apk add`-ed over SSH, but it is not supported or tested here.
 PKGS="dropbear dropbear-scp busybox-extras sudo apk-tools alpine-keys ca-certificates bash curl nano less coreutils findutils grep sed gawk tar gzip unzip procps-ng openssl git"
 [ "$WITH_PY" = 1 ] && PKGS="$PKGS python3 py3-pip"      # pip + apk are the package managers
 R=/tmp/rootfs

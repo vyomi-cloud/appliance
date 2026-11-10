@@ -1,4 +1,4 @@
-"""EKS managed node groups -> REAL k3s agent nodes (offline appliance / booster only; shells out through the K3sRuntime's single docker seam).
+"""EKS managed node groups -> REAL k3s agent nodes (offline appliance / mesh only; shells out through the K3sRuntime's single docker seam).
 
 Each node group becomes ``desiredSize`` k3s agent containers that join the cluster's k3s server and carry the EKS labels:
 

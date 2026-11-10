@@ -1150,8 +1150,8 @@ _tier_cache: dict = {"tier": "", "verified_at": 0.0, "ttl": 60.0}
 
 def active_tier() -> str:
     """Resolve active tier. In appliance mode, re-verifies cached JWT periodically."""
-    try:                                   # headless booster: tier comes from the signed session token (no licence JWT there)
-        from core import booster_session as _bs
+    try:                                   # headless mesh: tier comes from the signed session token (no licence JWT there)
+        from core import mesh_session as _bs
         _bt = _bs.effective_tier()
         if _bt:
             return _bt

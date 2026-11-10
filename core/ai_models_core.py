@@ -48,7 +48,7 @@ def _guardrails():
 
 _ACCT = "123456789012"
 
-# (model id, provider, name, input modalities, output modalities, streaming, catalogue id): the ten booster-mesh models only
+# (model id, provider, name, input modalities, output modalities, streaming, catalogue id): the ten mesh-llm models only
 # (core/ai_model_catalog.py). Legacy real-vendor ids resolve through the hidden alias map (see _resolve_model) but are never listed.
 BEDROCK_MODELS = [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT"], ["EMBEDDING"] if m["kind"] == "embed" else ["TEXT"],
                    m["kind"] != "embed", m["id"]) for m in CAT.MODELS]
@@ -932,7 +932,7 @@ def _gdev_dispatch(method, path, query, headers, body):
 def _gdev_model(m):
     emb = _vx_embed(m)
     return {"name": f"models/{m}", "version": "001", "displayName": CAT.BY_ID[m]["name"] if m in CAT.BY_ID else m,
-            "description": (CAT.BY_ID[m]["blurb"] if m in CAT.BY_ID else "Vyomi booster-mesh model") + f" ({CAT.availability(CAT.resolve('gcp', m) or m)['label']})",
+            "description": (CAT.BY_ID[m]["blurb"] if m in CAT.BY_ID else "Vyomi mesh-llm model") + f" ({CAT.availability(CAT.resolve('gcp', m) or m)['label']})",
             "inputTokenLimit": 8192, "outputTokenLimit": 1 if emb else 8192,
             "supportedGenerationMethods": ["embedContent", "batchEmbedContents"] if emb else ["generateContent", "streamGenerateContent", "countTokens"]}
 
