@@ -789,7 +789,7 @@
      }
     ],
     "notes": [
-     "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+     "Service Bus: the simulator speaks both the REST protocol ({sim}/azure-data/servicebus) and native AMQP 1.0 (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) on :5672 (plaintext) / :5671 (AMQPS, not yet TLS-wired — use plaintext for now).",
      "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
     ],
     "terraform": "",
@@ -1566,7 +1566,7 @@
    "azure/cognitiveservices": "Azure OpenAI in Vyomi is SIMULATED (deterministic, labelled output, no real model): AzureOpenAI(azure_endpoint={sim}/azure-data/openai/<account>, api_key=<account key>). Good for wiring and tests, not for judging model quality.",
    "azure/cosmos": "Cosmos SDKs require TLS: point them at https://{tls_hostport}/azure-data/cosmos/<account> and trust the caddy certificate.",
    "azure/keyvault": "Key Vault SDKs require TLS and host-based URLs: https://<vault>.vault.localtest.me:{tls_port}.",
-   "azure/servicebus": "Service Bus SDKs default to AMQP, which the simulator does not support. Use the Service Bus REST protocol ({sim}/azure-data/servicebus) or Azure Storage Queues.",
+   "azure/servicebus": "Service Bus SDKs default to AMQP, which the simulator now speaks natively on :5672 (plaintext; :5671/AMQPS isn't TLS-wired yet). REST ({sim}/azure-data/servicebus) and Azure Storage Queues remain available too.",
    "gcp/firestore": "Firestore is a separate emulator: set FIRESTORE_EMULATOR_HOST={host}:8080 (not the simulator port).",
    "gcp/kms": "No Google emulator exists: use the REST/HttpJson transport against https://{tls_hostport}.",
    "gcp/pubsub": "Pub/Sub is a separate emulator: set PUBSUB_EMULATOR_HOST={host}:8085 (not the simulator port).",
