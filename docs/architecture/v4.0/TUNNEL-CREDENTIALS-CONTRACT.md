@@ -1,11 +1,11 @@
 # vyomi-tunnel credentials - contract (portal <-> tunnel)
 
-Status: 2026-11-10. Tunnel side built on `v4/mesh-ssh-transport`; portal side NOT built (separate repo, branch from `v4-nano-portal`).
+Status: 2026-11-10. Tunnel side built on `v4/mesh-ssh-transport`; portal side built on portal branch `portal/tunnel-credentials` (`app/tunnel_credentials.py`, page `/account/tunnel-credentials`), verified locally against the real CLI; NOT merged to `v4-nano-portal`, NOT deployed to vyomi.cloud.
 Model: the AWS CLI. No `login` command. The user creates an access key in the console and saves it as `~/.vyomi/credentials`.
 
 ## 1. The user's side
 
-**Where to download the access key and secret:** `https://vyomi.cloud/account/tunnel-credentials` (console: avatar menu > **Tunnel credentials**). The tunnel prints this URL whenever credentials are missing or rejected. *The page does not exist yet; it is part of the portal work in section 4.*
+**Where to download the access key and secret:** `https://vyomi.cloud/account/tunnel-credentials` (console: avatar menu > **Tunnel credentials**). The tunnel prints this URL whenever credentials are missing or rejected. *Built in the portal branch above; live only after it is merged and deployed.*
 
 The page: create access key (secret shown once, "Download credentials" button), list, rotate, revoke.
 

@@ -7,8 +7,10 @@ import { join } from "node:path";
 
 export class TunnelAuthError extends Error { constructor(code, message) { super(message); this.code = code; } }
 export const DEFAULT_PORTAL = "https://vyomi.cloud";
-export const KEYS_URL = "https://vyomi.cloud/account/tunnel-credentials";
-export const NO_CREDENTIALS = `No Vyomi credentials. Download your access key and secret from ${KEYS_URL} (console: avatar menu > Tunnel credentials) and save the file as ~/.vyomi/credentials`;
+export const keysUrl = (portal) => (portal || DEFAULT_PORTAL).replace(/\/$/, "") + "/account/tunnel-credentials";
+export const KEYS_URL = keysUrl();
+export const noCredentials = (portal) => `No Vyomi credentials. Download your access key and secret from ${keysUrl(portal)} (console: avatar menu > Tunnel credentials) and save the file as ~/.vyomi/credentials`;
+export const NO_CREDENTIALS = noCredentials();
 
 export function parseIni(text) {
   const out = {}; let cur = null;
@@ -36,15 +38,15 @@ export function loadCredentials({ env = process.env, read = (f) => readFileSync(
 export const sha256hex = (s) => createHash("sha256").update(s).digest("hex");
 export const sign = ({ secret, method, path, date, body }) => createHmac("sha256", secret).update(`${method}\n${path}\n${date}\n${sha256hex(body)}`).digest("hex");
 
-const FRIENDLY = {
-  InvalidAccessKey: `your Vyomi access key is not valid. Create a new one at ${KEYS_URL}.`,
-  SignatureMismatch: `your Vyomi secret key does not match. Create a new access key at ${KEYS_URL}.`,
+const friendly = (portal) => ({
+  InvalidAccessKey: `your Vyomi access key is not valid. Create a new one at ${keysUrl(portal)}.`,
+  SignatureMismatch: `your Vyomi secret key does not match. Create a new access key at ${keysUrl(portal)}.`,
   RequestTimeSkew: "your computer's clock is off by more than 5 minutes. Fix the clock and retry.",
-  KeyRevoked: `this access key was revoked. Create a new one at ${KEYS_URL}.`,
+  KeyRevoked: `this access key was revoked. Create a new one at ${keysUrl(portal)}.`,
   PlanNotAllowed: "Mesh needs a Pro or Max plan.",
   NoMeshSession: "Mesh is not running. Start it in the Vyomi console, then retry.",
   Throttled: "too many requests; wait a moment and retry.",
-};
+});
 
 export async function fetchSession({ creds, fetchFn = globalThis.fetch, now = () => new Date(), version = "1.2.0" }) {
   const path = "/api/tunnel/session", body = JSON.stringify({ client: "vyomi-tunnel/" + version });
@@ -55,7 +57,7 @@ export async function fetchSession({ creds, fetchFn = globalThis.fetch, now = ()
       "x-vyomi-key": creds.accessKeyId, "x-vyomi-date": date, "x-vyomi-signature": sign({ secret: creds.secretAccessKey, method: "POST", path, date, body }) } });
   } catch (e) { throw new TunnelAuthError("Unreachable", `cannot reach ${creds.portal} (${String(e.message).slice(0, 80)})`); }
   let j = null; try { j = await r.json(); } catch { /* not json */ }
-  if (!r.ok) { const code = j?.error?.code || "Error"; throw new TunnelAuthError(code, FRIENDLY[code] || j?.error?.message || `the portal refused the request (HTTP ${r.status})`); }
+  if (!r.ok) { const code = j?.error?.code || "Error"; throw new TunnelAuthError(code, friendly(creds.portal)[code] || j?.error?.message || `the portal refused the request (HTTP ${r.status})`); }
   const s = j?.session; if (!s || typeof s.expires_at !== "number") throw new TunnelAuthError("BadResponse", "unexpected response from the portal");
   return { tier: s.tier || "", meshAllowed: s.allowed !== false, expiresAt: s.expires_at, sessionEnd: s.session_end ?? null, codespace: s.mesh?.codespace || "", meshState: s.mesh?.state || "",
            githubToken: s.github?.token || "" };
@@ -65,7 +67,7 @@ export async function fetchSession({ creds, fetchFn = globalThis.fetch, now = ()
 export function createSessionManager({ env = process.env, loader = () => loadCredentials({ env }), fetchFn, now = () => new Date(), log = () => {}, refreshMarginS = 120 } = {}) {
   let cur = null, creds = null;
   async function get() {
-    creds = creds || loader(); if (!creds) throw new TunnelAuthError("NoCredentials", NO_CREDENTIALS);
+    creds = creds || loader(); if (!creds) throw new TunnelAuthError("NoCredentials", noCredentials(env.VYOMI_PORTAL_URL));
     const t = now().getTime() / 1000;
     if (cur && cur.expiresAt - t > refreshMarginS) return withGithub(cur);
     cur = await fetchSession({ creds, fetchFn, now });

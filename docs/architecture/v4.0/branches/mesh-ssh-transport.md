@@ -18,7 +18,7 @@ No login command. The user creates an access key in the console (avatar menu > T
 signs a request to the portal for a short-lived session (plan, Mesh session end, Codespace, GitHub token); the GitHub token goes to `gh` as GH_TOKEN, so
 the user never signs in to gh. Contract: `docs/architecture/v4.0/TUNNEL-CREDENTIALS-CONTRACT.md`. Nano also needs a key (Free works); Mesh needs Pro/Max;
 streams stop at session_end. The first Mesh command writes the `*.vyomi` ssh block. Tunnel side built and tested against a stub portal that verifies the
-signature; the portal side (key store, avatar page, /api/tunnel/session, GitHub token vending) is NOT built. NOT verified: a real Codespace with these
+signature; the portal side is built on portal branch `portal/tunnel-credentials` (key store, /account/tunnel-credentials page, signed /api/tunnel/session, GitHub token from the existing Mesh GitHub connection) and was exercised with the real CLI against a local portal (Free account: Nano ok, Mesh refused). Not merged/deployed; the Nano avatar-menu link (wasm/vyomi-appbar.js) is not added yet. NOT verified: a real Codespace with these
 credentials; that the user's ssh key is accepted by the Codespace sshd on :2222.
 Hidden/legacy: `--codespace`, `--relay-mode`, `relay-login`, `config`, `status`, `keep`.
 
