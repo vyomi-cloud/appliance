@@ -43,6 +43,8 @@ VERB_RE = re.compile(r"^_?(create|list|get|delete|update|put|patch|describe|publ
                      r"enable|disable|encrypt|decrypt|sign|verify|rotate|restore|purge|send|receive|batch|run|"
                      r"generate|import|export|tag|untag|subscribe|unsubscribe|commit|rollback|begin|execute|"
                      r"lease|break|renew|regenerate|deallocate|poweroff|reboot|resize|seek|snapshot)_[a-z0-9_]+$")
+# Private internal accessors whose names merely look like verb-named handlers (not SDK/REST operations).
+NOT_OPERATIONS = {"_get_target_backlog"}
 TEST_DIRS = ("tests", "wasm/ui-tests", "samples")
 SDK_TEST_EXT = (".java", ".go", ".py", ".sh", ".mjs", ".js")
 
@@ -127,7 +129,7 @@ def _ops_in(path: str) -> set[str]:
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
-        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name not in NOT_OPERATIONS and VERB_RE.match(n.name):
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
             ops.add(fn_ops[n.name])
     for fname in dispatched:
