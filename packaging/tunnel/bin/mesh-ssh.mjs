@@ -25,13 +25,26 @@ const dockerIp = (rawName) => `docker inspect -f '{{range .NetworkSettings.Netwo
 
 /** @returns transport {resolve(name,port), open(host,port), exec(cmd), http(req,res,body), close(), simulatorTarget()} */
 export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null, log = () => {}, ipTtlMs = 30000,
-                                     simulatorPort = 9000, hostSshPort = 2222, config = null } = {}) {
+                                     simulatorPort = 9000, hostSshPort = 2222, config = null, keepaliveMs = 240000 } = {}) {
   if (!CODESPACE.test(String(codespace || ""))) throw new Error("a Codespace name is required (VYOMI_MESH_CODESPACE / --codespace)");
   let cfg = config;                         // {file, host} - tests inject it; otherwise `gh codespace ssh --config` provides it
   let dir = null;
   const ips = new Map();                    // container name -> {ip, at}
   const live = new Set();
   let closed = false;
+  // Beat the Codespaces idle timeout automatically: GitHub resets its idle timer on ssh traffic THE CLIENT sends (not on keepalives
+  // inside an idle connection), so while this transport is in use it runs a trivial command on the host every ~4 min. Users do nothing.
+  const ka = { writes: 0, failures: 0, lastAt: 0, timer: null };
+  function startKeepalive() {
+    if (ka.timer || !keepaliveMs) return;
+    const beat = async () => {
+      if (closed) return;
+      try { await exec("echo vyomi-keepalive > /dev/null"); ka.writes++; ka.failures = 0; ka.lastAt = Date.now(); }
+      catch (e) { if (++ka.failures === 1) log("keepalive failed: " + String(e.message).slice(0, 120)); }
+    };
+    ka.timer = setInterval(beat, keepaliveMs); ka.timer.unref?.();
+    beat();
+  }
 
   const collect = (child) => new Promise((resolve, reject) => {
     let out = "", err = "";
@@ -42,7 +55,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
   });
 
   async function ensureConfig() {
-    if (cfg) return cfg;
+    if (cfg) { startKeepalive(); return cfg; }
     if (!ghBin) {                                                    // find gh, or install a private pinned copy (gh-manager.mjs)
       ghBin = (await ensureGh({ spawn, log })).path;
       const a = await ghAuthOk(ghBin, { spawn });
@@ -55,6 +68,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     const file = join(dir, "ssh_config");
     writeFileSync(file, text, { mode: 0o600 });
     cfg = { file, host: m[1] };
+    startKeepalive();
     return cfg;
   }
   const sshArgs = (c) => ["-F", c.file, "-o", `ControlPath=${join(dir || tmpdir(), "cm-%C")}`, "-o", "ControlMaster=auto", "-o", "ControlPersist=600",
@@ -149,9 +163,9 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     out.end(body);
   }
 
-  function close() { closed = true; for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) spawn("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
+  function close() { closed = true; clearInterval(ka.timer); for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) spawn("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
 
-  return { resolve, open, exec, simulatorTarget, httpToSimulator, close, codespace };
+  return { resolve, open, exec, simulatorTarget, httpToSimulator, close, codespace, keepalive: () => ({ ...ka, timer: undefined }) };
 }
 
 /** A drop-in for booster-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.

@@ -177,7 +177,6 @@ Usage: vyomi-tunnel [command]
   forward     forward a local port to a target
   login       sign in through the Vyomi relay
   status      show sign-in state
-  keep        keep a Mesh Codespace from going idle
   config      add the *.vyomi block to ~/.ssh/config
 
 Targets: host, k3s, vyomi-k3s-<id>, or a Docker instance name
@@ -210,9 +209,6 @@ Sign in with your browser and store a Mesh session token in ~/.vyomi.`,
   status: `vyomi-tunnel status
 
 Show whether you are signed in and when the Mesh session ends.`,
-  keep: `vyomi-tunnel keep [--user u] [--key f] [--interval s]
-
-Hold an ssh session to the Codespace host so GitHub does not idle it out.`,
   config: `vyomi-tunnel config [--yes | --remove]
 
 Add (or remove) the *.vyomi block in ~/.ssh/config so 'ssh my-vm.vyomi' works.`,

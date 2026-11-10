@@ -13,6 +13,12 @@ simulator HTTP API (Nano compute calls) over it. Browser VMs (tunnel 2) are unch
   container with `Host: simulator:9000`, `/shell` -> 501, `/booster` -> 410), `connectSsh` / `forwardSsh` for the CLI.
 - `local-relay.mjs`: `VYOMI_MESH_CODESPACE=<name>` selects the ssh hub. `mesh-cli.mjs`: `connect|forward ... --codespace <name>` (or the env) goes straight over ssh, no relay/token.
 
+## Idle timeout (automatic)
+GitHub resets a Codespace's idle timer on ssh traffic the client sends. The transport therefore runs a trivial command on the host every 4 min
+(`keepaliveMs`) for as long as it is in use (connect, forward, or the relay with VYOMI_MESH_CODESPACE), starting on first use and stopping on close.
+Users do nothing; `vyomi-tunnel keep` remains only as a hidden advanced command and is no longer in the help. Unit-tested with a fake ssh; NOT yet
+proven against a real idle timeout (needs a >30 min live run on a fresh Codespace).
+
 ## GitHub CLI handling
 `wasm/relay/gh-manager.mjs`: use a system `gh` (>= 2.40) if present, else a managed copy in `~/.vyomi/bin`, else download the pinned official release
 (v2.103.3; SHA-256 embedded in code; macOS/Linux/Windows, x64/arm64) and unpack there. Never touches PATH/Homebrew. `vyomi-tunnel gh-login` signs in

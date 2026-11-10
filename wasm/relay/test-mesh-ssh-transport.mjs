@@ -35,7 +35,7 @@ function fakeSpawn(bin, args) {
   setImmediate(() => { c.stdout.end(out); c.emit("close", 0); });
   return c;
 }
-const t = createSshTransport({ codespace: "cs-test", spawn: fakeSpawn, config: { file: "/dev/null", host: "cs.test.main" } });
+const t = createSshTransport({ codespace: "cs-test", spawn: fakeSpawn, config: { file: "/dev/null", host: "cs.test.main" }, keepaliveMs: 0 });
 
 // resolve
 assert.deepEqual(await t.resolve("host"), { host: "127.0.0.1", port: 2222, reserved: "host" });
@@ -51,6 +51,15 @@ assert.equal(await t.resolve("vyomi-k3s-ZZ"), null);
 assert.deepEqual(await t.simulatorTarget(), { host: "10.0.0.2", port: 9000 });
 assert.ok(cmds.some((c) => /^W /.test(c)) === false);
 await assert.rejects(() => t.open("1.2.3.4; id", 22));         // open() only takes dotted quads
+
+// keepalive: starts by itself on first use, sends real ssh traffic on a schedule, stops on close
+const kaCmds = []; const kt = createSshTransport({ codespace: "cs-ka", config: { file: "/dev/null", host: "h" }, keepaliveMs: 40,
+  spawn: (b, a) => { kaCmds.push(a[a.length - 1]); return fakeSpawn(b, a); } });
+assert.equal(kaCmds.length, 0);                                   // nothing before the transport is used
+await kt.exec("true"); await new Promise((r) => setTimeout(r, 150));
+const beats = kaCmds.filter((c) => c.includes("vyomi-keepalive")).length;
+assert.ok(beats >= 3, "keepalive beats: " + beats); assert.ok(kt.keepalive().writes >= 3);
+kt.close(); const after = kaCmds.length; await new Promise((r) => setTimeout(r, 120)); assert.equal(kaCmds.length, after);   // stops on close
 
 // connectSsh: bytes round trip
 const stdin = new PassThrough(), stdout = new PassThrough(); const got = []; stdout.on("data", (d) => got.push(d));
