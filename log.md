@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-10T18:00:10+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 1 actionable.**
+- 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
+- · `announcement` Amazon OpenSearch Service now lets you validate and roll back version upgrades ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-service/upgrades/))
+
+Sources that failed this run (2): maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-10T16:59:46+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3010,3 @@ Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - 🔧 `operation-added` AWS ec2: new operation GetCapacityManagerSupportabilityScores
 - 🔧 `operation-changed` AWS ec2: operation CreateCapacityReservationFleet changed
 - · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
-- · `spec-commit` Azure servicebus: fix: improve Service Bus administration Swagger interoperability (#47269) ([link](https://github.com/Azure/azure-rest-api-specs/commit/1758295d22b6a143bb74383febd0c3f6bccfeda5))
-- · `release` pypi:boto3: 1.43.120 → 1.43.121
-- · `release` pypi:botocore: 1.43.120 → 1.43.121
-
-Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T18:50:50+00:00
-
-Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
