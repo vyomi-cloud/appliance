@@ -78,7 +78,22 @@ const wsOk = await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${por
 assert.equal(wsOk, "abc");
 const refused = await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${port}/connect?vm=host`, { headers: { origin: "https://evil.example" } }); w.on("unexpected-response", (_q, r) => res(r.statusCode)); w.on("error", () => {}); });
 assert.equal(refused, 403);
-assert.equal(await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${port}/shell`); w.on("unexpected-response", (_q, r) => res(r.statusCode)); w.on("error", () => {}); }), 501);
+// /shell: tab <-> simulator's /booster/shell WS over a stream (stub transport -> real local ws server standing in for the simulator)
+const sim = http.createServer(); const simWss = new WebSocketServer({ server: sim }); const seen = [];
+simWss.on("connection", (ws, rq) => { seen.push(rq.url); ws.send(JSON.stringify({ t: "opened", container: "vyomi-i-x" })); ws.on("message", (d, b) => ws.send(b ? Buffer.concat([Buffer.from("echo:"), d]) : JSON.stringify({ t: "resize-ack" }))); });
+await new Promise((r) => sim.listen(0, "127.0.0.1", r));
+const stub = { codespace: "x", simulatorTarget: async () => ({ host: "127.0.0.1", port: sim.address().port }), open: async (h, p) => net.connect(p, h), close() {}, resolve: t.resolve, httpToSimulator: t.httpToSimulator };
+const hub2 = createSshHub({ WebSocketServer, WebSocket: WS, transport: stub, origins: ["https://vyomi.cloud"] });
+const srv2 = http.createServer(); srv2.on("upgrade", (rq, s, h) => hub2.shellUpgrade(rq, s, h));
+await new Promise((r) => srv2.listen(0, "127.0.0.1", r));
+const msgs = await new Promise((res) => { const out = []; const w = new WS(`ws://127.0.0.1:${srv2.address().port}/shell`, { headers: { origin: "https://vyomi.cloud" } });
+  w.on("open", () => w.send(JSON.stringify({ type: "auth", cloud: "aws", ref: "i-1", cols: 80, rows: 24 })));
+  w.on("message", (d, b) => { out.push(b ? "B:" + d : "T:" + d); if (out.length === 1) { w.send(Buffer.from("ls"), { binary: true }); w.send(JSON.stringify({ t: "resize", cols: 1, rows: 1 })); } if (out.length === 3) { w.close(); res(out); } }); });
+assert.equal(msgs[0], 'T:{"t":"opened","container":"vyomi-i-x"}'); assert.ok(msgs.includes("B:echo:ls")); assert.ok(msgs.includes('T:{"t":"resize-ack"}'));
+assert.match(seen[0], /cloud=aws&ref=i-1&cols=80&rows=24/);
+const bad = await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${srv2.address().port}/shell`); w.on("open", () => w.send(JSON.stringify({ type: "auth", cloud: "nope", ref: "x" }))); w.on("message", (d) => res(String(d))); });
+assert.match(bad, /BadRequest/);
+sim.close(); srv2.close();
 srv.close(); t.close();
 console.log("mesh-ssh transport: all checks passed");
 process.exit(0);

@@ -151,7 +151,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = "gh",
 /** A drop-in for booster-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.
  *  The laptop is the trust boundary here (the ssh session is the user's own), so there is no session token; browser callers
  *  are still limited to the allow-listed origins. */
-export function createSshHub({ WebSocketServer, transport, log = () => {},
+export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, transport, log = () => {},
                                origins = (process.env.VYOMI_RELAY_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
                                allowLoopback = process.env.VYOMI_RELAY_ALLOW_LOOPBACK === "1", maxTcp = Number(process.env.VYOMI_MAX_STREAMS || 20) } = {}) {
   const allow = new Set(origins.length ? origins : ["https://vyomi.cloud", "https://www.vyomi.cloud"]);
@@ -161,6 +161,9 @@ export function createSshHub({ WebSocketServer, transport, log = () => {},
     "access-control-allow-headers": "*", "access-control-allow-private-network": "true" } : {});
   const connWss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024 });
   const streams = new Set();
+  const shellWss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024 });
+  const maxShells = Number(process.env.VYOMI_SHELL_MAX_PER_SESSION || 4), idleMs = Number(process.env.VYOMI_SHELL_IDLE_MS || 900000);
+  let shells = 0;
   const reject = (socket, status, code) => { try { socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`); } catch { /* */ } socket.destroy(); };
 
   function connectUpgrade(req, socket, head) {
@@ -190,6 +193,47 @@ export function createSshHub({ WebSocketServer, transport, log = () => {},
     return true;
   }
 
+
+  /** /shell (the Nano tab's terminal): first message is the JSON auth {cloud, ref, cols, rows}; bytes then flow tab <-> the simulator's own
+   *  /booster/shell WebSocket, reached over an ssh stream (the simulator resolves the container itself and uses its own session token). */
+  function shellUpgrade(req, socket, head) {
+    if (!originOk(req.headers.origin)) { reject(socket, 403, "OriginNotAllowed"); return true; }
+    if (!WSClient) { reject(socket, 501, "MeshShellUnavailable"); return true; }
+    shellWss.handleUpgrade(req, socket, head, (tab) => {
+      const fail = (code, message, wsCode = 4401) => { try { tab.send(JSON.stringify({ t: "error", code, message })); tab.close(wsCode, code.slice(0, 100)); } catch { /* */ } };
+      const authTimer = setTimeout(() => fail("AuthTimeout", "no auth message"), 10000);
+      tab.on("close", () => clearTimeout(authTimer));
+      tab.once("message", async (data, isBin) => {
+        clearTimeout(authTimer);
+        let a; try { if (isBin) throw 0; a = JSON.parse(data.toString()); } catch { return fail("BadRequest", "first message must be JSON auth"); }
+        const cloud = String(a?.cloud || ""), ref = String(a?.ref || "");
+        if (!a || a.type !== "auth" || !/^(aws|gcp|azure)$/.test(cloud) || !ref || ref.length > 200) return fail("BadRequest", "cloud/ref", 4400);
+        if (shells >= maxShells) return fail("TooManyShells", `at most ${maxShells} shells`, 4429);
+        shells++; let freed = false; const free = () => { if (!freed) { freed = true; shells--; } };
+        let sock, sim, last = Date.now(); const queue = [];
+        const idle = setInterval(() => { if (Date.now() - last > idleMs) { fail("IdleTimeout", "shell closed after being idle", 4408); end(); } }, Math.min(1000, Math.max(20, idleMs / 4)));
+        const end = () => { clearInterval(idle); free(); try { sim && sim.close(); } catch { /* */ } try { sock && sock.destroy(); } catch { /* */ } try { tab.close(1000); } catch { /* */ } };
+        tab.on("close", end); tab.on("error", end);
+        tab.on("message", (d, bin) => {
+          last = Date.now();
+          if (bin && d.length > 64 * 1024) return fail("FrameTooLarge", "input frame too large", 1009);
+          if (sim && sim.readyState === 1) sim.send(d, { binary: bin }); else if (queue.length < 64) queue.push([d, bin]);
+        });
+        try {
+          const t = await transport.simulatorTarget(); if (!t) return fail("MeshSimulatorDown", "the simulator is not running in the Codespace", 4502);
+          sock = await transport.open(t.host, t.port);
+          const q = new URLSearchParams({ cloud, ref, cols: String(a.cols ?? ""), rows: String(a.rows ?? "") });
+          sim = new WSClient(`ws://simulator:9000/booster/shell?${q}`, { createConnection: () => sock, maxPayload: 1024 * 1024 });
+          sim.on("open", () => { for (const [d, b] of queue) sim.send(d, { binary: b }); queue.length = 0; });
+          sim.on("message", (d, b) => { last = Date.now(); try { tab.send(d, { binary: b }); } catch { /* */ } });
+          sim.on("close", () => end()); sim.on("error", () => end());
+          sim.on("unexpected-response", (_q, r) => { fail("LocalRefused", "simulator refused the shell: HTTP " + r.statusCode, 4403); end(); });
+        } catch (e) { fail("MeshStreamFailed", String(e.message).slice(0, 200), 4502); end(); }
+      });
+    });
+    return true;
+  }
+
   /** HTTP carrying X-Vyomi-Session-Token marks the Mesh plane (the Nano console's compute calls) -> the simulator in the Codespace. */
   function http_(req, res, body) {
     if (req.headers["x-vyomi-session-token"] === undefined) return false;
@@ -203,8 +247,7 @@ export function createSshHub({ WebSocketServer, transport, log = () => {},
 
   return {
     upgrade: (_q, socket) => { reject(socket, 410, "MeshLinkNotUsed"); return true; },          // no outbound link exists any more
-    shellUpgrade: (_q, socket) => { reject(socket, 501, "MeshShellUnavailable"); return true; },
-    connectUpgrade, http: http_, enabled: () => true,
+    shellUpgrade, connectUpgrade, http: http_, enabled: () => true,
     linked: () => [transport.codespace], streams: () => streams.size, close: () => transport.close(),
   };
 }

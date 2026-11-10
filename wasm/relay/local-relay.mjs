@@ -41,7 +41,7 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 // CommonJS require honors NODE_PATH (unlike ESM import), so the `ws` package
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
-const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
+const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status
 if (["login", "config", "connect", "status"].includes(process.argv[2])) {
@@ -65,7 +65,7 @@ const tabs = new Set();        // live registrant sockets, insertion-ordered
 // Booster link (outbound-dialed booster <-> token-paired clients). Inert unless VYOMI_BOOSTER_SESSION_KEY is set.
 // VYOMI_MESH_CODESPACE=<name>: the link runs on THIS machine over the user's own `gh codespace ssh` session (mesh-ssh.mjs); the Codespace dials nothing.
 const hub = process.env.VYOMI_MESH_CODESPACE
-  ? createSshHub({ WebSocketServer, transport: createSshTransport({ codespace: process.env.VYOMI_MESH_CODESPACE, log: (m) => console.log("[relay] " + m) }), log: (m) => console.log("[relay] " + m) })
+  ? createSshHub({ WebSocketServer, WebSocket, transport: createSshTransport({ codespace: process.env.VYOMI_MESH_CODESPACE, log: (m) => console.log("[relay] " + m) }), log: (m) => console.log("[relay] " + m) })
   : createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
 // Remote-LLM plane (spike, inert unless VYOMI_BOOSTER_SESSION_KEY is set): a GitHub-Actions runner dials OUT to /llm-runner;
 // the booster reaches it with plain HTTP under /llm/*.
