@@ -16,15 +16,18 @@
   function toast(text) { var b = B(); if (b && b.toast) b.toast(text); }
   function css() {
     var st = document.createElement("style");
-    st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}"
+    st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px}"
       + ".vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}.vy-nano-video>.vy-video-banner{order:1;flex:1 1 340px;min-width:0;margin:0 0 16px!important}.vy-nano-video>#vy-bw{order:2;flex:1 1 340px;min-width:0;margin:0 0 16px}"
-      + "#vy-bw .main{flex:1 1 200px;min-width:0}"
-      + "#vy-bw h4{margin:0 0 3px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}"
+      + "#vy-bw .main{min-width:0}"
+      + "@media(max-width:560px){#vy-bw{grid-template-columns:minmax(0,1fr)}#vy-bw .act{min-width:0}}"
+      + "#vy-bw .foot:empty{display:none}#vy-bw .foot{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 20px;padding-top:8px;border-top:1px solid rgba(128,128,128,.22)}"
+      + "#vy-bw .foot p,#vy-bw .foot .sub{margin:0;text-align:left}#vy-bw .foot .sub a{white-space:nowrap}"
+      + "#vy-bw h4{margin:0;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}"
       + "#vy-bw .tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:#e8f0fe;color:#1a56c4}"
       + "#vy-bw .tag.free{background:#eceff3;color:#4b5563}"
       + "#vy-bw p{margin:0 0 6px;color:#4b5563}#vy-bw p:last-child{margin:0}"
       + "#vy-bw .fine{font-size:12px;color:#6b7280}#vy-bw a{color:#1a56c4}"
-      + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}"
+      + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}#vy-bw .act .go{white-space:nowrap}"
       + "#vy-bw .go{display:block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 16px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-bw .go.stop{background:#b42318}#vy-bw .go[disabled]{opacity:.6;cursor:default}"
       + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}"
@@ -134,7 +137,11 @@
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">Upgrade to Pro / Max</a>';
     }
-    card.innerHTML = '<div class="main">' + main + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div><div class="act">' + act + '</div>';
+    // Fixed layout for every state: row 1 = title (left, no wrap) + buttons (right); row 2 spans both columns with the note lines.
+    var tm = /^(<h4>[\s\S]*?<\/h4>)([\s\S]*)$/.exec(main), title = tm ? tm[1] : main, notes = tm ? tm[2] : "", subs = "";
+    act = act.replace(/<div class="sub">[\s\S]*?<\/div>/g, function (s) { if (s.replace(/<[^>]*>/g, "").trim()) subs += s; return ""; });
+    card.innerHTML = '<div class="main">' + title + '</div><div class="act">' + act + '</div>'
+      + '<div class="foot">' + notes + subs + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div>';
   }
 
   // Mount as an in-page card on the console HOME page: directly beside the "How Nano ... works" video banner; if that banner was dismissed,
