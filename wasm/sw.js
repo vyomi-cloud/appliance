@@ -1370,6 +1370,11 @@ self.addEventListener("fetch", (event) => {
       // production). Where this SW does see it (a bare local Nano server) there is no portal: say "not
       // signed in" rather than a 501 that every console's account menu would trip over.
       if (apiPath === "/api/auth/me" && method === "GET") return json({ authenticated: false });
+      // Same for the other portal-only GETs the consoles poll (Mesh state, account Mesh settings, runtime profile):
+      // with no portal there is nothing to say. An empty 200 is exactly what mesh-link.js / vyomi-appbar.js read as
+      // "the portal can't say" (account = null, no session, no sandbox flags); a 501 tripped every console's API check.
+      if (method === "GET" && (apiPath === "/api/mesh/status" || apiPath === "/api/runtime/profile"
+          || apiPath === "/api/account/mesh" || apiPath.indexOf("/api/account/mesh/") === 0)) return json({});
       if (apiPath === "/api/auth/logout" && method === "POST") {
         try { await metaPut("license_jwt", ""); } catch (_) {}
         return json({ ok: true });
