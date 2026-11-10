@@ -1,6 +1,6 @@
 # Release checks — v3.0.46
 
-Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/42852728137) for tag `v3.0.46`.
+Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/42873652800) for tag `v3.0.46`.
 
 | Package / check | Platform | Result |
 |---|---|---|
@@ -9,9 +9,9 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
 | CLI: aws / gcloud / az suites + CLI ↔ console both ways (75/76 checks passed) | Linux, release images | ❌ failure |
 | Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (75/76 checks passed) | Chromium, release wasm bundle | ❌ failure |
-| MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/42852728110)) |
+| MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/42874310267)) |
 | Startup: all services + UI status | Linux, release images | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/42854095821)) |
-| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | — not run |
+| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
 
 ## DEB
 
@@ -19,7 +19,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_3.0.46_all.deb | 12s |
+| ✅ | install vyomi_3.0.46_all.deb | 5s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | bundled VERSION is 3.0.46 | /usr/share/vyomi/packaging/common/VERSION = 3.0.46 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -57,7 +57,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.46 | exit 0; compose v3.0.46; ==> Vyomi 3.0.46 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.46 (SHA256-checked) | exit 0; cached compose v3.0.46 |
-| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.WmiYm4R8Wl/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.0OW3LMDiag/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.46) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -68,7 +68,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-3.0.46-1.noarch.rpm | 2s |
+| ✅ | install vyomi-3.0.46-1.noarch.rpm | 1s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | bundled VERSION is 3.0.46 | /usr/lib/cloud-learn/VERSION = 3.0.46 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -106,7 +106,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.46 | exit 0; compose v3.0.46; ==> Vyomi 3.0.46 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.46 (SHA256-checked) | exit 0; cached compose v3.0.46 |
-| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.SRavbio7AU/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.r7nsdQoo0I/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -117,7 +117,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 13s |
+| ✅ | install vyomi | 9s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | bundled VERSION is 3.0.46 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.46 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -140,7 +140,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 4s |
+| ✅ | install vyomi-docker | 3s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -156,7 +156,7 @@ Generated 2026-11-10 16:59 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.46 | exit 0; compose v3.0.46; ==> Vyomi 3.0.46 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.46 (SHA256-checked) | exit 0; cached compose v3.0.46 |
-| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.0YC5vBsvre/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.fMLmJfRr4k/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.46/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.46... (12 files, 27MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -385,7 +385,11 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Console UI (offline) — azure
 
-✅ 15/15 suites passed
+❌ 14/15 suites passed
+
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `offline-ui-crawl` | 18 | 2 |
 
 
 ## Console UI (offline) — gcp
@@ -433,6 +437,44 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 | ✅ | service Valkey (Memorystore) ready | ready after 1s |
 | ✅ | service OCI registry (Artifact Registry) ready | ready after 1s |
 | ✅ | service Azurite (Blob / Queue) ready | ready after 6s |
+| ✅ | /clouds status banner says 'Appliance is Ready' | Appliance is Ready |
+| ✅ | /clouds banner counts every service | — all 17 services running |
+| ✅ | running version is 3.0.46 | reports 3.0.46 |
+| ✅ | AWS console loads its service rail | 31 rail items |
+| ✅ | AWS console has no page errors |  |
+| ✅ | AWS console has no 5xx API calls |  |
+| ✅ | GCP console loads its service rail | 18 rail items |
+| ✅ | GCP console has no page errors |  |
+| ✅ | GCP console has no 5xx API calls |  |
+| ✅ | AZURE console loads its service rail | 21 rail items |
+| ✅ | AZURE console has no page errors |  |
+| ✅ | AZURE console has no 5xx API calls |  |
+
+## Windows E2E
+
+### Vyomi 3.0.46 startup — 31/31 checks passed
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | simulator answers /healthz | 3s |
+| ✅ | readiness reports every service ready | 17/17 ready, 100% |
+| ✅ | service Vyomi simulator ready | ready after 5s |
+| ✅ | service PostgreSQL ready | ready after 5s |
+| ✅ | service MySQL ready | ready after 5s |
+| ✅ | service Vault (KMS / secrets) ready | ready after 5s |
+| ✅ | service MinIO (S3) ready | ready after 5s |
+| ✅ | service DynamoDB ready | ready after 294s |
+| ✅ | service NATS (EventBridge) ready | ready after 7s |
+| ✅ | service ElasticMQ (SQS) ready | ready after 7s |
+| ✅ | service fake-gcs-server ready | ready after 7s |
+| ✅ | service Pub/Sub emulator ready | ready after 7s |
+| ✅ | service Firestore emulator ready | ready after 7s |
+| ✅ | service CloudSim Plus ready | ready after 7s |
+| ✅ | service VictoriaMetrics (CloudWatch metrics) ready | ready after 7s |
+| ✅ | service Caddy gateway (API Gateway V2) ready | ready after 7s |
+| ✅ | service Valkey (Memorystore) ready | ready after 7s |
+| ✅ | service OCI registry (Artifact Registry) ready | ready after 7s |
+| ✅ | service Azurite (Blob / Queue) ready | ready after 623s |
 | ✅ | /clouds status banner says 'Appliance is Ready' | Appliance is Ready |
 | ✅ | /clouds banner counts every service | — all 17 services running |
 | ✅ | running version is 3.0.46 | reports 3.0.46 |
