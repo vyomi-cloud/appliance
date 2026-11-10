@@ -69,6 +69,7 @@ jobs:
         env:
           CLOUDLEARN_DEV_MODE: "1"
         run: |
+          export VYOMI_DOCKER_GID=$(getent group docker 2>/dev/null | cut -d: -f3 || echo 0)
           # DEV_MODE=1 keeps /api/license/signup available in CI (production
           # mode disables that endpoint by design — see core/license_remote).
           # --profile full starts every real backend (Vault, NATS, MinIO,

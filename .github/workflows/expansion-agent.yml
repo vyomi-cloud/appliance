@@ -158,6 +158,7 @@ jobs:
         run: |
           docker build -t cloudlearn/simulator:ci .
           CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+          VYOMI_DOCKER_GID=$(getent group docker 2>/dev/null | cut -d: -f3 || echo 0) \
             docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
               $(grep -v '^#' tests/conformance/hourly/ci-services.txt)
           for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
