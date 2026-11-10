@@ -78,7 +78,9 @@ start_ai() {
     || { log "AI pack: could not read the admission plan - not starting models."; return 0; }
   free=$(df -BG --output=avail "$HOME" 2>/dev/null | tail -1 | tr -dc 0-9)
   if [ -n "$free" ] && [ "$free" -lt "$AI_MIN_FREE_GB" ]; then log "AI pack: only ${free} GB free disk (< ${AI_MIN_FREE_GB}) - not pulling models."; return 0; fi
-  local vars; vars=$(printf '%s' "$plan" | python3 -c '
+  # Parse with the SIMULATOR's python: the Codespace host (minimal Ubuntu base) has no python3, which made this step always report
+  # "chat model not admitted" on a real Codespace. The simulator image always ships it.
+  local vars; vars=$(printf '%s' "$plan" | docker compose -f "$COMPOSE" exec -T simulator python3 -c '
 import json, sys
 p = json.load(sys.stdin)
 for k, e in (p.get("errors") or {}).items():
