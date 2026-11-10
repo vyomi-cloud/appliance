@@ -5,7 +5,7 @@
  *   NANO_DIR=$PWD/wasm RELAY_HTTP=http://127.0.0.1:8090 node wasm/ui-tests/validate-aws-logs.mjs
  */
 import { startServer, bootConsole, chromium } from "./lib.mjs";
-import { runLogsFlow } from "../../tests/conformance/ui/_aws_logs_flow.mjs";
+import { runLogsFlow } from "./_aws_logs_flow.mjs";
 
 let fails = 0;
 const check = (ok, what, detail = "") => {
