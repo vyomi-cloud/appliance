@@ -248,3 +248,5 @@ drift check, run-only worktree, claims file, enforcement layers, no `v4/headless
 by tag, `headless-smoke` as a gate instead of an empty branch, a named integrator, one document) → this version, which adds:
 the fast preflight versus full `headless-smoke` split, `archive/*` tags exempt from the tag rule, the portal drift item (P1),
 and removes the status SHAs and the resolved gap list.
+
+See also `V4-BACKENDS-AND-FIDELITY-POLICY.md` (2026-11-10): real-backend policy, labels, out-of-scope decisions, what the gap sweep built, and the open items carried into v5.
