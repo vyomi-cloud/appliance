@@ -77,6 +77,9 @@ CORES = [
     "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
     "azure_table_core.py",                          # Azure: Table Storage (native azure-data-tables)
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
+    "azure_servicebus_rules.py",                    # v4: Service Bus subscription rules (SQL + correlation filters), shared by REST + AMQP
+    "amqp10.py",                                    # v4: AMQP 1.0 protocol engine (substrate-free; Nano carries it over the relay's WebSocket bridge)
+    "azure_servicebus_amqp.py",                     # v4: Service Bus AMQP dialect ($cbs, $management, sessions, locks) on the shared MessagingStore
     "azure_cmk_core.py", "azure_sql_security_core.py", "azure_storage_svc_core.py", "azure_sql_ext_core.py", "azure_sql_mirror_core.py", "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
     "azure_acr_core.py",                            # v4: Container Registry repository data plane (OCI v2 + ACR v1 REST)

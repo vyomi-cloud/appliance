@@ -66,7 +66,7 @@ const CORES = [
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py", "gcp_osconfig_core.py", "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",
   // Azure data-plane cores — imported by aws_wire_router for the x-ms-*/dbs/keys/secrets routes.
   "azure_netaccess.py", "azure_diag_pipeline.py", "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py",
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py",
   "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
   "vpc_lattice_dataplane.py",
   "eventbridge_partner_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
@@ -129,6 +129,8 @@ if _USE_PGLITE:
     from core.sql_store import PGliteSqlStore
     _STORES["rds"] = PGliteSqlStore()                     # RDS = real Postgres (shared seam)
 _ROUTER = AwsWireRouter(stores=_STORES)
+from core.azure_servicebus_amqp import NanoBridge as _NanoBridge
+_NanoBridge.install(lambda: _ROUTER.az_sb)    # Service Bus AMQP 1.0 engine on the router's store; the relay bridges the bytes in
 from core import k8s_tier_gate as _k8sg
 _k8sg.arm_nano()          # managed Kubernetes = Pro/Max/Enterprise; fails closed (Free) until the licence tier is read
 def _set_k8s_tier(tier, primary): _k8sg.set_tier(tier, primary)
@@ -211,9 +213,15 @@ builtins._capture = _capture; builtins._restore = _restore
   };
   writeEngines(); setInterval(writeEngines, 30000);
 
+  // AMQP 1.0 (Azure Service Bus) streams the relay tunnels in: wasm/relay/amqp-bridge.js
+  let _amqpWs = null;
+  const _amqp = (await import("./amqp-bridge.js")).createAmqpBridge({
+    py, send: (d) => { try { _amqpWs && _amqpWs.send(d); } catch (_) {} }, onDirty: () => scheduleStoresSave(),
+  });
   function connect() {
     _announce();
     const ws = new WebSocket(RELAY);
+    ws.binaryType = "arraybuffer"; _amqpWs = ws;
     ws.onopen = () => { window.__nano.registered = true; log(`<span class="ok">registered</span> → ${RELAY}`); _announce(); };
     ws.onclose = (ev) => {
       window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason);
@@ -224,8 +232,10 @@ builtins._capture = _capture; builtins._restore = _restore
     };
     ws.onerror = () => log('ws error','err');
     ws.onmessage = async (ev) => {
+      if (typeof ev.data !== "string") { try { _amqp.binary(ev.data); } catch (e) { log("amqp: " + e, "err"); } return; }
       let req; try { req = JSON.parse(ev.data); } catch { return; }
       if (req.type === "ping") { ws.send(JSON.stringify({type:"pong"})); return; }
+      if (req.type === "amqp-open" || req.type === "amqp-close") { try { _amqp.text(req); } catch (e) { log("amqp: " + e, "err"); } return; }
       try {
         const respJson = await handle(JSON.stringify(req));  // run through the REAL core
         const resp = JSON.parse(respJson);

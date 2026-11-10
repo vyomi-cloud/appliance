@@ -64,3 +64,73 @@ class Broker:
     @property
     def conn_str(self):
         return "Endpoint=sb://localhost:%d;SharedAccessKeyName=k;SharedAccessKey=v;UseDevelopmentEmulator=true" % self.port
+
+    @property
+    def ws_url(self):
+        return "ws://127.0.0.1:%d/$servicebus/websocket" % self.port
+
+
+class NanoBroker:
+    """The Nano substrate: the real local relay + a headless Nano tab (Pyodide + the real AwsWireRouter) from
+    wasm/relay/test-amqp-bridge.mjs. Native SDKs dial the relay's raw AMQP listener / its /$servicebus/websocket path;
+    entities are created through the relay's HTTP surface (the same namespace-root REST data plane Nano serves)."""
+
+    def __init__(self):
+        import os
+        import subprocess
+        here = os.path.dirname(os.path.abspath(__file__))
+        self.script = os.path.join(here, "..", "..", "wasm", "relay", "test-amqp-bridge.mjs")
+        self.http_port, self.port = free_port(), free_port()
+        self.node_modules = os.environ.get("VYOMI_SB_JS_NODE_MODULES", "")
+        self.proc = subprocess.Popen(
+            ["node", self.script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            env=dict(os.environ, RELAY_PORT=str(self.http_port), RELAY_AMQP_PORT=str(self.port), NODE_PATH=self.node_modules))
+        self.log = []
+
+    def start(self, timeout=240):
+        import threading
+        import time
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            line = self.proc.stdout.readline()
+            if not line:
+                break
+            self.log.append(line)
+            if line.startswith("READY"):
+                threading.Thread(target=lambda: [self.log.append(x) for x in self.proc.stdout], daemon=True).start()
+                return self
+        raise RuntimeError("Nano fixture did not become ready:\n" + "".join(self.log[-20:]))
+
+    def stop(self):
+        self.proc.terminate()
+        try:
+            self.proc.wait(10)
+        except Exception:
+            self.proc.kill()
+
+    def _http(self, method, path, body=b"", headers=None):
+        import urllib.request
+        req = urllib.request.Request("http://127.0.0.1:%d%s" % (self.http_port, path), data=body or None, method=method,
+                                     headers=dict({"BrokerProperties": "{}"}, **(headers or {})))
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, r.read()
+
+    def create(self, name, **opts):
+        import json
+        self._http("PUT", "/" + name, json.dumps(opts).encode() if opts else b"")
+
+    def create_sub(self, topic, sub, **opts):
+        import json
+        self._http("PUT", "/%s/subscriptions/%s" % (topic, sub), json.dumps(opts).encode() if opts else b"")
+
+    def peek(self, name):
+        import json
+        return json.loads(self._http("GET", "/%s/messages" % name)[1])["messages"]
+
+    @property
+    def conn_str(self):
+        return "Endpoint=sb://localhost:%d;SharedAccessKeyName=k;SharedAccessKey=v;UseDevelopmentEmulator=true" % self.port
+
+    @property
+    def ws_url(self):
+        return "ws://127.0.0.1:%d/$servicebus/websocket" % self.http_port

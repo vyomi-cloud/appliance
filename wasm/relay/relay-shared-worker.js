@@ -14,6 +14,7 @@
 //   relay → worker : {id, method, path, query, headers, body(base64)}
 //   worker → relay : {id, status, headers, body(base64)}
 import { installPGlite } from "../pglite-loader.js";
+import { createAmqpBridge } from "./amqp-bridge.js";            // Service Bus AMQP 1.0 streams tunnelled in by the relay
 import { installParquet } from "../parquet/parquet-loader.js";   // RDS exports: real Parquet (lazy)
 
 // Same-origin runtime first (wasm/fetch_pyodide.py vendors it at <bundle>/vendor/pyodide/),
@@ -35,7 +36,7 @@ const CORES = [
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "gcp_eventarc_core.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py", "gcp_osconfig_core.py", "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",
   "azure_netaccess.py", "azure_diag_pipeline.py", "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py",
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py",
   "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
   "vpc_lattice_dataplane.py",
   "eventbridge_partner_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
@@ -102,6 +103,7 @@ setInterval(announce, 3000);
 let py = null, handle = null, booting = null, ws = null;
 let monitorTimer = null, localFails = 0, cloudFailStreak = 0;
 let scheduleStoresSave = () => {};   // real impl installed once Pyodide is up (store-sync in bootPyodide)
+let amqp = null;                    // AMQP-over-relay bridge (installed with Pyodide)
 let saveNow = async () => {};        // likewise: persist + notify now (awaited before each relayed response)
 let refreshStores = async () => {};  // likewise: re-read the shared snapshot (before each relayed request)
 
@@ -182,6 +184,8 @@ if _USE_PGLITE:
     _STORES["rds"] = PGliteSqlStore(ns="rds")             # RDS = real Postgres (shared seam)
     _STORES["gcp_sql"] = PGliteSqlStore(ns="gcp_sql")     # Cloud SQL = real Postgres too (MySQL instances keep their dialect fallback)
 _ROUTER = AwsWireRouter(stores=_STORES)
+from core.azure_servicebus_amqp import NanoBridge as _NanoBridge
+_NanoBridge.install(lambda: _ROUTER.az_sb)    # Service Bus AMQP 1.0 engine on the router's store; the relay bridges the bytes in
 from core import k8s_tier_gate as _k8sg
 _k8sg.arm_nano()          # managed Kubernetes = Pro/Max/Enterprise; fails closed (Free) until the licence tier is read below
 def _set_k8s_tier(tier, primary): _k8sg.set_tier(tier, primary)
@@ -254,6 +258,8 @@ builtins._capture = _capture; builtins._restore = _restore
     async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; _saveGen++; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     saveNow = () => saveStores(true);
+    amqp = createAmqpBridge({ py, send: (data) => { try { ws && ws.send(data); } catch (_) {} },
+                              onActivity: () => { state.lastActivity = Date.now(); }, onDirty: () => scheduleStoresSave() });
     globalThis.__nano_stores_dirty = () => { try { scheduleStoresSave(); } catch (_) {} };
     refreshStores = async () => { if (_restoring) return; _restoring = true; try { await restoreShared(); } catch (_) {} finally { _restoring = false; } };
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { await restoreShared(); } finally { _restoring = false; } };
@@ -291,7 +297,7 @@ function connect() {
   state.phase = "connecting"; announce();
   const url = wsUrlFor(state.mode);
   const sock = new WebSocket(url);
-  ws = sock;
+  sock.binaryType = "arraybuffer"; ws = sock;
   let opened = false;
   sock.onopen = () => {
     if (sock !== ws) { try { sock.close(1000, "stale"); } catch (_) {} return; }
@@ -330,8 +336,10 @@ function connect() {
   };
   sock.onerror = () => { if (sock === ws) log("ws error [" + state.mode + "]", "err"); };
   sock.onmessage = async (ev) => {
+    if (typeof ev.data !== "string") { try { amqp && amqp.binary(ev.data); } catch (e) { log("amqp: " + e, "err"); } return; }
     let req; try { req = JSON.parse(ev.data); } catch { return; }
     if (req.type === "ping") { sock.send(JSON.stringify({ type: "pong" })); return; }
+    if (req.type === "amqp-open" || req.type === "amqp-close") { try { amqp && amqp.text(req); } catch (e) { log("amqp: " + e, "err"); } return; }
     try {
       await refreshStores();   // serve the latest shared state: a save from a stale copy would undo other tabs' changes
       const resp = JSON.parse(await handle(JSON.stringify(req)));

@@ -453,16 +453,50 @@ class Broker:
         return None
 
 
+class _Guard:
+    def __init__(self, c):
+        self.c = c
+        self.scope = None
+
+    def __enter__(self):
+        self.c.lock.acquire()
+        try:
+            if self.c.scope is not None:
+                self.scope = self.c.scope()
+                try:
+                    self.scope.__enter__()
+                except Exception as e:      # e.g. MessagingGatewayKeyInaccessible from the CMK envelope
+                    self.scope = None
+                    raise SbError("amqp:unauthorized-access", str(getattr(e, "message", e)), 403)
+        except BaseException:
+            self.c.lock.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.scope is not None:
+                self.scope.__exit__(*exc)
+        finally:
+            self.c.lock.release()
+        return False
+
+
 # ── the Container ───────────────────────────────────────────────────────────
 class ServiceBusAmqp(A.Container):
-    def __init__(self, get_store, persist=None, now=None):
+    def __init__(self, get_store, persist=None, now=None, scope=None):
         self.get_store = get_store
+        self.scope = scope           # optional: () -> context manager (customer-managed-key envelope around store access)
         self.persist = persist or (lambda: None)
         self.broker = Broker(now)
         self.lock = threading.RLock()
         self.consumers = set()
         self.dirty = False
         self.stats = {"connections": 0, "sent": 0, "delivered": 0}
+
+    def _guard(self):
+        """lock + (when configured) the CMK scope; a key-inaccessible failure surfaces as an SbError"""
+        return _Guard(self)
 
     # -- engine callbacks -----------------------------------------------------
     def on_open(self, conn):
@@ -475,7 +509,7 @@ class ServiceBusAmqp(A.Container):
         return self.get_store()
 
     def on_attach(self, link):
-        with self.lock:
+        with self._guard():
             store = self._s()
             try:
                 node = parse_address(store, link.address)
@@ -545,7 +579,7 @@ class ServiceBusAmqp(A.Container):
         return {"%x" % id(lk) for lk in self.consumers if not lk.closed}
 
     def on_detach(self, link):
-        with self.lock:
+        with self._guard():
             self.consumers.discard(link)
             store = self._s()
             sl = link.ctx.get("sess_lock")
@@ -565,7 +599,7 @@ class ServiceBusAmqp(A.Container):
 
     # -- inbound transfers ----------------------------------------------------
     def on_transfer(self, link, delivery):
-        with self.lock:
+        with self._guard():
             store = self._s()
             node = link.ctx.get("node")
             try:
@@ -603,11 +637,11 @@ class ServiceBusAmqp(A.Container):
 
     # -- credit / settlement for consumers -----------------------------------
     def on_flow(self, link):
-        with self.lock:
+        with self._guard():
             self._pump_link(self._s(), link)
 
     def on_disposition(self, link, delivery, state, settled):
-        with self.lock:
+        with self._guard():
             token = delivery.data
             if not token:
                 return
@@ -653,7 +687,7 @@ class ServiceBusAmqp(A.Container):
     # -- the pump -------------------------------------------------------------
     def pump(self):
         """periodic: expire locks / TTL, release scheduled, push to credit-holding consumers. True if state changed."""
-        with self.lock:
+        with self._guard():
             store = self._s()
             changed = self.broker.tick(store)
             self._pump_all(store)
@@ -663,7 +697,7 @@ class ServiceBusAmqp(A.Container):
 
     def push(self):
         """after any inbound I/O: hand freshly enqueued messages to consumers that hold credit"""
-        with self.lock:
+        with self._guard():
             self._pump_all(self._s())
 
     def _pump_all(self, store):
@@ -1005,3 +1039,83 @@ class ServiceBusAmqp(A.Container):
         if not out:
             return 204, None
         return 200, {"rules": out}
+
+
+# ── failures of the CMK envelope must never escape into the protocol engine ──
+def _swallow(default):
+    def deco(fn):
+        def wrapper(self, *a, **k):
+            try:
+                return fn(self, *a, **k)
+            except SbError as e:
+                return default(e) if callable(default) else default
+        wrapper.__name__ = fn.__name__
+        return wrapper
+    return deco
+
+
+ServiceBusAmqp.on_attach = _swallow(lambda e: (e.condition, e.description))(ServiceBusAmqp.on_attach)
+ServiceBusAmqp.on_transfer = _swallow(lambda e: A.delivery_state(A.D_REJECTED, A.error(e.condition, e.description)))(ServiceBusAmqp.on_transfer)
+for _n in ("on_flow", "on_disposition", "on_detach", "push"):
+    setattr(ServiceBusAmqp, _n, _swallow(None)(getattr(ServiceBusAmqp, _n)))
+ServiceBusAmqp.pump = _swallow(False)(ServiceBusAmqp.pump)
+
+
+# ── Nano (Pyodide) glue: one Connection per relay stream id, base64 across the JS boundary ──
+class NanoBridge:
+    """The relay's AMQP-over-WebSocket bridge hands this class the raw AMQP bytes of each stream (sid); the bytes
+    to send back are returned as JSON {"out": [[sid, b64]...], "close": [sid...], "dirty": bool}. The tab owns the
+    sockets; this owns the protocol + the broker (bound to the router's Service Bus store)."""
+
+    def __init__(self, get_store, scope=None):
+        self.container = ServiceBusAmqp(get_store, scope=scope)
+        self.conns = {}
+
+    @classmethod
+    def install(cls, get_store, scope=None):
+        import builtins
+        b = cls(get_store, scope)
+        builtins._amqp_open, builtins._amqp_in = b.open, b.feed_b64
+        builtins._amqp_tick, builtins._amqp_close = b.tick_json, b.close
+        return b
+
+    def open(self, sid):
+        conn = A.Connection(self.container)
+        conn.on_output = lambda: None
+        self.conns[int(sid)] = conn
+
+    def close(self, sid):
+        conn = self.conns.pop(int(sid), None)
+        if conn is not None:
+            conn.connection_lost()
+        return self._collect()
+
+    def feed_b64(self, sid, b64):
+        import base64
+        conn = self.conns.get(int(sid))
+        if conn is None:
+            return self._collect()
+        conn.feed(base64.b64decode(b64))
+        self.container.push()
+        return self._collect()
+
+    def tick_json(self):
+        self.container.pump()
+        for c in list(self.conns.values()):
+            c.tick()
+        return self._collect()
+
+    def _collect(self):
+        import base64
+        out, close = [], []
+        for sid, c in list(self.conns.items()):
+            data = c.take()
+            if data:
+                out.append([sid, base64.b64encode(data).decode("ascii")])
+            if c.closed and c.close_after_flush and not c.out:
+                close.append(sid)
+                self.conns.pop(sid, None)
+                c.connection_lost()
+        dirty = bool(self.container.dirty)
+        self.container.dirty = False
+        return json.dumps({"out": out, "close": close, "dirty": dirty})

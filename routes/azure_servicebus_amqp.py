@@ -23,6 +23,13 @@ def _store():
     return wi.appliance_router().az_sb
 
 
+def _cmk_scope():
+    """Premium-namespace customer-managed key: message bodies (and their AMQP wire image) stay sealed between operations"""
+    from core import app_context as ctx, azure_servicebus_core as sb, wire_ingress as wi
+    r = wi.appliance_router()
+    return sb.CmkScope(_store(), sb.cmk_namespace(ctx.azure_arm_state, {}), r.az_kvkeys)
+
+
 def _port(name, default):
     try:
         return int(os.environ.get(name, default))
@@ -41,7 +48,7 @@ def register(app) -> None:
             from core.azure_servicebus_amqp import ServiceBusAmqp
             from core import middleware
 
-            container = ServiceBusAmqp(_store)
+            container = ServiceBusAmqp(_store, scope=_cmk_scope)
             srv = AmqpServer(container, on_dirty=middleware._schedule_persist)
             host = os.environ.get("VYOMI_AMQP_HOST", "0.0.0.0")
             data_dir = os.environ.get("VYOMI_DATA_DIR") or os.environ.get("CLOUDLEARN_DATA_DIR") or "/tmp"

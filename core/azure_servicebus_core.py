@@ -608,6 +608,8 @@ class CmkScope:
                 if m.get("_sealed") and m["_id"] in bodies:
                     m["body"] = base64.b64decode(bodies[m["_id"]])
                     del m["_sealed"]
+                    if ("w:" + m["_id"]) in bodies:        # the AMQP wire image of the message is sealed with the body
+                        m["_wire"] = base64.b64decode(bodies["w:" + m["_id"]])
             self.store._sb_sealed = None
         return self
 
@@ -629,6 +631,8 @@ class CmkScope:
         for m in _all_messages(self.store):
             if isinstance(m.get("body"), (bytes, bytearray)):
                 bodies[m["_id"]] = base64.b64encode(bytes(m["body"])).decode()
+                if m.get("_wire"):
+                    bodies["w:" + m["_id"]] = base64.b64encode(bytes(m["_wire"])).decode()
         try:
             env = self.cmk.seal(self.kv, self.uri, json.dumps(bodies).encode())
         except self.cmk.CmkError:
@@ -637,6 +641,8 @@ class CmkScope:
             if m["_id"] in bodies:
                 m["body"] = b""
                 m["_sealed"] = True
+                if "w:" + m["_id"] in bodies:
+                    m["_wire"] = b""
         self.store._sb_sealed = env
         try:
             self.store.persist()          # persist AFTER sealing so a backed store never keeps the plaintext

@@ -104,7 +104,7 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(hub.enabled() ? ["booster-link", "booster-shell"] : [])],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "amqp", ...(hub.enabled() ? ["booster-link", "booster-shell"] : [])],
       booster_sessions: hub.enabled() ? hub.linked().length : undefined,
       booster_streams: hub.enabled() ? hub.streams() : undefined,
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
@@ -185,6 +185,7 @@ server.on("upgrade", (req, socket, head) => {
   if (p === "/connect") { hub.connectUpgrade(req, socket, head); return; }
   if (p === "/mesh" && meshHub) { meshHub.upgrade(req, socket, head); return; }
   if (p === "/llm-runner") { llmHub.upgrade(req, socket, head); return; }
+  if (p.endsWith("/$servicebus/websocket")) { amqpWss.handleUpgrade(req, socket, head, (ws) => amqpAccept(ws, "ws")); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
@@ -193,17 +194,59 @@ wss.on("connection", (ws) => {
   ws.isAlive = true;
   tabs.add(ws);
   console.log(`[relay] tab registered (${tabs.size} active)`);
-  ws.on("message", (data) => {
+  ws.on("message", (data, isBinary) => {
+    if (isBinary) {                       // [u32 sid][AMQP bytes] from the tab's engine -> the AMQP client
+      const st = amqpStreams.get(data.readUInt32BE(0));
+      if (st && st.tab === ws) st.write(data.subarray(4));
+      return;
+    }
     let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
     if (msg.type === "pong") { ws.isAlive = true; return; }
+    if (msg.type === "amqp-close") { const st = amqpStreams.get(msg.sid); if (st && st.tab === ws) st.end(); return; }
     const done = pending.get(msg.id);
     if (done) { pending.delete(msg.id); done(msg); }
   });
-  ws.on("close", () => { tabs.delete(ws); console.log(`[relay] tab gone (${tabs.size} active)`); });
+  ws.on("close", () => { tabs.delete(ws); for (const st of [...amqpStreams.values()]) if (st.tab === ws) st.end(); console.log(`[relay] tab gone (${tabs.size} active)`); });
   ws.on("error", () => { try { ws.terminate(); } catch (_) {} tabs.delete(ws); });
 });
 
 const PING_MS = 10000;
+// ── AMQP 1.0 bridge (Azure Service Bus): native SDK -> relay -> in-browser engine ─────────────────────────────
+// Clients speak AMQP either over raw TCP (AMQP_PORT, default 5672: `UseDevelopmentEmulator=true` / use_tls=False) or
+// AMQP-over-WebSocket (ws://<relay>/$servicebus/websocket, subprotocol AMQPWSB10). Each connection becomes a numbered
+// stream carried over the registered tab's socket (wasm/relay/amqp-bridge.js is the tab end):
+//   relay -> tab : {type:"amqp-open", sid} | {type:"amqp-close", sid} | binary [u32 BE sid][AMQP bytes]
+//   tab -> relay : binary [u32 BE sid][AMQP bytes] | {type:"amqp-close", sid}
+const AMQP_PORT = Number(process.env.RELAY_AMQP_PORT ?? 5672);     // 0 = raw-TCP listener off
+const amqpStreams = new Map();                                      // sid -> {tab, write(buf), end()}
+const amqpWss = new WebSocketServer({ noServer: true, handleProtocols: (protos) => (protos.has("AMQPWSB10") ? "AMQPWSB10" : [...protos][0] || false) });
+function amqpAttach(write, end, kind) {
+  const tab = pickTab();
+  if (!tab) { end(); return null; }
+  const sid = sidSeq++;
+  const st = { tab, write, end: () => { if (amqpStreams.delete(sid)) end(); } };
+  amqpStreams.set(sid, st);
+  tab.send(JSON.stringify({ type: "amqp-open", sid }));
+  console.log(`[relay] amqp stream ${sid} (${kind})`);
+  return { sid, toTab: (buf) => { const f = Buffer.allocUnsafe(4 + buf.length); f.writeUInt32BE(sid, 0); buf.copy(f, 4); try { tab.send(f); } catch (_) {} },
+           closed: () => { if (amqpStreams.delete(sid)) { try { tab.send(JSON.stringify({ type: "amqp-close", sid })); } catch (_) {} } } };
+}
+function amqpAccept(ws, kind) {
+  const h = amqpAttach((b) => { try { ws.send(b); } catch (_) {} }, () => { try { ws.close(); } catch (_) {} }, kind);
+  if (!h) return;
+  ws.on("message", (d) => h.toTab(Buffer.isBuffer(d) ? d : Buffer.from(d)));
+  ws.on("close", h.closed); ws.on("error", h.closed);
+}
+if (AMQP_PORT) {
+  net.createServer((sock) => {
+    sock.setNoDelay(true);
+    const h = amqpAttach((b) => { try { sock.write(b); } catch (_) {} }, () => sock.end(), "tcp");
+    if (!h) return;
+    sock.on("data", (d) => h.toTab(d));
+    sock.on("close", h.closed); sock.on("error", h.closed);
+  }).on("error", (e) => console.log(`[relay] AMQP :${AMQP_PORT} listener off (${e.code || e.message})`))
+    .listen(AMQP_PORT, HOST, () => console.log(`  AMQP  ->  Service Bus (azure-servicebus / @azure/service-bus) on ${HOST}:${AMQP_PORT}  (+ ws://${HOST}:${PORT}/$servicebus/websocket)`));
+}
 // ── In-browser VM TCP bridge (ssh to Nano EC2 / Compute Engine / Azure VMs) ──
 // A VM worker connects to /vm?vm=<id>&port=22&prefer=<host port>. We listen on
 // HOST:<host port> (the preferred one if free, else the next free in VM_PORT_MIN..MAX)
