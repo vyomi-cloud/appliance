@@ -248,7 +248,13 @@ def encode_message(m: dict, locked_until: float | None = None, with_header=True)
         except Exception:
             pass
     anns[A.Symbol("x-opt-sequence-number")] = int(m["SequenceNumber"])
-    anns[A.Symbol("x-opt-enqueued-time")] = A.Timestamp(_ms(m.get("_enq") or 0))
+    enq = m.get("_enq")
+    if not enq:     # REST-created message: derive from the ISO stamp
+        try:
+            enq = datetime.strptime(m.get("EnqueuedTimeUtc") or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+        except Exception:
+            enq = 0
+    anns[A.Symbol("x-opt-enqueued-time")] = A.Timestamp(_ms(enq))
     if locked_until:
         anns[A.Symbol("x-opt-locked-until")] = A.Timestamp(_ms(locked_until))
     header = None
@@ -373,6 +379,7 @@ class Broker:
         m["_deferred"] = False
         m.pop("_lock_until", None)
         m.pop("_lock_link", None)
+        m.pop("_expires", None)          # the dead-letter sub-queue never expires messages
         if props:
             self._modify_props(m, props)
         extra = {}
@@ -619,7 +626,7 @@ class ServiceBusAmqp(A.Container):
             failed = bool(v[0]) if len(v) > 0 else False
             undeliv = bool(v[1]) if len(v) > 1 else False
             anns = v[2] if len(v) > 2 and isinstance(v[2], dict) else None
-            if undeliv and not failed:
+            if undeliv:
                 self.broker.defer(store, owner, boxname, m, anns)
             else:
                 self.broker.abandon(store, owner, boxname, m, anns)
@@ -855,6 +862,9 @@ class ServiceBusAmqp(A.Container):
         props = b.get("properties-to-modify") if isinstance(b.get("properties-to-modify"), dict) else None
         for tok in b.get("lock-tokens") or []:
             found = self.broker.find_locked(store, str(tok))
+            if A.TRACE:
+                print("SB update-disposition token", repr(tok), type(tok), found is not None,
+                      [(m.get("_locked"), m.get("DeliveryCount")) for m in node.box()], flush=True)
             if not found:
                 raise SbError(VENDOR + "message-lock-lost", "The lock supplied is invalid. Either the lock expired, or the message has already been removed from the queue.", 410)
             owner, boxname, m = found

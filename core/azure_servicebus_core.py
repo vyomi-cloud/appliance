@@ -105,10 +105,35 @@ def _require_subscription(topic: dict, sub_name: str) -> dict:
 
 
 # ── topic operations ────────────────────────────────────────────────────────
-def _create_topic(store, name: str) -> ServiceBusResponse:
+# Optional JSON body on PUT /{entity} and PUT /{topic}/subscriptions/{sub}: entity options shared with the
+# AMQP data plane (core/azure_servicebus_amqp.py). camelCase (as in the ARM properties) or snake_case.
+_OPTION_KEYS = {"lockDuration": "lock_duration", "maxDeliveryCount": "max_delivery_count",
+                "requiresSession": "requires_session", "requiresDuplicateDetection": "requires_duplicate_detection",
+                "deadLetteringOnMessageExpiration": "dead_lettering_on_expiration", "defaultMessageTimeToLive": "default_ttl"}
+
+
+def _entity_options(body: bytes) -> dict:
+    if not body:
+        return {}
+    try:
+        d = json.loads(body)
+    except Exception:
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    out = {}
+    for k, v in d.items():
+        k2 = _OPTION_KEYS.get(k, k if k in _OPTION_KEYS.values() else None)
+        if k2:
+            out[k2] = v
+    return out
+
+
+def _create_topic(store, name: str, body: bytes = b"") -> ServiceBusResponse:
     if not store.get_topic(name):
-        store.put_topic(name, {"name": name, "subscriptions": {}, "messages": [],
-                               "dead_letter": [], "created": _now_iso()})
+        t = {"name": name, "subscriptions": {}, "messages": [], "dead_letter": [], "created": _now_iso()}
+        t.update(_entity_options(body))
+        store.put_topic(name, t)
         store.persist()
     return _empty(201)
 
@@ -125,11 +150,12 @@ def _delete_topic(store, name: str) -> ServiceBusResponse:
     return _empty(200)
 
 
-def _create_subscription(store, topic_name: str, sub_name: str) -> ServiceBusResponse:
+def _create_subscription(store, topic_name: str, sub_name: str, body: bytes = b"") -> ServiceBusResponse:
     topic = _require_topic(store, topic_name)
     subs = topic.setdefault("subscriptions", {})
     if sub_name not in subs:
         subs[sub_name] = {"name": sub_name, "messages": [], "created": _now_iso()}
+        subs[sub_name].update(_entity_options(body))
         store.persist()
     return _empty(201)
 
@@ -179,7 +205,17 @@ def _send(store, topic_name: str, body: bytes, headers: dict) -> ServiceBusRespo
     own["SequenceNumber"] = _next_seq(store)
     topic.setdefault("messages", []).append(own)
     # ... AND an INDEPENDENT copy fanned out into every subscription backlog.
+    try:
+        from core import azure_servicebus_rules as _rules
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_servicebus_rules as _rules  # type: ignore
+    _view = {"sys": {"MessageId": message_id, "ContentType": content_type, "Label": props.get("Label"),
+                     "To": props.get("To"), "CorrelationId": props.get("CorrelationId"),
+                     "SessionId": props.get("SessionId")},
+             "user": {k: v for k, v in props.items() if k != "MessageId"}}
     for sub in topic.get("subscriptions", {}).values():
+        if not _rules.subscription_matches(sub, _view):     # SQL / correlation rules (default: match all)
+            continue
         copy = _make_message(message_id, body, content_type, props)
         copy["SequenceNumber"] = _next_seq(store)
         sub.setdefault("messages", []).append(copy)
@@ -416,7 +452,7 @@ def dispatch(store: MessagingStore, method: str, path: str,
         # topic-level
         if len(segs) == 1:
             if method == "PUT":
-                return _create_topic(store, topic)
+                return _create_topic(store, topic, body)
             if method == "GET":
                 return _get_topic(store, topic)
             if method == "DELETE":
@@ -455,7 +491,7 @@ def dispatch(store: MessagingStore, method: str, path: str,
             sub = segs[2]
             if len(segs) == 3:
                 if method == "PUT":
-                    return _create_subscription(store, topic, sub)
+                    return _create_subscription(store, topic, sub, body)
                 if method == "DELETE":
                     return _delete_subscription(store, topic, sub)
                 if method == "GET":

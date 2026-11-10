@@ -695,6 +695,12 @@ class Connection:
             self.on_output()
 
     def _emit(self, ftype, channel, body):
+        if TRACE and body:
+            try:
+                k, f, _p = parse_perf(body)
+                print("AMQP ->", channel, k, {a: b for a, b in f.items() if b is not None and a != "source" and a != "target"}, flush=True)
+            except Exception:
+                pass
         self.out += frame(ftype, channel, body)
         self.last_sent = self._now()
 
@@ -1008,7 +1014,10 @@ class Connection:
             lk = s.delivery_to_link.pop(did, None)
             if lk is not None:
                 lk.unsettled.pop(did, None)
-                s._settle_range(did, did, f.get("state"), False, True)
+                st = f.get("state")
+                if state_kind(st) == D_REJECTED:
+                    st = delivery_state(D_REJECTED)     # echo the outcome WITHOUT the error: an error in it reads as "failed to apply"
+                s._settle_range(did, did, st, False, True)
 
     def _h_detach(self, s, f):
         lk = s.by_remote.pop(int(f["handle"]), None)
