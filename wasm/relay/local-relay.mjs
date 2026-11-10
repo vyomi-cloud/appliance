@@ -142,7 +142,7 @@ const server = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
-    if (meshHub && meshHub.http(req, res)) return;               // LLM mesh peer table (/mesh/_peers)
+    if (meshHub && meshHub.http(req, res)) return;               // LLM mesh peer table (/mesh-llm/_peers)
     if (llmHub.http(req, res, Buffer.concat(chunks))) return;   // remote-LLM plane (/llm/*)
     if (hub.http(req, res, Buffer.concat(chunks))) return;     // mesh plane (carries X-Vyomi-Session-Token)
     const tab = pickTab();
@@ -194,7 +194,7 @@ server.on("upgrade", (req, socket, head) => {
   if (p === "/mesh") { hub.upgrade(req, socket, head); return; }
   if (p === "/shell") { hub.shellUpgrade(req, socket, head); return; }
   if (p === "/connect") { hub.connectUpgrade(req, socket, head); return; }
-  if (p === "/mesh" && meshHub) { meshHub.upgrade(req, socket, head); return; }
+  if (p === "/mesh-llm" && meshHub) { meshHub.upgrade(req, socket, head); return; }
   if (p === "/llm-runner") { llmHub.upgrade(req, socket, head); return; }
   if (p.endsWith("/$servicebus/websocket")) { amqpWss.handleUpgrade(req, socket, head, (ws) => amqpAccept(ws, "ws")); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;

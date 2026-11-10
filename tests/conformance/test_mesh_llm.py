@@ -202,18 +202,18 @@ def main_docker():
 
         # peer table
         time.sleep(3)
-        pt = json.loads(dx(relay, f"curl -s -H 'Authorization: Bearer {cfgs['mesh']['env']['VYOMI_MESH_TOKEN']}' http://127.0.0.1:8787/mesh/_peers").stdout or "{}")
+        pt = json.loads(dx(relay, f"curl -s -H 'Authorization: Bearer {cfgs['mesh']['env']['VYOMI_MESH_TOKEN']}' http://127.0.0.1:8787/mesh-llm/_peers").stdout or "{}")
         peers = {p["id"]: p for p in pt.get("peers", [])}
         check("peer table: 4 peers, all up with a recent handshake", len(peers) == 4 and all(p["up"] and p["last_handshake_s"] is not None for p in peers.values()), pt)
         check("peer table: no full public keys leaked, unauthenticated -> 401", all(p["pubkey"].endswith("...") for p in peers.values())
-              and "401" in dx(relay, "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/mesh/_peers").stdout)
+              and "401" in dx(relay, "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/mesh-llm/_peers").stdout)
         old_pub = dx(names[1], "wg show wgvyomi public-key").stdout.strip()[:8]
 
         # re-key / rejoin: ping mesh->r2 continuously while r1 leaves and rejoins with a new key
         dx(names[0], f"nohup ping -i 0.2 -c 150 {cfgs['r2']['address']} > /tmp/ping_r2.txt 2>&1 &")
         time.sleep(2)
         dx(names[1], "bash /opt/rl/mesh-up.sh down")
-        gone = json.loads(dx(relay, f"curl -s -H 'Authorization: Bearer {cfgs['mesh']['env']['VYOMI_MESH_TOKEN']}' http://127.0.0.1:8787/mesh/_peers").stdout)
+        gone = json.loads(dx(relay, f"curl -s -H 'Authorization: Bearer {cfgs['mesh']['env']['VYOMI_MESH_TOKEN']}' http://127.0.0.1:8787/mesh-llm/_peers").stdout)
         check("drain/leave: r1 disappears from the peer table", "r1" not in {p["id"] for p in gone["peers"]} and len(gone["peers"]) == 3, gone)
         check("leave: r1's service is no longer reachable", dx(names[0], f"curl -s -m 3 http://{cfgs['r1']['address']}:11434/").stdout.strip() == "")
         fresh = mint("r1", "runner", 1)          # rotation: same node id/slot, fresh token
@@ -263,7 +263,7 @@ def main_docker():
         # clean leave
         dx(names[3], "bash /opt/rl/mesh-up.sh down")
         time.sleep(1)
-        pt = json.loads(dx(relay, f"curl -s -H 'Authorization: Bearer {cfgs['mesh']['env']['VYOMI_MESH_TOKEN']}' http://127.0.0.1:8787/mesh/_peers").stdout)
+        pt = json.loads(dx(relay, f"curl -s -H 'Authorization: Bearer {cfgs['mesh']['env']['VYOMI_MESH_TOKEN']}' http://127.0.0.1:8787/mesh-llm/_peers").stdout)
         check("another leave: r3 removed, mesh/r1/r2 stay up", {p["id"] for p in pt["peers"]} == {"mesh", "r1", "r2"} and all(p["up"] for p in pt["peers"]), pt)
         logs = "".join(sh("docker", "logs", nm).stdout + dx(nm, "cat /tmp/vyomi-mesh/agent.log 2>/dev/null").stdout for nm in names + [relay])
         toks = [c["env"]["VYOMI_MESH_TOKEN"] for c in cfgs.values()] + [fresh["env"]["VYOMI_MESH_TOKEN"]]

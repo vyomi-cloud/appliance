@@ -184,16 +184,16 @@ export function createMeshHub({ WebSocketServer, key = process.env.VYOMI_MESH_SE
     return n;
   }
 
-  /** HTTP GET /mesh/_peers (any valid mesh-node token of the session). Returns true if handled. */
+  /** HTTP GET /mesh-llm/_peers (any valid mesh-node token of the session). Returns true if handled. */
   function http(req, res) {
     const url = new URL(req.url, "http://x");
-    if (!url.pathname.startsWith("/mesh")) return false;
+    if (!url.pathname.startsWith("/mesh-llm")) return false;
     const out = (st, obj) => { res.writeHead(st, { "content-type": "application/json", "x-vyomi-hub": "1" }); res.end(JSON.stringify(obj)); return true; };
     if (!enabled()) return out(503, { error: "MeshLinkDisabled" });
     let claims; const a = req.headers["authorization"] || "";
     try { claims = verify(/^Bearer /i.test(a) ? a.slice(7).trim() : "", key); } catch (e) { return out(e.status || 401, { error: e.code || "MeshSessionInvalid" }); }
     if (claims.role !== ROLE || (sessionId && claims.session_id !== sessionId)) return out(403, { error: "MeshSessionWrongRole" });
-    if (url.pathname === "/mesh/_peers") {
+    if (url.pathname === "/mesh-llm/_peers") {
       refresh().then(() => out(200, { session_id: sessionId, iface, mode, hub: HUB_ADDR, peers: [...nodes.values()].map((n) => ({
         id: n.id, address: n.addr, role: n.mrole, up: !n.draining && isUp(n), pubkey: n.pub.slice(0, 8) + "...", last_handshake_s: n.hs ? Math.round(now() / 1000 - n.hs) : null,
         connected_s: Math.round((now() - n.since) / 1000), rx_bytes: n.rx, tx_bytes: n.tx })) }));
@@ -213,7 +213,7 @@ export function createMeshHub({ WebSocketServer, key = process.env.VYOMI_MESH_SE
 /** Runs on every node (runner or mesh). Needs root (or CAP_NET_ADMIN) for `ip`/`wg`. */
 export function meshAgent({ relayUrl, token, WS, iface = "wgvyomi", run = sh, log = () => {}, directWaitMs = 8000,
                             statusFile = "", onDrain = () => {}, minBackoffMs = 500, maxBackoffMs = 15000 }) {
-  const url = /\/mesh\/?$/.test(relayUrl) ? relayUrl : relayUrl.replace(/\/$/, "") + "/mesh";
+  const url = /\/mesh-llm\/?$/.test(relayUrl) ? relayUrl : relayUrl.replace(/\/$/, "") + "/mesh-llm";
   let ws = null, udp = null, wgPort = 0, stopped = false, backoff = minBackoffMs, retryT = null, mode = null;
   let kp = null, cfg = null, peerDump = [];
   const state = { linked: false, address: null, mode: null, path: null, connects: 0, rekeys: 0 };

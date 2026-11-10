@@ -45,7 +45,7 @@ The relay-only hub of the runner pool stays as the rendezvous and the fallback; 
 |---|---|
 | `core/mesh_llm.py` | portal side: address plan, `mint_mesh_session(session_id, nodes)`, rotation re-mint, token verify, `wg show dump` parser, `runner_urls()` |
 | `wasm/relay/mesh-llm.mjs` | `createMeshHub` (relay) + `meshAgent` (every node) + CLI `node mesh-llm.mjs agent` |
-| `wasm/relay/local-relay.mjs` | wires `/mesh` (WS) and `/mesh/_peers` (GET) when `VYOMI_MESH=1` |
+| `wasm/relay/local-relay.mjs` | wires `/mesh-llm` (WS) and `/mesh-llm/_peers` (GET) when `VYOMI_MESH=1` |
 | `docker/mesh-runner-llm/mesh-up.sh` | node entrypoint (runner and mesh): `up` / `down` / `status`, idempotent, masks the token |
 | `codespace/.devcontainer/mesh/mesh-up.sh` | mesh-side wrapper (+ `capAdd: NET_ADMIN` in `devcontainer.json`) |
 | `docker/mesh-llm-test/` | harness images/relay; `tests/conformance/test_mesh_llm.py` (+ `_rpc.py`) |
@@ -81,7 +81,7 @@ the plan or the hub address (403), another session's token on a hub already serv
 
 ## 6. Peer table, leave/drain, re-key
 
-* `GET /mesh/_peers` (any valid mesh token of the session): `{peers:[{id, address, role, up, last_handshake_s, connected_s, rx_bytes, tx_bytes, pubkey(8 chars)}]}`;
+* `GET /mesh-llm/_peers` (any valid mesh token of the session): `{peers:[{id, address, role, up, last_handshake_s, connected_s, rx_bytes, tx_bytes, pubkey(8 chars)}]}`;
   `up` = WS open and a WireGuard handshake in the last 200 s. The same list is pushed to every node on change (`{type:"peers"}`); the gateway
   uses `core.mesh_llm.runner_urls(peers)` to learn which runner Ollamas to call.
 * Leave: node sends `{type:"leave"}` (or the WS closes) -> hub removes the peer, closes its UDP socket, broadcasts. `mesh-up.sh down` and SIGTERM do this.
