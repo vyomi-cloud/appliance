@@ -307,6 +307,21 @@ def is_azure_native_path(path: str) -> bool:
     return path in ("/subscriptions", "/tenants") or path.startswith(("/subscriptions/", "/api/azure/", "/azure-data/"))
 
 
+_HOST_OK = re.compile(r"^[A-Za-z0-9.\-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?$")
+
+
+def request_host(headers, fallback: str = "") -> str:
+    """The host a client reaches the simulator at, for the URLs it advertises (endpoints, selfLinks).
+
+    Behind a forwarder (the user's `vyomi-tunnel` reaches the Mesh simulator as `simulator:9000` inside the Codespace's Docker
+    network, but the user's tools use the laptop-side address) the forwarder states the real address in X-Forwarded-Host. Only a
+    plain host[:port] is accepted, so a header can never inject anything else into a URL. This is metadata only, never authorization."""
+    xf = str(headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    if xf and _HOST_OK.match(xf):
+        return xf
+    return headers.get("host") or fallback
+
+
 # ── State initialization ───────────────────────────────────────────────────
 
 def _default_packs() -> Dict[str, dict]:

@@ -46,7 +46,8 @@ def _now() -> str:
 def _public_base(request: Request | None) -> str:
     if request is None:
         return "http://localhost:9000"
-    host = request.headers.get("host") or (request.url.netloc if request.url else "") or "localhost:9000"
+    from core.app_context import request_host
+    host = request_host(request.headers, (request.url.netloc if request.url else "") or "localhost:9000")
     scheme = request.headers.get("x-forwarded-proto") or (request.url.scheme if request.url else "http") or "http"
     return f"{scheme}://{host}"
 

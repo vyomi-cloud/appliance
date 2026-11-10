@@ -184,6 +184,10 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) if (!HOP.has(k)) headers[k] = v;
     headers.host = `simulator:${simulatorPort}`;                // the simulator's DNS-rebinding guard allows its own service name (VYOMI_MESH_HOSTS)
+    // ...but that name only exists inside the Codespace's Docker network. Tell the simulator the address the USER reaches it at (the laptop side
+    // of `vyomi-tunnel forward <simulator> 9000:9000`), so the endpoints it advertises (Keys and Endpoints, selfLinks) work from the laptop.
+    headers["x-forwarded-host"] = process.env.VYOMI_MESH_ENDPOINT_HOST || "127.0.0.1:9000";
+    headers["x-forwarded-proto"] = "http";
     headers["content-length"] = String(body.length);
     const out = http.request({ method: req.method, path: req.url, headers, createConnection: () => sock }, (r) => {
       const h = {};

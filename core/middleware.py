@@ -70,7 +70,8 @@ def _gcp_capture_public_base(request) -> None:
     if _GCP_PUBLIC_BASE_ENV:
         return
     try:
-        host = request.headers.get("host") or request.url.netloc
+        from core.app_context import request_host
+        host = request_host(request.headers, request.url.netloc)
         scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
         if not host:
             return
