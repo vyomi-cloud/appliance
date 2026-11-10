@@ -46,6 +46,8 @@ over `gh codespace ssh`), the resolver moving from the agent (`booster-dial.mjs`
 forwarded requests, and removing `booster-dial.mjs` from the image once the new transport replaces it. Section 11 item 9 (where the relay runs) is answered by
 this section; sections 2 to 4 still describe the outbound design until the transport is built.
 
+> **Implemented 2026-11-10 (`v4/mesh-ssh-transport`)**: the link runs on the laptop over the user's `gh codespace ssh` session (`wasm/relay/mesh-ssh.mjs`). Where §2-4 below describe the Codespace dialling out, the ssh transport supersedes it.
+
 ## 2. Components
 
 ```

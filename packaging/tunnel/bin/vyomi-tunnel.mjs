@@ -43,10 +43,16 @@ import { createRequire } from "node:module";
 const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
-if (["login", "config", "connect", "status", "forward", "keep"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   process.exit(await main(process.argv.slice(2)));
 }
+
+if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-tunnel: unknown command "${process.argv[2]}". Run \`vyomi-tunnel help\`.`); process.exit(2); }
+
+// Nothing is served without a valid Vyomi key (Free is enough for Nano). Same credentials file as the Mesh commands.
+{ const { requireSession } = await import("./credentials.mjs"); const a = await requireSession();
+  if (a.error) { console.error("vyomi-tunnel: " + a.error); process.exit(a.code === "NoCredentials" ? 2 : 1); } }
 
 const VERSION = "1.2.0";
 const PORT = Number(process.env.RELAY_PORT || 8090);
