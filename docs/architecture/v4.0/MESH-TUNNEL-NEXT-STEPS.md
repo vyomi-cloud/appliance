@@ -24,7 +24,7 @@ Worker `/egress` + browser-VM use of it, tunnel architecture doc, P1 Nano back-p
 - Keep-alive probe against a live Codespace.
 
 ## Owner / deploy-time items
-- DO env `MESH_RELAY_URL` and `GITHUB_APP_SLUG=vyomi-mesh` (do-spec-v4-ready.yaml); rotate the GitHub App client secret.
+- DO env `GITHUB_APP_SLUG=vyomi-mesh` (do-spec-v4-ready.yaml); rotate the GitHub App client secret. `MESH_RELAY_URL` stays EMPTY (§1c: the tunnel is the relay).
 - Sync the devcontainer sshd and Mesh naming to `vyomi-cloud/sandbox` (needs the owner's OK). Clean up old `vyomi-mesh-*` Codespaces.
 - Release items stay in `RELEASE-READINESS.md` (on `docs/v4-release-plan-mesh`, not yet on the trunk).
 

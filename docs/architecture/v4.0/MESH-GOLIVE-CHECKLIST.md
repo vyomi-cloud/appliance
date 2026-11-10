@@ -19,13 +19,18 @@ a real Codespace or a real wss:// relay. Design: `MESH-CODESPACES-GITHUB-APP.md`
 
 ## 2. Portal env vars (DigitalOcean app)
 `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `MESH_TOKEN_KEY` (Fernet key for stored GitHub tokens; losing it forces everyone to reconnect),
-`MESH_SESSION_KEY` (session-token master key; the relay needs the SAME value as `VYOMI_MESH_SESSION_KEY`), `MESH_RELAY_URL`
-(public `wss://.../mesh`), optional `MESH_REPO`, `MESH_REPO_MODE` (auto|direct|fork), `PORTAL_BASE_URL`. Do NOT set `MESH_WORKER=0` in prod
+`MESH_SESSION_KEY` (session-token master key; the simulator in the Codespace gets the matching per-session key from `/api/mesh/session/token`),
+optional `MESH_REPO`, `MESH_REPO_MODE` (auto|direct|fork), `PORTAL_BASE_URL`. **Leave `MESH_RELAY_URL` EMPTY** (decision 2026-11-10, VYOMI-TUNNEL-ARCHITECTURE §1c:
+the link runs on the laptop over the user's own `gh codespace ssh`; the console talks to the local `vyomi-tunnel`, `mesh-link.js` falls back to
+`http://127.0.0.1:8090` when the portal returns no `relay_url`). The one thing that still needs a hosted relay URL is the GitHub-hosted model
+runners (they dial out; the portal answers `relay_not_configured` 503 without it): a separate decision. Do NOT set `MESH_WORKER=0` in prod
 (it is the 8 h TTL / heartbeat / hours-limit enforcer).
 
-## 3. Relay with TLS
-Deploy the relay (`wasm/relay/local-relay.mjs`, mesh hub enabled by the session key) behind wss:// termination. Set `VYOMI_RELAY_ORIGINS`
-to the portal origins. Tested over ws:// only.
+## 3. Relay with TLS — NOT NEEDED for the Mesh
+Superseded by §1c: there is no hosted relay and no wss:// endpoint for the Mesh. Only the optional runner-hosted-model plane would need one.
+Instead verify the tunnel path on a real Codespace: `vyomi-tunnel list mesh`, `ssh host.vyomi`, and a console call through `http://127.0.0.1:8090`
+(carrying `X-Vyomi-Session-Token`; `VYOMI_RELAY_ALLOW_LOOPBACK=1` only for a localhost portal). Also check the published simulator image has
+`core/mesh_session.py` (the 2026-11-10 `:latest` was 3.0.46 and did not).
 
 ## 4. Real boot test (personal GitHub Free account, NOT vyomi-admin)
 - [ ] Dashboard: Connect GitHub -> single install+authorise screen -> back on the dashboard, "GitHub: <login>".
