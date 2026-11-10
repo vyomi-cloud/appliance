@@ -3,16 +3,16 @@
 # and keep CI boots out of the install/traction numbers.
 services:
   simulator:
-    # VYOMI_DOCKER_GID (set by the booting workflow from the runner's docker
-    # group) keeps the simulator on its normal non-root `cloudlearn` user —
-    # same as local/prod — while still granting /var/run/docker.sock access.
-    # A prior fix ran the container as root (user: "0:0") instead; that gave
-    # docker.sock access too, but also runs the EC2 LXD backend as root,
-    # which breaks its unprivileged-container launch and left every instance
-    # in state=stopped right after create (aws.ec2.reboot -> 409, console-
-    # actions pinned at 172/173 since v3.0.40's #498).
-    group_add:
-      - "${VYOMI_DOCKER_GID:-0}"
+    # docker-compose.yml's own group_add (VYOMI_DOCKER_GID) already covers
+    # /var/run/docker.sock access for the simulator's non-root `cloudlearn`
+    # user; don't repeat it here — merging two compose files with the same
+    # literal group_add entry fails ("items at 0 and 1 are equal"). A prior
+    # fix ran the container as root (user: "0:0") instead, which also gave
+    # docker.sock access but ran the EC2 LXD backend as root too, breaking
+    # its unprivileged-container launch and leaving every instance in
+    # state=stopped right after create (aws.ec2.reboot -> 409, console-
+    # actions pinned at 172/173 since v3.0.40's #498). The booting workflow
+    # just needs to export VYOMI_DOCKER_GID before `docker compose up`.
     environment:
       CLOUDLEARN_TIER_ENFORCE: "0"
       # Test boots must not count as installs in the traction numbers.
