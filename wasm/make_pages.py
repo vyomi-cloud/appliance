@@ -655,8 +655,7 @@ def main():
 
 
 def _main_retired():
-    # Launch page -> the Nano landing (/nano/ = index.html), identical to Lite/Max/Pro.
-    _process("pricing.html", "index.html", LAUNCH)
+    # (The old launch page index.html is deleted: /nano/ redirects into the v4 console.)
     # Workspaces dashboard (Appliance health / Host util / Spaces / KC) -> clouds.html.
     # + the portal's Nano chrome: side-menu account / Sign out, line icons, install ping.
     _process("clouds.html", "clouds.html", SW, post=_nano_dashboard)
