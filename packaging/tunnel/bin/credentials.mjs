@@ -7,7 +7,8 @@ import { join } from "node:path";
 
 export class TunnelAuthError extends Error { constructor(code, message) { super(message); this.code = code; } }
 export const DEFAULT_PORTAL = "https://vyomi.cloud";
-export const NO_CREDENTIALS = "No Vyomi credentials. In the console open the avatar menu > Tunnel credentials, create an access key, and save it as ~/.vyomi/credentials";
+export const KEYS_URL = "https://vyomi.cloud/account/tunnel-credentials";
+export const NO_CREDENTIALS = `No Vyomi credentials. Download your access key and secret from ${KEYS_URL} (console: avatar menu > Tunnel credentials) and save the file as ~/.vyomi/credentials`;
 
 export function parseIni(text) {
   const out = {}; let cur = null;
@@ -36,10 +37,10 @@ export const sha256hex = (s) => createHash("sha256").update(s).digest("hex");
 export const sign = ({ secret, method, path, date, body }) => createHmac("sha256", secret).update(`${method}\n${path}\n${date}\n${sha256hex(body)}`).digest("hex");
 
 const FRIENDLY = {
-  InvalidAccessKey: "your Vyomi access key is not valid. Create a new one in the console (avatar menu > Tunnel credentials).",
-  SignatureMismatch: "your Vyomi secret key does not match. Create a new access key in the console.",
+  InvalidAccessKey: `your Vyomi access key is not valid. Create a new one at ${KEYS_URL}.`,
+  SignatureMismatch: `your Vyomi secret key does not match. Create a new access key at ${KEYS_URL}.`,
   RequestTimeSkew: "your computer's clock is off by more than 5 minutes. Fix the clock and retry.",
-  KeyRevoked: "this access key was revoked. Create a new one in the console.",
+  KeyRevoked: `this access key was revoked. Create a new one at ${KEYS_URL}.`,
   PlanNotAllowed: "Mesh needs a Pro or Max plan.",
   NoMeshSession: "Mesh is not running. Start it in the Vyomi console, then retry.",
   Throttled: "too many requests; wait a moment and retry.",

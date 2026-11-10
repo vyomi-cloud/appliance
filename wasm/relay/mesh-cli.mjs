@@ -183,9 +183,11 @@ Get one: 'vyomi-tunnel help credentials'.
 const DETAILS = {
   credentials: `Mesh credentials (like ~/.aws/credentials)
 
-1. In the Vyomi console open the avatar menu > Tunnel credentials.
-2. Create an access key and download it.
-3. Save it as ~/.vyomi/credentials:
+Where to get it: https://vyomi.cloud/account/tunnel-credentials
+(in the console: avatar menu > Tunnel credentials)
+
+1. Create an access key. The secret is shown once, so download it.
+2. Save the downloaded file as ~/.vyomi/credentials (it looks like this):
 
    [default]
    vyomi_access_key_id     = VYKA...

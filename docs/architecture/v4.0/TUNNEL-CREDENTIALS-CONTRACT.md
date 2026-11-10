@@ -5,7 +5,9 @@ Model: the AWS CLI. No `login` command. The user creates an access key in the co
 
 ## 1. The user's side
 
-Console: avatar menu > **Tunnel credentials**: create access key (secret shown once, "Download credentials" button), list, rotate, revoke.
+**Where to download the access key and secret:** `https://vyomi.cloud/account/tunnel-credentials` (console: avatar menu > **Tunnel credentials**). The tunnel prints this URL whenever credentials are missing or rejected. *The page does not exist yet; it is part of the portal work in section 4.*
+
+The page: create access key (secret shown once, "Download credentials" button), list, rotate, revoke.
 
 `~/.vyomi/credentials` (mode 600), INI like `~/.aws/credentials`:
 
