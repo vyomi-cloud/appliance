@@ -138,13 +138,16 @@
   var COMPUTE_PATH = /^\/(compute\/v1\/|v1(beta1)?\/projects\/[^/]+\/locations\/[^/]+\/(publishers|endpoints|models)\b|openai\/|azure-data\/openai\/|.*\/aiplatform\/)|\/providers\/Microsoft\.(Compute|ContainerService|CognitiveServices|MachineLearningServices|Batch|ContainerInstance)\//i;
   // Heuristic classifier for native-wire calls: EC2/VMs, languages (Lambda/functions), AI. Everything else stays in the browser.
   function isComputeCall(wirePath, authorization) { return COMPUTE_SCOPE.test(authorization || "") || COMPUTE_PATH.test(wirePath || ""); }
+  var LOCAL_TUNNEL = "http://127.0.0.1:8090";   // vyomi-tunnel's local relay (RELAY_PORT default)
   function httpBase(u) { try { var x = new URL(u); x.protocol = x.protocol === "wss:" ? "https:" : x.protocol === "ws:" ? "http:" : x.protocol; x.pathname = ""; x.search = ""; return x.toString().replace(/\/+$/, ""); } catch (_) { return ""; } }
   function applySession(st) {
     var prev = JSON.stringify(sess && { s: sess.session && sess.session.state, e: sess.error && sess.error.code, n: sess.ended_note });
     sess = st;
-    var live = st && st.session && st.session.state === "running" && st.relay_url && st.session.session_token;
+    // No hosted relay (decision 2026-11-10: the link runs on the laptop): with no relay_url from the portal the console talks to the
+    // user's own `vyomi-tunnel`, which holds the ssh session to the Codespace. A hosted relay_url, when set, still wins.
+    var live = st && st.session && st.session.state === "running" && st.session.session_token;
     if (live) {
-      var base = httpBase(st.relay_url);
+      var base = st.relay_url ? httpBase(st.relay_url) : LOCAL_TUNNEL;
       if (!vboost || vboost.token !== st.session.session_token || vboost.relay_url !== base) {
         vboost = { id: SESSION_ID, name: "Codespace mesh", session: true, relay_url: base, token: st.session.session_token, base: base };
         delete state[SESSION_ID]; pollOne(vboost);
