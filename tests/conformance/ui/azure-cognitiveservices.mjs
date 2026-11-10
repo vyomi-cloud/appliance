@@ -115,7 +115,13 @@ try {
     check(ok, `tab "${tabs[i]}" renders`, txt.slice(0, 160).replace(/\n/g, " ⏎ "));
   }
   const keysTab = content["Keys and Endpoint"] || "";
-  check(/KEY 1/.test(keysTab) && /KEY 2/.test(keysTab) && /openai\.azure\.com/.test(keysTab), "Keys and Endpoint lists both keys and the endpoint", keysTab.slice(0, 200));
+  // The endpoint is whatever ARM reports: offline it points at the simulator's own inference
+  // route (<base>/azure-data/openai/<account>/, so the SDK can call it); Nano keeps the
+  // <account>.openai.azure.com shape. The tab must show the same value ARM returns.
+  const acct = await (await fetch(`${arm}/accounts/${name}?${AV}`)).json().catch(() => ({}));
+  const wantEp = (acct.properties || {}).endpoint || "";
+  check(/KEY 1/.test(keysTab) && /KEY 2/.test(keysTab) && wantEp && keysTab.includes(wantEp),
+    "Keys and Endpoint lists both keys and the endpoint", `want endpoint ${wantEp} :: ` + keysTab.slice(0, 300));
 
   // model deployments: create one in the blade, read it back over ARM
   const dp = tabIndex(/Model deployments/i);

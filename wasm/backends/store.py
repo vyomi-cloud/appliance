@@ -171,7 +171,16 @@ class Backends:
         try:
             from core import nano_registry as _reg
             _r = _reg.get()
-            self.resources = _r["resources"]
+            # The registry has no ResourceStore of its own (it can't import wasm/);
+            # register this one so nano_persist (STORE_ATTRS "resources") snapshots it.
+            cur = _r.get("resources")
+            if not isinstance(cur, ResourceStore):
+                # The router may have registered a plain holder first (core/aws_wire_router
+                # ResourceCollections); the console needs the full store, with its contents.
+                rs = ResourceStore()
+                rs.collections.update(getattr(cur, "collections", None) or {})
+                _r["resources"] = cur = rs
+            self.resources = cur
             self._azure_arm = _r["az_arm"]
         except Exception:
             # Defensive fallback (e.g. registry unavailable in an isolated test):

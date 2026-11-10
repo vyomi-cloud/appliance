@@ -125,11 +125,18 @@ check("Free tier deletes immediately", cp(st, "GET", ["locations", "eastus", "de
 
 # through the Nano ARM dispatcher
 arm = AzureArm()
-rid = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.AppConfiguration/configurationStores/nano-cfg"
+rid = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg/providers/Microsoft.AppConfiguration/configurationStores/nano-cfg"
 r = arm.handle("PUT", rid, {"api-version": "2024-05-01"}, {"location": "eastus", "sku": {"name": "Standard"}})
 check("Nano ARM: create store with LRO header", r["status"] == 200 and "Azure-AsyncOperation" in r["headers"] and r["body"]["name"] == "nano-cfg", r)
 r = arm.handle("PUT", rid + "/keyValues/k1$prod", {}, {"properties": {"value": "v"}})
 check("Nano ARM: keyValues PUT/GET", arm.handle("GET", rid + "/keyValues/k1$prod")["body"]["properties"]["value"] == "v")
 check("Nano ARM: state persists via the public map", rid.lower() in arm.state)
 print(f"\n{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

@@ -207,7 +207,7 @@ _CLOUDSQL_WIZARD = _basic_wizard(
             {"value": "SQLSERVER_2022_STANDARD", "label": "SQL Server 2022 Standard"},
          ]},
         {"name": "rootPassword", "label": "Password for the postgres user", "type": "password",
-         "required": True,
+         "help": "Optional: leave blank and set it later (or use Generate in the real console).",
          "validate": {"regex": r"^.{8,99}$", "message": "8-99 characters"}},
     ],
     sections=[
@@ -364,11 +364,11 @@ _APIGW_WIZARD = _basic_wizard(
     name_default="my-gateway", region_or_zone="region",
     extra_basic_fields=[
         {"name": "apiConfig", "label": "API config",
-         "default": "", "required": True,
-         "help": "Reference an existing API config (OpenAPI 2.0/3.0 spec) by name."},
+         "default": "",
+         "help": "Reference an existing API config (OpenAPI 2.0/3.0 spec) by name; can be attached after creation."},
         {"name": "__serviceAccount__", "label": "Service account",
-         "default": "", "required": True,
-         "help": "Service account email used to invoke backend services."},
+         "default": "",
+         "help": "Service account email used to invoke backend services; defaults to the project's compute service account."},
     ],
 )
 
@@ -403,6 +403,12 @@ _VPC_WIZARD = _basic_wizard(
         ]},
     ],
 )
+# The networks.insert fields the form's choices set (subnet mode, routing mode, description).
+_VPC_WIZARD["synthetic_map"] = {
+    "__subnetCreationMode__": {"auto": {"autoCreateSubnetworks": True}, "custom": {"autoCreateSubnetworks": False}},
+    "__routingMode__": {"regional": {"routingConfig.routingMode": "REGIONAL"}, "global": {"routingConfig.routingMode": "GLOBAL"}},
+    "__description__": {"*": {"description": "$value"}},
+}
 
 
 # ============================================================================
@@ -486,6 +492,29 @@ _EVENTARC_WIZARD = _basic_wizard(
 # ============================================================================
 # Secret Manager — Create secret
 # ============================================================================
+def _artifactregistry_wizard():
+    w = _basic_wizard(
+        name_field=_name("Name", "my-repo", r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$",
+                         "1-63 chars, lowercase letters, digits, hyphens; start with a letter"),
+        name_default="my-repo", region_or_zone="region",
+        extra_basic_fields=[
+            {"name": "format", "label": "Format", "type": "select", "required": True, "default": "DOCKER",
+             "options": [{"value": "DOCKER", "label": "Docker"}, {"value": "MAVEN", "label": "Maven"},
+                         {"value": "NPM", "label": "npm"}, {"value": "PYTHON", "label": "Python"},
+                         {"value": "APT", "label": "Apt"}, {"value": "YUM", "label": "Yum"},
+                         {"value": "GO", "label": "Go"}, {"value": "GENERIC", "label": "Generic"}]},
+            {"name": "mode", "label": "Mode", "type": "select", "default": "STANDARD_REPOSITORY",
+             "options": [{"value": "STANDARD_REPOSITORY", "label": "Standard"},
+                         {"value": "VIRTUAL_REPOSITORY", "label": "Virtual"},
+                         {"value": "REMOTE_REPOSITORY", "label": "Remote"}]},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ])
+    w["synthetic_map"] = {"__region__": {"location": "$value"}}
+    return w
+
+
+_ARTIFACTREGISTRY_WIZARD = _artifactregistry_wizard()
+
 _SECRETMANAGER_WIZARD = _basic_wizard(
     name_field=_name("Name", "my-secret",
                      r"^[A-Za-z0-9_-]{1,255}$",
@@ -493,7 +522,7 @@ _SECRETMANAGER_WIZARD = _basic_wizard(
     name_default="my-secret", region_or_zone=None,
     extra_basic_fields=[
         {"name": "secret_value", "label": "Secret value", "type": "password",
-         "required": True,
+         "help": "Optional: a secret can be created empty and a version added later.",
          "validate": {"regex": r"^.{1,65535}$", "message": "1-65535 chars"}},
     ],
     sections=[
@@ -596,7 +625,7 @@ _CLOUDSCHEDULER_WIZARD = _basic_wizard(
             {"name": "httpMethod", "label": "HTTP method", "type": "select", "default": "POST",
              "ifEquals": {"targetType": "HTTP"}, "options": [
                 {"value": m, "label": m} for m in ("POST", "GET", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")]},
-            {"name": "topic", "label": "Cloud Pub/Sub topic", "default": "projects/demo/topics/my-topic",
+            {"name": "topic", "label": "Cloud Pub/Sub topic", "default": "my-topic",
              "ifEquals": {"targetType": "Pub/Sub"}},
             {"name": "message", "label": "Message body", "default": "scheduled",
              "ifEquals": {"targetType": "Pub/Sub"}},
@@ -662,6 +691,36 @@ _IAMCREDENTIALS_WIZARD = _basic_wizard(
 
 
 # ============================================================================
+# Cloud Monitoring — Create alert policy (core/gcp_monitoring_core.form_to_policy): one
+# threshold condition on a metric, with an e-mail notification channel
+# ============================================================================
+_MONITORING_WIZARD = _basic_wizard(
+    name_field=_name("Policy name", "High CPU utilization", r"^.{1,512}$", "1-512 characters"),
+    name_default="High CPU utilization", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "severity", "label": "Severity", "type": "select", "default": "WARNING", "options": [
+            {"value": "CRITICAL", "label": "Critical"}, {"value": "ERROR", "label": "Error"},
+            {"value": "WARNING", "label": "Warning"}]},
+        {"name": "email", "label": "Notification e-mail address", "default": "ops@example.com",
+         "help": "An e-mail notification channel is created (or reused) and attached."},
+        {"name": "documentation", "label": "Documentation", "default": "CPU utilization above 80% for 5 minutes. Check the instance for runaway processes."},
+    ],
+    sections=[
+        {"label": "Condition", "fields": [
+            {"name": "metricType", "label": "Metric type", "default": "compute.googleapis.com/instance/cpu/utilization", "required": True},
+            {"name": "resourceType", "label": "Resource type", "default": "gce_instance", "required": True},
+            {"name": "comparison", "label": "Condition", "type": "select", "default": "COMPARISON_GT", "options": [
+                {"value": "COMPARISON_GT", "label": "Above threshold"}, {"value": "COMPARISON_GE", "label": "At or above"},
+                {"value": "COMPARISON_LT", "label": "Below threshold"}, {"value": "COMPARISON_LE", "label": "At or below"},
+                {"value": "COMPARISON_EQ", "label": "Equal to"}, {"value": "COMPARISON_NE", "label": "Not equal to"}]},
+            {"name": "threshold", "label": "Threshold value", "type": "number", "default": 0.8},
+            {"name": "duration", "label": "Retest window", "default": "300s", "help": "Duration in seconds, e.g. 300s."},
+            {"name": "alignmentPeriod", "label": "Alignment period", "default": "60s"},
+            {"name": "aligner", "label": "Aligner", "type": "select", "default": "ALIGN_MEAN", "options": [
+                {"value": a, "label": a} for a in ("ALIGN_MEAN", "ALIGN_MAX", "ALIGN_MIN", "ALIGN_SUM", "ALIGN_COUNT", "ALIGN_RATE")]},
+        ]},
+    ],
+)
 # Memorystore for Redis — Create instance (core/gcp_redis_core.job_from_form)
 # ============================================================================
 _REDIS_WIZARD = _basic_wizard(
@@ -698,9 +757,11 @@ WIZARDS: dict[str, dict] = {
     "iam":           _IAM_WIZARD,
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
+    "artifactregistry": _ARTIFACTREGISTRY_WIZARD,
     "kms":           _KMS_WIZARD,
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
     "container":     _CONTAINER_WIZARD,
+    "monitoring":    _MONITORING_WIZARD,
     "redis":         _REDIS_WIZARD,
 }

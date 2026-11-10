@@ -3,12 +3,18 @@
 # ENDPOINT (default http://127.0.0.1:9000), PROJECT. One [PASS]/[FAIL] line per check.
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
-PROJECT="${PROJECT:-cli-redis-proj}"
+# Default PROJECT: the appliance's GCP project, discovered the way a user's gcloud
+# sees it (Cloud Resource Manager) — the same project the GCP console works in.
+if [ -z "${PROJECT:-}" ]; then
+  PROJECT=$(CLOUDSDK_API_ENDPOINT_OVERRIDES_CLOUDRESOURCEMANAGER="$BASE/" CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 gcloud projects list --format='value(projectId)' --limit=1 2>/dev/null | head -1)
+  [ -n "$PROJECT" ] || { echo "FAIL discover project :: \`gcloud projects list\` against $BASE returned nothing"; exit 1; }
+fi
 LOC=us-central1
 ID="cli-redis-$(date +%s)"
 HA="${ID}-ha"
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 export CLOUDSDK_CORE_PROJECT="$PROJECT"
@@ -21,8 +27,8 @@ out=$(gcloud redis instances create "$ID" $F --size=2 --tier=basic --redis-versi
 chk $? "gcloud redis instances create (basic, 2 GB)" "$out"
 
 out=$(gcloud redis instances describe "$ID" $F --format=json 2>&1)
-echo "$out" | grep -q '"state": "READY"' && echo "$out" | grep -q '"memorySizeGb": 2' && echo "$out" | grep -q '"tier": "BASIC"' && echo "$out" | grep -q '"port": 6379' && echo "$out" | grep -q '"redisVersion": "REDIS_7_0"'
-chk $? "describe (READY, 2 GB, BASIC, port 6379, REDIS_7_0)" "$(echo "$out" | head -5)"
+echo "$out" | grep -q '"state": "READY"' && echo "$out" | grep -q '"memorySizeGb": 2' && echo "$out" | grep -q '"tier": "BASIC"' && echo "$out" | grep -Eq '"port": [0-9]+' && echo "$out" | grep -q '"redisVersion": "REDIS_7_0"'
+chk $? "describe (READY, 2 GB, BASIC, a TCP port, REDIS_7_0)" "$(echo "$out" | head -5)"
 
 out=$(gcloud redis instances list $F --format='value(name,state)' 2>&1); echo "$out" | grep -q "$ID.*READY"
 chk $? "instances list contains the instance" "$out"

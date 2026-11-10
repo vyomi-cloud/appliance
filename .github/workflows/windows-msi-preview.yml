@@ -69,7 +69,7 @@ jobs:
           $stage = (Resolve-Path stage).Path
           & $wix build packaging\windows\cloudlearn.wxs -arch x64 `
             -d Version=$env:MSI_VERSION -d "StageDir=$stage" `
-            -o "cloud-learn-$($env:MSI_VERSION)-x64.msi"
+            -o "vyomi-$($env:MSI_VERSION)-x64.msi"
           Get-ChildItem *.msi | ForEach-Object { Write-Host "Built: $($_.Name) ($([Math]::Round($_.Length/1MB,1)) MB)" }
 
       - name: Publish to windows-msi-preview prerelease
@@ -77,7 +77,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $msi = "cloud-learn-$($env:MSI_VERSION)-x64.msi"
+          $msi = "vyomi-$($env:MSI_VERSION)-x64.msi"
           gh release delete windows-msi-preview --yes --cleanup-tag 2>$null
           gh release create windows-msi-preview $msi `
             --prerelease `

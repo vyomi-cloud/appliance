@@ -27,7 +27,7 @@
        renders ~148 px wide — clearly readable .cloud suffix included.
        Header is 50 px tall so 44 px logo leaves a tight but balanced 3 px
        clearance top + bottom. width:auto preserves the ratio. */
-    .hdr-logo-img{height:44px;width:auto;display:block;flex-shrink:0}
+    .hdr-logo-img{height:30px;width:auto;display:block;flex-shrink:0}
     /* Light-theme header — dark text on white. Hover states use a soft
        neutral instead of the old AWS-navy hover so it matches the white bg. */
     .hdr-svc{color:#16191f;font-size:14px;font-weight:700;padding-left:2px;white-space:nowrap}
@@ -3279,8 +3279,11 @@ const gcpLastPath = (value='') => {
   const parts = String(value || '').split('/').filter(Boolean);
   return parts.length ? parts[parts.length - 1] : '';
 };
-// space = project: every GCP view resolves to the active space's project.
-const gcpProjectDefault = () => window.localStorage.getItem('cloudlearn.active.space') || window.localStorage.getItem('cloudlearn.gcp.project') || 'cloudlearn';
+// space = project: every GCP view resolves to the GCP space's project ID (the
+// one `gcloud projects list` shows), read once from the console catalog.
+window.__VYOMI_GCP_PROJECT = window.__VYOMI_GCP_PROJECT || '';
+fetch('/api/gcp/catalog').then(r => r.json()).then(c => { if (c && c.project) window.__VYOMI_GCP_PROJECT = c.project; }).catch(() => {});
+const gcpProjectDefault = () => window.__VYOMI_GCP_PROJECT || 'vyomi-project';
 const gcpComputeProjectDefault = () => gcpProjectDefault();
 const gcpComputeZoneDefault = () => window.localStorage.getItem('cloudlearn.gcp.zone') || 'us-central1-a';
 const gcpLocationDefault = () => window.localStorage.getItem('cloudlearn.gcp.location') || 'us-central1';
@@ -5186,7 +5189,7 @@ function DashboardView({onOpen, onBack, notify, onExportTerraform}) {
   return (
     <>
       <header className="hdr">
-        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi"/></a>
+        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-logo.png" alt="Vyomi"/></a>
         <button className="hdr-menu" onClick={() => onOpen('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -8006,7 +8009,7 @@ function GCPComputeView({notify, onBack, onOpen}) {
         layout="stacked"
         titleCardChips={(
           <>
-            <span className="gcp-list-head-chip">Project: {project || 'cloudlearn'}</span>
+            <span className="gcp-list-head-chip">Project: {project || gcpProjectDefault()}</span>
             <span className="gcp-list-head-chip">{computeItems.length} resource{computeItems.length === 1 ? '' : 's'}</span>
           </>
         )}
@@ -9088,7 +9091,7 @@ function GCPStorageView({notify, onBack, onOpen}) {
         layout="stacked"
         titleCardChips={(
           <>
-            <span className="gcp-list-head-chip">Project: {project || 'cloudlearn'}</span>
+            <span className="gcp-list-head-chip">Project: {project || gcpProjectDefault()}</span>
             <span className="gcp-list-head-chip">{bucketCount} resource{bucketCount === 1 ? '' : 's'}</span>
           </>
         )}
@@ -13277,7 +13280,7 @@ function App() {
             re-render with the chosen scope. */}
         <header className="hdr">
           <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
-            <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
+            <img className="hdr-logo-img" src="/assets/brand/vyomi-logo.png" alt="vyomi"/>
           </a>
           <div className="hdr-svc"><strong>Workspaces</strong></div>
           <div className="hdr-right">
@@ -13537,7 +13540,7 @@ function App() {
         <>
           {/* Top header */}
           <header className="hdr">
-            <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi"/></a>
+            <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-logo.png" alt="Vyomi"/></a>
             <button className="hdr-menu" onClick={() => open('providers')}>Providers</button>
             <div className="hdr-svc"><strong>{titleMap[view] || 'Simulator'}</strong></div>
             <div className="hdr-search">

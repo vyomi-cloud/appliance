@@ -21,6 +21,8 @@ from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
 from core import elbv2_core
 from core import ssm_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
+from core import kinesis_core
+from core import apigatewayv2_core
 from core import stepfunctions_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -54,7 +56,7 @@ def _fn_row(fn):
             "handler": fn.get("handler", "index.handler"), "codeSize": len(fn.get("source", "")),
             "function_name": fn["name"], "function_arn": fn.get("arn", ""),
             "memory_size": fn.get("memory_size", 128), "timeout": fn.get("timeout", 3),
-            "state": "Active", "package_type": "Zip",
+            "state": "Active", "package_type": "Zip", "invocation_count": fn.get("invocation_count", 0),
             "created": fn.get("created") or fn.get("last_modified") or "",
             "last_modified": fn.get("last_modified") or fn.get("created") or ""}
 
@@ -64,10 +66,17 @@ def lambda_list(p=None):
 
 
 def lambda_create(p):
-    name = str(p.get("name") or "").strip()
+    # The same name spellings the offline console API accepts (core/models.LambdaFunctionRequest).
+    name = str(p.get("FunctionName") or p.get("functionName") or p.get("function_name") or p.get("name") or "").strip()
     source = p.get("code") or p.get("source") or "def handler(event, context):\n    return {'ok': True, 'event': event}"
     body = {"FunctionName": name, "Runtime": p.get("runtime", "python3.12"),
             "Handler": p.get("handler", "index.handler"), "Code": {"Source": source}}
+    if isinstance(p.get("environment"), dict) and p["environment"]:
+        body["Environment"] = {"Variables": {str(k): str(v) for k, v in p["environment"].items()}}
+    for src, dst in (("memory_size", "MemorySize"), ("memory", "MemorySize"), ("timeout", "Timeout"),
+                     ("description", "Description"), ("role", "Role")):
+        if p.get(src) not in (None, ""):
+            body[dst] = p[src]
     r = lambda_core.dispatch(_COMPUTE, "POST", "/2015-03-31/functions", {}, {}, json.dumps(body).encode())
     if r.status >= 400:
         return {"ok": False, "code": "CreateFailed", **_lam_json(r)}
@@ -174,7 +183,7 @@ def apigw_create(p):
                              {}, {}, json.dumps(integ).encode())
     apigateway_core.dispatch(_COMPUTE, "POST", f"/restapis/{api_id}/deployments",
                              {}, {}, json.dumps({"stageName": p.get("stage", "prod")}).encode())
-    return {"ok": True, "id": api_id, "name": name,
+    return {"ok": True, **_api_row(_COMPUTE._apigateway_apis[api_id]), "id": api_id, "name": name,
             "endpoint": f"/{p.get('stage','prod')}/{path_part}", "method": method}
 
 
@@ -278,11 +287,21 @@ def vpc_create(p):
         rec = _VPC._vpc_model["vpcs"][vid.group(1)]
         rec["name"] = str(p.get("name") or "")
         rec["created"] = _now()
-        # Every real VPC is created with a default security group.
-        sg = re.search(r"<groupId>(.*?)</groupId>", _vpc_q("CreateSecurityGroup", {"VpcId": vid.group(1)}).body)
-        if sg:
-            _VPC._vpc_model["sgs"][sg.group(1)].update(name="default", description="default VPC security group")
     return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": cidr}
+
+
+def vpc_delete(b, a, p):
+    """Console Delete VPC: removes the VPC and its networking, refused while instances run in it."""
+    vid = str(p.get("name") or "")
+    if vid not in getattr(_VPC, "_vpc_model", {}).get("vpcs", {}):
+        return {"ok": False, "code": "InvalidVpcID.NotFound", "name": vid, "message": f"The vpc ID '{vid}' does not exist"}
+    active = [r.get("instance_id") or r.get("name") for r in b.resources.list("aws", a, "ec2")
+              if r.get("vpc_id") == vid and r.get("state") not in ("terminated", "shutting-down")]
+    if active:
+        return {"ok": False, "http_status": 409, "code": "DependencyViolation",
+                "message": f"Terminate its instances first: {', '.join(str(i) for i in active[:3])}"}
+    vpc_core.delete_vpc_cascade(_VPC, vid)
+    return {"ok": True, "vpc_id": vid}
 
 
 def vpc_create_subnet(p):
@@ -323,7 +342,7 @@ def vpc_analyze(p):
 
 # ── EventBridge (rules → SQS delivery) ─────────────────────────────────────
 def _eb(action, body):
-    return eventbridge_core.dispatch(MSG, "AWSEvents." + action, body)
+    return eventbridge_core.dispatch(MSG, "AWSEvents." + action, body, lambda_store=_COMPUTE)
 
 
 def eb_list(p=None):
@@ -345,6 +364,10 @@ def eb_create(p):
         q = MSG.get_queue(str(p["targetQueue"]))
         if q:
             _eb("PutTargets", {"Rule": name, "Targets": [{"Id": "t1", "Arn": q["queue_arn"]}]})
+    if p.get("targetLambda"):
+        fn = getattr(_COMPUTE, "_lambda_functions", {}).get(str(p["targetLambda"]))
+        if fn:
+            _eb("PutTargets", {"Rule": name, "Targets": [{"Id": "t2", "Arn": fn["arn"]}]})
     return {"ok": True, "name": name}
 
 
@@ -361,6 +384,37 @@ def eb_put_event(p):
                                        "DetailType": str(p.get("detailType") or ""),
                                        "Detail": detail or "{}"}]})
     return {"ok": True, "eventId": (r.body.get("Entries") or [{}])[0].get("EventId")}
+
+
+# ── Kinesis Data Streams (core/kinesis_core.py; store shared with the relay) ─
+KIN = A._R["kinesis"]
+
+
+def kinesis_list(p=None):
+    return kinesis_core.console_list(KIN)
+
+
+def kinesis_create(p):
+    return kinesis_core.console_create(KIN, p or {})
+
+
+def kinesis_get(p):
+    return kinesis_core.console_get(KIN, str(p.get("name") or ""))
+
+
+def kinesis_update(p):
+    return kinesis_core.console_update(KIN, str(p.get("name") or ""), p.get("body") or {})
+
+
+def kinesis_delete(p):
+    return kinesis_core.console_delete(KIN, str(p.get("name") or ""))
+
+
+def kinesis_put(p):
+    body = {"StreamName": str(p.get("name") or ""), "PartitionKey": str(p.get("partition_key") or "pk"),
+            "Data": __import__("base64").b64encode(str(p.get("data") or "").encode()).decode()}
+    r = kinesis_core.dispatch(KIN, "Kinesis_20131202.PutRecord", body)
+    return {"ok": r.status < 400, **r.body}
 
 
 # ── Azure Service Bus (topics + subscriptions + send/receive) ──────────────
@@ -506,11 +560,19 @@ def extras_create(p):
         while f"{leaf}-{n:08x}" in _EXTRAS.get(key, {}):
             n += 1
         name = f"{leaf}-{n:08x}"
-    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
+    default_state = "ENABLED" if key.endswith("eventbridge/rules") else "available"
+    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state") or default_state, **vals}
+    if not item.get("state"):
+        item["state"] = default_state
     item["name"] = name
     item.setdefault("created", _now())
     if key.endswith("eventbridge/rules"):
-        item.setdefault("target_count", 0)   # a new rule has no targets yet
+        # a new rule's target count is what was attached (none yet unless a target was given)
+        if item.get("target_count") in (None, "", "\u2014"):
+            item["target_count"] = 1 if item.get("target_arn") else 0
+    if name in _EXTRAS.get(key, {}):
+        return {"ok": False, "__http": {"status": 409, "headers": {}, "body": {
+            "detail": f"'{name}' already exists. Choose a different name."}}}
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 
@@ -530,6 +592,70 @@ def extras_config_put(p):
     return {"ok": True}
 
 
+# ── API Gateway V2 (HTTP/WebSocket APIs) — core/apigatewayv2_core.py ────────
+# Store = the shared registry's `apigwv2`, the SAME one the native /v2 relay wire
+# reads/writes, so console-created APIs are visible to the CLI/SDK and vice-versa.
+def _apigwv2():
+    from core import nano_registry
+    return nano_registry.get()["apigwv2"]
+
+
+def _v2(method, path, body=None):
+    r = apigatewayv2_core.dispatch(_apigwv2(), method, path, {}, {},
+                                   json.dumps(body).encode() if body is not None else b"")
+    return r.status, _lam_json(r)
+
+
+def apigwv2_list(p=None):
+    apis = sorted((apigatewayv2_core.console_view(a) for a in _apigwv2().apis.values()),
+                  key=lambda a: (a["created"], a["name"]))
+    return {"ok": True, "apis": apis, "count": len(apis)}
+
+
+def apigwv2_create(p):
+    name = str(p.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "code": "BadRequestException", "message": "name is required"}
+    body = {"name": name, "protocolType": str(p.get("protocol_type") or p.get("protocolType") or "HTTP").upper()}
+    if p.get("description"):
+        body["description"] = p["description"]
+    if body["protocolType"] == "WEBSOCKET":
+        body["routeSelectionExpression"] = p.get("route_selection_expression") or "$request.body.action"
+    elif p.get("target"):
+        body["target"] = p["target"]
+    st, out = _v2("POST", "/v2/apis", body)
+    if st >= 300:
+        return {"ok": False, "code": "BadRequestException", "message": out.get("message", "")}
+    return {"ok": True, **apigatewayv2_core.console_view(_apigwv2().apis[out["apiId"]])}
+
+
+def apigwv2_get(p):
+    api = _apigwv2().apis.get(str(p.get("id") or p.get("name") or ""))
+    if not api:
+        return {"ok": False, "code": "NotFoundException"}
+    return {"ok": True, **apigatewayv2_core.console_view(api)}
+
+
+def apigwv2_delete(p):
+    st, out = _v2("DELETE", f"/v2/apis/{p.get('id') or p.get('name') or ''}")
+    return {"ok": st < 300, "message": out.get("message", "")}
+
+
+def apigwv2_patch(p):
+    api = _apigwv2().apis.get(str(p.get("id") or p.get("name") or ""))
+    if not api:
+        return {"ok": False, "code": "NotFoundException"}
+    if isinstance(p.get("tags"), dict):
+        api["tags"] = {str(k): str(v) for k, v in p["tags"].items()}
+    if p.get("description") is not None:
+        api["description"] = p["description"]
+    return {"ok": True, **apigatewayv2_core.console_view(api)}
+
+
+def apigwv2_children(p):
+    """GET /api/apigatewayv2/apis/{id}/{routes|integrations|stages|deployments|authorizers|models}."""
+    st, out = _v2("GET", f"/v2/apis/{p.get('id')}/{p.get('kind')}")
+    return {"ok": st < 300, **out}
 # ── CloudWatch Logs (core/logs_core.py) ─────────────────────────────────────
 def logs_console(p):
     """Console REST for CloudWatch Logs: the SAME logs_core.console_dispatch the
@@ -734,3 +860,12 @@ def sfn_children(p):
     if not sm:
         return {"ok": False, "code": "StateMachineDoesNotExist"}
     return {"ok": True, **stepfunctions_core.children(_sfn(), sm, p.get("kind"))}
+# ── Amazon SNS (core/sns_core.py) — shares the messaging store with SQS + the native wire ──
+def sns_console(p):
+    from core import nano_registry, sns_core
+    store = nano_registry.get()["msg"]
+    status, out = sns_core.console_dispatch(store, str(p.get("method") or "GET"), str(p.get("path") or ""),
+                                            dict(p.get("query") or {}), dict(p.get("body") or {}))
+    if status >= 400:
+        return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
+    return out

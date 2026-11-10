@@ -43,8 +43,11 @@ _REGISTRY: dict[str, CloudProvider] = {}
 _MUTATING_OPS = {
     "Create", "Update", "Delete", "Terminate", "Start", "Stop", "Reboot", "Modify",
     # native sub-resource ops seen on the _resource path (GCP cores)
-    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Resize", "Upgrade", "Failover",
+    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Enable", "Disable", "Resize", "Upgrade", "Failover",
 }
+# GCP resource-detail tab writes (/api/gcp/sub/{service}/{op}/{name}) — logged on the parent.
+_GCP_TAB_WRITES = ("Set", "Attach", "Detach", "Create", "Delete", "Grant", "Revoke", "Add", "Update", "Destroy",
+                   "Restore", "Publish", "Seek", "Rotate", "Import", "Export", "Patch", "Promote", "Test")
 
 
 def _emit_event(provider: str, service: str, resource: str, action: str,
@@ -76,7 +79,18 @@ def _events_query(params: dict) -> dict:
             service=params.get("service") or None,
             limit=int(params.get("limit") or 200),
         )
-        return {"ok": True, "events": evs}
+        # The console's Activity tab reads the offline appliance's shape:
+        # {at, event, detail:{name, …}} — project the store's events onto it so the
+        # tab is filtered by resource and its Detail column is filled, like offline.
+        out = []
+        for e in evs:
+            d = e.get("detail")
+            d = dict(d) if isinstance(d, dict) else ({"note": d} if d else {})
+            d.setdefault("name", e.get("resource", ""))
+            d.setdefault("service", e.get("service", ""))
+            d.setdefault("status", e.get("status", ""))
+            out.append({**e, "at": e.get("ts", ""), "event": e.get("action", ""), "detail": d})
+        return {"ok": True, "events": out}
     except Exception as e:
         return {"ok": True, "events": [], "error": str(e)}
 
@@ -105,7 +119,7 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
         out = _gcp_fill_out(svc, operation, out)
     # cloudsim event: record mutating ops (best-effort). For a sub-resource op the
     # "resource" is the CHILD's name (body.name) when present, else the parent name.
-    if operation in _MUTATING_OPS:
+    if operation in _MUTATING_OPS or (provider == "gcp" and operation.startswith(_GCP_TAB_WRITES)):
         res_name = str(body.get("name") or name or "") if operation in (
             "CreateSubscription", "CreateDatabase") else str(name or body.get("name") or "")
         _emit_event(provider, svc, res_name, operation, out)
@@ -131,10 +145,12 @@ def _ec2_launch_defaults(body: dict) -> dict:
     out.setdefault("public_dns", "ec2-" + out["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
     out.setdefault("image_id", "ami-0" + h[25:32] + h[:9])
     out.setdefault("availability_zone", "us-east-1a")
-    out.setdefault("vpc_id", "vpc-0" + h[:16])
-    out.setdefault("subnet_id", "subnet-0" + h[16:32])
+    out.setdefault("az", out["availability_zone"])
     out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
-    return out
+    # Placement (default VPC + subnet, default / launch-wizard security group),
+    # the primary ENI, root volume and IAM profile: core/aws_console_detail.
+    from . import aws_core_adapter as _A
+    return _A.ec2_apply_launch(out)
 
 
 def _gcp_fill(svc: str, rec):
@@ -197,11 +213,18 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         from . import gcp_core_adapter as _gca
         if svc in _gca.GCP_CORE_SERVICES:
             return _gca.resource_op(svc, operation, name, body)
+        # Resource-detail tab ops on generic-store parents (compute, vpc, functions, …).
+        if _gca.is_tab_op(svc, operation):
+            return _gca.tab_dispatch(svc, operation, name, body, backends.resources, account)
     if provider == "azure":
         from . import azure_core_adapter as _aca
         if svc in _aca.AZURE_DP_SERVICES:
             return _aca.resource_op(svc, operation, name, body)
     r = backends.resources
+    if name and provider == "aws" and svc == "ec2" and r.get(provider, account, svc, name) is None:
+        # The grid links an instance by its i-… id, the store keys it by Name tag.
+        name = next((k for k, v in r.collections.get(provider + "/" + account + "/" + svc, {}).items()
+                     if v.get("instance_id") == name), name)
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
@@ -209,9 +232,16 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             body = _ec2_launch_defaults(body)
         if provider == "gcp":   # stored described, so created/updated times stay fixed
             body = _gcp_fill(svc, body)
+            if svc in ("compute", "functions"):   # described like instances.get / functions.get
+                from core import gcp_console_tabs as _gct
+                body = (_gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a") if svc == "compute"
+                        else _gct.describe_function(body, "nano-project", "us-central1"))
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
+        if rec and provider == "aws" and svc == "ec2":
+            from . import aws_core_adapter as _A   # instances launched before placement was modeled
+            rec = _A._ec2_rec(backends, account, {"name": name}) or rec
         if not rec and name == "_settings":
             # Detail-tab settings that were never saved: an empty record, so the
             # tab renders each field's default (not a 404 for a normal state).
@@ -220,6 +250,14 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "Update":
         rec = r.update(provider, account, svc, name, body)
         return {"ok": True, **rec} if rec else {"ok": False, "code": "NotFound", "name": name}
+    if provider == "aws" and svc == "ec2" and operation in ("Delete", "Terminate", "Stop", "Start"):
+        # Termination / stop protection and the state-transition reason (core/aws_console_detail).
+        rec = r.get(provider, account, svc, name)
+        if rec is not None:
+            from . import aws_core_adapter as _A
+            err = _A.ec2_guard(rec, "Terminate" if operation == "Delete" else operation)
+            if err:
+                return err
     if operation == "Delete":
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
@@ -236,6 +274,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             "Stop":   ("stopped", "stopped"),
             "Reboot": ("running", "available"),
         }[operation]
+        if provider == "gcp" and svc == "compute":   # GCE instance status values
+            status = "TERMINATED" if operation == "Stop" else "RUNNING"
         updated = r.update(provider, account, svc, name, {"state": st, "status": status})
         return {"ok": True, **(updated or {"name": name, "state": st, "status": status})}
     if operation == "Terminate":
@@ -243,6 +283,60 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
+
+
+def _arm_event(method: str, scope: str, typ: str, name: str) -> None:
+    """Activity log for an ARM write: recorded against the resource it belongs to
+    (``scope``'s name), with the ARM operation name (``<type>/write|delete|action``)."""
+    try:
+        from core import nano_events
+        verb = {"DELETE": "delete", "POST": "action"}.get(method.upper(), "write")
+        top = scope.rstrip("/").split("/")[-1]
+        nano_events.record(provider="azure", service=typ, resource=top, action=f"{typ}/{verb}",
+                           status="ok", detail=f"{method.upper()} {typ} {name}".strip())
+    except Exception:
+        pass
+
+
+class _NanoBlobHook:
+    """The in-browser blob core (shared registry store) for ARM operations that read or
+    write blobs (API Management backup/restore). Nano's blob store is one account."""
+
+    def _store(self):
+        from core import nano_registry
+        return nano_registry.get()["az_blob"]
+
+    def exists(self, account, container):
+        return self._store().container_exists(container)
+
+    def put(self, account, container, name, data, content_type):
+        from core import azure_blob_core as bc
+        bc.dispatch(self._store(), "PUT", f"/{container}/{name}", {}, {"x-ms-blob-type": "BlockBlob",
+                    "content-type": content_type, "x-ms-blob-content-type": content_type}, data)
+
+    def get(self, account, container, name):
+        from core import azure_blob_core as bc
+        r = bc.dispatch(self._store(), "GET", f"/{container}/{name}", {}, {}, b"")
+        return r.body if getattr(r, "status", 404) == 200 else None
+
+
+def _arm_child_deleted(full_type: str, rec: dict, state: dict) -> None:
+    """A resource left ARM state (DELETE or resource-group cascade). Nano's Key Vault
+    data plane is ONE store shared by all vaults (the SW route carries no vault name),
+    so once the LAST vault is gone nothing may stay readable: purge secrets + keys."""
+    if full_type.lower() != "microsoft.keyvault/vaults":
+        return
+    if any(isinstance(r, dict) and str(r.get("type", "")).lower() == "microsoft.keyvault/vaults"
+           for r in state.values()):
+        return
+    from core import nano_registry
+    reg = nano_registry.get()
+    sec, keys = reg["az_kvsec"], reg["az_kvkeys"]
+    for n in list(sec.names()):
+        sec.drop_secret(n)
+    sec.persist()
+    for k in list(keys.key_ids()):
+        keys.drop_key(k)
 
 
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
@@ -268,6 +362,14 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
             from core.azure_arm_core import AzureArm
             arm = AzureArm()
         backends._azure_arm = arm
+    if getattr(arm, "on_event", None) is None:
+        arm.on_event = _arm_event
+    if getattr(arm, "blob_hook", None) is None:
+        arm.blob_hook = _NanoBlobHook()
+    if getattr(arm, "on_child_delete", None) is None:
+        arm.on_child_delete = _arm_child_deleted
+    if params.get("origin"):
+        arm._public_base = params["origin"]      # shown endpoints point at THIS Nano origin
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}
@@ -329,6 +431,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "kms":            len(A.kms_list_keys().get("value", [])),
                 "secretsmanager": len(A.secrets_list().get("value", [])),
                 "sqs":            len(A.sqs_list_queues().get("queues", [])),
+                "cloudwatch":     len(A.cw_list().get("items", [])),
                 "iam": (len(A.iam_list_users().get("users", [])) +
                         len(A.iam_list_roles().get("roles", [])) +
                         len(A.iam_list_policies().get("policies", [])) +
@@ -336,7 +439,13 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "rds":            len(A.rds_list().get("databases", [])),
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
+                "sns":            len(A.MSG.topics),
             }
+            try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["apigatewayv2"] = len(nano_registry.get()["apigwv2"].apis)
+            except Exception:
+                pass
             try:   # Systems Manager parameters live in the shared registry store
                 from core import nano_registry
                 aws_counts["ssm"] = len(nano_registry.get()["ssm"].parameters)
@@ -345,6 +454,19 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
             try:   # Step Functions lives in the shared registry store (console + relay wire)
                 from core import nano_registry
                 aws_counts["stepfunctions"] = len(nano_registry.get()["sfn"].machines)
+            except Exception:
+                pass
+            try:   # Lambda + API Gateway + VPC live in the shared registry's compute store
+                from . import dataplane_adapter as DP
+                aws_counts["lambda"] = len(DP.lambda_list().get("functions", []))
+                aws_counts["apigateway"] = len(DP.apigw_list().get("apis", []))
+                aws_counts["vpc"] = len(DP.vpc_list().get("vpcs", []))
+                aws_counts["eventbridge"] = len(DP.extras_list({"key": "eventbridge/rules"}).get("value", []))
+            except Exception:
+                pass
+            try:   # Kinesis Data Streams live in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["kinesis"] = len(nano_registry.get()["kinesis"].streams)
             except Exception:
                 pass
             for svc, n in aws_counts.items():
@@ -403,7 +525,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
         if provider == "gcp":
             from . import gcp_core_adapter as GC
-            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container", "iamcredentials", "redis"):
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container", "iamcredentials", "monitoring", "redis", "artifactregistry"):
                 n = len(GC.resource_op(svc, "List").get("items", []))
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n
@@ -411,10 +533,10 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
             arm = getattr(backends, "_azure_arm", None)
-            # AzureArm keeps its flat map in `_state` (lower-cased resource ids). Count
+            # AzureArm keeps its flat map in `state` (lower-cased resource ids). Count
             # top-level resources only (<ns>/<type>/<name>); children (subnets, APIs, …)
             # have longer ids and are not separately billed resources.
-            for rid in getattr(arm, "_state", {}) or {}:
+            for rid in getattr(arm, "state", {}) or {}:
                 i = rid.find("/providers/")
                 if i < 0:
                     continue  # resource groups etc. have no /providers/ segment
@@ -422,6 +544,10 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 if len(tail) != 3:
                     continue
                 rtype = (tail[0] + "/" + tail[1]).lower()
+                # Locks, auto-shutdown schedules and NICs are configuration, not billed resources.
+                if rtype in ("microsoft.authorization/locks", "microsoft.devtestlab/schedules",
+                             "microsoft.network/networkinterfaces"):
+                    continue
                 by_service[rtype] = by_service.get(rtype, 0) + 1
                 if rtype in _VM_SERVICES["azure"]:
                     vms += 1
@@ -451,6 +577,101 @@ def _handler_resource_name(params: dict) -> str:
     return ""
 
 
+# ── In-browser VM compute (wasm/vm): the instances that should have a VM ──────
+# The page-side VM host (wasm/vm/nano-vm-host.js) reconciles real v86 VMs against
+# this list: one entry per EC2 instance / Compute Engine instance / Azure VM in the
+# stores, with the state it should be in and the cloud-specific login user + the
+# public keys the user asked for at launch (GCE metadata ssh-keys, Azure osProfile).
+# The VM's root filesystem lives in RAM, so memory is also the disk for `apk add` (OpenJDK 8 alone is ~100 MB).
+_VM_MEM_MB = {"nano": 256, "micro": 512, "small": 512, "medium": 768, "large": 1024}
+
+
+def _vm_mem(itype: str) -> int:
+    t = str(itype or "").lower()
+    for k, v in _VM_MEM_MB.items():
+        if k in t:
+            return v
+    return 1024 if any(x in t for x in ("xlarge", "standard_b2", "standard_d", "e2-standard", "n2-")) else 512
+
+
+def _vms_list(backends: Backends) -> dict:
+    items = []
+    colls = getattr(backends.resources, "collections", {}) or {}
+    for key, coll in colls.items():
+        prov, _, svc = key.partition("/")[0], None, key.rsplit("/", 1)[-1]
+        if prov == "aws" and svc == "ec2":
+            for name, r in coll.items():
+                iid = r.get("instance_id") or name
+                st = str(r.get("state") or "running").lower()
+                img = str(r.get("image_id") or r.get("ami") or "").lower()
+                user = "ubuntu" if "ubuntu" in img or "ubuntu" in str(r.get("platform_details") or "").lower() else "ec2-user"
+                items.append({"cloud": "aws", "id": iid, "ref": iid, "name": r.get("name") or name,
+                              "desired": "terminate" if st in ("terminated", "shutting-down") else
+                                         "stop" if st in ("stopped", "stopping") else "run",
+                              "user": user, "mem_mb": _vm_mem(r.get("instance_type")), "keys": [],
+                              "key_name": r.get("key_name") or "", "instance_type": r.get("instance_type") or ""})
+        elif prov == "gcp" and svc == "compute":
+            for name, r in coll.items():
+                n = str(r.get("name") or name).rsplit("/", 1)[-1]
+                st = str(r.get("status") or "RUNNING").upper()
+                keys, user = [], ""
+                for it in ((r.get("metadata") or {}).get("items") or []) if isinstance(r.get("metadata"), dict) else []:
+                    if isinstance(it, dict) and it.get("key") in ("ssh-keys", "sshKeys"):
+                        for line in str(it.get("value") or "").splitlines():
+                            u, _, k = line.partition(":")
+                            if k.strip().startswith(("ssh-", "ecdsa-")):
+                                keys.append(k.strip()); user = user or u.strip()
+                mt = str(r.get("machineType") or "").rsplit("/", 1)[-1]
+                items.append({"cloud": "gcp", "id": "gce-" + n, "ref": n, "name": n,
+                              "desired": "stop" if st in ("TERMINATED", "STOPPED", "STOPPING", "SUSPENDED", "SUSPENDING") else "run",
+                              "user": user or "gcpuser", "mem_mb": _vm_mem(mt), "keys": keys,
+                              "instance_type": mt, "zone": str(r.get("zone") or "").rsplit("/", 1)[-1]})
+    arm = getattr(backends, "_azure_arm", None)
+    if arm is None:
+        try:
+            from core import nano_registry
+            arm = nano_registry.get().get("az_arm")
+        except Exception:
+            arm = None
+    for rid, rec in (getattr(arm, "state", {}) or {}).items():
+        i = rid.find("/providers/")
+        tail = rid[i + len("/providers/"):].split("/") if i >= 0 else []
+        if len(tail) != 3 or (tail[0] + "/" + tail[1]).lower() != "microsoft.compute/virtualmachines":
+            continue
+        props = rec.get("properties") or {}
+        osp = props.get("osProfile") or {}
+        keys = [k.get("keyData") for k in (((osp.get("linuxConfiguration") or {}).get("ssh") or {}).get("publicKeys") or [])
+                if isinstance(k, dict) and k.get("keyData")]
+        ps = str(props.get("powerState") or "").lower()
+        n = rec.get("name") or tail[2]
+        size = (props.get("hardwareProfile") or {}).get("vmSize") or ""
+        items.append({"cloud": "azure", "id": "az-" + n, "ref": n, "name": n,
+                      "desired": "stop" if ps.endswith(("stopped", "deallocated")) else "run",
+                      "user": osp.get("adminUsername") or "azureuser", "mem_mb": _vm_mem(size), "keys": keys,
+                      "instance_type": size, "resource_id": rec.get("id") or rid})
+    return {"ok": True, "items": items}
+
+
+def _vms_annotate(backends: Backends, params: dict) -> dict:
+    """Stamp the live VM runtime facts (launch status, ssh port/command) onto the
+    instance record so grids/describe show them like the offline appliance does."""
+    cloud, ref, ann = params.get("cloud"), params.get("ref"), params.get("runtime") or {}
+    r = backends.resources
+    if cloud == "aws":
+        for key, coll in (getattr(r, "collections", {}) or {}).items():
+            if key.startswith("aws/") and key.endswith("/ec2"):
+                for name, rec in coll.items():
+                    if (rec.get("instance_id") or name) == ref:
+                        rec.update(ann); return {"ok": True}
+    if cloud == "gcp":
+        for key, coll in (getattr(r, "collections", {}) or {}).items():
+            if key.startswith("gcp/") and key.endswith("/compute"):
+                for name, rec in coll.items():
+                    if str(rec.get("name") or name).rsplit("/", 1)[-1] == ref:
+                        rec.update(ann); return {"ok": True}
+    return {"ok": False, "code": "NotFound"}
+
+
 def dispatch(backends: Backends, provider: str, service: str, operation: str,
              account: str = "default", params: dict | None = None) -> dict:
     """Route one call to the right cloud plugin's handler."""
@@ -477,6 +698,9 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
     # Live resource census for the dashboard's per-cloud footprint pies.
     if service == "_census":
         return _census_dispatch(backends, provider)
+    # In-browser VM compute: which instances should have a running VM (wasm/vm).
+    if service == "_vms":
+        return _vms_annotate(backends, params or {}) if operation == "Annotate" else _vms_list(backends)
     h = p.handlers().get((service, operation))
     if h is None:
         return {"ok": False, "code": "UnsupportedOperation",

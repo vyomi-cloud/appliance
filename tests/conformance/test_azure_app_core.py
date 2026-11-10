@@ -65,6 +65,14 @@ ing = r["body"]["properties"]["configuration"]["ingress"]
 check("string form values are coerced", ing["targetPort"] == 8080 and ing["external"] is True
       and r["body"]["properties"]["template"]["scale"]["maxReplicas"] == 4, r["body"])
 
+# no container runtime (Nano / no Docker): the record must say so, never present a served FQDN
+nr = call(st, "GET", ["containerApps", "form"])["body"]
+check("no runtime -> vyomiRuntime says control-plane only; no vyomiEndpoint",
+      nr["properties"].get("vyomiRuntime", {}).get("backend") == "none" and "vyomiEndpoint" not in nr["properties"], nr["properties"].get("vyomiRuntime"))
+rv = nr["properties"]["latestRevisionName"]
+rp = call(st, "GET", ["containerApps", "form", "revisions", rv, "replicas"])["body"]["value"]
+check("no runtime -> replica details state it is not executing", rp and "Control plane only" in rp[0]["properties"]["runningStateDetails"], rp)
+
 # multiple revisions: traffic split + deactivate / restart / replicas
 M = {"location": "eastus", "properties": {"configuration": {"activeRevisionsMode": "Multiple", "ingress": {"targetPort": 80}},
                                           "template": {"containers": [{"image": "a"}], "scale": {"minReplicas": 2, "maxReplicas": 3}}}}
@@ -101,12 +109,41 @@ check("deletes", call(st, "DELETE", ["jobs", "j1"])["status"] == 200 and call(st
 
 # the Nano ARM class delegates to the same engine and keeps its map in the public `state`
 arm = AzureArm()
-base = "/subscriptions/s/resourceGroups/g/providers/Microsoft.App"
+base = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/g/providers/Microsoft.App"
 r = arm.handle("PUT", base + "/containerApps/a1", {"api-version": "2024-03-01"}, APP)
 check("AzureArm (Nano) serves Microsoft.App with LRO headers and public state",
       r["status"] == 200 and "Azure-AsyncOperation" in r["headers"] and any("containerapps" in k for k in arm.state), r)
 j = arm.handle("POST", base + "/jobs/none/start", {}, {})
 check("AzureArm: unknown job → 404", j["status"] == 404)
 
+# a Docker runtime handle without a network must not leave a null in the app (the console Properties tab
+# prints it as "null")
+ac.configure_runtime(start=lambda *a, **k: {"id": "c1", "host": "127.0.0.1", "port": 8080, "network": None},
+                     stop=lambda h: None)
+st_rt = {}
+r = call(st_rt, "PUT", ["containerApps", "rt"], APP)
+check("runtime handle without a network leaves no null in properties", "null" not in __import__("json").dumps(
+    call(st_rt, "GET", ["containerApps", "rt"])["body"]["properties"].get("vyomiRuntime")), r["body"])
+ac.configure_runtime(start=None, stop=None)
+
 print(f"\n{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+# a runtime that reports no docker network must not leave a null in the record (console Properties tab)
+_saved = dict(ac.RUNTIME)
+ac.RUNTIME["start"] = lambda *a, **k: {"id": "c1", "host": "127.0.0.1", "port": 32768}
+ac.RUNTIME["stop"] = lambda h: None
+st2 = {}
+rr = call(st2, "PUT", ["containerApps", "rt"], APP)
+rt = rr["body"]["properties"].get("vyomiRuntime", {})
+check("vyomiRuntime has no null values (network omitted when unknown)",
+      rt.get("backend") == "docker" and "network" not in rt and None not in rt.values(), rt)
+ac.RUNTIME.clear(); ac.RUNTIME.update(_saved)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

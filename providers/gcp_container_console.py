@@ -13,7 +13,21 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_container_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID — the project the console creates in."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
+
+
+async def _json_body(request):
+    """Console form body; a missing/invalid JSON body is a 400, not a 500."""
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    if not isinstance(b, dict):
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    return b
 
 
 def _http_error(r):
@@ -81,12 +95,12 @@ def register(app, on_change=None):
 
     @app.post("/api/container/clusters")
     async def create_cluster(request: Request):
-        form = await request.json()
-        req = core.job_from_form(form, DEFAULT_PROJECT)
+        form = await _json_body(request)
+        req = core.job_from_form(form, _project())
         r = call("POST", f"/v1/{req['parent']}/clusters", body=json.dumps({"cluster": req["cluster"]}).encode())
         if r.status >= 300:
             raise _http_error(r)
-        v = core.view_by_name(store(), core.cluster_name(DEFAULT_PROJECT, req["location"], req["cluster"]["name"]))
+        v = core.view_by_name(store(), core.cluster_name(_project(), req["location"], req["cluster"]["name"]))
         changed("create", v)
         return v
 
@@ -108,7 +122,7 @@ def register(app, on_change=None):
         full = find(name)
         p, l, c = loc(full)
         try:
-            b = await request.json()
+            b = await _json_body(request)
         except Exception:
             b = {}
         if action == "resize":

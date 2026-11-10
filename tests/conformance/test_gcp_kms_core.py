@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)
-    print(f"  ok  {name}")
+    print(f"[PASS] {name}")
 
 
 def _jbody(r):
@@ -121,6 +121,27 @@ def run() -> int:
                             {"content-type": "application/json"},
                             json.dumps({"plaintext": base64.b64encode(b"x").decode()}).encode())
     _check("encrypt unknown key 404", missenc.status == 404)
+
+    # 8. import jobs: create / duplicate / get / list / unknown / bad method
+    jb = json.dumps({"importMethod": "RSA_OAEP_3072_SHA1_AES_256", "protectionLevel": "SOFTWARE"}).encode()
+    hdr = {"content-type": "application/json"}
+    cj = gkms.dispatch(st, "POST", f"{RING}/importJobs", {"importJobId": "ij1"}, hdr, jb)
+    _check("create importJob 200", cj.status == 200)
+    _check("importJob name", _jbody(cj)["name"] == f"{ring_name}/importJobs/ij1")
+    _check("importJob has state + expireTime", _jbody(cj).get("state") and _jbody(cj).get("expireTime"))
+    dj = gkms.dispatch(st, "POST", f"{RING}/importJobs", {"importJobId": "ij1"}, hdr, jb)
+    _check("duplicate importJob 409", dj.status == 409)
+    gj = gkms.dispatch(st, "GET", f"{RING}/importJobs/ij1", {}, {}, b"")
+    _check("get importJob 200", gj.status == 200 and _jbody(gj)["importMethod"] == "RSA_OAEP_3072_SHA1_AES_256")
+    lj = gkms.dispatch(st, "GET", f"{RING}/importJobs", {}, {}, b"")
+    _check("list importJobs has job", any(j["name"].endswith("/ij1") for j in _jbody(lj)["importJobs"]))
+    mj = gkms.dispatch(st, "GET", f"{RING}/importJobs/ghost", {}, {}, b"")
+    _check("unknown importJob 404", mj.status == 404)
+    bj = gkms.dispatch(st, "POST", f"{RING}/importJobs", {"importJobId": "ij2"}, hdr,
+                       json.dumps({"importMethod": "NOPE"}).encode())
+    _check("bad importMethod 400", bj.status == 400)
+    nr = gkms.dispatch(st, "GET", f"{LOC}/keyRings/nope/importJobs", {}, {}, b"")
+    _check("importJobs on unknown ring 404", nr.status == 404)
 
     print("\nGCP Cloud KMS core conformance: ALL GREEN")
     return 0

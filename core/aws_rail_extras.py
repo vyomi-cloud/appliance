@@ -736,7 +736,7 @@ _SECRETSMANAGER = {
         "Secrets", "key",
         "Encrypted secret values (DB credentials, API keys, OAuth tokens). KMS-encrypted at rest.",
         [["name","Secret name"],["secret_type","Type"],
-         ["last_rotated","Last rotated"],["next_rotation","Next rotation"],
+         ["created","Created"],
          ["kms_key_id","Encryption key"]],
         [{"name":"name","label":"Secret name","required":True},
          {"name":"secret_type","label":"Type","type":"select","default":"Other",
@@ -745,10 +745,10 @@ _SECRETSMANAGER = {
                      {"value":"Other","label":"Other (API keys, etc.)"}]}],
         seed=[
             {"name":"prod/db/postgres","secret_type":"RdsCredentials",
-             "last_rotated":_TIME,"next_rotation":"2026-06-28T00:00:00Z",
+             "created":_TIME,
              "kms_key_id":"aws/secretsmanager"},
             {"name":"prod/api/stripe","secret_type":"Other",
-             "last_rotated":"—","next_rotation":"—",
+             "created":_TIME,
              "kms_key_id":"aws/secretsmanager"},
         ]),
     "rotation": analytics(

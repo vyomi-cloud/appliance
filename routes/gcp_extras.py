@@ -132,6 +132,8 @@ def register(app: FastAPI) -> None:
             if "." not in col_path and col_path not in payload:
                 payload[col_path] = payload.get(col_path, "\u2014")
         slot = _gcp_extras_state(stub_path)
+        if name in slot["items"]:
+            raise HTTPException(status_code=409, detail=f"'{name}' already exists. Choose a different name.")
         slot["items"][name] = payload
         slot["seeded"] = True
         _persist_state()

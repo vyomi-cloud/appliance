@@ -87,10 +87,20 @@ def _size_bytes(item: dict) -> int:
         return 0
 
 
+def _project() -> str:
+    """The GCP space's project ID (core/gcp_project) — the project the console,
+    gcloud and the SDKs all name."""
+    try:
+        from core import gcp_project
+        return gcp_project.project_id()
+    except Exception:
+        return "vyomi-project"
+
+
 def _table_view(name: str, coll: dict, include_count: bool = True) -> dict:
     view = {
         "table_name": name,
-        "table_arn": f"projects/cloudlearn/databases/(default)/documents/{name}",
+        "table_arn": f"projects/{_project()}/databases/(default)/documents/{name}",
         "table_status": "ACTIVE",
         # The document id is the collection's single key — surfaced as the partition
         # key so the widget's key-query UX works with no branching.

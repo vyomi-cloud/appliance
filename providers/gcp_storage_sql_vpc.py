@@ -102,7 +102,7 @@ def api_gcp_storage_get_bucket(bucket: str):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
-    project = str(bucket_rec.get("project") or "cloudlearn")
+    project = _gcp_project_name(bucket_rec.get("project"))
     return s._gcp_storage_bucket_view(project, bucket_rec)
 
 
@@ -125,7 +125,7 @@ def api_gcp_storage_list_objects(bucket: str, request: Request):
     for name, obj in gcp_storage_state.get("objects", {}).get(bucket, {}).items():
         if prefix and not name.startswith(prefix):
             continue
-        objects.append(s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj))
+        objects.append(s._gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj))
     objects.sort(key=lambda item: item.get("name", ""))
     return {"kind": "storage#objects", "items": objects, "prefixes": [], "nextPageToken": ""}
 
@@ -149,7 +149,7 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
         raise HTTPException(400, detail="Object name is required")
     obj = s._gcp_storage_object_record(bucket, name, payload)
     gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
-    return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+    return s._gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj)
 
 
 async def api_gcp_storage_upload_object(bucket: str, request: Request):
@@ -200,7 +200,7 @@ async def api_gcp_storage_upload_object(bucket: str, request: Request):
         raise HTTPException(502, detail=f"Object upload failed: {str(exc)[:160]}")
     obj = s._gcp_storage_object_record(bucket, name, {"contentType": ct, "size": str(len(data))})
     gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
-    return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+    return s._gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj)
 
 
 def api_gcp_storage_get_object(bucket: str, object_name: str):
@@ -209,7 +209,7 @@ def api_gcp_storage_get_object(bucket: str, object_name: str):
     obj = gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
     if not bucket_rec or not obj:
         raise HTTPException(404, detail="Object not found")
-    return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+    return s._gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, object_name, obj)
 
 
 def api_gcp_storage_delete_object(bucket: str, object_name: str):

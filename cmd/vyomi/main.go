@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 func progress(msg string) {
@@ -33,6 +34,7 @@ Usage:
   vyomi db          Database operations (dump, restore, refresh)
   vyomi redis       Redis operations (flush)
   vyomi doctor      Print diagnostics
+  vyomi mcp         MCP server (stdio) for AI agents: claude mcp add vyomi -- vyomi mcp
   vyomi help        This help
 
 Substrate: --docker or --multipass (remembered for next time)
@@ -79,11 +81,28 @@ func ternary(b bool, t, f string) string {
 func main() {
 	c := loadConfig()
 
+	// Installed as `vyomi-mcp` (the macOS/Linux packages ship this binary under
+	// that name next to the bash launcher, which execs it for `vyomi mcp`), it is
+	// the MCP server and nothing else.
+	if isMCPAlias(os.Args[0]) {
+		args := os.Args[1:]
+		if len(args) > 0 && args[0] == "mcp" {
+			args = args[1:]
+		}
+		os.Exit(c.runMCP(args))
+	}
+
 	args := os.Args[1:]
 	cmd := "help"
 	if len(args) > 0 {
 		cmd = args[0]
 		args = args[1:]
+	}
+
+	// MCP server for AI coding agents (stdio). Substrate-independent: it talks to
+	// the simulator over HTTP, so it is routed before inner/outer dispatch.
+	if cmd == "mcp" {
+		os.Exit(c.runMCP(args))
 	}
 
 	// Inner context (inside the appliance): compose straight against the stack.
@@ -126,4 +145,11 @@ func fail(err error) int {
 		return 1
 	}
 	return 0
+}
+
+// isMCPAlias reports whether the binary was invoked as vyomi-mcp (vyomi-mcp.exe,
+// or a platform-suffixed release asset such as vyomi-mcp-darwin-arm64).
+func isMCPAlias(argv0 string) bool {
+	base := argv0[strings.LastIndexAny(argv0, `/\`)+1:] // both separators, on any OS
+	return strings.HasPrefix(strings.ToLower(base), "vyomi-mcp")
 }

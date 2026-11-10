@@ -9,6 +9,7 @@ import pytest
 
 from .catalog_reader import enumerate_actions
 from .conftest import record_result
+from .sample_payloads import azure_resource_name
 
 
 _SPECS = [s for s in enumerate_actions(["azure"])]
@@ -54,7 +55,7 @@ def test_azure_action(spec, http_session, base_url):
 
     path = spec.path
     if "{name}" in path:
-        placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
+        placeholder = _CREATED_IDS.get(spec.service) or azure_resource_name(spec.service)
         path = path.replace("{name}", placeholder)
 
     # Azure ARM REST requires api-version on every request.

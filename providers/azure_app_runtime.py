@@ -26,6 +26,9 @@ def _enabled() -> bool:
         return False
     if mode == "docker":
         return True
+    # Docker compute backend (the appliance default): every VM/app is a real sibling container
+    if (os.environ.get("VYOMI_COMPUTE_BACKEND") or os.environ.get("CLOUDLEARN_COMPUTE_BACKEND") or "").lower() == "docker":
+        return True
     try:
         from core.app_context import active_tier
         return active_tier().lower() in PAID_TIERS
@@ -37,7 +40,11 @@ def _start(app_id: str, revision: str, image: str, env: dict, port):
     if not _enabled():
         return None
     name = "vyomi-ca-" + hashlib.sha1(f"{app_id}/{revision}".encode()).hexdigest()[:12]
+    subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=60)   # idempotent re-sync
     cmd = ["docker", "run", "-d", "--name", name, "--label", "vyomi.azure.app=" + app_id, "--memory", "512m"]
+    net = os.environ.get("VYOMI_INSTANCE_NETWORK")
+    if net:
+        cmd += ["--network", net, "--network-alias", app_id.rstrip("/").rsplit("/", 1)[-1].lower()]
     for k, v in (env or {}).items():
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
             cmd += ["-e", f"{k}={v if v is not None else ''}"]
@@ -46,13 +53,34 @@ def _start(app_id: str, revision: str, image: str, env: dict, port):
     cmd.append(image)
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if p.returncode:
-        return None
+        return {"error": (p.stderr or p.stdout or "docker run failed").strip()[-300:]}
     host_port = None
     if port:
         q = subprocess.run(["docker", "port", name, str(int(port))], capture_output=True, text=True, timeout=20)
         m = re.search(r":(\d+)\s*$", q.stdout.strip().splitlines()[0]) if q.stdout.strip() else None
         host_port = int(m.group(1)) if m else None
-    return {"id": name, "host": "127.0.0.1", "port": host_port}
+    return {"id": name, "host": "127.0.0.1", "port": host_port, "network": net}
+
+
+def _status(handle) -> str:
+    """Real replica state from the container, not a constant."""
+    p = subprocess.run(["docker", "inspect", "-f", "{{.State.Status}}", handle["id"]], capture_output=True, text=True, timeout=20)
+    st = p.stdout.strip()
+    return {"running": "Running", "restarting": "Activating", "created": "Activating", "paused": "NotRunning",
+            "exited": "NotRunning", "dead": "NotRunning"}.get(st, "NotRunning" if p.returncode else "Running")
+
+
+def deprovision_container_app(record: dict) -> None:
+    """Remove every container backing a Container App record. Idempotent. Call this before
+    dropping the record (e.g. from a resource-group cascade)."""
+    if isinstance(record, dict) and str(record.get("_type", "")).lower().endswith("/containerapps"):
+        core._stop_runtime(record)
+        app_id = str(record.get("id", ""))
+        if app_id and shutil.which("docker"):      # also catch containers whose handle was lost (restart)
+            ids = subprocess.run(["docker", "ps", "-aq", "--filter", f"label=vyomi.azure.app={app_id}"],
+                                 capture_output=True, text=True, timeout=30).stdout.split()
+            if ids:
+                subprocess.run(["docker", "rm", "-f", *ids], capture_output=True, timeout=60)
 
 
 def _stop(handle) -> None:
@@ -61,4 +89,4 @@ def _stop(handle) -> None:
 
 
 def attach() -> None:
-    core.configure_runtime(_start, _stop)
+    core.configure_runtime(_start, _stop, _status)

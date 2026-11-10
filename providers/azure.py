@@ -58,7 +58,7 @@ def tool_response(tool: str) -> dict:
             ],
             "config": {
                 "ARM endpoint": "set AZURE_RESOURCE_MANAGER_HOSTNAME to the simulator host (e.g. 192.168.252.7:9000) — the simulator serves /subscriptions/... ARM routes",
-                "auth": "subscription_id can be any string (e.g. 'sub-001'); the simulator gates by space, not by Azure AD tokens",
+                "subscription": "the space has one subscription, 00000000-0000-0000-0000-cloudlearn01 (GET /subscriptions returns it, as `az login` reads it); any other id is SubscriptionNotFound, as in Azure",
             },
             "notes": "Azure CLI dev usage in the simulator: point ARM at the simulator host. Real az CLI binaries work for any service whose ARM operation is implemented (covered by the 11 service packs in packs/azure/).",
             "provider_surface": provider_info.get("surface", {}),
@@ -72,7 +72,7 @@ def tool_response(tool: str) -> dict:
             "dependency": "com.azure:azure-resourcemanager-* (com.azure:azure-resourcemanager-compute, -storage, -sql, -servicebus, -cosmos, -appservice, -apimanagement, -network, -eventgrid, -keyvault, -authorization)",
             "config": {
                 "ARM endpoint": endpoint,
-                "AzureProfile": "AzureProfile(AzureEnvironment.AZURE).withSubscription('sub-001')",
+                "AzureProfile": "AzureProfile(AzureEnvironment.AZURE).withSubscription('00000000-0000-0000-0000-cloudlearn01')",
                 "credentials": "AzureCliCredential or DefaultAzureCredential — simulator accepts any",
             },
             "help": [
@@ -106,7 +106,7 @@ def tool_response(tool: str) -> dict:
             "status": "partial",
             "endpoint": endpoint,
             "dependency": "azure-mgmt-compute (and other azure-mgmt-* packages)",
-            "config": {"base_url": endpoint, "subscription_id": "sub-001", "credentials": "DefaultAzureCredential"},
+            "config": {"base_url": endpoint, "subscription_id": "00000000-0000-0000-0000-cloudlearn01", "credentials": "DefaultAzureCredential"},
             "help": [
                 "Pass base_url to each management client constructor.",
                 "Use DefaultAzureCredential — simulator accepts any token.",
@@ -120,7 +120,7 @@ def tool_response(tool: str) -> dict:
             "status": "partial",
             "endpoint": endpoint,
             "dependency": "@azure/arm-compute (and other @azure/arm-* packages)",
-            "config": {"$host": endpoint, "subscriptionId": "sub-001", "credentials": "DefaultAzureCredential"},
+            "config": {"$host": endpoint, "subscriptionId": "00000000-0000-0000-0000-cloudlearn01", "credentials": "DefaultAzureCredential"},
             "help": [
                 "Pass $host option to each management client constructor.",
                 "Use DefaultAzureCredential — simulator accepts any token.",

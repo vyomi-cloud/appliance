@@ -136,6 +136,17 @@ def run() -> int:
                        json.dumps({"structuredQuery": {"from": [{"collectionId": "users"}]}}).encode())
     _check("runQuery no-filter returns all", len([r for r in _jbody(qall) if "document" in r]) == 2)
 
+    # 7c. orderBy + limit + a comparison filter (the REST shape: rows of {document, readTime})
+    for did, age in (("zed", 40), ("amy", 20), ("kim", 30)):
+        fs.dispatch(st, "POST", f"{DB_PREFIX}/people?documentId={did}", {"documentId": did}, {},
+                    json.dumps({"fields": {"age": {"integerValue": str(age)}}}).encode())
+    oq = {"structuredQuery": {"from": [{"collectionId": "people"}],
+                              "where": {"fieldFilter": {"field": {"fieldPath": "age"}, "op": "GREATER_THAN", "value": {"integerValue": "20"}}},
+                              "orderBy": [{"field": {"fieldPath": "age"}, "direction": "DESCENDING"}], "limit": 1}}
+    orows = [r for r in _jbody(fs.dispatch(st, "POST", f"{DB_PREFIX}:runQuery", {}, {}, json.dumps(oq).encode())) if "document" in r]
+    _check("runQuery where+orderBy DESC+limit 1 returns the oldest only",
+           len(orows) == 1 and orows[0]["document"]["name"].endswith("/people/zed") and "readTime" in orows[0])
+
     # 8. delete document -> 200, then get -> 404 NOT_FOUND
     dr = fs.dispatch(st, "DELETE", f"{DB_PREFIX}/users/alice", {}, {}, b"")
     _check("delete 200", dr.status == 200 and _jbody(dr) == {})

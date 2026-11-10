@@ -41,6 +41,12 @@ def register(app: FastAPI) -> None:
               ``{"azure": [<assignment>, ...]}``
         """
         body = await request.json()
+        if isinstance(body, dict) and body.get("policy_name"):
+            # The IAM console's CreatePolicy shares this path (a managed policy with
+            # a name + document), not a Cedar policy-set replace.
+            from core.models import IAMPolicyRequest
+            from providers import aws_iam
+            return aws_iam.api_iam_create_policy(IAMPolicyRequest(**body))
         space = _active_space_id()
         ce.clear_policies(space)
         if "policies" in body:
@@ -64,10 +70,17 @@ def register(app: FastAPI) -> None:
     @app.get("/api/iam/policies", include_in_schema=False)
     async def get_policies():
         space = _active_space_id()
+        # The IAM console lists the account's managed policies from the same path.
+        try:
+            from providers import aws_iam
+            iam = aws_iam.api_iam_list_policies()
+        except Exception:
+            iam = {"policies": [], "count": 0}
         return {
             "space_id": space,
             "available": ce.available(),
             "policyset": ce.get_policies(space),
+            **iam,
         }
 
     @app.post("/api/iam/evaluate", include_in_schema=False)

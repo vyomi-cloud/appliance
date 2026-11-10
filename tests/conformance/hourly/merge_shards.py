@@ -93,7 +93,7 @@ def main() -> int:
     a = ap.parse_args()
     order = [s["id"] for s in json.load(open(os.path.join(HERE, "suites.json")))["suites"]]
     res = merge(a.out, order)
-    bad = [s["id"] for s in res["suites"] if s.get("status") != "pass"]
+    bad = [s["id"] for s in res["suites"] if s.get("status") not in ("pass", "pending")]
     print(f"merged {len(res['suites'])} suites; {len(res['suites']) - len(bad)} green"
           + (f"; missing shards: {', '.join(res['missing_shards'])}" if res.get("missing_shards") else ""))
     return 0

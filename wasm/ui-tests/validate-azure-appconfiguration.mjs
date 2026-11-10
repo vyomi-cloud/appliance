@@ -48,8 +48,13 @@ try {
   const rail = page.locator(RAIL_SEL).filter({ hasText: SERVICE }).first();
   check((await rail.count()) > 0, "App Configuration is on the Nano Azure console rail");
   await rail.click({ timeout: 5000 });
-  await sleep(1500);
-  check(/key-values|feature flags/i.test(await page.locator("#main").innerText()), "service page explains what the service does");
+  // The banner is part of the grid, which renders after the ARM list call returns.
+  let pageText = "";
+  for (let i = 0; i < 20 && !/key-values|feature flags/i.test(pageText); i++) {
+    await sleep(500);
+    pageText = await page.locator("#main").innerText();
+  }
+  check(/key-values|feature flags/i.test(pageText), "service page explains what the service does", pageText.slice(0, 200));
 
   await page.locator("#main button").filter({ hasText: /create/i }).first().click({ timeout: 5000 });
   await sleep(1000);

@@ -5,7 +5,7 @@
 #   brew tap vyomi-cloud/tap
 #   brew install vyomi-docker
 #
-# For real VMs (Max tier) use the `cloud-learn` formula instead — the two
+# For real VMs (Max tier) use the `vyomi` formula instead — the two
 # conflict (both install a `vyomi` binary).
 #
 # Auto-updated by .github/workflows/release.yml (url + sha256 + version bumped
@@ -13,7 +13,7 @@
 class VyomiDocker < Formula
   desc "Vyomi (Docker) — Free/Lite/Pro: docker compose up, no Multipass"
   homepage "https://vyomi.cloud"
-  url "https://github.com/vyomi-cloud/appliance/releases/download/v2.2.1/cloud-learn-2.2.1.tar.gz"
+  url "https://github.com/vyomi-cloud/appliance/releases/download/v3.0.33/vyomi-3.0.33.tar.gz"
   sha256 "REPLACED_BY_RELEASE_WORKFLOW"
   license :cannot_represent  # BSL 1.1 — not in SPDX simple form
   version "2.2.1"
@@ -30,6 +30,10 @@ class VyomiDocker < Formula
     # share/ layout works without extra config.
     bin.install "packaging/docker/vyomi" => "vyomi"
     (share/"vyomi-docker").install "docker-compose.cloudlite.yml"
+    # `vyomi mcp` (MCP server for AI coding agents): compiled per OS/arch by
+    # release.yml into packaging/docker/mcp/<os>-<arch>/vyomi-mcp. The wrapper
+    # picks the right one at runtime. Absent from tarballs older than v3.0.46.
+    (share/"vyomi-docker").install "packaging/docker/mcp" if File.directory?("packaging/docker/mcp")
   end
 
   def caveats
@@ -41,8 +45,11 @@ class VyomiDocker < Formula
         vyomi up      # docker compose up → http://localhost:9000
         vyomi down
 
+      AI coding agents (Claude Code):
+        claude mcp add --scope user vyomi -- vyomi mcp
+
       Free/Lite = full API/SDK conformance (no compute); Pro unlocks EC2-on-Docker
-      with SSH. For real VMs (Max tier), use the `cloud-learn` formula.
+      with SSH. For real VMs (Max tier), use the `vyomi` formula.
     EOS
   end
 

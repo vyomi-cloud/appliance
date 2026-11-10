@@ -1075,6 +1075,26 @@ def _console_lb(store, lb: dict) -> dict:
     }
 
 
+def forward_targets(store, lb_name: str):
+    """(lb, [(target_id, port), ...]) the LB's first listener forwards to (default action), or (lb, [])."""
+    lb = _find_lb(store, lb_name)
+    out = []
+    for ls in store.listeners.values():
+        if ls["LoadBalancerArn"] != lb["LoadBalancerArn"]:
+            continue
+        for a in ls.get("DefaultActions") or []:
+            if a.get("Type") != "forward":
+                continue
+            tgs = [x["TargetGroupArn"] for x in (a.get("ForwardConfig") or {}).get("TargetGroups", [])] or [a.get("TargetGroupArn")]
+            for arn in tgs:
+                tg = store.target_groups.get(arn)
+                for t in (tg or {}).get("_targets", []):
+                    out.append((t["Id"], int(t.get("Port") or tg.get("Port") or 80)))
+        if out:
+            break
+    return lb, out
+
+
 def console_list(store) -> dict:
     return {"items": [_console_lb(store, lb) for lb in sorted(store.load_balancers.values(), key=lambda x: x["LoadBalancerName"])]}
 

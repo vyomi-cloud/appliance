@@ -35,6 +35,65 @@ _BUILTIN_ROLES = {
 }
 
 
+# More built-ins, keyed by their real, stable role-definition GUIDs (Owner/Contributor/Reader are above).
+# Data-plane roles carry dataActions: a request is data-plane when the action matches dataActions.
+_BUILTIN_IDS = {
+    "8e3af657-a8ff-443c-a75c-2fe8c4bcb635": "Owner",
+    "b24988ac-6180-42a0-ab88-20f7382dd24c": "Contributor",
+    "acdd72a7-3385-48ef-bd42-f606fba81ae7": "Reader",
+    "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9": "User Access Administrator",
+    "9980e02c-c2be-4d73-94e8-173b1dc7cf3c": "Virtual Machine Contributor",
+    "4d97b98b-1d4f-4787-a291-c67834d212e7": "Network Contributor",
+    "43d0d8ad-25c7-4714-9337-8ba259a9fe05": "Monitoring Reader",
+    "ba92f5b4-2d11-453d-a403-e96b0029c9fe": "Storage Blob Data Contributor",
+    "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1": "Storage Blob Data Reader",
+    "b7e6dc6d-f1e8-4753-8033-0f276bb0955b": "Storage Blob Data Owner",
+    "974c5e8b-45b9-4653-ba55-5f855dd0fb88": "Storage Queue Data Contributor",
+    "00482a5a-887f-4fb3-b363-3b7fe8e74483": "Key Vault Administrator",
+    "b86a8fe4-44ce-4948-aee5-eccb2c155cd7": "Key Vault Secrets Officer",
+    "4633458b-17de-408a-b874-0445c86b69e6": "Key Vault Secrets User",
+    "090c5cfd-751d-490a-894a-3ce6f1109419": "Azure Service Bus Data Owner",
+}
+_BUILTIN_ROLES.update({
+    "User Access Administrator": {"actions": ["*/read", "Microsoft.Authorization/*", "Microsoft.Support/*"], "notActions": []},
+    "Virtual Machine Contributor": {"actions": ["Microsoft.Compute/virtualMachines/*", "Microsoft.Compute/disks/*", "Microsoft.Network/networkInterfaces/*",
+                                                 "Microsoft.Network/virtualNetworks/read", "Microsoft.Network/virtualNetworks/subnets/join/action",
+                                                 "Microsoft.Resources/subscriptions/resourceGroups/read", "Microsoft.Storage/storageAccounts/read"], "notActions": []},
+    "Network Contributor": {"actions": ["Microsoft.Network/*"], "notActions": []},
+    "Monitoring Reader": {"actions": ["*/read", "Microsoft.Insights/*/read"], "notActions": []},
+    "Storage Blob Data Contributor": {"actions": ["Microsoft.Storage/storageAccounts/blobServices/containers/delete", "Microsoft.Storage/storageAccounts/blobServices/containers/read", "Microsoft.Storage/storageAccounts/blobServices/containers/write"], "notActions": [],
+                                      "dataActions": ["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/*"]},
+    "Storage Blob Data Reader": {"actions": ["Microsoft.Storage/storageAccounts/blobServices/containers/read"], "notActions": [],
+                                 "dataActions": ["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"]},
+    "Storage Blob Data Owner": {"actions": ["Microsoft.Storage/storageAccounts/blobServices/containers/delete", "Microsoft.Storage/storageAccounts/blobServices/containers/read", "Microsoft.Storage/storageAccounts/blobServices/containers/write"], "notActions": [],
+                                "dataActions": ["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/*"]},
+    "Storage Queue Data Contributor": {"actions": ["Microsoft.Storage/storageAccounts/queueServices/queues/delete", "Microsoft.Storage/storageAccounts/queueServices/queues/read", "Microsoft.Storage/storageAccounts/queueServices/queues/write"], "notActions": [],
+                                       "dataActions": ["Microsoft.Storage/storageAccounts/queueServices/queues/messages/*"]},
+    "Key Vault Administrator": {"actions": ["Microsoft.KeyVault/checkNameAvailability/read", "Microsoft.KeyVault/vaults/*"], "notActions": [],
+                                "dataActions": ["Microsoft.KeyVault/vaults/*"]},
+    "Key Vault Secrets Officer": {"actions": ["Microsoft.KeyVault/vaults/read"], "notActions": [],
+                                  "dataActions": ["Microsoft.KeyVault/vaults/secrets/*"]},
+    "Key Vault Secrets User": {"actions": ["Microsoft.KeyVault/vaults/read"], "notActions": [],
+                               "dataActions": ["Microsoft.KeyVault/vaults/secrets/getSecret/action", "Microsoft.KeyVault/vaults/secrets/readMetadata/action"]},
+    "Azure Service Bus Data Owner": {"actions": ["Microsoft.ServiceBus/*"], "notActions": [],
+                                     "dataActions": ["Microsoft.ServiceBus/*"]},
+})
+
+
+def builtin_role_definitions(sub="00000000-0000-0000-0000-cloudlearn01"):
+    """ARM-shaped built-in role definitions (what `GET /subscriptions/{s}/providers/Microsoft.Authorization/roleDefinitions` lists)."""
+    out = []
+    for guid, name in _BUILTIN_IDS.items():
+        r = _BUILTIN_ROLES[name]
+        out.append({"id": f"/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions/{guid}", "name": guid,
+                    "type": "Microsoft.Authorization/roleDefinitions",
+                    "properties": {"roleName": name, "type": "BuiltInRole", "description": f"Built-in role: {name}.",
+                                   "assignableScopes": ["/"],
+                                   "permissions": [{"actions": list(r["actions"]), "notActions": list(r.get("notActions", [])),
+                                                    "dataActions": list(r.get("dataActions", [])), "notDataActions": []}]}})
+    return out
+
+
 @dataclass
 class AzureIamResponse:
     status: int = 200
@@ -95,6 +154,8 @@ def _resolve_role(store, role_ref: str) -> dict | None:
         return defs[role_ref]
     # role_ref may be a full roleDefinitionId ending in the name/guid
     tail = role_ref.rsplit("/", 1)[-1]
+    if tail.lower() in _BUILTIN_IDS:
+        return {"roleName": _BUILTIN_IDS[tail.lower()], **_BUILTIN_ROLES[_BUILTIN_IDS[tail.lower()]]}
     return defs.get(tail)
 
 
@@ -157,6 +218,75 @@ def check_access(store, principal_id: str, action: str, scope: str) -> dict:
     decision = "Allowed" if (allowed and not denied) else "NotAllowed"
     return {"accessDecision": decision, "roles": granting_roles,
             "hasDenyAssignment": denied}
+
+
+def _role_from_arm_def(rec):
+    """A custom roleDefinitions ARM record -> {roleName, actions, notActions, dataActions}."""
+    p = rec.get("properties") or {}
+    perms = p.get("permissions") or []
+    return {"roleName": p.get("roleName") or rec.get("name"),
+            "actions": [a for x in perms for a in (x.get("actions") or [])],
+            "notActions": [a for x in perms for a in (x.get("notActions") or [])],
+            "dataActions": [a for x in perms for a in (x.get("dataActions") or [])],
+            "notDataActions": [a for x in perms for a in (x.get("notDataActions") or [])]}
+
+
+def arm_check_access(state, store, principal_id, action, scope):
+    """checkAccess over BOTH the ARM role assignments in `state` (the ones `PUT .../roleAssignments` creates) and the legacy
+    store, with built-in roles resolved by GUID/name and custom roles from ARM roleDefinitions records."""
+    if store is None:
+        class _S: pass
+        store = _S()
+    out = dict(check_access(store, principal_id, action, scope))
+    roles, allowed, denied = list(out["roles"]), out["accessDecision"] == "Allowed", out["hasDenyAssignment"]
+    is_data = False
+    for rec in list((state or {}).values()):
+        if not isinstance(rec, dict) or str(rec.get("_type", rec.get("type", ""))).lower() != "microsoft.authorization/roleassignments":
+            continue
+        p = rec.get("properties") or {}
+        if p.get("principalId") != principal_id:
+            continue
+        sc = p.get("scope") or rec.get("_scope") or rec.get("id", "").rsplit("/providers/Microsoft.Authorization/roleAssignments/", 1)[0]
+        if not _scope_covers(sc, scope):
+            continue
+        ref = str(p.get("roleDefinitionId", ""))
+        tail = ref.rsplit("/", 1)[-1]
+        role = None
+        if tail.lower() in _BUILTIN_IDS:
+            role = dict(_BUILTIN_ROLES[_BUILTIN_IDS[tail.lower()]], roleName=_BUILTIN_IDS[tail.lower()])
+        elif tail in _BUILTIN_ROLES:
+            role = dict(_BUILTIN_ROLES[tail], roleName=tail)
+        else:
+            d = state.get(ref.lower()) or next((r for r in state.values() if isinstance(r, dict) and r.get("name") == tail
+                                                and str(r.get("_type", r.get("type", ""))).lower() == "microsoft.authorization/roledefinitions"), None)
+            if d:
+                role = _role_from_arm_def(d)
+        if not role:
+            continue
+        if _matches_any(role.get("actions"), action) and not _matches_any(role.get("notActions"), action):
+            allowed = True
+            roles.append(role["roleName"])
+        elif _matches_any(role.get("dataActions"), action) and not _matches_any(role.get("notDataActions"), action):
+            allowed = is_data = True
+            roles.append(role["roleName"])
+    return {"accessDecision": "Allowed" if (allowed and not denied) else "NotAllowed", "roles": sorted(set(roles)),
+            "hasDenyAssignment": denied, "isDataAction": is_data}
+
+
+def arm_check_access_request(state, store, body):
+    """Body of POST {scope}/providers/Microsoft.Authorization/checkAccess (api 2018-09-01-preview)."""
+    body = body or {}
+    subject = body.get("subject") or {}
+    principal = body.get("principalId") or subject.get("principalId") or (subject.get("attributes") or {}).get("ObjectId", "")
+    scope = body.get("scope") or (body.get("resource") or {}).get("id") or "/"
+    acts = body.get("actions") or ([{"id": body["action"]}] if body.get("action") else [])
+    res = []
+    for a in acts:
+        act = a.get("id") if isinstance(a, dict) else str(a)
+        d = arm_check_access(state, store, principal, act, scope)
+        res.append({"actionId": act, "accessDecision": d["accessDecision"], "isDataAction": d["isDataAction"], "roles": d["roles"],
+                    "roleAssignment": None, "denyAssignment": None, "timeToLiveInMs": 300000})
+    return {"value": res}
 
 
 def _check_access(store, body: dict) -> AzureIamResponse:

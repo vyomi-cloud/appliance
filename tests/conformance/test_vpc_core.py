@@ -82,6 +82,37 @@ def run(store=None):
                  "DestinationPort": "5432", "Protocol": "tcp"})
     _check("AnalyzeReachability over EC2 Query wire → <reachable> emitted", "<reachable>" in body)
 
+    # DeleteVpc, as on real EC2: refused while dependencies exist, gone once they are cleared
+    v2 = xid(call({"Action": "CreateVpc", "CidrBlock": "10.8.0.0/16"}), "vpcId")
+    sn = xid(call({"Action": "CreateSubnet", "VpcId": v2, "CidrBlock": "10.8.1.0/24"}), "subnetId")
+    gw = xid(call({"Action": "CreateInternetGateway"}), "internetGatewayId")
+    call({"Action": "AttachInternetGateway", "InternetGatewayId": gw, "VpcId": v2})
+    _check("DeleteVpc with a subnet + gateway → DependencyViolation", vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).status == 400 and "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
+    _check("DeleteInternetGateway while attached → DependencyViolation", "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteInternetGateway", "InternetGatewayId": gw}).body)
+    sg9 = xid(call({"Action": "CreateSecurityGroup", "GroupName": "sweep-del", "GroupDescription": "d", "VpcId": v2}), "groupId")
+    _check("DeleteVpc with a non-default security group → DependencyViolation", "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
+    _check("DeleteSecurityGroup removes a user group", vpc.dispatch(s, {"Action": "DeleteSecurityGroup", "GroupId": sg9}).status == 200
+           and "InvalidGroup.NotFound" in vpc.dispatch(s, {"Action": "DescribeSecurityGroups", "GroupId.1": sg9}).body)
+    call({"Action": "DeleteSubnet", "SubnetId": sn})
+    call({"Action": "DetachInternetGateway", "InternetGatewayId": gw, "VpcId": v2})
+    call({"Action": "DeleteInternetGateway", "InternetGatewayId": gw})
+    call({"Action": "DeleteVpc", "VpcId": v2})
+    m = s._vpc_model
+    _check("DeleteVpc removes the VPC and its main route table", v2 not in m["vpcs"] and not any(r["vpc_id"] == v2 for r in m["route_tables"].values()))
+    _check("DeleteVpc on an unknown id → InvalidVpcID.NotFound", "InvalidVpcID.NotFound" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
+    v3 = xid(call({"Action": "CreateVpc", "CidrBlock": "10.7.0.0/16"}), "vpcId")
+    call({"Action": "CreateSubnet", "VpcId": v3, "CidrBlock": "10.7.1.0/24"})
+    _check("console cascade removes the VPC and its subnets", vpc.delete_vpc_cascade(s, v3) and v3 not in m["vpcs"] and not any(x["vpc_id"] == v3 for x in m["subnets"].values()))
+
+    # DescribeSecurityGroups: what was given at creation, and the default group every VPC has
+    v4 = xid(call({"Action": "CreateVpc", "CidrBlock": "10.6.0.0/16"}), "vpcId")
+    g4 = xid(call({"Action": "CreateSecurityGroup", "VpcId": v4, "GroupName": "web", "GroupDescription": "web <tier>"}), "groupId")
+    body = call({"Action": "DescribeSecurityGroups", "GroupId.1": g4})
+    _check("DescribeSecurityGroups returns the Description + name", "<groupDescription>web &lt;tier&gt;</groupDescription>" in body and "<groupName>web</groupName>" in body)
+    body = call({"Action": "DescribeSecurityGroups", "Filter.1.Name": "vpc-id", "Filter.1.Value.1": v4, "Filter.2.Name": "group-name", "Filter.2.Value.1": "default"})
+    _check("every VPC has a default group", "<groupDescription>default VPC security group</groupDescription>" in body)
+    _check("unknown group → InvalidGroup.NotFound", "InvalidGroup.NotFound" in vpc.dispatch(s, {"Action": "DescribeSecurityGroups", "GroupId.1": "sg-nope"}).body)
+
     print("\nVPC network-simulation conformance: ALL GREEN")
     return s
 

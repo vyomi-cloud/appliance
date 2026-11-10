@@ -501,3 +501,6 @@ def register(app, h) -> None:
             body_target=body_target,
             model_name=model_name,
         )
+
+    # Lambda Function URLs (API 2021-10-31) + the public /lambda-url/<id>/ invoke path.
+    _routes_lambda.register_function_urls(app)

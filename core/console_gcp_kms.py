@@ -60,14 +60,26 @@ def _call(action: str, payload: dict) -> dict:
     return body
 
 
-_PROJECT, _LOCATION, _RING = "cloudlearn", "global", "default"
+_LOCATION, _RING = "global", "default"
+
+
+def _project() -> str:
+    """The GCP space's project ID (core/gcp_project) — the project the console,
+    gcloud and the SDKs all name."""
+    try:
+        from core import gcp_project
+        return gcp_project.project_id()
+    except Exception:
+        return "vyomi-project"
+
+
 _STATE = {"Enabled": "ENABLED", "Disabled": "DISABLED", "PendingDeletion": "DESTROY_SCHEDULED",
           "PendingImport": "PENDING_IMPORT", "Unavailable": "DESTROYED"}
 
 
 def _gcp_name(key_id: str) -> str:
     """Cloud KMS resource name of a key (the shape every GCP API returns), not an ARN."""
-    return f"projects/{_PROJECT}/locations/{_LOCATION}/keyRings/{_RING}/cryptoKeys/{key_id}"
+    return f"projects/{_project()}/locations/{_LOCATION}/keyRings/{_RING}/cryptoKeys/{key_id}"
 
 
 def _gcp_state(state: str) -> str:

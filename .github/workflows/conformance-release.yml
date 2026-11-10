@@ -106,11 +106,9 @@ jobs:
           fi
           echo "old=$OLD" >> "$GITHUB_OUTPUT"; echo "new=$NEW" >> "$GITHUB_OUTPUT"
           echo "$NEW" > VERSION
-          # Only manifests the release still publishes (Scoop, winget and Snap
-          # were dropped from the pipeline).
-          for f in packaging/rpm/cloud-learn.spec; do
-            [ -f "$f" ] && sed -i "s/$(echo "$OLD" | sed 's/\./\\./g')/$NEW/g" "$f"
-          done
+          # Packages take their version from VERSION at build time (release.yml);
+          # no per-package manifest to bump (Scoop, winget, Snap and the old RPM
+          # spec are gone).
           python3 - "$NEW" <<'PY'
           import sys, json, os
           new = sys.argv[1]
@@ -130,7 +128,9 @@ jobs:
           python3 scripts/release_notes.py --version "$NEW" --prev "${{ steps.changes.outputs.prev }}" \
             --pr-head "refs/remotes/pr/$PR" --kind "$KIND" "${HL[@]}" --new-services /tmp/new-services.md \
             --write-changelog --write-readme
-          git add -A VERSION CHANGELOG.md README.md packaging services
+          # `vyomi mcp` knowledge: new version + services released above.
+          python3 scripts/gen_mcp_matrix.py
+          git add -A VERSION CHANGELOG.md README.md packaging services cmd/vyomi/mcp_matrix.json
           git commit -q -m "release(v$NEW): ${KIND,,} (#$PR)"
           git push -q origin HEAD:main
 

@@ -35,6 +35,7 @@ class MessagingStore:
     def __init__(self, account_id: str = DEFAULT_ACCOUNT_ID) -> None:
         self.queues: dict[str, dict[str, Any]] = {}
         self.topics: dict[str, dict[str, Any]] = {}
+        self.sns: dict[str, Any] = {}   # SNS-owned non-topic state (platform apps, SMS, delivery log)
         self.account_id = account_id
         self._clock: float | None = None  # None -> real wall clock
 

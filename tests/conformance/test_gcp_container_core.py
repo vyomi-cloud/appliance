@@ -29,6 +29,8 @@ check("create returns a DONE CREATE_CLUSTER operation", s == 200 and op["status"
 s, c = call(st, "GET", L + "/clusters/c1")
 check("get: RUNNING, default-pool, endpoint, version", s == 200 and c["status"] == "RUNNING" and c["nodePools"][0]["name"] == "default-pool"
       and c["endpoint"] and c["currentMasterVersion"] == gk.DEFAULT_VERSION and c["currentNodeCount"] == 2, c)
+check("honest: endpoint is not a fake public IP and the cluster says control plane only",
+      c["endpoint"].endswith(".invalid") and "control plane only" in c["statusMessage"] and c["conditions"], c.get("endpoint"))
 check("duplicate -> 409 ALREADY_EXISTS", call(st, "POST", L + "/clusters", {"cluster": {"name": "c1"}})[0] == 409)
 check("bad name -> 400", call(st, "POST", L + "/clusters", {"cluster": {"name": "Bad_Name"}})[0] == 400)
 check("bad location -> 400", call(st, "POST", "/v1/projects/p1/locations/mars-1/clusters", {"cluster": {"name": "x"}})[0] == 400)
@@ -51,9 +53,19 @@ check("cannot delete last node pool -> 400", call(st, "DELETE", L + "/clusters/c
 s, ops = call(st, "GET", L + "/operations")
 check("operations list + get", s == 200 and len(ops["operations"]) >= 5 and call(st, "GET", L + "/operations/" + ops["operations"][0]["name"])[0] == 200)
 check("serverConfig", call(st, "GET", L + "/serverConfig")[1]["defaultClusterVersion"] == gk.DEFAULT_VERSION)
+sc = call(st, "GET", L + "/serverConfig")[1]
+check("deprecated 1.35.8-gke.1919000 still valid but in no channel",
+      "1.35.8-gke.1919000" in sc["validMasterVersions"] and all("1.35.8-gke.1919000" not in c["validVersions"] for c in sc["channels"]) and "1.35.8-gke.1975000" in sc["validMasterVersions"])
 s, op = call(st, "POST", L + "/clusters", {"cluster": {"name": "ap", "autopilot": {"enabled": True}}}, {"$alt": "json;enum-encoding=int"})
 check("int enums on request (operationType/status)", s == 200 and op["operationType"] == 1 and op["status"] == 3, op)
 check("autopilot has no node pools", call(st, "GET", L + "/clusters/ap")[1]["nodePools"] == [])
 check("delete cluster", call(st, "DELETE", L + "/clusters/c1")[1]["operationType"] == "DELETE_CLUSTER" and call(st, "GET", L + "/clusters/c1")[0] == 404)
 print(f"RESULT pass={PASS} fail={FAIL}")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

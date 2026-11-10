@@ -61,20 +61,25 @@ jobs:
           New-Item -ItemType Directory -Force msi | Out-Null
           # The MSI is attached by the release job; give a just-finished release a moment.
           for ($i = 0; $i -lt 10; $i++) {
-            gh release download $tag -p "cloud-learn-$ver-x64.msi*" -D msi --clobber 2>$null
-            if (Test-Path "msi\cloud-learn-$ver-x64.msi") { break }
+            gh release download $tag -p "vyomi-$ver-x64.msi*" -D msi --clobber 2>$null
+            if (Test-Path "msi\vyomi-$ver-x64.msi") { break }
             Start-Sleep 30
           }
-          if (-not (Test-Path "msi\cloud-learn-$ver-x64.msi")) { throw "No cloud-learn-$ver-x64.msi on release $tag" }
-          $want = (Get-Content "msi\cloud-learn-$ver-x64.msi.sha256" -Raw).Trim().Split()[0].ToLower()
-          $got  = (Get-FileHash "msi\cloud-learn-$ver-x64.msi" -Algorithm SHA256).Hash.ToLower()
+          if (-not (Test-Path "msi\vyomi-$ver-x64.msi")) { throw "No vyomi-$ver-x64.msi on release $tag" }
+          $want = (Get-Content "msi\vyomi-$ver-x64.msi.sha256" -Raw).Trim().Split()[0].ToLower()
+          $got  = (Get-FileHash "msi\vyomi-$ver-x64.msi" -Algorithm SHA256).Hash.ToLower()
           if ($want -ne $got) { throw "SHA256 mismatch: release says $want, downloaded file is $got" }
           Write-Host "SHA256 OK $got"
           $prev = "${{ steps.rel.outputs.prev }}"
           if ($prev) {
             $pv = $prev.TrimStart("v")
             New-Item -ItemType Directory -Force prev | Out-Null
-            gh release download $prev -p "cloud-learn-$pv-x64.msi" -D prev --clobber
+            # The previous release's MSI: vyomi-X (cloud-learn-X before v3.0.33).
+            gh release download $prev -p "vyomi-$pv-x64.msi" -D prev --clobber 2>$null
+            if (-not (Test-Path "prev\vyomi-$pv-x64.msi")) {
+              gh release download $prev -p "cloud-learn-$pv-x64.msi" -D prev --clobber
+              if (Test-Path "prev\cloud-learn-$pv-x64.msi") { Move-Item "prev\cloud-learn-$pv-x64.msi" "prev\vyomi-$pv-x64.msi" }
+            }
           }
 
       - name: Validate install, upgrade and uninstall
@@ -83,8 +88,8 @@ jobs:
         run: |
           $ver = "${{ steps.rel.outputs.ver }}"; $prev = "${{ steps.rel.outputs.prev }}"
           # Hashtable splat: named parameters (an array would splat them positionally).
-          $vargs = @{ Msi = "msi\cloud-learn-$ver-x64.msi"; Version = $ver; OutDir = "msi-validation" }
-          if ($prev) { $vargs.PrevMsi = "prev\cloud-learn-$($prev.TrimStart('v'))-x64.msi" }
+          $vargs = @{ Msi = "msi\vyomi-$ver-x64.msi"; Version = $ver; OutDir = "msi-validation" }
+          if ($prev) { $vargs.PrevMsi = "prev\vyomi-$($prev.TrimStart('v'))-x64.msi" }
           # Once release signing is live, set the repo variable MSI_SIGNER (e.g.
           # "Vyomi Cloud") and a missing/invalid signature fails validation.
           if ("${{ vars.MSI_SIGNER }}") { $vargs.ExpectSigner = "${{ vars.MSI_SIGNER }}" }
@@ -100,8 +105,8 @@ jobs:
         run: |
           $ver = "${{ steps.rel.outputs.ver }}"
           New-Item -ItemType Directory -Force signed | Out-Null
-          ./tests/installer/sign-selfsigned.ps1 -Msi "msi\cloud-learn-$ver-x64.msi" -Out "signed\cloud-learn-$ver-x64.msi"
-          ./tests/installer/validate-msi.ps1 -Msi "signed\cloud-learn-$ver-x64.msi" -Version $ver `
+          ./tests/installer/sign-selfsigned.ps1 -Msi "msi\vyomi-$ver-x64.msi" -Out "signed\vyomi-$ver-x64.msi"
+          ./tests/installer/validate-msi.ps1 -Msi "signed\vyomi-$ver-x64.msi" -Version $ver `
             -OutDir msi-validation-selfsigned -ExpectSigner "Vyomi Test Signing"
 
       - name: Job summary

@@ -39,7 +39,7 @@ public class ContainerConformance {
 
   public static void main(String[] args) throws Exception {
     String endpoint = System.getenv().getOrDefault("ENDPOINT", "http://127.0.0.1:9000");
-    String project = System.getenv().getOrDefault("PROJECT", "java-gke-proj");
+    String project = System.getenv().getOrDefault("PROJECT", "vyomi-project");
     String region = "us-central1";
     System.out.println("== google-cloud-container (Java) against " + endpoint + " project=" + project + " ==");
 

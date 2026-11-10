@@ -25,10 +25,13 @@ from core.sql_store import InMemorySqlStore
 from core.iam_store import InMemoryIamStore
 from core.messaging_store import InMemoryMessagingStore
 from core.gcp_firestore_core import FirestoreStore
+from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
+from core.kinesis_core import KinesisStore
+from core.apigatewayv2_core import ApiGwV2Store
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
@@ -40,6 +43,8 @@ from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
 import types
+from core.cloudwatch_core import CloudWatchStore
+from core.gcp_monitoring_core import MonitoringStore
 
 _REG: dict | None = None
 
@@ -59,6 +64,8 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "kinesis": KinesisStore(),         # Kinesis Data Streams
+            "apigwv2": ApiGwV2Store(),
             # Console compute/network models: Lambda + API Gateway share ONE namespace
             # (AWS_PROXY reaches the registered functions); VPC has its own. They
             # live here (not as module singletons) so nano_persist snapshots them.
@@ -75,12 +82,14 @@ def get() -> dict:
             "gcp_kms": InMemoryKeyStore(),
             "gcp_sec": InMemoryKvStore(),
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
+            "gcp_mon": MonitoringStore(),   # Cloud Monitoring (policies, channels, metrics, series)
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
+            "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),
@@ -93,5 +102,6 @@ def get() -> dict:
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
+            "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
         }
     return _REG

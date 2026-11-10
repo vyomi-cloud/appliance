@@ -16,7 +16,21 @@ from fastapi import HTTPException, Request, Response
 from core import gcp_container_core as gke
 from core import gcp_redis_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID — the project the console creates in."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
+
+
+async def _json_body(request):
+    """Console form body; a missing/invalid JSON body is a 400, not a 500."""
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    if not isinstance(b, dict):
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    return b
 
 
 def _http_error(r):
@@ -32,7 +46,14 @@ def register(app, on_change=None):
     store = core.shared_store
     host = os.environ.get("CLOUDLEARN_VALKEY_HOST", "").strip()
     if host:
-        core.configure_data_plane(host, os.environ.get("CLOUDLEARN_VALKEY_PORT", "6379"))
+        # The shown host:port must work from the USER's machine: when the compose publishes the
+        # valkey container on loopback, advertise that (localhost:<public port>), not the
+        # Docker-internal name.
+        pub = os.environ.get("CLOUDLEARN_VALKEY_PUBLIC_PORT", "").strip()
+        if pub:
+            core.configure_data_plane(os.environ.get("CLOUDLEARN_VALKEY_PUBLIC_HOST", "localhost").strip() or "localhost", pub)
+        else:
+            core.configure_data_plane(host, os.environ.get("CLOUDLEARN_VALKEY_PORT", "6379"))
 
     def changed(action, payload):
         if on_change:
@@ -95,13 +116,13 @@ def register(app, on_change=None):
 
     @app.post("/api/redis/instances")
     async def create_instance(request: Request):
-        form = await request.json()
-        req = core.job_from_form(form, DEFAULT_PROJECT)
+        form = await _json_body(request)
+        req = core.job_from_form(form, _project())
         r = call("POST", f"/v1/{req['parent']}/instances", {"instanceId": req["instanceId"]},
                  json.dumps(req["instance"]).encode())
         if r.status >= 300:
             raise _http_error(r)
-        v = core.view_by_name(store(), core.instance_name(DEFAULT_PROJECT, req["location"], req["instanceId"]))
+        v = core.view_by_name(store(), core.instance_name(_project(), req["location"], req["instanceId"]))
         changed("create", v)
         return v
 
@@ -123,7 +144,7 @@ def register(app, on_change=None):
         full = find(name)
         p, l, i = loc(full)
         try:
-            b = await request.json()
+            b = await _json_body(request)
         except Exception:
             b = {}
         path = f"/v1/projects/{p}/locations/{l}/instances/{i}"

@@ -66,6 +66,96 @@ def _tagging(op: str, body: bytes) -> bytes | None:
     return json.dumps({"Tags": [{"Key": k, "Value": v} for k, v in tags.items()]}).encode()
 
 
+# DynamoDB Local has no backups, point-in-time recovery or Contributor Insights
+# ("UnknownOperationException"); real DynamoDB does. Keep that state here, per table.
+_PITR: dict[str, dict[str, Any]] = {}
+_BACKUPS: dict[str, dict[str, Any]] = {}
+_INSIGHTS: dict[str, str] = {}
+_REGION_ACCT = "arn:aws:dynamodb:us-east-1:000000000000"
+
+
+def _ddb_error(kind: str, msg: str) -> bytes:
+    return json.dumps({"__type": f"com.amazonaws.dynamodb.v20120810#{kind}", "message": msg}).encode()
+
+
+def _describe_table(name: str) -> dict[str, Any] | None:
+    try:
+        req = urllib.request.Request(
+            _DDB_URL, data=json.dumps({"TableName": name}).encode(), method="POST",
+            headers={"X-Amz-Target": "DynamoDB_20120810.DescribeTable",
+                     "Content-Type": "application/x-amz-json-1.0",
+                     "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.loads(r.read()).get("Table")
+    except Exception:
+        return None
+
+
+def _backup_summary(b: dict[str, Any]) -> dict[str, Any]:
+    return {k: b[k] for k in ("TableName", "TableId", "TableArn", "BackupArn", "BackupName", "BackupCreationDateTime",
+                              "BackupStatus", "BackupType", "BackupSizeBytes") if k in b}
+
+
+def _backups(op: str, body: bytes) -> tuple[int, bytes] | None:
+    import time
+    import uuid
+    if op not in ("DescribeContinuousBackups", "UpdateContinuousBackups", "CreateBackup", "ListBackups",
+                  "DescribeBackup", "DeleteBackup", "DescribeContributorInsights", "UpdateContributorInsights"):
+        return None
+    try:
+        p = json.loads(body or b"{}")
+    except ValueError:
+        p = {}
+    if op in ("DescribeBackup", "DeleteBackup"):
+        b = _BACKUPS.get(str(p.get("BackupArn", "")))
+        if not b:
+            return 400, _ddb_error("BackupNotFoundException", f"Backup not found: {p.get('BackupArn', '')}")
+        if op == "DescribeBackup":
+            return 200, json.dumps({"BackupDescription": {"BackupDetails": _backup_summary(b),
+                                                          "SourceTableDetails": {"TableName": b["TableName"], "TableId": b["TableId"], "TableArn": b["TableArn"]}}}).encode()
+        b["BackupStatus"] = "DELETED"
+        _BACKUPS.pop(b["BackupArn"], None)
+        return 200, json.dumps({"BackupDescription": {"BackupDetails": _backup_summary(b)}}).encode()
+    if op == "ListBackups":
+        tn = p.get("TableName")
+        rows = [_backup_summary(b) for b in _BACKUPS.values() if not tn or b["TableName"] == tn]
+        return 200, json.dumps({"BackupSummaries": rows}).encode()
+    name = str(p.get("TableName", ""))
+    t = _describe_table(name)
+    if not t:
+        return 400, _ddb_error("TableNotFoundException", f"Requested resource not found: Table: {name} not found")
+    arn = f"{_REGION_ACCT}:table/{name}"
+    if op == "CreateBackup":
+        bname = str(p.get("BackupName", ""))
+        if not bname:
+            return 400, _ddb_error("ValidationException", "BackupName is required")
+        now = time.time()
+        barn = f"{arn}/backup/{time.strftime('%Y%m%d%H%M%S', time.gmtime(now))}-{uuid.uuid4().hex[:8]}"
+        b = {"TableName": name, "TableId": t.get("TableId") or str(uuid.uuid5(uuid.NAMESPACE_URL, arn)), "TableArn": arn,
+             "BackupArn": barn, "BackupName": bname, "BackupCreationDateTime": now, "BackupStatus": "AVAILABLE",
+             "BackupType": "USER", "BackupSizeBytes": int(t.get("TableSizeBytes") or 0)}
+        _BACKUPS[barn] = b
+        return 200, json.dumps({"BackupDetails": _backup_summary(b)}).encode()
+    if op in ("DescribeContinuousBackups", "UpdateContinuousBackups"):
+        st = _PITR.setdefault(name, {"on": False, "since": None})
+        if op == "UpdateContinuousBackups":
+            on = bool((p.get("PointInTimeRecoverySpecification") or {}).get("PointInTimeRecoveryEnabled"))
+            if on and not st["on"]:
+                st["since"] = time.time()
+            st["on"] = on
+        d: dict[str, Any] = {"ContinuousBackupsStatus": "ENABLED",
+                             "PointInTimeRecoveryDescription": {"PointInTimeRecoveryStatus": "ENABLED" if st["on"] else "DISABLED"}}
+        if st["on"]:
+            d["PointInTimeRecoveryDescription"].update({"EarliestRestorableDateTime": st["since"],
+                                                        "LatestRestorableDateTime": max(time.time() - 300, st["since"])})
+        return 200, json.dumps({"ContinuousBackupsDescription": d}).encode()
+    # Contributor Insights
+    if op == "UpdateContributorInsights":
+        _INSIGHTS[name] = "ENABLED" if p.get("ContributorInsightsAction") == "ENABLE" else "DISABLED"
+    return 200, json.dumps({"TableName": name, "ContributorInsightsStatus": _INSIGHTS.get(name, "DISABLED"),
+                            "ContributorInsightsRuleList": [f"DynamoDBContributorInsights-PKC-{name}"] if _INSIGHTS.get(name) == "ENABLED" else []}).encode()
+
+
 async def proxy(request: Any) -> tuple[int, bytes, str]:
     """Forward the request body + X-Amz-Target to DDB Local. Returns (status,
     body, content_type)."""
@@ -75,6 +165,9 @@ async def proxy(request: Any) -> tuple[int, bytes, str]:
     tagged = _tagging(target.rsplit(".", 1)[-1], body)
     if tagged is not None:
         return 200, tagged, content_type
+    shim = _backups(target.rsplit(".", 1)[-1], body)
+    if shim is not None:
+        return shim[0], shim[1], content_type
     try:
         req = urllib.request.Request(
             _DDB_URL,

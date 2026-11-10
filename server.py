@@ -176,6 +176,12 @@ try:
 except Exception:
     pass
 try:
+    from core import gcp_eventing as _gcp_eventing
+    _gcp_eventing.register(app)
+    app.add_middleware(_gcp_eventing.EventTap)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-eventing] skipped: {_e}")
+try:
     from core import cedar_routes as _cedar_routes
     _cedar_routes.register(app)
 except Exception:
@@ -191,13 +197,15 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
-from routes import lazy_backends, shared, console_next, aws_logs, app_env
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
+from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
+from routes import gcp_resourcemanager, app_env
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
-            lazy_backends, shared, console_next, aws_logs, app_env]:
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
+            gcp_resourcemanager, app_env]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -477,7 +485,7 @@ _USAGE = {
     "gcp": {
         "connect": [
             ("gcloud / gsutil — point at the simulator", "bash", """gcloud config set auth/disable_credentials true
-gcloud config set core/project gcp-dev
+gcloud config set core/project __PROJECT__
 # REST services — set the override for the one you use:
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE="__BASE__/storage/v1/"
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="__BASE__/compute/v1/"
@@ -503,12 +511,12 @@ gcloud storage buckets create gs://demo
 gcloud storage cp ./f.txt gs://demo/f.txt
 gcloud storage ls gs://demo"""),
                 ("Java", "java", """Storage st = StorageOptions.newBuilder().setHost("__BASE__")
-    .setProjectId("gcp-dev").setCredentials(NoCredentials.getInstance()).build().getService();
+    .setProjectId("__PROJECT__").setCredentials(NoCredentials.getInstance()).build().getService();
 st.create(BucketInfo.of("demo"));
 st.create(BlobInfo.newBuilder("demo", "f.txt").build(), "hello".getBytes());"""),
                 ("Go", "go", """// STORAGE_EMULATOR_HOST=__HOST__
 c, _ := storage.NewClient(ctx)
-c.Bucket("demo").Create(ctx, "gcp-dev", nil)
+c.Bucket("demo").Create(ctx, "__PROJECT__", nil)
 w := c.Bucket("demo").Object("f.txt").NewWriter(ctx); w.Write([]byte("hello")); w.Close()"""),
             ]),
             ("Compute Engine", [
@@ -516,18 +524,18 @@ w := c.Bucket("demo").Object("f.txt").NewWriter(ctx); w.Write([]byte("hello")); 
 gcloud compute instances list --zones=us-central1-a"""),
                 ("Java", "java", """Compute compute = new Compute.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-compute.instances().list("gcp-dev", "us-central1-a").execute();"""),
+compute.instances().list("__PROJECT__", "us-central1-a").execute();"""),
                 ("Go", "go", """csvc, _ := compute.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/compute/v1/"))
-list, _ := csvc.Instances.List("gcp-dev", "us-central1-a").Do()"""),
+list, _ := csvc.Instances.List("__PROJECT__", "us-central1-a").Do()"""),
             ]),
             ("Cloud SQL (Admin)", [
                 ("CLI", "bash", """gcloud sql instances create db1 --database-version=POSTGRES_16 --tier=db-f1-micro --region=us-central1
 gcloud sql instances list"""),
                 ("Java", "java", """SQLAdmin sql = new SQLAdmin.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-sql.instances().list("gcp-dev").execute();"""),
+sql.instances().list("__PROJECT__").execute();"""),
                 ("Go", "go", """ssvc, _ := sqladmin.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/"))
-ssvc.Instances.List("gcp-dev").Do()"""),
+ssvc.Instances.List("__PROJECT__").Do()"""),
             ]),
             ("Pub/Sub", [
                 ("CLI", "bash", """export PUBSUB_EMULATOR_HOST="__HOSTNAME__:8085"
@@ -535,11 +543,11 @@ gcloud pubsub topics create demo-topic
 gcloud pubsub subscriptions create demo-sub --topic=demo-topic"""),
                 ("Java", "java", """// PUBSUB_EMULATOR_HOST=__HOSTNAME__:8085
 TopicAdminClient admin = TopicAdminClient.create();
-admin.createTopic(TopicName.of("gcp-dev", "demo-topic"));
-Publisher pub = Publisher.newBuilder(TopicName.of("gcp-dev", "demo-topic")).build();
+admin.createTopic(TopicName.of("__PROJECT__", "demo-topic"));
+Publisher pub = Publisher.newBuilder(TopicName.of("__PROJECT__", "demo-topic")).build();
 pub.publish(PubsubMessage.newBuilder().setData(ByteString.copyFromUtf8("hi")).build());"""),
                 ("Go", "go", """// PUBSUB_EMULATOR_HOST=__HOSTNAME__:8085
-c, _ := pubsub.NewClient(ctx, "gcp-dev")
+c, _ := pubsub.NewClient(ctx, "__PROJECT__")
 t, _ := c.CreateTopic(ctx, "demo-topic")
 t.Publish(ctx, &pubsub.Message{Data: []byte("hi")}).Get(ctx)"""),
             ]),
@@ -550,35 +558,35 @@ t.Publish(ctx, &pubsub.Message{Data: []byte("hi")}).Get(ctx)"""),
 Firestore db = FirestoreOptions.getDefaultInstance().getService();
 db.collection("users").document("alice").set(Map.of("name", "Alice"));"""),
                 ("Go", "go", """// FIRESTORE_EMULATOR_HOST=__HOSTNAME__:8080
-c, _ := firestore.NewClient(ctx, "gcp-dev")
+c, _ := firestore.NewClient(ctx, "__PROJECT__")
 c.Collection("users").Doc("alice").Set(ctx, map[string]any{"name": "Alice"})"""),
             ]),
             ("Cloud Functions", [
                 ("CLI", "bash", """gcloud functions list --region=us-central1"""),
                 ("Java", "java", """CloudFunctions fn = new CloudFunctions.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-fn.projects().locations().functions().list("projects/gcp-dev/locations/us-central1").execute();"""),
+fn.projects().locations().functions().list("projects/__PROJECT__/locations/us-central1").execute();"""),
                 ("Go", "go", """fsvc, _ := cloudfunctions.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/"))
-fsvc.Projects.Locations.Functions.List("projects/gcp-dev/locations/us-central1").Do()"""),
+fsvc.Projects.Locations.Functions.List("projects/__PROJECT__/locations/us-central1").Do()"""),
             ]),
             ("IAM", [
                 ("CLI", "bash", """gcloud iam service-accounts create demo-sa
 gcloud iam service-accounts list"""),
                 ("Java", "java", """Iam iam = new Iam.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-iam.projects().serviceAccounts().list("projects/gcp-dev").execute();"""),
+iam.projects().serviceAccounts().list("projects/__PROJECT__").execute();"""),
                 ("Go", "go", """isvc, _ := iam.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/"))
-isvc.Projects.ServiceAccounts.List("projects/gcp-dev").Do()"""),
+isvc.Projects.ServiceAccounts.List("projects/__PROJECT__").Do()"""),
             ]),
             ("VPC Network", [
                 ("CLI", "bash", """gcloud compute networks create demo-vpc --subnet-mode=custom
 gcloud compute networks list
 gcloud compute firewall-rules list"""),
                 ("Java", "java", """// same Apiary Compute client as Compute Engine
-compute.networks().list("gcp-dev").execute();
-compute.firewalls().list("gcp-dev").execute();"""),
-                ("Go", "go", """csvc.Networks.List("gcp-dev").Do()
-csvc.Firewalls.List("gcp-dev").Do()"""),
+compute.networks().list("__PROJECT__").execute();
+compute.firewalls().list("__PROJECT__").execute();"""),
+                ("Go", "go", """csvc.Networks.List("__PROJECT__").Do()
+csvc.Firewalls.List("__PROJECT__").Do()"""),
             ]),
         ],
     },
@@ -797,6 +805,7 @@ def _usage_html(request, provider: str) -> str:
     def sub(code: str) -> str:
         return (code.replace("__BASE__", base).replace("__HOSTNAME__", hostname)
                     .replace("__HOST__", host)
+                    .replace("__PROJECT__", _gcp_project_name(None))
                     .replace("__SUB__", provider_azure_services.DEFAULT_SUBSCRIPTION))
 
     def block(title: str, lang: str, code: str) -> str:
@@ -1198,6 +1207,7 @@ def _iam_resolve_identity(principal: str) -> dict:
                     policy_ids.extend(list(group.get("policies", [])))
             policy_ids = list(dict.fromkeys(policy_ids))
             policies = [state.get("policies", {}).get(pid) for pid in policy_ids if state.get("policies", {}).get(pid)]
+            policies += [{"policy_name": n, "document": d} for n, d in (user.get("inline_policies") or {}).items()]   # PutUserPolicy
             return {
                 "principal": principal,
                 "type": "user",
@@ -2541,6 +2551,31 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    _iam_src = _cloudsim_service_state(space, "iam")
+    if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
+        _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
+    for _iam_kind, _iam_coll in (("user", "users"), ("group", "groups"), ("role", "roles")):
+        for _iam_id, _iam_rec in _iam_src.get(_iam_coll, {}).items():
+            if isinstance(_iam_rec, dict):
+                add("aws", "iam", _iam_kind, str(_iam_id), _iam_rec)
+
+    try:   # Secrets Manager + KMS — the Vault-backed stores the console and SDK/CLI share
+        from core import vault_routes as _vr
+        for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
+            add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        for _key_id, _key in list(_vr._kms_keys.items()):
+            if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+                add("aws", "kms", "key", _key_id, {"name": _key_id})
+    except Exception:
+        pass
+
+    try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
+        from core.apigatewayv2_core import shared_store as _apigwv2_store
+        for api_id, api in _apigwv2_store().apis.items():
+            add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
+    except Exception:
+        pass
+
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
         for _n in _ssm_store().parameters:
@@ -2587,6 +2622,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Monitoring — alert policies from the shared wire/console store
+        from core.gcp_monitoring_core import shared_store as _mon_store
+        for _pn, _pol in _mon_store().alert_policies.items():
+            add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
+                {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -2603,12 +2646,27 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
                 {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
                  "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
+    try:   # CloudWatch alarms (durable store owned by routes/aws_cloudwatch.py)
+        from routes.aws_cloudwatch import console_rows as _cw_rows
+        for _row in _cw_rows():
+            add("aws", "cloudwatch", "alarm", _row["arn"], _row)
+    except Exception:
+        pass
+    aws_sns_state = _cloudsim_service_state(space, "sns")
+    for topic_arn, topic in aws_sns_state.get("topics", {}).items():
+        if isinstance(topic, dict):
+            add("aws", "sns", "topic", topic.get("name", topic_arn),
+                {**topic, "state": "active", "created": topic.get("created", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
         if isinstance(table, dict):
             add("aws", "dynamodb", "table", table_name, table)
 
+    aws_kinesis = _cloudsim_service_state(space, "kinesis")
+    for stream_name, stream in aws_kinesis.get("streams", {}).items():
+        if isinstance(stream, dict):
+            add("aws", "kinesis", "stream", stream_name, stream)
     aws_logs = _cloudsim_service_state(space, "logs")
     for group_name, group in aws_logs.get("log_groups", {}).items():
         if isinstance(group, dict):
@@ -2637,6 +2695,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(sub, dict):
             add("gcp", "pubsub", "subscription", subscription_id, sub)
 
+    gcp_ar = _cloudsim_service_state(space, "gcp_artifactregistry")
+    for repo_name, repo in gcp_ar.get("repositories", {}).items():
+        if isinstance(repo, dict):
+            add("gcp", "artifactregistry", "repository", repo_name, repo)
+
     gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
         if isinstance(db, dict):
@@ -2646,6 +2709,33 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for fn_name, fn in gcp_functions.get("functions", {}).items():
         if isinstance(fn, dict):
             add("gcp", "functions", "function", fn_name, fn, "gcp_functions")
+
+    # Pub/Sub backed by the emulator keeps topics/subscriptions only there (not in
+    # service_states), so list them under the space's project.
+    try:
+        from core import gcp_pubsub_emulator as _ps_emu
+        if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
+            from core import gcp_project as _gp
+            for _pp in (_gp.ensure_identity(space)[0],):
+                for _t in _ps_emu.list_topics(_pp):
+                    add("gcp", "pubsub", "topic", f"{_pp}/{_t['name']}", {"name": _t["name"]})
+                for _sb in _ps_emu.list_subscriptions(_pp):
+                    add("gcp", "pubsub", "subscription", f"{_pp}/{_sb['name']}", {"name": _sb["name"]})
+    except Exception:
+        pass
+
+    # API Gateway created through the console catalog (routes/gcp_extras.py) lives under
+    # service_states["apigateway"][<project>]["apis"|"gateways"]; the SDK path under gcp_apigateway.
+    _ag_projects = service_states.get("apigateway", {}) if isinstance(service_states.get("apigateway"), dict) else {}
+    if str(space.get("provider") or "") == "gcp":
+        for _proj, _pd in _ag_projects.items():
+            if not isinstance(_pd, dict) or _proj in ("apis", "logs"):
+                continue
+            for _akind, _nkind in (("apis", "api"), ("gateways", "gateway")):
+                for _aname, _arec in (_pd.get(_akind) or {}).items():
+                    if isinstance(_arec, dict):
+                        add("gcp", "apigateway", _nkind, f"{_proj}/{_aname}",
+                            {**_arec, "name": _aname, "created": _arec.get("createTime", "")})
 
     gcp_apigw = _cloudsim_service_state(space, "gcp_apigateway")
     for api_id, api in gcp_apigw.get("apis", {}).items():
@@ -2832,7 +2922,8 @@ def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
         nodes, counts, runtime_instances = _cloudsim_collect_resources(source_space)
         try:
             from core import cost_model as _cm
-            _savings = _cm.estimate_space_savings(nodes)
+            from core import usage_meter as _um
+            _savings = _cm.estimate_space_savings(nodes, usage=_um.snapshot(active_id))
         except Exception:
             _savings = {"real_cloud_cost_usd": 0.0, "simulator_cost_usd": 0.0, "savings_usd": 0.0, "savings_pct": 0.0, "by_provider": {}, "by_service": {}, "resource_count": 0}
         if detail is None:
@@ -3502,6 +3593,11 @@ def _lambda_sync_code_artifact(function: dict) -> None:
     code_path = function_dir / f"{module_name}.py"
     code = function.get("code") or _lambda_default_code(function["function_name"])
     code_path.write_text(code, encoding="utf-8")
+    for rel, text in (function.get("extra_files") or {}).items():   # other modules from the uploaded zip
+        dest = (function_dir / rel).resolve()
+        if function_dir.resolve() in dest.parents:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
     function["code_path"] = str(code_path)
     function["workdir"] = str(function_dir)
 
@@ -3669,6 +3765,7 @@ def _lambda_create_function_record(req: LambdaFunctionRequest) -> dict:
         "permissions": [],
         "tags": copy.deepcopy(req.tags or []),
         "layers": list(req.layers) if req.layers else [],
+        "extra_files": dict(getattr(req, "extra_files", None) or {}),
     }
     function["code_sha256"] = base64.b64encode(hashlib.sha256(function["code"].encode("utf-8")).digest()).decode("ascii")
     _lambda_sync_code_artifact(function)
@@ -3889,10 +3986,15 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         handler = getattr(module, handler_name)
 
         class Context:
-            function_name = ""
-            memory_limit_in_mb = 0
-            invoked_function_arn = ""
-            aws_request_id = ""
+            function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+            function_version = "$LATEST"
+            memory_limit_in_mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "128") or 128)
+            invoked_function_arn = os.environ.get("VYOMI_LAMBDA_ARN", "")
+            aws_request_id = os.environ.get("VYOMI_LAMBDA_REQUEST_ID", "")
+            log_group_name = "/aws/lambda/" + function_name
+            log_stream_name = ""
+            def get_remaining_time_in_millis(self):
+                return 3000
 
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -3925,6 +4027,10 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         env={
             **os.environ,
             **(function.get("environment") or {}),
+            "AWS_LAMBDA_FUNCTION_NAME": function.get("function_name", ""),
+            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": str(function.get("memory_size", 128)),
+            "VYOMI_LAMBDA_ARN": function.get("function_arn", ""),
+            "VYOMI_LAMBDA_REQUEST_ID": str(uuid.uuid4()),
             "PYTHONPATH": str(workdir) + (os.pathsep + os.environ.get("PYTHONPATH", "") if os.environ.get("PYTHONPATH") else ""),
         },
     )
@@ -4070,7 +4176,10 @@ def _sqs_validate_queue_name(queue_name: str) -> None:
 
 
 def _sqs_queue_url(queue_name: str) -> str:
-    return f"http://127.0.0.1:9000/api/sqs/queues/{queue_name}"
+    # The origin the client reached us on (was hard-coded to 127.0.0.1:9000, so a
+    # simulator on any other port, or reached by another host name, handed out URLs
+    # pointing at a different simulator).
+    return f"{_gcp_public_base().rstrip('/')}/api/sqs/queues/{queue_name}"
 
 
 def _sqs_queue_arn(queue_name: str) -> str:
@@ -4231,6 +4340,10 @@ def _sqs_queue_attributes(queue: dict) -> dict[str, str]:
     redrive_policy = queue.get("redrive_policy") or {}
     if redrive_policy:
         attrs["RedrivePolicy"] = json.dumps(redrive_policy, separators=(",", ":"), default=str)
+    # Encryption (SqsManagedSseEnabled / KmsMasterKeyId …) and the access Policy
+    # the console sets (routes/aws_console_detail.py).
+    attrs.update({k: v for k, v in (queue.get("extra_attributes") or {}).items() if v not in (None, "")})
+    attrs.setdefault("SqsManagedSseEnabled", "true")
     return attrs
 
 
@@ -5319,7 +5432,7 @@ def _ec2_security_group_xml(group_id: str, group: dict) -> ET.Element:
     item = _ec2_xml("item")
     _ec2_sub(item, "groupId", group_id)
     _ec2_sub(item, "groupName", group.get("group_name", group_id))
-    _ec2_sub(item, "description", group.get("description", "CloudLearn security group"))
+    _ec2_sub(item, "groupDescription", group.get("description", "CloudLearn security group"))
     _ec2_sub(item, "ownerId", AWS_ACCOUNT_ID)
     _ec2_sub(item, "vpcId", group.get("vpc_id", ""))
     ip_permissions = _ec2_sub(item, "ipPermissions")
@@ -7436,7 +7549,7 @@ def _lxd_clouds_clis_bootstrap_async(container_ref: str, instance: dict) -> None
                 "export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=$SIM/api/gcp/storage/v1/\n"
                 "export CLOUDSDK_API_ENDPOINT_OVERRIDES_PUBSUB=$SIM/api/gcp/pubsub/v1/\n"
                 "export CLOUDSDK_API_ENDPOINT_OVERRIDES_FIRESTORE=$SIM/api/gcp/firestore/v1/\n"
-                "export CLOUDSDK_CORE_PROJECT=123456789012\n"
+                "export CLOUDSDK_CORE_PROJECT=" + _gcp_project_name(None) + "\n"
                 "export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\n"
                 "export AZURE_HTTP_USER_AGENT=vyomi-simulator/2.0.5\n"
                 "EOF\n"
@@ -7480,7 +7593,7 @@ def _reboot_lxd_instance(instance: dict) -> dict:
     ref = instance.get("container_id") or instance.get("container_name")
     if not ref:
         raise HTTPException(409, detail="InstanceContainerMissing")
-    if _lxd_status(ref) != "running":
+    if not _await_reboot_ready(instance, lambda: _lxd_status(ref) == "running"):
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     _lxd_run_checked(["restart", ref], timeout=180)
@@ -7558,13 +7671,39 @@ def _port_publish_enabled() -> bool:
     return _instance_ssh_mode() in {"port", "both", "auto"}
 
 
+_DOCKER_DESKTOP_HOST: bool | None = None
+
+
+def _docker_desktop_host() -> bool:
+    """True when the Docker daemon runs inside Docker Desktop's VM (macOS/Windows).
+    Container bridge IPs (172.x) are NOT routable from the user's machine there,
+    even though the appliance itself (a Linux container) can reach them. Detected
+    from the daemon, not from sys.platform, because the appliance is a Linux
+    container in that case. Cached; False if the daemon can't be asked."""
+    global _DOCKER_DESKTOP_HOST
+    if _DOCKER_DESKTOP_HOST is None:
+        try:
+            out = subprocess.run(["docker", "info", "--format", "{{.OperatingSystem}}"],
+                                 capture_output=True, text=True, timeout=8).stdout
+            _DOCKER_DESKTOP_HOST = "desktop" in out.lower()
+        except Exception:
+            return False   # transient failure: don't cache
+    return _DOCKER_DESKTOP_HOST
+
+
+def _appliance_containerized() -> bool:
+    return os.path.exists("/.dockerenv")
+
+
 def _routable_ip_enabled() -> bool:
     mode = _instance_ssh_mode()
     if mode in {"routable", "both"}:
         return True
     if mode == "port":
         return False
-    return sys.platform.startswith("linux")   # auto
+    # auto: bridge IPs are reachable from the user's machine only on a native Linux
+    # Docker host, never through Docker Desktop's VM.
+    return sys.platform.startswith("linux") and not _docker_desktop_host()
 
 
 def _ensure_vpc_network() -> str | None:
@@ -7639,6 +7778,9 @@ def _docker_backed(instance: dict) -> bool:
     (vs LXD/Multipass). Docker containers are named vyomi-i-<id>."""
     if str(instance.get("console_backend") or "") == "docker-exec":
         return True
+    _rt = (instance.get("properties") or {}).get("runtime") if isinstance(instance.get("properties"), dict) else None
+    if isinstance(_rt, dict) and _rt.get("backend") == "docker":   # Azure ARM VM record
+        return True
     cn = str(instance.get("container_name") or instance.get("container_id") or "")
     return cn.startswith("vyomi-i-")
 
@@ -7664,6 +7806,11 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     published_port = info.get("published_port") or instance.get("ssh_host_port")
     opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     iid = str(instance.get("instance_id") or "")
+    # The appliance runs in a container: its key dir (/root/.vyomi/...) is not a path
+    # the user can read. Show the path where they save the downloaded key instead.
+    local_key = f"~/.ssh/vyomi-{iid}.pem"
+    if _appliance_containerized():
+        key_path = local_key
 
     primary = None
     alternatives: list[dict] = []
@@ -7730,7 +7877,7 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     key_url = {
         "aws":   f"/api/aws/ec2/instances/{iid}/private-key.pem",
         "gcp":   f"/api/gcp/compute/instances/{iid}/private-key.pem",
-        "azure": f"/api/azure/vm/{iid}/private-key.pem",
+        "azure": f"/api/azure/vm/{instance.get('name') or iid}/private-key.pem",
     }.get(provider) or f"/api/{provider}/instances/{iid}/private-key.pem"
 
     return {
@@ -7754,6 +7901,11 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
             "key_download_url": key_url,
             "key_local_filename": f"vyomi-{iid}.pem",
             "host_identity_path": key_path,
+            # One paste that fetches the key from THIS appliance and locks its mode,
+            # so the ssh command above works from the user's own machine.
+            "key_fetch_command": (
+                f"curl -fsSo {local_key} {_gcp_public_base()}{key_url} && chmod 600 {local_key}"
+                if _appliance_containerized() else None),
         },
         "alternatives": alternatives,
         # Shell fallback (works on the appliance host itself, always) — the
@@ -7850,7 +8002,9 @@ def _sync_docker_instance(instance: dict) -> None:
         instance["container_status"] = "missing"
         if str(instance.get("state") or "").strip().lower() not in {"terminated", "stopped"}:
             instance["state"] = "stopped"
-        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "error", "pending"}:
+        # A failed launch (e.g. docker.sock unreachable) must stay visible as
+        # launch_status=error + launch_error, not be reset to a silent "ready".
+        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "pending"}:
             instance["launch_status"] = "ready"
             instance["launch_error"] = ""
         return
@@ -7919,7 +8073,7 @@ def _reboot_docker_instance(instance: dict) -> dict:
     if not _docker_available():
         raise HTTPException(status_code=503, detail="DockerUnavailable")
     inst = _docker_instance_obj(instance)
-    if _docker_compute().status(inst) != "running":
+    if not _await_reboot_ready(instance, lambda: _docker_compute().status(inst) == "running"):
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     try:
@@ -8257,7 +8411,7 @@ def _reboot_multipass_instance(instance: dict) -> dict:
     ref = instance.get("container_id") or instance.get("container_name")
     if not ref:
         raise HTTPException(409, detail="InstanceContainerMissing")
-    if _multipass_status(ref) != "running":
+    if not _await_reboot_ready(instance, lambda: _multipass_status(ref) == "running"):
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     _multipass_run_checked(["restart", ref], timeout=180)
@@ -8439,6 +8593,35 @@ def provision_azure_vm_runtime(record: dict) -> None:
     instance_id = f"az-{digest}-{safe_name[:24]}"
 
     host_os = _resolved_host_os()
+    _compute_env = (os.environ.get("VYOMI_COMPUTE_BACKEND") or os.environ.get("CLOUDLEARN_COMPUTE_BACKEND") or "").strip().lower()
+    if _compute_env == "docker" and _docker_available():
+        # CloudLite+: same sibling-Docker-container backend as EC2/GCE (was missing
+        # for Azure: the VM was metadata-only with nothing to SSH into).
+        d_instance = {"instance_id": instance_id, "provider": "azure", "name": raw_name,
+                      "instance_type": str((props.get("hardwareProfile") or {}).get("vmSize") or "")
+                      if isinstance(props.get("hardwareProfile"), dict) else "",
+                      "runtime_backend": "docker"}
+        try:
+            _start_docker_instance(d_instance)
+        except Exception as exc:
+            runtime["status"] = "launch_failed"
+            runtime["backend"] = "docker"
+            runtime["error"] = str(getattr(exc, "detail", exc))[:200]
+            return
+        runtime["status"] = "provisioned"
+        runtime["backend"] = "docker"
+        runtime["containerName"] = d_instance["container_name"]
+        runtime["containerId"] = d_instance.get("container_id", "")
+        runtime["containerStatus"] = d_instance.get("container_status", "")
+        runtime["state"] = d_instance.get("state", "")
+        runtime["instanceId"] = instance_id
+        runtime["sshHostPort"] = d_instance.get("ssh_host_port")
+        if d_instance.get("private_ip"):
+            nics = props.setdefault("networkProfile", {}).setdefault("networkInterfaces", [])
+            if isinstance(nics, list) and not nics:
+                nics.append({"id": f"runtime/{d_instance['container_name']}",
+                             "properties": {"privateIPAddress": d_instance["private_ip"]}})
+        return
     if host_os in {"darwin", "windows"} and _runtime_available("multipass"):
         backend = "multipass"
     elif _lxd_available():
@@ -8446,7 +8629,7 @@ def provision_azure_vm_runtime(record: dict) -> None:
     else:
         runtime["status"] = "simulated"
         runtime["backend"] = "simulated"
-        runtime["note"] = "No LXD/multipass runtime available on host — Azure VM is metadata-only here."
+        runtime["note"] = "No LXD/multipass/Docker runtime available on host — Azure VM is metadata-only here."
         return
 
     workspace = _instance_workspace(instance_id)
@@ -8523,7 +8706,10 @@ def deprovision_azure_vm_runtime(record: dict) -> None:
         backend = runtime.get("backend") if isinstance(runtime, dict) else None
         if not container:
             return
-        if backend == "lxd" and _lxd_available():
+        if backend == "docker":
+            _terminate_docker_instance({"instance_id": runtime.get("instanceId") or str(container)[len("vyomi-i-"):],
+                                        "container_name": container, "ssh_host_port": runtime.get("sshHostPort")})
+        elif backend == "lxd" and _lxd_available():
             try:
                 _lxd_run_checked(["stop", container, "--force"], timeout=60)
             except Exception:
@@ -11632,6 +11818,21 @@ def _restore_license_at_boot():
 
 
 @app.on_event("startup")
+def _gcp_project_identity_at_boot():
+    """Each GCP space is one project (ID + number, core/gcp_project): assign the
+    ids and move GCP state stored under the number / legacy project ids onto the
+    ID, then copy the shared emulators' old-id data in a daemon thread (they may
+    still be starting)."""
+    try:
+        from core import gcp_project as _gp
+        if _gp.migrate_state():
+            _persist_state()
+        _gp.migrate_backends_async()
+    except Exception as _e:
+        print(f"[gcp-project] migration skipped: {_e}")
+
+
+@app.on_event("startup")
 def _register_install_at_boot():
     """v2.0.6 (#427): phone-home to the portal so we know about every
     appliance install — not just the ones that complete activation.
@@ -12429,6 +12630,27 @@ def _stop_runtime_process(instance: dict) -> None:
     raise HTTPException(status_code=503, detail="RuntimeUnavailable")
 
 
+def _await_reboot_ready(instance: dict, is_running, timeout: float = 45.0) -> bool:
+    """A reboot issued while the launch is still settling (state pending / container not up yet)
+    used to 409 InstanceNotRunning. Give an in-flight launch time to finish instead, so
+    create -> reboot from the console or a script is not a race. A genuinely stopped instance
+    still fails fast."""
+    import time as _t
+    if is_running():
+        return True
+    # Only an instance that is genuinely down fails fast. A record that says pending / rebooting /
+    # running while the backend does not yet report running is a launch or restart still settling
+    # (the record can be ahead of the container), so give it time rather than 409 on a race.
+    if str(instance.get("state") or "").lower() in {"stopped", "stopping", "shutting-down", "terminated"}:
+        return False
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        _t.sleep(1.0)
+        if is_running():
+            return True
+    return False
+
+
 def _reboot_runtime_process(instance: dict) -> None:
     backend = str(instance.get("runtime_backend") or "lxd").strip().lower()
     if backend == "docker":
@@ -12683,6 +12905,186 @@ def _ec2_query_describe_images(params: dict[str, Any]) -> Response:
             images_set.append(_ec2_image_xml(image))
 
     return _ec2_success_response("DescribeImagesResponse", build)
+
+
+def _ec2_query_get_image_findings(params: dict[str, Any]) -> Response:
+    image_id = str(params.get("ImageId", "")).strip()
+    if not image_id:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter ImageId", 400)
+    if image_id not in {p["ami"] for p in AMI_CATALOG}:
+        return _ec2_error_response("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist", 400)
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "imageFindingsSet")
+
+    return _ec2_success_response("GetImageFindingsResponse", build)
+
+
+def _ec2_query_get_capacity_manager_supportability_scores(params: dict[str, Any]) -> Response:
+    for name in ("CapacityAmount", "CapacityUnit", "MarketType"):
+        if not str(params.get(name, "")).strip():
+            return _ec2_error_response("MissingParameter", f"The request must contain the parameter {name}", 400)
+    azs = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityAvailabilityZoneId.") and str(v).strip()]
+    if not azs:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter CapacityAvailabilityZoneId", 400)
+
+    def build(root: ET.Element) -> None:
+        # The simulator has no capacity constraints, so every zone scores the maximum.
+        _ec2_sub(root, "aggregateScore", "100")
+        scores = _ec2_sub(root, "capacityManagerSupportabilityScoreSet")
+        for az in azs:
+            item = _ec2_sub(scores, "item")
+            _ec2_sub(item, "availabilityZoneId", az)
+            _ec2_sub(item, "score", "100")
+
+    return _ec2_success_response("GetCapacityManagerSupportabilityScoresResponse", build)
+
+
+_EC2_CAPACITY_RESERVATION_FLEETS: dict[str, dict[str, Any]] = {}
+
+
+def _ec2_capacity_fleet_xml(parent: ET.Element, fleet: dict[str, Any]) -> None:
+    _ec2_sub(parent, "capacityReservationFleetId", fleet["id"])
+    _ec2_sub(parent, "capacityReservationFleetArn", fleet["arn"])
+    _ec2_sub(parent, "state", fleet["state"])
+    _ec2_sub(parent, "totalTargetCapacity", str(fleet["target"]))
+    _ec2_sub(parent, "totalFulfilledCapacity", str(fleet["fulfilled"]))
+    _ec2_sub(parent, "tenancy", fleet["tenancy"])
+    if fleet["end_date"]:
+        _ec2_sub(parent, "endDate", fleet["end_date"])
+    _ec2_sub(parent, "createTime", fleet["create_time"])
+    _ec2_sub(parent, "instanceMatchCriteria", fleet["match"])
+    _ec2_sub(parent, "allocationStrategy", fleet["strategy"])
+    tags = _ec2_sub(parent, "tagSet")
+    for tag in fleet["tags"]:
+        item = _ec2_sub(tags, "item")
+        _ec2_sub(item, "key", tag["key"])
+        _ec2_sub(item, "value", tag["value"])
+    reservations = _ec2_sub(parent, "instanceTypeSpecificationSet")
+    for spec in fleet["specs"]:
+        item = _ec2_sub(reservations, "item")
+        _ec2_sub(item, "instanceType", spec["instance_type"])
+        _ec2_sub(item, "instancePlatform", spec["platform"])
+        _ec2_sub(item, "availabilityZone", spec["az"])
+        _ec2_sub(item, "availabilityZoneId", spec["az_id"])
+
+
+def _ec2_query_create_capacity_reservation_fleet(params: dict[str, Any]) -> Response:
+    target = str(params.get("TotalTargetCapacity", "")).strip()
+    if not target:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter TotalTargetCapacity", 400)
+    if not target.isdigit() or int(target) < 1:
+        return _ec2_error_response("InvalidParameterValue", "Value for parameter TotalTargetCapacity must be a positive integer", 400)
+    has_requirements = any(k.startswith("InstanceRequirements.") for k in params)
+    spec_idx = sorted({m.group(1) for k in params if (m := re.match(r"^InstanceTypeSpecification\.(\d+)\.", k))}, key=int)
+    if not spec_idx and not has_requirements:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter InstanceTypeSpecification", 400)
+    region = str(params.get("Region", "") or "us-east-1")
+    fleet_az = str(params.get("AvailabilityZone", "")).strip()
+    fleet_az_id = str(params.get("AvailabilityZoneId", "")).strip()
+    specs = []
+    for i in spec_idx:
+        pre = f"InstanceTypeSpecification.{i}."
+        specs.append({
+            "instance_type": str(params.get(pre + "InstanceType", "")).strip() or "m5.large",
+            "platform": str(params.get(pre + "InstancePlatform", "")).strip() or "Linux/UNIX",
+            "az": str(params.get(pre + "AvailabilityZone", "")).strip() or fleet_az or f"{region}a",
+            "az_id": str(params.get(pre + "AvailabilityZoneId", "")).strip() or fleet_az_id or "use1-az1",
+        })
+    if not specs:
+        specs.append({"instance_type": "m5.large", "platform": "Linux/UNIX", "az": fleet_az or f"{region}a", "az_id": fleet_az_id or "use1-az1"})
+    fleet_id = f"crf-{secrets.token_hex(8)}"
+    end_date = str(params.get("EndDate", "")).strip()
+    fleet = {
+        "id": fleet_id,
+        "arn": f"arn:aws:ec2:{region}:123456789012:capacity-reservation-fleet/{fleet_id}",
+        "state": "active",
+        "target": int(target),
+        "fulfilled": int(target),
+        "tenancy": str(params.get("Tenancy", "")).strip() or "default",
+        "end_date": end_date,
+        "create_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "match": str(params.get("InstanceMatchCriteria", "")).strip() or "open",
+        "strategy": str(params.get("AllocationStrategy", "")).strip() or "prioritized",
+        "tags": _vpc_parse_tag_specifications(params, "capacity-reservation-fleet"),
+        "specs": specs,
+    }
+    if str(params.get("DryRun", "")).lower() == "true":
+        return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
+    _EC2_CAPACITY_RESERVATION_FLEETS[fleet_id] = fleet
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "capacityReservationFleetId", fleet_id)
+        _ec2_sub(root, "state", "submitted")
+        _ec2_sub(root, "totalTargetCapacity", str(fleet["target"]))
+        _ec2_sub(root, "totalFulfilledCapacity", "0")
+        _ec2_sub(root, "instanceMatchCriteria", fleet["match"])
+        _ec2_sub(root, "allocationStrategy", fleet["strategy"])
+        _ec2_sub(root, "createTime", fleet["create_time"])
+        if end_date:
+            _ec2_sub(root, "endDate", end_date)
+        _ec2_sub(root, "tenancy", fleet["tenancy"])
+        reservations = _ec2_sub(root, "fleetCapacityReservationSet")
+        per = max(1, fleet["target"] // len(specs))
+        for spec in specs:
+            item = _ec2_sub(reservations, "item")
+            _ec2_sub(item, "capacityReservationId", f"cr-{secrets.token_hex(8)}")
+            _ec2_sub(item, "availabilityZoneId", spec["az_id"])
+            _ec2_sub(item, "instanceType", spec["instance_type"])
+            _ec2_sub(item, "instancePlatform", spec["platform"])
+            _ec2_sub(item, "availabilityZone", spec["az"])
+            _ec2_sub(item, "totalInstanceCount", str(per))
+            _ec2_sub(item, "fulfilledCapacity", "0")
+            _ec2_sub(item, "ebsOptimized", "false")
+            _ec2_sub(item, "createTime", fleet["create_time"])
+        tags = _ec2_sub(root, "tagSet")
+        for tag in fleet["tags"]:
+            item = _ec2_sub(tags, "item")
+            _ec2_sub(item, "key", tag["key"])
+            _ec2_sub(item, "value", tag["value"])
+
+    return _ec2_success_response("CreateCapacityReservationFleetResponse", build)
+
+
+def _ec2_query_describe_capacity_reservation_fleets(params: dict[str, Any]) -> Response:
+    ids = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityReservationFleetId.")]
+    for fid in ids:
+        if fid not in _EC2_CAPACITY_RESERVATION_FLEETS:
+            return _ec2_error_response("InvalidCapacityReservationFleetId.NotFound", f"The capacity reservation fleet '{fid}' does not exist", 400)
+    fleets = [_EC2_CAPACITY_RESERVATION_FLEETS[i] for i in ids] if ids else list(_EC2_CAPACITY_RESERVATION_FLEETS.values())
+
+    def build(root: ET.Element) -> None:
+        fleet_set = _ec2_sub(root, "capacityReservationFleetSet")
+        for fleet in fleets:
+            _ec2_capacity_fleet_xml(_ec2_sub(fleet_set, "item"), fleet)
+
+    return _ec2_success_response("DescribeCapacityReservationFleetsResponse", build)
+
+
+def _ec2_query_cancel_capacity_reservation_fleets(params: dict[str, Any]) -> Response:
+    ids = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityReservationFleetId.")]
+    if not ids:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter CapacityReservationFleetId", 400)
+
+    def build(root: ET.Element) -> None:
+        ok = _ec2_sub(root, "successfulFleetCancellationSet")
+        bad = _ec2_sub(root, "failedFleetCancellationSet")
+        for fid in ids:
+            fleet = _EC2_CAPACITY_RESERVATION_FLEETS.get(fid)
+            if fleet is None:
+                item = _ec2_sub(bad, "item")
+                _ec2_sub(item, "capacityReservationFleetId", fid)
+                err = _ec2_sub(item, "cancelCapacityReservationFleetError")
+                _ec2_sub(err, "code", "capacity-reservation-fleet-not-found")
+                _ec2_sub(err, "message", f"The capacity reservation fleet '{fid}' does not exist")
+                continue
+            item = _ec2_sub(ok, "item")
+            _ec2_sub(item, "capacityReservationFleetId", fid)
+            _ec2_sub(item, "previousFleetState", fleet["state"])
+            _ec2_sub(item, "currentFleetState", "cancelled")
+            fleet["state"] = "cancelled"
+
+    return _ec2_success_response("CancelCapacityReservationFleetsResponse", build)
 
 
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
@@ -12952,8 +13354,8 @@ def _gcp_compute_find_instance(project: str, zone: str, instance_ref: str) -> di
                 break
     if not isinstance(instance, dict):
         return None
-    cand_proj = str(instance.get("project") or "cloudlearn").strip()
-    req_proj = str(project or "cloudlearn").strip()
+    cand_proj = _gcp_project_name(instance.get("project"))
+    req_proj = _gcp_project_name(project)
     if cand_proj != req_proj:
         return None
     requested_zone = str(zone or "").strip().lower().rstrip("/").split("/")[-1]
@@ -13155,7 +13557,7 @@ def _gcp_compute_sync_resource_links() -> bool:
                 continue
             groups[group_name] = {
                 "name": group_name,
-                "project": str(instance.get("project") or "cloudlearn"),
+                "project": _gcp_project_name(instance.get("project")),
                 "zone": str(instance.get("zone") or instance.get("az") or "us-central1-a"),
                 "description": "",
                 "baseInstanceName": instance_name or group_name,
@@ -13184,7 +13586,7 @@ def _gcp_compute_sync_resource_links() -> bool:
 
 
 def _gcp_compute_instance_json(instance: dict) -> dict:
-    project = str(instance.get("project") or "cloudlearn")
+    project = _gcp_project_name(instance.get("project"))
     zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
     machine_type = str(instance.get("machine_type") or instance.get("instance_type") or "e2-micro")
     instance_name = str(instance.get("name") or instance.get("instance_id") or "gcp-instance")
@@ -13261,11 +13663,13 @@ def _gcp_compute_instance_json(instance: dict) -> dict:
         "selfLink": _gcp_compute_instance_path(project, zone, instance_name),
         "canIpForward": bool(instance.get("assign_external_ip", True)),
         "description": instance.get("description", ""),
-        "scheduling": {
+        # setScheduling (console Scheduling tab / SDK) stores the instance's own policy.
+        "scheduling": dict(instance.get("scheduling") or {
             "automaticRestart": True,
             "onHostMaintenance": "MIGRATE",
             "preemptible": False,
-        },
+            "provisioningModel": "STANDARD",
+        }),
         "serviceAccounts": [
             {
                 "email": f"{instance.get('service_account', 'default')}@{project}.iam.gserviceaccount.com",
@@ -13283,7 +13687,7 @@ def _gcp_compute_instance_json(instance: dict) -> dict:
 
 
 def _gcp_compute_operation_json(instance: dict, operation_type: str, status: str = "DONE") -> dict:
-    project = str(instance.get("project") or "cloudlearn")
+    project = _gcp_project_name(instance.get("project"))
     zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
     instance_name = str(instance.get("name") or instance.get("instance_id") or "gcp-instance")
     op_name = f"{operation_type}-{instance_name}"
@@ -13313,7 +13717,7 @@ def _gcp_compute_json_list(project: str, zone: str) -> dict:
     for instance in gcp_compute_state.get("instances", {}).values():
         if not isinstance(instance, dict):
             continue
-        if str(instance.get("project") or "cloudlearn").strip() != str(project or "cloudlearn").strip():
+        if _gcp_project_name(instance.get("project")) != _gcp_project_name(project):
             continue
         # zone may be stored plain ("us-central1-a") or as a self-link URL
         # (".../zones/us-central1-a"); compare on the trailing segment.
@@ -13389,7 +13793,7 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         "reservation_id": f"r-{instance_id.replace('gce-', '')}",
         "owner_id": AWS_ACCOUNT_ID,
         "provider": "gcp",
-        "project": str(project or "cloudlearn"),
+        "project": _gcp_project_name(project),
         "zone": str(zone or "us-central1-a"),
         "name": str(payload.get("name") or "gcp-instance"),
         "machine_type": _gcp_resource_name(machine_type_ref, "e2-micro"),
@@ -13474,7 +13878,7 @@ def _gcp_compute_instance_group_view(group: dict) -> dict:
         "id": _gcp_compute_numeric_id(f"{group.get('project')}:{group.get('zone')}:{group.get('name')}"),
         "name": group.get("name", ""),
         "description": group.get("description", ""),
-        "zone": _gcp_compute_zone_path(str(group.get("project") or "cloudlearn"), str(group.get("zone") or "us-central1-a")),
+        "zone": _gcp_compute_zone_path(_gcp_project_name(group.get("project")), str(group.get("zone") or "us-central1-a")),
         "network": f"{_gcp_compute_api_root()}/projects/{group.get('project') or 'cloudlearn'}/global/networks/default",
         "size": int(group.get("targetSize") or len(group.get("instances") or [])),
         "namedPorts": group.get("namedPorts", []),
@@ -13511,7 +13915,7 @@ def _gcp_compute_disk_record(project: str, zone: str, payload: dict[str, Any] | 
 
 
 def _gcp_compute_disk_view(disk: dict) -> dict:
-    project = str(disk.get("project") or "cloudlearn")
+    project = _gcp_project_name(disk.get("project"))
     zone = str(disk.get("zone") or "us-central1-a")
     name = str(disk.get("name") or "")
     return {
@@ -13558,7 +13962,7 @@ def _gcp_compute_snapshot_record(project: str, payload: dict[str, Any] | None = 
 
 
 def _gcp_compute_snapshot_view(snapshot: dict) -> dict:
-    project = str(snapshot.get("project") or "cloudlearn")
+    project = _gcp_project_name(snapshot.get("project"))
     name = str(snapshot.get("name") or "")
     return {
         "kind": "compute#snapshot",
@@ -13593,7 +13997,7 @@ def _gcp_compute_image_record(project: str, payload: dict[str, Any] | None = Non
 
 
 def _gcp_compute_image_view(image: dict) -> dict:
-    project = str(image.get("project") or "cloudlearn")
+    project = _gcp_project_name(image.get("project"))
     name = str(image.get("name") or "")
     return {
         "kind": "compute#image",
@@ -13640,6 +14044,16 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_instances(params)
         if action == "DescribeImages":
             return _ec2_query_describe_images(params)
+        if action == "GetImageFindings":
+            return _ec2_query_get_image_findings(params)
+        if action == "CreateCapacityReservationFleet":
+            return _ec2_query_create_capacity_reservation_fleet(params)
+        if action == "DescribeCapacityReservationFleets":
+            return _ec2_query_describe_capacity_reservation_fleets(params)
+        if action == "CancelCapacityReservationFleets":
+            return _ec2_query_cancel_capacity_reservation_fleets(params)
+        if action == "GetCapacityManagerSupportabilityScores":
+            return _ec2_query_get_capacity_manager_supportability_scores(params)
         if action == "DescribeInstanceStatus":
             return _ec2_query_describe_instance_status(params)
         if action == "DescribeInstanceTypes":
@@ -13924,7 +14338,9 @@ def api_gcp_compute_delete_instance(project: str, zone: str, instance: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
-    if backend == "multipass":
+    if backend == "docker" or (not backend and _docker_backed(instance)):
+        _terminate_docker_instance(instance)   # remove the sibling container (was leaked)
+    elif backend == "multipass":
         _terminate_multipass_instance(instance)
     elif backend == "lxd":
         _terminate_lxd_instance(instance)
@@ -13967,7 +14383,7 @@ def api_gcp_compute_get_operation(project: str, zone: str, operation_id: str):
     for candidate in gcp_compute_state.get("instances", {}).values():
         if not isinstance(candidate, dict):
             continue
-        candidate_project = str(candidate.get("project") or "cloudlearn")
+        candidate_project = _gcp_project_name(candidate.get("project"))
         candidate_zone = str(candidate.get("zone") or candidate.get("az") or "us-central1-a")
         candidate_name = str(candidate.get("name") or candidate.get("instance_id") or "gcp-instance")
         if candidate_project != project or candidate_zone != zone:
@@ -14361,7 +14777,7 @@ def _gcp_storage_folder_record(project: str, bucket: str, payload: dict[str, Any
 
 
 def _gcp_storage_folder_view(folder: dict) -> dict:
-    project = str(folder.get("project") or "cloudlearn")
+    project = _gcp_project_name(folder.get("project"))
     bucket = str(folder.get("bucket") or "")
     name = str(folder.get("name") or "")
     return {
@@ -14411,7 +14827,7 @@ def _gcp_storage_transfer_view(transfer: dict) -> dict:
         "labels": transfer.get("labels", {}),
         "createTime": transfer.get("createTime", _now()),
         "updateTime": transfer.get("updateTime", _now()),
-        "project": transfer.get("project", "cloudlearn"),
+        "project": _gcp_project_name(transfer.get("project")),
     }
 
 
@@ -14484,7 +14900,7 @@ def _gcp_sql_backup_record(project: str, instance: str, payload: dict[str, Any] 
 
 
 def _gcp_sql_backup_view(backup: dict) -> dict:
-    project = str(backup.get("project") or "cloudlearn")
+    project = _gcp_project_name(backup.get("project"))
     instance = str(backup.get("instance") or "")
     name = str(backup.get("name") or "")
     return {
@@ -14582,7 +14998,7 @@ def _gcp_pubsub_schema_record(project: str, payload: dict[str, Any] | None = Non
 
 
 def _gcp_pubsub_schema_view(schema: dict) -> dict:
-    project = str(schema.get("project") or "cloudlearn")
+    project = _gcp_project_name(schema.get("project"))
     name = str(schema.get("name") or "")
     return {
         "name": f"projects/{project}/schemas/{name}",
@@ -14677,7 +15093,7 @@ def _gcp_firestore_index_record(project: str, database: str, collection: str, pa
 
 
 def _gcp_firestore_index_view(index: dict) -> dict:
-    project = str(index.get("project") or "cloudlearn")
+    project = _gcp_project_name(index.get("project"))
     database = str(index.get("database") or "(default)")
     collection = str(index.get("collection") or "")
     name = str(index.get("name") or "")
@@ -14747,9 +15163,31 @@ def _gcp_apigw_api_record(project: str, location: str, payload: dict[str, Any]) 
     }
 
 
+def _gcp_apigw_openapi_routes(docs) -> list:
+    """Routes [{method, path, backend}] of a native API config's openapiDocuments (base64 contents)."""
+    import base64
+    from core import gcp_console_tabs as _T
+    out = []
+    for d in docs if isinstance(docs, list) else []:
+        try:
+            raw = ((d or {}).get("document") or {}).get("contents") or ""
+            doc = _T.parse_openapi(base64.b64decode(raw).decode("utf-8") if raw else "")
+            default = (doc.get("x-google-backend") or {}).get("address", "")
+            for path, ops in (doc.get("paths") or {}).items():
+                for method, op in (ops or {}).items():
+                    if method.lower() in ("get", "put", "post", "delete", "patch", "options", "head"):
+                        out.append({"method": method.upper(), "path": path,
+                                    "backend": ((op or {}).get("x-google-backend") or {}).get("address") or default})
+        except Exception:
+            continue
+    return out
+
+
 def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) -> dict:
-    name = str(payload.get("name") or payload.get("apiConfigId") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    name = str(payload.get("apiConfigId") or payload.get("name") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    name = name.rstrip("/").split("/")[-1]
     return {
+        "routes": _gcp_apigw_openapi_routes(payload.get("openapiDocuments")),
         "name": name,
         "project": project,
         "location": location,
@@ -14771,7 +15209,8 @@ def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) 
 
 
 def _gcp_apigw_gateway_record(project: str, location: str, payload: dict[str, Any]) -> dict:
-    name = str(payload.get("name") or payload.get("gatewayId") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    name = str(payload.get("gatewayId") or payload.get("name") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    name = name.rstrip("/").split("/")[-1]       # real API: a bare gatewayId (a full resource name is tolerated)
     return {
         "name": name,
         "project": project,
@@ -14803,11 +15242,36 @@ def _gcp_apigw_match_config(api: str, path: str, method: str) -> dict | None:
     cands = [c for c in gcp_apigw_state.get("configs", {}).values()
              if isinstance(c, dict) and (not api or str(c.get("api") or "") == api)]
     for c in cands:
+        for r in c.get("routes") or []:
+            if "/" + str(r.get("path") or "").strip("/") == want and str(r.get("method") or "").upper() in ("", "ANY", method):
+                return {"integration_type": "http", "integration_uri": r.get("backend") or "", "status_code": 200}
+    for c in cands:
         pp = "/" + str(c.get("path_part") or "").strip("/")
         hm = str(c.get("http_method") or "").upper()
         if (pp == want or pp == "/") and hm in ("", "ANY", method):
             return c
     return cands[0] if cands else None
+
+
+def _gcp_apigw_console_route(gateway: str, path: str, method: str):
+    """A route of a gateway deployed through the console's API-config tab (shared core/gcp_console_tabs state)."""
+    try:
+        from providers.gcp_tabs_console import tab_state
+        want, method = "/" + str(path or "").strip("/"), str(method or "").upper()
+        for key, gws in list(tab_state.items()):
+            if not (key.startswith("apigateway/") and key.endswith("/gateways")) or gateway not in gws:
+                continue
+            api = key.split("/")[1]
+            cfgs = tab_state.get(f"apigateway/{api}/configs", {})
+            for r in (cfgs.get(gws[gateway].get("apiConfig")) or {}).get("routes", []):
+                if "/" + str(r.get("path") or "").strip("/") == want and r["method"] in (method, "ANY"):
+                    return {"integration_type": "http", "integration_uri": r.get("backend", ""), "status_code": 200}
+            raise HTTPException(404, detail="No matching API config route")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    return None
 
 
 async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
@@ -14819,9 +15283,13 @@ async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
             if isinstance(g, dict) and g.get("name") == gateway:
                 gw = g
                 break
+    cfg = None
     if not gw:
-        raise HTTPException(404, detail="Gateway not found")
-    cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
+        cfg = _gcp_apigw_console_route(gateway, path, request.method)     # deployed from the console's API-config tab
+        if cfg is None:
+            raise HTTPException(404, detail="Gateway not found")
+    else:
+        cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
     if not cfg:
         raise HTTPException(404, detail="No matching API config route")
     raw = await request.body()
@@ -14911,7 +15379,7 @@ def api_gcp_storage_get_bucket(bucket: str):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
-    project = str(bucket_rec.get("project") or "cloudlearn")
+    project = _gcp_project_name(bucket_rec.get("project"))
     return _gcp_storage_bucket_view(project, bucket_rec)
 
 
@@ -14934,7 +15402,7 @@ def api_gcp_storage_list_objects(bucket: str, request: Request):
     for name, obj in gcp_storage_state.get("objects", {}).get(bucket, {}).items():
         if prefix and not name.startswith(prefix):
             continue
-        objects.append(_gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj))
+        objects.append(_gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj))
     objects.sort(key=lambda item: item.get("name", ""))
     return {"kind": "storage#objects", "items": objects, "prefixes": [], "nextPageToken": ""}
 
@@ -14958,7 +15426,7 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
     obj = _gcp_storage_object_record(bucket, name, payload)
     gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
     _record_usage("gcp.storage.create_object", {"bucket": bucket, "object": name})
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj)
 
 
 def api_gcp_storage_get_object(bucket: str, object_name: str):
@@ -14966,7 +15434,7 @@ def api_gcp_storage_get_object(bucket: str, object_name: str):
     obj = gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
     if not bucket_rec or not obj:
         raise HTTPException(404, detail="Object not found")
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, object_name, obj)
 
 
 def api_gcp_storage_delete_object(bucket: str, object_name: str):
@@ -14997,7 +15465,7 @@ async def api_gcp_storage_patch_object(bucket: str, object_name: str, request: R
         obj.setdefault("metadata", {}).update(payload["metadata"])
     obj["updated"] = _now()
     _record_usage("gcp.storage.patch_object", {"bucket": bucket, "object": object_name})
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, object_name, obj)
 
 
 async def api_gcp_storage_compose_object(bucket: str, destination: str, request: Request):
@@ -15029,7 +15497,7 @@ async def api_gcp_storage_compose_object(bucket: str, destination: str, request:
     obj = _gcp_storage_object_record(bucket, destination, dest_payload)
     gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[destination] = obj
     _record_usage("gcp.storage.compose_object", {"bucket": bucket, "destination": destination, "sources": len(source_objects)})
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, destination, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, destination, obj)
 
 
 def api_gcp_storage_list_folders(bucket: str):
@@ -15054,7 +15522,7 @@ async def api_gcp_storage_create_folder(bucket: str, request: Request):
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    folder = _gcp_storage_folder_record(str(bucket_rec.get("project") or "cloudlearn"), bucket, payload)
+    folder = _gcp_storage_folder_record(_gcp_project_name(bucket_rec.get("project")), bucket, payload)
     gcp_storage_state.setdefault("folders", {}).setdefault(bucket, {})[folder["name"]] = folder
     _record_usage("gcp.storage.create_folder", {"bucket": bucket, "folder": folder["name"]})
     return _gcp_storage_folder_view(folder)
@@ -15442,6 +15910,7 @@ def api_gcp_pubsub_delete_topic(project: str, topic: str):
         if str(sub.get("project") or project) == project and str(sub.get("topic") or "") == f"projects/{project}/topics/{topic}":
             del gcp_pubsub_state["subscriptions"][sub_id]
             gcp_pubsub_state.get("messages", {}).pop(sub_id, None)
+            _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, {}, "gcp_pubsub", action="delete")
     gcp_pubsub_state.get("messages", {}).pop(topic, None)
     _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic, {}, "gcp_pubsub", action="delete")
     _record_usage("gcp.pubsub.delete_topic", {"project": project, "topic": topic})
@@ -16552,10 +17021,6 @@ def api_gcp_vpc_delete_route(project: str, route: str):
     return {"done": True}
 
 
-def _gcp_project_name(project: str | None) -> str:
-    return str(project or "cloudlearn").strip() or "cloudlearn"
-
-
 def _strip_action_suffix(value: str, *suffixes: str) -> str:
     text = str(value or "")
     for suffix in suffixes:
@@ -16680,7 +17145,10 @@ def _gcp_compute_network_root() -> str:
 
 def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
     name = str(bucket.get("name") or "")
-    project_number = str(bucket.get("projectNumber") or _gcp_compute_numeric_id(f"{project}:{name}"))
+    from core import gcp_project as _gp
+    _proj = _gp.current()   # the space's project: its real number
+    project_number = str(bucket.get("projectNumber") or (_proj["projectNumber"] if project == _proj["projectId"]
+                                                         else _gcp_compute_numeric_id(f"{project}:{name}")))
     return {
         "kind": "storage#bucket",
         "id": name,
@@ -16698,7 +17166,17 @@ def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
         "labels": bucket.get("labels", {}),
         "iamConfiguration": _gcp_storage_sanitize_iam_config(bucket.get("iamConfiguration")),
         "etag": bucket.get("etag", ""),
+        # lifecycle / retentionPolicy / encryption / versioning / softDeletePolicy (buckets.patch)
+        **_gcp_storage_settings_view(bucket),
     }
+
+
+def _gcp_storage_settings_view(bucket: dict) -> dict:
+    try:
+        from core import gcp_storage_core as _gcs_core
+        return _gcs_core.bucket_settings_view(bucket)
+    except Exception:
+        return {}
 
 
 def _gcp_storage_sanitize_iam_config(conf: Any) -> dict:
@@ -16884,7 +17362,9 @@ def _gcp_functions_make_operation(project: str, location: str, fn_view: dict, op
 def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
     name = str(function.get("name") or "")
     # Trigger URL points at the simulator (this is where the function actually runs).
-    uri = f"{_gcp_public_base()}/v1/projects/{project}/locations/{location}/functions/{name}:call"
+    # The HTTPS trigger URL: the handler gets a real request and returns the real response here
+    # (the `:call` management route keeps the {executionId,status,result} envelope).
+    uri = f"{_gcp_public_base()}/gcf/{project}/{location}/{name}"
     service_config = dict(function.get("serviceConfig") or {})
     service_config["uri"] = uri
     service_config.setdefault("availableMemory", "256M")
@@ -16944,7 +17424,8 @@ def _gcp_apigateway_api_view(project: str, location: str, api: dict) -> dict:
 def _gcp_apigateway_config_view(project: str, location: str, cfg: dict) -> dict:
     name = str(cfg.get("name") or "")
     return {
-        "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}",
+        "name": (f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apis/{cfg['api']}/configs/{name}"
+                 if cfg.get("api") and cfg.get("routes") else f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}"),
         "displayName": cfg.get("displayName", name),
         "api": cfg.get("api", ""),
         "parent_id": cfg.get("parent_id", ""),
@@ -16975,7 +17456,10 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
         "description": gw.get("description", ""),
         "labels": gw.get("labels", {}),
         "state": gw.get("state", "ACTIVE"),
-        "defaultHostname": _gcp_public_host(),
+        # host + path prefix that really routes to this gateway on the simulator (the real
+        # <gw>-<hash>.<region>.gateway.dev is not resolvable here); invokeUrl is the full http URL
+        "defaultHostname": f"{_gcp_public_host()}/api/gcp/apigateway/invoke/{name}",
+        "invokeUrl": f"{_gcp_public_base()}/api/gcp/apigateway/invoke/{name}",
         "createTime": gw.get("createTime", _now()),
         "updateTime": gw.get("updateTime", _now()),
     }
@@ -17088,9 +17572,10 @@ def api_vpc_delete(vpc_id: str, force: bool = False):
         if sg.get("vpc_id") == vpc_id:
             del vpc_state["security_groups"][sg_id]
 
-    for igw_id, igw in list(vpc_state["internet_gateways"].items()):
+    _igws = vpc_state.setdefault("internet_gateways", {})   # older persisted vpc state may lack the key
+    for igw_id, igw in list(_igws.items()):
         if igw.get("attached_vpc_id") == vpc_id:
-            del vpc_state["internet_gateways"][igw_id]
+            del _igws[igw_id]
 
     del vpc_state["vpcs"][vpc_id]
     _record_usage("vpc.delete_vpc", {"vpc_id": vpc_id, "force": force})
@@ -17783,6 +18268,9 @@ def _vpc_query_describe_route_tables(params: dict[str, Any]) -> Response:
                 route_table_ids.extend([str(v) for v in value if v])
             else:
                 route_table_ids.append(str(value))
+    for missing in route_table_ids:
+        if missing not in {r["route_table_id"] for r in vpc_state["route_tables"].values()}:
+            return _ec2_error_response("InvalidRouteTableID.NotFound", f"The routeTable ID '{missing}' does not exist", 400)
     filters = _ec2_parse_filters(params)
     route_tables = []
     for rt in vpc_state["route_tables"].values():
@@ -18130,6 +18618,30 @@ def _vpc_query_delete_subnet(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DeleteSubnetResponse", build)
 
 
+def _vpc_query_delete_security_group(params: dict[str, Any]) -> Response:
+    group_id = str(params.get("GroupId", params.get("groupId", ""))).strip()
+    group_name = str(params.get("GroupName", params.get("groupName", ""))).strip()
+    if not group_id and group_name:
+        group_id = next((gid for gid, g in vpc_state["security_groups"].items() if g.get("group_name") == group_name), "")
+    if not group_id:
+        raise HTTPException(400, detail="MissingParameter: GroupId")
+    sg = vpc_state["security_groups"].get(group_id)
+    if not sg:
+        return _ec2_error_response("InvalidGroup.NotFound", f"The security group '{group_id}' does not exist", 400)
+    if sg.get("is_default") or sg.get("group_name") == "default":
+        return _ec2_error_response("CannotDelete", f"the specified group: \"{group_id}\" name: \"default\" cannot be deleted by a user", 400)
+    if any(group_id in (i.get("security_group_ids") or []) and i.get("state") not in {"terminated"}
+           for i in ec2_state["instances"].values()):
+        return _ec2_error_response("DependencyViolation", f"resource {group_id} has a dependent object", 400)
+    del vpc_state["security_groups"][group_id]
+    _record_usage("vpc.delete_security_group", {"security_group_id": group_id})
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "return", "true")
+
+    return _ec2_success_response("DeleteSecurityGroupResponse", build)
+
+
 def _vpc_query_delete_route_table(params: dict[str, Any]) -> Response:
     route_table_id = str(params.get("RouteTableId", params.get("routeTableId", ""))).strip()
     if not route_table_id:
@@ -18191,6 +18703,17 @@ def _vpc_query_delete_vpc(params: dict[str, Any]) -> Response:
     vpc_id = str(params.get("VpcId", params.get("vpcId", ""))).strip()
     if not vpc_id:
         raise HTTPException(400, detail="MissingParameter: VpcId")
+    if vpc_id not in vpc_state["vpcs"]:
+        return _ec2_error_response("InvalidVpcID.NotFound", f"The vpc ID '{vpc_id}' does not exist", 400)
+    # Real EC2 refuses DeleteVpc while anything the caller created still lives in it; only the
+    # implicit main route table and default security group go with the VPC.
+    dep = (any(s.get("vpc_id") == vpc_id for s in vpc_state["subnets"].values())
+           or any(g.get("vpc_id") == vpc_id and not g.get("is_default") for g in vpc_state["security_groups"].values())
+           or any(r.get("vpc_id") == vpc_id and not r.get("is_main") for r in vpc_state["route_tables"].values())
+           or any(g.get("attached_vpc_id") == vpc_id for g in vpc_state.get("internet_gateways", {}).values())
+           or any(i.get("vpc_id") == vpc_id and i.get("state") not in {"terminated"} for i in ec2_state["instances"].values()))
+    if dep:
+        return _ec2_error_response("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.", 400)
     api_vpc_delete(vpc_id, force=True)
 
     def build(root: ET.Element) -> None:
@@ -18507,7 +19030,16 @@ def _rds_runtime_delete(db: dict) -> None:
 
 
 def _rds_vpc_id() -> str:
-    for vpc_id in sorted(vpc_state.get("vpcs", {})):
+    # RDS places an instance in the account's default VPC unless told otherwise; a custom
+    # VPC without subnets can't host a DB subnet group, so it is the last resort.
+    vpcs = vpc_state.get("vpcs", {})
+    for vpc_id in sorted(vpcs):
+        if vpcs[vpc_id].get("is_default"):
+            return vpc_id
+    for vpc_id in sorted(vpcs):
+        if _rds_default_subnet_ids(vpc_id):
+            return vpc_id
+    for vpc_id in sorted(vpcs):
         return vpc_id
     return ""
 
@@ -20924,6 +21456,82 @@ async def api_rds_query(request: Request):
     return _rds_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
 
 
+_vpc_nacls: dict[str, dict[str, Any]] = {}
+
+
+def _vpc_query_nacl(action: str, params: dict[str, Any]) -> Response:
+    """EC2 network ACLs over the SDK: kept per VPC next to the offline VPC state."""
+    if action == "CreateNetworkAcl":
+        vpc_id = str(params.get("VpcId", "")).strip()
+        if not vpc_id:
+            raise HTTPException(400, detail="MissingParameter: VpcId")
+        if vpc_id not in vpc_state["vpcs"]:
+            raise HTTPException(400, detail=f"InvalidVpcID.NotFound: The vpc ID '{vpc_id}' does not exist")
+        nid = "acl-" + secrets.token_hex(8)
+        _vpc_nacls[nid] = {"id": nid, "vpc_id": vpc_id, "entries": [], "subnets": []}
+
+        def build(root: ET.Element) -> None:
+            n = _ec2_sub(root, "networkAcl")
+            _ec2_sub(n, "networkAclId", nid)
+            _ec2_sub(n, "vpcId", vpc_id)
+        return _ec2_success_response("CreateNetworkAclResponse", build)
+    if action == "DescribeNetworkAcls":
+        want = {str(v) for k, v in params.items() if k.startswith("NetworkAclId") and v}
+        missing = [w for w in want if w not in _vpc_nacls]
+        if missing:
+            raise HTTPException(400, detail=f"InvalidNetworkAclID.NotFound: The networkAcl ID '{missing[0]}' does not exist")
+
+        def build(root: ET.Element) -> None:
+            st = _ec2_sub(root, "networkAclSet")
+            for n in _vpc_nacls.values():
+                if want and n["id"] not in want:
+                    continue
+                it = _ec2_sub(st, "item")
+                _ec2_sub(it, "networkAclId", n["id"])
+                _ec2_sub(it, "vpcId", n["vpc_id"])
+                _ec2_sub(it, "default", "false")
+                es = _ec2_sub(it, "entrySet")
+                for e in n["entries"]:
+                    ei = _ec2_sub(es, "item")
+                    _ec2_sub(ei, "ruleNumber", str(e["rule_number"]))
+                    _ec2_sub(ei, "protocol", e["protocol"])
+                    _ec2_sub(ei, "ruleAction", e["action"])
+                    _ec2_sub(ei, "egress", str(e["egress"]).lower())
+                    _ec2_sub(ei, "cidrBlock", e["cidr"])
+                a = _ec2_sub(it, "associationSet")
+                for sid in n["subnets"]:
+                    ai = _ec2_sub(a, "item")
+                    _ec2_sub(ai, "networkAclAssociationId", "aclassoc-" + sid[-8:])
+                    _ec2_sub(ai, "networkAclId", n["id"])
+                    _ec2_sub(ai, "subnetId", sid)
+                _ec2_sub(it, "tagSet")
+        return _ec2_success_response("DescribeNetworkAclsResponse", build)
+    nid = str(params.get("NetworkAclId", "")).strip()
+    n = _vpc_nacls.get(nid)
+    if not n:
+        raise HTTPException(400, detail=f"InvalidNetworkAclID.NotFound: The networkAcl ID '{nid}' does not exist")
+    if action == "DeleteNetworkAcl":
+        if n["subnets"]:
+            raise HTTPException(400, detail=f"DependencyViolation: network ACL {nid} has associated subnets")
+        del _vpc_nacls[nid]
+    elif action == "CreateNetworkAclEntry":
+        n["entries"].append({
+            "rule_number": int(params.get("RuleNumber", 100)),
+            "protocol": str(params.get("Protocol", "-1")),
+            "action": str(params.get("RuleAction", "allow")).lower(),
+            "egress": str(params.get("Egress", "false")).lower() == "true",
+            "cidr": str(params.get("CidrBlock", "0.0.0.0/0")),
+        })
+    elif action == "AssociateNetworkAcl":
+        sid = str(params.get("SubnetId", "")).strip()
+        if sid not in n["subnets"]:
+            n["subnets"].append(sid)
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "return", "true")
+    return _ec2_success_response(action + "Response", build)
+
+
 async def api_vpc_query(request: Request):
     params = await _ec2_query_params(request)
     action = str(params.get("Action", "")).strip()
@@ -20936,6 +21544,9 @@ async def api_vpc_query(request: Request):
         return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
 
     try:
+        if action in ("CreateNetworkAcl", "DescribeNetworkAcls", "DeleteNetworkAcl",
+                      "CreateNetworkAclEntry", "AssociateNetworkAcl"):
+            return _vpc_query_nacl(action, params)
         if action == "CreateVpc":
             return _vpc_query_create_vpc(params)
         if action == "DescribeVpcs":
@@ -20948,6 +21559,8 @@ async def api_vpc_query(request: Request):
             return _vpc_query_describe_subnets(params)
         if action == "DeleteSubnet":
             return _vpc_query_delete_subnet(params)
+        if action == "DeleteSecurityGroup":
+            return _vpc_query_delete_security_group(params)
         if action == "CreateSecurityGroup":
             return _vpc_query_create_security_group(params)
         if action == "DescribeSecurityGroups":
@@ -21547,6 +22160,10 @@ async def api_iam_query(request: Request) -> Response:
         return _iam_query_error(code, detail, exc.status_code if exc.status_code >= 400 else 400)
     if not action:
         return _iam_query_error("MissingAction", "The request must contain the parameter Action.")
+    from providers import aws_iam_query_ext as _iam_ext   # Attach/PutUserPolicy, access keys, Simulate*
+    _ext = _iam_ext.handle(action, params)
+    if _ext is not None:
+        return _ext
     return _iam_query_error("InvalidAction", f"The action '{action}' is not implemented by the simulator.")
 
 
@@ -21575,10 +22192,12 @@ async def api_sts_query(request: Request) -> Response:
 _EC2_VPC_ACTIONS = {
     "CreateVpc", "DescribeVpcs", "DeleteVpc",
     "CreateSubnet", "DescribeSubnets", "DeleteSubnet",
-    "CreateSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
+    "CreateSecurityGroup", "DeleteSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
     "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
     "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
     "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",
+    "DetachInternetGateway", "DeleteInternetGateway",
+    "CreateNetworkAcl", "DescribeNetworkAcls", "CreateNetworkAclEntry", "AssociateNetworkAcl", "DeleteNetworkAcl",
 }
 
 
@@ -22814,6 +23433,7 @@ def api_runtime_host_distribution():
         ("gcp_secretmanager", "secrets", False),
         ("gcp_kms", "keys", False),
         ("gcp_firestore", "databases", False),
+        ("gcp_artifactregistry", "repositories", False),
     ]
     # Azure ARM stores everything keyed by the full resourceId at the
     # top level of the service_state — values are themselves resources
@@ -22994,9 +23614,41 @@ def _find_instance_across_spaces(provider: str, instance_id: str) -> tuple[Optio
                     continue
                 if "virtualmachines" not in str(rec.get("_type", "")).lower():
                     continue
-                if rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid):
+                _rt = (rec.get("properties") or {}).get("runtime") or {}
+                if (rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid)
+                        or (isinstance(_rt, dict) and _rt.get("instanceId") == iid)):
                     return rec, space
+    if provider == "gcp":
+        # The GCE REST/gcloud/console paths resolve instances through the active
+        # space's compute bucket by id OR name; the scan above only matched the
+        # id key of spaces' persisted service_states, so connect-info 404'd for a
+        # VM that exists. Use the same resolver the instance GET uses.
+        try:
+            found = _gcp_compute_find_instance("", "", iid)
+        except Exception:
+            found = None
+        if isinstance(found, dict):
+            return found, {}
     return None, None
+
+
+def _flatten_azure_vm(inst: dict, instance_id: str) -> dict:
+    """Flatten an Azure VM ARM record to the flat instance dict the docker/LXD
+    connect paths expect (runtime fields live under properties.runtime)."""
+    _rt = (inst.get("properties") or {}).get("runtime") or {}
+    _cn = str(_rt.get("containerName") or "")
+    _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
+    if _rt.get("backend") == "docker" and _cn:
+        _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
+    return {
+        **inst,
+        "ssh_host_port": _rt.get("sshHostPort"),
+        "instance_id": _iid,
+        "container_name": _cn,
+        "container_id": _rt.get("containerId") or _cn,
+        "ami": "",
+        "state": _rt.get("state") or _rt.get("containerStatus") or "",
+    }
 
 
 def _connect_info_response(provider: str, instance_id: str) -> dict:
@@ -23009,17 +23661,7 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
     # Flatten so Azure reaches the same lazy SSH-provisioning path (key inject +
     # lxc proxy) as AWS/GCP instead of 409/503-ing with no SSH command.
     if provider == "azure":
-        _rt = (inst.get("properties") or {}).get("runtime") or {}
-        _cn = str(_rt.get("containerName") or "")
-        _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
-        inst = {
-            **inst,
-            "instance_id": _iid,
-            "container_name": _cn,
-            "container_id": _rt.get("containerId") or _cn,
-            "ami": "",
-            "state": _rt.get("state") or _rt.get("containerStatus") or "",
-        }
+        inst = _flatten_azure_vm(inst, instance_id)
     state_running = inst.get("state") or inst.get("powerState") or ""
     if isinstance(state_running, dict):
         state_running = state_running.get("Name") or ""
@@ -23053,6 +23695,8 @@ def _private_key_pem_response(provider: str, instance_id: str) -> Response:
     pem = _vmc.read_private_key(instance_id)
     if not pem:
         inst, _ = _find_instance_across_spaces(provider, instance_id)
+        if inst and provider == "azure":
+            inst = _flatten_azure_vm(inst, instance_id)
         if inst and _docker_backed(inst):
             pem = _docker_private_key_pem(inst)
     if not pem:
@@ -23275,6 +23919,48 @@ async def api_console_azurevm_exec(instance_id: str, request: Request):
     return {"message": "Console command executed", "instance_id": instance_id, **result}
 
 
+# ── Event delivery hooks: EventBridge targets + Step Functions Lambda tasks use the appliance's REAL
+# SQS queues and Lambda functions (the shared cores otherwise look in their own, empty stores).
+def _eb_send_sqs(arn: str, body: str) -> None:
+    queue = _sqs_find_queue(arn.rsplit(":", 1)[-1])
+    if queue is not None:
+        _sqs_enqueue_message(queue, body, source="eventbridge")
+        _persist_state()
+
+
+def _eb_invoke_lambda(name: str, body: str) -> None:
+    try:
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {"raw": body}
+    _lambda_invoke_function(name, payload, invocation_type="Event", source="events.amazonaws.com")
+
+
+def _sfn_invoke_lambda(name: str, payload: Any) -> dict:
+    """Synchronous Lambda call for a Step Functions Task: {found, error, payload}."""
+    if _lambda_find_function(name) is None:
+        return {"found": False}
+    rec = _lambda_invoke_function(name, payload if payload is not None else {}, source="states.amazonaws.com")
+    if rec.get("status") == "error":
+        tb = (rec.get("traceback") or "").strip().splitlines()
+        last = tb[-1] if tb else ""
+        etype = (last.split(":", 1)[0].strip().rsplit(".", 1)[-1]) if ":" in last else "Error"
+        return {"found": True, "error": {"errorType": etype, "errorMessage": rec.get("error", "")}}
+    return {"found": True, "payload": rec.get("response_payload")}
+
+
+try:
+    from core import nats_routes as _nr_hooks, stepfunctions_core as _sfn_hooks
+    _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
+    _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
+    _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
+    from core import eventbridge_core as _ebc_hooks
+    from routes import aws_kinesis as _eb_kin, aws_logs as _eb_logs
+    _ebc_hooks.set_target_store("kinesis", _eb_kin.STORE)   # EventBridge Kinesis / Logs targets use the
+    _ebc_hooks.set_target_store("logs", _eb_logs.STORE)     # console-visible space stores
+except Exception as _e:   # never let this break appliance boot
+    print(f"[eventing] delivery hooks skipped: {_e}")
+
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by
 # the ONE aws_wire_router on real backends (MinIO/Postgres/Vault/NATS) — the
@@ -23288,6 +23974,32 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# API Gateway V2 console REST (/api/apigatewayv2/*) — shares its store with the native /v2 wire.
+try:
+    from providers import aws_apigatewayv2_console as _apigwv2_console
+
+    def _apigwv2_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload, {}, None, action="delete")
+            _record_usage("apigatewayv2.delete_api", {"api_id": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload["apiId"],
+                                            {"name": payload["name"], "created": payload["createdDate"]}, None)
+            _record_usage("apigatewayv2.create_api", {"api_id": payload["apiId"], "name": payload["name"]})
+    _apigwv2_console.register(app, _apigwv2_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] console routes skipped: {_e}")
+try:   # API Gateway V2 data plane: the integration handler behind the shared Caddy gateway
+    from providers import aws_apigatewayv2_gateway as _apigwv2_gateway
+    _apigwv2_gateway.register(app, lambda fn, ev: _lambda_invoke_function(fn, ev, source="apigateway"))
+    from core import apigateway_core as _apigw1_core      # API Gateway v1 (REST) _user_request_ invoke -> the same Lambdas
+
+    def _apigw1_lambda(fn, ev):
+        rec = _lambda_invoke_function(fn, ev, source="apigateway")
+        return rec.get("response_payload") if rec.get("status") == "success" else {"_error": True}
+    _apigw1_core.LAMBDA_INVOKER = _apigw1_lambda
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] gateway handler skipped: {_e}")
 # Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
 try:
     from providers import aws_ssm_console as _ssm_console
@@ -23366,6 +24078,20 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
 
+# Azure Log Analytics data plane (/azure-data/loganalytics/...: ingest + KQL subset); ARM control plane is in azure_services.
+try:
+    from providers import azure_loganalytics_routes as _azure_la_routes
+    _azure_la_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-loganalytics] routes skipped: {_e}")
+
+# Azure OpenAI inference data plane (SIMULATED: /azure-data/openai/{account}/openai/deployments/{dep}/chat/completions ...).
+try:
+    from providers import azure_openai_routes as _azure_openai_routes
+    _azure_openai_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-openai] routes skipped: {_e}")
+
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:
     from providers import azure_dns_routes as _azure_dns_routes
@@ -23406,6 +24132,30 @@ try:
     _iamc_console.register(app, _iamc_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[iamcredentials] routes skipped: {_e}")
+
+# Cloud Monitoring: native /v3/projects/* wire + console REST (/api/gcp/monitoring/*).
+try:
+    from providers import gcp_monitoring_console as _mon_console
+
+    def _mon_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "monitoring", "policy", payload, {}, None, action="delete")
+            _record_usage("gcp.monitoring.delete_policy", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "monitoring", "policy", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "Enabled")}, None,
+                                            region="global")
+            _record_usage("gcp.monitoring.create_policy", {"name": payload["id"]})
+    _mon_console.register(app, _mon_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[monitoring] routes skipped: {_e}")
+
+# GCP console resource-detail tabs (/api/gcp/sub/{service}/{op}/{name}) over the services' own state.
+try:
+    from providers import gcp_tabs_console as _gcp_tabs_console
+    _gcp_tabs_console.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-tabs] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

@@ -149,7 +149,7 @@ def appliance_page(browser: Browser) -> Iterator[Page]:
       } catch (e) {}
     """)
     page = ctx.new_page()
-    page.goto(f"{BASE_URL}/ui", wait_until="domcontentloaded")
+    page.goto(f"{BASE_URL}/ui#spaces", wait_until="domcontentloaded")
     yield page
     ctx.close()
 

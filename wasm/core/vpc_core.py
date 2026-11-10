@@ -30,6 +30,7 @@ gateways and full NACL return-path/ephemeral evaluation slot in behind the same 
 from __future__ import annotations
 
 import ipaddress
+import re
 import uuid
 from dataclasses import dataclass, field
 from xml.sax.saxutils import escape as _xml_escape
@@ -143,6 +144,8 @@ def _create_vpc(store, params):
     _model(store)["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": True,
                                             "routes": [{"dest": cidr, "target": "local"}],
                                             "subnets": []}
+    _create_security_group(store, {"VpcId": vpc_id, "GroupName": "default",   # every VPC gets one
+                                   "GroupDescription": "default VPC security group"})
     return _envelope("CreateVpc", f"<vpc><vpcId>{vpc_id}</vpcId><cidrBlock>{cidr}</cidrBlock>"
                                   f"<state>available</state></vpc>")
 
@@ -172,7 +175,8 @@ def _create_security_group(store, params):
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     sg_id = _rid("sg")
     # default: deny all ingress, allow all egress (AWS SG defaults)
-    m["sgs"][sg_id] = {"id": sg_id, "vpc_id": vpc_id, "ingress": [],
+    m["sgs"][sg_id] = {"id": sg_id, "vpc_id": vpc_id, "name": str(params.get("GroupName", sg_id)),
+                       "description": str(params.get("GroupDescription", "")), "ingress": [],
                        "egress": [{"protocol": "-1", "from_port": None, "to_port": None,
                                    "cidrs": ["0.0.0.0/0"], "sgs": []}]}
     return _envelope("CreateSecurityGroup", f"<groupId>{sg_id}</groupId>")
@@ -239,6 +243,26 @@ def _create_network_acl(store, params):
                      f"<networkAcl><networkAclId>{nacl_id}</networkAclId></networkAcl>")
 
 
+def _describe_network_acls(store, params):
+    m = _model(store)
+    want = {v for k, v in params.items() if k.startswith("NetworkAclId.")}
+    items = ""
+    for nid, n in m["nacls"].items():
+        if want and nid not in want:
+            continue
+        ents = "".join(
+            f"<item><ruleNumber>{e['rule_number']}</ruleNumber><protocol>{e['protocol']}</protocol>"
+            f"<ruleAction>{'allow' if e['allow'] else 'deny'}</ruleAction><egress>{str(e['egress']).lower()}</egress>"
+            f"<cidrBlock>{e['cidr']}</cidrBlock></item>" for e in n["entries"])
+        assoc = "".join(f"<item><networkAclAssociationId>aclassoc-{sid[-8:]}</networkAclAssociationId>"
+                        f"<networkAclId>{nid}</networkAclId><subnetId>{sid}</subnetId></item>" for sid in n["subnets"])
+        items += (f"<item><networkAclId>{nid}</networkAclId><vpcId>{n['vpc_id']}</vpcId><default>false</default>"
+                  f"<entrySet>{ents}</entrySet><associationSet>{assoc}</associationSet><tagSet/></item>")
+    if want and not items and not (want & set(m["nacls"])):
+        raise VpcError("InvalidNetworkAclID.NotFound", f"The network ACL ID '{sorted(want)[0]}' does not exist")
+    return _envelope("DescribeNetworkAcls", f"<networkAclSet>{items}</networkAclSet>")
+
+
 def _create_network_acl_entry(store, params):
     m = _model(store)
     nacl = m["nacls"].get(str(params.get("NetworkAclId", "")))
@@ -267,6 +291,143 @@ def _associate_network_acl(store, params):
     m["subnets"][subnet_id]["nacl"] = nacl_id
     m["nacls"][nacl_id]["subnets"].append(subnet_id)
     return _envelope("AssociateNetworkAcl", "<return>true</return>")
+
+
+def _ok(action: str) -> VpcResponse:
+    return _envelope(action, "<return>true</return>")
+
+
+def _xml(v) -> str:
+    return str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _describe_security_groups(store, params):
+    """DescribeSecurityGroups: GroupId.N, GroupName.N and the group-id / group-name / vpc-id filters."""
+    m = _model(store)
+    ids = {v for k, v in params.items() if k.startswith("GroupId.")}
+    names = {v for k, v in params.items() if k.startswith("GroupName.")}
+    filters = {}
+    for k, v in params.items():
+        f = re.match(r"Filter\.(\d+)\.Name$", k)
+        if f:
+            filters[v] = {params[x] for x in params if x.startswith(f"Filter.{f.group(1)}.Value.")}
+    missing = ids - set(m["sgs"])
+    if missing:
+        raise VpcError("InvalidGroup.NotFound", f"The security group '{sorted(missing)[0]}' does not exist")
+    items = ""
+    for g in m["sgs"].values():
+        name = g.get("name") or g["id"]
+        if (ids and g["id"] not in ids) or (names and name not in names) \
+                or ("group-id" in filters and g["id"] not in filters["group-id"]) \
+                or ("group-name" in filters and name not in filters["group-name"]) \
+                or ("vpc-id" in filters and g.get("vpc_id") not in filters["vpc-id"]):
+            continue
+        items += (f"<item><ownerId>123456789012</ownerId><groupId>{g['id']}</groupId><groupName>{_xml(name)}</groupName>"
+                  f"<groupDescription>{_xml(g.get('description', ''))}</groupDescription><vpcId>{g.get('vpc_id', '')}</vpcId>"
+                  "<ipPermissions/><ipPermissionsEgress/></item>")
+    return _envelope("DescribeSecurityGroups", f"<securityGroupInfo>{items}</securityGroupInfo>")
+
+
+def _delete_vpc(store, params):
+    """DeleteVpc, as on real EC2: refused while the VPC has dependencies. Only what the VPC
+    owns implicitly (its main route table, its default security group) goes with it."""
+    vpc_id = str(params.get("VpcId", ""))
+    m = _model(store)
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"The vpc ID '{vpc_id}' does not exist")
+    blocked = (any(s.get("vpc_id") == vpc_id for s in m["subnets"].values())
+               or any(g.get("vpc_id") == vpc_id for g in m["igws"].values())
+               or any(r.get("vpc_id") == vpc_id and not r.get("main") for r in m["route_tables"].values())
+               or any(g.get("vpc_id") == vpc_id and g.get("name") != "default" for g in m["sgs"].values())
+               or any(n.get("vpc_id") == vpc_id for n in m["nacls"].values()))
+    if blocked:
+        raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
+    delete_vpc_cascade(store, vpc_id)
+    return _ok("DeleteVpc")
+
+
+def delete_vpc_cascade(store, vpc_id: str) -> bool:
+    """Remove a VPC and everything recorded under it: what the console's Delete VPC does
+    (subnets, gateways, route tables, security groups, ACLs, NAT gateways, endpoints...)."""
+    m = _model(store)
+    if vpc_id not in m["vpcs"]:
+        return False
+    for key, records in m.items():
+        if key == "vpcs" or not isinstance(records, dict):
+            continue
+        for rid in [k for k, r in records.items() if isinstance(r, dict) and r.get("vpc_id") == vpc_id]:
+            del records[rid]
+    del m["vpcs"][vpc_id]
+    return True
+
+
+def _delete_subnet(store, params):
+    sid = str(params.get("SubnetId", ""))
+    m = _model(store)
+    if sid not in m["subnets"]:
+        raise VpcError("InvalidSubnetID.NotFound", f"The subnet ID '{sid}' does not exist")
+    del m["subnets"][sid]
+    for r in list(m["route_tables"].values()) + list(m["nacls"].values()):
+        if sid in (r.get("subnets") or []):
+            r["subnets"].remove(sid)
+    return _ok("DeleteSubnet")
+
+
+def _delete_security_group(store, params):
+    gid = str(params.get("GroupId", ""))
+    m = _model(store)
+    if gid not in m["sgs"]:
+        raise VpcError("InvalidGroup.NotFound", f"The security group '{gid}' does not exist")
+    if m["sgs"][gid].get("name") == "default":
+        raise VpcError("CannotDelete", f"the specified group: \"{gid}\" name: \"default\" cannot be deleted by a user")
+    del m["sgs"][gid]
+    return _ok("DeleteSecurityGroup")
+
+
+def _detach_internet_gateway(store, params):
+    igw_id, vpc_id = str(params.get("InternetGatewayId", "")), str(params.get("VpcId", ""))
+    m = _model(store)
+    if igw_id not in m["igws"]:
+        raise VpcError("InvalidInternetGatewayID.NotFound", f"The internetGateway ID '{igw_id}' does not exist")
+    if m["igws"][igw_id].get("vpc_id") != vpc_id:
+        raise VpcError("Gateway.NotAttached", f"resource {igw_id} and network {vpc_id} are not attached")
+    m["igws"][igw_id]["vpc_id"] = None
+    if vpc_id in m["vpcs"]:
+        m["vpcs"][vpc_id]["igw"] = None
+    return _ok("DetachInternetGateway")
+
+
+def _delete_internet_gateway(store, params):
+    igw_id = str(params.get("InternetGatewayId", ""))
+    m = _model(store)
+    if igw_id not in m["igws"]:
+        raise VpcError("InvalidInternetGatewayID.NotFound", f"The internetGateway ID '{igw_id}' does not exist")
+    if m["igws"][igw_id].get("vpc_id"):
+        raise VpcError("DependencyViolation", f"The internetGateway '{igw_id}' has dependencies and cannot be deleted.")
+    del m["igws"][igw_id]
+    return _ok("DeleteInternetGateway")
+
+
+def _delete_route_table(store, params):
+    rid = str(params.get("RouteTableId", ""))
+    m = _model(store)
+    if rid not in m["route_tables"]:
+        raise VpcError("InvalidRouteTableID.NotFound", f"The routeTable ID '{rid}' does not exist")
+    if m["route_tables"][rid].get("main") or m["route_tables"][rid].get("subnets"):
+        raise VpcError("DependencyViolation", f"The routeTable '{rid}' has dependencies and cannot be deleted.")
+    del m["route_tables"][rid]
+    return _ok("DeleteRouteTable")
+
+
+def _delete_network_acl(store, params):
+    nid = str(params.get("NetworkAclId", ""))
+    m = _model(store)
+    if nid not in m["nacls"]:
+        raise VpcError("InvalidNetworkAclID.NotFound", f"The network ACL '{nid}' does not exist")
+    if m["nacls"][nid].get("subnets"):
+        raise VpcError("DependencyViolation", f"The network ACL '{nid}' has dependencies and cannot be deleted.")
+    del m["nacls"][nid]
+    return _ok("DeleteNetworkAcl")
 
 
 def _describe_vpcs(store, params):
@@ -403,10 +564,16 @@ _OPS = {
     "CreateInternetGateway": _create_internet_gateway,
     "AttachInternetGateway": _attach_internet_gateway,
     "CreateRoute": _create_route, "DescribeVpcs": _describe_vpcs,
-    "CreateNetworkAcl": _create_network_acl,
+    "CreateNetworkAcl": _create_network_acl, "DescribeNetworkAcls": _describe_network_acls,
     "CreateNetworkAclEntry": _create_network_acl_entry,
     "AssociateNetworkAcl": _associate_network_acl,
     "AnalyzeReachability": _analyze_reachability_action,
+    "DescribeSecurityGroups": _describe_security_groups,
+    "DeleteVpc": _delete_vpc, "DeleteSubnet": _delete_subnet,
+    "DeleteSecurityGroup": _delete_security_group,
+    "DetachInternetGateway": _detach_internet_gateway,
+    "DeleteInternetGateway": _delete_internet_gateway,
+    "DeleteRouteTable": _delete_route_table, "DeleteNetworkAcl": _delete_network_acl,
 }
 
 

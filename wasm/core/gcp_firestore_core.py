@@ -25,6 +25,7 @@ type round-trips exactly as the SDK encoded it.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -50,6 +51,12 @@ class FirestoreStore:
 
     def __init__(self) -> None:
         self.documents: dict[str, dict[str, Any]] = {}
+        # projects.databases (Firestore Admin API): db id -> database record. Documents of
+        # the (default) database are keyed by their bare path; a named database's by
+        # "~{db}~/{path}" (see _DbDocs), so the original single-database layout still reads.
+        self.databases: dict[str, dict[str, Any]] = {}
+        # composite indexes: "{db}/{collectionGroup}/{indexId}" -> index record
+        self.indexes: dict[str, dict[str, Any]] = {}
 
     def get(self, rel: str) -> dict | None:
         d = self.documents.get(rel)
@@ -158,6 +165,168 @@ def _parse_documents_path(path: str) -> tuple[str, str, str] | None:
     return base, rel, suffix
 
 
+class _DbDocs:
+    """The document store of ONE database: (default) reads/writes bare paths, a named
+    database the same paths under its "~{db}~/" prefix."""
+
+    def __init__(self, store: FirestoreStore, db: str) -> None:
+        self.store = store
+        self.pre = "" if db in ("(default)", "") else "~%s~/" % db
+
+    def get(self, rel):
+        return self.store.get(self.pre + rel)
+
+    def put(self, rel, entry):
+        self.store.put(self.pre + rel, entry)
+
+    def delete(self, rel):
+        self.store.delete(self.pre + rel)
+
+    def in_collection(self, coll):
+        return [(r[len(self.pre):], e) for r, e in self.store.in_collection(self.pre + coll)]
+
+    def all(self):
+        """Every (rel, entry) of this database."""
+        if self.pre:
+            return [(r[len(self.pre):], e) for r, e in self.store.documents.items() if r.startswith(self.pre)]
+        return [(r, e) for r, e in self.store.documents.items() if not r.startswith("~")]
+
+
+def _db_of(base: str) -> str:
+    parts = base.split("/")
+    return parts[parts.index("databases") + 1] if "databases" in parts else "(default)"
+
+
+# ── projects.databases + composite indexes (Firestore Admin API) ───────────
+_DB_ID = re.compile(r"^(\(default\)|[a-z][a-z0-9-]{2,61}[a-z0-9])$")
+
+
+def database_view(project: str, db_id: str, rec: dict) -> dict:
+    return {"name": f"projects/{project}/databases/{db_id}", "uid": rec.get("uid", ""),
+            "createTime": rec.get("createTime", ""), "updateTime": rec.get("updateTime", rec.get("createTime", "")),
+            "locationId": rec.get("locationId", "us-central1"), "type": rec.get("type", "FIRESTORE_NATIVE"),
+            "concurrencyMode": rec.get("concurrencyMode", "OPTIMISTIC"),
+            "appEngineIntegrationMode": rec.get("appEngineIntegrationMode", "DISABLED"),
+            "pointInTimeRecoveryEnablement": rec.get("pointInTimeRecoveryEnablement", "POINT_IN_TIME_RECOVERY_DISABLED"),
+            "deleteProtectionState": rec.get("deleteProtectionState", "DELETE_PROTECTION_DISABLED"),
+            "etag": rec.get("etag", "")}
+
+
+def validate_index(collection_group: str, body: dict) -> dict:
+    fields = [f for f in (body.get("fields") or []) if isinstance(f, dict) and f.get("fieldPath") != "__name__"]
+    if len(fields) < 2:
+        raise ValueError("this index is not necessary, configure using single field index controls")
+    out = []
+    for f in fields:
+        fp = str(f.get("fieldPath") or "").strip()
+        if not fp:
+            raise ValueError("Every index field needs a fieldPath.")
+        if f.get("arrayConfig"):
+            if f["arrayConfig"] != "CONTAINS":
+                raise ValueError("arrayConfig must be CONTAINS.")
+            out.append({"fieldPath": fp, "arrayConfig": "CONTAINS"})
+        else:
+            order = str(f.get("order") or "ASCENDING").upper()
+            if order not in ("ASCENDING", "DESCENDING"):
+                raise ValueError("order must be ASCENDING or DESCENDING.")
+            out.append({"fieldPath": fp, "order": order})
+    scope = str(body.get("queryScope") or "COLLECTION")
+    if scope not in ("COLLECTION", "COLLECTION_GROUP"):
+        raise ValueError("queryScope must be COLLECTION or COLLECTION_GROUP.")
+    return {"queryScope": scope, "fields": out + [{"fieldPath": "__name__", "order": out[-1].get("order", "ASCENDING")}],
+            "state": "READY", "apiScope": "ANY_API", "collectionGroup": collection_group}
+
+
+def _admin(store: FirestoreStore, method: str, path: str, query: dict, body: bytes) -> FirestoreResponse | None:
+    p = path.split("?", 1)[0]
+    for pre in ("/v1beta1/", "/v1/", "/"):
+        if p.startswith(pre):
+            p = p[len(pre):]
+            break
+    segs = [unquote(s) for s in p.strip("/").split("/") if s]
+    if len(segs) < 3 or segs[0] != "projects" or segs[2] != "databases":
+        return None
+    project = segs[1]
+    try:
+        data = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        data = {}
+    dbs = store.databases
+    if len(segs) == 3:
+        if method == "GET":
+            return _json(200, {"databases": [database_view(project, k, v) for k, v in sorted(dbs.items())]})
+        if method == "POST":
+            db_id = str(query.get("databaseId") or data.get("databaseId") or "").strip()
+            if not _DB_ID.match(db_id):
+                return _err(400, "INVALID_ARGUMENT", "Database ID '%s' is invalid: 4-63 characters, lowercase letters, digits and hyphens, starting with a letter (or '(default)')." % db_id)
+            if db_id in dbs:
+                return _err(409, "ALREADY_EXISTS", f"Database already exists. Please use another database_id")
+            now = _now()
+            dbs[db_id] = {"uid": uuid.uuid4().hex, "createTime": now, "updateTime": now, "etag": uuid.uuid4().hex[:16],
+                          **{k: data[k] for k in ("locationId", "type", "concurrencyMode", "appEngineIntegrationMode",
+                                                  "pointInTimeRecoveryEnablement", "deleteProtectionState") if data.get(k)}}
+            _persist(store)
+            return _json(200, {"name": f"projects/{project}/databases/{db_id}/operations/{uuid.uuid4().hex}", "done": True,
+                               "response": database_view(project, db_id, dbs[db_id])})
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on databases")
+    db = segs[3]
+    if len(segs) == 4:
+        if db not in dbs:
+            return _err(404, "NOT_FOUND", f"The database {db} does not exist for project {project}")
+        if method == "GET":
+            return _json(200, database_view(project, db, dbs[db]))
+        if method == "DELETE":
+            if dbs[db].get("deleteProtectionState") == "DELETE_PROTECTION_ENABLED":
+                return _err(400, "FAILED_PRECONDITION", "Delete protection is enabled for this database.")
+            dbs.pop(db)
+            view = _DbDocs(store, db)
+            for rel, _ in view.all():
+                view.delete(rel)
+            for k in [k for k in store.indexes if k.startswith(db + "/")]:
+                store.indexes.pop(k)
+            _persist(store)
+            return _json(200, {"done": True, "response": {"name": f"projects/{project}/databases/{db}"}})
+        if method == "PATCH":
+            for k in ("deleteProtectionState", "pointInTimeRecoveryEnablement", "concurrencyMode"):
+                if k in data:
+                    dbs[db][k] = data[k]
+            dbs[db]["updateTime"] = _now()
+            _persist(store)
+            return _json(200, {"done": True, "response": database_view(project, db, dbs[db])})
+    # .../collectionGroups/{cg}/indexes[/{id}]
+    if len(segs) >= 7 and segs[4] == "collectionGroups" and segs[6] == "indexes":
+        cg = segs[5]
+        prefix = f"{db}/"
+        if len(segs) == 7 and method == "GET":
+            items = [dict(v, name=f"projects/{project}/databases/{db}/collectionGroups/{v['collectionGroup']}/indexes/{k.rsplit('/', 1)[-1]}")
+                     for k, v in sorted(store.indexes.items()) if k.startswith(prefix) and (cg == "-" or v["collectionGroup"] == cg)]
+            return _json(200, {"indexes": items} if items else {})
+        if len(segs) == 7 and method == "POST":
+            try:
+                rec = validate_index(cg, data)
+            except ValueError as e:
+                return _err(400, "INVALID_ARGUMENT", str(e))
+            for k, v in store.indexes.items():
+                if k.startswith(prefix) and v["collectionGroup"] == cg and v["fields"] == rec["fields"] and v["queryScope"] == rec["queryScope"]:
+                    return _err(409, "ALREADY_EXISTS", "Index already exists")
+            iid = "CICAg" + uuid.uuid4().hex[:10]
+            store.indexes[f"{db}/{cg}/{iid}"] = rec
+            _persist(store)
+            return _json(200, {"done": True, "response": dict(rec, name=f"projects/{project}/databases/{db}/collectionGroups/{cg}/indexes/{iid}")})
+        if len(segs) == 8 and method == "DELETE":
+            if store.indexes.pop(f"{db}/{cg}/{segs[7]}", None) is None:
+                return _err(404, "NOT_FOUND", "Index not found")
+            _persist(store)
+            return _json(200, {})
+    return None
+
+
+def _persist(store) -> None:
+    fn = getattr(store, "persist", None)
+    if callable(fn):
+        fn()
+
+
 # ── dispatch ───────────────────────────────────────────────────────────────
 def dispatch(store: FirestoreStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -167,8 +336,10 @@ def dispatch(store: FirestoreStore, method: str, path: str,
 
     parsed = _parse_documents_path(path)
     if parsed is None:
-        return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+        admin = _admin(store, method, path, query, body)
+        return admin if admin is not None else _err(404, "NOT_FOUND", f"Unknown path: {path}")
     base, rel, suffix = parsed
+    store = _DbDocs(store, _db_of(base))   # this database's documents
 
     def _load_body() -> dict:
         if not body:

@@ -34,7 +34,17 @@ import textwrap
 from datetime import datetime, timezone
 from typing import Any
 
-PROJECT = "cloudlearn"
+
+def _project() -> str:
+    """The GCP space's project ID (core/gcp_project) — the project the console,
+    gcloud and the SDKs all name."""
+    try:
+        from core import gcp_project
+        return gcp_project.project_id()
+    except Exception:
+        return "vyomi-project"
+
+
 REGION = "us-central1"
 DEFAULT_RUNTIME = "python312"
 DEFAULT_ENTRY_POINT = "handler"
@@ -70,7 +80,7 @@ def _now_iso() -> str:
 
 
 def _fn_resource_name(name: str) -> str:
-    return f"projects/{PROJECT}/locations/{REGION}/functions/{name}"
+    return f"projects/{_project()}/locations/{REGION}/functions/{name}"
 
 
 def _validate_name(name: str) -> None:

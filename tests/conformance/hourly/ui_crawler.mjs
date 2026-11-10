@@ -27,7 +27,8 @@ const { startServer, bootConsole, chromium, sleep, RAIL_SEL } = await import("..
 
 const OUT = process.env.OUT || resolve(HERE, `out/ui-${TARGET}.json`);
 const MAX_SERVICES = +(process.env.MAX_SERVICES || 80);
-const MAX_TABS = +(process.env.MAX_TABS || 10);
+// Every tab: a cap silently skipped the later ones (Compute Engine has 19).
+const MAX_TABS = +(process.env.MAX_TABS || 60);
 const CREATE = (process.env.CREATE ?? "1") !== "0";
 // Walking every detail tab of every service takes ~40 min per console, so the
 // hourly run walks tabs for 1/TAB_SHARDS of the services (rotating by UTC
@@ -66,6 +67,17 @@ const BAD_TEXT = [
   [/coming soon/i, "says coming soon"],
   [/traceback \(most recent call last\)/i, "shows a Python traceback"],
 ];
+// Placeholder panes and fixed sentences the consoles render instead of data (all
+// three clouds, offline + Nano). Each is a PLACEHOLDER_PANE finding: the tab has
+// to show this resource's real data from the backend.
+const PLACEHOLDER_TEXT = [
+  [/this pane mirrors/i, "placeholder pane ('This pane mirrors … view')"],
+  [/wiring lands in|rendering is the next step/i, "placeholder pane ('Wiring lands in …')"],
+  [/not yet wired|placeholder for (portal )?parity/i, "placeholder pane ('Not yet wired')"],
+  [/activity log derived from \/api\//i, "fixed Activity text instead of this resource's events"],
+  [/permissions inherited from project-level iam bindings\.?$/im, "fixed Permissions text instead of the IAM bindings"],
+  [/\(simulated\)|healthy by construction|none set on simulated resources/i, "fabricated value marked 'simulated'"],
+];
 
 // Snapshot of the main panel, used to detect empty panels and dead tabs.
 const snap = (page) => page.evaluate(() => {
@@ -73,7 +85,7 @@ const snap = (page) => page.evaluate(() => {
   // Azure shows resource detail (and its tabs) in the #blade side pane, outside #main.
   const bl = document.querySelector("#blade.open");
   const text = ((m?.innerText || "") + (bl ? "\n" + bl.innerText : "")).trim();
-  return { text: text.slice(0, 4000), len: text.length, html: (m?.innerHTML || "").length + (bl ? bl.innerHTML.length : 0) };
+  return { text: text.slice(0, 20000), len: text.length, html: (m?.innerHTML || "").length + (bl ? bl.innerHTML.length : 0) };
 });
 
 // How implemented each console surface is (service page, create, resource
@@ -83,7 +95,7 @@ const snap = (page) => page.evaluate(() => {
 //   live           loaded data from the API, or shows this resource's own data
 //   static         rendered without any API call and nothing specific to the
 //                  resource (hard-coded or permanently empty)
-const UNIMPL = new Set(["HTTP_501", "HTTP_404", "HTTP_5XX", "PAGE_ERROR", "BAD_TEXT", "EMPTY_PANEL", "DEAD_TAB",
+const UNIMPL = new Set(["HTTP_501", "HTTP_404", "HTTP_5XX", "PAGE_ERROR", "BAD_TEXT", "PLACEHOLDER_PANE", "EMPTY_PANEL", "DEAD_TAB",
   "CRAWL_ERROR", "CREATE_FAILED", "CREATE_NO_SUBMIT", "CREATE_NO_ROW", "CREATE_REJECTED"]);
 function classify(findings, calls, text, tokens) {
   const api404 = (f) => f.type !== "HTTP_404" || !/\.(m?js|css|png|svg|ico|woff2?)(\s|$|\?)/.test(f.detail || "");
@@ -94,7 +106,8 @@ function classify(findings, calls, text, tokens) {
 }
 
 function textFindings(text) {
-  return BAD_TEXT.filter(([re]) => re.test(text)).map(([, why]) => ({ type: "BAD_TEXT", detail: why }));
+  return [...BAD_TEXT.filter(([re]) => re.test(text)).map(([, why]) => ({ type: "BAD_TEXT", detail: why })),
+          ...PLACEHOLDER_TEXT.filter(([re]) => re.test(text)).slice(0, 1).map(([, why]) => ({ type: "PLACEHOLDER_PANE", detail: why }))];
 }
 
 // Grid cells that render a placeholder instead of real data ("-", "—", "–",
@@ -103,7 +116,9 @@ function textFindings(text) {
 // column header so the agent knows which field is missing.
 const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
   const out = [];
-  const isPh = (t) => /^(-|—|–|n\/a|null|none)?$/i.test(t.trim());
+  // A literal "NONE" is a real enum value (e.g. API Gateway authorizationType);
+  // only the consoles' lowercase "none" missing-value fallback is a placeholder.
+  const isPh = (t) => /^(-|—|–|n\/a|null)?$/i.test(t.trim()) || t.trim() === "none";
   for (const table of document.querySelectorAll("#main table")) {
     const heads = [...table.querySelectorAll("thead th, tr:first-child th")].map((h) => (h.innerText || "").trim());
     // Consoles build tables with DOM calls (no <tbody>): data rows are the <tr>s with <td>s.
@@ -112,6 +127,8 @@ const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
         const col = heads[ci] || `column ${ci + 1}`;
         // Checkbox / action columns legitimately have no text.
         if (td.querySelector("input,button,svg,[role=checkbox]") || !col || /^(actions?|select)$/i.test(col)) return;
+        // "Show every field" columns the console adds beside its curated ones: a record's optional properties are legitimately empty.
+        if (td.hasAttribute("data-auto")) return;
         if (isPh(td.innerText || "")) out.push({ row: ri + 1, col });
       });
     });
@@ -141,8 +158,35 @@ const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
   return out;
 });
 
+// Columns the real cloud console ALSO shows as "-"/blank when the optional field
+// was not set. The crawler creates resources with defaults only, so these are
+// faithful, not missing data. Keyed by cloud/service so a real placeholder in any
+// other column of the same service is still a finding. `why` is required.
+const BLANK_LIKE_REAL = [
+  { cloud: "aws", service: "DynamoDB", column: /^sort key$/i, why: "table created with a partition key only; real AWS shows - for Sort key" },
+  { cloud: "aws", service: "API Gateway", column: /^description$/i, why: "Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "EventBridge", column: /^description$/i, why: "rule Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "VPC", column: /^name$/i, why: "Name is just the Name tag; untagged VPCs/subnets/route tables show - in real AWS" },
+  // EC2 detail tabs (010f88ca) show the instance's real DescribeInstances fields; a default
+  // launch attaches no instance profile and no key pair, and a running instance has no
+  // state-transition reason: the real console shows - for each. ENI and security-group-rule
+  // descriptions are optional and blank unless set.
+  { cloud: "aws", service: "EC2", column: /^iam role$/i, why: "no instance profile attached at launch; real AWS shows - for IAM Role" },
+  { cloud: "aws", service: "EC2", column: /^key pair assigned at launch$/i, why: "launched without a key pair; real AWS shows -" },
+  { cloud: "aws", service: "EC2", column: /^state transition reason$/i, why: "a running instance has no state transition reason; real AWS shows -" },
+  { cloud: "aws", service: "EC2", column: /^description$/i, why: "ENI / security-group rule Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "Lambda", column: /^description$/i, why: "function / version Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "Secrets Manager", column: /^description$/i, why: "secret Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "KMS", column: /^description$/i, why: "key Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "KMS", column: /^alias(es)?$/i, why: "keys created through the API (CreateKey) have no alias until one is added; real AWS shows - in Aliases" },
+  { cloud: "aws", service: "Systems Manager", column: /^labels$/i, why: "parameter versions carry no labels until you add one; real AWS shows - in History" },
+];
+let CURRENT = { cloud: "", service: "" };
+const BUILT_IN_ROW = /\bBuiltInRole\b/;
+const blankLikeReal = (col) => BLANK_LIKE_REAL.some((e) => e.why && e.cloud === CURRENT.cloud && e.service === CURRENT.service && e.column.test(col));
+
 async function placeholderFindings(page, where) {
-  const cells = await PLACEHOLDER_CELLS(page).catch(() => []);
+  const cells = (await PLACEHOLDER_CELLS(page).catch(() => [])).filter((c) => !blankLikeReal(c.col));
   // One finding per column, not per cell, to keep the inventory readable.
   const byCol = new Map();
   for (const c of cells) byCol.set(c.col, (byCol.get(c.col) || 0) + 1);
@@ -201,7 +245,31 @@ async function dismissPopups(page) {
 // Data rows only: consoles often append <tr>s straight to <table> (no <tbody>),
 // so match any <tr> holding a <td>, not just "tbody tr".
 const ROW_SEL = "#main table tr:has(td), #main [role=row]:has([role=cell],[role=gridcell])";
-const rowCount = (page) => page.locator(ROW_SEL).count();
+// Lists page (AWS shows 10 rows by default), so once a service holds a page-full the visible
+// row count cannot grow; use the list's own total ("15 items") when it states one.
+const rowCount = async (page) => {
+  // The list loads asynchronously: a count taken while it is still fetching reads 0 for a
+  // service that has rows (Azure VMs: "rows 0 -> 0" with the VM listed seconds later), so
+  // wait until the count is non-zero or has been stable for ~2.5s before trusting it.
+  let rows = await page.locator(ROW_SEL).count(), stable = 0;
+  for (let i = 0; i < 12 && stable < 5; i++) {
+    await sleep(500);
+    const n = await page.locator(ROW_SEL).count();
+    stable = n === rows ? stable + 1 : 0;
+    rows = n;
+    if (rows > 0 && stable >= 2) break;
+  }
+  const t = await page.locator("#main").innerText().catch(() => "");
+  const m = /\b(\d+)\s+items?\b/i.exec(t);
+  return m ? Math.max(rows, +m[1]) : rows;
+};
+
+// A fresh variant of a taken name that keeps its character class: names without separators
+// (Azure storage accounts: lowercase letters and digits only) get a plain suffix.
+const freshName = (v) => {
+  const sfx = Date.now().toString(36).slice(-4);
+  return /[-_.\/]/.test(v) ? `${v}-${sfx}` : `${v}${sfx}`;
+};
 
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
@@ -212,7 +280,13 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   if (!(await btn.count())) return f;
   const rowsBefore = await rowCount(page);
   const savBefore = await savingsSnapshot(page);
-  const listText = await page.locator("#main").innerText().catch(() => "");
+  // What the list already shows, cell by cell (and each cell's last path segment: GCP lists
+  // full resource names, …/functions/<id>). A form NAME whose value equals a listed cell is
+  // taken. Matching anywhere in the list text instead also renamed ordinary field values that
+  // merely appear in it (CloudWatch "CPUUtilization", "300", "80" → an invalid alarm).
+  const listNames = new Set(await page.evaluate((sel) => [...document.querySelectorAll(sel)].flatMap((tr) =>
+    [...tr.querySelectorAll("td,[role=cell],[role=gridcell]")].map((c) => (c.innerText || "").trim()).filter(Boolean)
+  ).flatMap((t) => [t, t.split("/").pop(), t.split("@")[0]]), ROW_SEL).catch(() => []));   // …/<id>, <id>@project.iam…
   try {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
@@ -225,11 +299,35 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     const fillWizardRequired = async () => {
       for (const w of await blade.locator(".wiz-field:has(.req)").all()) {
         const inp = w.locator("input[type=text], input:not([type])").first();
-        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+        // lowercase letters+digits only: valid for every Azure name rule (a storage account
+        // rejects hyphens), as a user typing a real name would
+        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl${Date.now().toString(36)}`).catch(() => {});
+      }
+      // A VM's admin password sits on Basics, a step the walk has left by the time the
+      // generic password fill below runs: fill it where the user would.
+      for (const inp of await blade.locator(".wiz-field:has(.req) input[type=password]").all()) {
+        if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
+      }
+    };
+    // Only name fields are renamed (a log class "Standard" equal to a listed cell is not a name).
+    const renameIn = async (where) => {
+      const inps = await where.locator("input[type=text], input:not([type])").all();   // a bare <input> is text too
+      for (let i = 0; i < inps.length; i++) {
+        const inp = inps[i];
+        const v = await inp.inputValue().catch(() => "");
+        if (!v || !/^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) || !listNames.has(v)) continue;
+        const label = await inp.evaluate((e) => {
+          const f = e.closest(".field, .wiz-field, .form-field, .fld, label") || e.parentElement;
+          return ((f && f.innerText) || e.getAttribute("aria-label") || e.placeholder || "").split("\n")[0];
+        }).catch(() => "");
+        // labelled "... name" / "... ID"; an unlabelled first field is taken to be the name. A
+        // labelled non-name field (Azure VNet "Address space" 10.0.0.0/16) is never touched.
+        if (/\bname\b|\bid\b/i.test(label) || (i === 0 && !label.trim())) await inp.fill(freshName(v)).catch(() => {});
       }
     };
     if (await blade.count()) {
       for (let step = 0; step < 12; step++) {
+        await renameIn(blade);   // each wizard tab renders only its own fields (the name is on Basics)
         await fillWizardRequired();
         const fin = blade.locator("button").filter({ hasText: /^\s*create\s*$/i });
         if (await fin.count()) break;
@@ -247,9 +345,17 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     // A default name that already exists (an earlier crawl created it) would be
     // rejected or overwritten by the real cloud; give it a fresh suffix so the
     // create adds a row.
-    for (const inp of await scope.locator("input[type=text]").all()) {
-      const v = await inp.inputValue().catch(() => "");
-      if (v && /^[a-z0-9][a-z0-9._-]*$/i.test(v) && listText.includes(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
+    const renameTaken = () => renameIn(scope);
+    await renameTaken();
+    // AWS create pages are step wizards (Choose secret type → Configure secret → …) that only
+    // render the current step's fields, so the name may sit on a later step: walk the
+    // "Next: …" buttons, renaming on each step, then submit from the last one.
+    for (let step = 0; step < 8 && !(await blade.count()); step++) {
+      const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
+      if (!(await next.count())) break;
+      await next.click({ timeout: 3000 }).catch(() => {});
+      await sleep(400);
+      await renameTaken();
     }
     for (const inp of await scope.locator("input[type=password]").all()) {
       if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
@@ -265,19 +371,57 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     }
     const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
     if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
+    const TAKEN = /already exists|ResourceInUse|ResourceExists|AlreadyExists|name is (already )?(taken|in use)/i;
+    let taken = false;
+    const onResp = async (r) => {
+      if (process.env.DEBUG_CRAWL && ["POST", "PUT"].includes(r.request().method())) console.log(`[debug] create ${r.status()} ${r.request().method()} ${r.url().slice(0, 200)}`);
+      if (r.status() < 400 || !["POST", "PUT"].includes(r.request().method())) return;
+      if (r.status() === 409 || TAKEN.test(await r.text().catch(() => ""))) taken = true;
+    };
+    page.on("response", onResp);
     await submit.click({ timeout: 3000 });
     await sleep(3000);
+    page.off("response", onResp);
+    // The list only shows its first page, so a default name left by an earlier crawl can be
+    // taken without being visible above (DynamoDB "Music" behind 10+ tables). The cloud then
+    // rightly refuses it ("already exists"): as a user would, rename it once and resubmit.
+    if (taken) {
+      const first = scope.locator("button:visible").filter({ hasText: /^\s*1\s*[A-Za-z]/ }).first();   // step "1 Table details"
+      if (await first.count()) { await first.click({ timeout: 3000 }).catch(() => {}); await sleep(400); }
+      const nameInp = scope.locator("input[type=text]:visible, input:not([type]):visible").first();
+      const v = await nameInp.inputValue().catch(() => "");
+      if (v) {
+        // "(default)" (Firestore's one default database) cannot take a suffix: use a fresh id.
+        await nameInp.fill(/^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) ? freshName(v) : `crawl-${Date.now().toString(36)}`).catch(() => {});
+        for (let step = 0; step < 8 && !(await blade.count()); step++) {
+          const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
+          if (!(await next.count())) break;
+          await next.click({ timeout: 3000 }).catch(() => {});
+          await sleep(400);
+        }
+        await submit.click({ timeout: 3000 }).catch(() => {});
+        await sleep(3000);
+      }
+    }
   } catch (e) {
     f.push({ type: "CREATE_FAILED", detail: `create with defaults failed: ${String(e.message || e).split("\n")[0].slice(0, 200)}` });
     return f;
   }
   f.push(...drain().map((x) => ({ ...x, detail: `during create: ${x.detail}` })));
   const s = await snap(page);
-  if (/\b(error|failed|invalid)\b/i.test(s.text.slice(0, 800))) {
-    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
+  // Host names are data, not messages: a GKE endpoint such as
+  // "kubernetes-api-not-running.control-plane-only.invalid" (RFC 2606 .invalid) is not an error.
+  // Rows already in the list are resource data too: a Cloud Scheduler job that ran shows its
+  // real last-attempt status ("Failed: … 405" from example.com). A rejection is a message
+  // outside the list (form error / toast), so drop the list rows' lines before looking.
+  const rowLines = new Set((await page.locator(ROW_SEL).allInnerTexts().catch(() => [])).flatMap((t) => t.split("\n")).map((l) => l.trim()).filter(Boolean));
+  const msg = s.text.slice(0, 800).split("\n").filter((l) => !rowLines.has(l.trim())).join("\n").replace(/[\w-]+(\.[\w-]+)+/g, "");
+  if (/\b(error|failed|invalid)\b/i.test(msg)) {
+    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(msg.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
   }
   await backToList();
   const rowsAfter = await rowCount(page);
+  if (process.env.DEBUG_CRAWL) console.log(`[debug] ${service}: rows ${rowsBefore} -> ${rowsAfter}`);
   if (rowsAfter <= rowsBefore) f.push({ type: "CREATE_NO_ROW", detail: "create with defaults added no resource to the list" });
   f.push(...(await placeholderFindings(page, "after create")));
   if (rowsAfter > rowsBefore) {
@@ -295,7 +439,9 @@ async function crawlConsole(browser, base, con, needsSW) {
   const errs = [];         // uncaught page errors since the last drain
   page.on("response", async (r) => {
     const s = r.status(), u = r.url();
-    if (s >= 400 && !/favicon|\.map$|hot-update/.test(u)) {
+    // /api/auth/me is the PORTAL's route (the account menu asks it who is signed in); the bare local
+    // Nano server has no portal, so it answers 501 there while the real portal answers it.
+    if (s >= 400 && !/favicon|\.map$|hot-update|\/api\/auth\/me(\?|$)/.test(u)) {
       // 5xx: keep the start of the body so the finding says why, not just that it failed.
       const body = s >= 500 ? (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200) : "";
       net.push({ status: s, url: u.replace(base, "").slice(0, 200), body });
@@ -320,8 +466,12 @@ async function crawlConsole(browser, base, con, needsSW) {
   });
   const calls = () => {
     const now = Date.now();
-    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0).map((x) => x.p));
-    const n = new Set(log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p)).map((x) => x.p)).size;
+    // Fetches a previous surface was already credited for (e.g. Insights then Metrics both
+    // call /api/metrics/series) are not background polling, so they don't mask this surface's own.
+    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0 && !x.own).map((x) => x.p));
+    const mine = log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p));
+    mine.forEach((x) => { x.own = true; });
+    const n = new Set(mine.map((x) => x.p)).size;
     t0 = now;
     return n;
   };
@@ -344,9 +494,14 @@ async function crawlConsole(browser, base, con, needsSW) {
       await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
     }
     drain(); // boot noise is reported once below, not per service
-    const services = await page.evaluate((sel) => [...document.querySelectorAll(sel)]
-      .map((e, i) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
-      .filter((x) => x.label && !/^home$/i.test(x.label)), RAIL_SEL);
+    // The side nav also holds chrome that is not a service (hamburger, close,
+    // the Console Home title, collapsible section headers): not crawled.
+    const NAV_CHROME = "nav-open nav-x nav-title nav-sec-h";
+    const services = await page.evaluate(([sel, chrome]) => [...document.querySelectorAll(sel)]
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => !chrome.split(" ").some((c) => e.classList.contains(c)))
+      .map(({ e, i }) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
+      .filter((x) => x.label && !/^(home|dashboard)$/i.test(x.label)), [RAIL_SEL, NAV_CHROME]);
     // Opening a service swaps #rail for that service's own sidebar (EC2 →
     // Events, Instances, …), so the service list's indexes stop matching.
     // Go back to the console home whenever the rail entry isn't this service.
@@ -377,7 +532,17 @@ async function crawlConsole(browser, base, con, needsSW) {
       if (seen.has(svc.label) || seen.size >= MAX_SERVICES || (ONLY && !ONLY.test(svc.label))) continue;
       seen.add(svc.label);
       const row = { target: TARGET, cloud: con.cloud, service: svc.label, tabs: [], findings: [], surfaces: [] };
-      const surface = (kind, name, f, n, text, tokens) => row.surfaces.push({ kind, name, state: classify(f, n, text, tokens), calls: n });
+      CURRENT = { cloud: con.cloud, service: svc.label };
+      // A tab / resource detail classified "static" (no API call, nothing about this
+      // resource) is a finding, not just a label: it reaches the fixers. An editable,
+      // empty collection (a Labels/Tags editor with an Add control) is real UI.
+      const surface = (kind, name, f, n, text, tokens, editable) => {
+        const state = classify(f, n, text, tokens);
+        row.surfaces.push({ kind, name, state, calls: n });
+        if (state === "static" && (kind === "tab" || kind === "detail") && !editable)
+          row.findings.push({ type: kind === "tab" ? "STATIC_TAB" : "STATIC_DETAIL", tab: kind === "tab" ? name : undefined,
+                              detail: `${kind === "tab" ? "tab '" + name + "'" : "resource detail"} shows no backend data and nothing about this resource` });
+      };
       let tokens = [];
       try {
         await dismissPopups(page);
@@ -403,7 +568,12 @@ async function crawlConsole(browser, base, con, needsSW) {
           if (hasCreate) surface("create", "create with defaults", cf, 1, "");
           // Values that identify the first resource (names, ids): a tab that
           // shows them is rendering this resource's data, not static text.
-          tokens = await page.locator("#main table tr:has(td)").first().locator("td").allInnerTexts().catch(() => []);
+          // Built-in rows the cloud seeds (Azure built-in roles like Owner) are read-only catalogue
+          // entries listed before what the crawl created: walk a resource of the account's own.
+          const rowTexts = await page.locator("#main table tr:has(td)").allInnerTexts().catch(() => []);
+          const own = rowTexts.findIndex((t) => !BUILT_IN_ROW.test(t));
+          const firstRow = page.locator("#main table tr:has(td)").nth(Math.max(0, own));
+          tokens = await firstRow.locator("td").allInnerTexts().catch(() => []);
           tokens = tokens.map((t) => t.trim()).filter((t) => t.length >= 4 && /[a-z]/i.test(t) && /[\d_.:\/-]/.test(t)).slice(0, 6);
           if (process.env.DEBUG_CRAWL) console.log(`[debug] ${svc.label}: tokens=${JSON.stringify(tokens)}`);
           // Open the first resource so its detail tabs (where most unfilled
@@ -411,7 +581,8 @@ async function crawlConsole(browser, base, con, needsSW) {
           drain(); calls();
           // Resource links first (as the wasm/ui-tests validators open them);
           // a plain cell only if the row has no link.
-          let link = page.locator("#main a.id, #main table tr:has(td) td a, #main [role=row] a").first();
+          let link = (await firstRow.locator("a").count()) ? firstRow.locator("a").first()
+            : page.locator("#main a.id, #main table tr:has(td) td a, #main [role=row] a").first();
           if (!(await link.count())) link = page.locator("#main table tr:has(td) td:not(.chk)").first();
           if (process.env.DEBUG_CRAWL) console.log(`[debug] ${svc.label}: resource links=${await page.locator("#main a.id, #main table tr:has(td) td a").count()}`);
           if (await link.count()) {
@@ -459,7 +630,21 @@ async function crawlConsole(browser, base, con, needsSW) {
           // content is the whole panel.
           const prev = new Set(t === 0 ? [] : before.text.split("\n"));
           const added = after.text.split("\n").filter((l) => !prev.has(l)).join("\n");
-          surface("tab", label, tf, calls(), added, tokens);
+          // A Tags tab holding the editable tag grid renders this resource's own tags (the
+          // grid's inputs aren't part of innerText); validated by azure-tags-tab (save + reload).
+          const tagEditor = /^tags$/i.test(label) && (await page.locator(".tags-grid input").count().catch(() => 0)) >= 2 ? 1 : 0;
+          const editable = /^(labels|tags)$/i.test(label) &&
+            (await page.locator("#main button, #blade button").filter({ hasText: /add|edit/i }).count().catch(() => 0)) > 0;
+          // A tab that opens the same panel as the live tab before it (Azure Insights → Metrics both
+          // draw the resource's measured series; the repeat fetch is deduped as "background") shows
+          // that tab's real data: it inherits its liveness rather than reading as static.
+          const prevLive = row.surfaces.at(-1)?.state === "live" && row.surfaces.at(-1)?.kind === "tab";
+          const samePanel = t > 0 && prevLive && added.trim() === "" && !tf.some((f) => f.type === "DEAD_TAB");
+          // Azure tabs render into their own panel (.sub-content). A line the tab shares with the
+          // Overview before it (the full resource id, now in Overview's essentials too) is still
+          // this resource's data: look for its identifying values in the tab's own panel as well.
+          const panel = await page.locator("#main .sub-content, #blade .sub-content").first().innerText({ timeout: 1000 }).catch(() => "");
+          surface("tab", label, tf, calls() + tagEditor + (samePanel ? 1 : 0), added + "\n" + panel, tokens, editable);
           if (process.env.DEBUG_CRAWL && row.surfaces.at(-1).state === "static") console.log(`[debug] ${svc.label}/${label} static: ${JSON.stringify(added.slice(0, 160))}`);
         }
       } catch (e) {
@@ -468,6 +653,12 @@ async function crawlConsole(browser, base, con, needsSW) {
       }
       row.status = row.findings.length ? "broken" : "ok";
       rows.push(row);
+      // Checkpoint after every service: a console with many tabs can outlast the suite timeout,
+      // and a kill must still leave what was crawled (reporting only; findings are unchanged).
+      try {
+        mkdirSync(dirname(OUT), { recursive: true });
+        writeFileSync(OUT, JSON.stringify({ target: TARGET, at: new Date().toISOString(), services: [...all, ...rows], partial: true }, null, 1));
+      } catch {}
     }
   } catch (e) {
     rows.push({ target: TARGET, cloud: con.cloud, service: "(console boot)", tabs: [], status: "broken",

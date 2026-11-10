@@ -45,6 +45,15 @@ from . import vault_client as vc
 _kms_keys: dict[str, dict] = {}
 # Module-level KMS alias store: alias_name -> key_id
 _kms_aliases: dict[str, str] = {}
+_kms_alias_created: dict[str, float] = {}
+_kms_grants: dict[str, dict[str, dict]] = {}
+
+
+def _kms_default_policy() -> str:
+    root = "arn:aws:iam::000000000000:root"
+    return json.dumps({"Version": "2012-10-17", "Id": "key-default-1", "Statement": [
+        {"Sid": "Enable IAM User Permissions", "Effect": "Allow", "Principal": {"AWS": root},
+         "Action": "kms:*", "Resource": "*"}]}, indent=2)
 
 
 def _active_space_id(request: Request) -> str:
@@ -95,6 +104,26 @@ def _kms_key_metadata(key_id: str) -> dict | None:
     return _kms_keys.get(key_id)
 
 
+_KMS_BLOB_MAGIC = "vyomikms1|"
+
+
+def _kms_wrap_blob(key_name: str, vault_ct: str) -> str:
+    """base64( magic | key-name | vault ciphertext ): the blob names its own key (real KMS behaviour)."""
+    return base64.b64encode(f"{_KMS_BLOB_MAGIC}{key_name}|{vault_ct}".encode()).decode()
+
+
+def _kms_unwrap_blob(blob_b64: str) -> tuple[str, str]:
+    """-> (key_name or "", vault_ciphertext). Accepts the legacy base64("vault:v1:...") and raw forms."""
+    try:
+        raw = base64.b64decode(blob_b64, validate=False).decode()
+    except Exception:
+        return "", blob_b64
+    if raw.startswith(_KMS_BLOB_MAGIC):
+        _, name, ct = raw.split("|", 2)
+        return name, ct
+    return "", (raw if raw.startswith("vault:") else blob_b64)
+
+
 async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
     """Return the response dict for an AWS KMS X-Amz-Target, or None if not handled."""
     op = target.split(".", 1)[-1]  # "TrentService.Encrypt" → "Encrypt"
@@ -104,18 +133,28 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
     if op == "Encrypt":
         pt_b64 = body.get("Plaintext", "")
         ct = vc.transit_encrypt("aws", space, key_name, pt_b64) or ""
-        ct_wrapped = base64.b64encode(ct.encode()).decode()
-        return {"KeyId": key, "CiphertextBlob": ct_wrapped}
+        if not ct:
+            return {"__type": "KMSInternalException", "message": "Encryption backend unavailable."}
+        return {"KeyId": key, "CiphertextBlob": _kms_wrap_blob(key_name, ct)}
     if op == "Decrypt":
         ct_in = body.get("CiphertextBlob", "")
-        try:
-            ct = base64.b64decode(ct_in).decode()
-            if not ct.startswith("vault:"):
-                ct = ct_in
-        except Exception:
-            ct = ct_in
-        pt = vc.transit_decrypt("aws", space, key_name, ct) or ""
-        return {"KeyId": key, "Plaintext": pt}
+        blob_key, ct = _kms_unwrap_blob(ct_in)
+        # Real KMS recovers the key from the ciphertext blob; an explicit KeyId must agree with it.
+        if blob_key:
+            if body.get("KeyId") and _kms_resolve_key_name(body) != blob_key:
+                return {"__type": "IncorrectKeyException",
+                        "message": "The key supplied does not match the ciphertext's key."}
+            dec_key = blob_key
+        elif body.get("KeyId") or body.get("KeyArn") or body.get("KeyAlias"):
+            dec_key = key_name   # legacy blob without an embedded key id
+        else:
+            return {"__type": "InvalidCiphertextException", "message": ""}
+        pt = vc.transit_decrypt("aws", space, dec_key, ct)
+        if pt is None:
+            return {"__type": "InvalidCiphertextException", "message": ""}
+        stored = _kms_keys.get(dec_key)
+        arn = (stored or {}).get("Arn") or f"arn:aws:kms:us-east-1:000000000000:key/{dec_key}"
+        return {"KeyId": arn, "Plaintext": pt, "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
     if op in ("Encapsulate", "Decapsulate"):
         # ML-KEM, simulated: the shared secret is random and the ciphertext is that
         # secret sealed with the key's transit key, so Decapsulate recovers it.
@@ -152,7 +191,10 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
         r = vc.transit_generate_data_key("aws", space, key_name, key_spec=spec)
         if not r:
             return None
-        return {"KeyId": key, "Plaintext": r["Plaintext"], "CiphertextBlob": r["CiphertextBlob"]}
+        # CiphertextBlob is base64 binary on the AWS wire (boto3 decodes it); embed the key id so
+        # Decrypt works without KeyId, like real KMS.
+        return {"KeyId": key, "Plaintext": r["Plaintext"],
+                "CiphertextBlob": _kms_wrap_blob(key_name, r["CiphertextBlob"])}
     if op == "CreateKey":
         import uuid as _uuid
         key_id = body.get("KeyId") or _uuid.uuid4().hex
@@ -231,15 +273,74 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
         _kms_aliases[alias_name] = target_key_id
         return {}
     if op == "ListAliases":
+        want = _kms_resolve_key_name({"KeyId": body["KeyId"]}) if body.get("KeyId") else ""
         aliases = []
         for alias_name, target_key_id in _kms_aliases.items():
+            if want and target_key_id != want:
+                continue
             aliases.append({
                 "AliasName": alias_name,
                 "AliasArn": f"arn:aws:kms:us-east-1:000000000000:{alias_name}",
                 "TargetKeyId": target_key_id,
+                "CreationDate": _kms_alias_created.setdefault(alias_name, time.time()),
             })
         return {"Aliases": aliases, "Truncated": False}
+    if op in ("DeleteAlias", "UpdateAlias"):
+        alias_name = body.get("AliasName", "")
+        if alias_name not in _kms_aliases:
+            return {"__type": "NotFoundException", "message": f"Alias arn:aws:kms:us-east-1:000000000000:{alias_name} is not found."}
+        if op == "DeleteAlias":
+            _kms_aliases.pop(alias_name, None)
+        else:
+            _kms_aliases[alias_name] = _kms_resolve_key_name({"KeyId": body.get("TargetKeyId", "")})
+        return {}
+    if op in ("GetKeyPolicy", "PutKeyPolicy", "ListKeyPolicies", "ListGrants", "CreateGrant", "RevokeGrant", "RetireGrant"):
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key 'arn:aws:kms:us-east-1:000000000000:key/{key_name}' does not exist"}
+        if op == "ListKeyPolicies":
+            return {"PolicyNames": ["default"], "Truncated": False}
+        if op == "GetKeyPolicy":
+            return {"Policy": stored.get("Policy") or _kms_default_policy(), "PolicyName": "default"}
+        if op == "PutKeyPolicy":
+            try:
+                json.loads(body.get("Policy", ""))
+            except ValueError:
+                return {"__type": "MalformedPolicyDocumentException", "message": "Policy is not valid JSON."}
+            stored["Policy"] = body["Policy"]
+            return {}
+        grants = _kms_grants.setdefault(stored["KeyId"], {})
+        if op == "CreateGrant":
+            import uuid as _uuid
+            gid = _uuid.uuid4().hex + _uuid.uuid4().hex
+            grants[gid] = {"KeyId": stored["Arn"], "GrantId": gid, "Name": body.get("Name", ""),
+                           "CreationDate": time.time(), "GranteePrincipal": body.get("GranteePrincipal", ""),
+                           "RetiringPrincipal": body.get("RetiringPrincipal", ""),
+                           "IssuingAccount": "arn:aws:iam::000000000000:root",
+                           "Operations": list(body.get("Operations") or []),
+                           **({"Constraints": body["Constraints"]} if body.get("Constraints") else {})}
+            return {"GrantToken": gid[:64], "GrantId": gid}
+        if op == "ListGrants":
+            return {"Grants": [g for g in grants.values()], "Truncated": False}
+        gid = body.get("GrantId", "")
+        if gid not in grants:
+            return {"__type": "NotFoundException", "message": f"Grant ID {gid} not found"}
+        grants.pop(gid)
+        return {}
     return None
+
+
+def _aws_secret_entry(name: str, created: str) -> dict:
+    """A SecretListEntry / DescribeSecret body (dates as epoch seconds, as the SDKs parse them)."""
+    try:
+        ts = datetime.strptime(created.replace("Z", "")[:26], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        try:
+            ts = datetime.strptime(created.replace("Z", ""), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+        except ValueError:
+            ts = time.time()
+    return {"ARN": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}", "Name": name,
+            "CreatedDate": ts, "LastChangedDate": ts, "SecretVersionsToStages": {}}
 
 
 async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | None:
@@ -275,6 +376,18 @@ async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | N
         _aws_secret_index_remove(space, name)
         return {"Name": name, "ARN": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}",
                 "DeletionDate": time.time()}
+    if op == "ListSecrets":
+        # The same per-space index the console lists, so console- and SDK-created secrets
+        # both show (`aws secretsmanager list-secrets`). Filter: name (prefix match).
+        created = _aws_secret_created(space)
+        prefixes = [v for f in (body.get("Filters") or []) if f.get("Key") == "name" for v in (f.get("Values") or [])]
+        names = [n for n in _aws_secret_index_get(space) if not prefixes or any(n.startswith(p) for p in prefixes)]
+        return {"SecretList": [_aws_secret_entry(n, created.get(n, "")) for n in names]}
+    if op == "DescribeSecret":
+        if name not in _aws_secret_index_get(space) and vc.kv_get("aws", space, name) is None:
+            return {"__type": "ResourceNotFoundException",
+                    "message": "Secrets Manager can't find the specified secret."}
+        return _aws_secret_entry(name, _aws_secret_created(space).get(name, ""))
     if op == "ListSecretVersionIds":
         versions = vc.kv_list_versions("aws", space, name)
         return {"Name": name, "Versions": [
@@ -334,6 +447,90 @@ def gcp_vault_index(space: str, kind: str) -> dict:
     return {n: created.get(n, "") for n in _gcp_idx_get(space, kind)}
 
 
+# ── GCP Secret Manager model on Vault: secret settings (replication, labels, rotation,
+#    topics) + per-version lifecycle states, KV-backed so they persist and the native
+#    /v1 API, the console and its detail tabs (providers/gcp_tabs_console) share them.
+def _kv_dict(space: str, key: str) -> dict:
+    got = vc.kv_get("gcp", space, key)
+    data = (got or {}).get("data") if isinstance(got, dict) else None
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def gcp_secret_meta(space: str, name: str) -> dict:
+    return _kv_dict(space, f"__secmeta__{name}")
+
+
+def gcp_secret_meta_put(space: str, name: str, meta: dict) -> None:
+    vc.kv_put("gcp", space, f"__secmeta__{name}", dict(meta) or {"_": ""})
+
+
+def gcp_secret_states(space: str, name: str) -> dict:
+    return _kv_dict(space, f"__verstate__{name}")
+
+
+def gcp_secret_set_state(space: str, name: str, version: str, state: str) -> dict:
+    st = gcp_secret_states(space, name)
+    st[str(version)] = state
+    if state == "DESTROYED":
+        st[f"{version}_destroyTime"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        vc.kv_destroy_versions("gcp", space, name, [int(version)])
+    vc.kv_put("gcp", space, f"__verstate__{name}", st)
+    return st
+
+
+def gcp_secret_versions(space: str, name: str) -> list:
+    """The secret's versions, newest first: {version, state, createTime[, destroyTime]}."""
+    st = gcp_secret_states(space, name)
+    out = []
+    for v in vc.kv_list_versions("gcp", space, name):
+        n = str(v.get("version"))
+        state = st.get(n) or ("DESTROYED" if v.get("destroyed") else "ENABLED")
+        out.append({"version": n, "state": state, "createTime": v.get("created_time", ""),
+                    **({"destroyTime": st.get(f"{n}_destroyTime")} if state == "DESTROYED" else {})})
+    return list(reversed(out))
+
+
+# ── GCP Cloud KMS model on Vault transit: each CryptoKeyVersion is a transit key version;
+#    version states, the primary version, rotation schedule and labels live in the key's
+#    KV meta (shared by the native /v1 API, the console and its detail tabs).
+def gcp_kms_ring_of(space: str, name: str) -> str:
+    for entry in _gcp_idx_get(space, "kms"):
+        if entry == name or entry.split("/")[-1] == name:
+            return entry.partition("/")[0]
+    return "default-ring"
+
+
+def gcp_kms_key_meta(space: str, name: str) -> dict:
+    return _kv_dict(space, f"__kmsmeta__{name}")
+
+
+def gcp_kms_key_meta_put(space: str, name: str, meta: dict) -> None:
+    vc.kv_put("gcp", space, f"__kmsmeta__{name}", dict(meta))
+
+
+def gcp_kms_sync(space: str, ring: str, name: str) -> dict:
+    """The key's meta with every transit version listed, due automatic rotations applied
+    and DESTROY_SCHEDULED versions past their destroy time moved to DESTROYED."""
+    from core import gcp_kms_core as kc
+    meta = gcp_kms_key_meta(space, name)
+    tkey = f"{ring}__{name}"
+    for _ in range(kc.rotation_due(meta)):
+        nv = vc.transit_rotate("gcp", space, tkey)
+        if nv:
+            meta.setdefault("versions", {})[str(nv)] = {"state": "ENABLED", "createTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+            meta["primary"] = str(nv)
+    vs = meta.setdefault("versions", {})
+    for v, t in vc.transit_key_versions("gcp", space, tkey).items():
+        vs.setdefault(str(v), {"state": "ENABLED", "createTime": t})
+    now = datetime.now(timezone.utc).timestamp()
+    for v in vs.values():
+        if v.get("state") == "DESTROY_SCHEDULED" and kc._parse_ts(v.get("destroyTime", "")) <= now:
+            v["state"], v["destroyEventTime"] = "DESTROYED", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    meta.setdefault("primary", "1")
+    gcp_kms_key_meta_put(space, name, meta)
+    return meta
+
+
 def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}:encrypt")
     async def gcp_kms_encrypt(project: str, loc: str, ring: str, key: str, request: Request):
@@ -343,7 +540,15 @@ def _register_gcp(app: FastAPI) -> None:
         vc.transit_create_key("gcp", space, key_name)
         _gcp_idx_add(space, "kms", f"{ring}/{key}")   # so the console list sees SDK-used keys
         pt_b64 = body.get("plaintext", "")
-        ct = vc.transit_encrypt("gcp", space, key_name, pt_b64)
+        # encrypt with the PRIMARY version, which must be ENABLED (Cloud KMS semantics)
+        meta = gcp_kms_sync(space, ring, key)
+        primary = str(meta.get("primary") or "1")
+        pstate = (meta.get("versions") or {}).get(primary, {}).get("state", "ENABLED")
+        if pstate != "ENABLED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{primary} is not enabled, current state is: {pstate}."}},
+                status_code=400)
+        ct = vc.transit_encrypt("gcp", space, key_name, pt_b64, key_version=int(primary))
         if ct is None:
             return _vault_unavailable_response("gcp.kms")
         # Vault returns ``vault:v1:<base64>`` as an opaque string. Google's KMS
@@ -372,6 +577,16 @@ def _register_gcp(app: FastAPI) -> None:
                 ct = ct_in  # not our wrap, pass through
         except Exception:
             ct = ct_in
+        # the ciphertext names its key version (vault:vN:...): only an ENABLED version decrypts
+        try:
+            ver = ct.split(":")[1].lstrip("v") if ct.startswith("vault:") else "1"
+        except Exception:
+            ver = "1"
+        vstate = (gcp_kms_sync(space, ring, key).get("versions") or {}).get(ver, {}).get("state", "ENABLED")
+        if vstate != "ENABLED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver} is not enabled, current state is: {vstate}."}},
+                status_code=400)
         pt = vc.transit_decrypt("gcp", space, key_name, ct)
         if pt is None:
             return _vault_unavailable_response("gcp.kms")
@@ -389,14 +604,56 @@ def _register_gcp(app: FastAPI) -> None:
         return {"name": f"projects/{project}/locations/{loc}/keyRings/{ring}",
                 "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
-    def _gcp_cryptokey_view(project: str, loc: str, ring: str, key: str) -> dict:
+    # Cloud KMS importJobs (create / get / list) on the REST surface; the key-pair generation
+    # logic is the same gcp_kms_core code the console's Import jobs tab uses.
+    _gcp_import_jobs: dict = {}
+
+    def _gcp_ij_err(e):
+        return JSONResponse({"error": {"code": e.status, "message": e.message, "status": e.gcp_status}}, status_code=e.status)
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs")
+    async def gcp_kms_create_import_job(project: str, loc: str, ring: str, request: Request):
+        from core import gcp_kms_core as kc
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        rname = f"projects/{project}/locations/{loc}/keyRings/{ring}"
+        try:
+            return kc.import_job_create(jobs, rname, request.query_params.get("importJobId", ""), body or {}, 0.6)
+        except kc.KmsTabError as e:
+            return _gcp_ij_err(e)
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs")
+    async def gcp_kms_list_import_jobs(project: str, loc: str, ring: str, request: Request):
+        from core import gcp_kms_core as kc
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        out = kc.import_job_list(jobs, f"projects/{project}/locations/{loc}/keyRings/{ring}", 0.6)
+        return {"importJobs": out} if out else {}
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs/{job}")
+    async def gcp_kms_get_import_job(project: str, loc: str, ring: str, job: str, request: Request):
+        from core import gcp_kms_core as kc
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        name = f"projects/{project}/locations/{loc}/keyRings/{ring}/importJobs/{job}"
+        if name not in jobs:
+            return JSONResponse({"error": {"code": 404, "message": f"ImportJob {name} not found.", "status": "NOT_FOUND"}}, status_code=404)
+        kc._advance_keygen(jobs[name], 0.6)
+        return kc.import_job_view(name, jobs[name])
+
+    def _gcp_cryptokey_view(project: str, loc: str, ring: str, key: str, meta: dict | None = None) -> dict:
         base = f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}"
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        meta = meta or {}
+        primary = str(meta.get("primary") or "1")
+        pv = (meta.get("versions") or {}).get(primary, {})
         return {
-            "name": base, "purpose": "ENCRYPT_DECRYPT", "createTime": now,
-            "primary": {"name": f"{base}/cryptoKeyVersions/1", "state": "ENABLED",
+            "name": base, "purpose": "ENCRYPT_DECRYPT", "createTime": pv.get("createTime") or now,
+            "primary": {"name": f"{base}/cryptoKeyVersions/{primary}", "state": pv.get("state", "ENABLED"),
                         "protectionLevel": "SOFTWARE",
-                        "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION", "createTime": now},
+                        "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION", "createTime": pv.get("createTime") or now},
+            **{k: meta[k] for k in ("rotationPeriod", "nextRotationTime", "labels") if meta.get(k)},
             "versionTemplate": {"protectionLevel": "SOFTWARE",
                                 "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION"},
         }
@@ -411,7 +668,86 @@ def _register_gcp(app: FastAPI) -> None:
 
     @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}")
     async def gcp_kms_get_cryptokey(project: str, loc: str, ring: str, key: str, request: Request):
-        return _gcp_cryptokey_view(project, loc, ring, key)
+        return _gcp_cryptokey_view(project, loc, ring, key, gcp_kms_sync(_active_space_id(request), ring, key))
+
+    # Native cryptoKeyVersions API (list / create / get / patch / :destroy / :restore) over the
+    # same transit versions + KV meta the console's key tabs use.
+    def _gcp_ver_ctx(project, loc, ring, key, request):
+        space = _active_space_id(request)
+        if not any(e == f"{ring}/{key}" for e in _gcp_idx_get(space, "kms")):
+            return None, None, JSONResponse({"error": {"code": 404, "status": "NOT_FOUND",
+                "message": f"CryptoKey projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key} not found."}}, status_code=404)
+        return space, f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}", None
+
+    def _gcp_ver_view(kname, ver, meta):
+        from core import gcp_kms_core as kc
+        return kc._version_view(kname, ver, meta["versions"][ver])
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions")
+    async def gcp_kms_list_versions(project: str, loc: str, ring: str, key: str, request: Request):
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        meta = gcp_kms_sync(space, ring, key)
+        vs = [_gcp_ver_view(kname, v, meta) for v in sorted(meta["versions"], key=int)]
+        return {"cryptoKeyVersions": vs, "totalSize": len(vs)}
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions")
+    async def gcp_kms_create_version(project: str, loc: str, ring: str, key: str, request: Request):
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        nv = vc.transit_rotate("gcp", space, f"{ring}__{key}")
+        if not nv:
+            return JSONResponse({"error": {"code": 503, "status": "UNAVAILABLE", "message": "The key store (Vault transit) is unavailable."}}, status_code=503)
+        meta = gcp_kms_key_meta(space, key)
+        meta.setdefault("versions", {})[str(nv)] = {"state": "ENABLED", "createTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        gcp_kms_key_meta_put(space, key, meta)
+        return _gcp_ver_view(kname, str(nv), gcp_kms_sync(space, ring, key))
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}")
+    async def gcp_kms_get_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        meta = gcp_kms_sync(space, ring, key)
+        if ver not in meta["versions"]:
+            return JSONResponse({"error": {"code": 404, "status": "NOT_FOUND", "message": f"CryptoKeyVersion {ver} not found."}}, status_code=404)
+        return _gcp_ver_view(kname, ver, meta)
+
+    async def _gcp_ver_change(project, loc, ring, key, ver, request, action):
+        from core import gcp_kms_core as kc
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        meta = gcp_kms_sync(space, ring, key)
+        try:
+            if action == "patch":
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = {}
+                st = kc._enum((body or {}).get("state"), {2: "ENABLED", 3: "DISABLED"})
+                if st not in ("ENABLED", "DISABLED"):
+                    raise kc.KmsTabError(400, "INVALID_ARGUMENT", "state can only be set to ENABLED or DISABLED.")
+                action = "enable" if st == "ENABLED" else "disable"
+            kc.set_version_state(meta, ver, action)
+        except kc.KmsTabError as e:
+            return _gcp_ij_err(e)
+        gcp_kms_key_meta_put(space, key, meta)
+        return _gcp_ver_view(kname, ver, meta)
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}:destroy")
+    async def gcp_kms_destroy_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        return await _gcp_ver_change(project, loc, ring, key, ver, request, "destroy")
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}:restore")
+    async def gcp_kms_restore_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        return await _gcp_ver_change(project, loc, ring, key, ver, request, "restore")
+
+    @app.patch("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}")
+    async def gcp_kms_patch_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        return await _gcp_ver_change(project, loc, ring, key, ver, request, "patch")
 
     @app.post("/v1/projects/{project}/secrets")
     async def gcp_secrets_create(project: str, request: Request):
@@ -425,6 +761,28 @@ def _register_gcp(app: FastAPI) -> None:
             "replication": body.get("replication", {"automatic": {}}),
             "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
+
+    # Native list / get (`gcloud secrets list|describe`, the SDKs' listSecrets /
+    # getSecret) over the same name index the console list reads.
+    @app.get("/v1/projects/{project}/secrets")
+    async def gcp_secrets_list(project: str, request: Request):
+        space = _active_space_id(request)
+        created = _gcp_idx_created(space, "secrets")
+        names = _gcp_idx_get(space, "secrets")
+        return {"secrets": [{"name": f"projects/{project}/secrets/{n}",
+                             "replication": {"automatic": {}},
+                             "createTime": created.get(n, "")} for n in names],
+                "totalSize": len(names)}
+
+    @app.get("/v1/projects/{project}/secrets/{secret}")
+    async def gcp_secrets_get(project: str, secret: str, request: Request):
+        space = _active_space_id(request)
+        if secret not in _gcp_idx_get(space, "secrets"):
+            return JSONResponse(status_code=404, content={"error": {
+                "code": 404, "status": "NOT_FOUND",
+                "message": f"Secret [projects/{project}/secrets/{secret}] not found or has no versions."}})
+        return {"name": f"projects/{project}/secrets/{secret}", "replication": {"automatic": {}},
+                "createTime": _gcp_idx_created(space, "secrets").get(secret, "")}
 
     @app.post("/v1/projects/{project}/secrets/{secret}:addVersion")
     async def gcp_secrets_add_version(project: str, secret: str, request: Request):
@@ -448,15 +806,19 @@ def _register_gcp(app: FastAPI) -> None:
         }
 
     # Version state transitions (:disable / :enable / :destroy). Vault KV keeps the
-    # value; the lifecycle state lives here and gates :access like the real service.
-    _gcp_ver_state: dict = {}
-
+    # value; the lifecycle state (KV-backed, gcp_secret_states) gates :access like the
+    # real service, and :destroy really destroys the version's data in Vault.
     def _gcp_ver_set(request: Request, project: str, secret: str, version: str, state: str):
         space = _active_space_id(request)
         ver = version
         if version == "latest":
-            ver = "1"
-        _gcp_ver_state[(space, secret, ver)] = state
+            vs = [v for v in gcp_secret_versions(space, secret) if v["state"] != "DESTROYED"]
+            ver = vs[0]["version"] if vs else "1"
+        cur = gcp_secret_states(space, secret).get(ver)
+        if cur == "DESTROYED" and state != "DESTROYED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"Secret Version [projects/{project}/secrets/{secret}/versions/{ver}] is destroyed."}}, status_code=400)
+        gcp_secret_set_state(space, secret, ver, state)
         return {
             "name": f"projects/{project}/secrets/{secret}/versions/{ver}",
             "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -484,7 +846,10 @@ def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:access")
     async def gcp_secrets_access(project: str, secret: str, version: str, request: Request):
         space = _active_space_id(request)
-        st = _gcp_ver_state.get((space, secret, "1" if version == "latest" else version), "ENABLED")
+        if version == "latest":   # the newest version that isn't destroyed
+            vs = [v for v in gcp_secret_versions(space, secret) if v["state"] != "DESTROYED"]
+            version = vs[0]["version"] if vs else "latest"
+        st = gcp_secret_states(space, secret).get(version, "ENABLED")
         if st != "ENABLED":
             return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
                 "message": f"Secret Version [projects/{project}/secrets/{secret}/versions/{version}] is in {st} state."}},
@@ -526,8 +891,9 @@ def _register_gcp(app: FastAPI) -> None:
         for n in names:
             got = vc.kv_get("gcp", space, n)
             version = str(((got or {}).get("metadata") or {}).get("version") or 1)
-            items.append({"name": n, "replication": "automatic", "created": created.get(n, ""),
-                          "latest_version": version})
+            rep = gcp_secret_meta(space, n).get("replication") or {"automatic": {}}
+            items.append({"name": n, "replication": "automatic" if "automatic" in rep else "user-managed",
+                          "created": created.get(n, ""), "latest_version": version})
         return {"items": items}
 
     @app.post("/api/gcp/secrets")
@@ -540,9 +906,16 @@ def _register_gcp(app: FastAPI) -> None:
         name = (body.get("name") or body.get("secretId") or body.get("secret_id") or "").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})
+        from core import gcp_secretmanager_core as _smc
+        try:
+            replication = _smc.replication_from_form(body)
+        except _smc.SecretPatchError as e:
+            return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message})
         if vc.kv_put("gcp", space, name, body.get("value") or body.get("secret_value") or "changeme") is None:
             return _vault_unavailable_response("gcp.secrets")
         _gcp_idx_add(space, "secrets", name)
+        gcp_secret_meta_put(space, name, {"replication": replication,
+                                          **({"labels": body["labels"]} if isinstance(body.get("labels"), dict) and body["labels"] else {})})
         return {"ok": True, "name": name}
 
     @app.get("/api/gcp/secrets/{name}")
@@ -550,6 +923,9 @@ def _register_gcp(app: FastAPI) -> None:
         space = _active_space_id(request)
         got = vc.kv_get("gcp", space, name)
         if got is None:
+            # A secret may exist with no version yet (created empty): metadata only.
+            if name in _gcp_idx_get(space, "secrets"):
+                return {"ok": True, "name": name, "value": ""}
             return JSONResponse(status_code=404,
                                 content={"ok": False, "error": "secret not found", "name": name})
         data = got.get("data", {})
@@ -573,6 +949,8 @@ def _register_gcp(app: FastAPI) -> None:
     async def gcp_console_secret_delete(name: str, request: Request):
         space = _active_space_id(request)
         vc.kv_delete("gcp", space, name)
+        vc.kv_delete("gcp", space, f"__secmeta__{name}")
+        vc.kv_delete("gcp", space, f"__verstate__{name}")
         _gcp_idx_remove(space, "secrets", name)
         return {"ok": True, "deleted": True, "name": name}
 
@@ -761,6 +1139,39 @@ def _register_azure(app: FastAPI) -> None:
         host = request.headers.get("host", "localhost")
         return {"kid": f"https://{host}/keys/{key}", "value": pt}
 
+    # ── Key Vault CERTIFICATES — the shared certificates core (real self-signed
+    # X.509 + RSA key), persisted per vault in Vault KV; a certificate's PEM bundle
+    # is also its secret (sid), so GET secrets/{name} returns it like Key Vault.
+    from core import azure_keyvault_certificates_core as _kvc
+
+    @app.api_route("/azure-data/keyvault/{vault}/certificates", methods=["GET"])
+    @app.api_route("/azure-data/keyvault/{vault}/certificates/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE"])
+    async def az_kv_certificates(vault: str, request: Request, rest: str = ""):
+        space = _active_space_id(request)
+        got = vc.kv_get("azure", space, f"__kvcerts__{vault}")
+        store = _kvc.CertStore()
+        data = (got or {}).get("data") if isinstance(got, dict) else None
+        if isinstance(data, dict) and isinstance(data.get("certs"), str):
+            store.vaults[vault] = json.loads(data["certs"])
+        body = None
+        if request.method in ("POST", "PATCH"):
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+        status, out = _kvc.dispatch(store, vault, request.method, "/certificates/" + rest, body)
+        if request.method != "GET" and status < 300:
+            if vc.kv_put("azure", space, f"__kvcerts__{vault}", {"certs": json.dumps(store.vaults.get(vault, {}))}) is None:
+                return _vault_unavailable_response("azure.kv")
+            name = rest.split("/")[0]
+            if request.method == "POST" and rest.endswith("/create"):
+                vc.kv_put("azure", space, f"{vault}__{name}", _kvc.secret_value(store, vault, name))
+                _azkv_index_add(space, vault, "secrets", name)
+            elif request.method == "DELETE":
+                vc.kv_delete("azure", space, f"{vault}__{name}")
+                _azkv_index_remove(space, vault, "secrets", name)
+        return JSONResponse(status_code=status, content=out)
+
     # ── Key Vault SECRETS (Vault KV-backed) — get/put + list/delete + index ───
     @app.get("/azure-data/keyvault/{vault}/secrets/{secret}")
     @app.get("/azure-data/keyvault/{vault}/secrets/{secret}/{version:path}")
@@ -832,6 +1243,21 @@ def _azkv_index_add(space: str, vault: str, kind: str, name: str) -> None:
 def _azkv_index_remove(space: str, vault: str, kind: str, name: str) -> None:
     names = [n for n in _azkv_index_get(space, vault, kind) if n != name]
     vc.kv_put("azure", space, f"__idx__{vault}__{kind}", json.dumps(names))
+
+
+def purge_azure_vault(space: str, vault: str) -> None:
+    """Destroy every secret/key the data plane holds for `vault` (called when the
+    vault, or its resource group, is deleted so nothing stays readable)."""
+    if not vault:
+        return
+    for name in _azkv_index_get(space, vault, "secrets"):
+        vc.kv_delete("azure", space, f"{vault}__{name}")
+    for name in _azkv_index_get(space, vault, "keys"):
+        for suf in ("__rsapriv", "__attrs", ""):
+            vc.kv_delete("azure", space, f"{vault}__{name}{suf}")
+    for kind in ("secrets", "keys"):
+        vc.kv_delete("azure", space, f"__idx__{vault}__{kind}")
+    vc.kv_delete("azure", space, f"__kvcerts__{vault}")
 
 
 def _azkv_b64url(b: bytes) -> str:
@@ -994,6 +1420,19 @@ def aws_vault_resources(space: str) -> dict:
     return {"secrets": secrets, "keys": keys}
 
 
+def _aws_secret_meta(space: str, name: str) -> dict:
+    """Per-secret console metadata (encryption key, ARN, created) kept beside the value."""
+    got = vc.kv_get("aws", space, "__meta__" + name)
+    try:
+        raw = (got.get("data") or {}).get("value", "{}") if got else "{}"
+        meta = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    except Exception:
+        meta = {}
+    meta.setdefault("kms_key_id", "aws/secretsmanager")
+    meta.setdefault("arn", f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}")
+    return meta
+
+
 def _aws_alias_for(key_id: str) -> str:
     for a, k in _kms_aliases.items():
         if k == key_id:
@@ -1032,9 +1471,20 @@ def _register_aws_console(app: FastAPI) -> None:
         # well as the plain `value` / native `SecretString`.
         value = (body.get("value") or body.get("SecretString")
                  or body.get("secret_string") or "changeme")
+        # Create never overwrites: real Secrets Manager (and Nano's core/secrets_core) reject
+        # an existing name; updating a value is PUT /api/aws/secrets/{name}.
+        if name in _aws_secret_index_get(space) or vc.kv_get("aws", space, name) is not None:
+            return JSONResponse(status_code=400, content={
+                "ok": False, "code": "ResourceExistsException",
+                "error": f"The operation failed because the secret {name} already exists."})
         if vc.kv_put("aws", space, name, value) is None:
             return _vault_unavailable_response("aws.secrets")
         _aws_secret_index_add(space, name)
+        import datetime as _dt
+        vc.kv_put("aws", space, "__meta__" + name, json.dumps({
+            "kms_key_id": body.get("kms_key_id") or "aws/secretsmanager",
+            "created": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "description": body.get("description", "")}))
         return {"ok": True, "name": name}
 
     @app.get("/api/aws/secrets/{name}")
@@ -1069,6 +1519,7 @@ def _register_aws_console(app: FastAPI) -> None:
     async def aws_console_secret_delete(name: str, request: Request):
         space = _active_space_id(request)
         vc.kv_delete("aws", space, name)
+        vc.kv_delete("aws", space, "__meta__" + name)
         _aws_secret_index_remove(space, name)
         return {"ok": True, "deleted": True, "name": name}
 

@@ -6,6 +6,7 @@
  *
  * One [PASS]/[FAIL] line per check; exit 1 on any failure.
  */
+import http from "node:http";
 import { createRequire } from "node:module";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,7 +38,7 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 const bad = [];
-let createStatus = null, newId = "";
+let createStatus = null, newId = "", hook;
 page.on("response", async (r) => {
   if (r.request().method() === "POST" && /\/api\/(gcp\/)?cloudscheduler\/jobs$/.test(r.url())) {
     createStatus = r.status();
@@ -74,8 +75,8 @@ try {
   check(await rowFor().count() > 0, "new job appears in the list", `rows ${rows0} → ${await rows()}, id ${newId}`);
 
   // every grid column filled
-  const heads = await page.locator("#main table th").allInnerTexts();
-  const cells = await rowFor().locator("td").allInnerTexts();
+  const heads = await page.locator("#main table th:not([data-auto])").allInnerTexts();
+  const cells = await rowFor().locator("td:not([data-auto])").allInnerTexts();
   const data = cells.map((c, i) => [(heads[i] || "").replace(/[▲▼]/g, "").trim(), c.trim()]).filter(([h]) => h);   // skip the checkbox column
   const blanks = data.filter(([, v]) => BLANK.test(v)).map(([h]) => h);
   check(data.length >= 8 && !blanks.length, "every grid column is filled", `blank: ${blanks.join(", ") || "-"} · ${JSON.stringify(data)}`);
@@ -115,6 +116,14 @@ try {
   check(/PAUSED/.test(await tabText("Last execution")), "Pause → job state PAUSED");
   await act(/resume/i);
   check(/ENABLED/.test(await tabText("Last execution")), "Resume → job state ENABLED");
+  // The wizard default target (example.com) isn't reachable from an offline appliance and a run now
+  // sends the request for real, so point the job at a local listener the container can reach.
+  hook = http.createServer((q, r) => { q.resume(); r.writeHead(200, { "Content-Length": "0" }); r.end(); });
+  await new Promise((r) => hook.listen(0, "0.0.0.0", r));
+  const jobsApi = `${BASE}/v1/projects/vyomi-project/locations/us-central1/jobs/${newId}`;
+  const pr = await fetch(`${jobsApi}?updateMask=httpTarget`, { method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ httpTarget: { uri: `http://${process.env.HTTP_TARGET_HOST || "host.docker.internal"}:${hook.address().port}/hook`, httpMethod: "POST" } }) });
+  check(pr.status < 300, "job target repointed at a reachable listener", `HTTP ${pr.status}`);
   await act(/force run/i);
   check(/Success/.test(await tabText("Last execution")), "Force run → last execution result Success");
 
@@ -129,6 +138,7 @@ try {
 } catch (e) {
   check(false, "console flow", String(e.message || e).split("\n")[0]);
 }
+hook?.close?.();
 await browser.close();
 console.log(fails ? `${fails} check(s) failed` : "all checks passed");
 process.exit(fails ? 1 : 0);

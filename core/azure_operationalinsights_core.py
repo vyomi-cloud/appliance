@@ -19,7 +19,14 @@ ARM REST of the ``operationalinsights`` resource provider (azure-rest-api-specs
 Workspaces live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
 lower-cased resource id; their child collections live INSIDE the workspace record under underscore keys
 (never serialised to ARM clients), so they are space-scoped and persisted by the same seams as the rest of ARM.
-Not modelled: the KQL query data plane (api.loganalytics.io), data export, linked services/storage insights,
+Data plane (also served by this file, both offline and Nano): ``.../workspaces/{ws}/api/logs`` (HTTP Data Collector: JSON
+array, ``Log-Type`` header or ``logType`` query -> table ``<LogType>_CL``, fields suffixed _s/_d/_b like the real service),
+``.../workspaces/{ws}/dataCollectionRules/{dcr}/streams/{Custom-X_CL}`` (Logs Ingestion API, 204) and
+``.../workspaces/{ws}/api/query`` / ``/query`` (POST {"query"} or GET ?query=) answering with the Log Analytics
+``{"tables":[{"name":"PrimaryResult","columns":[..],"rows":[..]}]}`` shape. KQL subset: ``Table | where`` (==, !=, =~, >, <, >=, <=,
+contains, !contains, startswith, endswith, has, in, and/or) ``| project | extend``-free ``| take/limit | count | order by/sort by |
+summarize count() by col | distinct``. Records live in the workspace record (``_rows``), so they follow the ARM state seams.
+Not modelled: the real KQL language beyond that subset, data export, linked services/storage insights,
 clusters, purge and conditional headers (If-Match / If-None-Match).
 
 ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}`` (``body`` is a JSON-able object or ``None``).
@@ -28,6 +35,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -479,7 +487,7 @@ def _put_data_source(rec, store, name, cur, payload):
 def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, base=""):
     """Handle one ``Microsoft.OperationalInsights`` ARM request (``chain`` = tokens after the namespace)."""
     method = (method or "GET").upper()
-    payload = payload if isinstance(payload, dict) else {}
+    payload = {"_array": payload} if isinstance(payload, list) else (payload if isinstance(payload, dict) else {})
     try:
         return _dispatch(state, method, sub, rg, list(chain), payload, query or {})
     except _E as e:
@@ -505,6 +513,8 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
         if rec is None:
             raise _not_found(name, rg)
         head = rest[0].lower()
+        if head in ("api", "query", "datacollectionrules"):
+            return _data_plane(rec, rest, method, payload, query)
         if head in ("savedsearches", "tables", "datasources"):
             if len(rest) > 2:
                 return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
@@ -527,3 +537,318 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
 
 def resource_types():
     return [("workspaces", API_VERSION)]
+
+
+# ═══════════════════════ data plane: ingest + KQL subset ═════════════════════════
+MAX_ROWS = 50000
+
+
+def _bad_arg(msg, code="BadArgumentError"):
+    return _err(400, code, msg)
+
+
+def _data_plane(rec, rest, method, payload, query):
+    low = [x.lower() for x in rest]
+    try:
+        if low[:2] == ["api", "logs"] and method == "POST":
+            return _ingest_collector(rec, payload, query)
+        if low[0] == "datacollectionrules" and len(rest) >= 4 and low[2] == "streams" and method == "POST":
+            return _ingest_dcr(rec, rest[3], payload)
+        if low == ["api", "query"] or low == ["query"]:
+            q = payload.get("query") if method == "POST" else query.get("query")
+            if not q and method == "POST":
+                q = query.get("query")
+            if not isinstance(q, str) or not q.strip():
+                return _bad_arg("The request had some invalid properties: query is required.", "BadArgumentError")
+            return _ok(run_kql(rec, q))
+    except KqlError as e:
+        return _bad_arg(str(e), "SemanticError" if e.semantic else "SyntaxError")
+    return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+
+
+def _rows(rec):
+    return rec.setdefault("_rows", {})
+
+
+def _store(rec, table, rows):
+    tbl = _rows(rec).setdefault(table, [])
+    tbl.extend(rows)
+    if len(tbl) > MAX_ROWS:
+        del tbl[: len(tbl) - MAX_ROWS]
+    if table.lower() not in rec.setdefault("_tables", {}):      # custom table appears in the tables list too
+        cols = sorted({c for r in rows for c in r} | {"TimeGenerated"})
+        rec["_tables"][table.lower()] = _table_record(table, cols, rec["properties"].get("retentionInDays", 30), "Customer")
+
+
+def _ingest_collector(rec, payload, query):
+    log_type = query.get("logType") or query.get("Log-Type") or query.get("log-type")
+    if not log_type:
+        return _bad_arg("Log-Type header (or logType query parameter) is required.", "InvalidRequest")
+    if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", log_type):
+        return _bad_arg("Log-Type may only contain letters, numbers and underscore (max 100).", "InvalidRequest")
+    records = payload.get("_array") if "_array" in payload else [payload]
+    if not isinstance(records, list) or not all(isinstance(x, dict) for x in records):
+        return _bad_arg("The body must be a JSON object or an array of objects.", "InvalidRequest")
+    tf = query.get("time-generated-field") or query.get("timeGeneratedField")
+    out = []
+    for r in records:
+        row = {"TimeGenerated": _now()}
+        for k, v in r.items():
+            if tf and k == tf and isinstance(v, str):
+                row["TimeGenerated"] = v
+                continue
+            suffix = "_b" if isinstance(v, bool) else "_d" if isinstance(v, (int, float)) else "_s"
+            if isinstance(v, (dict, list)):
+                v = json.dumps(v)
+            row[re.sub(r"[^A-Za-z0-9_]", "_", k) + suffix] = v
+        out.append(row)
+    _store(rec, log_type + "_CL", out)
+    return {"status": 200, "headers": {}, "body": None, "lro": False, "rid": "", "verb": ""}
+
+
+def _ingest_dcr(rec, stream, payload):
+    records = payload.get("_array")
+    if not isinstance(records, list) or not all(isinstance(x, dict) for x in records):
+        return _bad_arg("The body must be a JSON array of objects.", "InvalidRequest")
+    table = stream[len("Custom-"):] if stream.lower().startswith("custom-") else stream
+    out = []
+    for r in records:
+        row = dict(r)
+        row.setdefault("TimeGenerated", _now())
+        out.append(row)
+    _store(rec, table, out)
+    return {"status": 204, "headers": {}, "body": None, "lro": False, "rid": "", "verb": ""}
+
+
+class KqlError(Exception):
+    def __init__(self, msg, semantic=False):
+        super().__init__(msg)
+        self.semantic = semantic
+
+
+def _split_top(text, sep):
+    """Split on `sep` outside quotes/parentheses."""
+    out, cur, depth, q = [], [], 0, None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if q:
+            cur.append(ch)
+            if ch == q:
+                q = None
+        elif ch in "'\"":
+            q = ch
+            cur.append(ch)
+        elif ch == "(":
+            depth += 1
+            cur.append(ch)
+        elif ch == ")":
+            depth -= 1
+            cur.append(ch)
+        elif depth == 0 and text.startswith(sep, i):
+            out.append("".join(cur))
+            cur = []
+            i += len(sep)
+            continue
+        else:
+            cur.append(ch)
+        i += 1
+    out.append("".join(cur))
+    return [x.strip() for x in out]
+
+
+def _split_bool(text):
+    """`a and b or c` -> [[a,b],[c]] (OR of ANDs), split outside quotes/parens."""
+    toks, cur, depth, q, i = [], [], 0, None, 0
+    ors = []
+    ands = []
+    buf = ""
+    while i < len(text):
+        ch = text[i]
+        if q:
+            buf += ch
+            if ch == q:
+                q = None
+        elif ch in "'\"":
+            q = ch
+            buf += ch
+        elif ch == "(":
+            depth += 1
+            buf += ch
+        elif ch == ")":
+            depth -= 1
+            buf += ch
+        elif depth == 0 and re.match(r"\s+and\s+", text[i:], re.I):
+            ands.append(buf.strip())
+            buf = ""
+            i += re.match(r"\s+and\s+", text[i:], re.I).end()
+            continue
+        elif depth == 0 and re.match(r"\s+or\s+", text[i:], re.I):
+            ands.append(buf.strip())
+            ors.append(ands)
+            ands, buf = [], ""
+            i += re.match(r"\s+or\s+", text[i:], re.I).end()
+            continue
+        else:
+            buf += ch
+        i += 1
+    ands.append(buf.strip())
+    ors.append(ands)
+    return ors
+
+
+_OPS = ["!contains", "contains", "!startswith", "startswith", "!endswith", "endswith", "!has", "has", "in", "==", "!=", "=~", ">=", "<=", ">", "<"]
+
+
+def _literal(tok):
+    tok = tok.strip()
+    if (len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in "'\""):
+        return tok[1:-1]
+    m = re.fullmatch(r"ago\((\d+(?:\.\d+)?)([smhd])\)", tok, re.I)
+    if m:
+        secs = float(m.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2).lower()]
+        return (datetime.now(timezone.utc) - timedelta(seconds=secs)).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    if tok.lower() in ("true", "false"):
+        return tok.lower() == "true"
+    try:
+        return int(tok) if re.fullmatch(r"-?\d+", tok) else float(tok)
+    except ValueError:
+        raise KqlError(f"Unrecognised literal '{tok}'")
+
+
+def _parse_pred(text):
+    m = re.fullmatch(r"\(?\s*(.*?)\s*\)?", text.strip())
+    text = m.group(1) if m and text.strip().startswith("(") and text.strip().endswith(")") else text.strip()
+    ops_re = r"^([A-Za-z_][A-Za-z0-9_]*)\s*(" + "|".join(re.escape(o) + (r"(?=[\s(])" if o[-1].isalpha() else "") for o in _OPS) + r")\s*(.+)$"
+    m = re.match(ops_re, text, re.S)
+    if not m:
+        raise KqlError(f"Failed to parse predicate '{text}'")
+    col, op, rhs = m.group(1), m.group(2), m.group(3).strip()
+    if op == "in":
+        inner = re.fullmatch(r"\((.*)\)", rhs, re.S)
+        if not inner:
+            raise KqlError("'in' requires a parenthesised list")
+        return col, op, [_literal(x) for x in _split_top(inner.group(1), ",")]
+    return col, op, _literal(rhs)
+
+
+def _cmp(val, op, rhs):
+    if val is None:
+        return op in ("!=", "!contains", "!has", "!startswith", "!endswith")
+    if op == "in":
+        return val in rhs or str(val) in [str(x) for x in rhs]
+    neg = op.startswith("!") and op != "!="
+    base = op[1:] if neg else op
+    if base in ("contains", "has", "startswith", "endswith"):
+        a, b = str(val).lower(), str(rhs).lower()
+        r = {"contains": b in a, "has": re.search(r"(?<![A-Za-z0-9_])" + re.escape(b) + r"(?![A-Za-z0-9_])", a) is not None,
+             "startswith": a.startswith(b), "endswith": a.endswith(b)}[base]
+        return (not r) if neg else r
+    if op == "=~":
+        return str(val).lower() == str(rhs).lower()
+    a, b = val, rhs
+    if isinstance(b, (int, float)) and not isinstance(b, bool):
+        try:
+            a = float(a)
+        except (TypeError, ValueError):
+            return op == "!="
+    elif isinstance(a, (int, float)) and not isinstance(a, bool):
+        a, b = str(a), str(b)
+    if op == "==":
+        return a == b
+    if op == "!=":
+        return a != b
+    try:
+        return {">": a > b, "<": a < b, ">=": a >= b, "<=": a <= b}[op]
+    except TypeError:
+        return False
+
+
+def _coltype(v):
+    return "bool" if isinstance(v, bool) else "long" if isinstance(v, int) else "real" if isinstance(v, float) else "string"
+
+
+def _resolve_col(cols, name):
+    for c in cols:
+        if c.lower() == name.lower():
+            return c
+    raise KqlError(f"Failed to resolve scalar expression named '{name}'", semantic=True)
+
+
+def run_kql(rec, query):
+    stages = _split_top(query.strip().rstrip(";"), "|")
+    head = stages[0]
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", head):
+        raise KqlError(f"Query must start with a table name, got '{head}'")
+    store = _rows(rec)
+    tkey = next((k for k in list(store) + [t["name"] for t in rec.get("_tables", {}).values()] if k.lower() == head.lower()), None)
+    if tkey is None:
+        raise KqlError(f"'{head}' : Failed to resolve table or column expression named '{head}'", semantic=True)
+    rows = [dict(r) for r in store.get(tkey, [])]
+    cols = []
+    for r in rows:
+        for c in r:
+            if c not in cols:
+                cols.append(c)
+    if not cols:
+        base = next((t for t in rec.get("_tables", {}).values() if t["name"].lower() == head.lower()), None)
+        cols = [c["name"] for c in ((base or {}).get("properties", {}).get("schema", {}).get("columns") or [])] or ["TimeGenerated"]
+    for stage in stages[1:]:
+        m = re.match(r"([A-Za-z]+)\b\s*(.*)$", stage, re.S)
+        if not m:
+            raise KqlError(f"Unsupported operator in '{stage}'")
+        op, arg = m.group(1).lower(), m.group(2).strip()
+        if op == "where":
+            groups = [[_parse_pred(a) for a in ands] for ands in _split_bool(arg)]
+            for g in groups:
+                for col, _, _ in g:
+                    _resolve_col(cols, col)
+            rows = [r for r in rows if any(all(_cmp(r.get(_resolve_col(cols, c)), o, v) for c, o, v in g) for g in groups)]
+        elif op == "project":
+            names = [_resolve_col(cols, x) for x in _split_top(arg, ",")]
+            rows = [{n: r.get(n) for n in names} for r in rows]
+            cols = names
+        elif op in ("take", "limit"):
+            if not re.fullmatch(r"\d+", arg):
+                raise KqlError(f"'{op}' requires a number")
+            rows = rows[: int(arg)]
+        elif op == "count":
+            rows, cols = [{"Count": len(rows)}], ["Count"]
+        elif op in ("order", "sort"):
+            body = re.sub(r"^by\s+", "", arg, flags=re.I)
+            keys = []
+            for part in _split_top(body, ","):
+                mm = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)(?:\s+(asc|desc))?", part, re.I)
+                if not mm:
+                    raise KqlError(f"Cannot parse sort key '{part}'")
+                keys.append((_resolve_col(cols, mm.group(1)), (mm.group(2) or "desc").lower() == "desc"))
+            for col, desc in reversed(keys):
+                rows.sort(key=lambda r, c=col: (r.get(c) is None, r.get(c) if isinstance(r.get(c), (int, float)) else str(r.get(c))), reverse=desc)
+        elif op == "summarize":
+            mm = re.fullmatch(r"count\(\)\s*(?:by\s+(.+))?", arg, re.I)
+            if not mm:
+                raise KqlError("Only 'summarize count() [by col, ...]' is supported")
+            by = [_resolve_col(cols, x) for x in _split_top(mm.group(1), ",")] if mm.group(1) else []
+            groups = {}
+            for r in rows:
+                groups.setdefault(tuple(r.get(b) for b in by), []).append(r)
+            rows = [dict(zip(by, k), count_=len(v)) for k, v in groups.items()] if by else [{"count_": len(rows)}]
+            cols = by + ["count_"]
+        elif op == "distinct":
+            names = [_resolve_col(cols, x) for x in _split_top(arg, ",")]
+            seen, out = set(), []
+            for r in rows:
+                k = tuple(r.get(n) for n in names)
+                if k not in seen:
+                    seen.add(k)
+                    out.append({n: r.get(n) for n in names})
+            rows, cols = out, names
+        else:
+            raise KqlError(f"Unsupported operator '{op}'. Supported: where, project, take, limit, count, order by, sort by, summarize count() by, distinct.")
+    types = {}
+    for c in cols:
+        types[c] = next((_coltype(r[c]) for r in rows if r.get(c) is not None), "datetime" if c == "TimeGenerated" else "string")
+    if "TimeGenerated" in types:
+        types["TimeGenerated"] = "datetime"
+    return {"tables": [{"name": "PrimaryResult", "columns": [{"name": c, "type": types[c]} for c in cols],
+                        "rows": [[r.get(c) for c in cols] for r in rows]}]}

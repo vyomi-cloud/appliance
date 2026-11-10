@@ -1,0 +1,182 @@
+[
+ {
+  "name": "runtime",
+  "label": "Pyodide runtime",
+  "category": "core"
+ },
+ {
+  "name": "s3",
+  "label": "InMemoryObjectStore",
+  "category": "aws"
+ },
+ {
+  "name": "ddb",
+  "label": "InMemoryNoSqlStore",
+  "category": "aws"
+ },
+ {
+  "name": "kms",
+  "label": "InMemoryKeyStore",
+  "category": "aws"
+ },
+ {
+  "name": "sec",
+  "label": "InMemoryKvStore",
+  "category": "aws"
+ },
+ {
+  "name": "rds",
+  "label": "InMemorySqlStore",
+  "category": "aws"
+ },
+ {
+  "name": "iam",
+  "label": "InMemoryIamStore",
+  "category": "aws"
+ },
+ {
+  "name": "msg",
+  "label": "InMemoryMessagingStore",
+  "category": "aws"
+ },
+ {
+  "name": "kinesis",
+  "label": "KinesisStore",
+  "category": "aws"
+ },
+ {
+  "name": "apigwv2",
+  "label": "ApiGwV2Store",
+  "category": "aws"
+ },
+ {
+  "name": "logs",
+  "label": "LogsStore",
+  "category": "aws"
+ },
+ {
+  "name": "elbv2",
+  "label": "Elbv2Store",
+  "category": "aws"
+ },
+ {
+  "name": "ssm",
+  "label": "SsmStore",
+  "category": "aws"
+ },
+ {
+  "name": "sfn",
+  "label": "StepFunctionsStore",
+  "category": "aws"
+ },
+ {
+  "name": "gcs",
+  "label": "InMemoryObjectStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_fs",
+  "label": "FirestoreStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_kms",
+  "label": "InMemoryKeyStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_sec",
+  "label": "InMemoryKvStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_gke",
+  "label": "ContainerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_mon",
+  "label": "MonitoringStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_redis",
+  "label": "RedisStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_iamc",
+  "label": "IamCredentialsStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_sched",
+  "label": "CloudSchedulerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_msg",
+  "label": "InMemoryMessagingStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_iam",
+  "label": "InMemoryIamStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_sql",
+  "label": "InMemorySqlStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_ar",
+  "label": "ArtifactRegistryStore",
+  "category": "gcp"
+ },
+ {
+  "name": "az_blob",
+  "label": "AzureBlobStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_cosmos",
+  "label": "CosmosStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_kvsec",
+  "label": "InMemoryKvStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_kvkeys",
+  "label": "InMemoryKeyStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_queue",
+  "label": "AzureQueueStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_sb",
+  "label": "InMemoryMessagingStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_arm",
+  "label": "AzureArm",
+  "category": "azure"
+ },
+ {
+  "name": "events",
+  "label": "EventStore",
+  "category": "core"
+ },
+ {
+  "name": "cw",
+  "label": "CloudWatchStore",
+  "category": "aws"
+ }
+]

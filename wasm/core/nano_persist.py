@@ -31,17 +31,22 @@ _B64 = "__b64__"
 # router attrs AND the shared-registry keys (nano_registry), so one snapshot maps
 # cleanly onto either the router or the console adapter's registry.
 STORE_ATTRS = [
-    "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2",
-    "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
+    "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2", "kinesis",
+    "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql", "gcp_ar",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
+    "apigwv2",  # API Gateway V2 (core/apigatewayv2_core.ApiGwV2Store)
     "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)
     "az_arm",   # Azure ARM control plane (core/azure_arm_core.AzureArm.state — Container Apps, VMs, …)
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
+    "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "resources",  # generic catalog CRUD (EC2, Lambda-adjacent, every GCP service; wasm/backends/store.ResourceStore)
+    "compute",  # Lambda functions + API Gateway APIs + VPC model (core/nano_registry.ComputeStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
+    "cw",       # CloudWatch metrics / alarms / dashboards
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
 ]
 
@@ -114,22 +119,45 @@ def capture_store(store) -> dict:
     return snap
 
 
+def _persisted_dicts(store):
+    for k, v in vars(store).items():
+        if isinstance(v, dict) and (not k.startswith("_") or k in _DURABLE_PRIVATE):
+            yield k, v
+
+
+def mark_saved(store) -> None:
+    """This store's state just went into the shared snapshot: remember its keys, so a later
+    restore can tell a key someone deleted (was shared, now gone) from one not saved yet."""
+    try:
+        store._nano_synced = {k: {str(x) for x in v} for k, v in _persisted_dicts(store)}
+    except Exception:
+        pass
+
+
 def restore_store(store, snap: dict) -> None:
+    synced = getattr(store, "_nano_synced", None) or {}
+    now_synced = dict(synced)
     for k, v in (snap.get("state") or {}).items():
         try:
             dv = _dec(v)
             cur = getattr(store, k, None)
-            # MERGE dict state (union) instead of REPLACING it: a restore can only
-            # ADD resources from the other context, never wipe locally-held ones.
-            # This makes console<->SDK sync additive-safe (no destructive overwrite)
-            # and lets the console rehydrate before every op without losing unsaved
-            # local state. (Deletions don't cross contexts — acceptable vs data loss.)
+            # Three-way merge of dict state. A key in the snapshot wins. A key this context last
+            # synced that the snapshot no longer has was DELETED elsewhere: drop it, or our next
+            # save would bring it back. A key never synced is local and unsaved: keep it.
             if isinstance(cur, dict) and isinstance(dv, dict):
+                incoming = {str(x) for x in dv}
+                for key in [x for x in cur if str(x) in synced.get(k, ()) and str(x) not in incoming]:
+                    del cur[key]
                 cur.update(dv)
+                now_synced[k] = incoming
             else:
                 setattr(store, k, dv)
         except Exception:
             pass
+    try:
+        store._nano_synced = now_synced
+    except Exception:
+        pass
     for db_id, sqltext in (snap.get("sql") or {}).items():
         try:
             conn = store.open_engine(db_id)          # fresh connection for this DB
@@ -159,11 +187,29 @@ def capture(obj) -> dict:
     return out
 
 
+def _gcp_project_migrate(snap: dict) -> dict:
+    """GCP state saved under the old console project ("demo") or the project
+    number → the Nano project ID (core/gcp_project), so snapshots written before
+    projects had one ID stay visible to the console and the CLI alike."""
+    try:
+        from core import gcp_project as gp
+        pid = gp.NANO_PROJECT["projectId"]
+        old = {gp.NANO_PROJECT["projectNumber"], *gp.LEGACY_PROJECT_IDS} - {pid}
+        txt = json.dumps(snap.get("state") or {})
+        if not any(f"projects/{o}" in txt or f'"{o}"' in txt for o in old):
+            return snap
+        return {**snap, "state": gp.rewrite_tree(copy.deepcopy(snap.get("state") or {}), old, pid)}
+    except Exception:
+        return snap
+
+
 def restore(obj, blob: dict) -> None:
     for name, snap in (blob or {}).items():
         st = _lookup(obj, name)
         if st is not None and isinstance(snap, dict):
             try:
+                if name == "gcs" or name.startswith("gcp_"):
+                    snap = _gcp_project_migrate(snap)
                 restore_store(st, snap)
             except Exception:
                 pass
@@ -174,6 +220,34 @@ def capture_registry() -> dict:
     """Snapshot the shared in-context registry → JSON-safe dict (JS persists it)."""
     from core import nano_registry
     return capture(nano_registry.get())
+
+
+def mark_saved_registry() -> None:
+    """Call right after a snapshot from capture_registry() is saved (see mark_saved)."""
+    from core import nano_registry
+    obj = nano_registry.get()
+    for name in STORE_ATTRS:
+        st = _lookup(obj, name)
+        if st is not None:
+            mark_saved(st)
+
+
+def health_registry() -> dict:
+    """Live engine check for the Service status cards (wasm/sw.js /api/runtime/readiness):
+    every store in this runtime's registry must be built and its state must read back
+    through the same snapshot persistence uses. {store: {"ok", "engine"[, "error"]}}."""
+    from core import nano_registry
+    out = {}
+    for name, st in nano_registry.get().items():
+        engine = type(st).__name__ if st is not None else ""
+        try:
+            if st is None:
+                raise RuntimeError("not built")
+            capture_store(st)
+            out[name] = {"ok": True, "engine": engine}
+        except Exception as e:
+            out[name] = {"ok": False, "engine": engine, "error": f"{type(e).__name__}: {e}"[:200]}
+    return out
 
 
 def restore_registry(blob: dict) -> None:

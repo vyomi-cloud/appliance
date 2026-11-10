@@ -34,7 +34,7 @@ func chk(name string, ok bool, detail string) {
 
 func main() {
 	endpoint := env("ENDPOINT", "http://127.0.0.1:9000")
-	project := env("PROJECT", "gcp-dev")
+	project := env("PROJECT", "vyomi-project")
 	ctx := context.Background()
 	fmt.Printf("== sqladmin LRO against %s project=%s ==\n", endpoint, project)
 

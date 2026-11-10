@@ -23,7 +23,7 @@ r = P.dispatch(b, "aws", "_resource", "Create", params={"service": "ec2", "body"
 check("create ok", r.get("ok"), r)
 check("instance id is i-<17 hex>", re.fullmatch(r"i-[0-9a-f]{17}", r.get("instance_id", "")), r)
 check("state running", r.get("state") == "running", r)
-check("private IPv4", re.fullmatch(r"10\.0\.\d+\.\d+", r.get("private_ip", "")), r)
+check("private IPv4 inside its default-VPC subnet", r.get("private_ip", "").startswith("172.31.") and r.get("subnet_id", "").startswith("subnet-"), r)
 check("public IPv4 + DNS", bool(r.get("public_ip")) and r["public_ip"].replace(".", "-") in r.get("public_dns", ""), r)
 check("AMI / AZ / launch time", r.get("image_id", "").startswith("ami-") and r.get("availability_zone") and r.get("launch_time"), r)
 check("instance type default kept", r.get("instance_type") == "t3.micro", r)

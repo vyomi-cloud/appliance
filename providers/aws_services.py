@@ -1103,6 +1103,14 @@ async def _ddb_api_aws(request: Request):
                 })
         return _ddb_json_response({"Streams": streams_list})
 
+    from core import dynamodb_core as _ddbc
+    if action in _ddbc._BULK_ACTIONS:
+        try:
+            return _ddb_json_response(_ddbc.bulk_operation(
+                _ddb_state().setdefault("bulk_operations", {}), _ddb_tables(),
+                _aws_account_id(), action, payload))
+        except _ddbc.DdbError as e:
+            return _ddb_error_response(e.code, e.message, e.status)
     return _ddb_error_response("UnknownOperationException", f"The action {action} is not implemented.", 400)
 
 

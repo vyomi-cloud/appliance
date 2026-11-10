@@ -54,6 +54,21 @@ localStorage.setItem("nano_local_ws",     "ws://127.0.0.1:9000/register");
 localStorage.setItem("nano_local_ext",    "http://127.0.0.1:9000");
 ```
 
+## SSH into Nano VMs (1.1.0+)
+
+With in-browser VM compute on in Nano, every EC2 instance, Compute Engine
+instance and Azure VM is a real Linux VM running in your browser tab. The tunnel
+gives each one a TCP port on this machine (127.0.0.1:22000-22999, shown in the
+instance's Connect tab) and bridges it to the VM's SSH server, so a normal
+`ssh` works from your terminal while the Nano tab is open:
+
+```bash
+ssh -i ~/.ssh/vyomi-<instance>.pem -p 22000 ec2-user@127.0.0.1
+```
+
+`GET /health` lists `"vm-tcp"` in `features` and the bridged VMs under `vms`.
+Port range: `VM_PORT_MIN` / `VM_PORT_MAX`.
+
 ## Notes
 
 - **Safari**: connecting an `https://` page to `ws://localhost` can be blocked;
