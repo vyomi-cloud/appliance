@@ -49,3 +49,19 @@ def test_recovery_detects_state_loss():
     clock, sleep = _clock()
     bad = run_recovery(lambda: True, lambda: "m", lambda m: False, {"restart": lambda: None}, emit=lambda s: None, clock=clock, sleep=sleep)
     assert bad and "state survives" in bad[0]
+
+
+from tests.conformance.nightly.gate import verdict
+
+def _s(**k): return {i: {"id": i, **v} for i, v in k.items()}
+
+def test_gate_ok_when_nothing_regresses_and_red_may_turn_green():
+    assert verdict(_s(a={"status": "pass", "passed": 3}, b={"status": "fail"}),
+                   _s(a={"status": "pass", "passed": 3}, b={"status": "pass"})) == []
+
+def test_gate_blocks_regression_missing_drop_and_empty():
+    before = _s(a={"status": "pass", "passed": 3}, b={"status": "pass", "passed": 2}, c={"status": "pass", "passed": 1})
+    after = _s(a={"status": "fail"}, c={"status": "pass", "passed": 0})
+    p = verdict(before, after)
+    assert len(p) == 3 and any("missing" in x for x in p) and any("dropped" in x for x in p)
+    assert verdict(before, {}) == ["no suites ran after the fixes"]
