@@ -67,12 +67,12 @@ has not been merged yet.)
 
 ## 6. Azure Service Bus: AMQP decision
 
-Today: a Vyomi-invented REST surface only (`core/azure_servicebus_core.py`); stock SDKs (AMQP by default) cannot connect.
+Before this work: a Vyomi-invented REST surface only (`core/azure_servicebus_core.py`); stock SDKs (AMQP by default) cannot connect.
 Microsoft's emulator was rejected (amd64 SQL Server, ~1.6 GB + 2 GB RAM, dev/test-only EULA, .NET-only runtime management).
 **Decision (owner, 2026-11-10):** build a real AMQP 1.0 data plane in our own pure-Python engine, bound to the same
 `MessagingStore` as the REST surface: **offline = full AMQP** (TCP 5672 plain, WebSocket, TLS 5671 if cheap; SDK
 `UseDevelopmentEmulator=true` first), **Nano = the Service Bus dialect over AMQP-over-WebSocket through the relay**.
-In progress on `v4/azure-sb-amqp`. Registry text that said "AMQP-only, can't cross the relay" is wrong and is being corrected.
+**Delivered (2026-11-10):** `core/amqp10.py` + `core/azure_servicebus_amqp.py`; unchanged Python and JS SDKs pass (27 tests) offline and on Nano via the local relay. Gaps: Cloudflare relay carries no AMQP; Nano verified headlessly only; SASL/$cbs unverified; partitions, transactions, auto-forward, rule actions not modelled. See `branches/azure-sb-amqp.md`.
 
 ## 7. Open items to carry into v5
 

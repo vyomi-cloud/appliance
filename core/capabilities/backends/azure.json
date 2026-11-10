@@ -1422,36 +1422,39 @@
  },
  "servicebus": {
   "title": "Service Bus",
-  "summary": "Vyomi's own Service Bus core serves queues, topics and subscriptions over a Vyomi-invented REST surface backed by the shared messaging store; AMQP 1.0 in progress.",
+  "summary": "Vyomi's own Service Bus core serves queues, topics and subscriptions over a real AMQP 1.0 data plane (core/amqp10.py, pure Python) plus a Vyomi REST surface, both on the shared messaging store; stock azure-servicebus SDKs connect unchanged.",
   "wire": [
    "ARM REST (Microsoft.* resource provider, Azure api-versions) (Microsoft.ServiceBus namespaces, queues, topics, authorization rules)",
-   "Vyomi namespace-root REST (atom+xml entities, BrokerProperties, /messages, $deadletterqueue); stock azure-servicebus SDKs speak AMQP and cannot connect today"
+   "AMQP 1.0 (TCP 5672, TLS 5671 self-signed, WebSocket /$servicebus/websocket): native Python and JavaScript SDKs verified offline and on Nano via the local relay",
+   "Vyomi namespace-root REST (atom+xml entities, BrokerProperties, /messages, $deadletterqueue) shares the same state"
   ],
   "offline": {
    "kind": "inhouse",
    "tech": [
+    "Python AMQP 1.0 engine (core/amqp10.py, core/azure_servicebus_amqp.py, core/amqp_server.py)",
     "Python (core/azure_servicebus_core.py)",
     "MessagingStore (core/messaging_store.py)"
    ],
-   "notes": "Entities and message bodies are held in the persisted Azure Service Bus state slot (no NATS or RabbitMQ in this path). AMQP 1.0 in progress: a separate branch (v4/azure-sb-amqp) is building a real AMQP data plane; it is not merged and does not work on this trunk."
+   "notes": "Entities and messages live in the persisted Azure Service Bus state slot, shared by AMQP and REST (no NATS or RabbitMQ). Python azure-servicebus 7.15 and JS @azure/service-bus 7.10 SDK suites pass. SASL and $cbs tokens are accepted but not verified."
   },
   "nano": {
    "kind": "inhouse",
    "tech": [
-    "Python core in Pyodide"
+    "Python AMQP broker in Pyodide",
+    "amqp-bridge.js through the local relay (raw TCP and WebSocket)"
    ],
-   "notes": "Same REST core in the page with an in-memory store persisted to IndexedDB. AMQP 1.0 in progress; no AMQP in the browser today."
+   "notes": "Same broker in the page, reached through the local relay; verified headlessly (Pyodide in Node), not in a real Chrome tab. The Cloudflare relay and the relay-less in-page boot do not carry AMQP. No TLS on Nano."
   },
   "differs": [
-   "Not AMQP: the azure-servicebus SDK, Service Bus Explorer tools and anything that dials port 5671/5672 cannot connect; only the Vyomi REST surface works",
-   "The REST data plane is simplified: complete, defer and dead-letter act by sequence number rather than the SDK lock-token dance; peek re-reads the same backlog",
+   "AMQP covers send/receive (peek-lock and receive-and-delete), settle, defer, dead-letter, sessions, schedule, duplicate detection and SQL/correlation rules; not modelled: partitions, auto-forward, transactions, geo-DR on AMQP, tier size limits, batch-delete, rule actions",
+   "The REST data plane is simplified (complete/defer/dead-letter by sequence number); use AMQP for lock-token semantics",
    "Entity names are global across every namespace in the space, so two namespaces with the same queue name share one backlog",
-   "Sessions, scheduled messages, transfer queues and forwarding are not modelled; their counts read zero",
-   "Only message TTL, lock duration and dead-lettering on expiration are enforced; maxDeliveryCount and partitioning round-trip but are not enforced",
    "Tier gates are enforced (Basic cannot create topics or use sessions/duplicate detection); throughput and size limits per tier are not",
    "Geo-recovery pairing and failover are ARM state; no message data moves",
-   "Network rule sets are enforced on the REST wire with a declared simulated caller; they cannot be exercised through AMQP",
-   "Customer-managed-key encryption is envelope encryption through Vyomi's Key Vault core with a keystream-XOR plus HMAC-SHA256 cipher (core/azure_cmk_core.py), not an AES-GCM implementation"
+   "Network rule sets are enforced on the REST wire with a declared simulated caller; they are not enforced on AMQP",
+   "Customer-managed-key encryption is envelope encryption through Vyomi's Key Vault core with a keystream-XOR plus HMAC-SHA256 cipher (core/azure_cmk_core.py), not an AES-GCM implementation",
+   "ARM-created queues are not mirrored into the data store; create entities via the REST data plane or console. ServiceBusAdministrationClient is not served; AMQP uses the default tenant's space",
+   "Session locks do not expire while the receiver link is open"
   ],
   "notInScope": [
    "Event Hubs and Relay",
