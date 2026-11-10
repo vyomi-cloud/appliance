@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-10 20:04 UTC · refreshes after every pipeline run_
+_Updated 2026-11-10 20:23 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-10 20:04 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 291 of 292 suites passing (run 18:27 UTC)
+- **Hourly tests:** 287 of 289 suites passing (run 20:16 UTC)
 - **Upstream watch:** 18 open changes from the real clouds to adopt
 
 ## By cloud
@@ -225,8 +225,8 @@ Existing work rebuilt onto main by the agent, then **reviewed and merged by a pe
 
 | Upgrade | Source PRs | Stage | Review PR |
 |---|---|---|---|
-| Azure Service Bus over AMQP 1.0 (Rohith's stack #34→#45) [#181](https://github.com/vyomi-cloud/appliance/issues/181) | [#34](https://github.com/vyomi-cloud/appliance/pull/34) → [#35](https://github.com/vyomi-cloud/appliance/pull/35) → [#37](https://github.com/vyomi-cloud/appliance/pull/37) → [#38](https://github.com/vyomi-cloud/appliance/pull/38) → [#39](https://github.com/vyomi-cloud/appliance/pull/39) → [#40](https://github.com/vyomi-cloud/appliance/pull/40) → [#45](https://github.com/vyomi-cloud/appliance/pull/45) | 👀 In review | [PR #188](https://github.com/vyomi-cloud/appliance/pull/188) |
-| Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (Rohith's stack #43→#46) [#182](https://github.com/vyomi-cloud/appliance/issues/182) | [#43](https://github.com/vyomi-cloud/appliance/pull/43) → [#44](https://github.com/vyomi-cloud/appliance/pull/44) → [#46](https://github.com/vyomi-cloud/appliance/pull/46) | 👀 In review | [PR #194](https://github.com/vyomi-cloud/appliance/pull/194) |
+| Azure Service Bus over AMQP 1.0 (Rohith's stack #34→#45) [#181](https://github.com/vyomi-cloud/appliance/issues/181) | [#34](https://github.com/vyomi-cloud/appliance/pull/34) → [#35](https://github.com/vyomi-cloud/appliance/pull/35) → [#37](https://github.com/vyomi-cloud/appliance/pull/37) → [#38](https://github.com/vyomi-cloud/appliance/pull/38) → [#39](https://github.com/vyomi-cloud/appliance/pull/39) → [#40](https://github.com/vyomi-cloud/appliance/pull/40) → [#45](https://github.com/vyomi-cloud/appliance/pull/45) | ✅ Merged | [PR #188](https://github.com/vyomi-cloud/appliance/pull/188) |
+| Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (Rohith's stack #43→#46) [#182](https://github.com/vyomi-cloud/appliance/issues/182) | [#43](https://github.com/vyomi-cloud/appliance/pull/43) → [#44](https://github.com/vyomi-cloud/appliance/pull/44) → [#46](https://github.com/vyomi-cloud/appliance/pull/46) | ✅ Merged | [PR #194](https://github.com/vyomi-cloud/appliance/pull/194) |
 
 ## Real backends and vyomi-libs
 
@@ -938,9 +938,9 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
 | nano-ui-crawl | ✅ | 63/63 |
-| nano-cores | ✅ | 350/350 |
+| nano-cores | ✅ | 347/347 |
 | nano-gcp-kms-core | ✅ | 35/35 |
-| nano-gcp-cloudsql-core | ✅ | 45/45 |
+| nano-gcp-cloudsql-core | ✅ | 43/43 |
 | nano-gcp-compute-core | ✅ | 18/18 |
 | nano-store-delete-sync | ✅ | 4/4 |
 | nano-aws-iam-detail | ✅ | 8/8 |
@@ -1023,7 +1023,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-aws-logs | ✅ | 33/33 |
 | nano-ui-aws-logs | ✅ | 33/33 |
 | offline-sdk-java-aws-ssm | ✅ | 33/33 |
-| offline-sdk-go-aws-ssm | ✅ | 40/40 |
+| offline-sdk-go-aws-ssm | ✅ | 38/38 |
 | offline-cli-aws-ssm | ✅ | 34/34 |
 | offline-ui-aws-ssm | ✅ | 19/19 |
 | nano-ui-aws-ssm | ✅ | 19/19 |
@@ -1056,7 +1056,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | nano-ui-gcp-container | ✅ | 21/21 |
 | offline-sdk-java-gcp-iamcredentials | ✅ | 11/11 |
 | offline-sdk-go-gcp-iamcredentials | ✅ | 17/17 |
-| offline-cli-gcp-iamcredentials | ✅ | 9/9 |
+| offline-cli-gcp-iamcredentials | ❌ | 8/9 |
 | offline-ui-gcp-iamcredentials | ✅ | 21/21 |
 | nano-ui-gcp-iamcredentials | ✅ | 21/21 |
 | offline-sdk-java-gcp-redis | ✅ | 15/15 |
@@ -1190,9 +1190,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-gcp-console-tools-routes | ✅ | 16/16 |
 | offline-cli-gcp-scheduler-pubsub-gcloud | ✅ | 7/7 |
 | offline-api-gcp-console-maintenance-routes | ✅ | 5/5 |
-| offline-api-gcp-sql-reconcile-networking | ✅ | 3/3 |
-| offline-api-gcp-storage-anywhere-caches | ✅ | 9/9 |
-| offline-api-gcp-tooling-routes | ✅ | 13/13 |
 
 </details>
 
