@@ -106,8 +106,29 @@
       var was = JSON.stringify(account);
       account = (r.ok && r.body && typeof r.body.enabled === "boolean") ? r.body : null;
       if (JSON.stringify(account) !== was) { try { window.dispatchEvent(new CustomEvent("vyomi-mesh-account", { detail: account })); } catch (_) {} render(); }
+      enforcePlanCloud();
       return account;
     }, function () { account = null; return null; });
+  }
+  // Pro = ONE cloud: a console of any other cloud does not open. Blocks the page at once (no way to keep working there), then sends the
+  // user to the Spaces page after a moment. Only on a console page and only once the portal's account record is known.
+  var planGated = false;
+  function pageCloud() { var m = location.pathname.match(/\/v4\/(aws|azure|gcp)(\/|$)/) || location.pathname.match(/(aws|azure|gcp)-console\.html/); return m ? m[1] : ""; }
+  function enforcePlanCloud() {
+    if (planGated || !IS_CONSOLE || !account) return;
+    var c = pageCloud(), pc = planCloud();
+    if (!c || !pc || cloudAllowed(c)) return;
+    planGated = true;
+    var N = { aws: "AWS", gcp: "GCP", azure: "Azure" }, home = NANO_BASE + "/clouds.html";
+    var o = document.createElement("div"); o.id = "vyb-plan-gate"; o.setAttribute("role", "alertdialog"); o.setAttribute("aria-modal", "true");
+    o.style.cssText = "position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:16px;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif";
+    o.innerHTML = '<div style="max-width:440px;background:#fff;color:#0f172a;border-radius:12px;padding:24px 26px;box-shadow:0 20px 50px rgba(0,0,0,.35)">'
+      + '<h2 style="margin:0 0 8px;font-size:18px">Your plan covers ' + (N[pc] || pc) + ' only</h2>'
+      + '<p style="margin:0 0 18px;color:#475467">The ' + (N[c] || c) + ' console is part of Max. Taking you back to your spaces.</p>'
+      + '<a href="' + home + '" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;padding:9px 16px;font-weight:600">Go to my spaces</a>'
+      + ' <a href="/pricing" target="_blank" rel="noopener" style="margin-left:10px;color:#2563eb">See plans</a></div>';
+    document.body.appendChild(o);
+    setTimeout(function () { location.replace(home); }, 3500);
   }
   function setMesh(on) {
     return accountFetch("POST", on ? "/enable" : "/disable").then(function (r) {
@@ -499,11 +520,11 @@
   }
   function termsAgreed() { var W = window.VyomiMeshWidget; if (W) return W.agreed(); try { return localStorage.getItem("vy_mesh_terms") === "1"; } catch (_) { return false; } }
   function termsAccept() { var W = window.VyomiMeshWidget; if (W) W.accept(); else { try { localStorage.setItem("vy_mesh_terms", "1"); } catch (_) {} } }
-  function sessionStart() {
+  function sessionStart(cloud) {
     return (termsAgreed() ? Promise.resolve(true) : termsModal()).then(function (ok) {      // terms are a modal dialog, never inline
       if (!ok) return { cancelled: true };
       termsAccept();
-      return portalApi("start", "POST").then(function (r) { return loadSession().then(function () { return r; }); });
+      return portalApi("start" + (cloud ? "?cloud=" + encodeURIComponent(cloud) : ""), "POST").then(function (r) { return loadSession().then(function () { return r; }); });
     });
   }
   function sessionStop() { return portalApi("stop", "POST").then(function (r) { return loadSession().then(function () { return r; }); }); }

@@ -72,7 +72,7 @@
   function doStart() {
     var b = B();
     run(function () {
-      return b.sessionStart().then(function (r) {
+      return b.sessionStart(CLOUD).then(function (r) {
         if (!r || r.cancelled) return;
         var er = !r.ok && r.j; if (!er) return;
         if (er.action === "reconnect") view = "connect"; else toast(er.message || er.error || "Could not start the mesh.");
@@ -111,6 +111,8 @@
       var tierName = (a.tier || "pro").charAt(0).toUpperCase() + (a.tier || "pro").slice(1);
       var cloudName = a.clouds === "one" && a.primary_cloud ? ({ aws: "AWS", gcp: "GCP", azure: "Azure" }[a.primary_cloud] || a.primary_cloud) : "";
       var sub = a.source === "trial" && a.days_left != null ? tierName + " trial: " + a.days_left + " day" + (a.days_left === 1 ? "" : "s") + " left" + (cloudName ? " \u00b7 " + cloudName + " only" : "") : (cloudName ? tierName + " \u00b7 " + cloudName + " only" : "");
+      var CLOUD_NAMES = { aws: "AWS", gcp: "GCP", azure: "Azure" };
+      var offCloud = !!(a.clouds === "one" && a.primary_cloud && CLOUD && String(a.primary_cloud).toLowerCase() !== CLOUD);   // Pro = one cloud; this console is another
       var hrs = x && x.hours_remaining != null ? x.hours_remaining + " h left this cycle" : "";
       var line, btn;
       if (starting) { line = "Starting\u2026 about 2 minutes."; btn = '<button class="go" disabled>Starting\u2026</button>'; }
@@ -124,6 +126,10 @@
       else {
         line = (x && x.ended_note) || (conn ? "Runs on the free quota of your own GitHub account." : "Connect your GitHub account to start.");
         btn = '<button class="go" data-ss ' + (busy ? "disabled" : "") + '>' + (conn ? "Join the Mesh" : "Connect GitHub & join") + '</button>';
+        if (offCloud) {                                             // not this cloud's plan: no Join here, say why and where to go
+          line = "Your " + (a.source === "trial" ? "trial" : tierName + " plan") + " covers " + cloudName + " only. The Mesh on " + (CLOUD_NAMES[CLOUD] || CLOUD) + " is part of Max.";
+          btn = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">See plans</a>';
+        }
       }
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p>' + esc(line) + '</p>';
       act = btn + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
