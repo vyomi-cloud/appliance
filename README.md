@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-10 23:06 UTC · refreshes after every pipeline run_
+_Updated 2026-11-10 23:55 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-10 23:06 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 288 of 289 suites passing (run 22:04 UTC)
+- **Hourly tests:** 288 of 289 suites passing (run 23:50 UTC)
 - **Upstream watch:** 18 open changes from the real clouds to adopt
 
 ## By cloud
@@ -18,7 +18,7 @@ _Updated 2026-11-10 23:06 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 19 | 0 | 9 | 17 | 93% · 93% |
 | GCP | 18 | 0 | 6 | 12 | 100% · 100% |
-| Azure | 18 | 0 | 6 | 12 | 100% · 100% |
+| Azure | 18 | 0 | 6 | 12 | 100% · 99% |
 
 ## In progress
 
@@ -895,6 +895,14 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | CloudWatch Logs | nano | tab: Tags | static |
 | Systems Manager | nano | tab: Tags | static |
 | CloudWatch | nano | tab: Tags | static |
+
+</details>
+
+<details><summary>Console parts not live yet — Azure (1)</summary>
+
+| Service | Console | Part | State |
+|---|---|---|---|
+| Resource groups | nano | page: Resource groups | static |
 
 </details>
 
