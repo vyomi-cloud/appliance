@@ -33,6 +33,7 @@
  *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
 import { egress } from "./egress.mjs";
+import { createLazySshHub } from "./mesh-lazy-hub.mjs";
 import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
@@ -40,7 +41,7 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 // CommonJS require honors NODE_PATH (unlike ESM import), so the `ws` package
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
-const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
+const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
 if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
@@ -56,6 +57,9 @@ if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-
 
 const VERSION = "1.2.0";
 const PORT = Number(process.env.RELAY_PORT || 8090);
+// Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own
+// `gh codespace ssh`; opened on first use). No hosted relay, no MESH_RELAY_URL. Needs a Pro/Max key + a running Mesh Codespace.
+const hub = createLazySshHub({ WebSocketServer, WebSocket, openMesh: async (o) => (await import("./mesh-cli.mjs")).openMesh(o), log: (m) => console.log("[relay] " + m) });
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN
 const pending = new Map();     // id -> {resolve}
 // All registered tab sockets (shared worker, standalone endpoint, extra views).
@@ -103,7 +107,9 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp"],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "mesh-link", "mesh-shell"],
+      mesh_sessions: hub.enabled() ? hub.linked().length : 0,
+      mesh_streams: hub.streams(),
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
       dbs: [...vmHosts.values()].filter((v) => v.db).map((v) => ({ db: v.vm, engine: v.engine, host_port: v.hostPort })),
     }));
@@ -128,6 +134,7 @@ const server = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
+    if (hub.http(req, res, Buffer.concat(chunks))) return;     // Mesh plane (carries X-Vyomi-Session-Token) -> the simulator in the Codespace
     const tab = pickTab();
     if (!tab) {
       cors(res, 503, { "content-type": "text/plain" });
@@ -174,6 +181,8 @@ const wss = new WebSocketServer({ noServer: true });
 const vmWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   const p = new URL(req.url, "http://x").pathname;
+  if (p === "/shell") { hub.shellUpgrade(req, socket, head); return; }
+  if (p === "/connect") { hub.connectUpgrade(req, socket, head); return; }
   const target = p === "/register" ? wss : (p === "/vm" || p === "/db") ? vmWss : null;
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));

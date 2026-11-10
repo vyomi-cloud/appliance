@@ -223,7 +223,7 @@ Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespac
 export const helpText = (topic) => (topic && DETAILS[topic]) || HELP;
 
 /** Credentials -> Vyomi session -> an ssh transport to the user's Mesh Codespace. Returns {transport, sess} or {error, code}. */
-async function openMesh({ cs, log = () => {} } = {}) {
+export async function openMesh({ cs, log = () => {} } = {}) {
   const { createSessionManager } = await import("./credentials.mjs");
   const ssh = await import("./mesh-ssh.mjs");
   let sess; try { sess = await createSessionManager({ log }).get(); } catch (e) { return { error: e.message, code: e.code }; }
