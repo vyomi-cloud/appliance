@@ -4,6 +4,33 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.46] — 2026-11-10
+
+Daily conformance release. **2 product fixes** (all clouds 2); 0 reach Nano and 2 reach the offline appliance.
+
+### Highlights
+
+- **New `vyomi mcp` server for AI coding agents (offline).** Vyomi now ships an MCP server on all platforms, plus a Claude Code plugin, so AI coding agents can work with the simulator directly; it requires vyomi 3.0.46 or later.
+- **Clearer status reporting (offline).** The status tool for AI agents now names any backends it cannot reach, and a low readiness figure is usually fine rather than a sign of a problem.
+
+### Fixes — all clouds
+
+- **[offline]** Vyomi_status names unreachable backends; low readiness is usually fine
+- **[offline]** Vyomi mcp - MCP server for AI coding agents, shipped on all platforms + Claude Code plugin
+
+<details><summary>Platform and release pipeline (3)</summary>
+
+- Use Vyomi with AI coding agents (vyomi mcp + Claude Code plugin)
+- Require vyomi 3.0.46+ (first release with `vyomi mcp`)
+- Use Vyomi with AI coding agents (vyomi mcp + Claude Code plugin)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.46`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.45] — 2026-11-06
 
 Daily conformance release. **15 product fixes** (AWS 2, all clouds 13); 12 reach Nano and 12 reach the offline appliance.
