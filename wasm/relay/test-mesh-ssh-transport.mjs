@@ -102,7 +102,7 @@ for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"],
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });
   assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, /Usage:[\s\S]*gh-login[\s\S]*forward <target>/);
 }
-const bad = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
-assert.equal(bad.status, 2); assert.match(bad.stderr, /unknown command "bogus"/);
+const badCmd = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
+assert.equal(badCmd.status, 2); assert.match(badCmd.stderr, /unknown command "bogus"/);
 console.log("mesh-ssh transport: all checks passed");
 process.exit(0);
