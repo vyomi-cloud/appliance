@@ -2,52 +2,85 @@
   "$doc": "Vyomi capability registry — Azure Service Bus. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py generic catalog + core/azure_servicebus_core.py + core/azure_locks_core.py); 'offline' = the appliance, which shares the same generic ARM catalog.",
   "azure.servicebus.namespace.crud": {
     "title": "Namespaces — create, list, get, update, delete (generic ARM catalog)",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.tags": {
     "title": "Tags",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.scale": {
     "title": "Scale (pricing tier)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Vyomi enforces the headline tier gates — a Basic namespace rejects topic creation and queues with sessions or duplicate detection enabled, and messaging units / premiumMessagingPartitions require a Premium namespace — but per-tier throughput, entity size and partition-COUNT limits are not otherwise modelled."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.saspolicies": {
     "title": "Shared access policies (authorizationRules) and their keys/connection strings (listKeys)",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [
       "listKeys returns the same fixed simulated key pair every generic ARM resource's listKeys action does; it is not derived from the policy's configured rights."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.locks": {
     "title": "Resource locks (Microsoft.Authorization/locks), scoped to this namespace, plus the Locks panel's Subscription / Resource group scope-switcher buttons",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [
       "Enforcement is scoped to the exact locked resource (the namespace, or a queue/topic locked directly over the ARM API) — a lock does not cascade to block writes/deletes on a namespace's queues or topics the way a resource-group-scoped lock would in real ARM.",
       "The Subscription / Resource group scope-switcher buttons show the real locks at that wider scope (the same generic engine the Subscription/Resource group blades' own Locks panels use) but read-only here — creating or deleting a lock at that scope is done from those blades, not from a namespace's Locks panel."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.activitylog": {
     "title": "Namespace activity log",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.listactions": {
     "title": "Activity log toolbar: Export Activity Logs, Insights, Pin current filters (real or local) and Feedback (not simulated)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "'Export Activity Logs' opens the subscription's continuous export: a real subscription-scope Microsoft.Insights/diagnosticSettings (separate from the namespace's own Diagnostic settings page) whose Administrative events are delivered to the chosen Log Analytics workspace and/or storage account (insights-activity-logs). Event Hub destinations are not served; only Administrative has an event source in Vyomi.",
       "'Insights' shows counts computed from the loaded events, not the Service Bus Insights workbook (Microsoft.Insights/workbooks, Microsoft-authored); 'Pin current filters' is a per-browser preference, it does not write a Microsoft.Portal/dashboards resource; 'Feedback' posts to a real Microsoft telemetry endpoint outside the simulator and is not simulated.",
@@ -61,89 +94,155 @@
   },
   "azure.servicebus.namespace.properties": {
     "title": "Properties (read-only resource summary)",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.exporttemplate": {
     "title": "Export template (ARM template)",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": ["Only the ARM Template tab is generated from the namespace's real properties; Bicep and Terraform export are not modeled."],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Only the ARM Template tab is generated from the namespace's real properties; Bicep and Terraform export are not modeled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.iam": {
     "title": "Access control (IAM) on a namespace: role assignments and built-in role definitions over ARM, plus Check access / My access",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this namespace (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.identity": {
-   "title": "Identity (system-assigned managed identity)",
-   "level": { "nano": "full", "offline": "full" },
-   "limitations": [
-    "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources, an unknown reference is rejected with 400 ResourceNotFound and the attached identity's principalId/clientId are resolved from that resource."
-   ],
-   "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "title": "Identity (system-assigned managed identity)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources, an unknown reference is rejected with 400 ResourceNotFound and the attached identity's principalId/clientId are resolved from that resource."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.networking": {
-   "title": "Networking (network rule sets)",
-   "level": { "nano": "limited", "offline": "limited" },
-   "limitations": [
-    "Premium namespaces: networkRuleSets/default (public network access, default action, IP rules, virtual network rules whose subnet must carry the Microsoft.ServiceBus endpoint, trusted services, private endpoint) is a validated ARM resource AND is enforced on the Service Bus REST data plane: a blocked caller gets 403, an allowed one passes. The namespace is named by the x-vyomi-namespace header (one relay serves every namespace; the queue blade sends it).",
-    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
-    "AMQP connections (azure-servicebus SDK) are not served by the simulator, so enforcement is proven on the REST wire only."
-   ],
-   "tests": [
-    "tests/conformance/test_azure_cfgext_core.py",
-    "tests/conformance/test_azure_netenforce.py",
-    "tests/conformance/test_azure_netenforce_sdk.py",
-    "tests/cli/azure-netenforce-cli-smoke.sh"
-   ]
+    "title": "Networking (network rule sets)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Premium namespaces: networkRuleSets/default (public network access, default action, IP rules, virtual network rules whose subnet must carry the Microsoft.ServiceBus endpoint, trusted services, private endpoint) is a validated ARM resource AND is enforced on the Service Bus REST data plane: a blocked caller gets 403, an allowed one passes. The namespace is named by the x-vyomi-namespace header (one relay serves every namespace; the queue blade sends it).",
+      "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+      "AMQP connections (the native azure-servicebus / @azure/service-bus SDKs) ARE served now (azure.servicebus.amqp.*) but carry no declared caller network, so namespace network rules are NOT evaluated on AMQP; enforcement is proven on the REST wire only."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cfgext_core.py",
+      "tests/conformance/test_azure_netenforce.py",
+      "tests/conformance/test_azure_netenforce_sdk.py",
+      "tests/cli/azure-netenforce-cli-smoke.sh"
+    ]
   },
-  "azure.servicebus.namespace.encryption": {"title": "Encryption (customer-managed key)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Data is envelope-encrypted at rest: a per-store data-encryption key is wrapped by the Key Vault key (wrapKey); requests unwrap it (unwrapKey) and re-seal under the key's latest version, so rotation re-wraps. Disabling, expiring or deleting the key makes every request fail 403 and the data stays ciphertext until the key is usable again. Message bodies are sealed (queues, topics, subscription copies, dead-letter); the namespace is resolved from x-vyomi-namespace, the *.servicebus.windows.net host or the only CMK namespace because the REST data wire carries no namespace. AMQP is not simulated. Offline appliance: the namespace-root REST data plane runs through the same engine; sealed-at-rest and key-disable 403 are verified over the offline wire in tests/conformance/test_azure_offline_wiring.py."], "tests": ["tests/conformance/test_azure_cmk_enforced.py", "tests/conformance/test_azure_cfgext_core.py", "tests/conformance/test_azure_cmk_keylookup.py", "tests/conformance/test_azure_offline_wiring.py"]},
+  "azure.servicebus.namespace.encryption": {
+    "title": "Encryption (customer-managed key)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Data is envelope-encrypted at rest: a per-store data-encryption key is wrapped by the Key Vault key (wrapKey); requests unwrap it (unwrapKey) and re-seal under the key's latest version, so rotation re-wraps. Disabling, expiring or deleting the key makes every request fail 403 and the data stays ciphertext until the key is usable again. Message bodies are sealed (queues, topics, subscription copies, dead-letter); the namespace is resolved from x-vyomi-namespace, the *.servicebus.windows.net host or the only CMK namespace because the REST data wire carries no namespace. AMQP traffic goes through the same envelope on the offline appliance (the wire image of each message is sealed with its body); the AMQP path was not exercised against a CMK namespace by a native-SDK test. Offline appliance: the namespace-root REST data plane runs through the same engine; sealed-at-rest and key-disable 403 are verified over the offline wire in tests/conformance/test_azure_offline_wiring.py."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cmk_enforced.py",
+      "tests/conformance/test_azure_cfgext_core.py",
+      "tests/conformance/test_azure_cmk_keylookup.py",
+      "tests/conformance/test_azure_offline_wiring.py"
+    ]
+  },
   "azure.servicebus.namespace.georecovery": {
     "title": "Geo-disaster recovery (paired namespaces + alias failover)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Pairing (disasterRecoveryConfigs), role (Primary/Secondary) and FailOver are real ARM state, ENFORCED: both namespaces of a pairing must exist, differ, and be Premium tier, and FailOver must be invoked from the Secondary's own path — exactly like real Service Bus (core/azure_arm_core.AzureArm._servicebus_georecovery).",
       "No message data actually moves on failover — Vyomi's Service Bus data plane is one store shared by every namespace (see azure.servicebus.queue.explorer), so there is nothing per-namespace for a real customer's queues/topics to lose or gain; pendingReplicationOperationsCount always reads 0."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.diagnosticsettings": {
     "title": "Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this namespace)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Logs/metrics are never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline, so the setting is stored and validated exactly as the real resource requires but nothing flows.",
       "Vyomi has no catalog of Service Bus's real log/metric category names (GET .../diagnosticSettingsCategories is not modeled) — the create form offers the 'allLogs' category group and 'AllMetrics' rather than Service Bus's specific category picker."
     ],
-    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_monitor_core.py",
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.namespace.alerts": {
     "title": "Alert rules (Microsoft.Insights/metricAlerts, scoped to this namespace)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "A metric alert rule is a real, resource-group-scoped ARM resource that round-trips (create/list/delete, enabled/disabled, condition, severity) exactly as configured, scoped to this namespace via properties.scopes — but there is no metrics pipeline to evaluate the condition against, so a rule never actually fires or notifies an action group."
     ],
-    "tests": ["tests/conformance/test_azure_monitor_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_monitor_core.py"
+    ]
   },
   "azure.servicebus.namespace.monitoring": {
     "title": "Insights and Metrics charts on a namespace",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Insights and Metrics are the shared per-resource panels (azure.common.resource_monitoring): the only metric is the namespace's own Activity-log operation count, charted over the last 24 hours. Message-count, throttling and size metrics are not sampled or retained over time anywhere in Vyomi (only the live point-in-time counts on the Overview/Queues/Topics pages). The pre-authored Microsoft Insights workbook is not modelled."
     ],
-    "tests": ["tests/conformance/test_azure_resource_monitoring.py"]
+    "tests": [
+      "tests/conformance/test_azure_resource_monitoring.py"
+    ]
   },
   "azure.servicebus.namespace.logs": {
     "title": "Logs (a Log Analytics query scoped to this namespace)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Runs the same real KQL pass-through (POST .../workspaces/{ws}/api/query) the Monitor service's own Logs page uses, defaulted to this namespace's own AzureActivity rows (ResourceId filter) — but only the built-in AzureActivity table returns real data (core/azure_operationalinsights_core.py); there is no Service Bus-specific resource-diagnostic table (e.g. OperationalLogs) to query even once a Diagnostic setting routes logs to a workspace, since nothing is actually delivered there (azure.servicebus.namespace.diagnosticsettings)."
     ],
-    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_operationalinsights_core.py"
+    ]
   },
   "azure.servicebus.namespace.tools": {
     "title": "Diagnose and solve problems, Events, Tasks",
@@ -161,26 +260,122 @@
   },
   "azure.servicebus.queue.crud": {
     "title": "Queues — create, list, get, update, delete (ARM sub-resource of the namespace)",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [
       "maxDeliveryCount, enablePartitioning and the auto-delete-on-idle/forwarding toggles round-trip through ARM exactly as configured, but only defaultMessageTimeToLive, lockDuration and dead-lettering-on-expiration are enforced by the data plane (see azure.servicebus.queue.explorer). requiresSession and requiresDuplicateDetection round-trip too, except Vyomi now rejects setting either one true on a Basic-tier namespace's queue (see azure.servicebus.namespace.scale)."
     ],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.topic.crud": {
     "title": "Topics — create, list, get, update, delete (ARM sub-resource of the namespace)",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": ["Topic subscriptions and their SQL filter rules are not modeled in this console — only the topic resource itself round-trips. Vyomi rejects creating a topic on a Basic-tier namespace (see azure.servicebus.namespace.scale), matching real Service Bus."],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Topic subscriptions and their SQL filter rules are not modeled in this console — only the topic resource itself round-trips. Vyomi rejects creating a topic on a Basic-tier namespace (see azure.servicebus.namespace.scale), matching real Service Bus."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
   },
   "azure.servicebus.queue.explorer": {
     "title": "Service Bus Explorer — send, peek, receive, complete, defer and move to dead letter on a queue",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [
-      "The Service Bus data plane is a simplified, invented REST surface (the real Service Bus data plane is AMQP-only and can't cross the relay) — complete/defer/dead-letter act by sequence number directly rather than the SDK's lock-token dance, and 'Peek next messages' re-peeks the same backlog rather than paging through it.",
+      "The Explorer drives the Vyomi REST surface on the namespace root (not the SDKs' wire): complete/defer/dead-letter act by sequence number directly rather than the SDK's lock-token dance, and 'Peek next messages' re-peeks the same backlog rather than paging through it. The REST surface and the AMQP 1.0 data plane (azure.servicebus.amqp.*) read and write the SAME store, so a message sent by a native SDK appears in the Explorer and vice versa.",
       "Entity names are global across every namespace in this simulator (like the AWS lens's shared KMS/Secrets Manager stores) — two namespaces sharing a queue name would share its backlog.",
-      "Sessions, scheduled messages and transfer queues are not modeled; their counts always read zero."
+      "Sessions and scheduled messages exist on the AMQP data plane (azure.servicebus.amqp.*) but the Explorer's counts for them still read zero; transfer queues are not modeled."
     ],
-    "tests": ["tests/conformance/test_azure_servicebus_core.py"]
+    "tests": [
+      "tests/conformance/test_azure_servicebus_core.py"
+    ]
+  },
+  "azure.servicebus.amqp.messaging": {
+    "title": "AMQP 1.0 data plane: send, receive (peek-lock / receive-and-delete), complete, abandon, dead-letter, defer, peek, scheduled messages, batches, locks, TTL, max-delivery-count, duplicate detection",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Proven with the UNCHANGED native SDKs: Python azure-servicebus 7.15 and JavaScript @azure/service-bus 7.10 (tests below), over raw AMQP and AMQP-over-WebSocket. Nano runs the same engine in Pyodide behind the relay's AMQP bridge (vyomi-tunnel / wasm/relay/local-relay.mjs): the local relay only - the Cloudflare cloud relay (relay.vyomi.cloud) does not carry AMQP yet.",
+      "Entities are created through the REST data plane / console (PUT on the namespace root, optional JSON body: lockDuration, maxDeliveryCount, requiresSession, requiresDuplicateDetection, deadLetteringOnMessageExpiration, defaultMessageTimeToLive) - ARM-created queues/topics are not mirrored into the data store, and the Service Bus management SDK (ServiceBusAdministrationClient, an ATOM/XML REST client) is not served. Entity names are global to the simulator (no per-namespace isolation), the same as the REST surface.",
+      "Not modelled: partitioning (partition keys are preserved as annotations only), auto-forwarding, transactions (coordinator links are refused), message size limits per tier (a 700 KB multi-frame message works), delivery-count based ordering guarantees across link restarts, large-message/Premium limits, and the Basic-tier gates on AMQP entities. Sequence numbers are global to the store, not per entity."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_servicebus_amqp_python_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_js_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_nano.py"
+    ]
+  },
+  "azure.servicebus.amqp.sessions": {
+    "title": "AMQP sessions: session-filtered receivers (named and next-available), session state, session lock, per-session ordering",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "A session lock is held for as long as the receiver link is open (renew-session-lock returns a new expiry but the lock does not time out while the link lives); get-message-sessions (browse sessions) is implemented but not exercised by a native SDK test."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_servicebus_amqp_python_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_js_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_nano.py"
+    ]
+  },
+  "azure.servicebus.amqp.rules": {
+    "title": "Subscription rules over AMQP $management: add/remove/enumerate, SQL filter (SQL-92 subset) and correlation filter evaluated at fan-out",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Exercised by the JavaScript SDK's ruleManager only (the Python SDK has no AMQP rule API). SQL filter supports comparison, AND/OR/NOT, IN, LIKE, IS [NOT] NULL, EXISTS, arithmetic, LEN/UPPER/LOWER and sys./user. properties; rule ACTIONS (SET/REMOVE) are stored and enumerated but not applied to the message. A subscription created by REST with no rules matches everything until the first rule operation materialises $Default.",
+      "REST sends (the console Explorer) honour the same rules."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_servicebus_amqp_js_sdk.py"
+    ]
+  },
+  "azure.servicebus.amqp.transport": {
+    "title": "AMQP transport and security: SASL, $cbs put-token, plain TCP, AMQP-over-WebSocket, TLS",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "SASL (ANONYMOUS / PLAIN / EXTERNAL / MSSBCBS) and $cbs put-token are accepted and recorded, never verified: any credential works, SAS signatures and Entra tokens are not checked and claims (Send/Listen/Manage) are not enforced - the same stance as the REST data plane.",
+      "Offline: AMQP listens on :5672 (plain AMQP and AMQP-over-WebSocket at /$servicebus/websocket, sniffed on one port) and :5671 (TLS with a self-signed certificate minted via the openssl CLI; the handshake is verified with a raw client but no SDK trusts the self-signed certificate, so SDKs are tested against the no-TLS paths: UseDevelopmentEmulator=true / use_tls=False / a ws:// endpoint). Env VYOMI_AMQP_PORT / VYOMI_AMQPS_PORT, 0 disables.",
+      "Nano: the local relay accepts raw AMQP on RELAY_AMQP_PORT (default 5672) and ws://<relay>/$servicebus/websocket and tunnels each connection to the tab as a numbered stream (binary frames on the /register socket). A Nano tab must be registered; the Cloudflare cloud relay and the in-page (relay-less) Nano boot do not serve AMQP. Verified headlessly (real relay + Pyodide + real AwsWireRouter) not in a real browser tab.",
+      "Tenant isolation: AMQP carries no tenant, so the offline listener binds to the default tenant's Azure space (like the namespace-root REST route). Geo-DR alias failover, partitioned entities and Premium messaging units are not modelled on AMQP. Idle-timeout keep-alives are sent, but connection throttling is not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_servicebus_amqp_python_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_js_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_nano.py"
+    ]
+  },
+  "azure.servicebus.amqp.management": {
+    "title": "AMQP $management node: peek, receive-by-sequence-number, update-disposition, schedule/cancel, renew-lock, session state",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "batch-delete-messages and the entity-statistics operations are not implemented (answered 501 amqp:not-implemented)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_servicebus_amqp_python_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_js_sdk.py",
+      "tests/conformance/test_azure_servicebus_amqp_nano.py"
+    ]
   }
 }
