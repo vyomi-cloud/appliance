@@ -41,6 +41,8 @@ services:
     user: "0:0"
     ports:
       - "${VYOMI_SIMULATOR_PORT:-9000}:9000"
+      - "${VYOMI_AMQP_PORT:-5672}:5672"
+      - "${VYOMI_AMQPS_PORT:-5671}:5671"
     networks: [vyomi-net]
     extra_hosts:
       - "host.docker.internal:host-gateway"
