@@ -121,7 +121,7 @@ srv.close(); t.close();
 const bin = new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname;
 for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["help", "credentials"], ["help", "list"], ["help", "forward"]]) {
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });
-  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? ({ credentials: /credentials[\s\S]*Vyomi Credentials/, list: /list \[nano\|mesh\|all\]/, forward: /forward <name>/ })[a[0] === "help" ? a[1] : a[0]] : /list[\s\S]*ssh <name>\.vyomi[\s\S]*forward[\s\S]*key/);
+  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? ({ credentials: /credentials[\s\S]*Access Key/, list: /list \[nano\|mesh\|all\]/, forward: /forward <name>/ })[a[0] === "help" ? a[1] : a[0]] : /list[\s\S]*ssh <name>\.vyomi[\s\S]*forward[\s\S]*key/);
 }
 const badCmd = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
 assert.equal(badCmd.status, 2); assert.match(badCmd.stderr, /unknown command "bogus"/);
