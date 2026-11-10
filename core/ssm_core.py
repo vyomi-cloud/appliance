@@ -44,6 +44,7 @@ class SsmStore:
         self.associations: dict = {}
         self.windows: dict = {}         # window id -> window (targets inside)
         self.baselines: dict = {}
+        self.host_management: dict = {}  # default host management config ({} = not registered)
         self._seeded = False
 
 
@@ -1040,6 +1041,18 @@ def _delete_baseline(store: SsmStore, b: dict) -> dict:
     return {"BaselineId": b["BaselineId"]}
 
 
+def _register_dhmc(store: SsmStore, b: dict) -> dict:
+    _need(b, "PermissionModel")
+    role = b.get("RoleArn") or f"arn:aws:iam::{ACCOUNT}:role/service-role/AWSSystemsManagerDefaultEC2InstanceManagementRole"
+    store.host_management = {"PermissionModel": b["PermissionModel"], "RoleArn": role}
+    return {"RoleArn": role}
+
+
+def _deregister_dhmc(store: SsmStore, b: dict) -> dict:
+    store.host_management = {}
+    return {}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # dispatch
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1063,6 +1076,7 @@ _OPS = {
     "DescribeMaintenanceWindowTargets": _describe_targets, "DeregisterTargetFromMaintenanceWindow": _deregister_target,
     "CreatePatchBaseline": _create_baseline, "GetPatchBaseline": _get_baseline,
     "DescribePatchBaselines": _describe_baselines, "DeletePatchBaseline": _delete_baseline,
+    "RegisterDefaultHostManagementConfiguration": _register_dhmc, "DeregisterDefaultHostManagementConfiguration": _deregister_dhmc,
 }
 OPERATIONS = sorted(_OPS)
 

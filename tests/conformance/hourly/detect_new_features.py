@@ -141,12 +141,35 @@ def _cloud_of(core_file: str) -> str:
     return "azure" if b.startswith("azure_") else "gcp" if b.startswith("gcp_") else "aws"
 
 
+# AWS engine functions the verb-name heuristic picks up that are internal helpers, not
+# SDK/CLI operations (private functions, nested methods, Step Functions ASL choice
+# operators): an SDK test can never call them, so they are not "untested operations".
+AWS_INTERNAL_HELPERS = {
+    "apigatewayv2_core": {"CreateGrand", "GetGrand", "GetChild", "CreateMapping", "CreateVpclink"},
+    "cloudwatch_core": {"QueryEnvelope", "RunQueries", "SetState", "StateReasonData", "StateUpdatedTimestamp"},
+    "eventbridge_core": {"GetArchive", "SendSqs"},
+    "lambda_core": {"InvokeRaw"},
+    "logs_core": {"RunInsights"},
+    "sns_core": {"PublishToEndpoint", "PublishToPhone", "PublishToTopic", "SubscribeResult"},
+    "ssm_core": {"AddDocVersion", "GetVersion", "TagHolder"},
+}
+_ASL_OP_RE = re.compile(r"^(Is[A-Z]\w+|(Numeric|String|Timestamp|Boolean)\w+|InvokeLambda|RunMachine|RunState)$")
+
+
+def _internal_helper(engine: str, op: str) -> bool:
+    if op in AWS_INTERNAL_HELPERS.get(engine, ()):
+        return True
+    return engine == "stepfunctions_core" and bool(_ASL_OP_RE.match(op))
+
+
 def operations(target: str) -> list[dict]:
     pattern = "wasm/core/*_core.py" if target == "nano" else "core/*_core.py"
     feats = []
     for f in sorted(glob.glob(os.path.join(ROOT, pattern))):
         engine = os.path.basename(f)[:-3]
         for op in sorted(_ops_in(f)):
+            if _internal_helper(engine, op):
+                continue
             feats.append({"target": target, "cloud": _cloud_of(f), "service": engine, "kind": "operation", "name": op})
     return feats
 

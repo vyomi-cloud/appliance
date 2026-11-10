@@ -146,6 +146,30 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-gcp-storage-anywhere-caches",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_storage_anywhere_caches_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-gcp-sql-reconcile-networking",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_sql_reconcile_networking_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-gcp-tooling-routes",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_tooling_routes_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-sdk-info-routes",
       "target": "offline",
       "cloud": "aws",

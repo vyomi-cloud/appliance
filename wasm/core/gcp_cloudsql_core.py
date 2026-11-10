@@ -687,6 +687,14 @@ def dispatch(store: SqlStore, method: str, path: str,
         return _patch_instance(store, project, segs[3], payload)
     if len(segs) == 5 and segs[4] == "promoteReplica" and method == "POST":
         return _promote_replica(store, project, segs[3])
+    if len(segs) == 5 and segs[4] == "reconcileNetworking" and method == "POST":
+        rec = _get_instance(store, project, segs[3])
+        if not rec:
+            return _not_found(f"The Cloud SQL instance does not exist. Instance: {segs[3]}")
+        op = _op(rec, "RECONCILE_NETWORKING")
+        store.put_instance(_key(project, segs[3]), rec)
+        store.persist()
+        return _json(200, op)
     if len(segs) in (5, 6) and segs[4].split(":")[0] == "workloadCaptures":
         verb = segs[4].partition(":")[2]
         wid = None

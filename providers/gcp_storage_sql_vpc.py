@@ -237,6 +237,10 @@ async def api_gcp_storage_compose_object(bucket: str, destination: str, request:
     return await _server().api_gcp_storage_compose_object(bucket, destination, request)
 
 
+async def api_gcp_storage_anywhere_caches(bucket: str, request: Request, tail: str = ""):
+    return await _server().api_gcp_storage_anywhere_caches(bucket, request, tail)
+
+
 def api_gcp_storage_list_folders(bucket: str):
     return _server().api_gcp_storage_list_folders(bucket)
 
@@ -357,6 +361,17 @@ def api_gcp_sql_restart_instance(project: str, instance: str):
     rec["state"] = "RUNNABLE"
     rec["updateTime"] = _now()
     return {"kind": "sql#operation", "operationType": "RESTART", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
+
+
+def api_gcp_sql_reconcile_networking(project: str, instance: str):
+    """POST .../reconcileNetworking (sql.projects.instances.reconcileNetworking)."""
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    rec["updateTime"] = _now()
+    return s._gcp_sql_make_operation(project, instance, "RECONCILE_NETWORKING")
 
 
 def api_gcp_sql_start_instance(project: str, instance: str):

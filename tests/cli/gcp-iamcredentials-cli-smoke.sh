@@ -44,7 +44,7 @@ out=$(gcloud iam service-accounts sign-jwt "$TMP/claims.json" "$TMP/out.jwt" --i
 chk $? "gcloud iam service-accounts sign-jwt" "$out"
 [ "$(tr -cd '.' < "$TMP/out.jwt" | wc -c | tr -d ' ')" = "2" ]
 chk $? "signed JWT has three dot-separated parts" "$(cat "$TMP/out.jwt" 2>/dev/null | head -c 80)"
-cut -d. -f2 < "$TMP/out.jwt" | tr '_-' '/+' | { read -r p; echo "$p$(printf '=%.0s' 1 2 3)" | base64 -d 2>/dev/null; } | grep -q '"aud":"https://example.com"'
+cut -d. -f2 < "$TMP/out.jwt" | tr '_-' '/+' | { read -r p; while [ $(( ${#p} % 4 )) -ne 0 ]; do p="$p="; done; echo "$p" | base64 -d 2>/dev/null; } | grep -q '"aud":"https://example.com"'
 chk $? "JWT payload carries the claims" "$(cut -d. -f2 < "$TMP/out.jwt")"
 
 out=$(gcloud iam service-accounts sign-blob "$TMP/in.txt" "$TMP/out2.sig" --iam-account="ghost-$SFX@$PROJECT.iam.gserviceaccount.com" --project="$PROJECT" --quiet 2>&1)
