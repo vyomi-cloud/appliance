@@ -112,6 +112,13 @@ def main():
     check("Validate OK", call(st, "ValidateStateMachineDefinition", definition=json.dumps(DEF))[1]["result"] == "OK")
     s, b = call(st, "TestState", definition=json.dumps({"Type": "Pass", "Result": {"x": 1}, "End": True}), roleArn=ROLE, input="{}")
     check("TestState Pass", b["status"] == "SUCCEEDED" and json.loads(b["output"]) == {"x": 1}, b)
+    s, b = call(st, "ListMapRuns", executionArn=ex)
+    check("ListMapRuns empty for non-distributed execution", s == 200 and b == {"mapRuns": []}, b)
+    mr = "arn:aws:states:us-east-1:000000000000:mapRun:m1/x:y"
+    s, b = call(st, "DescribeMapRun", mapRunArn=mr)
+    check("DescribeMapRun unknown -> ResourceNotFound", s == 400 and b["__type"] == "ResourceNotFound", b)
+    s, b = call(st, "UpdateMapRun", mapRunArn=mr, maxConcurrency=5)
+    check("UpdateMapRun unknown -> ResourceNotFound", s == 400 and b["__type"] == "ResourceNotFound", b)
     check("DeleteStateMachine", call(st, "DeleteStateMachine", stateMachineArn=arn)[0] == 200
           and call(st, "DescribeStateMachine", stateMachineArn=arn)[1]["__type"] == "StateMachineDoesNotExist")
     print(f"\n{PASS} passed, {FAIL} failed")
