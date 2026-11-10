@@ -44,6 +44,7 @@ class SsmStore:
         self.associations: dict = {}
         self.windows: dict = {}         # window id -> window (targets inside)
         self.baselines: dict = {}
+        self.host_management: dict = {}  # Default Host Management Configuration (RoleArn, PermissionModel)
         self._seeded = False
 
 
@@ -1040,6 +1041,31 @@ def _delete_baseline(store: SsmStore, b: dict) -> dict:
     return {"BaselineId": b["BaselineId"]}
 
 
+_DHMC_ROLE = "service-role/AWSSystemsManagerDefaultEC2InstanceManagementRole"
+
+
+def _register_dhmc(store: SsmStore, b: dict) -> dict:
+    """RegisterDefaultHostManagementConfiguration: PermissionModel is required; RoleArn defaults to the
+    service-linked default role. Re-registering needs Overwrite (else the config is left as is)."""
+    _need(b, "PermissionModel")
+    model = b["PermissionModel"]
+    if not isinstance(model, str) or not model:
+        raise SsmError("ValidationException", "PermissionModel must be a non-empty string.")
+    role = b.get("RoleArn") or f"arn:aws:iam::000000000000:role/{_DHMC_ROLE}"
+    if not isinstance(role, str) or not role.startswith("arn:"):
+        raise SsmError("ValidationException", "RoleArn is not a valid ARN.")
+    cur = store.host_management
+    if cur and not b.get("Overwrite"):
+        return {"RoleArn": cur["RoleArn"]}
+    store.host_management = {"RoleArn": role, "PermissionModel": model}
+    return {"RoleArn": role}
+
+
+def _deregister_dhmc(store: SsmStore, b: dict) -> dict:
+    store.host_management = {}
+    return {}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # dispatch
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1063,6 +1089,8 @@ _OPS = {
     "DescribeMaintenanceWindowTargets": _describe_targets, "DeregisterTargetFromMaintenanceWindow": _deregister_target,
     "CreatePatchBaseline": _create_baseline, "GetPatchBaseline": _get_baseline,
     "DescribePatchBaselines": _describe_baselines, "DeletePatchBaseline": _delete_baseline,
+    "RegisterDefaultHostManagementConfiguration": _register_dhmc,
+    "DeregisterDefaultHostManagementConfiguration": _deregister_dhmc,
 }
 OPERATIONS = sorted(_OPS)
 
