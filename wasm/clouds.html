@@ -3565,6 +3565,30 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         const spaces = d.spaces || [];
         window._vySpaces = {}; spaces.forEach(s => { window._vySpaces[s.space_id] = s; });
         const active = d.active_space_id;
+        // Single-cloud plan (Pro): the other clouds are locked, so the space picker
+        // adds nothing - go straight to that cloud's console. Once per tab session,
+        // never when embedded, and "?all=1" keeps the picker reachable.
+        try {
+          const embedded = document.documentElement.classList.contains('vy-embed');
+          const seen = sessionStorage.getItem('vy-auto-console');
+          if (!embedded && !seen && !/[?&]all=1\b/.test(location.search)) {
+            const pol = await ensureTierPolicy();
+            const ap = pol && (pol.active_policy || pol.policy || pol);
+            const provs = ap && ap.providers;
+            let only = '';
+            if (provs === 'primary_cloud_only') only = ((pol.primary_cloud || ap.primary_cloud || '') + '').toLowerCase();
+            else if (Array.isArray(provs) && provs.length === 1) only = String(provs[0]).toLowerCase();
+            if (only && PROVIDER_PATHS[only]) {
+              const mine = spaces.filter(s => (s.provider || 'aws').toLowerCase() === only);
+              const pick = mine.find(s => s.space_id === active) || mine[0];
+              if (pick) {
+                sessionStorage.setItem('vy-auto-console', '1');
+                await switchAndOpen(pick.space_id, only);
+                return;
+              }
+            }
+          }
+        } catch (_) { /* fall through to the normal picker */ }
         // Update pill counts (per provider + total)
         const counts = { aws: 0, gcp: 0, azure: 0, total: spaces.length };
         spaces.forEach(s => {
