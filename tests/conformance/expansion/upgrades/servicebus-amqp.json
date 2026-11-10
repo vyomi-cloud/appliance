@@ -1,0 +1,33 @@
+{
+ "status": "ready",
+ "title": "Azure Service Bus over AMQP 1.0 (Rohith's stack #34\u2192#45)",
+ "source_prs": [
+  34,
+  35,
+  37,
+  38,
+  39,
+  40,
+  45
+ ],
+ "suites": [
+  "pytest:test_lease_core",
+  "pytest:test_servicebus_topology",
+  "pytest:test_azure_servicebus_core",
+  "pytest:test_sqs_fifo_dlq_core",
+  "pytest:test_servicebus_amqp_*",
+  "script:test_servicebus_real_sdk",
+  "offline-sdk-go-aws",
+  "offline-sdk-java-aws",
+  "offline-sdk-go-azure",
+  "offline-sdk-java-azure",
+  "offline-api-azure-console-data-planes",
+  "offline-api-azure-console-lens",
+  "offline-api-azure-console-routes",
+  "offline-ui-aws-sqs-dlq-tab",
+  "nano-ui-aws-sqs-dlq-tab",
+  "nano-ui-azure-storage-console",
+  "nano-cores"
+ ],
+ "pr_body": "## Azure Service Bus over AMQP 1.0 (Rohith's stack #34 \u2192 #35 \u2192 #37 \u2192 #38 \u2192 #39 \u2192 #40 \u2192 #45)\n\nRebuilt onto current `main` by cherry-picking each source PR's own commits in order (`-x`, authorship kept). Source PRs were not touched. Backend per `backends.json`: Service Bus = `messaging-core` (`core/lease.py`) + `amqp` adapter (`core/servicebus_amqp/`) + NATS. No `libs/` restructuring.\n\n### What changed\n- #34 `core/lease.py` universal lease engine; SQS ported onto it; Service Bus REST fidelity (lock duration/renewal, 410 lock-lost, DLQ, properties, 256 KB), shared runtime store, Siftly topology.\n- #35 AMQP 1.0 codec, SASL, connection handshake, asyncio TCP server. #37 CBS auth, address resolution, sender links, batch transfers. #38 receiver links, dispositions, renew-lock. #39 lifecycle manager, TLS 5671 listener, connection strings. #40 Siftly gate A1-A9. #45 full performative fields / real-SDK compatibility.\n- Extra commit (mine): Nano loads `lease.py` (sqs_core / azure_servicebus_core now import it) - `wasm/build_cores.py`, `wasm/nano-boot.js`, both relay loaders, regenerated `wasm/core/`.\n\n### Conflict resolutions / deviations (please review)\n- **`.github/` changes dropped** (agent rule: never edit `.github/`): #34's `console-conformance.yml` and `ci.yml` edits (CLOUDLEARN_DEV_MODE pass-through, `run_conformance.py` floor). Commit \"lower run_conformance.py floor\" touched only `ci.yml`, so it is skipped entirely. The `docker-compose.yml` part of the DEV_MODE commit is kept. **The CI floor lowering is therefore not applied; decide whether you want it.**\n- `#34 389b264` (console-actions fixes #31/#41/#42): main already had newer fixes. `providers/gcp_services.py` (uploadType=media), `server.py` (Pub/Sub subscription record sync + full topic name): kept main's side. `.github/ci.yml` dropped.\n- `#34 92b7197` (DockerUnavailable env pattern): main already had it plus `runtimeunavailable`; kept main's, commit became empty and was skipped.\n- `#38`: its branch carries re-merged copies of #35/#37 plus merge commits. Cherry-picked only its own commits (`68ca68e` receiver links, and `a07ec07` with `-m 1`, its receiver/management fixes). `connection.py` conflicted between #37's review fixes and #38's receiver work; took #38's version for `68ca68e`, then `a07ec07` re-applied the fixes. Result for all stack files is byte-identical to PR #38's tip.\n- **`#45` scope**: commit `d5a9ce9` also modifies app-env files (`core/app_provision.py`, Redis recipe in `core/backend_provisioner.py`) and `ae5404e`, `577540b` modify only `core/app_provision.py`. Those depend on the app-profile PR (#43), which is not in this stack and not on main, so those parts were dropped (the two app-env-only commits skipped). All AMQP / Service Bus parts of `d5a9ce9` are kept (note the commit message still mentions app-env/Redis). The app-env pieces belong in the Siftly Blob / app-profile stack.\n- Remaining stack state files (`core/servicebus_amqp/*`, `core/lease.py`, `core/azure_servicebus_*`) equal PR #45's tip.\n\n### Suite results (run against this branch on a local appliance; main as baseline)\nPass: `test_lease_core`, `test_servicebus_topology`, `test_azure_servicebus_core`, `test_sqs_fifo_dlq_core` + all 5 `test_servicebus_amqp_*` (incl. Siftly gate A1-A9, `test_servicebus_amqp_siftly_gate.py`) = 42 pytest tests; `test_servicebus_real_sdk.py` with the real `azure-servicebus` SDK over AMQP: ALL GREEN; hourly suites `offline-sdk-go-aws`, `offline-sdk-java-aws` (SQS), `offline-sdk-go-azure`, `offline-sdk-java-azure`, `offline-api-azure-console-data-planes|lens|routes`, `offline-ui-aws-sqs-dlq-tab`, `nano-ui-aws-sqs-dlq-tab`, `nano-ui-azure-storage-console`, `nano-cores` (280).\nNot green in my sandbox, **identical on `main`** and unrelated to SQS/Service Bus (no Vault / MinIO / Postgres / Docker there): `offline-sdk-python-aws` (74/10: secretsmanager, MinIO, KMS), `-aws-ops` (1), `-aws-ops2` (DynamoDB DescribeTable), `-azure-ops` (Key Vault keys 503), `offline-cli-aws` (s3 ls), `offline-cli-azure` (SQL connectionInfo), `offline-console-actions` (3: ec2 reboot 409, secrets 503). Their SQS paths pass. Please confirm in CI where those backends exist.\nNot run: Nano has no AMQP listener (by design); the actual TLS 5671 listener was exercised only by the lifecycle unit tests, not with a container.\n"
+}
