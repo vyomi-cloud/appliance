@@ -85,5 +85,5 @@ function findExe(dir, name) {
 export async function ghAuthOk(ghPath, { spawn = nodeSpawn, env = process.env } = {}) {
   if (env.GH_TOKEN || env.GITHUB_TOKEN) return { ok: true };
   const r = await run(spawn, ghPath, ["auth", "status"]);
-  return r.ok ? { ok: true } : { ok: false, reason: "not signed in to GitHub. Run `vyomi-tunnel gh-login`." };
+  return r.ok ? { ok: true } : { ok: false, reason: "not signed in to GitHub. Run `vyomi-tunnel login`." };
 }
