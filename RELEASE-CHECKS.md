@@ -1,6 +1,6 @@
 # Release checks — v3.0.46
 
-Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/42873652800) for tag `v3.0.46`.
+Generated 2026-11-10 19:44 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/42874310298) for tag `v3.0.46`.
 
 | Package / check | Platform | Result |
 |---|---|---|
@@ -19,7 +19,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_3.0.46_all.deb | 5s |
+| ✅ | install vyomi_3.0.46_all.deb | 4s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | bundled VERSION is 3.0.46 | /usr/share/vyomi/packaging/common/VERSION = 3.0.46 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -41,7 +41,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker_3.0.46_all.deb | 2s |
+| ✅ | install vyomi-docker_3.0.46_all.deb | 1s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -57,7 +57,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.46 | exit 0; compose v3.0.46; ==> Vyomi 3.0.46 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.46 (SHA256-checked) | exit 0; cached compose v3.0.46 |
-| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.0OW3LMDiag/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.u44rpb1CX6/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.46) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -68,7 +68,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-3.0.46-1.noarch.rpm | 1s |
+| ✅ | install vyomi-3.0.46-1.noarch.rpm | 2s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | bundled VERSION is 3.0.46 | /usr/lib/cloud-learn/VERSION = 3.0.46 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -106,7 +106,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.46 | exit 0; compose v3.0.46; ==> Vyomi 3.0.46 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.46 (SHA256-checked) | exit 0; cached compose v3.0.46 |
-| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.r7nsdQoo0I/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/tmp/tmp.7ulgQ0j2gJ/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -117,7 +117,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 9s |
+| ✅ | install vyomi | 16s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | bundled VERSION is 3.0.46 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.46 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -140,7 +140,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 3s |
+| ✅ | install vyomi-docker | 5s |
 | ✅ | package manager reports version 3.0.46 | found '3.0.46' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -156,7 +156,7 @@ Generated 2026-11-10 19:00 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.46 | exit 0; compose v3.0.46; ==> Vyomi 3.0.46 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.46 (SHA256-checked) | exit 0; cached compose v3.0.46 |
-| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.fMLmJfRr4k/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.46 |   compose   : v3.0.46 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.4PyQn3tvK0/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.46/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.46... (12 files, 27MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -385,11 +385,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Console UI (offline) — azure
 
-❌ 14/15 suites passed
-
-| Failing suite | Passed | Failed |
-|---|---|---|
-| `offline-ui-crawl` | 18 | 2 |
+✅ 15/15 suites passed
 
 
 ## Console UI (offline) — gcp
