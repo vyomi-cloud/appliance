@@ -170,6 +170,7 @@ function openBrowser(url) {
 const HELP = `vyomi-tunnel - connect your machine to Vyomi
 
   vyomi-tunnel login      sign in with GitHub (one time)
+  vyomi-tunnel list       show everything you can reach, and how
   ssh <name>.vyomi        connect to the Codespace, a Docker instance or k3s
   vyomi-tunnel forward <name> <local>:<remote>
                           forward a port, e.g. forward k3s 6443:6443
@@ -178,6 +179,14 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
 <name>: host, k3s, or a Docker instance name. Start Mesh in the Vyomi console first.
 `;
 const DETAILS = {
+  list: `vyomi-tunnel list [type] [--json]
+
+Shows everything you can reach right now, and the command for each.
+Types: api, vm, db, host, instance, k3s, llm, service, forward
+  api       the Nano endpoint for aws/gcloud/az and SDKs (needs: vyomi-tunnel)
+  vm, db    VMs and databases running in the Nano tab
+  host, instance, k3s, llm, service   what runs in your Mesh Codespace
+  forward   port forwards you have running`,
   login: `vyomi-tunnel login
 
 Signs you in to GitHub in your browser and sets up ssh so that
@@ -212,7 +221,10 @@ export async function main(argv) {
       if (!pos[0] || !m) { console.error("usage: vyomi-tunnel forward <target> <local>:<remote> --codespace <name>"); return 2; }
       const f = await ssh.forwardSsh(vmName(pos[0]), { local: Number(m[1]), remote: Number(m[2]), transport, net });
       if (f.port) console.error(`forwarding 127.0.0.1:${f.port} -> ${vmName(pos[0])}:${m[2]} via ${transport.codespace} (Ctrl-C to stop)`);
+      let reg = null; if (f.port) { try { fs.mkdirSync(path.join(HOME, "forwards"), { recursive: true }); reg = path.join(HOME, "forwards", `${process.pid}.json`);
+        fs.writeFileSync(reg, JSON.stringify({ pid: process.pid, target: vmName(pos[0]), local: f.port, remote: Number(m[2]), codespace: transport.codespace, started: new Date().toISOString() })); } catch { /* list just won't show it */ } }
       for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
+      f.done.then(() => { try { reg && fs.rmSync(reg); } catch { /* */ } });
       return await f.done;
     } catch (e) { console.error("vyomi-tunnel: " + e.message); return 1; }
     finally { transport.close(); }
@@ -228,6 +240,42 @@ export async function main(argv) {
     let where = ""; try { where = ` Mesh Codespace: ${await sshm.findCodespace(gh.path)}.`; } catch (e) { where = " " + e.message[0].toUpperCase() + e.message.slice(1); }
     console.log(`Signed in.${r.changed ? " SSH set up." : ""}${where}\nConnect with: ssh <name>${SUFFIX}`);
     return 0;
+  }
+  if (cmd === "list" || cmd === "ls") {                                // every transport line, with the command to use it
+    const json = rest.includes("--json"); const want = rest.find((x) => !x.startsWith("-"));
+    const KINDS = ["api", "vm", "db", "host", "instance", "k3s", "llm", "service", "forward"];
+    if (want && !KINDS.includes(want)) { console.error(`vyomi-tunnel: unknown type "${want}". Types: ${KINDS.join(", ")}`); return 2; }
+    const rows = []; const notes = [];
+    const ssh = await import("./mesh-ssh.mjs");
+    const transport = ssh.createSshTransport({ codespace: cs, log: () => {} });
+    const meshP = (!want || !["api", "vm", "db", "forward"].includes(want) || want === "api") ? transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })) : Promise.resolve(null);
+    const port = process.env.RELAY_PORT || 8090;
+    try {
+      const h = await (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) })).json();
+      rows.push({ where: "local", name: "nano-api", type: "api", address: `http://127.0.0.1:${port}`, connect: `aws --endpoint-url http://127.0.0.1:${port} ...   (tab ${h.tab ? "connected" : "NOT connected"})` });
+      for (const v of h.vms || []) rows.push({ where: "browser", name: v.vm, type: "vm", address: `127.0.0.1:${v.host_port}`, connect: `ssh -p ${v.host_port} user@127.0.0.1` });
+      for (const d of h.dbs || []) rows.push({ where: "browser", name: d.db, type: "db", address: `127.0.0.1:${d.host_port}`, connect: `${d.engine || "db"} client -> 127.0.0.1:${d.host_port}` });
+    } catch { notes.push(`local relay not running on :${port} (run: vyomi-tunnel)`); }
+    const m = await meshP;
+    if (m && m.err) notes.push("mesh: " + m.err);
+    else if (m) for (const t of m.ts) {
+      const how = t.kind === "k3s" ? `vyomi-tunnel forward ${t.name} 6443:6443` : t.ssh ? `ssh ${t.name}${SUFFIX}` : t.ports.length ? `vyomi-tunnel forward ${t.name} ${t.ports[0]}:${t.ports[0]}` : "";
+      rows.push({ where: "mesh", name: t.name, type: t.kind, address: t.ip ? t.ip + (t.ports[0] ? ":" + t.ports[0] : "") : "", connect: how });
+    }
+    transport.close();
+    try { for (const f of fs.readdirSync(path.join(HOME, "forwards"))) {                       // active forwards (one file per running `forward`)
+      const fp = path.join(HOME, "forwards", f); let d; try { d = JSON.parse(fs.readFileSync(fp, "utf8")); } catch { continue; }
+      let alive = true; try { process.kill(d.pid, 0); } catch { alive = false; }
+      if (!alive) { try { fs.rmSync(fp); } catch { /* */ } continue; }
+      rows.push({ where: "local", name: `${d.target}`, type: "forward", address: `127.0.0.1:${d.local}`, connect: `-> ${d.target}:${d.remote} (pid ${d.pid})` });
+    } } catch { /* none */ }
+    const out = want ? rows.filter((r) => r.type === want) : rows;
+    if (json) { console.log(JSON.stringify({ targets: out, notes }, null, 2)); return out.length ? 0 : 1; }
+    const w = [9, 22, 10, 22]; const line = (r) => [r.where, r.name, r.type, r.address].map((c, i) => String(c).padEnd(w[i])).join(" ") + " " + r.connect;
+    if (out.length) { console.log(line({ where: "WHERE", name: "NAME", type: "TYPE", address: "ADDRESS", connect: "CONNECT" })); for (const r of out) console.log(line(r)); }
+    else console.log(want ? `No ${want} targets right now.` : "Nothing reachable right now.");
+    for (const n of notes) console.log(`\n! ${n}`);
+    return out.length ? 0 : 1;
   }
   if (cmd === "gh-login") return main(["login", ...rest]);               // old name
   if (cmd === "connect") {

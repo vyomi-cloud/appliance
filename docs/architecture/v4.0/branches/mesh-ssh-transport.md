@@ -20,6 +20,12 @@ automatically (`findCodespace`: newest Available/Starting vyomi-mesh-* / vyomi-b
 `login --portal`/`--token` (portal-token relay), `connect|forward --relay-mode`, `--codespace`, `config`, `status`, `keep`, `gh-login` (alias of login).
 NOT verified: a real browser login end to end (device flow starts correctly), and that the user's own ssh key is accepted by the Codespace sshd on :2222.
 
+## Discovery: `vyomi-tunnel list [type] [--json]`
+Every transport line is listable so users can self-serve: types api (Nano endpoint), vm, db (browser), host, instance, k3s, llm, service (Mesh Codespace,
+via `docker inspect` over the ssh session), forward (running `forward` processes, tracked in ~/.vyomi/forwards/<pid>.json, dead pids pruned).
+Each row carries the command to use it. Unit-tested with a fake ssh; browser rows verified against a running local relay; Mesh rows NOT yet seen live
+(Codespace stopped). Not yet listed: reverse forwards, Docker daemon, runner-backed k3s (those transports are not built).
+
 ## Idle timeout (automatic)
 GitHub resets a Codespace's idle timer on ssh traffic the client sends. The transport therefore runs a trivial command on the host every 4 min
 (`keepaliveMs`) for as long as it is in use (connect, forward, or the relay with VYOMI_MESH_CODESPACE), starting on first use and stopping on close.

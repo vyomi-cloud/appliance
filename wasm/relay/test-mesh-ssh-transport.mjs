@@ -1,6 +1,7 @@
 /* Laptop-side ssh transport (mesh-ssh.mjs) with a fake `ssh`: no network, no Codespace.
  * WS_PKG=<path to ws> node wasm/relay/test-mesh-ssh-transport.mjs */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import http from "node:http";
 import net from "node:net";
 import { EventEmitter } from "node:events";
@@ -30,6 +31,7 @@ function fakeSpawn(bin, args) {
   let out = "";
   const m = /docker inspect .* (\S+) 2>/.exec(cmd);
   if (m && IPS[m[1]]) out = IPS[m[1]] + " ";
+  if (cmd.includes("xargs -r docker inspect")) out = "/simulator|vyomi/appliance:x|172.18.0.2 |9000/tcp \n/llm-chat|llama|172.18.0.7 |8080/tcp \n/vyomi-i-web|ubuntu|172.18.0.5 |22/tcp \n/vyomi-k3s-0123456789|rancher/k3s|172.18.0.9 |6443/tcp \n/bad name|x||\n";
   if (cmd.includes("compose.service=simulator")) out = "simulator_c\n";
   if (cmd.includes("name=vyomi-k3s-")) out = "vyomi-k3s-0123456789\n";
   setImmediate(() => { c.stdout.end(out); c.emit("close", 0); });
@@ -51,6 +53,15 @@ assert.equal(await t.resolve("vyomi-k3s-ZZ"), null);
 assert.deepEqual(await t.simulatorTarget(), { host: "10.0.0.2", port: 9000 });
 assert.ok(cmds.some((c) => /^W /.test(c)) === false);
 await assert.rejects(() => t.open("1.2.3.4; id", 22));         // open() only takes dotted quads
+
+// list: everything reachable, classified, with the name the user types
+const lt = await t.list();
+assert.deepEqual(lt.map((r) => [r.name, r.kind]), [["host", "host"], ["simulator", "service"], ["llm-chat", "llm"], ["web", "instance"], ["vyomi-k3s-0123456789", "k3s"]]);
+assert.equal(lt.find((r) => r.name === "web").ip, "172.18.0.5"); assert.deepEqual(lt.find((r) => r.name === "simulator").ports, [9000]);
+// list in the packaged CLI: JSON shape, no crash with nothing reachable
+assert.equal(spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "bogus"], { encoding: "utf8" }).status, 2);
+const jl = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
+assert.ok(Array.isArray(JSON.parse(jl.stdout).targets));
 
 // the user's Mesh Codespace is found automatically (newest running vyomi-mesh-*; never someone else's or an unrelated one)
 const lst = (rows) => (b, a) => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(JSON.stringify(rows)); c.emit("close", 0); }); return c; };
@@ -112,7 +123,6 @@ assert.match(bad, /BadRequest/);
 sim.close(); srv2.close();
 srv.close(); t.close();
 // help: every spelling prints the same usage; unknown commands fail with rc 2 and never start a relay
-const { spawnSync } = await import("node:child_process");
 const bin = new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname;
 for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["login", "-h"], ["help", "forward"]]) {
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });

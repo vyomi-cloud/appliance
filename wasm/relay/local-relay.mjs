@@ -44,7 +44,7 @@ import { createRequire } from "node:module";
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status
-if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   process.exit(await main(process.argv.slice(2)));
 }

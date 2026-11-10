@@ -23,6 +23,21 @@ const HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade",
 
 const dockerIp = (rawName) => `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' ${rawName} 2>/dev/null`;
 
+/** Turn `docker inspect` rows (name|image|ips|exposed ports) into the targets a user can reach, with the name to type for each. */
+export function classifyTargets(text) {
+  const out = [{ name: "host", kind: "host", what: "the Codespace's own sshd", ssh: true, ports: [22] }];
+  for (const line of String(text || "").split("\n")) {
+    const [raw, image = "", ips = "", ports = ""] = line.split("|"); const n = (raw || "").replace(/^\//, "").trim();
+    if (!NAME.test(n)) continue;
+    const ps = ports.split(/\s+/).map((x) => Number(x.split("/")[0])).filter(Boolean);
+    const ip = ips.trim().split(/\s+/)[0] || "";
+    if (/^vyomi-k3s-[0-9a-f]{10}$/.test(n)) out.push({ name: n, kind: "k3s", what: "Kubernetes API (port 6443)", ip, ports: [6443], image });
+    else if (n.startsWith("vyomi-i-")) out.push({ name: n.slice(8), kind: "instance", what: "Docker instance", ssh: true, ip, ports: ps.length ? ps : [22], image });
+    else out.push({ name: n, kind: /(^|[-_])(llm|embed)/.test(n) ? "llm" : "service", what: "service container", ip, ports: ps, image });
+  }
+  return out;
+}
+
 /** Find the user's Mesh Codespace on their own account: the newest running (or starting) one named vyomi-mesh-* / vyomi-booster-*. */
 export async function findCodespace(ghBin, spawn = nodeSpawn) {
   const text = await new Promise((resolve, reject) => {
@@ -180,9 +195,15 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     out.end(body);
   }
 
+  /** Everything reachable in the Mesh Codespace right now. */
+  async function list() {
+    const text = await exec(`docker ps -q | xargs -r docker inspect -f '{{.Name}}|{{.Config.Image}}|{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}|{{range $p, $_ := .Config.ExposedPorts}}{{$p}} {{end}}'`);
+    return classifyTargets(text);
+  }
+
   function close() { closed = true; clearInterval(ka.timer); for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) spawn("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
 
-  return { resolve, open, exec, simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
+  return { resolve, open, exec, list, simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
 }
 
 /** A drop-in for booster-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.
