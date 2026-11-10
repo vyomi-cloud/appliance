@@ -98,9 +98,9 @@ srv.close(); t.close();
 // help: every spelling prints the same usage; unknown commands fail with rc 2 and never start a relay
 const { spawnSync } = await import("node:child_process");
 const bin = new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname;
-for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["gh-login", "-h"]]) {
+for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["gh-login", "-h"], ["help", "forward"]]) {
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });
-  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, /Usage:[\s\S]*gh-login[\s\S]*forward <target>/);
+  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? new RegExp("vyomi-tunnel " + (a[0] === "help" ? a[1] : a[0])) : /gh-login[\s\S]*forward[\s\S]*help <command>/);
 }
 const badCmd = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
 assert.equal(badCmd.status, 2); assert.match(badCmd.stderr, /unknown command "bogus"/);
