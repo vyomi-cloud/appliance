@@ -91,18 +91,33 @@ async function buildCloud(cloud, watch) {
     chunkNames: "chunks/[name]-[hash]",
     define: { "process.env.NODE_ENV": watch ? '"development"' : '"production"' },
     logLevel: "info",
+    plugins: [backendsData(cloud)],
   };
   await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
   await cp(join(HERE, "..", "wasm", "issue-reporter.js"), join(out, "issue-reporter.js"));   // automatic issue reporting (both substrates)
   await cp(join(HERE, "feedback-widget.js"), join(out, "feedback.js"));   // "Share feedback" floating button (both substrates)
   if (watch) {
-    const ctx = await esbuild.context({ ...opts, plugins: [emit(cloud, out)] });
+    const ctx = await esbuild.context({ ...opts, plugins: [backendsData(cloud), emit(cloud, out)] });
     await ctx.watch();
     return;
   }
   await esbuild.build(opts);
   await publish(cloud, out);
 }
+
+/* `import X from "vyomi-backends:<cloud>"` -> core/capabilities/backends/<cloud>.json ("How Vyomi runs this
+ * service" side-panel data, bundled like the capability registry). The file is written by a separate data
+ * branch and may not exist yet: then the module is `{}` and the panel says "not documented yet". */
+const backendsData = () => ({
+  name: "vyomi-backends",
+  setup(b) {
+    b.onResolve({ filter: /^vyomi-backends:/ }, (a) => ({ path: a.path.slice("vyomi-backends:".length), namespace: "vyomi-backends" }));
+    b.onLoad({ filter: /.*/, namespace: "vyomi-backends" }, (a) => {
+      const f = join(ROOT, "core", "capabilities", "backends", `${a.path}.json`);
+      return existsSync(f) ? { contents: readFileSync(f, "utf8"), loader: "json", watchFiles: [f] } : { contents: "{}", loader: "json" };
+    });
+  },
+});
 
 const emit = (cloud, out) => ({ name: "emit", setup(b) { b.onEnd(() => publish(cloud, out)); } });
 

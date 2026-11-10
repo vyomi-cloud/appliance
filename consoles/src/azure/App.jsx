@@ -20,6 +20,8 @@ import { Glyph, Loading, NotSimulated } from "./kit/common.jsx";
 import { SubscriptionCtx } from "./kit/subscription.js";
 import { SERVICES, byId, classicHref } from "./services/registry.js";
 import { useK8sLock, K8sLocked } from "../common/k8sTier.jsx";
+import BackendsSection from "../common/BackendsPanel.jsx";
+import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
 import Home from "./pages/Home.jsx";
 import AllServices from "./pages/AllServices.jsx";
 import ServiceNotSimulated from "./pages/ServiceNotSimulated.jsx";
@@ -47,7 +49,7 @@ export default function App() {
   const [subs, setSubs] = useState([]);
 
   useEffect(() => { savePref("mode", mode); }, [mode]);
-  useEffect(() => { setMenuOpen(false); setDrawer(null); }, [route.path]);
+  useEffect(() => { setMenuOpen(false); setDrawer((d) => (d === "help" ? d : null)); }, [route.path]);   // the help pane follows you between a service's pages
   useEffect(() => {
     // Vyomi's simulated subscription, read back over native ARM (GET /subscriptions/{id}).
     getSubscriptionInfo(DEFAULT_SUBSCRIPTION)
@@ -172,6 +174,7 @@ export default function App() {
               )}
               {drawer === "help" && (
                 <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  {svc && <BackendsSection cloud="azure" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0f6cbd" />}
                   <p>Vyomi simulates this portal against local backends. Storage accounts are created over native Azure Resource Manager (ARM) and blobs over the native Blob REST API — the same endpoints your azure-* SDKs and the az CLI use, so both always see the same state.</p>
                   <p>Services without a Vyomi v4 page open in the <a href={classicHref()}>classic Vyomi console</a>.</p>
                   <NotSimulated feature="Support requests, service health and the documentation search" />
