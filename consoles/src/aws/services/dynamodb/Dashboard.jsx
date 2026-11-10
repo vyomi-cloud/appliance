@@ -13,6 +13,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { statusOf } from "./Tables.jsx";
 import { getFavoriteTables } from "./prefs.js";
 import * as api from "./api.js";
+import { fmtDate } from "../../kit/common.jsx";
 
 const ALARM_STATE = {
   ALARM: <StatusIndicator type="error">In alarm</StatusIndicator>,
@@ -68,7 +69,7 @@ export default function Dashboard() {
           columnDefinitions={[
             { id: "name", header: "Table name", cell: (t) => <Link href={href("dynamodb", "tables", t.TableName)} onFollow={follow}>{t.TableName}</Link> },
             { id: "status", header: "Status", cell: (t) => statusOf(t.TableStatus) },
-            { id: "created", header: "Created at (UTC)", cell: (t) => t.CreationDateTime || "-" },
+            { id: "created", header: "Created at (UTC)", cell: (t) => fmtDate(t.CreationDateTime) },
           ]}
           empty={<Box textAlign="center" color="inherit">
             <b>No favorite tables</b>

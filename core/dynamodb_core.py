@@ -106,6 +106,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+def _wire_ts(v):
+    """DynamoDB's wire timestamps are epoch NUMBERS (seconds, fractional); stored values are ISO strings.
+    Official SDKs (Go v2, Java v1) reject an ISO string in CreationDateTime, so convert at the wire edge."""
+    if isinstance(v, bool) or v is None or v == "":
+        return v
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return datetime.strptime(str(v).replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+    except ValueError:
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return v
+
+
 def _req_id() -> str:
     return uuid.uuid4().hex.upper()[:16]
 
@@ -578,7 +594,7 @@ def _table_view(store: NoSqlStore, table: dict, include_items: bool = True) -> d
         "KeySchema": table.get("key_schema", []),
         "AttributeDefinitions": table.get("attribute_definitions", []),
         "ProvisionedThroughput": pt,
-        "CreationDateTime": table.get("created", ""),
+        "CreationDateTime": _wire_ts(table.get("created", "")),
         "ItemCount": int(table.get("item_count", 0) or 0),
         "TableSizeBytes": int(table.get("table_size_bytes", 0) or 0),
         "TableClassSummary": {"TableClass": table.get("table_class", "STANDARD")},
@@ -995,7 +1011,7 @@ def _backup_summary(backup: dict) -> dict:
         "BackupStatus": backup.get("backup_status", "AVAILABLE"),
         "BackupType": backup.get("backup_type", "USER"),
         "BackupSizeBytes": int(backup.get("backup_size_bytes", 0) or 0),
-        "BackupCreationDateTime": backup["backup_creation_datetime"],
+        "BackupCreationDateTime": _wire_ts(backup["backup_creation_datetime"]),
     }
 
 
@@ -1007,7 +1023,7 @@ def _backup_description(backup: dict) -> dict:
             "TableName": src.get("table_name", ""), "TableArn": src.get("table_arn", ""),
             "TableSizeBytes": int(src.get("table_size_bytes", 0) or 0),
             "KeySchema": src.get("key_schema", []),
-            "TableCreationDateTime": src.get("created", ""),
+            "TableCreationDateTime": _wire_ts(src.get("created", "")),
             "ItemCount": int(src.get("item_count", 0) or 0),
             "BillingMode": src.get("billing_mode", "PAY_PER_REQUEST"),
         },
