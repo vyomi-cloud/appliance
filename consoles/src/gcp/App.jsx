@@ -32,6 +32,13 @@ import ProductMenu, { recordVisit } from "./pages/ProductMenu.jsx";
 import AllProducts from "./pages/AllProducts.jsx";
 import ProjectPicker from "./pages/ProjectPicker.jsx";
 import { Brand } from "./pages/Brand.jsx";
+import BackendsSection from "../common/BackendsPanel.jsx";
+import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
+import InfoOutlinedIcon from "@mui/icons-material/esm/InfoOutlined.js";
+import CloseIcon from "@mui/icons-material/esm/Close.js";
+
+/** GCP product id -> capability/backends file name, where they differ. */
+const SERVICE_FILE = { "security/secret-manager": "secret-manager", "security/kms": "kms", "security/scc": "securitycenter", "cloud-hub": "hub" };
 
 const pref = (k, d) => { try { return localStorage.getItem(`vyomi.v4.${k}`) || d; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(`vyomi.v4.${k}`, v); } catch {} };
@@ -51,8 +58,10 @@ export default function App() {
   const theme = useMemo(() => makeTheme(mode), [mode]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(pref("gcp.infoOpen", "") === "1");
   const [navCollapsed, setNavCollapsed] = useState(pref("gcp.navCollapsed", "") === "1");
   useEffect(() => { savePref("mode", mode); document.documentElement.style.colorScheme = mode; }, [mode]);
+  useEffect(() => { savePref("gcp.infoOpen", infoOpen ? "1" : ""); }, [infoOpen]);
   useEffect(() => { savePref("gcp.navCollapsed", navCollapsed ? "1" : ""); }, [navCollapsed]);
   useEffect(() => { document.title = `${prod ? prod.title + " – " : ""}${project} – Vyomi · Google Cloud`; });
 
@@ -90,12 +99,23 @@ export default function App() {
       <CssBaseline />
       <Box sx={{ minHeight: "100vh", bgcolor: "chrome.main", display: "flex", flexDirection: "column" }}>
         <TopBar onMenu={() => setMenuOpen(true)} onPicker={() => setPickerOpen(true)} project={project} mode={mode}
-          onMode={() => setMode(mode === "dark" ? "light" : "dark")} />
+          onMode={() => setMode(mode === "dark" ? "light" : "dark")} infoOpen={infoOpen} onInfo={() => setInfoOpen((v) => !v)} />
         <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
           {nav && <ProductNav prod={prod} nav={nav} route={route} collapsed={navCollapsed} onToggle={() => setNavCollapsed((v) => !v)} />}
           <Box component="main" sx={{ containerType: "inline-size", flex: 1, minWidth: 0, bgcolor: "background.paper", borderRadius: "16px 16px 0 0", mr: { xs: 0, sm: 2 }, ml: nav ? 0 : { xs: 0, sm: 2 }, px: 3, pt: 1, pb: 6 }}>
             {content}
           </Box>
+          {infoOpen && (
+            <Box component="aside" aria-label="How Vyomi runs this service" data-testid="info-panel"
+              sx={{ width: { xs: "100%", sm: 380 }, flexShrink: 0, position: { xs: "fixed", sm: "static" }, inset: { xs: "64px 0 0 0", sm: "auto" }, zIndex: 1200, bgcolor: "background.paper", color: "text.primary", borderLeft: 1, borderColor: "divider", overflow: "auto", maxHeight: { sm: "calc(100vh - 64px)" }, p: 2 }}>
+              <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="h6" sx={{ flex: 1, fontSize: 18 }}>{prod?.title || "Vyomi"}</Typography>
+                <IconButton size="small" aria-label="Close panel" onClick={() => setInfoOpen(false)}><CloseIcon fontSize="small" /></IconButton>
+              </Stack>
+              {prod && <BackendsSection cloud="gcp" data={BACKENDS_DATA} serviceId={SERVICE_FILE[prod.id] || prod.id} registryFile={registryFileFor(SERVICE_FILE[prod.id] || prod.id)} substrate={SUBSTRATE} accent="#1a73e8" />}
+              <Typography variant="body2" color="text.secondary">Vyomi simulates this console against local backends. Everything you do here is visible to your SDKs and CLI.</Typography>
+            </Box>
+          )}
         </Box>
       </Box>
       <ProductMenu open={menuOpen} onClose={() => setMenuOpen(false)} active={prod?.id} />
@@ -105,7 +125,7 @@ export default function App() {
   );
 }
 
-function TopBar({ onMenu, onPicker, project, mode, onMode }) {
+function TopBar({ onMenu, onPicker, project, mode, onMode, infoOpen, onInfo }) {
   const search = useRef(null);
   const [q, setQ] = useState("");
   useEffect(() => {
@@ -138,14 +158,14 @@ function TopBar({ onMenu, onPicker, project, mode, onMode }) {
           )}
         />
       </Box>
-      <TopBarActions mode={mode} onMode={onMode} />
+      <TopBarActions mode={mode} onMode={onMode} infoOpen={infoOpen} onInfo={onInfo} />
       <Tooltip title="Vyomi · local simulator"><Avatar sx={{ width: 32, height: 32, bgcolor: "primary.main", color: "primary.contrastText", fontSize: 15, ml: 0.5, mr: 1 }}>V</Avatar></Tooltip>
     </Box>
   );
 }
 
 /** Right side of the top bar, as in the native console: Cloud Shell · notifications · ⋮ menu. */
-function TopBarActions({ mode, onMode }) {
+function TopBarActions({ mode, onMode, infoOpen, onInfo }) {
   const notify = useNotify();
   const [bell, setBell] = useState(null);
   const [more, setMore] = useState(null);
@@ -154,6 +174,9 @@ function TopBarActions({ mode, onMode }) {
     <>
       <Tooltip title="Activate Cloud Shell">
         <IconButton aria-label="Activate Cloud Shell" onClick={() => notify.info("Cloud Shell isn't simulated in Vyomi. Use your own terminal: gcloud, gsutil and the client libraries work against this endpoint.", "Cloud Shell")}><TerminalIcon /></IconButton>
+      </Tooltip>
+      <Tooltip title="How Vyomi runs this service">
+        <IconButton aria-label="How Vyomi runs this service" aria-pressed={!!infoOpen} onClick={onInfo}><InfoOutlinedIcon /></IconButton>
       </Tooltip>
       <Tooltip title="Notifications">
         <IconButton aria-label="Notifications" onClick={(e) => setBell(e.currentTarget)}>
