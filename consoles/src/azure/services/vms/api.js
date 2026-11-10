@@ -45,6 +45,25 @@ export const vmAction = (rg, name, verb) => ARM.action(rg, name, verb);
 // ── Network interface (Microsoft.Network/networkInterfaces) ────────────────────────────
 export const getNic = (rg, name) => NIC_ARM.get(rg, name);
 export const putNic = (rg, name, body) => NIC_ARM.put(rg, name, body);
+const VNET_ARM = armType("Microsoft.Network", "virtualNetworks", "2023-11-01");
+/** The wizard offers "(new) <vnet>"; make it real. Creates the vnet (with the subnet) when it does not exist yet,
+ *  and adds the subnet when the vnet exists without it. Existing vnets are left alone. */
+export async function ensureVnet(rg, vnetField, subnet, location) {
+  const name = (vnetField || "vnet").replace(/^\(new\)\s*/, "").trim() || "vnet";
+  const sn = subnet || "default";
+  let v = null;
+  try { v = await VNET_ARM.get(rg, name); } catch { v = null; }
+  if (!v) {
+    await VNET_ARM.put(rg, name, { location, properties: { addressSpace: { addressPrefixes: ["10.0.0.0/16"] }, subnets: [{ name: sn, properties: { addressPrefix: "10.0.0.0/24" } }] } });
+    return;
+  }
+  const subs = v.properties?.subnets || [];
+  if (!subs.some((x) => x.name === sn)) {
+    const used = new Set(subs.map((x) => x.properties?.addressPrefix));
+    let i = 0; while (used.has(`10.0.${i}.0/24`)) i++;
+    await VNET_ARM.put(rg, name, { ...v, properties: { ...v.properties, subnets: [...subs, { name: sn, properties: { addressPrefix: `10.0.${i}.0/24` } }] } });
+  }
+}
 export const nicNameFor = (vmName) => `${vmName}-nic`;
 
 /** A short, deterministic-looking private IP in the 10.0.0.0/24 range (no real DHCP). */

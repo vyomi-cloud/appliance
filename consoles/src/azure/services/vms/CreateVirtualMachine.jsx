@@ -252,6 +252,7 @@ export default function CreateVirtualMachine() {
         }
         nicBody.properties.networkSecurityGroup = { id: `/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.Network/networkSecurityGroups/${nsgName}` };
       }
+      await api.ensureVnet(rg, f.vnet, f.subnet, ff.location);
       await api.putNic(rg, nicName, nicBody);
       await api.createVm(rg, f.name, api.toVmBody(ff));
       notify.success(`Deployment of virtual machine '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
