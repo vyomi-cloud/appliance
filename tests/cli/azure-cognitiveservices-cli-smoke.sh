@@ -50,9 +50,9 @@ out=$(rest --method get --url "$P/accounts/$ACCT/deployments?$API"); echo "$out"
 chk $? "list deployments" "$out"
 out=$(rest --method put --url "$P/accounts/$ACCT/deployments/big?$API" --body '{"sku":{"name":"Standard","capacity":99999},"properties":{"model":{"format":"OpenAI","name":"gpt-4o","version":"2024-08-06"}}}'); echo "$out" | grep -q 'InsufficientQuota'
 chk $? "over-quota deployment → InsufficientQuota" "$out"
-out=$(rest --method get --url "$P/accounts/$ACCT/usages?$API"); echo "$out" | grep -q 'gpt-4o'
+out=$(rest --method get --url "$P/accounts/$ACCT/usages?$API"); echo "$out" | grep -q 'qwen2.5-3b'
 chk $? "account usages list model quotas" "$out"
-out=$(rest --method get --url "$BASE/subscriptions/$SUB/providers/Microsoft.CognitiveServices/locations/eastus/models?$API"); echo "$out" | grep -q 'text-embedding-3-small'
+out=$(rest --method get --url "$BASE/subscriptions/$SUB/providers/Microsoft.CognitiveServices/locations/eastus/models?$API"); echo "$out" | grep -q 'nomic-embed-text'
 chk $? "location models list" "$out"
 out=$(rest --method delete --url "$P/accounts/$ACCT/deployments/chat?$API"); chk $? "delete deployment" "$out"
 
