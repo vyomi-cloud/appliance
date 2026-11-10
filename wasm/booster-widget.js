@@ -1,7 +1,7 @@
 /* Vyomi Global Mesh widget for the AWS / GCP / Azure Nano consoles: an in-page card on the console HOME page (beside the "How Nano ... works" video banner).
  *   Pro / Max (or active trial) with mesh enabled -> Start / Leave the Mesh button
  *   Pro / Max entitled but switched off              -> "Turn on the Mesh"
- *   Free, trial never used                           -> Free tier note + "Start 1-month Pro/Max free trial"
+ *   Free, trial never used                           -> "Start 30-day trial" (one per account; same trial as the appliance)
  *   Trial ended / not entitled                       -> "Upgrade to Pro / Max"
  * Uses window.VyomiBooster (booster-link.js) and /api/account/booster. Cloud = data-cloud on this script tag. */
 (function () {
@@ -16,15 +16,18 @@
   function toast(text) { var b = B(); if (b && b.toast) b.toast(text); }
   function css() {
     var st = document.createElement("style");
-    st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}"
+    st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px}"
       + ".vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}.vy-nano-video>.vy-video-banner{order:1;flex:1 1 340px;min-width:0;margin:0 0 16px!important}.vy-nano-video>#vy-bw{order:2;flex:1 1 340px;min-width:0;margin:0 0 16px}"
-      + "#vy-bw .main{flex:1 1 200px;min-width:0}"
-      + "#vy-bw h4{margin:0 0 3px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}"
+      + "#vy-bw .main{min-width:0}"
+      + "@media(max-width:560px){#vy-bw{grid-template-columns:minmax(0,1fr)}#vy-bw .act{min-width:0}}"
+      + "#vy-bw .foot:empty{display:none}#vy-bw .foot{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 20px;padding-top:8px;border-top:1px solid rgba(128,128,128,.22)}"
+      + "#vy-bw .foot p,#vy-bw .foot .sub{margin:0;text-align:left}#vy-bw .foot .sub a{white-space:nowrap}"
+      + "#vy-bw h4{margin:0;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}"
       + "#vy-bw .tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:#e8f0fe;color:#1a56c4}"
       + "#vy-bw .tag.free{background:#eceff3;color:#4b5563}"
       + "#vy-bw p{margin:0 0 6px;color:#4b5563}#vy-bw p:last-child{margin:0}"
       + "#vy-bw .fine{font-size:12px;color:#6b7280}#vy-bw a{color:#1a56c4}"
-      + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}"
+      + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}#vy-bw .act .go{white-space:nowrap}"
       + "#vy-bw .go{display:block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 16px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-bw .go.stop{background:#b42318}#vy-bw .go[disabled]{opacity:.6;cursor:default}"
       + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}"
@@ -84,7 +87,7 @@
   }
   function enable(trial) {
     run(function () {
-      return api("/enable").then(function (r) {
+      return api(trial ? "/enable?trial=1" : "/enable").then(function (r) {
         if (!r.ok) { toast(r.j.message || "Could not turn on the mesh."); return; }
         // Pro = ONE cloud: a fresh trial pins the cloud of the console it was started from
         if (trial && r.j.clouds === "one" && !r.j.primary_cloud && CLOUD) return api("/primary-cloud", { cloud: CLOUD });
@@ -105,7 +108,9 @@
     } else if (a.effective) {                                       // Pro / Max / active trial, switched on
       var ss = x && x.session, stt = ss && ss.state, conn = !!(x && x.github && x.github.connected);
       var starting = stt === "pending" || stt === "starting", running = stt === "running", stopping = stt === "stopping";
-      var sub = a.source === "trial" && a.days_left != null ? a.days_left + " day" + (a.days_left === 1 ? "" : "s") + " of free trial left" : "";
+      var tierName = (a.tier || "pro").charAt(0).toUpperCase() + (a.tier || "pro").slice(1);
+      var cloudName = a.clouds === "one" && a.primary_cloud ? ({ aws: "AWS", gcp: "GCP", azure: "Azure" }[a.primary_cloud] || a.primary_cloud) : "";
+      var sub = a.source === "trial" && a.days_left != null ? tierName + " trial: " + a.days_left + " day" + (a.days_left === 1 ? "" : "s") + " left" + (cloudName ? " \u00b7 " + cloudName + " only" : "") : (cloudName ? tierName + " \u00b7 " + cloudName + " only" : "");
       var hrs = x && x.hours_remaining != null ? x.hours_remaining + " h left this cycle" : "";
       var line, btn;
       if (starting) { line = "Starting\u2026 about 2 minutes."; btn = '<button class="go" disabled>Starting\u2026</button>'; }
@@ -120,16 +125,23 @@
         line = (x && x.ended_note) || (conn ? "Runs on the free quota of your own GitHub account." : "Connect your GitHub account to start.");
         btn = '<button class="go" data-ss ' + (busy ? "disabled" : "") + '>' + (conn ? "Join the Mesh" : "Connect GitHub & join") + '</button>';
       }
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? "Trial" : (a.tier || "pro")) + '</span></h4><p>' + esc(line) + '</p>';
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p>' + esc(line) + '</p>';
       act = btn + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
+    } else if (!a.trial_used) {                                     // Free, the account's one 30-day trial not started yet
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Try the Mesh with a free 30-day Pro trial (one cloud): real compute and AI on your own free GitHub quota. One trial per account.</p>';
+      act = '<button class="go" data-tr ' + (busy ? "disabled" : "") + '>' + (busy ? "Starting trial\u2026" : "Start 30-day Pro trial") + '</button><div class="sub">or <a href="' + PRICING + '" target="_blank" rel="noopener">compare plans</a></div>';
     } else {                                                        // trial used / expired
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">Upgrade to Pro / Max</a>';
     }
-    card.innerHTML = '<div class="main">' + main + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div><div class="act">' + act + '</div>';
+    // Fixed layout for every state: row 1 = title (left, no wrap) + buttons (right); row 2 spans both columns with the note lines.
+    var tm = /^(<h4>[\s\S]*?<\/h4>)([\s\S]*)$/.exec(main), title = tm ? tm[1] : main, notes = tm ? tm[2] : "", subs = "";
+    act = act.replace(/<div class="sub">[\s\S]*?<\/div>/g, function (s) { if (s.replace(/<[^>]*>/g, "").trim()) subs += s; return ""; });
+    card.innerHTML = '<div class="main">' + title + '</div><div class="act">' + act + '</div>'
+      + '<div class="foot">' + notes + subs + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div>';
   }
 
   // Mount as an in-page card on the console HOME page: directly beside the "How Nano ... works" video banner; if that banner was dismissed,
