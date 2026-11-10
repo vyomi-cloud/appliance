@@ -1,58 +1,27 @@
 {
- "at": "2026-11-10T21:59:51+00:00",
+ "at": "2026-11-10T22:59:52+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "storage/v1",
-   "kind": "operation-removed",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
-   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
-   "detail": {
-    "params": [
-     "anywhereCacheId",
-     "bucket"
-    ],
-    "request": "",
-    "response": "AnywhereCache",
-    "http": "POST",
-    "deprecated": false
-   },
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:07ceb9a9bfac",
+   "title": "Amazon S3 Access Grants now support listing grants across multiple AWS accounts",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-access-grants-list-across-regions/",
+   "detail": "Amazon S3 Access Grants can now discover and list all your grants across multiple AWS accounts with a single API call, eliminating the need to query each account separately. A single ListCallerAccessGrants call returns grants from your own S3 Access Grants instance and every instance shared with you, giving you a complete view of the S3 data you can access. By setting the new InstanceScope parameter to ALL in your ListCallerAccessGrants request, S3 Access Grants queries every instance shared with you through AWS Resource Access Manager (AWS RAM) and returns all the grants in one combined respo",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon RDS",
+   "service": "Amazon S3",
    "kind": "announcement",
-   "key": "feed:aws:bcf450af44c8",
-   "title": "Amazon RDS for PostgreSQL announces Extended Support minor versions 13.23-rds.20260819, 12.22-rds.20260820 and 11.22-rds.20260822",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-postgresql-extended-support/",
-   "detail": "Amazon Relational Database Service (RDS) for PostgreSQL announces Amazon RDS Extended Support minor versions 13.23-rds.20260819, 12.22-rds.20260820 and 11.22-rds.20260822. Amazon RDS Extended Support provides up to three additional years of fixes for critical Common Vulnerabilities and Exposures (CVE) and bugs beyond a major version's end of standard support date, giving you more time to upgrade to a new major version. You can upgrade your database using Amazon RDS Blue/Green Deployments , in-place upgrade, or restore from a snapshot. Learn more about performing version upgrades in the Amazon ",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:e8755f8c8f10",
-   "title": "Amazon RDS for MySQL 26.10 is now available in Amazon RDS Database Preview Environment ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-mysql-26-10-preview-environment/",
-   "detail": "Starting today, Amazon RDS for MySQL 26.10 is available in the Amazon RDS Database Preview Environment , allowing you to evaluate the pre-release of MySQL 26.10 on Amazon RDS for MySQL. MySQL 26.10 includes bug fixes, security patches, and some improvements to READ COMMITTED workload performance and purge lag warnings in the error log. On busy READ COMMITTED workloads, NUMA systems performance could be impacted as each read view that closed required a global mutex. Read-view objects can now be reused which eliminates the global mutex on closure. The error log now reports warnings when the hist",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Azure Functions",
-   "kind": "announcement",
-   "key": "feed:azure:acd972c05ac0",
-   "title": "[Launched] Generally Available: Azure Functions support for .NET 11",
-   "link": "https://azure.microsoft.com/updates?id=578773",
-   "detail": "Azure Functions support for .NET 11 is now generally available.You can now build Azure Functions apps targeting .NET 11 using the isolated worker model, while continuing to use the Azure Functions programming model and host integration. Your serverless ap",
+   "key": "feed:aws:590495b6b7fd",
+   "title": "Amazon S3 Tables now support S3 server access logging",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-server-access-logging/",
+   "detail": "Amazon S3 Tables now support server access logging, providing you detailed records of the requests made to your table buckets. You can now track table operations, namespace management, and data access to support security audits, access analysis, and cost attribution. Log delivery is available at no additional cost, and you pay only for the storage of the log files. When you enable server access logging on a table bucket, S3 delivers logs for requests to all tables and namespaces in that bucket to a general purpose bucket in the same account and Region. Each record captures the requester, opera",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/software.amazon.awssdk:s3: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out"
- ]
+ "errors": []
 }

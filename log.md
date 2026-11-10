@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-10T22:59:52+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `announcement` Amazon S3 Access Grants now support listing grants across multiple AWS accounts ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-access-grants-list-across-regions/))
+- · `announcement` Amazon S3 Tables now support S3 server access logging ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-server-access-logging/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-10T21:59:51+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,18 +3007,4 @@ Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T23:50:54+00:00
-
-Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
-- · `spec-commit` Azure servicebus: fix: improve Service Bus administration Swagger interoperability (#47269) ([link](https://github.com/Azure/azure-rest-api-specs/commit/1758295d22b6a143bb74383febd0c3f6bccfeda5))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-28T22:50:53+00:00
-
-Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
