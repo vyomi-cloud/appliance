@@ -205,6 +205,11 @@ try:
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] Key Vault / ACR / Service Bus core mount skipped: {_e}")
 try:
+    from routes import azure_servicebus_amqp as _azsb_amqp   # Service Bus AMQP 1.0 listener (:5672 / :5671, ws path /$servicebus/websocket)
+    _azsb_amqp.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[servicebus-amqp] listener not mounted: {_e}")
+try:
     from core import vault_routes as _vault_routes
     _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
 except Exception:

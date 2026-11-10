@@ -127,6 +127,8 @@ class AmqpServer:
     async def start(self, host="0.0.0.0", port=5672, tls_port=0, cert_dir=None):
         loop = asyncio.get_running_loop()
         started = []
+        if self.task is None:
+            self.task = loop.create_task(self._pump_loop())
         if port:
             self.servers.append(await asyncio.start_server(self._handle, host, port))
             started.append(("amqp", port))
@@ -137,7 +139,6 @@ class AmqpServer:
                 ctx.load_cert_chain(*cc)
                 self.servers.append(await asyncio.start_server(self._handle, host, tls_port, ssl=ctx))
                 started.append(("amqps", tls_port))
-        self.task = loop.create_task(self._pump_loop())
         return started
 
     async def stop(self):
