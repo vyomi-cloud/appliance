@@ -155,6 +155,14 @@ func main() {
 		must("DeletePatchBaseline", err)
 	}
 
+	// ── Default host management configuration ──
+	role := "arn:aws:iam::000000000000:role/go-dhmc-" + sfx
+	rg, err := c.RegisterDefaultHostManagementConfiguration(ctx, &ssm.RegisterDefaultHostManagementConfigurationInput{
+		PermissionModel: types.DHMCPermissionModelServiceManaged, RoleArn: aws.String(role)})
+	chk("RegisterDefaultHostManagementConfiguration echoes RoleArn", err == nil && aws.ToString(rg.RoleArn) == role, fmt.Sprint(err))
+	_, err = c.DeregisterDefaultHostManagementConfiguration(ctx, &ssm.DeregisterDefaultHostManagementConfigurationInput{})
+	must("DeregisterDefaultHostManagementConfiguration", err)
+
 	// ── cleanup ──
 	_, err = c.DeleteDocument(ctx, &ssm.DeleteDocumentInput{Name: aws.String(doc)})
 	must("DeleteDocument", err)
