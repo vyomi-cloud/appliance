@@ -6,11 +6,26 @@
 // openMesh(). When the Mesh session ends the hub is dropped, and the next request opens a fresh one.
 import { createSshHub } from "./mesh-ssh.mjs";
 
-export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, log = () => {}, retryMs = 15000, now = Date.now } = {}) {
+export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, currentCodespace = null, recheckMs = 30000, log = () => {}, retryMs = 15000, now = Date.now } = {}) {
   let hub = null, pending = null, failed = null;          // failed: {at, err}
-  const drop = () => { const h = hub; hub = null; try { h && h.close(); } catch { /* */ } };
+  let hubCs = null, checkedAt = 0;                         // the Codespace this link was opened for; when we last re-checked it
+  const drop = () => { const h = hub; hub = null; hubCs = null; try { h && h.close(); } catch { /* */ } };
+  // A Mesh restart creates a NEW Codespace. A relay that keeps running must not keep talking to the dead one: while there is Mesh traffic,
+  // re-read the account's current Codespace (at most every recheckMs, from a fresh signed session) and drop the link when it changed or the
+  // Mesh session is over. The next request then opens a fresh link.
+  async function fresh() {
+    if (!hub || !currentCodespace || now() - checkedAt < recheckMs) return;
+    checkedAt = now();
+    let r; try { r = await currentCodespace({ log }); } catch { return; }
+    if (r && (r.error === "SessionEnded" || (r.codespace && hubCs && r.codespace !== hubCs))) {
+      log(r.error ? "your Mesh session has ended." : `Mesh moved to a new Codespace (${r.codespace}); reconnecting.`); drop(); failed = null;
+    }
+  }
+  const stale = () => { checkedAt = 0; setTimeout(drop, 0); };   // the simulator stream failed: don't keep a possibly dead link
   function ensure() {
-    if (hub) return Promise.resolve(hub);
+    return fresh().then(() => hub ? hub : open());
+  }
+  function open() {
     if (failed && now() - failed.at < retryMs) return Promise.reject(failed.err);       // don't hammer the portal / gh on every poll
     if (!pending) {
       pending = (async () => {
@@ -18,6 +33,7 @@ export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, log = (
         if (o.error) { const e = new Error(o.error); e.code = o.code || "MeshUnavailable"; throw e; }
         o.transport.onStop(() => { log("your Mesh session has ended."); drop(); });
         hub = createSshHub({ WebSocketServer, WebSocket, transport: o.transport, log });
+        hubCs = (o.sess && o.sess.codespace) || o.transport.codespace || null; checkedAt = now();
         failed = null;
         return hub;
       })().catch((e) => { failed = { at: now(), err: e }; throw e; }).finally(() => { pending = null; });
@@ -33,6 +49,7 @@ export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, log = (
     /** Mesh plane = HTTP carrying X-Vyomi-Session-Token (the Nano console's compute/AI calls). Anything else is the relay's own business. */
     http(req, res, body) {
       if (req.headers["x-vyomi-session-token"] === undefined) return false;
+      const wh = res.writeHead.bind(res); res.writeHead = (st, ...a) => { if (st === 502) stale(); return wh(st, ...a); };
       ensure().then((h) => h.http(req, res, body)).catch((e) => {
         if (res.headersSent) return;
         res.writeHead(e.code === "PlanNotAllowed" ? 403 : 503, { "content-type": "application/json" });

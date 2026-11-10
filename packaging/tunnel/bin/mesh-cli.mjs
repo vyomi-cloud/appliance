@@ -247,6 +247,13 @@ export async function openMesh({ cs, log = () => {} } = {}) {
   return { transport, sess };
 }
 
+/** The account's CURRENT Mesh Codespace, from a FRESH signed session (not the cached one): a Mesh restart creates a new Codespace, and a relay that
+ *  stays running must follow it. {codespace} | {error: code} (SessionEnded = the Mesh is over). */
+export async function currentMeshCodespace({ log = () => {} } = {}) {
+  const { createSessionManager } = await import("./credentials.mjs");
+  try { const s = await createSessionManager({ log }).get(); return { codespace: s.codespace || null }; } catch (e) { return { error: e.code || "Error" }; }
+}
+
 export async function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { const topic = cmd === "help" ? rest[0] : (["-h", "--help", "-help", "-?"].includes(cmd) ? undefined : cmd); const t = topic && DETAILS[topic];

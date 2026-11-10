@@ -76,7 +76,7 @@ const hub = process.env.VYOMI_MESH_CODESPACE
   ? createSshHub({ WebSocketServer, WebSocket, transport: createSshTransport({ codespace: process.env.VYOMI_MESH_CODESPACE, log: (m) => console.log("[relay] " + m) }), log: (m) => console.log("[relay] " + m) })
   : process.env.VYOMI_RELAY_AUTH === "1"
     // the user's own `vyomi-tunnel`: open the ssh link to their Mesh Codespace on first use (no hosted relay, no MESH_RELAY_URL)
-    ? createLazySshHub({ WebSocketServer, WebSocket, openMesh: async (o) => (await import("./mesh-cli.mjs")).openMesh(o), log: (m) => console.log("[relay] " + m) })
+    ? createLazySshHub({ WebSocketServer, WebSocket, openMesh: async (o) => (await import("./mesh-cli.mjs")).openMesh(o), currentCodespace: async (o) => (await import("./mesh-cli.mjs")).currentMeshCodespace(o), log: (m) => console.log("[relay] " + m) })
     : createHub({ WebSocketServer, log: (m) => console.log("[relay] " + m) });
 // Remote-LLM plane (spike, inert unless VYOMI_MESH_SESSION_KEY is set): a GitHub-Actions runner dials OUT to /llm-runner;
 // the mesh reaches it with plain HTTP under /llm/*.

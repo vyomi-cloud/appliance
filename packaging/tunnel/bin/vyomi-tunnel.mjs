@@ -59,7 +59,7 @@ const VERSION = "1.2.0";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 // Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own
 // `gh codespace ssh`; opened on first use). No hosted relay, no MESH_RELAY_URL. Needs a Pro/Max key + a running Mesh Codespace.
-const hub = createLazySshHub({ WebSocketServer, WebSocket, openMesh: async (o) => (await import("./mesh-cli.mjs")).openMesh(o), log: (m) => console.log("[relay] " + m) });
+const hub = createLazySshHub({ WebSocketServer, WebSocket, openMesh: async (o) => (await import("./mesh-cli.mjs")).openMesh(o), currentCodespace: async (o) => (await import("./mesh-cli.mjs")).currentMeshCodespace(o), log: (m) => console.log("[relay] " + m) });
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN
 const pending = new Map();     // id -> {resolve}
 // All registered tab sockets (shared worker, standalone endpoint, extra views).
