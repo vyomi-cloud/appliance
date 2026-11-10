@@ -1,13 +1,13 @@
 {
- "at": "2026-11-10T08:59:29+00:00",
+ "at": "2026-11-10T09:59:28+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "storage/v1",
-   "kind": "operation-added",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:added",
-   "title": "GCP storage/v1: new operation storage.anywhereCaches.pause",
+   "kind": "operation-removed",
+   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
+   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
    "detail": {
     "params": [
      "anywhereCacheId",
@@ -18,7 +18,7 @@
     "http": "POST",
     "deprecated": false
    },
-   "actionable": true
+   "actionable": false
   }
  ],
  "errors": []
