@@ -1,13 +1,13 @@
 {
- "at": "2026-11-10T07:59:30+00:00",
+ "at": "2026-11-10T08:59:29+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "storage/v1",
-   "kind": "operation-removed",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
-   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
+   "kind": "operation-added",
+   "key": "gcp:storage/v1:storage.anywhereCaches.pause:added",
+   "title": "GCP storage/v1: new operation storage.anywhereCaches.pause",
    "detail": {
     "params": [
      "anywhereCacheId",
@@ -18,16 +18,7 @@
     "http": "POST",
     "deprecated": false
    },
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "web",
-   "kind": "spec-commit",
-   "key": "azure:web:0d1214d41a",
-   "title": "Azure web: Fix Go SDK acronym naming across eight TypeSpec projects (#48037)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/0d1214d41ae3765a5e2a35866dc1c9327e46d439",
-   "actionable": false
+   "actionable": true
   }
  ],
  "errors": []
