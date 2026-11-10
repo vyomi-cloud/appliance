@@ -3,11 +3,16 @@
 # and keep CI boots out of the install/traction numbers.
 services:
   simulator:
-    # The workflow boots without VYOMI_DOCKER_GID, so the non-root `cloudlearn`
-    # user cannot open /var/run/docker.sock (group differs per runner image) and
-    # every EC2/VM launch failed with "permission denied" -> state=stopped.
-    # CI boots are ephemeral, so run as root to reach the socket on any runner.
-    user: "0:0"
+    # VYOMI_DOCKER_GID (set by the booting workflow from the runner's docker
+    # group) keeps the simulator on its normal non-root `cloudlearn` user —
+    # same as local/prod — while still granting /var/run/docker.sock access.
+    # A prior fix ran the container as root (user: "0:0") instead; that gave
+    # docker.sock access too, but also runs the EC2 LXD backend as root,
+    # which breaks its unprivileged-container launch and left every instance
+    # in state=stopped right after create (aws.ec2.reboot -> 409, console-
+    # actions pinned at 172/173 since v3.0.40's #498).
+    group_add:
+      - "${VYOMI_DOCKER_GID:-0}"
     environment:
       CLOUDLEARN_TIER_ENFORCE: "0"
       # Test boots must not count as installs in the traction numbers.
