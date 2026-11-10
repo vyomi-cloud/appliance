@@ -38,6 +38,9 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 CLOUDS = ("aws", "gcp", "azure")
 ROUTE_RE = re.compile(r"""@(?:app|router)\.(get|post|put|patch|delete|api_route)\(\s*["']([^"']+)["']""")
 OP_RE = re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$")            # PascalCase: PutItem, CreateDBInstance
+# single-word operations (Publish, Subscribe, Query) sit next to PascalCase ones in a real dispatch table
+ASL_CMP_RE = re.compile(r"^(Is[A-Z]\w+|(Numeric|String|Timestamp|Boolean)(Equals|LessThan|GreaterThan)\w*|StringMatches)$")
+ONEWORD_RE = re.compile(r"^[A-Z][A-Za-z0-9]+$")
 VERB_RE = re.compile(r"^_?(create|list|get|delete|update|put|patch|describe|publish|pull|acknowledge|ack|modify|set|"
                      r"insert|query|scan|upload|download|copy|invoke|add|remove|attach|detach|start|stop|restart|"
                      r"enable|disable|encrypt|decrypt|sign|verify|rotate|restore|purge|send|receive|batch|run|"
@@ -104,6 +107,25 @@ def console_features(target: str, cloud: str) -> list[dict]:
     return feats
 
 
+_AWS_OPS: dict[str, str] | None = None
+
+
+def _aws_ops() -> dict[str, str]:
+    """lowercase -> canonical name of every operation in botocore's service models ({} if unavailable)."""
+    global _AWS_OPS
+    if _AWS_OPS is None:
+        _AWS_OPS = {}
+        try:
+            import botocore.session
+            sess = botocore.session.get_session()
+            for svc in sess.get_available_services():
+                for op in sess.get_service_model(svc).operation_names:
+                    _AWS_OPS[op.lower()] = op
+        except Exception:
+            _AWS_OPS = {}
+    return _AWS_OPS
+
+
 def _ops_in(path: str) -> set[str]:
     """Operation names an engine implements: PascalCase keys of its dispatch
     tables (AWS JSON/query cores) plus verb-named handlers (REST cores)."""
@@ -112,27 +134,46 @@ def _ops_in(path: str) -> set[str]:
     except Exception:
         return set()
     ops = set()
+    defined = {f.name for f in ast.walk(tree) if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))}
     fn_ops: dict[str, str] = {}
     keys_all: set[str] = set()
     dispatched = set()   # handlers wired into a dispatch table: reported under the table's SDK operation name
     for n in ast.walk(tree):
         if isinstance(n, ast.Dict) and len(n.keys) >= 3:
             keys = [k.value for k in n.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
-            if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) for v in n.values) \
-                    and all(OP_RE.match(k) for k in keys):
+            if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) or (isinstance(v, ast.Tuple) and v.elts and isinstance(v.elts[0], ast.Name))
+                           for v in n.values) \
+                    and all(not isinstance(v, ast.Name) or v.id in defined for v in n.values) \
+                    and all(ONEWORD_RE.match(k) for k in keys) and sum(bool(OP_RE.match(k)) for k in keys) * 2 > len(keys):
+                # ASL Choice comparison tables (NumericEquals: lambda a, b: ...) are not SDK operations
+                if all(isinstance(v, ast.Lambda) and len(v.args.args) == 2 for v in n.values) \
+                        and all(ASL_CMP_RE.match(k) for k in keys):
+                    continue
                 ops |= set(keys)
                 keys_all |= set(keys)
-                dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)}
+                dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)} | {v.elts[0].id for v in n.values if isinstance(v, ast.Tuple)}
         elif isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id in ("op", "action", "target", "operation"):
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
+            if n.name.startswith("_") and _cloud_of(path) == "aws" and _aws_ops():
+                # private handler behind a route table: an SDK operation only if botocore knows it
+                # (under botocore's spelling); otherwise it is an internal helper (_create_grand, _invoke_raw)
+                canon = _aws_ops().get(fn_ops[n.name].lower())
+                if not canon:
+                    continue
+                fn_ops[n.name] = canon
             ops.add(fn_ops[n.name])
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
             ops.discard(fn_ops[fname])
+    if len(keys_all) >= 10:
+        # An engine with a real PascalCase dispatch table exposes exactly those operations;
+        # its other verb-named functions (create_grand, run_state, is_numeric...) are internal
+        # helpers, not SDK operations, so they must not be reported as untested ops.
+        ops = set(keys_all)
     return ops
 
 
@@ -285,7 +326,16 @@ def op_tested(op: str, corpus: str) -> bool:
 
 def route_tested(path: str, corpus: str) -> bool:
     stem = path.split("{")[0].rstrip("/")
-    return bool(stem) and re.search(re.escape(stem) + r"(?![A-Za-z0-9_-])", corpus) is not None
+    if stem and re.search(re.escape(stem) + r"(?![A-Za-z0-9_-])", corpus) is not None:
+        return True
+    # Tests often build the path from an f-string/template (f"/api/x/{tool}/resolve"):
+    # a templated segment in the test stands for any literal segment of the route.
+    segs = [x for x in path.split("/") if x]
+    if not segs or any("{" in x for x in segs):
+        return False
+    tpl = r"(?:\$?\{[A-Za-z_][\w.\[\]'\"()+ ]*\}|%s|\+\s*\w+\s*\+)"
+    pat = "/" + "/".join("(?:%s|%s)" % (re.escape(x), tpl) for x in segs)
+    return re.search(pat + r"(?![A-Za-z0-9_-])", corpus) is not None
 
 
 # ── Main ──────────────────────────────────────────────────────────────────

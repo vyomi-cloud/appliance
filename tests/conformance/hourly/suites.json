@@ -729,6 +729,54 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-aws-console-messaging",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_console_messaging_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-aws-console-secrets-kms",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_console_secrets_kms_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-runtime-tier-gates",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_runtime_tier_gates_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-core-runtime-tier-features",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "core",
+      "cmd": "python3 tests/conformance/test_runtime_tier_features_core.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-runtime-budgets",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_runtime_budgets_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-aws-console-rds-sql",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_console_rds_sql_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-sdk-info-extras-config",
       "target": "offline",
       "cloud": "aws",

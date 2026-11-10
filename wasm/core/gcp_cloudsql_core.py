@@ -537,6 +537,17 @@ def _promote_replica(store: SqlStore, project: str, instance: str) -> CloudSqlRe
     return _json(200, _op(rec, "PROMOTE_REPLICA"))
 
 
+def _reconcile_networking(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    """sql.projects.instances.reconcileNetworking (v1beta4, POST) -> Operation."""
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    rec["etag"] = _etag()
+    store.put_instance(_key(project, instance), rec)
+    store.persist()
+    return _json(200, _op(rec, "RECONCILE_NETWORKING"))
+
+
 def _workload_captures(store, project, instance, method, verb, workload_id, payload) -> CloudSqlResponse:
     """sql.workloadCaptures.{start,stop,startReplay,stopReplay,list} (v1beta4, preview).
     Discovery for these has flapped between request shapes, so the body is read
@@ -687,6 +698,8 @@ def dispatch(store: SqlStore, method: str, path: str,
         return _patch_instance(store, project, segs[3], payload)
     if len(segs) == 5 and segs[4] == "promoteReplica" and method == "POST":
         return _promote_replica(store, project, segs[3])
+    if len(segs) == 5 and segs[4] == "reconcileNetworking" and method == "POST":
+        return _reconcile_networking(store, project, segs[3])
     if len(segs) in (5, 6) and segs[4].split(":")[0] == "workloadCaptures":
         verb = segs[4].partition(":")[2]
         wid = None

@@ -54,6 +54,11 @@ def main():
     ex = sfn.start_execution(stateMachineArn=arn, input="{}")["executionArn"]
     check("sfn DescribeStateMachineForExecution", lambda: sfn.describe_state_machine_for_execution(executionArn=ex)["stateMachineArn"] == arn)
     check("sfn ListMapRuns on an execution without Map states is empty", lambda: sfn.list_map_runs(executionArn=ex)["mapRuns"] == [])
+    mr = ex.replace(":execution:", ":mapRun:") + "/nomap:00000000-0000-0000-0000-000000000000"
+    check("sfn DescribeMapRun of an unknown map run is ResourceNotFound",
+          lambda: raises(lambda: sfn.describe_map_run(mapRunArn=mr), "ResourceNotFound"))
+    check("sfn UpdateMapRun of an unknown map run is ResourceNotFound",
+          lambda: raises(lambda: sfn.update_map_run(mapRunArn=mr, maxConcurrency=2), "ResourceNotFound"))
     check("sfn RedriveExecution of a succeeded execution is refused",
           lambda: raises(lambda: sfn.redrive_execution(executionArn=ex), "ExecutionNotRedrivable"))
     check("sfn SendTaskHeartbeat with an unknown token is refused",
@@ -81,6 +86,20 @@ def main():
     check("ssm CancelCommand on a finished command is a no-op", lambda: ssm.list_commands(CommandId=cid)["Commands"][0]["Status"] == "Success")
     check("ssm CancelCommand with an unknown id is refused", lambda: raises(lambda: ssm.cancel_command(CommandId=str(uuid.uuid4())), "InvalidCommandId"))
     check("ssm DescribeInstanceInformation answers", lambda: "InstanceInformationList" in ssm.describe_instance_information())
+
+    try:
+        ssm.deregister_default_host_management_configuration()
+    except ClientError:
+        pass
+    check("ssm RegisterDefaultHostManagementConfiguration returns a role ARN",
+          lambda: ssm.register_default_host_management_configuration(PermissionModel="DefaultRole")["RoleArn"].startswith("arn:aws:iam::"))
+    check("ssm RegisterDefaultHostManagementConfiguration twice without Overwrite is refused",
+          lambda: raises(lambda: ssm.register_default_host_management_configuration(PermissionModel="DefaultRole"), "InvalidParameters"))
+    check("ssm RegisterDefaultHostManagementConfiguration with Overwrite replaces it",
+          lambda: ssm.register_default_host_management_configuration(PermissionModel="DefaultRole", Overwrite=True)["RoleArn"] != "")
+    ssm.deregister_default_host_management_configuration()
+    check("ssm re-register after deregister without Overwrite", lambda: bool(ssm.register_default_host_management_configuration(PermissionModel="DefaultRole")["RoleArn"]))
+    ssm.deregister_default_host_management_configuration()
 
     vpc = ec2.create_vpc(CidrBlock="10.77.0.0/16")["Vpc"]["VpcId"]
     rt = ec2.create_route_table(VpcId=vpc)["RouteTable"]["RouteTableId"]
