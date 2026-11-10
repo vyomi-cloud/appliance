@@ -119,7 +119,7 @@
     var c = pageCloud(), pc = planCloud();
     if (!c || !pc || cloudAllowed(c)) return;
     planGated = true;
-    var N = { aws: "AWS", gcp: "GCP", azure: "Azure" }, home = NANO_BASE + "/clouds.html";
+    var N = { aws: "AWS", gcp: "GCP", azure: "Azure" }, home = location.pathname.replace(/\/(v4\/.*|[^/]*-console\.html)$/, "") + "/clouds.html";   // the Spaces page next to the bundle (NANO_BASE is empty on /nano/v4/<cloud>/)
     var o = document.createElement("div"); o.id = "vyb-plan-gate"; o.setAttribute("role", "alertdialog"); o.setAttribute("aria-modal", "true");
     o.style.cssText = "position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:16px;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif";
     o.innerHTML = '<div style="max-width:440px;background:#fff;color:#0f172a;border-radius:12px;padding:24px 26px;box-shadow:0 20px 50px rgba(0,0,0,.35)">'
