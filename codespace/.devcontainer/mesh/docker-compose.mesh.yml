@@ -4,9 +4,11 @@ name: vyomi-mesh
 networks:
   vyomi-net:
     name: vyomi-net
+# The Mesh role (core/mesh_session.py, mesh_ai.py) exists only in v4 images. NEVER default to :latest: on 2026-11-10 it was a v3 build (3.0.46)
+# with no Mesh code, and every Mesh Codespace booted it. Pin the exact release tag at GA; override with VYOMI_SIMULATOR_IMAGE.
 services:
   simulator:
-    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:v4-preview}
     pull_policy: always
     user: "0:0"
     networks: [vyomi-net]
@@ -53,7 +55,7 @@ services:
     command: ["-hf", "${VYOMI_AI_EMBED_HF:-CompendiumLabs/bge-small-en-v1.5-gguf:Q8_0}", "--host", "0.0.0.0", "--port", "8080",
               "--embeddings", "-c", "${VYOMI_AI_EMBED_CTX:-512}", "-np", "1", "-t", "1"]
   llm:
-    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:v4-preview}
     profiles: ["ai"]
     networks: [vyomi-net]
     restart: unless-stopped
