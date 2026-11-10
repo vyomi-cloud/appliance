@@ -1,4 +1,4 @@
-/* Pro = ONE cloud in the Nano UI. Faked /api/account/booster (+ /primary-cloud) against the Nano preview.
+/* Pro = ONE cloud in the Nano UI. Faked /api/account/mesh (+ /primary-cloud) against the Nano preview.
  *   Pro, no cloud yet -> every cloud usable; the first one used is pinned (POST /primary-cloud), the other two then locked
  *   Pro, cloud chosen -> the other clouds are refused (gate + create-space), the chosen one works
  *   Max               -> all three, nothing pinned
@@ -20,7 +20,7 @@ const MAX = { enabled: true, effective: true, status: "active", source: "subscri
 async function open(acc) {
   const ctx = await browser.newContext(); const page = await ctx.newPage(); const calls = []; let cur = acc;
   await ctx.addInitScript(() => { try { localStorage.setItem("vyomi.boosters", JSON.stringify([{ id: "bst-demo", name: "lab", paired_at: 1, base: "http://127.0.0.1:1", token: "t" }])); } catch {} });
-  await page.route("**/api/account/booster**", async (route) => {
+  await page.route("**/api/account/mesh**", async (route) => {
     const u = new URL(route.request().url()), m = route.request().method(); calls.push(m + " " + u.pathname);
     if (cur === null) return route.fulfill({ status: 404, body: "no" });
     if (m === "POST" && u.pathname.endsWith("/primary-cloud")) {
@@ -42,7 +42,7 @@ const allowed = (page) => page.evaluate(() => ["aws", "gcp", "azure"].map((c) =>
 try {
   let t = await open(PRO(""));
   check("Pro, no cloud yet: all three usable", JSON.stringify(await allowed(t.page)) === "[true,true,true]");
-  check("Pro: first gate use pins that cloud", await t.page.evaluate(async () => await window._cloudGate("gcp", null)) === true && t.calls.includes("POST /api/account/booster/primary-cloud"), t.calls.join(","));
+  check("Pro: first gate use pins that cloud", await t.page.evaluate(async () => await window._cloudGate("gcp", null)) === true && t.calls.includes("POST /api/account/mesh/primary-cloud"), t.calls.join(","));
   check("Pro: other clouds now locked, gcp stays", JSON.stringify(await allowed(t.page)) === "[false,true,false]");
   check("Pro: gate refuses aws", await t.page.evaluate(async () => await window._cloudGate("aws", null)) === false);
   await t.ctx.close();
@@ -51,11 +51,11 @@ try {
   check("Pro, aws chosen: only aws", JSON.stringify(await allowed(t.page)) === "[true,false,false]");
   const g = await t.page.evaluate(async () => ({ gate: await window._cloudGate("gcp", null), allowed: VyomiBooster.cloudAllowed("gcp") }));
   check("Pro: a GCP space/compute request is refused (one cloud only)", g.gate === false && g.allowed === false, JSON.stringify(g));
-  check("Pro: no pin call when a cloud is already chosen", !t.calls.includes("POST /api/account/booster/primary-cloud"), t.calls.join(","));
+  check("Pro: no pin call when a cloud is already chosen", !t.calls.includes("POST /api/account/mesh/primary-cloud"), t.calls.join(","));
   await t.ctx.close();
 
   t = await open(MAX);
-  check("Max: all three, nothing pinned", JSON.stringify(await allowed(t.page)) === "[true,true,true]" && await t.page.evaluate(async () => await window._cloudGate("azure", null)) === true && !t.calls.includes("POST /api/account/booster/primary-cloud"));
+  check("Max: all three, nothing pinned", JSON.stringify(await allowed(t.page)) === "[true,true,true]" && await t.page.evaluate(async () => await window._cloudGate("azure", null)) === true && !t.calls.includes("POST /api/account/mesh/primary-cloud"));
   await t.ctx.close();
 
   t = await open(null);

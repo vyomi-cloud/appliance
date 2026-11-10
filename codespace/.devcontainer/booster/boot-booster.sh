@@ -41,7 +41,7 @@ arm_expiry() {
   ( sleep "$left"; expire ) >/dev/null 2>&1 & echo $! > "$RUN_DIR/expiry.pid"; disown 2>/dev/null || true
 }
 expire() {
-  post /api/booster/session/ended "{\"codespace_id\":\"$CODESPACE\",\"reason\":\"ttl\"}"
+  post /api/mesh/session/ended "{\"codespace_id\":\"$CODESPACE\",\"reason\":\"ttl\"}"
   docker compose -f "$COMPOSE" --profile ai down 2>/dev/null || true
   date -u +%FT%TZ > "$RUN_DIR/EXPIRED"; log "session ended — stack stopped (idle timeout will stop the Codespace)."
 }
@@ -55,7 +55,7 @@ fetch_session() {
   [ -n "${VYOMI_BOOSTER_SESSION_TOKEN:-}" ] && [ -n "${VYOMI_BOOSTER_SESSION_KEY:-}" ] && return 0
   local out tok key end i
   for i in 1 2 3 4 5 6 7 8 9 10; do
-    out=$(curl -fsS -m 10 -G "$PORTAL/api/booster/session/token" --data-urlencode "codespace_id=$CODESPACE" 2>/dev/null) && {
+    out=$(curl -fsS -m 10 -G "$PORTAL/api/mesh/session/token" --data-urlencode "codespace_id=$CODESPACE" 2>/dev/null) && {
       tok=$(printf '%s' "$out" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
       key=$(printf '%s' "$out" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
       end=$(printf '%s' "$out" | sed -n 's/.*"session_end":\([0-9]*\).*/\1/p')
@@ -107,7 +107,7 @@ start_stack() {
   docker compose -f "$COMPOSE" up -d simulator
   for _ in $(seq 1 60); do
     if docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 3 http://localhost:9000/healthz >/dev/null 2>&1; then
-      post /api/booster/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
+      post /api/mesh/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
       start_ai
       log "booster ready."; return 0
     fi; sleep 3

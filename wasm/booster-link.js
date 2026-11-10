@@ -98,7 +98,7 @@
   var account = null, accTimer = null;
   var _origFetch = window.fetch.bind(window);
   function accountFetch(method, path) {
-    return _origFetch("/api/account/booster" + (path || ""), { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" } })
+    return _origFetch("/api/account/mesh" + (path || ""), { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" } })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, body: j }; }); });
   }
   function loadAccount() {
@@ -121,7 +121,7 @@
   function cloudAllowed(c) { if (!account || account.clouds !== "one") return true; var pc = planCloud(); return !pc || String(c).toLowerCase() === pc; }
   function pinCloud(c) {   // first use of a cloud on a Pro plan chooses it; refused once another is chosen
     if (!account || account.clouds !== "one" || planCloud()) return Promise.resolve(cloudAllowed(c));
-    return _origFetch("/api/account/booster/primary-cloud", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ cloud: c }) })
+    return _origFetch("/api/account/mesh/primary-cloud", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ cloud: c }) })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (r) { if (r.ok) { account = r.body; try { window.dispatchEvent(new CustomEvent("vyomi-booster-account", { detail: account })); } catch (_) {} return true; } if (r.body && r.body.primary_cloud) { account = Object.assign({}, account, { primary_cloud: r.body.primary_cloud }); } return false; }, function () { return true; });
   }
@@ -130,7 +130,7 @@
 
 
   // ── portal session (the portal-Nano flow: Start/Stop live on the vyomi.cloud dashboard; Nano only shows + uses it) ──────────
-  // /api/booster/status -> {session:{state,countdown_seconds,session_token,error},relay_url,error,ended_note,hours_remaining,...}.
+  // /api/mesh/status -> {session:{state,countdown_seconds,session_token,error},relay_url,error,ended_note,hours_remaining,...}.
   // While the session is running the relay is registered as an in-memory mesh and compute/AI wire calls are routed to it.
   var sess = null, sessTimer = null;
   var COMPUTE_SCOPE = /Credential=[^/]+\/[^/]+\/[^/]+\/(ec2|lambda|ecs|eks|batch|lightsail|autoscaling|apprunner|bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime|sagemaker|sagemaker-runtime)\//i;
@@ -156,7 +156,7 @@
     render();
   }
   function loadSession() {
-    return realFetch("/api/booster/status", { credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
+    return realFetch("/api/mesh/status", { credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { applySession(j && typeof j.entitled === "boolean" && j.entitled ? j : null); }, function () { applySession(null); });
   }
   function sessionTick() { if (sess && sess.session && sess.session.countdown_seconds > 0) { sess.session.countdown_seconds -= 1; renderChip(); } }
@@ -419,7 +419,7 @@
   // ── Start / Stop from the console (same portal API the legacy dashboard card used) ──────────────────────────────────────────
   var hbTimer = null;
   function portalApi(path, method) {
-    return realFetch("/api/booster/" + path, { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
+    return realFetch("/api/mesh/" + path, { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j || {} }; }); });
   }
   function ensureHeartbeat() {            // the portal ends a session whose Vyomi tab has been closed for 5 minutes: the open console is that tab

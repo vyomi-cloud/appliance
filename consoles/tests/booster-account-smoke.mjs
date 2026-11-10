@@ -1,4 +1,4 @@
-/* Account flow: the portal's booster record decides backend vs browser. Faked /api/account/booster (route) against the Nano preview.
+/* Account flow: the portal's booster record decides backend vs browser. Faked /api/account/mesh (route) against the Nano preview.
  *   not enabled  -> no booster option (no Create Space modal in the portal-Nano flow) (everything stays in the browser)
  *   enabled      -> picker offers the booster and PRESELECTS it (backend)
  *   toggle       -> dialog Turn off / Turn on call POST /disable | /enable and the picker follows
@@ -20,7 +20,7 @@ const OFF = { enabled: false, effective: false, status: "none", source: "", tier
 async function open(acc) {
   const ctx = await browser.newContext(); const page = await ctx.newPage(); const calls = []; let cur = acc;
   await ctx.addInitScript(() => { try { localStorage.setItem("vyomi.boosters", JSON.stringify([{ id: "bst-demo", name: "lab", paired_at: 1, base: "http://127.0.0.1:1", token: "t" }])); } catch {} });
-  await page.route("**/api/account/booster**", async (route) => {
+  await page.route("**/api/account/mesh**", async (route) => {
     const u = new URL(route.request().url()), m = route.request().method(); calls.push(m + " " + u.pathname);
     if (cur === null) return route.fulfill({ status: 404, body: "no" });
     if (m === "POST" && u.pathname.endsWith("/enable")) cur = { ...EN };
@@ -59,10 +59,10 @@ try {
   await t.page.evaluate(() => { document.documentElement.classList.remove("vy-entering", "vy-pickopen"); VyomiBooster.openPairDialog(); });   // clouds.html hides the page while it auto-enters / shows its cloud picker
   check("dialog shows booster off + Turn on", /Booster:\s*off/i.test(await t.page.innerText("#vyb-acc")) && /Turn on/.test(await t.page.innerText("#vyb-acc-btn")));
   await t.page.click("#vyb-acc-btn"); await t.page.waitForFunction(() => /Turn off/.test((document.getElementById("vyb-acc-btn") || {}).textContent || ""), null, { timeout: 8000 }).catch(() => {});
-  check("Turn on -> POST /enable, dialog says on", t.calls.includes("POST /api/account/booster/enable") && /Booster:\s*on/i.test(await t.page.innerText("#vyb-acc")), t.calls.join(","));
+  check("Turn on -> POST /enable, dialog says on", t.calls.includes("POST /api/account/mesh/enable") && /Booster:\s*on/i.test(await t.page.innerText("#vyb-acc")), t.calls.join(","));
   check("picker now offers + preselects the booster", (await picker(t.page)).value === "bst-demo");
   await t.page.click("#vyb-acc-btn"); await t.page.waitForFunction(() => /Turn on/.test((document.getElementById("vyb-acc-btn") || {}).textContent || ""), null, { timeout: 8000 }).catch(() => {});
-  check("Turn off -> POST /disable, back to browser only", t.calls.includes("POST /api/account/booster/disable") && !(await picker(t.page)).shown);
+  check("Turn off -> POST /disable, back to browser only", t.calls.includes("POST /api/account/mesh/disable") && !(await picker(t.page)).shown);
   await t.ctx.close();
 } catch (e) { bad++; console.log("FAIL harness - " + (e && e.stack || e)); }
 finally { await browser.close(); preview.kill(); }

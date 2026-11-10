@@ -3,7 +3,7 @@
  *   Pro / Max entitled but switched off              -> "Turn on the Mesh"
  *   Free, trial never used                           -> "Start 30-day trial" (one per account; same trial as the appliance)
  *   Trial ended / not entitled                       -> "Upgrade to Pro / Max"
- * Uses window.VyomiBooster (booster-link.js) and /api/account/booster. Cloud = data-cloud on this script tag. */
+ * Uses window.VyomiBooster (booster-link.js) and /api/account/mesh. Cloud = data-cloud on this script tag. */
 (function () {
   "use strict";
   var me = document.currentScript, CLOUD = (me && me.getAttribute("data-cloud")) || "";
@@ -58,7 +58,7 @@
     document.head.appendChild(st);
   }
   function api(path, body) {
-    return fetch("/api/account/booster" + path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body || {}) })
+    return fetch("/api/account/mesh" + path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body || {}) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
   }
   function refresh() { var b = B(); return b ? Promise.all([b.loadAccount(), b.loadSession()]).then(paint, paint) : Promise.resolve(); }

@@ -168,7 +168,7 @@ function decodeJwt(token) {
 // Portal account tier (Nano is served by the portal, same origin): a signed-in Pro/Max account with no activated licence still gets its plan.
 async function accountClaims() {
   try {
-    const r = await fetch("/api/booster/status", { credentials: "same-origin", cache: "no-store" });
+    const r = await fetch("/api/mesh/status", { credentials: "same-origin", cache: "no-store" });
     if (!r.ok) return null;
     const j = await r.json();
     if (j && (j.tier === "pro" || j.tier === "max")) return { tier: j.tier, primary_cloud: j.primary_cloud || "", sub: j.email || "" };

@@ -1,5 +1,5 @@
 /* UI check for the booster shell: the REAL wasm/booster-link.js + wasm/vm/nano-vm-host.js + xterm in headless Chromium, talking to the
- * REAL relay + dial agent + core/booster_shell.py (fake docker CLI -> local sh on the PTY). Only the portal's /api/booster/status is stubbed.
+ * REAL relay + dial agent + core/booster_shell.py (fake docker CLI -> local sh on the PTY). Only the portal's /api/mesh/status is stubbed.
  *   PY=<venv python> NODE_PATH=/tmp/np/node_modules RELAY_PORT=8812 node wasm/relay/test-booster-shell-ui.mjs
  * Proves: with a running booster session "Open shell" attaches the terminal to the Codespace VM (not the in-browser VM), typing works,
  * booster down shows a clear message (no silent fallback), no booster session leaves the in-browser path untouched. */
@@ -51,8 +51,8 @@ async function page(sessionStatus) {
   const ctx = await browser.newContext();
   const pg = await ctx.newPage();
   const errors = []; pg.on("pageerror", (e) => errors.push(String(e)));
-  await pg.route("**/api/booster/status", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(sessionStatus) }));
-  await pg.route("**/api/account/booster", (r) => r.fulfill({ status: 404, body: "{}" }));
+  await pg.route("**/api/mesh/status", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(sessionStatus) }));
+  await pg.route("**/api/account/mesh", (r) => r.fulfill({ status: 404, body: "{}" }));
   await pg.route("**/api/spaces/active", (r) => r.fulfill({ status: 404, body: "{}" }));
   await pg.route("**/connect-info", (r) => r.fulfill({ status: 404, contentType: "application/json", body: '{"ok":false}' }));
   await pg.goto(`http://127.0.0.1:${WEB}/harness.html`);

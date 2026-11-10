@@ -201,7 +201,7 @@ builtins._capture = _capture; builtins._restore = _restore
       if (c && !(c.exp && c.exp * 1000 < Date.now())) { tier = c.tier || "free"; primary = c.primary_cloud || ""; }
     } catch (_) { /* unreadable -> Free (locked) */ }
     if (tier === "free") {      // same fallback as sw.js accountClaims(): a signed-in Pro/Max portal account without an activated licence
-      try { const r = await fetch("/api/booster/status", { credentials: "same-origin", cache: "no-store" }); const j = r.ok ? await r.json() : null; if (j && (j.tier === "pro" || j.tier === "max")) { tier = j.tier; primary = j.primary_cloud || ""; } } catch (_) {}
+      try { const r = await fetch("/api/mesh/status", { credentials: "same-origin", cache: "no-store" }); const j = r.ok ? await r.json() : null; if (j && (j.tier === "pro" || j.tier === "max")) { tier = j.tier; primary = j.primary_cloud || ""; } } catch (_) {}
     }
     try { py.runPython(`_set_k8s_tier(${JSON.stringify(String(tier))}, ${JSON.stringify(String(primary))})`); } catch (_) {}
   };

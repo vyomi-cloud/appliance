@@ -3,7 +3,7 @@
  *
  *   node consoles/nano_preview.mjs [--port 8743] [--tier pro|max [--primary azure|gcp|aws]]   →  http://127.0.0.1:8743/nano/  (launcher → v4 consoles)
  *
- * --tier answers the portal's /api/booster/status as a signed-in account of that plan (the SW's accountClaims()), which is how Nano learns
+ * --tier answers the portal's /api/mesh/status as a signed-in account of that plan (the SW's accountClaims()), which is how Nano learns
  * the plan with no activated licence. Managed Kubernetes (AKS/GKE) is Pro/Max only (core/k8s_tier_gate.py) and fails closed on Nano without
  * one, so the Nano smoke runner (consoles/tests/run-nano-smokes.mjs) starts the preview with --tier max.
  */
@@ -25,7 +25,7 @@ const MIME = {
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
-  if (TIER && url.pathname === "/api/booster/status") {
+  if (TIER && url.pathname === "/api/mesh/status") {
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     return res.end(JSON.stringify({ tier: TIER, primary_cloud: PRIMARY, email: "nano-preview@test.local" }));
   }

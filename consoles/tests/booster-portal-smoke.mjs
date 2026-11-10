@@ -1,5 +1,5 @@
 /* Portal-Nano booster flow (NO Create Space): Start/Stop live on the vyomi.cloud dashboard; Nano shows the session and routes
- * compute/AI to it. The portal's /api/booster/status is faked (page.route) and a tiny fake relay+booster answers the session
+ * compute/AI to it. The portal's /api/mesh/status is faked (page.route) and a tiny fake relay+booster answers the session
  * token plane. Checks: off / starting / running+connected / <15 min warning / compute+AI routed while emulators stay local /
  * unreachable / ended note / failed+action / not entitled -> no chip / session token never persisted.
  *   PW=<playwright path> node consoles/tests/booster-portal-smoke.mjs      Exit 1 on any FAIL. */
@@ -36,8 +36,8 @@ const running = (left = 25000) => ({ ...base, active: true, relay_url: `ws://127
 let cur = { ...base };
 const browser = await pw.chromium.launch(); const ctx = await browser.newContext(); const page = await ctx.newPage();
 await ctx.addInitScript(() => { try { localStorage.setItem("vyomi.booster_poll_ms", "250"); } catch {} });
-await page.route("**/api/booster/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(cur) }));
-await page.route("**/api/account/booster**", (route) => route.fulfill({ status: 404, body: "no" }));
+await page.route("**/api/mesh/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(cur) }));
+await page.route("**/api/account/mesh**", (route) => route.fulfill({ status: 404, body: "no" }));
 const errors = []; page.on("pageerror", (e) => errors.push(e.message));
 const chip = () => page.evaluate(() => { const c = document.getElementById("vyb-chip"); return c ? { text: c.textContent, state: c.dataset.state, link: c.dataset.link, cls: c.className, href: (c.querySelector("a") || {}).getAttribute?.("href") } : null; });
 const until = (fn, arg, t = 15000) => page.waitForFunction(fn, arg, { timeout: t }).then(() => true, () => false);
