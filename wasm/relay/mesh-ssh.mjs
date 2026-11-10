@@ -56,10 +56,12 @@ export async function findCodespace(ghBin, spawn = nodeSpawn) {
 
 /** @returns transport {resolve(name,port), open(host,port), exec(cmd), http(req,res,body), close(), simulatorTarget()} */
 export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null, log = () => {}, ipTtlMs = 30000,
-                                     simulatorPort = 9000, hostSshPort = 2222, config = null, keepaliveMs = 240000 } = {}) {
+                                     simulatorPort = 9000, hostSshPort = 2222, config = null, keepaliveMs = 240000, env = {} } = {}) {
   if (codespace && !CODESPACE.test(String(codespace))) throw new Error("bad Codespace name");   // none given: found on the user's account at first use
   let cfg = config;                         // {file, host} - tests inject it; otherwise `gh codespace ssh --config` provides it
   let dir = null;
+  const sp = (bin, args, o = {}) => spawn(bin, args, { ...o, env: { ...process.env, ...env } });   // env carries GH_TOKEN from the Vyomi session
+  const stopHandlers = []; let stopTimer = null;
   const ips = new Map();                    // container name -> {ip, at}
   const live = new Set();
   let closed = false;
@@ -88,13 +90,13 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
   async function ensureConfig() {
     if (cfg) { startKeepalive(); return cfg; }
     if (!ghBin) {                                                    // find gh, or install a private pinned copy (gh-manager.mjs)
-      ghBin = (await ensureGh({ spawn, log })).path;
-      const a = await ghAuthOk(ghBin, { spawn });
+      ghBin = (await ensureGh({ spawn: sp, log })).path;
+      const a = await ghAuthOk(ghBin, { spawn: sp, env: { ...process.env, ...env } });
       if (!a.ok) throw new Error(a.reason);
     }
-    if (!codespace) { codespace = await findCodespace(ghBin, spawn); log("using Codespace " + codespace); }
+    if (!codespace) { codespace = await findCodespace(ghBin, sp); log("using Codespace " + codespace); }
     dir = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "vm-"));   // short: a unix ControlPath is limited to ~100 chars
-    const text = await collect(spawn(ghBin, ["codespace", "ssh", "-c", codespace, "--config"], { stdio: ["ignore", "pipe", "pipe"] }));
+    const text = await collect(sp(ghBin, ["codespace", "ssh", "-c", codespace, "--config"], { stdio: ["ignore", "pipe", "pipe"] }));
     const m = /^Host\s+(\S+)/m.exec(text);
     if (!m) throw new Error("gh did not return an ssh config for this Codespace");
     const file = join(dir, "ssh_config");
@@ -109,7 +111,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
   /** Run a command on the Codespace host (names are validated by the callers; nothing user-controlled is interpolated raw). */
   async function exec(cmd) {
     const c = await ensureConfig();
-    return collect(spawn("ssh", [...sshArgs(c), c.host, cmd], { stdio: ["ignore", "pipe", "pipe"] }));
+    return collect(sp("ssh", [...sshArgs(c), c.host, cmd], { stdio: ["ignore", "pipe", "pipe"] }));
   }
 
   async function containerIp(rawName) {
@@ -154,7 +156,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     if (closed) throw new Error("transport closed");
     if (!/^[0-9.]{7,15}$/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error("bad target");
     const c = await ensureConfig();
-    const child = spawn("ssh", [...sshArgs(c), "-W", `${host}:${port}`, c.host], { stdio: ["pipe", "pipe", "pipe"] });
+    const child = sp("ssh", [...sshArgs(c), "-W", `${host}:${port}`, c.host], { stdio: ["pipe", "pipe", "pipe"] });
     live.add(child);
     let errText = "";
     child.stderr?.on("data", (d) => { errText += d; });
@@ -201,9 +203,12 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     return classifyTargets(text);
   }
 
-  function close() { closed = true; clearInterval(ka.timer); for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) spawn("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
+  /** Close everything at an epoch-seconds deadline (the Mesh session end); handlers added with onStop run first. */
+  function stopAt(epochS) { clearTimeout(stopTimer); const ms = epochS * 1000 - Date.now(); stopTimer = setTimeout(() => { for (const h of stopHandlers) { try { h(); } catch { /* */ } } close(); }, Math.max(0, ms)); stopTimer.unref?.(); }
 
-  return { resolve, open, exec, list, simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
+  function close() { closed = true; clearTimeout(stopTimer); clearInterval(ka.timer); for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) sp("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
+
+  return { resolve, open, exec, list, stopAt, onStop: (h) => stopHandlers.push(h), simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
 }
 
 /** A drop-in for booster-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.

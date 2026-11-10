@@ -15,6 +15,7 @@ import net from "node:net";
 import crypto from "node:crypto";
 import readline from "node:readline";
 import { spawn } from "node:child_process";
+import { requireSession } from "./credentials.mjs";
 import { createRequire } from "node:module";
 import { keep } from "./keeper.mjs";
 
@@ -169,17 +170,30 @@ function openBrowser(url) {
 
 const HELP = `vyomi-tunnel - connect your machine to Vyomi
 
-  vyomi-tunnel login      sign in with GitHub (one time)
-  vyomi-tunnel list [nano|mesh|all]
+  vyomi-tunnel list [nano|mesh|all] [type]
                           show what you can reach, and how
   ssh <name>.vyomi        connect to the Codespace, a Docker instance or k3s
   vyomi-tunnel forward <name> <local>:<remote>
                           forward a port, e.g. forward k3s 6443:6443
   vyomi-tunnel            start the local relay for the Nano console
 
-<name>: host, k3s, or a Docker instance name. Start Mesh in the Vyomi console first.
+Everything needs a key (Free works for Nano; Mesh needs Pro or Max).
+Get one: 'vyomi-tunnel help credentials'.
 `;
 const DETAILS = {
+  credentials: `Mesh credentials (like ~/.aws/credentials)
+
+1. In the Vyomi console open the avatar menu > Tunnel credentials.
+2. Create an access key and download it.
+3. Save it as ~/.vyomi/credentials:
+
+   [default]
+   vyomi_access_key_id     = VYKA...
+   vyomi_secret_access_key = ...
+
+Or set VYOMI_ACCESS_KEY_ID and VYOMI_SECRET_ACCESS_KEY.
+Use another profile with VYOMI_PROFILE. A Free key covers Nano; Mesh needs Pro or Max.
+The first Mesh command also sets up 'ssh <name>.vyomi' for you.`,
   list: `vyomi-tunnel list [nano|mesh|all] [type] [--json]
 
 Shows what you can reach right now, and the command for each.
@@ -189,16 +203,7 @@ Shows what you can reach right now, and the command for each.
 Add a type to narrow it:
   vyomi-tunnel list nano vm        (also: api, db)
   vyomi-tunnel list mesh k3s       (also: host, instance, llm, service, forward)
-A type alone works too: vyomi-tunnel list vm
-  api       the Nano endpoint for aws/gcloud/az and SDKs (needs: vyomi-tunnel)
-  vm, db    VMs and databases running in the Nano tab
-  host, instance, k3s, llm, service   what runs in your Mesh Codespace
-  forward   port forwards you have running`,
-  login: `vyomi-tunnel login
-
-Signs you in to GitHub in your browser and sets up ssh so that
-'ssh <name>.vyomi' works. Installs the GitHub CLI for you if needed.
-Run it once.`,
+A type alone works too: vyomi-tunnel list vm`,
   forward: `vyomi-tunnel forward <name> <local>:<remote>
 
 Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespace.
@@ -206,6 +211,18 @@ Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespac
   vyomi-tunnel forward host 2222:22`,
 };
 export const helpText = (topic) => (topic && DETAILS[topic]) || HELP;
+
+/** Credentials -> Vyomi session -> an ssh transport to the user's Mesh Codespace. Returns {transport, sess} or {error, code}. */
+async function openMesh({ cs, log = () => {} } = {}) {
+  const { createSessionManager } = await import("./credentials.mjs");
+  const ssh = await import("./mesh-ssh.mjs");
+  let sess; try { sess = await createSessionManager({ log }).get(); } catch (e) { return { error: e.message, code: e.code }; }
+  if (!sess.meshAllowed) return { error: "Mesh needs a Pro or Max plan.", code: "PlanNotAllowed" };
+  try { await configureSsh({ yes: true }); } catch { /* ssh setup is best effort */ }
+  const transport = ssh.createSshTransport({ codespace: cs || sess.codespace || null, env: sess.githubToken ? { GH_TOKEN: sess.githubToken } : {}, log });
+  if (sess.sessionEnd) transport.stopAt(sess.sessionEnd);
+  return { transport, sess };
+}
 
 export async function main(argv) {
   const [cmd, ...rest] = argv;
@@ -221,7 +238,10 @@ export async function main(argv) {
   const ri = rest.indexOf("--relay-mode"); if (ri >= 0) rest.splice(ri, 1);   // legacy portal-token relay path
   if (ri < 0 && (cmd === "connect" || cmd === "forward")) {
     const ssh = await import("./mesh-ssh.mjs");
-    const transport = ssh.createSshTransport({ codespace: cs, log: (m) => console.error("vyomi-tunnel: " + m) });
+    const o = await openMesh({ cs, log: (m) => console.error("vyomi-tunnel: " + m) });
+    if (o.error) { console.error("vyomi-tunnel: " + o.error); return o.code === "NoCredentials" ? 2 : 1; }
+    const transport = o.transport;
+    transport.onStop(() => console.error("vyomi-tunnel: your Mesh session has ended."));
     try {
       if (cmd === "connect") { const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; } return await ssh.connectSsh(vm, { port: Number(rest[1] || 22), transport }); }
       const pos = rest.filter((x) => !x.startsWith("--")); const m = /^(\d{1,5}):(\d{1,5})$/.exec(pos[1] || "");
@@ -231,25 +251,20 @@ export async function main(argv) {
       let reg = null; if (f.port) { try { fs.mkdirSync(path.join(HOME, "forwards"), { recursive: true }); reg = path.join(HOME, "forwards", `${process.pid}.json`);
         fs.writeFileSync(reg, JSON.stringify({ pid: process.pid, target: vmName(pos[0]), local: f.port, remote: Number(m[2]), codespace: transport.codespace, started: new Date().toISOString() })); } catch { /* list just won't show it */ } }
       for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
+      transport.onStop(() => f.close());
       f.done.then(() => { try { reg && fs.rmSync(reg); } catch { /* */ } });
       return await f.done;
     } catch (e) { console.error("vyomi-tunnel: " + e.message); return 1; }
     finally { transport.close(); }
   }
-  if (cmd === "login" && !rest.includes("--portal") && !rest.includes("--token")) {
-    const g = await import("./gh-manager.mjs"), sshm = await import("./mesh-ssh.mjs");
-    const say = (m) => console.error("vyomi-tunnel: " + m);
-    let gh; try { gh = await g.ensureGh({ log: say }); } catch (e) { say(e.message); return 1; }
-    const run = (args, stdio) => new Promise((res) => spawn(gh.path, args, { stdio }).on("error", () => res(1)).on("close", (c) => res(c || 0)));
-    if ((await run(["auth", "status"], "ignore")) !== 0 && !process.env.GH_TOKEN) { say("signing in to GitHub..."); if (await run(["auth", "login", "--web", "-s", "codespace"], "inherit")) return 1; }
-    if ((await run(["codespace", "list", "--limit", "1"], "ignore")) !== 0 && !process.env.GH_TOKEN) { if (await run(["auth", "refresh", "-h", "github.com", "-s", "codespace"], "inherit")) return 1; }
-    const r = await configureSsh({ yes: true });
-    let where = ""; try { where = ` Mesh Codespace: ${await sshm.findCodespace(gh.path)}.`; } catch (e) { where = " " + e.message[0].toUpperCase() + e.message.slice(1); }
-    console.log(`Signed in.${r.changed ? " SSH set up." : ""}${where}\nConnect with: ssh <name>${SUFFIX}`);
-    return 0;
+  if (cmd === "login" || cmd === "gh-login") {                         // there is no login: credentials live in a file, like ~/.aws/credentials
+    console.error("vyomi-tunnel has no login. Save your access key as ~/.vyomi/credentials (console: avatar menu > Tunnel credentials). Run `vyomi-tunnel help credentials`.");
+    return 2;
   }
   if (cmd === "list" || cmd === "ls") {                                // every transport line, with the command to use it
     const json = rest.includes("--json"); const pos = rest.filter((x) => !x.startsWith("-"));
+    const auth = await requireSession();                                                                // nothing is listed without a valid key, Nano included
+    if (auth.error) { console.error("vyomi-tunnel: " + auth.error); return auth.code === "NoCredentials" ? 2 : 1; }
     const KINDS = ["api", "vm", "db", "host", "instance", "k3s", "llm", "service", "forward"];
     const SCOPES = { nano: ["api", "vm", "db"], mesh: ["host", "instance", "k3s", "llm", "service", "forward"], all: KINDS };      // forwards go to a Mesh target
     const norm = (w) => { w = String(w || "").toLowerCase(); return w === "k3s" || KINDS.includes(w) || SCOPES[w] ? w : w.replace(/(s|es)$/, "") && KINDS.includes(w.replace(/s$/, "")) ? w.replace(/s$/, "") : w; };   // vms -> vm, dbs -> db
@@ -261,9 +276,12 @@ export async function main(argv) {
       kinds = [t]; want = t;
     } else if (want && !KINDS.includes(want) && !SCOPES[want]) { console.error(`vyomi-tunnel: unknown "${pos[0]}". Use: nano, mesh, all, or a type (${KINDS.join(", ")})`); return 2; }
     const rows = []; const notes = [];
-    const ssh = await import("./mesh-ssh.mjs");
-    const transport = ssh.createSshTransport({ codespace: cs, log: () => {} });
-    const meshP = kinds.some((k) => ["host", "instance", "k3s", "llm", "service"].includes(k)) ? transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })) : Promise.resolve(null);
+    let transport = null, meshP = Promise.resolve(null);
+    if (kinds.some((k) => ["host", "instance", "k3s", "llm", "service"].includes(k))) {                    // Mesh also needs a plan that allows it
+      const o = await openMesh({ cs });
+      if (o.error) meshP = Promise.resolve({ err: o.error });
+      else { transport = o.transport; meshP = transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })); }
+    }
     const port = process.env.RELAY_PORT || 8090;
     if (kinds.some((k) => ["api", "vm", "db"].includes(k))) try {
       const h = await (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) })).json();
@@ -277,7 +295,7 @@ export async function main(argv) {
       const how = t.kind === "k3s" ? `vyomi-tunnel forward ${t.name} 6443:6443` : t.ssh ? `ssh ${t.name}${SUFFIX}` : t.ports.length ? `vyomi-tunnel forward ${t.name} ${t.ports[0]}:${t.ports[0]}` : "";
       rows.push({ where: "mesh", name: t.name, type: t.kind, address: t.ip ? t.ip + (t.ports[0] ? ":" + t.ports[0] : "") : "", connect: how });
     }
-    transport.close();
+    transport?.close();
     try { for (const f of fs.readdirSync(path.join(HOME, "forwards"))) {                       // active forwards (one file per running `forward`)
       const fp = path.join(HOME, "forwards", f); let d; try { d = JSON.parse(fs.readFileSync(fp, "utf8")); } catch { continue; }
       let alive = true; try { process.kill(d.pid, 0); } catch { alive = false; }
@@ -292,7 +310,6 @@ export async function main(argv) {
     for (const n of notes) console.log(`\n! ${n}`);
     return out.length ? 0 : 1;
   }
-  if (cmd === "gh-login") return main(["login", ...rest]);               // old name
   if (cmd === "connect") {
     const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; }
     const { relay, token } = load();
@@ -308,7 +325,7 @@ export async function main(argv) {
     for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
     return f.done;
   }
-  if (cmd === "login") {                                              // legacy: Vyomi portal token for the relay path (login --portal)
+  if (cmd === "relay-login") {                                        // legacy: Vyomi portal token for the old relay path
     const i = rest.indexOf("--token");
     if (i >= 0) { const { relay } = load(); save({ relay: rest[rest.indexOf("--relay") + 1] || relay, token: rest[i + 1] }); console.log("Saved."); return 0; }
     try { await login({ portal: process.env.VYOMI_PORTAL_URL || DEFAULT_PORTAL }); console.log("Signed in."); } catch (e) { console.error("vyomi-tunnel login: " + e.message); return 1; }

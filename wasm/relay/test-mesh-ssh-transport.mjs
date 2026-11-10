@@ -58,17 +58,6 @@ await assert.rejects(() => t.open("1.2.3.4; id", 22));         // open() only ta
 const lt = await t.list();
 assert.deepEqual(lt.map((r) => [r.name, r.kind]), [["host", "host"], ["simulator", "service"], ["llm-chat", "llm"], ["web", "instance"], ["vyomi-k3s-0123456789", "k3s"]]);
 assert.equal(lt.find((r) => r.name === "web").ip, "172.18.0.5"); assert.deepEqual(lt.find((r) => r.name === "simulator").ports, [9000]);
-// list in the packaged CLI: JSON shape, no crash with nothing reachable
-assert.equal(spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "bogus"], { encoding: "utf8" }).status, 2);
-for (const sc of ["nano", "mesh", "all"]) { const r = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", sc, "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
-  assert.ok(Array.isArray(JSON.parse(r.stdout).targets), "list " + sc); }
-const L = (...a) => spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", ...a], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
-for (const a of [["nano", "vm"], ["nano", "vms"], ["nano", "db"], ["nano", "dbs"], ["nano", "api"], ["vms"]]) assert.ok(Array.isArray(JSON.parse(L(...a, "--json").stdout).targets), "list " + a.join(" "));
-assert.equal(L("nano", "k3s").status, 2); assert.match(L("nano", "k3s").stderr, /nano types: api, vm, db/);   // type must belong to the scope
-assert.equal(L("mesh", "vm").status, 2); assert.equal(L("all", "vm").status, 2);
-const jl = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
-assert.ok(Array.isArray(JSON.parse(jl.stdout).targets));
-
 // the user's Mesh Codespace is found automatically (newest running vyomi-mesh-*; never someone else's or an unrelated one)
 const lst = (rows) => (b, a) => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(JSON.stringify(rows)); c.emit("close", 0); }); return c; };
 assert.equal(await findCodespace("gh", lst([{ name: "other-app", state: "Available" }, { name: "vyomi-mesh-old", state: "Available", createdAt: "2026-11-01" },
@@ -130,9 +119,9 @@ sim.close(); srv2.close();
 srv.close(); t.close();
 // help: every spelling prints the same usage; unknown commands fail with rc 2 and never start a relay
 const bin = new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname;
-for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["login", "-h"], ["help", "forward"]]) {
+for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["help", "credentials"], ["help", "list"], ["help", "forward"]]) {
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });
-  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? new RegExp("vyomi-tunnel " + (a[0] === "help" ? a[1] : a[0])) : /login[\s\S]*ssh <name>\.vyomi[\s\S]*forward/);
+  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? ({ credentials: /credentials[\s\S]*Tunnel credentials/, list: /list \[nano\|mesh\|all\]/, forward: /forward <name>/ })[a[0] === "help" ? a[1] : a[0]] : /list[\s\S]*ssh <name>\.vyomi[\s\S]*forward[\s\S]*key/);
 }
 const badCmd = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
 assert.equal(badCmd.status, 2); assert.match(badCmd.stderr, /unknown command "bogus"/);

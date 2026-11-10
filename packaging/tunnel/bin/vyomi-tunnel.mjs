@@ -50,6 +50,10 @@ if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "lis
 
 if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-tunnel: unknown command "${process.argv[2]}". Run \`vyomi-tunnel help\`.`); process.exit(2); }
 
+// Nothing is served without a valid Vyomi key (Free is enough for Nano). Same credentials file as the Mesh commands.
+{ const { requireSession } = await import("./credentials.mjs"); const a = await requireSession();
+  if (a.error) { console.error("vyomi-tunnel: " + a.error); process.exit(a.code === "NoCredentials" ? 2 : 1); } }
+
 const VERSION = "1.2.0";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN

@@ -13,12 +13,14 @@ simulator HTTP API (Nano compute calls) over it. Browser VMs (tunnel 2) are unch
   container with `Host: simulator:9000`, `/shell` -> 501, `/booster` -> 410), `connectSsh` / `forwardSsh` for the CLI.
 - `local-relay.mjs`: `VYOMI_MESH_CODESPACE=<name>` selects the ssh hub. `mesh-cli.mjs`: `connect|forward ... --codespace <name>` (or the env) goes straight over ssh, no relay/token.
 
-## User flow (one command)
-`vyomi-tunnel login` once: finds or installs gh, signs in to GitHub (browser, codespace scope), writes the `*.vyomi` ssh block and includes it in
-~/.ssh/config. After that `ssh <name>.vyomi` and `vyomi-tunnel forward <name> <local>:<remote>` just work: the user's running Mesh Codespace is found
-automatically (`findCodespace`: newest Available/Starting vyomi-mesh-* / vyomi-booster-*). No flags. Old pieces are hidden, not removed:
-`login --portal`/`--token` (portal-token relay), `connect|forward --relay-mode`, `--codespace`, `config`, `status`, `keep`, `gh-login` (alias of login).
-NOT verified: a real browser login end to end (device flow starts correctly), and that the user's own ssh key is accepted by the Codespace sshd on :2222.
+## User flow (credentials file, the AWS-CLI model; supersedes the earlier `login` flow)
+No login command. The user creates an access key in the console (avatar menu > Tunnel credentials) and saves `~/.vyomi/credentials`. Every command
+signs a request to the portal for a short-lived session (plan, Mesh session end, Codespace, GitHub token); the GitHub token goes to `gh` as GH_TOKEN, so
+the user never signs in to gh. Contract: `docs/architecture/v4.0/TUNNEL-CREDENTIALS-CONTRACT.md`. Nano also needs a key (Free works); Mesh needs Pro/Max;
+streams stop at session_end. The first Mesh command writes the `*.vyomi` ssh block. Tunnel side built and tested against a stub portal that verifies the
+signature; the portal side (key store, avatar page, /api/tunnel/session, GitHub token vending) is NOT built. NOT verified: a real Codespace with these
+credentials; that the user's ssh key is accepted by the Codespace sshd on :2222.
+Hidden/legacy: `--codespace`, `--relay-mode`, `relay-login`, `config`, `status`, `keep`.
 
 ## Discovery: `vyomi-tunnel list [nano|mesh|all|type] [--json]`
 Every transport line is listable so users can self-serve: types api (Nano endpoint), vm, db (browser), host, instance, k3s, llm, service (Mesh Codespace,
