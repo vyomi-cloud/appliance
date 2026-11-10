@@ -378,9 +378,19 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
       if (r.status() < 400 || !["POST", "PUT"].includes(r.request().method())) return;
       if (r.status() === 409 || TAKEN.test(await r.text().catch(() => ""))) taken = true;
     };
+    // Multi-step creates (an Azure VM PUTs vnet, public IP, NSG, NIC, then the VM) outlast the
+    // fixed 3s on a loaded stack; count the writes still in flight so the list is read after
+    // they finish, not while the last PUT is pending.
+    let inflight = 0;
+    const isWrite = (r) => ["POST", "PUT"].includes(r.method());
+    const onReq = (r) => { if (isWrite(r)) inflight++; };
+    const onDone = (r) => { if (isWrite(r)) inflight = Math.max(0, inflight - 1); };
+    page.on("request", onReq); page.on("requestfinished", onDone); page.on("requestfailed", onDone);
     page.on("response", onResp);
     await submit.click({ timeout: 3000 });
     await sleep(3000);
+    for (let i = 0; i < 40 && inflight > 0; i++) await sleep(500);   // up to 20s more
+    page.off("request", onReq); page.off("requestfinished", onDone); page.off("requestfailed", onDone);
     page.off("response", onResp);
     // The list only shows its first page, so a default name left by an earlier crawl can be
     // taken without being visible above (DynamoDB "Music" behind 10+ tables). The cloud then
