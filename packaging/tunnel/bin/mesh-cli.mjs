@@ -170,7 +170,8 @@ function openBrowser(url) {
 const HELP = `vyomi-tunnel - connect your machine to Vyomi
 
   vyomi-tunnel login      sign in with GitHub (one time)
-  vyomi-tunnel list       show everything you can reach, and how
+  vyomi-tunnel list [nano|mesh|all]
+                          show what you can reach, and how
   ssh <name>.vyomi        connect to the Codespace, a Docker instance or k3s
   vyomi-tunnel forward <name> <local>:<remote>
                           forward a port, e.g. forward k3s 6443:6443
@@ -179,10 +180,13 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
 <name>: host, k3s, or a Docker instance name. Start Mesh in the Vyomi console first.
 `;
 const DETAILS = {
-  list: `vyomi-tunnel list [type] [--json]
+  list: `vyomi-tunnel list [nano|mesh|all|type] [--json]
 
-Shows everything you can reach right now, and the command for each.
-Types: api, vm, db, host, instance, k3s, llm, service, forward
+Shows what you can reach right now, and the command for each.
+  nano    the Nano endpoint, browser VMs and databases
+  mesh    your Mesh Codespace: host, Docker instances, k3s, LLMs, services, and your forwards
+  all     everything (the default)
+Or one type: api, vm, db, host, instance, k3s, llm, service, forward
   api       the Nano endpoint for aws/gcloud/az and SDKs (needs: vyomi-tunnel)
   vm, db    VMs and databases running in the Nano tab
   host, instance, k3s, llm, service   what runs in your Mesh Codespace
@@ -244,13 +248,15 @@ export async function main(argv) {
   if (cmd === "list" || cmd === "ls") {                                // every transport line, with the command to use it
     const json = rest.includes("--json"); const want = rest.find((x) => !x.startsWith("-"));
     const KINDS = ["api", "vm", "db", "host", "instance", "k3s", "llm", "service", "forward"];
-    if (want && !KINDS.includes(want)) { console.error(`vyomi-tunnel: unknown type "${want}". Types: ${KINDS.join(", ")}`); return 2; }
+    const SCOPES = { nano: ["api", "vm", "db"], mesh: ["host", "instance", "k3s", "llm", "service", "forward"], all: KINDS };      // forwards go to a Mesh target
+    if (want && !KINDS.includes(want) && !SCOPES[want]) { console.error(`vyomi-tunnel: unknown "${want}". Use: nano, mesh, all, or a type (${KINDS.join(", ")})`); return 2; }
+    const kinds = SCOPES[want] || (want ? [want] : KINDS);                                                                      // no argument = all
     const rows = []; const notes = [];
     const ssh = await import("./mesh-ssh.mjs");
     const transport = ssh.createSshTransport({ codespace: cs, log: () => {} });
-    const meshP = (!want || !["api", "vm", "db", "forward"].includes(want) || want === "api") ? transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })) : Promise.resolve(null);
+    const meshP = kinds.some((k) => ["host", "instance", "k3s", "llm", "service"].includes(k)) ? transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })) : Promise.resolve(null);
     const port = process.env.RELAY_PORT || 8090;
-    try {
+    if (kinds.some((k) => ["api", "vm", "db"].includes(k))) try {
       const h = await (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) })).json();
       rows.push({ where: "local", name: "nano-api", type: "api", address: `http://127.0.0.1:${port}`, connect: `aws --endpoint-url http://127.0.0.1:${port} ...   (tab ${h.tab ? "connected" : "NOT connected"})` });
       for (const v of h.vms || []) rows.push({ where: "browser", name: v.vm, type: "vm", address: `127.0.0.1:${v.host_port}`, connect: `ssh -p ${v.host_port} user@127.0.0.1` });
@@ -269,11 +275,11 @@ export async function main(argv) {
       if (!alive) { try { fs.rmSync(fp); } catch { /* */ } continue; }
       rows.push({ where: "local", name: `${d.target}`, type: "forward", address: `127.0.0.1:${d.local}`, connect: `-> ${d.target}:${d.remote} (pid ${d.pid})` });
     } } catch { /* none */ }
-    const out = want ? rows.filter((r) => r.type === want) : rows;
+    const out = rows.filter((r) => kinds.includes(r.type));
     if (json) { console.log(JSON.stringify({ targets: out, notes }, null, 2)); return out.length ? 0 : 1; }
     const w = [9, 22, 10, 22]; const line = (r) => [r.where, r.name, r.type, r.address].map((c, i) => String(c).padEnd(w[i])).join(" ") + " " + r.connect;
     if (out.length) { console.log(line({ where: "WHERE", name: "NAME", type: "TYPE", address: "ADDRESS", connect: "CONNECT" })); for (const r of out) console.log(line(r)); }
-    else console.log(want ? `No ${want} targets right now.` : "Nothing reachable right now.");
+    else console.log(want && want !== "all" ? `No ${want} targets right now.` : "Nothing reachable right now.");
     for (const n of notes) console.log(`\n! ${n}`);
     return out.length ? 0 : 1;
   }

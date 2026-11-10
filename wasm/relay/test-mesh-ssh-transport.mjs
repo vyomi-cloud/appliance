@@ -60,6 +60,8 @@ assert.deepEqual(lt.map((r) => [r.name, r.kind]), [["host", "host"], ["simulator
 assert.equal(lt.find((r) => r.name === "web").ip, "172.18.0.5"); assert.deepEqual(lt.find((r) => r.name === "simulator").ports, [9000]);
 // list in the packaged CLI: JSON shape, no crash with nothing reachable
 assert.equal(spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "bogus"], { encoding: "utf8" }).status, 2);
+for (const sc of ["nano", "mesh", "all"]) { const r = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", sc, "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
+  assert.ok(Array.isArray(JSON.parse(r.stdout).targets), "list " + sc); }
 const jl = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
 assert.ok(Array.isArray(JSON.parse(jl.stdout).targets));
 
