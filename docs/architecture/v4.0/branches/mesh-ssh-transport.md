@@ -21,10 +21,10 @@ simulator HTTP API (Nano compute calls) over it. Browser VMs (tunnel 2) are unch
 | Short ControlPath dir under /tmp | os.tmpdir() | macOS unix-socket path limit (255 on exec with long tmpdir) |
 
 ## Open issues
-- [ ] `/shell` PTY plane (agent-based) is not carried over ssh yet - returns 501 (owner: Mesh)
-- [ ] `booster-dial.mjs` stays (hosted relay + existing tests use it); remove from the image once nothing needs it
-- [ ] Published `vyomi/appliance:latest` lacks /app/relay; needs rebuild (owner go)
-- [ ] Simulator on the stale image answers S3-style NoSuchBucket for unknown paths
+- [x] `/shell` PTY plane now carried over the ssh stream (tab <-> simulator `/booster/shell`); unit-tested, NOT yet live (Codespace was reaped by the idle timer, then came back without sshd)
+- [x] Image `COPY` fixed: ships mesh-ssh.mjs, runner-llm-hub.mjs, booster-mesh.mjs (trunk's local-relay imports them; the list lacked two); booster-dial.mjs no longer shipped
+- [ ] Image rebuild/publish so `vyomi/appliance` has /app/relay and the /booster/status route (owner go)
+- [ ] Live e2e of `/shell` + instance/k3s containers on a fresh Codespace, personal GitHub Free account (needs a new Mesh start)
 
 ## Testing
 Live against Codespace vyomi-mesh-jrjpj6jvggrvfqjjr: resolve host/simulator, CLI `connect host` and `forward` returned the sshd banner, WS `/connect`
