@@ -1,3 +1,5 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """Universal messaging lease state machine (AWS SQS, Azure Service Bus, GCP Pub/Sub).
 
 Pure Python, substrate-free, runs under Pyodide and host CPython.
