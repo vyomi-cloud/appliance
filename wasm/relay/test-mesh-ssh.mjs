@@ -89,6 +89,14 @@ link.stop(); await sleep(600);
 check("agent stop closes the open stream", (await Promise.race([s.p, sleep(3000).then(() => "hung")])) !== "hung");
 s.stdin.end();
 
+// 7b. a new Mesh start = a new Codespace = a new ssh host key: stale pins are dropped (checking stays on), same Codespace keeps its pin
+{ const home = fs.mkdtempSync(path.join(os.tmpdir(), "vh-")); const kh = path.join(home, "known_hosts");
+  fs.writeFileSync(kh, "host.vyomi ssh-ed25519 AAAAOLD\n");
+  check("first run records the Codespace and does not touch the pins", cli.resetKnownHostsOnNewCodespace("cs-one", { home }) === false && fs.readFileSync(kh, "utf8").includes("AAAAOLD"));
+  check("same Codespace keeps its pinned key", cli.resetKnownHostsOnNewCodespace("cs-one", { home }) === false && fs.readFileSync(kh, "utf8").includes("AAAAOLD"));
+  check("a NEW Codespace clears the stale pins", cli.resetKnownHostsOnNewCodespace("cs-two", { home }) === true && fs.readFileSync(kh, "utf8") === "");
+  check("no Codespace name is a no-op", cli.resetKnownHostsOnNewCodespace("", { home }) === false); }
+
 // 8. ssh config: idempotent Include, decline, remove
 const sshDir = fs.mkdtempSync(path.join(os.tmpdir(), "ssh-"));
 fs.writeFileSync(path.join(sshDir, "config"), "Host keep\n  User me\n");

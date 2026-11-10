@@ -113,6 +113,19 @@ export function forward(target, { local, remote, relay, token, WS, allowPrivileg
   });
 }
 
+/** Every Mesh start creates a NEW Codespace, so the ssh host key behind `host.vyomi` changes each time and the key pinned in ~/.vyomi/known_hosts
+ *  from the last one makes ssh refuse with "REMOTE HOST IDENTIFICATION HAS CHANGED". Host-key checking stays ON: when the Codespace differs from
+ *  the last one seen, forget the old pins (this file is ours and only holds *.vyomi keys); a new Codespace is then trusted on first use and pinned
+ *  for the rest of its life. Runs inside the ProxyCommand, i.e. before ssh checks the key. Returns true when the pins were reset. */
+export function resetKnownHostsOnNewCodespace(codespace, { home = HOME } = {}) {
+  if (!codespace) return false;
+  const last = path.join(home, "last_codespace"), kh = path.join(home, "known_hosts");
+  let prev = ""; try { prev = fs.readFileSync(last, "utf8").trim(); } catch { /* first run */ }
+  if (prev === codespace) return false;
+  try { fs.mkdirSync(home, { recursive: true, mode: 0o700 }); if (prev) fs.writeFileSync(kh, "", { mode: 0o600 }); fs.writeFileSync(last, codespace + "\n", { mode: 0o600 }); } catch { return false; }
+  return !!prev;
+}
+
 /** `config`: write ~/.vyomi/ssh_config and add ONE Include line to ~/.ssh/config (asks first unless yes). */
 export async function configureSsh({ yes = false, cmd = "vyomi-tunnel", sshDir = path.join(os.homedir(), ".ssh"), ask } = {}) {
   fs.mkdirSync(HOME, { recursive: true, mode: 0o700 });
@@ -251,6 +264,7 @@ export async function main(argv) {
     const o = await openMesh({ cs, log: (m) => console.error("vyomi-tunnel: " + m) });
     if (o.error) { console.error("vyomi-tunnel: " + o.error); return o.code === "NoCredentials" ? 2 : 1; }
     const transport = o.transport;
+    resetKnownHostsOnNewCodespace(o.transport.codespace || (o.sess && o.sess.codespace));
     transport.onStop(() => console.error("vyomi-tunnel: your Mesh session has ended."));
     try {
       if (cmd === "connect") { const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; } return await ssh.connectSsh(vm, { port: Number(rest[1] || 22), transport }); }
