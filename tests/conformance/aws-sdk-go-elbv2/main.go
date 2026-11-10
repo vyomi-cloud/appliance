@@ -237,7 +237,19 @@ func main() {
 	step("DeregisterTargets", err)
 	h, err = c.DescribeTargetHealth(ctx, &elb.DescribeTargetHealthInput{TargetGroupArn: &tgArn})
 	if step("DescribeTargetHealth (after deregister)", err) {
-		chk("one target left", len(h.TargetHealthDescriptions) == 1, "")
+		// Real ELBv2 keeps a deregistered target of an in-use group DRAINING for deregistration_delay.timeout_seconds
+		// (30 here), so it is still listed: one live target + the draining one, never "gone" instantly.
+		live, draining := 0, 0
+		for _, d := range h.TargetHealthDescriptions {
+			if d.TargetHealth != nil && d.TargetHealth.State == types.TargetHealthStateEnumDraining &&
+				d.TargetHealth.Reason == types.TargetHealthReasonEnumDeregistrationInProgress && aws.ToString(d.Target.Id) == "10.0.1.10" {
+				draining++
+			} else {
+				live++
+			}
+		}
+		chk("one live target left", live == 1, fmt.Sprint(h.TargetHealthDescriptions))
+		chk("deregistered target drains (Target.DeregistrationInProgress)", draining == 1, fmt.Sprint(h.TargetHealthDescriptions))
 	}
 	_, err = c.DeleteLoadBalancer(ctx, &elb.DeleteLoadBalancerInput{LoadBalancerArn: &lbArn})
 	step("DeleteLoadBalancer (cascades listeners)", err)
