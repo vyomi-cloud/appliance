@@ -41,15 +41,12 @@ func (c *Config) showUrlBanner(vmIp string) {
 	if httpOK("http://127.0.0.1:9000/healthz", 2*time.Second) {
 		url = "http://localhost:9000/"
 	}
-	progress("")
-	progress("  ============================================================")
-	progress("   Vyomi appliance is READY")
-	progress("   Console : " + url)
+	lv := newLaunchView()
+	lv.waitReady(strings.TrimRight(url, "/"))
+	lv.ready(strings.TrimRight(url, "/"))
 	if vmIp != "" {
-		progress(fmt.Sprintf("   Direct  : http://%s:9000/   (VM IP, no bridge needed)", vmIp))
+		progress(fmt.Sprintf("  Direct: http://%s:9000/   (VM IP, no bridge needed)", vmIp))
 	}
-	progress("  ============================================================")
-	progress("")
 	if envAny("", "VYOMI_NO_OPEN", "CLOUD_LEARN_NO_OPEN") != "1" {
 		openBrowser(url)
 	}

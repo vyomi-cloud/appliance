@@ -319,13 +319,17 @@ def register(app: FastAPI) -> None:
     @app.get("/api/gcp/catalog", include_in_schema=False)
     def api_gcp_catalog():
         from providers.gcp_catalog import build_console_payload
-        space = ctx.PLATFORM.get_active_space() or {}
-        project = str(space.get("active_account") or "cloudlearn")
+        from core import gcp_project
+        # The GCP space's project ID (+ number) — the same project gcloud sees
+        # through Cloud Resource Manager.
+        space = gcp_project.gcp_space() or ctx.PLATFORM.get_active_space() or {}
+        proj = gcp_project.current()
         region  = str(space.get("active_region") or "us-central1")
         zone = region + "-a"
-        return JSONResponse(build_console_payload(active_project=project,
+        return JSONResponse(build_console_payload(active_project=proj["projectId"],
                                                   active_region=region,
-                                                  active_zone=zone))
+                                                  active_zone=zone,
+                                                  project_number=proj["projectNumber"]))
 
     @app.get("/docs/gcp", include_in_schema=False)
     def docs_gcp(request: Request):

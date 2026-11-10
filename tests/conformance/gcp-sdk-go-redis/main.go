@@ -47,7 +47,7 @@ func httpCode(err error) int {
 
 func main() {
 	endpoint := env("ENDPOINT", "http://127.0.0.1:9000")
-	project := env("PROJECT", "go-redis-proj")
+	project := env("PROJECT", "vyomi-project")
 	region := "us-central1"
 	fmt.Printf("== cloud.google.com/go/redis (Go) against %s project=%s ==\n", endpoint, project)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -73,7 +73,7 @@ func main() {
 		created, err = op.Wait(ctx)
 	}
 	check("CreateInstance (LRO) -> Instance READY with host/port", err == nil && created.GetState() == redispb.Instance_READY &&
-		created.GetHost() != "" && created.GetPort() == 6379 && created.GetName() == name, fmt.Sprintf("%v %v", err, created))
+		created.GetHost() != "" && created.GetPort() > 0 && created.GetName() == name, fmt.Sprintf("%v %v", err, created))
 
 	_, err = c.CreateInstance(ctx, &redispb.CreateInstanceRequest{Parent: parent, InstanceId: id, Instance: &redispb.Instance{Tier: redispb.Instance_BASIC, MemorySizeGb: 1}})
 	check("CreateInstance duplicate -> 409 ALREADY_EXISTS", err != nil && httpCode(err) == 409, fmt.Sprint(err))

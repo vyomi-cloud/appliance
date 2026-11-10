@@ -166,6 +166,9 @@ def api_iam_remove_user_from_group(group_id: str, user_id: str):
 
 
 def api_iam_list_roles():
+    s = _server()
+    for r in iam_state["roles"].values():
+        r.setdefault("arn", s._iam_role_arn(r.get("role_name", "")))
     return {"roles": list(iam_state["roles"].values()), "count": len(iam_state["roles"])}
 
 
@@ -208,6 +211,11 @@ def api_iam_delete_role(role_id: str):
 
 
 def api_iam_list_policies():
+    # Customer managed policies: ARN arn:aws:iam::<account>:policy/<name>, attachable.
+    from core.app_context import AWS_ACCOUNT_ID
+    for p in iam_state["policies"].values():
+        p.setdefault("arn", f"arn:aws:iam::{AWS_ACCOUNT_ID}:policy/{p.get('policy_name', '')}")
+        p.setdefault("attachable", True)
     return {"policies": list(iam_state["policies"].values()), "count": len(iam_state["policies"])}
 
 

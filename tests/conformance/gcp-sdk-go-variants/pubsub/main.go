@@ -20,7 +20,7 @@ func env(k, d string) string {
 }
 
 func main() {
-	project := env("PROJECT", "cloudlearn")
+	project := env("PROJECT", "vyomi-project")
 	fmt.Printf("== cloud.google.com/go/pubsub against PUBSUB_EMULATOR_HOST=%s project=%s ==\n",
 		os.Getenv("PUBSUB_EMULATOR_HOST"), project)
 

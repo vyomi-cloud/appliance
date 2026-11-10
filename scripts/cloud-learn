@@ -58,6 +58,20 @@ _vyomi_migrate_state_dir
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${CLOUD_LEARN_HOME:-$(cd "${SCRIPT_PATH}/.." && pwd)}"
+
+# `vyomi mcp`: the MCP server for AI coding agents. A compiled helper bundled
+# per OS/arch under packaging/docker/mcp/ (built by release.yml); it speaks
+# JSON-RPC on stdout, so nothing may be printed here except on failure (stderr).
+if [ "${1:-}" = "mcp" ]; then
+  shift
+  case "$(uname -s)" in Darwin) _os=darwin ;; Linux) _os=linux ;; *) _os=unknown ;; esac
+  case "$(uname -m)" in x86_64|amd64) _arch=amd64 ;; arm64|aarch64) _arch=arm64 ;; *) _arch=unknown ;; esac
+  for _m in "${VYOMI_MCP_BIN:-}" "${ROOT_DIR}/packaging/docker/mcp/$_os-$_arch/vyomi-mcp"; do
+    if [ -n "$_m" ] && [ -x "$_m" ]; then exec "$_m" "$@"; fi
+  done
+  echo "vyomi: no MCP server binary for $_os-$_arch in ${ROOT_DIR} (dev clone? build it: go -C cmd/vyomi build -o ../../packaging/docker/mcp/$_os-$_arch/vyomi-mcp . — or set VYOMI_MCP_BIN)." >&2
+  exit 1
+fi
 PROJECT_NAME="${CLOUD_LEARN_PROJECT_NAME:-cloud-learn}"
 RUNTIME_CONTEXT="${CLOUD_LEARN_RUNTIME_CONTEXT:-outer}"
 COMPOSE_FILE="${CLOUD_LEARN_COMPOSE_FILE:-${ROOT_DIR}/docker-compose.appliance.yml}"
@@ -225,19 +239,22 @@ _backfill_install_id() {
 
 usage() {
   cat <<'EOF'
-Vyomi simulator launcher (cloud-learn CLI) — local multi-cloud appliance
+vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance)
 
-Usage:
-  cloud-learn up [-v|--verbose] [-y|--yes]
-  cloud-learn down
-  cloud-learn stop
-  cloud-learn force-stop
-  cloud-learn kill
-  cloud-learn restart
-  cloud-learn status
-  cloud-learn doctor
-  cloud-learn upgrade
-  cloud-learn help
+Usage (`cloud-learn` still works as a deprecated alias):
+  vyomi up [-v|--verbose] [-y|--yes]
+  vyomi down
+  vyomi stop
+  vyomi force-stop
+  vyomi kill
+  vyomi restart
+  vyomi status
+  vyomi doctor
+  vyomi upgrade
+  vyomi update       Docker tiers: move to the latest release (and this command)
+  vyomi version      This command, the running simulator, the latest release
+  vyomi mcp          MCP server (stdio) for AI agents: claude mcp add --scope user vyomi -- vyomi mcp
+  vyomi help
 
 Flags:
   -v, --verbose      Stream raw cloud-init log lines + sub-step detail.
@@ -649,7 +666,7 @@ ls -t "$_LOG_DIR"/up-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/nul
 # ESC bytes at variable-definition time. Plain single quotes preserve
 # the literal text "\033[32m" which then prints as "\033[32m" instead
 # of a real green colour.
-if [ -t 2 ]; then
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
   _C_RESET=$'\033[0m'  _C_BOLD=$'\033[1m'  _C_DIM=$'\033[2m'
   _C_GREEN=$'\033[32m' _C_YELLOW=$'\033[33m' _C_RED=$'\033[31m' _C_CYAN=$'\033[36m'
 else
@@ -687,7 +704,8 @@ progress() {
 _VYOMI_BANNER_PRINTED="${_VYOMI_BANNER_PRINTED:-0}"
 print_brand_banner() {
   if [ "${_VYOMI_BANNER_PRINTED}" = "1" ]; then return 0; fi
-  if [ "${VYOMI_NO_BANNER:-0}" = "1" ] || [ "${CLOUDLEARN_NO_BANNER:-0}" = "1" ]; then
+  # Same rule as the other launchers: only on an interactive terminal, never in CI.
+  if [ "${VYOMI_NO_BANNER:-0}" = "1" ] || [ "${CLOUDLEARN_NO_BANNER:-0}" = "1" ] || [ ! -t 2 ] || [ -n "${CI:-}" ]; then
     _VYOMI_BANNER_PRINTED=1
     return 0
   fi
@@ -702,13 +720,33 @@ print_brand_banner() {
   else
     _v="dev"
   fi
-  _emit "${C_CYAN}██╗   ██╗██╗   ██╗ ██████╗ ███╗   ███╗██╗${C_RESET}"
-  _emit "${C_CYAN}██║   ██║╚██╗ ██╔╝██╔═══██╗████╗ ████║██║${C_RESET}"
-  _emit "${C_CYAN}██║   ██║ ╚████╔╝ ██║   ██║██╔████╔██║██║${C_RESET}"
-  _emit "${C_CYAN}╚██╗ ██╔╝  ╚██╔╝  ██║   ██║██║╚██╔╝██║██║${C_RESET}"
-  _emit "${C_CYAN} ╚████╔╝    ██║   ╚██████╔╝██║ ╚═╝ ██║██║${C_RESET}"
-  _emit "${C_CYAN}  ╚═══╝     ╚═╝    ╚═════╝ ╚═╝     ╚═╝╚═╝${C_RESET}"
-  _emit "${C_DIM}       Local multi-cloud simulator · v${_v} · vyomi.cloud${C_RESET}"
+  # Launch view: the dot-matrix VYOMI shared with packaging/docker/vyomi and
+  # cmd/vyomi (tests/launcher/test_launch_view_consistency.py keeps them identical).
+  # LAUNCH-VIEW-MATRIX (keep identical across launchers)
+  local rows=(
+    "10001 10001 01110 10001 111"
+    "10001 10001 10001 11011 010"
+    "10001 01010 10001 10101 010"
+    "10001 00100 10001 10101 010"
+    "01010 00100 10001 10001 010"
+    "01010 00100 10001 10001 010"
+    "00100 00100 01110 10001 111"
+  )
+  local on="●" off="·" dimdot=""
+  case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *UTF-8*|*utf8*|*UTF8*) ;; *) on="#"; off="." ;; esac
+  [ -n "$C_CYAN" ] && dimdot=$'\033[38;5;236m'
+  local row ch i line
+  _emit ""
+  for row in "${rows[@]}"; do
+    line="  "
+    for ((i = 0; i < ${#row}; i++)); do
+      ch="${row:i:1}"
+      case "$ch" in 1) line+="${C_CYAN}${on}${C_RESET} " ;; 0) line+="${dimdot}${off}${C_RESET} " ;; " ") line+="  " ;; esac
+    done
+    _emit "$line"
+  done
+  _emit ""
+  _emit "  ${_C_BOLD:-}local AWS · GCP · Azure — no cloud bill${C_RESET}   ${C_DIM}v${_v} · Max tier · Multipass${C_RESET}"
   _emit ""
   _VYOMI_BANNER_PRINTED=1
 }
@@ -780,6 +818,34 @@ Check the VM directly:
 }
 trap 'on_err' ERR
 
+
+# Backends coming up after the console answers (same view as the Docker and
+# Windows launchers): live N/N from the readiness API, then a ✓ line. Heavy
+# backends keep starting in the background; the console's readiness strip shows the rest.
+_lv_wait_backends() {
+  local url="${1%/}" i body ready total pct
+  for ((i = 0; i < 90; i++)); do
+    body="$(curl -fsk --max-time 2 "$url/api/runtime/readiness" 2>/dev/null || true)"
+    ready="$(printf '%s' "$body" | sed -n 's/.*"ready_count":\([0-9]*\).*/\1/p')"
+    total="$(printf '%s' "$body" | sed -n 's/.*"total_count":\([0-9]*\).*/\1/p')"
+    pct="$(printf '%s' "$body" | sed -n 's/.*"overall_pct":\([0-9]*\).*/\1/p')"
+    [ -n "$total" ] || return 0
+    if [ "$ready" = "$total" ]; then
+      [ -t 2 ] && printf '\r\033[K' >&2
+      _emit "  ${_C_GREEN}✓${_C_RESET} backends   ${total}/${total} ready (S3 · KMS · SQL · NoSQL · queues · Pub/Sub · Blob)"
+      return 0
+    fi
+    if [ -t 2 ] && [ -n "$_C_CYAN" ]; then
+      printf '\r\033[K  %s▸%s backends   %s/%s ready (%s%%) — pulling and starting in the background' "$_C_YELLOW" "$_C_RESET" "$ready" "$total" "$pct" >&2
+      sleep 2
+    else
+      break
+    fi
+  done
+  [ -t 2 ] && printf '\r\033[K' >&2
+  _emit "  ${_C_GREEN}✓${_C_RESET} backends   ${ready:-0}/${total} ready; the rest keep starting in the background"
+}
+
 # Success banner — printed by cmd_up at the very end after health check.
 launch_success_banner() {
   local url="$1"
@@ -800,8 +866,11 @@ launch_success_banner() {
   # package-manager phone-home never wrote the file). Fail-soft.
   _backfill_install_id "$url" || true
 
+  _lv_wait_backends "$url"
+  # LAUNCH-VIEW-READY (keep identical across launchers)
   _emit ""
-  _emit "  Open in browser:  ${_C_BOLD}${_C_CYAN}${url}${_C_RESET}"
+  _emit "  ${_C_BOLD}Ready.${_C_RESET} Open ${_C_CYAN}${url}${_C_RESET}   ·   SDK/CLI: point --endpoint-url at ${url}"
+  _emit "  ${_C_DIM}Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.${_C_RESET}"
   if [ -n "$fallback_url" ]; then
     _emit "  Alternate URL:    ${_C_CYAN}${fallback_url}${_C_RESET}"
   fi
@@ -2518,6 +2587,27 @@ _docker_substrate_run() {
   if [ -z "$cf" ] || [ ! -f "$cf" ]; then
     printf 'vyomi: docker-compose.cloudlite.yml not found (set VYOMI_COMPOSE_FILE).\n' >&2; return 1
   fi
+  # `update` and the release cache are the Docker launcher's (packaging/docker/vyomi,
+  # shipped in this bundle), so all launchers move versions the same way: it fetches
+  # the latest release's compose file into ~/.vyomi (SHA256-checked) and upgrades
+  # this command through Homebrew. Every other action runs the newer cached release.
+  local _dl="${ROOT_DIR}/packaging/docker/vyomi"
+  if [ "$action" = "update" ] || [ "$action" = "upgrade" ]; then
+    if [ -f "$_dl" ]; then
+      VYOMI_BUNDLED_COMPOSE="$cf" VYOMI_BREW_FORMULA=vyomi VYOMI_FLAVOUR="vyomi · Docker substrate" \
+        bash "$_dl" update
+      return $?
+    fi
+    printf 'vyomi: this bundle lacks packaging/docker/vyomi; pulling the %s images only.\n' "$(sed -nE 's#.*vyomi/appliance:([0-9.]+).*#\1#p' "$cf" | head -1)" >&2
+  fi
+  if [ -z "${VYOMI_COMPOSE_FILE:-}" ]; then
+    local _cache="${HOME:-/root}/.vyomi/docker-compose.cloudlite.yml" _pv
+    _pv() { sed -nE 's#.*vyomi/appliance:([0-9]+\.[0-9]+\.[0-9]+).*#\1#p' "$1" | head -1; }
+    if [ -f "$_cache" ] && [ "$(_pv "$_cache")" != "$(_pv "$cf")" ] && \
+       [ "$(printf '%s\n%s\n' "$(_pv "$_cache")" "$(_pv "$cf")" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$(_pv "$_cache")" ]; then
+      cf="$_cache"
+    fi
+  fi
   if ! command -v docker >/dev/null 2>&1; then
     printf 'vyomi: Docker is required for the Free/Lite/Pro tiers.\n  Install Docker: https://docs.docker.com/engine/install/\n' >&2; return 1
   fi
@@ -2573,9 +2663,25 @@ outer_run() {
       && printf '%s\n' "$VYOMI_SUBSTRATE" > "${HOME:-/root}/.vyomi/substrate" 2>/dev/null || true
   fi
   case "$subcmd" in
+    -V|--version|version)
+      # Same report as the Docker launcher, pointed at wherever the simulator runs.
+      local _sub; _sub="$(_resolve_substrate)"
+      local _url="http://localhost:9000"
+      [ "$_sub" = "multipass" ] && _url="http://${APPLIANCE_NAME}.local:9000"
+      _url="${VYOMI_URL:-$_url}"
+      if [ -f "${ROOT_DIR}/packaging/docker/vyomi" ] && [ -f "${ROOT_DIR}/docker-compose.cloudlite.yml" ]; then
+        VYOMI_BUNDLED_COMPOSE="${ROOT_DIR}/docker-compose.cloudlite.yml" VYOMI_URL="$_url" \
+          VYOMI_FLAVOUR="vyomi · $_sub substrate" bash "${ROOT_DIR}/packaging/docker/vyomi" version
+      else
+        printf 'vyomi %s (vyomi · %s substrate)\n' "$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION" 2>/dev/null || echo dev)" "$_sub"
+      fi
+      return 0
+      ;;
+  esac
+  case "$subcmd" in
     up|down|stop|restart|status|ps|logs|update)
       if [ "$(_resolve_substrate)" = "docker" ]; then
-        print_brand_banner
+        [ "$subcmd" = "update" ] || print_brand_banner   # update draws its own
         _docker_substrate_run "$subcmd" "$@"
         return $?
       fi

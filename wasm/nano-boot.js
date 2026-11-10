@@ -89,16 +89,20 @@ const CORES = [
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "lease.py", "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
+  "aws_console_detail.py",   // AWS resource-detail tab model (EC2 placement/ENI/volumes/attributes, IAM resource access)
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it
   "azure_operationalinsights_core.py",   // Azure Log Analytics engine (Microsoft.OperationalInsights) — loaded before azure_arm_core which delegates to it
   "azure_appconfiguration_core.py",   // Azure App Configuration engine — loaded before azure_arm_core which delegates to it
+  "azure_keyvault_certificates_core.py",   // Azure Key Vault certificates (self-signed X.509) — imported by the Azure adapter
+  "azure_arm_ext_core.py",   // Azure ARM locks / identity / health / NICs / run commands — loaded before azure_arm_core which delegates to it
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
+  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
+  "function_shims.py", "gcp_console_tabs.py", "instance_catalog.py", "nano_triggers.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py",
@@ -111,7 +115,7 @@ const CORES = [
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
   "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py",
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
@@ -122,6 +126,11 @@ const CORES = [
   // which imports `from core.nano_events import EventStore`.
   "nano_events.py", "nano_registry.py", "nano_persist.py",
 ];
+
+// Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
+// these steps report the real work + timings to it, then close it when ready.
+const K = window.__nk || (window.NanoKernel ? window.NanoKernel.start(CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") : null)
+  || { step: () => ({ ok() {}, fail() {} }), info() {}, carry() {}, ready() {}, fail() {} };
 
 function banner(text, bad) {
   let b = document.getElementById("nano-banner");
@@ -139,8 +148,15 @@ function banner(text, bad) {
 
 async function bootBackend() {
   banner("Nano: booting Pyodide (in-browser cloud backend)…");
+  let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
   const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
   const py = await loadPyodide();
+  // Time-zone database: Pyodide's zoneinfo has no zone files without it (Cloud
+  // Scheduler, Monitoring and the like would reject every zone but UTC).
+  try { await py.loadPackage("tzdata"); } catch (_) {}
+  let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
+  st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
+  st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
   py.FS.writeFile("/wasm/backends/__init__.py", "");
@@ -150,9 +166,13 @@ async function bootBackend() {
   }
   // The vendored cores live under /core (their own `core` package) so their
   // `from core.object_store import ...` imports resolve, exactly as in the repo.
+  st.ok();
+  st = K.step("fs", "mounting /core: " + CORES.length + " cloud engines (AWS · GCP · Azure)");
   py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
   for (const c of CORES)
     py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  st.ok();
+  st = K.step("kernel", "importing the engines and wiring the console router");
   py.runPython(`
 import sys; sys.path.insert(0, "/")
 from wasm.backends.store import Backends
@@ -175,6 +195,30 @@ def _disp(payload_json):
                                  params=d.get("params") or {}))
 import builtins; builtins._disp = _disp
 `);
+  st.ok();
+  // ── Live engine status (Dashboard > Service status) ─────────────────
+  // This runtime checks every registry store (built + state reads back) and
+  // records the result; the SW's /api/runtime/readiness builds the cards from
+  // the fresh reports, so a card is "ready" only when an engine really is.
+  async function writeEngines() {
+    const key = "engines:" + (CONSOLE_PROVIDER || "page");
+    try {
+      const stores = JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())"));
+      await nbMetaPut(key, { ts: Date.now(), stores });
+    } catch (e) {
+      try { await nbMetaPut(key, { ts: Date.now(), error: String(e && e.message || e).slice(0, 200) }); } catch (_) {}
+    }
+  }
+  writeEngines(); setInterval(writeEngines, 30000);
+
+  // CPU: time this engine spends running Python (every request, census, health check
+  // goes through runPython), reported with the census as busy ms per window.
+  let _busyMs = 0, _busySince = performance.now();
+  { const _rp = py.runPython.bind(py);
+    py.runPython = (...a) => { const t = performance.now(); try { return _rp(...a); } finally { _busyMs += performance.now() - t; } }; }
+  const takeBusy = () => { const now = performance.now(), r = { busy_ms: Math.round(_busyMs), window_ms: Math.round(now - _busySince) };
+    _busyMs = 0; _busySince = now; return r; };
+
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
@@ -194,6 +238,7 @@ import builtins; builtins._disp = _disp
     try {
       const c = dispatch(CONSOLE_PROVIDER, "_census", "GET", {});
       c.wasm_heap_bytes = heapBytes();
+      Object.assign(c, takeBusy());
       c.ts = Date.now();
       await nbMetaPut("census:" + CONSOLE_PROVIDER, c);
     } catch (_) { /* best-effort — never disturb the console */ }
@@ -212,6 +257,10 @@ import builtins; builtins._disp = _disp
   const STORE_KEY = "nano:stores";
   let _bc = null; try { _bc = new BroadcastChannel("nano-stores"); } catch (_) {}
   let _restoring = false, _storeTimer = null;
+  // The state this context last saved or restored. Only a change from it is published, so a
+  // read never writes back a snapshot that may be older than the other context's latest change
+  // (which would undo it — e.g. a CLI verify overwritten by the console's stale copy).
+  let _lastStores = null;
   function captureStores() {
     try { return py.runPython("import json; from core import nano_persist; json.dumps(nano_persist.capture_registry())"); }
     catch (_) { return null; }
@@ -221,11 +270,14 @@ import builtins; builtins._disp = _disp
     try {
       py.globals.set("_vy_blob", blobJson);
       py.runPython("import json; from core import nano_persist; nano_persist.restore_registry(json.loads(_vy_blob))");
+      _lastStores = captureStores();
     } catch (_) {}
   }
   async function writeStores(notify) {
     try {
-      const j = captureStores(); if (!j) return;
+      const j = captureStores(); if (!j || j === _lastStores) return;   // unchanged: nothing to publish
+      _lastStores = j;
+      py.runPython("from core import nano_persist; nano_persist.mark_saved_registry()");
       await nbMetaPut(STORE_KEY, j);
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
     } catch (_) { /* best-effort */ }
@@ -241,7 +293,8 @@ import builtins; builtins._disp = _disp
   };
   // Boot: rehydrate the persisted dataset into the shared registry BEFORE releasing
   // /api/* requests, so the console opens with its previous resources intact.
-  try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {}
+  st = K.step("store", "restoring your resources from IndexedDB");
+  try { restoreStores(await nbMetaGet(STORE_KEY)); st.ok(); } catch (e) { st.ok("starting fresh"); }
 
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", async (ev) => {
@@ -257,17 +310,47 @@ import builtins; builtins._disp = _disp
       // snapshot's shallow dict-merge would otherwise REPLACE a parent record
       // (e.g. a Cloud SQL instance) and drop a sub-resource just added to it
       // (a database) before the debounced save landed.
-      if (!_restoring && !_storeTimer) {
+      if (!_restoring) {
         _restoring = true;
         try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
       }
       const [prov, svc, op, params] = ev.data.tuple;
-      port.postMessage(dispatch(prov, svc, op, params || {}));
+      // In-browser VM compute (wasm/vm): connect-info / key / exec are answered by
+      // the VM host; any other mutating op may have created/stopped/deleted an
+      // instance, so the host reconciles its VMs against the stores right after.
+      const out = svc === "_vm"
+        ? (window.NanoVM ? await window.NanoVM.handle(prov, op, params || {})
+                         : { __http: { status: 409, body: { detail: { error: "NoRuntime", hint: "In-browser VM compute is not loaded in this view." } } } })
+        : dispatch(prov, svc, op, params || {});
+      if (window.NanoVM && svc !== "_vm" && !/^(GET|HEAD|List|Get|Describe|Query|Scan)/.test(op)) window.NanoVM.kick();
       scheduleCensus();       // any op may have mutated state — refresh the footprint
-      scheduleStoresSave();   // …and persist + notify the other context (Fix #1/#2)
+      // Persist + notify the other contexts BEFORE answering: when the console sees the
+      // response, the change is already in the shared snapshot, so a CLI call right after
+      // reads it (and a read changes nothing, so it publishes nothing — writeStores).
+      await writeStores(true);
+      port.postMessage(out);
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
     }
+  });
+
+  // In-browser VM compute: the host is ~15 KB and inert unless the nano_vm_compute
+  // flag is on; the engine + image load inside the VM workers on first launch only.
+  await new Promise((res) => {
+    const sc = document.createElement("script");
+    sc.src = BASE + "/vm/nano-vm-host.js"; sc.onload = res; sc.onerror = res;
+    document.head.appendChild(sc);
+  });
+  if (window.NanoVM) window.NanoVM.init({
+    listDesired: async () => {
+      if (!_restoring && !_storeTimer) {
+        _restoring = true;
+        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+      }
+      const r = dispatch("aws", "_vms", "List", {});
+      return r && r.ok ? r.items : null;
+    },
+    annotate: (cloud, ref, runtime) => { try { dispatch(cloud, "_vms", "Annotate", { cloud, ref, runtime }); scheduleStoresSave(); } catch (_) {} },
   });
 
   writeCensus();                              // initial (heap + any seeded state)
@@ -277,6 +360,7 @@ import builtins; builtins._disp = _disp
   // Release any held /api/* requests.
   const reg = await navigator.serviceWorker.ready;
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
+  K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 
@@ -294,19 +378,22 @@ import builtins; builtins._disp = _disp
 (async () => {
   if (!("serviceWorker" in navigator)) { banner("Nano needs a service-worker-capable browser.", true); return; }
   try {
+    const sw = K.step("service", "service worker: registering " + BASE + "/sw.js");
     const reg = await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/", updateViaCache: "none" });
     try { await reg.update(); } catch (_) {}
     await navigator.serviceWorker.ready;
+    sw.ok(wasControlledAtStart ? "active, controlling this page" : "installed");
     // Arriving from the dashboard we're already CONTROLLED. If a console URL is
     // opened cold/directly, it started uncontrolled (boot()'s /api reads went to
     // the network) — reload once to a controlled load before booting Pyodide.
     if (!wasControlledAtStart) {
       const n = Number(sessionStorage.getItem("nano-boot-reload") || "0");
-      if (n < 4) { sessionStorage.setItem("nano-boot-reload", String(n + 1)); location.reload(); return; }
+      if (n < 4) { K.info("service", "reloading once under the service worker"); K.carry(); sessionStorage.setItem("nano-boot-reload", String(n + 1)); location.reload(); return; }
     }
     sessionStorage.removeItem("nano-boot-reload");
     await bootBackend();
   } catch (e) {
+    K.fail(e);
     banner("Nano boot failed: " + e, true);
   }
 })();

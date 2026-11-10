@@ -134,24 +134,19 @@ const STUBS = {
   "/api/rds/parameter-groups": { parameter_groups: [] },
 };
 
-// Nano's in-WASM "backends" — the analogue of the appliance's OSS services
-// (MinIO/DynamoDB-Local/Vault/... → in-browser cores). Grouped by the same
-// Core/AWS/GCP/Azure categories the readiness strip tiles by. All are always
-// "ready" (one Pyodide runtime, nothing to boot). service-metrics maps live
-// CPU/RAM onto these `name`s from the census + WASM heap.
-const NANO_SERVICES = [
-  { name: "runtime",        label: "Pyodide runtime",     category: "core" },
-  { name: "router",         label: "Conformance router",  category: "core" },
-  { name: "s3",             label: "ObjectStore (S3)",    category: "aws" },
-  { name: "dynamodb",       label: "NoSQL (DynamoDB)",    category: "aws" },
-  { name: "kms",            label: "KMS engine",          category: "aws" },
-  { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
-  { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
-  { name: "iam",            label: "IAM",                 category: "aws" },
-  { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
-  { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
-  { name: "azure",          label: "ARM (Azure)",         category: "azure" },
-];
+// Nano's backend services for the readiness ribbon + Service status cards: the engine
+// stores core/nano_registry.py builds, listed in fixtures/nano-backends.json by
+// wasm/build_cores.py (CI fails if it's stale), plus the Pyodide runtime.
+// Re-read every 30 s (not once per worker lifetime), so a new bundle's list shows up on
+// the next poll instead of only after the browser restarts this long-lived worker.
+let _NANO_BACKENDS = null, _NANO_BACKENDS_AT = 0;
+async function nanoBackends() {
+  if (!_NANO_BACKENDS || Date.now() - _NANO_BACKENDS_AT > 30000) {
+    try { _NANO_BACKENDS = await (await fetch(FIX + "/nano-backends.json", { cache: "no-store" })).json(); _NANO_BACKENDS_AT = Date.now(); }
+    catch (_) { if (!_NANO_BACKENDS) return []; }
+  }
+  return _NANO_BACKENDS;
+}
 
 function json(obj, status, extraHeaders) {
   return new Response(obj === null ? "" : JSON.stringify(obj),
@@ -208,10 +203,12 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
+NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
+  const by_service = {};     // "<cloud>.<service>" -> USD/month, same keys as the appliance's cost_savings
   let resource_count = 0;
   for (const p of ["aws", "gcp", "azure"]) {
     let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
@@ -219,20 +216,25 @@ async function nanoCostSavings() {
     resource_count += c.resources || 0;
     const bs = c.by_service || {};
     let usd = 0;
-    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    for (const k in bs) {
+      const svcUsd = (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+      usd += svcUsd;
+      by_service[p + "." + k] = Math.round(svcUsd * 100) / 100;
+    }
     by_provider[p] = Math.round(usd * 100) / 100;
   }
   const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
-  return { resource_count, savings_usd, by_provider, period: "monthly" };
+  return { resource_count, savings_usd, by_provider, by_service, period: "monthly" };
 }
 
 // Each console gates on an active space whose provider matches it. We derive
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
 function nanoSpace(provider) {
-  const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "000000000000";
+  // AWS: the account Nano's engines use in ARNs and STS (wasm/build_fixtures.py NANO_AWS_ACCOUNT).
+  const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "123456789012";
   const region = provider === "gcp" ? "us-central1" : provider === "azure" ? "eastus" : "us-east-1";
-  return { space_id: "nano-" + provider, name: "Nano " + provider.toUpperCase(), provider,
+  return { space_id: "nano-" + provider, name: provider === "azure" ? "Azure" : provider.toUpperCase(), provider,
            status: "running", active_region: region, active_account: acct };
 }
 
@@ -325,6 +327,16 @@ async function nanoCostPull() {
 }
 async function metaGet(k) { const db = await idb(); const r = await _req(db.transaction("meta").objectStore("meta").get(k)); return r && r.v; }
 async function metaPut(k, v) { const db = await idb(); return await _req(db.transaction("meta", "readwrite").objectStore("meta").put({ k, v })); }
+// The engines reporting right now: each console tab's census (heap + busy time, every 5 s)
+// and the tunnel's relay worker (load:relay). A report older than maxAge means it's gone.
+async function liveEngines(maxAge = 60000) {
+  const now = Date.now(), out = [];
+  for (const k of ["census:aws", "census:gcp", "census:azure", "load:relay"]) {
+    let c = null; try { c = await metaGet(k); } catch (_) {}
+    if (c && typeof c.ts === "number" && (now - c.ts) < maxAge) out.push(c);
+  }
+  return out;
+}
 
 function mkSpace(provider, name, region) {
   const base = nanoSpace(provider);  // provider-correct account + default region
@@ -366,6 +378,12 @@ async function runInPage(tuple) {
     client.postMessage({ type: "vyomi-dispatch", tuple }, [ch.port2]);
     setTimeout(() => reject(new Error("backend timeout")), 15000);
   });
+}
+
+function vmTuple(cloud, ref, what, method, body) {
+  const op = { "connect-info": "ConnectInfo", "private-key.pem": "PrivateKey", exec: "Exec", "vm-status": "Status" }[what];
+  if ((op === "Exec") !== (method === "POST")) return { response: json({ detail: "MethodNotAllowed" }, 405) };
+  return { tuple: [cloud, "_vm", op, { ref, body: body || {} }] };
 }
 
 // Map a console /api/* request to a dispatch tuple (or a direct Response for
@@ -411,8 +429,8 @@ async function route(method, path, body, query) {
   //     /api/azure/operations/{id}. The substrate-free AzureArm core serves both;
   //     its HTTP envelope (status + Azure-AsyncOperation/Location headers + body)
   //     is returned verbatim (see the __http handling in the fetch listener).
-  if (path.startsWith("/subscriptions/") || path.startsWith("/api/azure/operations/")) {
-    return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null }] };
+  if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/api/azure/operations/")) {
+    return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null, origin: self.location.origin + BASE }] };
   }
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
@@ -437,6 +455,19 @@ async function route(method, path, body, query) {
     } else if (method === "DELETE") {
       return { tuple: ["azure", "_resource", "Delete", { service: svc, name: item }] };
     }
+  }
+  // Key Vault data plane as the vault blade (and the native SDK) address it:
+  // /azure-data/keyvault/{vault}/secrets|keys[/{name}[/create]] → the KV secrets/keys cores.
+  // Key Vault certificates (create / get / versions / pending / delete) → the shared certificates core.
+  am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/certificates((?:\/[^/]+){0,2})$/);
+  if (am) {
+    return { tuple: ["azure", "_resource", "KvData", { service: "kvcerts",
+      body: { method, vault: decodeURIComponent(am[1]), sub: am[2].replace(/^\//, "").split("/").map(decodeURIComponent).join("/"), body: body || {} } }] };
+  }
+  am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/(secrets|keys)((?:\/[^/]+){0,2})$/);
+  if (am) {
+    return { tuple: ["azure", "_resource", "KvData", { service: am[2] === "keys" ? "kvkeys" : "kvsecrets",
+      body: { method, sub: am[3].replace(/^\//, "").split("/").map(decodeURIComponent).join("/"), body: body || {} } }] };
   }
   // Service Bus (core/azure_servicebus_core.py) — topics + subscriptions + send/receive
   if (path === "/api/servicebus/topics") {
@@ -482,8 +513,19 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "s3", "CreateBucket", body || {}] };
   }
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versioning$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "GetVersioning", { bucket: dec(m[1]) }] };
   if (m && (method === "PUT" || method === "POST"))
     return { tuple: ["aws", "s3", "PutVersioning", { bucket: dec(m[1]), status: (body && body.status) || "Enabled" }] };
+  // Bucket detail tabs: configuration (lifecycle/cors/encryption/public_access_block/
+  // policy/ownership), object versions, event notifications (core/aws_console_detail.py).
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/config\/([a-z_]+)$/);
+  if (m) return { tuple: ["aws", "s3", { GET: "GetBucketConfig", PUT: "PutBucketConfig", DELETE: "DeleteBucketConfig" }[method] || "GetBucketConfig",
+                          { bucket: dec(m[1]), kind: m[2], method, value: (body || {}).value }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versions$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjectVersions", { bucket: dec(m[1]), prefix: (query && query.prefix) || "" }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/notifications?$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "GetBucketNotification", { bucket: dec(m[1]) }] };
+  if (m && method === "PUT") return { tuple: ["aws", "s3", "PutBucketNotification", { bucket: dec(m[1]), method, body: body || {} }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/?$/);
   if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjects", { bucket: dec(m[1]) }] };
   // (POST upload to this path is multipart — handled in the fetch listener.)
@@ -492,6 +534,7 @@ async function route(method, path, body, query) {
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteObject", { bucket: dec(m[1]), key: m[2] }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "s3", "GetBucket", { bucket: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "s3", "PutBucketTagging", { bucket: dec(m[1]), tags: (body || {}).tags || {} }] };
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteBucket", { bucket: dec(m[1]) }] };
   // Console-next creates a bucket with the name in the PATH (/api/s3/buckets/{bucket}),
   // not the collection path — route that POST to CreateBucket (was falling through → 501).
@@ -501,6 +544,11 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "dynamodb", "ListTables", {}] };
     if (method === "POST") return { tuple: ["aws", "dynamodb", "CreateTable", body || {}] };
   }
+  // Table detail tabs (core/aws_console_detail.py): indexes, streams, capacity,
+  // encryption, TTL, PITR, backups, Contributor Insights.
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "dynamodb", "DescribeTableSection", { table: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "dynamodb", "UpdateTableSection", { table: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/items$/);
   if (m && method === "GET")  return { tuple: ["aws", "dynamodb", "ListItems", { table: dec(m[1]) }] };
   if (m && method === "POST") return { tuple: ["aws", "dynamodb", "PutItem", { table: dec(m[1]), item: (body && body.item) || body || {} }] };
@@ -517,6 +565,10 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "iam", "CreateUser", body || {}] };
   }
   if (path === "/api/iam/roles" && method === "GET")    return { tuple: ["aws", "iam", "ListRoles", {}] };
+  // IAM account tabs (core/aws_console_detail.py): identity providers, password policy, Access Analyzer.
+  m = path.match(/^\/api\/iam\/detail\/([a-z-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "iam", "GetAccountSection", { section: m[1] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "iam", "UpdateAccountSection", { section: m[1], method, body: body || {} }] };
   if (path === "/api/iam/policies" && method === "GET") return { tuple: ["aws", "iam", "ListPolicies", {}] };
   if (path === "/api/iam/groups" && method === "GET")   return { tuple: ["aws", "iam", "ListGroups", {}] };
   if (path === "/api/iam/attachments" && method === "GET") return { tuple: ["aws", "iam", "ListAttachments", {}] };
@@ -536,6 +588,11 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "rds", "CreateDatabase", body || {}] };
   }
   if (path === "/api/rds/snapshots" && method === "GET") return { tuple: ["aws", "rds", "Snapshots", {}] };
+  // DB instance detail tabs (core/aws_console_detail.py): connectivity, configuration, events.
+  m = path.match(/^\/api\/rds\/databases\/([^/]+)\/(connectivity|subnet-group|pending-maintenance|performance-insights|configuration|events)$/);
+  if (m && method === "GET") return { tuple: ["aws", "rds", "DescribeDBInstanceDetail", { name: dec(m[1]), tab: m[2] }] };
+  if (m && m[2] === "configuration" && method === "PUT")
+    return { tuple: ["aws", "rds", "ModifyDBInstanceConfiguration", { name: dec(m[1]), body: body || {} }] };
   m = path.match(/^\/api\/rds\/databases\/([^/]+)\/(start|stop|reboot|modify)$/);
   if (m && method === "POST") return { tuple: ["aws", "rds", m[2][0].toUpperCase() + m[2].slice(1), { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/rds\/databases\/([^/]+)$/);
@@ -546,6 +603,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "sqs", "ListQueues", {}] };
     if (method === "POST") return { tuple: ["aws", "sqs", "CreateQueue", body || {}] };
   }
+  // Queue detail tabs (core/aws_console_detail.py): configuration, DLQ, encryption, access policy, purge.
+  m = path.match(/^\/api\/sqs\/queues\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "sqs", "GetQueueSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "sqs", "SetQueueSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/sqs\/queues\/([^/]+)\/(send|receive|purge)$/);
   if (m && method === "POST") return { tuple: ["aws", "sqs", m[2][0].toUpperCase() + m[2].slice(1), { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/sqs\/queues\/([^/]+)$/);
@@ -556,15 +617,31 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "secrets", "ListSecrets", {}] };
     if (method === "POST") return { tuple: ["aws", "secrets", "CreateSecret", body || {}] };
   }
+  // Secret detail tabs (core/aws_console_detail.py): value, versions, rotation, replication, key, policy.
+  m = path.match(/^\/api\/aws\/secrets\/(.+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "secrets", "GetSecretSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "secrets", "UpdateSecretSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };
+  // ── CloudWatch alarms (core/cloudwatch_core.py) ─────────────────────
+  if (path === "/api/aws/cloudwatch/alarms") {
+    if (method === "GET")  return { tuple: ["aws", "cloudwatch", "ListAlarms", {}] };
+    if (method === "POST") return { tuple: ["aws", "cloudwatch", "CreateAlarm", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/cloudwatch\/alarms\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "cloudwatch", "GetAlarm", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "cloudwatch", "DeleteAlarm", { name: dec(m[1]) }] };
   // ── KMS (core/kms_core.py) ──────────────────────────────────────────
   if (path === "/api/aws/kms/keys") {
     if (method === "GET")  return { tuple: ["aws", "kms", "ListKeys", {}] };
     if (method === "POST") return { tuple: ["aws", "kms", "CreateKey", body || {}] };
   }
   if (path === "/api/aws/extras/kms/aliases" && method === "GET") return { tuple: ["aws", "kms", "ListAliases", {}] };
+  // Key detail tabs (core/aws_console_detail.py): configuration, policy, aliases, rotation, users, admins, grants.
+  m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "kms", "GetKeySection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "kms", "UpdateKeySection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "kms", "GetKey", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kms", "DeleteKey", { name: dec(m[1]) }] };
@@ -574,6 +651,11 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "lambda", "ListFunctions", {}] };
     if (method === "POST") return { tuple: ["aws", "lambda", "CreateFunction", body || {}] };
   }
+  // Function detail tabs (core/aws_console_detail.py): code, env, configuration,
+  // versions, aliases, resource-based policy, execution role, saved test events.
+  m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/detail\/([a-z-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "lambda", "GetFunctionSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "lambda", "UpdateFunctionSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "lambda", "Invoke", { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/lambda\/functions\/([^/]+)$/);
@@ -584,6 +666,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "apigateway", "ListApis", {}] };
     if (method === "POST") return { tuple: ["aws", "apigateway", "CreateApi", body || {}] };
   }
+  // REST API detail tabs (core/aws_console_detail.py): authorizers, models, deployments, logging, policy, settings.
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "GetRestApiSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "apigateway", "UpdateRestApiSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/resources$/);
@@ -593,11 +679,24 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "apigateway", "GetApi", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // API Gateway V2 (core/apigatewayv2_core.py) — HTTP/WebSocket APIs
+  if (path === "/api/apigatewayv2/apis") {
+    if (method === "GET")  return { tuple: ["aws", "apigatewayv2", "ListApis", {}] };
+    if (method === "POST") return { tuple: ["aws", "apigatewayv2", "CreateApi", body || {}] };
+  }
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)\/(routes|integrations|stages|deployments|authorizers|models)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigatewayv2", "ListChildren", { id: dec(m[1]), kind: m[2] }] };
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "apigatewayv2", "GetApi", { id: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "apigatewayv2", "UpdateApi", { id: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "apigatewayv2", "DeleteApi", { id: dec(m[1]) }] };
   // Systems Manager Parameter Store (core/ssm_core.py) — names carry slashes, so match greedily
   if (path === "/api/ssm/parameters") {
     if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };
     if (method === "POST") return { tuple: ["aws", "ssm", "PutParameter", body || {}] };
   }
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)\/metadata$/);
+  if (m && method === "GET") return { tuple: ["aws", "ssm", "DescribeParameter", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/ssm\/parameters\/(.+)\/history$/);
   if (m && method === "GET") return { tuple: ["aws", "ssm", "ParameterHistory", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/ssm\/parameters\/(.+)$/);
@@ -620,8 +719,13 @@ async function route(method, path, body, query) {
   // VPC (core/vpc_core.py) — topology + reachability analyzer
   if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
   if (path === "/api/vpc/vpcs" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
+  // VPC detail tabs (core/aws_console_detail.py): attributes, NAT gateways, endpoints, NACLs, flow logs.
+  m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)\/detail\/([a-z_-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "vpc", "DescribeVpcSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "vpc", "ModifyVpcSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)$/);
   if (m && method === "GET") return { tuple: ["aws", "vpc", "GetVpc", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "vpc", "DeleteVpc", { name: dec(m[1]) }] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
   if (path === "/api/vpc/subnets" && method === "GET") return { tuple: ["aws", "vpc", "ListSubnets", {}] };
   if (path === "/api/vpc/route-tables" && method === "GET") return { tuple: ["aws", "vpc", "ListRouteTables", {}] };
@@ -636,13 +740,41 @@ async function route(method, path, body, query) {
   // Connect tab: Nano runs in the browser and has no instance runtime to SSH into, so
   // answer with the same {detail:{error,hint}} shape the appliance uses for a
   // not-connectable instance (the Connect pane renders it) instead of a 501.
-  if (/^\/api\/aws\/ec2\/instances\/[^/]+\/connect-info$/.test(path) && method === "GET")
-    return { response: json({ detail: { error: "NoRuntime", hint: "Nano has no instance runtime to SSH into; use the Vyomi appliance for SSH/console access." } }, 409) };
+  // In-browser VM compute (wasm/vm): connect-info / private key / exec for EC2,
+  // Compute Engine and Azure VMs, answered by the page's VM host (nano-vm-host.js),
+  // which runs each instance as a real v86 VM. With the feature flag off it answers
+  // 409 NoRuntime, as before.
+  m = path.match(/^\/api\/aws\/ec2\/instances\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
+   || path.match(/^\/api\/ec2\/instances\/([^/]+)\/console\/(exec)$/);
+  if (m) return vmTuple("aws", dec(m[1]), m[2], method, body);
+  m = path.match(/^\/api\/gcp\/compute\/instances\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
+   || path.match(/^\/api\/console\/gce\/instances\/([^/]+)\/(exec)$/);
+  if (m) return vmTuple("gcp", dec(m[1]), m[2], method, body);
+  m = path.match(/^\/api\/azure\/vm\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
+   || path.match(/^\/api\/console\/azurevm\/instances\/([^/]+)\/(exec)$/);
+  if (m) return vmTuple("azure", dec(m[1]), m[2], method, body);
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
+  // EC2 instance detail tabs (core/aws_console_detail.py, same engine as offline).
+  m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(details|network-interfaces|security|storage|user-data|iam-instance-profile|console-output)$/);
+  if (m && method === "GET") return { tuple: ["aws", "ec2", "DescribeInstanceDetail", { name: dec(m[1]), tab: m[2] }] };
+  m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(attributes|user-data|iam-instance-profile)$/);
+  if (m && (method === "PUT" || method === "DELETE"))
+    return { tuple: ["aws", "ec2", "ModifyInstanceAttribute", { name: dec(m[1]), tab: m[2], method, body: body || {} }] };
+  if (path === "/api/ec2/serial-console-access" && method === "GET") return { tuple: ["aws", "ec2", "GetSerialConsoleAccess", {}] };
+  if (path === "/api/ec2/serial-console-access" && method === "PUT") return { tuple: ["aws", "ec2", "ModifySerialConsoleAccess", { method, body: body || {} }] };
+  // Permissions tab (every AWS service): identity policies covering the resource ARN.
+  if (path === "/api/aws/resource-access" && method === "GET")
+    return { tuple: ["aws", "iam", "ResourceAccess", { arn: (query && query.arn) || "", service: (query && query.service) || "" }] };
   // Console "extras" — generic EC2/VPC sub-resource CRUD (volumes, snapshots,
   // launch templates, spot requests, endpoint services). Specific extras + fixtures
   // (kms/aliases, secretsmanager/*) are matched earlier, so only the unrouted ones
   // fall here. fullKey = "{category}/{resource}". Was 501; now a real in-memory CRUD.
+  // EventBridge rule detail tabs (core/aws_console_detail.py): details, targets, pattern, DLQ.
+  m = path.match(/^\/api\/aws\/extras\/eventbridge\/rules\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "eventbridge", "DescribeRuleSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "eventbridge", "PutRuleSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
+  m = path.match(/^\/api\/aws\/extras\/eventbridge\/rules\/([^/]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "eventbridge", "GetConsoleRule", { name: dec(m[1]) }] };
   let _ex = path.match(/^\/api\/aws\/extras\/(.+?)\/([^/]+)\/([^/]+)$/);
   if (_ex && method === "DELETE") return { tuple: ["aws", "extras", "Delete", { key: _ex[1] + "/" + _ex[2], name: dec(_ex[3]) }] };
   _ex = path.match(/^\/api\/aws\/extras-config\/(.+)$/);
@@ -655,6 +787,17 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // Kinesis Data Streams (core/kinesis_core.py) — streams + put record
+  if (path === "/api/kinesis/streams") {
+    if (method === "GET")  return { tuple: ["aws", "kinesis", "ListStreams", {}] };
+    if (method === "POST") return { tuple: ["aws", "kinesis", "CreateStream", body || {}] };
+  }
+  m = path.match(/^\/api\/kinesis\/streams\/([^/]+)\/put$/);
+  if (m && method === "POST") return { tuple: ["aws", "kinesis", "PutRecord", { name: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/kinesis\/streams\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "kinesis", "GetStream", { name: dec(m[1]) }] };
+  if (m && (method === "PUT" || method === "PATCH")) return { tuple: ["aws", "kinesis", "UpdateStream", { name: dec(m[1]), body: body || {} }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "kinesis", "DeleteStream", { name: dec(m[1]) }] };
   // CloudWatch Logs (core/logs_core.py) — the console REST under /api/logs/*
   m = path.match(/^\/api\/logs\/(.+)$/);
   if (m) return { tuple: ["aws", "logs", "Console", { method, path: m[1], query: query || {}, body: body || {} }] };
@@ -672,6 +815,10 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "elbv2", "CreateChild", { ...(body || {}), kind: m[1] }] };
   m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
+  // Amazon SNS (core/sns_core.py) — topics, subscriptions, platform applications, message log
+  if (path.startsWith("/api/aws/sns/") && (method === "GET" || method === "POST" || method === "DELETE" || method === "PATCH"))
+    return { tuple: ["aws", "sns", method === "GET" ? "GetSnsResource" : "WriteSnsResource",
+                     { method, path, query: query || {}, body: body || {} }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
@@ -715,9 +862,15 @@ async function route(method, path, body, query) {
   if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListObjects", { service: "storage", body: { bucket: dec(go[1]) } }] };
   go = path.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/o\/(.+)$/);
   if (go && method === "DELETE") return { tuple: ["gcp", "_resource", "DeleteObject", { service: "storage", body: { bucket: dec(go[1]), key: dec(go[2]) } }] };
+  // Firestore database -> its documents (Usage tab document count)
+  go = path.match(/^\/api\/gcp\/firestore\/v1\/projects\/[^/]+\/databases\/[^/]+\/documents\/?$/);
+  if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListDocuments", { service: "firestore" }] };
   // GCP-only sub-resource routes (additive; AWS/Azure untouched). These serve the
   // detail-view sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases,
   // Secret Manager / KMS versions) off the proven GCP cores via the shared dispatch.
+  // Project-wide subscription list (the Topics grid's Subscriptions column reads it).
+  if (method === "GET" && /^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/?$/.test(path))
+    return { tuple: ["gcp", "_resource", "ListAllSubscriptions", { service: "pubsub" }] };
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };
@@ -795,18 +948,73 @@ async function route(method, path, body, query) {
   return { miss: true };
 }
 
+// ── Request recorder (console Metrics tabs) ──────────────────────────────
+// Every /api/* request the worker serves is recorded as (time, provider, service, path,
+// status, latency_ms) — the in-browser twin of core/request_metrics.py — and persisted to
+// the "meta" store so the series survives a worker restart. Nothing is synthesized.
+const REQLOG = [];
+const REQLOG_MAX = 5000;
+let _reqLoaded = false, _reqSaveT = null;
+const AWS_API_KEYS = new Set(["ec2","vpc","lambda","rds","dynamodb","sqs","sns","s3","apigateway","eventbridge","iam","kms","secretsmanager","ssm","stepfunctions","logs","elbv2","cloudwatch"]);
+function classifyReq(path) {
+  const seg = path.split("/").filter(Boolean);
+  if (seg[0] === "api" && seg.length >= 3 && ["aws", "gcp", "azure"].includes(seg[1])) return [seg[1], seg[2].toLowerCase()];
+  if (seg[0] === "api" && seg.length >= 2 && AWS_API_KEYS.has(seg[1].toLowerCase())) return ["aws", seg[1].toLowerCase()];
+  if (seg[0] === "subscriptions") return ["azure", "arm"];
+  if (seg[0] === "azure-data" && seg.length >= 2) return ["azure", seg[1].toLowerCase()];
+  return null;
+}
+async function reqLogLoad() {
+  if (_reqLoaded) return; _reqLoaded = true;
+  try { const old = await metaGet("reqlog"); if (Array.isArray(old)) REQLOG.unshift(...old.slice(-REQLOG_MAX)); } catch (_) {}
+}
+function recordReq(method, path, query, status, ms) {
+  if (path.startsWith("/api/metrics")) return;
+  const c = classifyReq(path); if (!c) return;
+  const segs = path.split("/").filter(Boolean).map((x) => { try { return decodeURIComponent(x).toLowerCase(); } catch (_) { return x.toLowerCase(); } });
+  for (const v of (query || "").split("&")) { const i = v.indexOf("="); if (i > 0) { try { segs.push(decodeURIComponent(v.slice(i + 1)).toLowerCase()); } catch (_) {} } }
+  REQLOG.push({ t: Date.now() / 1000, p: c[0], s: c[1], m: method, st: status, ms, segs });
+  if (REQLOG.length > REQLOG_MAX) REQLOG.splice(0, REQLOG.length - REQLOG_MAX);
+  if (!_reqSaveT) _reqSaveT = setTimeout(() => { _reqSaveT = null; metaPut("reqlog", REQLOG.slice(-REQLOG_MAX)).catch(() => {}); }, 3000);
+}
+function reqPct(vals, q) { if (!vals.length) return 0; vals = vals.slice().sort((a, b) => a - b); return Math.round(vals[Math.min(vals.length - 1, Math.floor(q * vals.length))] * 100) / 100; }
+async function metricsSeries(q) {
+  await reqLogLoad();
+  const minutes = Math.max(1, Math.min(parseInt(q.get("minutes") || "60", 10) || 60, 1440));
+  const step = Math.max(10, Math.min(parseInt(q.get("step") || "60", 10) || 60, 3600));
+  const provider = q.get("provider") || "", service = q.get("service") || "", resource = (q.get("resource") || "").toLowerCase();
+  const n = Math.max(1, Math.floor(minutes * 60 / step));
+  const end = Math.floor(Date.now() / 1000 / step) * step + step, start = end - n * step;
+  const bk = Array.from({ length: n }, (_, i) => ({ t: start + i * step, requests: 0, errors: 0, lat: [] }));
+  for (const r of REQLOG) {
+    if (r.t < start || r.t >= end) continue;
+    if (provider && r.p !== provider) continue;
+    if (service && r.s !== service) continue;
+    if (resource && !r.segs.includes(resource)) continue;
+    const b = bk[Math.floor((r.t - start) / step)];
+    b.requests++; if (r.st >= 400) b.errors++; b.lat.push(r.ms);
+  }
+  const points = bk.map((b) => ({ t: b.t, requests: b.requests, errors: b.errors, latency_p50: reqPct(b.lat, 0.5), latency_p95: reqPct(b.lat, 0.95) }));
+  return { provider, service, resource: q.get("resource") || "", minutes, step, points,
+           total_requests: points.reduce((a, p) => a + p.requests, 0), total_errors: points.reduce((a, p) => a + p.errors, 0) };
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
-  const inArm = url.pathname.startsWith(BASE + "/subscriptions/");
+  const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname === BASE + "/subscriptions" ||
+                url.pathname === BASE + "/tenants" || url.pathname.startsWith(BASE + "/azure-data/keyvault/");
   if (url.origin !== self.location.origin || !(inApi || inArm)) return;
   // Strip the mount prefix so all routing below is written against "/api/..."
   // or "/subscriptions/...".
   const apiPath = url.pathname.slice(BASE.length);
+  const _t0 = Date.now();
   event.respondWith((async () => {
+    const _res = await (async () => {
     try {
       const method = event.request.method;
+      if (apiPath === "/api/metrics/series" && method === "GET") return json(await metricsSeries(url.searchParams));
       // ── console-next SPA (slice 1) ──────────────────────────────────
       // The new SPA (served at BASE/console-next/) talks ONLY to /api/console/*.
       // capabilities → the in-browser manifest (dispatched to console_next_adapter
@@ -828,7 +1036,8 @@ self.addEventListener("fetch", (event) => {
         const res = await runInPage(["_console", "capabilities", "capabilities", { lens, substrate }]);
         return json(res, 200);
       }
-      if (apiPath.startsWith("/api/console/")) {
+      if (apiPath.startsWith("/api/console/") && !/^\/api\/console\/(gce|azurevm)\/instances\/[^/]+\/exec$/.test(apiPath)) {
+        // (VM exec — the in-browser VM terminal — is routed below like the other VM endpoints.)
         // Slice-1 stub for the facade data plane. Clear 501 + a TODO marker so the
         // SPA's widgets render their empty/degraded state without erroring the shell.
         return json({
@@ -882,9 +1091,11 @@ self.addEventListener("fetch", (event) => {
       if (apiPath === "/api/runtime/host-distribution" && method === "GET") {
         // ── Live per-cloud footprint ──────────────────────────────────
         // Console pages census their in-browser backend and persist it to the
-        // "meta" store (see nano-boot.writeCensus). A census is "fresh" only
-        // while its console is open (rewritten every 5s); after TTL we drop it
-        // so the pies reflect LIVE sessions, not stale ghosts.
+        // "meta" store (see nano-boot.writeCensus: every 5 s and on leaving).
+        // Resources persist across sessions (nano_persist -> IndexedDB, restored
+        // on the next boot), so each cloud's LATEST census is its footprint even
+        // when no console is open; only the open-console count (sessions) and the
+        // live WASM heap need a fresh census.
         const CENSUS_TTL = 60000;
         const now = Date.now();
         const live = { aws: { vcpus: 0, ram_mb: 0, disk_mb: 0, resources: 0, vms: 0 },
@@ -893,17 +1104,14 @@ self.addEventListener("fetch", (event) => {
         let sessions = 0, liveResources = 0, heap = 0, freshest = 0;
         for (const p of ["aws", "gcp", "azure"]) {
           let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
-          if (!c || typeof c.ts !== "number" || (now - c.ts) >= CENSUS_TTL) continue;
+          if (!c || typeof c.ts !== "number") continue;
           live[p].vcpus = c.vcpus || 0; live[p].ram_mb = c.ram_mb || 0;
           live[p].disk_mb = c.disk_mb || 0; live[p].resources = c.resources || 0;
           live[p].vms = c.vms || 0; live[p].by_service = c.by_service || {};
-          sessions++; liveResources += c.resources || 0;
-          heap += c.wasm_heap_bytes || 0; freshest = Math.max(freshest, c.ts);
+          live[p].as_of = new Date(c.ts).toISOString();
+          liveResources += c.resources || 0; freshest = Math.max(freshest, c.ts);
+          if ((now - c.ts) < CENSUS_TTL) { sessions++; heap += c.wasm_heap_bytes || 0; }
         }
-        // Always report the live footprint so the three CPU/RAM/Disk pies stay
-        // visible. Only FRESH censuses count (a closed console's resources are
-        // ephemeral) — so with no live console the pies honestly show an empty
-        // state ("open a console…") rather than ghosts or a misleading estimate.
         return json({ providers: live, grand_total_resources: liveResources,
                       basis: "resources",
                       runtime: { wasm_heap_bytes: heap, sessions, ts: freshest } });
@@ -913,28 +1121,72 @@ self.addEventListener("fetch", (event) => {
       // utilization card shows a genuine live memory number, not a proxy.
       if (apiPath === "/api/host/sizing" && method === "GET") {
         const base = await (await fetch(FIX + "/host-sizing.json")).json().catch(() => ({}));
-        const now = Date.now();
-        let heap = 0, sessions = 0;
-        for (const p of ["aws", "gcp", "azure"]) {
-          let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
-          if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
-          heap += c.wasm_heap_bytes || 0; sessions++;
-        }
-        if (heap > 0) { base.wasm_heap_mb = Math.round(heap / (1024 * 1024)); base.runtime_sessions = sessions; }
+        const eng = await liveEngines();
+        let heap = 0;
+        for (const e of eng) heap += e.wasm_heap_bytes || 0;
+        if (heap > 0) { base.wasm_heap_mb = Math.round(heap / (1024 * 1024)); base.runtime_sessions = eng.length; }
+        if (typeof navigator.deviceMemory === "number") base.device_memory_gb = navigator.deviceMemory;
         return json(base);
+      }
+      // Host utilization → CPU on Nano: the share of time the in-browser engines (console
+      // tabs + the tunnel's relay worker) spent running Python over their last 5 s window,
+      // as % of one core (each engine runs on one thread). Real, measured — not a fixture.
+      if (apiPath === "/api/host/cpu" && method === "GET") {
+        const eng = await liveEngines(15000);
+        let busy = 0, win = 0;
+        for (const e of eng) { if (e.window_ms > 0) { busy += e.busy_ms || 0; win = Math.max(win, e.window_ms); } }
+        return json({ cpu_percent: win ? Math.min(100, Math.round((busy / win) * 1000) / 10) : 0,
+                      cpu_count: navigator.hardwareConcurrency || 0, engines: eng.length, basis: "engine-busy" });
+      }
+      // Host utilization → Disk on Nano: what this site has stored in the browser (IndexedDB,
+      // caches) against the space the browser lets it use (StorageManager.estimate()).
+      if (apiPath === "/api/runtime/disk-health" && method === "GET") {
+        let est = null, persisted = false;
+        try { est = await navigator.storage.estimate(); } catch (_) {}
+        try { persisted = !!(navigator.storage.persisted && await navigator.storage.persisted()); } catch (_) {}
+        if (!est || !est.quota) return json({ available: false, status: "unknown", error: "storage estimate unavailable" });
+        const used = est.usage || 0, quota = est.quota, GB = 1024 ** 3;
+        const pct = Math.round((used / quota) * 1000) / 10;
+        return json({ available: true, status: pct >= 92 ? "freeze" : pct >= 80 ? "warn" : "green", source: "browser", persisted,
+                      disk: { used_bytes: used, total_bytes: quota, avail_bytes: Math.max(0, quota - used), pct_used: pct,
+                              used_gb: used / GB, total_gb: quota / GB, avail_gb: Math.max(0, quota - used) / GB } });
       }
       // Service status (readiness-strip.js) — the Nano cores are always ready
       // (one Pyodide runtime, nothing to boot), grouped Core/AWS/GCP/Azure.
       if (apiPath === "/api/runtime/readiness" && method === "GET") {
-        const services = NANO_SERVICES.map((s) => ({ ...s, status: "ready" }));
-        const by_category = {};
-        for (const s of services) {
-          const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 100 });
-          c.ready++; c.total++;
+        // Real status: the engines run inside a Pyodide runtime (a console tab or the
+        // relay worker), which checks every registry store every 30 s (nano-boot.js /
+        // relay-shared-worker.js -> nano_persist.health_registry). A report older than
+        // 90 s means that runtime is gone. No live runtime -> the engines aren't running.
+        const now = Date.now(), FRESH_MS = 90000, ok = {}, err = {};
+        let live = 0, checked = 0;
+        for (const ctx of ["aws", "gcp", "azure", "page", "relay"]) {
+          let r = null; try { r = await metaGet("engines:" + ctx); } catch (_) {}
+          if (!r || typeof r.ts !== "number" || now - r.ts > FRESH_MS) continue;
+          live++; checked = Math.max(checked, r.ts);
+          if (r.error) { err["*"] = r.error; continue; }
+          for (const [k, v] of Object.entries(r.stores || {})) {
+            if (v && v.ok) ok[k] = true; else if (!ok[k]) err[k] = (v && v.error) || "failed";
+          }
         }
-        return json({ ready: true, status: "ready", percent: 100, overall_pct: 100,
-                      ready_count: services.length, total_count: services.length,
-                      by_category, services });
+        const services = (await nanoBackends()).map((s) => {
+          if (!live) return { ...s, status: "idle" };
+          if (err["*"]) return { ...s, status: "error", error: err["*"] };
+          if (s.name === "runtime" || ok[s.name]) return { ...s, status: "ready" };
+          return { ...s, status: "error", error: err[s.name] || "not reported by the runtime" };
+        });
+        const by_category = {};
+        let rc = 0;
+        for (const s of services) {
+          const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 0 });
+          c.total++; if (s.status === "ready") { c.ready++; rc++; }
+          c.pct = Math.round(100 * c.ready / c.total);
+        }
+        const all = rc === services.length;
+        return json({ ready: all, status: live ? (all ? "ready" : "degraded") : "idle",
+                      percent: Math.round(100 * rc / services.length), overall_pct: Math.round(100 * rc / services.length),
+                      ready_count: rc, total_count: services.length, live_runtimes: live,
+                      checked_at: checked ? new Date(checked).toISOString() : null, by_category, services });
       }
       // Per-service live CPU/RAM for the Service-status tiles. Derived from the
       // live census (real resource counts per service) + the real WASM heap — so
@@ -956,7 +1208,7 @@ self.addEventListener("fetch", (event) => {
                            : s.category === "gcp" ? ((cen.gcp && cen.gcp.resources) || 0)
                            : s.category === "azure" ? ((cen.azure && cen.azure.resources) || 0) : 0;
         const services = {};
-        for (const s of NANO_SERVICES) {
+        for (const s of await nanoBackends()) {
           if (s.name === "runtime") {
             // Real WASM linear heap as % of a 512 MiB visual budget.
             services.runtime = { cpu_pct: r1(Math.min(60, 4 + totalRes * 1.5)),
@@ -1001,6 +1253,10 @@ self.addEventListener("fetch", (event) => {
         try { await metaPut("license_jwt", key); } catch (_) {}
         return json({ ok: true, active_tier: c.tier, issued_to: c.sub || c.issued_to || "" });
       }
+      // Who is signed in is the PORTAL's call (served at the portal origin, outside this SW's scope in
+      // production). Where this SW does see it (a bare local Nano server) there is no portal: say "not
+      // signed in" rather than a 501 that every console's account menu would trip over.
+      if (apiPath === "/api/auth/me" && method === "GET") return json({ authenticated: false });
       if (apiPath === "/api/auth/logout" && method === "POST") {
         try { await metaPut("license_jwt", ""); } catch (_) {}
         return json({ ok: true });
@@ -1130,15 +1386,22 @@ self.addEventListener("fetch", (event) => {
       const res = await runInPage(r.tuple);
       // Native ARM responses carry a raw HTTP envelope — honour its real status
       // code + headers (Azure-AsyncOperation/Location) and emit the body verbatim.
+      if (res && res.__raw) {   // non-JSON body (e.g. the VM private key .pem)
+        const h = res.__raw;
+        return new Response(h.body, { status: h.status || 200, headers: h.headers || {} });
+      }
       if (res && res.__http) {
         const h = res.__http;
         return json(h.body === undefined ? null : h.body, h.status, h.headers);
       }
       // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
       // so the adapter result is the response body verbatim.
-      return json(res, res && res.ok === false ? 404 : 200);
+      return json(res, res && res.ok === false ? (res.http_status || 404) : 200);
     } catch (e) {
       return json({ ok: false, error: String(e) }, 500);
     }
+    })();
+    try { recordReq(event.request.method, apiPath, url.search.slice(1), _res.status, Date.now() - _t0); } catch (_) {}
+    return _res;
   })());
 });

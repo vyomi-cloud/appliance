@@ -296,7 +296,8 @@ def console_view(i):
                                         for w in mw) or "Any time (no preference)",
         "labels_text": ", ".join("%s=%s" % kv for kv in sorted((i.get("labels") or {}).items())) or "None",
         "display_name": i.get("displayName") or seg[5],
-        "connect_cmd": "redis-cli -h %s -p %d%s" % (i["host"], i["port"], " -a <AUTH string>" if i.get("authEnabled") else ""),
+        "connect_cmd": ("redis-cli -h %s -p %d%s" % (i["host"], i["port"], " -a <AUTH string>" if i.get("authEnabled") else ""))
+        if live else "Not available in this build: no Redis data plane runs here (control plane only). Use the offline appliance for a real redis-cli endpoint.",
         "data_plane": ("Valkey data plane (Redis protocol) at %s:%d" % (DATA_PLANE["host"], DATA_PLANE["port"])) if live
         else "Control plane only (the Valkey data plane runs on the offline appliance, Lite tier and up)",
         "created": i.get("createTime", ""),

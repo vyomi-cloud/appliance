@@ -61,8 +61,8 @@ try {
   for (let i = 0; i < 10 && !(await rowFor().count()); i++) await sleep(800);
   check(await rowFor().count() > 0, "new instance appears in the list", `rows ${rows0} → ${await rows()}, id ${newId}`);
 
-  const heads = await page.locator("#main table th").allInnerTexts();
-  const cells = await rowFor().locator("td").allInnerTexts();
+  const heads = await page.locator("#main table th:not([data-auto])").allInnerTexts();
+  const cells = await rowFor().locator("td:not([data-auto])").allInnerTexts();
   const data = cells.map((c, i) => [(heads[i] || "").replace(/[▲▼]/g, "").trim(), c.trim()]).filter(([h]) => h);   // skip the checkbox column
   const blanks = data.filter(([, v]) => BLANK.test(v)).map(([h]) => h);
   check(data.length >= 8 && !blanks.length, "every grid column is filled", `blank: ${blanks.join(", ") || "-"} · ${JSON.stringify(data)}`);
@@ -94,7 +94,7 @@ try {
   };
   check(/READY/.test(await tabText("Details")) && /Valkey data plane|Control plane only/.test(await tabText("Details")), "Details tab shows READY and the data-plane note");
   const conn = await tabText("Connection");
-  check(/redis-cli -h \S+ -p 6379/.test(conn) && /Authorized network/i.test(conn), "Connection tab shows the endpoint and the redis-cli command", conn.slice(0, 400).replace(/\n/g, " ⏎ "));
+  check(/Not available in this build/i.test(conn) && /Authorized network/i.test(conn) && !/redis-cli -h/.test(conn), "Connection tab is truthful: Nano has no Redis data plane (no redis-cli to a private IP), still shows the authorized network", conn.slice(0, 400).replace(/\n/g, " ⏎ "));
   check(/node-0/.test(await tabText("Replication")), "Replication tab lists the nodes");
 
   // resize the capacity from the detail header (the prompt is answered with 5)

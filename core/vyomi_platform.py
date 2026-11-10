@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import base64
+import hashlib
 import json
 import os
 import pickle
@@ -141,25 +142,37 @@ def _json_default(value: Any) -> Any:
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
-def _encode_state_value(value: Any) -> Any:
+# Byte values at least this large (S3 object bodies, uploaded files…) are kept OUT of the state
+# JSON, in content-addressed files next to the state DB (`<state file>.blobs/<sha256>`); the JSON
+# holds a `bytes-ref` with the digest. Inlined, a few multi-MB uploads made every persist re-encode
+# and HMAC tens of MB on the request path (~2 s per write, stalling the whole appliance).
+STATE_BLOB_MIN_BYTES = int(os.environ.get("VYOMI_STATE_BLOB_MIN_BYTES", str(64 * 1024)))
+
+
+def _encode_state_value(value: Any, put_blob: Callable[[bytes], dict] | None = None) -> Any:
     if isinstance(value, bytes):
+        if put_blob is not None and len(value) >= STATE_BLOB_MIN_BYTES:
+            return put_blob(value)
         return {"__cloudlearn_type__": "bytes", "base64": base64.b64encode(value).decode("ascii")}
     if isinstance(value, dict):
-        return {k: _encode_state_value(v) for k, v in value.items()}
+        return {k: _encode_state_value(v, put_blob) for k, v in value.items()}
     if isinstance(value, list):
-        return [_encode_state_value(v) for v in value]
+        return [_encode_state_value(v, put_blob) for v in value]
     if isinstance(value, tuple):
-        return [_encode_state_value(v) for v in value]
+        return [_encode_state_value(v, put_blob) for v in value]
     return value
 
 
-def _decode_state_value(value: Any) -> Any:
+def _decode_state_value(value: Any, get_blob: Callable[[dict], bytes] | None = None) -> Any:
     if isinstance(value, dict):
-        if value.get("__cloudlearn_type__") == "bytes" and "base64" in value:
+        kind = value.get("__cloudlearn_type__")
+        if kind == "bytes" and "base64" in value:
             return base64.b64decode(value["base64"])
-        return {k: _decode_state_value(v) for k, v in value.items()}
+        if kind == "bytes-ref" and "sha256" in value:
+            return get_blob(value) if get_blob is not None else b""
+        return {k: _decode_state_value(v, get_blob) for k, v in value.items()}
     if isinstance(value, list):
-        return [_decode_state_value(v) for v in value]
+        return [_decode_state_value(v, get_blob) for v in value]
     return value
 
 
@@ -168,6 +181,67 @@ class SQLiteStateStore:
         self.db_path = Path(db_path)
         self.legacy_pickle_path = Path(legacy_pickle_path) if legacy_pickle_path else None
         self.lock = threading.RLock()
+        self.blob_dir = self.db_path.with_name(self.db_path.name + ".blobs")
+        self._blob_digest: dict[int, tuple[bytes, str]] = {}   # id(bytes) -> (the bytes, sha256), last save
+        self._blob_refs: set[str] | None = None                 # digests the current state references
+
+    # ── large byte values, stored beside the DB ──────────────────────────────
+    def _blob_writer(self, refs: set[str], cache: dict[int, tuple[bytes, str]]) -> Callable[[bytes], dict]:
+        def put(value: bytes) -> dict:
+            hit = self._blob_digest.get(id(value))
+            digest = hit[1] if hit is not None and hit[0] is value else hashlib.sha256(value).hexdigest()
+            cache[id(value)] = (value, digest)
+            if digest not in refs:
+                path = self.blob_dir / digest
+                if not path.exists():
+                    self.blob_dir.mkdir(parents=True, exist_ok=True)
+                    tmp = path.with_name(f".{digest}.{uuid.uuid4().hex}.tmp")
+                    tmp.write_bytes(value)
+                    os.replace(tmp, path)
+                refs.add(digest)
+            return {"__cloudlearn_type__": "bytes-ref", "sha256": digest, "size": len(value)}
+        return put
+
+    def _blob_reader(self, ref: dict) -> bytes:
+        digest = str(ref.get("sha256") or "")
+        try:
+            data = (self.blob_dir / digest).read_bytes()
+        except OSError:
+            data = None
+        # The digest is inside the HMAC-signed JSON, so checking it keeps the blob as tamper-evident
+        # as the inline bytes were.
+        if data is None or hashlib.sha256(data).hexdigest() != digest:
+            import logging
+            logging.warning("STATE BLOB %s missing or altered; the value is restored empty.", digest[:16])
+            return b""
+        return data
+
+    def _encode_with_blobs(self, state: dict) -> tuple[str, set[str]]:
+        refs: set[str] = set()
+        cache: dict[int, tuple[bytes, str]] = {}
+        text = json.dumps(_encode_state_value(state, self._blob_writer(refs, cache)), sort_keys=True, default=_json_default)
+        self._blob_digest = cache
+        return text, refs
+
+    def _gc_blobs(self, conn: sqlite3.Connection, refs: set[str]) -> None:
+        """Delete blob files no longer referenced by the state or by any saved snapshot."""
+        if self._blob_refs is None:            # first save of this process: sweep the directory
+            try:
+                candidates = {p.name for p in self.blob_dir.iterdir() if len(p.name) == 64}
+            except OSError:
+                candidates = set()
+        else:
+            candidates = self._blob_refs
+        keep = set(refs)
+        for digest in candidates - refs:
+            if conn.execute("SELECT 1 FROM snapshots WHERE instr(state_json, ?) > 0 LIMIT 1", (digest,)).fetchone():
+                keep.add(digest)            # a snapshot still needs it: re-check on later saves
+                continue
+            try:
+                (self.blob_dir / digest).unlink()
+            except OSError:
+                pass
+        self._blob_refs = keep
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -226,10 +300,10 @@ class SQLiteStateStore:
             logging.warning("STATE TAMPER DETECTED: HMAC signature mismatch. Resetting to default state.")
             return None
         # If no signature yet (first boot / upgrade), that's OK — we'll sign on next save
-        return _decode_state_value(payload)
+        return _decode_state_value(payload, self._blob_reader)
 
     def _write_state_json(self, conn: sqlite3.Connection, state: dict) -> None:
-        state_bytes = json.dumps(_encode_state_value(state), sort_keys=True, default=_json_default)
+        state_bytes, refs = self._encode_with_blobs(state)
         conn.execute(
             "INSERT INTO metadata(key, value) VALUES('state_json', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -243,6 +317,10 @@ class SQLiteStateStore:
             (signature,),
         )
         conn.commit()
+        try:
+            self._gc_blobs(conn, refs)
+        except Exception:   # noqa: BLE001 — a failed sweep only leaves files behind
+            pass
 
     def _load_legacy_pickle(self) -> dict | None:
         if not self.legacy_pickle_path or not self.legacy_pickle_path.exists():
@@ -298,7 +376,7 @@ class SQLiteStateStore:
                 self._ensure_schema(conn)
                 cur = conn.execute(
                     "INSERT INTO snapshots(label, state_json, created_at) VALUES (?, ?, ?)",
-                    (label, json.dumps(_encode_state_value(state), sort_keys=True, default=_json_default), created_at),
+                    (label, self._encode_with_blobs(state)[0], created_at),
                 )
                 conn.commit()
                 return int(cur.lastrowid)
@@ -314,7 +392,7 @@ class SQLiteStateStore:
                     payload = json.loads(row["state_json"])
                 except Exception:
                     return None
-                return _decode_state_value(payload) if isinstance(payload, dict) else None
+                return _decode_state_value(payload, self._blob_reader) if isinstance(payload, dict) else None
 
 
 class SimulationKernel:

@@ -68,33 +68,37 @@ def main():
     check("cosmos delete container", call("DELETE", f"/api/console/azure-cosmos/containers/{c}").ok)
 
     q, t = f"q{tag}", f"t{tag}"
-    sp = "/api/console/azure-servicebus"
-    check("sb create queue", call("POST", f"{sp}/queues", json={"name": q}).ok)
-    check("sb list queues", q in call("GET", f"{sp}/queues").text)
-    r = call("POST", f"{sp}/queues/{q}/send", json={"body": "hello"})
+    check("sb create queue", call("POST", "/api/console/azure-servicebus/queues", json={"name": q}).ok)
+    check("sb list queues", q in call("GET", "/api/console/azure-servicebus/queues").text)
+    r = call("POST", f"/api/console/azure-servicebus/queues/{q}/send", json={"body": "hello"})
     check("sb send", r.ok and r.json().get("message_id"), r.text)
-    r = call("GET", f"{sp}/queues/{q}/peek")
+    r = call("GET", f"/api/console/azure-servicebus/queues/{q}/peek")
     check("sb peek", r.ok and r.json().get("count") == 1, r.text)
-    r = call("POST", f"{sp}/queues/{q}/receive", json={})
+    r = call("POST", f"/api/console/azure-servicebus/queues/{q}/receive", json={})
     check("sb receive", r.ok and r.json().get("count") == 1, r.text)
-    check("sb purge", call("POST", f"{sp}/queues/{q}/purge").json().get("purged") is True)
-    r = call("POST", f"{sp}/topics", json={"name": t})
+    check("sb purge", call("POST", f"/api/console/azure-servicebus/queues/{q}/purge").json().get("purged") is True)
+    r = call("POST", "/api/console/azure-servicebus/topics", json={"name": t})
     ta = r.json().get("topic_arn") if r.ok else ""
     check("sb create topic", bool(ta), r.text)
-    check("sb list topics", ta and ta in call("GET", f"{sp}/topics").text)
-    check("sb subscribe", call("POST", f"{sp}/topics/subscribe", json={"topic_arn": ta, "queue": q}).json().get("subscribed") is True)
-    r = call("GET", f"{sp}/topics/subscriptions", params={"topic_arn": ta})
+    check("sb list topics", ta and ta in call("GET", "/api/console/azure-servicebus/topics").text)
+    check("sb subscribe", call("POST", "/api/console/azure-servicebus/topics/subscribe", json={"topic_arn": ta, "queue": q}).json().get("subscribed") is True)
+    r = call("GET", "/api/console/azure-servicebus/topics/subscriptions", params={"topic_arn": ta})
     check("sb list subscriptions", r.ok and r.json().get("count") == 1, r.text)
-    r = call("POST", f"{sp}/topics/publish", json={"topic_arn": ta, "message": "m1", "subject": "s"})
+    r = call("POST", "/api/console/azure-servicebus/topics/publish", json={"topic_arn": ta, "message": "m1", "subject": "s"})
     check("sb publish fans out", r.ok and r.json().get("fanned_out_to") == 1, r.text)
-    check("sb delete topic", call("POST", f"{sp}/topics/delete", json={"topic_arn": ta}).json().get("deleted") is True)
-    check("sb delete queue", call("DELETE", f"{sp}/queues/{q}").json().get("deleted") is True)
+    check("sb delete topic", call("POST", "/api/console/azure-servicebus/topics/delete", json={"topic_arn": ta}).json().get("deleted") is True)
+    check("sb delete queue", call("DELETE", f"/api/console/azure-servicebus/queues/{q}").json().get("deleted") is True)
 
-    for lang, dep in (("python", "azure"), ("nodejs", "@azure")):
-        r = call("GET", f"/api/providers/azure/sdk/{lang}")
+    # literal paths (not f-strings) so the hourly route-coverage scan sees them
+    sdk_paths = {
+        "python": ("azure", "/api/providers/azure/sdk/python", "/api/providers/azure/sdk/python/snippet"),
+        "nodejs": ("@azure", "/api/providers/azure/sdk/nodejs", "/api/providers/azure/sdk/nodejs/snippet"),
+    }
+    for lang, (dep, info_path, snippet_path) in sdk_paths.items():
+        r = call("GET", info_path)
         b = r.json() if r.ok else {}
         check(f"sdk info {lang}", r.ok and b.get("provider") == "azure" and dep in b.get("dependency", ""), r.text)
-        r = call("GET", f"/api/providers/azure/sdk/{lang}/snippet")
+        r = call("GET", snippet_path)
         b = r.json() if r.ok else {}
         check(f"sdk snippet {lang} embeds endpoint", r.ok and b.get("language") == lang and b.get("endpoint", "") in b.get("snippet", "x"), r.text)
 

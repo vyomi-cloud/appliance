@@ -33,15 +33,29 @@ try {
   check(await open("Network Security Group"), "Network Security Group service opens");
   await openCreate();
   const nameInp = page.locator("#blade .field input").first();
+  await nameInp.fill("");   // the form pre-fills a realistic default name; clear it to test the required check
   await submit();
   check(await page.locator("#blade.open").count() > 0, "NSG create with empty name is refused (blade stays open)");
   await nameInp.fill(`nsg-${sfx}`);
   await submit();
   check((await page.locator("#main").innerText()).includes(`nsg-${sfx}`), "NSG row appears after create");
 
+  // Storage accounts: the unique default name must stay a valid account name (3-24 lowercase alnum, no "-").
+  check(await open("Storage accounts"), "Storage accounts service opens");
+  await openCreate();
+  const stDefault = await page.evaluate(() => [...document.querySelectorAll("#blade input")].map((i) => i.value).find((v) => /^st/.test(v)) || "");
+  check(/^[a-z0-9]{3,24}$/.test(stDefault), "Storage account default name is a valid account name", stDefault);
+  const blade = page.locator("#blade.open");
+  for (let step = 0; step < 12 && !(await blade.locator("button").filter({ hasText: /^\s*create\s*$/i }).count()); step++) {
+    await blade.locator("button").filter({ hasText: /^\s*(next|review \+ create)\s*$/i }).last().click({ timeout: 3000 }); await sleep(300);
+  }
+  await submit();
+  check((await page.locator("#main").innerText()).includes(stDefault), "Storage account row appears after create with defaults", stDefault);
+
   check(await open("Role Definition"), "Role Definition service opens");
   await openCreate();
   check(await page.locator("#blade .field:has(.req)").count() > 0, "Role Name is marked required");
+  await page.locator("#blade .field:has(.req) input").first().fill("");   // default role name is pre-filled
   await submit();
   check(await page.locator("#blade.open").count() > 0, "Role Definition create without Role Name is refused");
   await page.locator("#blade .field:has(.req) input").first().fill(`crawl-role-${sfx}`);

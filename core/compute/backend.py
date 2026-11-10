@@ -204,7 +204,15 @@ def ensure_instance_ssh_key(key_dir: str | os.PathLike | None = None) -> tuple[s
     """
     base = Path(key_dir or os.environ.get("VYOMI_INSTANCE_KEY_DIR")
                 or (Path.home() / ".vyomi" / "instance-keys"))
-    base.mkdir(parents=True, exist_ok=True)
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # The container user's HOME (e.g. /nonexistent) is not writable: keep the
+        # shared keypair next to the state file so launch can inject it and the
+        # console can serve it.
+        data = Path(os.environ.get("CLOUDLEARN_STATE_FILE", "/data/x")).parent
+        base = data / "instance-keys"
+        base.mkdir(parents=True, exist_ok=True)
     priv = base / "id_ed25519"
     pub = base / "id_ed25519.pub"
     if not priv.exists() or not pub.exists():

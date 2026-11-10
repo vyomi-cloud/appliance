@@ -566,6 +566,83 @@ def _eval_condition(table: dict, key_payload: dict[str, Any], expr: str,
     return True   # unsupported predicate → don't fail the transaction
 
 
+
+# ── bulk operations (StartBulkPutItems & co., new in 2026-11) ───────────────
+# Pure over a plain dict so the offline provider (ctx state) and the Nano/core
+# dispatcher (NoSqlStore) share one implementation.
+_BULK_ACTIONS = {"StartBulkPutItems", "ListBulkOperations", "DescribeBulkOperation",
+                 "CancelBulkOperation"}
+
+
+def bulk_operation(bulk: dict, tables: dict, account_id: str, action: str,
+                   payload: dict) -> dict:
+    """Run one bulk-operation action. Raises DdbError with the native code."""
+    if action == "StartBulkPutItems":
+        name = str(payload.get("TableName") or "").strip()
+        for fld in ("TableName", "InputS3Configuration", "OutputS3Configuration"):
+            if not payload.get(fld):
+                raise DdbError("ValidationException",
+                               f"1 validation error detected: Value null at '{fld[0].lower()+fld[1:]}' "
+                               "failed to satisfy constraint: Member must not be null")
+        if name not in tables:
+            raise DdbError("ResourceNotFoundException",
+                           f"Requested resource not found: Table: {name} not found")
+        token = payload.get("ClientToken")
+        if token:
+            for rec in bulk.values():
+                if rec.get("ClientToken") == token:
+                    return {"BulkOperationDescription": copy.deepcopy(rec)}
+        op_id = uuid.uuid4().hex[:24]
+        rec = {
+            "BulkOperationArn": f"arn:aws:dynamodb:us-east-1:{account_id}:table/{name}/bulk-operation/{op_id}",
+            "TableName": name,
+            "BulkOperationStatus": "IN_PROGRESS",
+            "CreationDateTime": datetime.now(timezone.utc).timestamp(),
+            "InputS3Configuration": copy.deepcopy(payload["InputS3Configuration"]),
+            "OutputS3Configuration": copy.deepcopy(payload["OutputS3Configuration"]),
+            "PerformanceTier": payload.get("PerformanceTier") or "STANDARD",
+        }
+        if payload.get("MaxWriteRequestUnits") is not None:
+            rec["MaxWriteRequestUnits"] = payload["MaxWriteRequestUnits"]
+        if token:
+            rec["ClientToken"] = token
+        bulk[rec["BulkOperationArn"]] = rec
+        return {"BulkOperationDescription": copy.deepcopy(rec)}
+
+    if action == "ListBulkOperations":
+        recs = sorted(bulk.values(), key=lambda r: (r["CreationDateTime"], r["BulkOperationArn"]))
+        start = 0
+        tok = payload.get("NextToken")
+        if tok:
+            arns = [r["BulkOperationArn"] for r in recs]
+            if tok not in arns:
+                raise DdbError("ValidationException", "Invalid NextToken")
+            start = arns.index(tok)
+        limit = int(payload.get("MaxResults") or 100)
+        page = recs[start:start + limit]
+        out = {"BulkOperationsSummaryList": [
+            {k: r[k] for k in ("BulkOperationArn", "TableName", "BulkOperationStatus",
+                               "CreationDateTime")} for r in page]}
+        if start + limit < len(recs):
+            out["NextToken"] = recs[start + limit]["BulkOperationArn"]
+        return out
+
+    arn = str(payload.get("BulkOperationArn") or "")
+    if not arn:
+        raise DdbError("ValidationException",
+                       "1 validation error detected: Value null at 'bulkOperationArn' "
+                       "failed to satisfy constraint: Member must not be null")
+    rec = bulk.get(arn)
+    if rec is None:
+        raise DdbError("ResourceNotFoundException", f"Requested resource not found: {arn}")
+    if action == "DescribeBulkOperation":
+        return {"BulkOperationDescription": copy.deepcopy(rec)}
+    if rec["BulkOperationStatus"] == "COMPLETED":
+        raise DdbError("ValidationException", "Bulk operation has already completed")
+    rec["BulkOperationStatus"] = "CANCELLED"
+    return {"BulkOperationArn": arn, "BulkOperationStatus": "CANCELLED"}
+
+
 # ── native-wire dispatcher (X-Amz-Target action → operation) ───────────────
 # The single routing point for the native AWS DynamoDB JSON protocol — what an
 # unmodified aws-cli / boto3 client speaks. Shared by the Nano relay/bridge (tab
@@ -727,6 +804,10 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
         if action == "ListTagsOfResource":
             table = _require_table(store, table_name())
             return _ok({"Tags": [{"Key": k, "Value": v} for k, v in _tags_view(table).items()]})
+
+        if action in _BULK_ACTIONS:
+            bulk = store.__dict__.setdefault("bulk_operations", {})
+            return _ok(bulk_operation(bulk, store.tables, store.account_id, action, payload))
 
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     except DdbError as e:

@@ -47,6 +47,11 @@ class Aws(CloudProvider):
             ("kms", "GetKey"):      lambda b, a, p: A.kms_get_key(p),
             ("kms", "DeleteKey"):   lambda b, a, p: A.kms_delete_key(p),
             ("kms", "ListAliases"): lambda b, a, p: A.kms_list_aliases(p),
+            # CloudWatch — alarms, via core/cloudwatch_core.py
+            ("cloudwatch", "ListAlarms"):  lambda b, a, p: A.cw_list(p),
+            ("cloudwatch", "CreateAlarm"): lambda b, a, p: A.cw_create(p),
+            ("cloudwatch", "GetAlarm"):    lambda b, a, p: A.cw_get(p),
+            ("cloudwatch", "DeleteAlarm"): lambda b, a, p: A.cw_delete(p),
             # Secrets Manager — via core/secrets_core.py
             ("secrets", "ListSecrets"):  lambda b, a, p: A.secrets_list(p),
             ("secrets", "CreateSecret"): lambda b, a, p: A.secrets_create(p),
@@ -98,6 +103,13 @@ class Aws(CloudProvider):
             ("apigateway", "ListResources"): lambda b, a, p: D.apigw_resources(p),
             ("apigateway", "ListStages"): lambda b, a, p: D.apigw_stages(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
+            # API Gateway V2 — HTTP/WebSocket APIs, via core/apigatewayv2_core.py
+            ("apigatewayv2", "ListApis"):    lambda b, a, p: D.apigwv2_list(p),
+            ("apigatewayv2", "CreateApi"):   lambda b, a, p: D.apigwv2_create(p),
+            ("apigatewayv2", "GetApi"):      lambda b, a, p: D.apigwv2_get(p),
+            ("apigatewayv2", "UpdateApi"):   lambda b, a, p: D.apigwv2_patch(p),
+            ("apigatewayv2", "DeleteApi"):   lambda b, a, p: D.apigwv2_delete(p),
+            ("apigatewayv2", "ListChildren"): lambda b, a, p: D.apigwv2_children(p),
             # Systems Manager Parameter Store, via core/ssm_core.py (shared registry store)
             ("ssm", "ListParameters"):    lambda b, a, p: D.ssm_list(p),
             ("ssm", "PutParameter"):      lambda b, a, p: D.ssm_put(p, False),
@@ -117,6 +129,7 @@ class Aws(CloudProvider):
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
             ("vpc", "GetVpc"):            lambda b, a, p: D.vpc_get(p),
+            ("vpc", "DeleteVpc"):         lambda b, a, p: D.vpc_delete(b, a, p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),
@@ -133,6 +146,13 @@ class Aws(CloudProvider):
             ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
             ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
             ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
+            # Kinesis Data Streams — via core/kinesis_core.py
+            ("kinesis", "ListStreams"):  lambda b, a, p: D.kinesis_list(p),
+            ("kinesis", "CreateStream"): lambda b, a, p: D.kinesis_create(p),
+            ("kinesis", "GetStream"):    lambda b, a, p: D.kinesis_get(p),
+            ("kinesis", "UpdateStream"): lambda b, a, p: D.kinesis_update(p),
+            ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
+            ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
             # Elastic Load Balancing — LBs, target groups, listeners (core/elbv2_core.py)
             ("elbv2", "ListLoadBalancers"):  lambda b, a, p: D.elb_list(p),
             ("elbv2", "CreateLoadBalancer"): lambda b, a, p: D.elb_create(p),
@@ -142,6 +162,9 @@ class Aws(CloudProvider):
             ("elbv2", "ListChildren"):       lambda b, a, p: D.elb_children(p),
             ("elbv2", "CreateChild"):        lambda b, a, p: D.elb_child_create(p),
             ("elbv2", "DeleteChild"):        lambda b, a, p: D.elb_child_delete(p),
+            # Amazon SNS — topics, subscriptions, platform applications (core/sns_core.py)
+            ("sns", "GetSnsResource"):   lambda b, a, p: D.sns_console(p),
+            ("sns", "WriteSnsResource"): lambda b, a, p: D.sns_console(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),
@@ -149,6 +172,44 @@ class Aws(CloudProvider):
             ("eventbridge", "PutEvent"):  lambda b, a, p: D.eb_put_event(p),
             # CloudWatch Logs — console REST, via core/logs_core.py
             ("logs", "Console"):          lambda b, a, p: D.logs_console(p),
+            # Resource-detail tabs (core/aws_console_detail.py): EC2 instance
+            # network/storage/security/attributes/user data/IAM profile + the
+            # Permissions tab's IAM policy evaluation.
+            ("ec2", "DescribeInstanceDetail"):  lambda b, a, p: A.ec2_detail(b, a, p),
+            ("ec2", "ModifyInstanceAttribute"): lambda b, a, p: A.ec2_modify(b, a, p),
+            ("ec2", "GetSerialConsoleAccess"):  lambda b, a, p: A.ec2_serial_access(p),
+            ("ec2", "ModifySerialConsoleAccess"): lambda b, a, p: A.ec2_serial_access(p),
+            ("iam", "ResourceAccess"):          lambda b, a, p: A.resource_access(p),
+            ("ssm", "DescribeParameter"):           lambda b, a, p: A.ssm_describe(p),
+            ("apigateway", "GetRestApiSection"):    lambda b, a, p: A.apigw_section(p),
+            ("apigateway", "UpdateRestApiSection"): lambda b, a, p: A.apigw_section(p),
+            ("eventbridge", "GetConsoleRule"):      lambda b, a, p: A.eb_get_rule(p),
+            ("eventbridge", "DescribeRuleSection"): lambda b, a, p: A.eb_rule_section(p),
+            ("eventbridge", "PutRuleSection"):      lambda b, a, p: A.eb_rule_section(p),
+            ("kms", "GetKeySection"):          lambda b, a, p: A.kms_section(p),
+            ("kms", "UpdateKeySection"):       lambda b, a, p: A.kms_section(p),
+            ("secrets", "GetSecretSection"):   lambda b, a, p: A.secret_section(p),
+            ("secrets", "UpdateSecretSection"): lambda b, a, p: A.secret_section(p),
+            ("sqs", "GetQueueSection"):        lambda b, a, p: A.sqs_section(p),
+            ("sqs", "SetQueueSection"):        lambda b, a, p: A.sqs_section(p),
+            ("vpc", "DescribeVpcSection"):     lambda b, a, p: A.vpc_detail_section(p),
+            ("vpc", "ModifyVpcSection"):       lambda b, a, p: A.vpc_detail_section(p),
+            ("iam", "GetAccountSection"):       lambda b, a, p: A.iam_section(p),
+            ("iam", "UpdateAccountSection"):    lambda b, a, p: A.iam_section(p),
+            ("lambda", "GetFunctionSection"):    lambda b, a, p: A.lambda_section(p),
+            ("lambda", "UpdateFunctionSection"): lambda b, a, p: A.lambda_section(p),
+            ("dynamodb", "DescribeTableSection"): lambda b, a, p: A.ddb_table_section(p),
+            ("dynamodb", "UpdateTableSection"):   lambda b, a, p: A.ddb_table_section(p),
+            ("rds", "DescribeDBInstanceDetail"): lambda b, a, p: A.rds_detail(p),
+            ("rds", "ModifyDBInstanceConfiguration"): lambda b, a, p: A.rds_modify_configuration(p),
+            ("s3", "PutBucketTagging"):        lambda b, a, p: A.s3_put_tagging(p),
+            ("s3", "GetVersioning"):           lambda b, a, p: A.s3_get_versioning(p),
+            ("s3", "GetBucketConfig"):         lambda b, a, p: A.s3_bucket_config(p),
+            ("s3", "PutBucketConfig"):          lambda b, a, p: A.s3_bucket_config(p),
+            ("s3", "DeleteBucketConfig"):       lambda b, a, p: A.s3_bucket_config(p),
+            ("s3", "ListObjectVersions"):       lambda b, a, p: A.s3_list_versions(p),
+            ("s3", "GetBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
+            ("s3", "PutBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
         }
 
 

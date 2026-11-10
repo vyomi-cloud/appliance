@@ -78,13 +78,16 @@ def create_aws(name: str):
 
 
 def create_gcp(name: str):
-    http("POST", f"{BASE}/storage/v1/b?project=gcp-dev", {"name": name})
+    # Each GCP space is its own project; ask Resource Manager for it, like gcloud does.
+    _, projects = http("GET", f"{BASE}/v1/projects")
+    project = projects["projects"][0]["projectId"]
+    http("POST", f"{BASE}/storage/v1/b?project={project}", {"name": name})
     return lambda i, blob: http("POST", f"{BASE}/upload/storage/v1/b/{name}/o?uploadType=media&name=obj-{i}.bin",
                                 raw=blob, headers={"Content-Type": "application/octet-stream"})
 
 
 def create_azure(name: str):
-    sub, rg = "sub-001", "rg-savings-check"
+    sub, rg = "00000000-0000-0000-0000-cloudlearn01", "rg-savings-check"
     arm = f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}"
     http("PUT", f"{arm}?api-version=2021-04-01", {"location": "eastus"})
     http("PUT", f"{arm}/providers/Microsoft.Storage/storageAccounts/{name}?api-version=2023-01-01",
@@ -114,7 +117,7 @@ def check_azure_vm() -> None:
     try:
         if not switch_to("azure"):
             return
-        sub, rg, name = "sub-001", "rg-savings-check", f"vm-sav-{uuid.uuid4().hex[:8]}"
+        sub, rg, name = "00000000-0000-0000-0000-cloudlearn01", "rg-savings-check", f"vm-sav-{uuid.uuid4().hex[:8]}"
         before = savings()
         http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}?api-version=2021-04-01", {"location": "eastus"})
         http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}?api-version=2023-09-01",

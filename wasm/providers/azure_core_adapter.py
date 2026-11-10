@@ -214,6 +214,17 @@ def _json_items(txt):
     return []
 
 
+def dispatch_blobs(st, container):
+    """A blob container's blobs, for the console."""
+    _, bx = _call(_blob, st, "GET", f"/{container}", {"restype": "container", "comp": "list"}, XMS)
+    blobs = []
+    for b in re.findall(r"<Blob>(.*?)</Blob>", bx, re.S):
+        g = lambda tag: (re.search(rf"<{tag}>([^<]*)</{tag}>", b) or [None, ""])[1]
+        blobs.append({"name": g("Name"), "size": int(g("Content-Length") or 0),
+                      "contentType": g("Content-Type"), "lastModified": g("Last-Modified"), "etag": g("Etag")})
+    return blobs
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → Azure data-plane core. Returns the registry envelope."""
     body = body or {}
@@ -238,14 +249,7 @@ def resource_op(service, operation, name="", body=None):
                 out.append({"name": n, "blobCount": len(re.findall(r"<Blob>", bx))})
             return {"ok": True, "value": out}
         if operation == "ListBlobs":
-            _, bx = _call(_blob, st, "GET", f"/{name}", {"restype": "container", "comp": "list"}, XMS)
-            blobs = []
-            for b in re.findall(r"<Blob>(.*?)</Blob>", bx, re.S):
-                g = lambda tag: (re.search(rf"<{tag}>([^<]*)</{tag}>", b) or [None, ""])[1]
-                blobs.append({"name": g("Name"), "size": int(g("Content-Length") or 0),
-                              "contentType": g("Content-Type"), "lastModified": g("Last-Modified"),
-                              "etag": g("Etag")})
-            return {"ok": True, "value": blobs}
+            return {"ok": True, "value": dispatch_blobs(st, name)}
         if operation == "DeleteObject":
             s, _ = _call(_blob, st, "DELETE", f"/{name}/{body.get('blob', '')}", {}, XMS)
             return {"ok": s < 300, "deleted": s < 300, "container": name, "blob": body.get("blob")}
@@ -257,7 +261,7 @@ def resource_op(service, operation, name="", body=None):
             return {"ok": s < 300, "name": rid} if s < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}
         if operation == "Get":
             _, x = _call(_blob, st, "GET", "/", {"comp": "list"}, XMS)
-            return {"ok": True, "name": name} if name in _xml_names(x) else {"ok": False, "code": "NotFound", "name": name}
+            return {"ok": True, "name": name, "blobs": dispatch_blobs(st, name)} if name in _xml_names(x) else {"ok": False, "code": "NotFound", "name": name}
         if operation == "Delete":
             s, _ = _call(_blob, st, "DELETE", f"/{name}", {"restype": "container"}, XMS)
             return {"ok": s < 300, "code": None if s < 300 else "NotFound", "name": name}
@@ -277,6 +281,44 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             s, _ = _call(_cosmos, st, "DELETE", f"/dbs/{name}")
             return {"ok": s < 300, "code": None if s < 300 else "NotFound", "name": name}
+
+    # ---- Key Vault data plane, native wire shape (/azure-data/keyvault/{vault}/…) ----
+    # The vault blade's Secrets / Keys tabs speak the SDK's own JSON (value[] with id/kid,
+    # {value}, attributes.enabled), so hand the core's body through untouched.
+    if operation == "KvData" and service == "kvcerts":
+        # Key Vault certificates: the shared certificates core (real self-signed X.509),
+        # its state hung on the registered KV secrets store (public attr → persisted).
+        try:
+            from core import azure_keyvault_certificates_core as _kvc
+        except ImportError:  # pragma: no cover - flat Pyodide layout
+            import azure_keyvault_certificates_core as _kvc  # type: ignore
+        cs = _kvc.CertStore()
+        cs.vaults = _STORES["kvsecrets"].__dict__.setdefault("kv_certs", {})
+        vault = str(body.get("vault") or "")
+        m = str(body.get("method") or "GET").upper()
+        sub = str(body.get("sub") or "").strip("/")
+        status, out = _kvc.dispatch(cs, vault, m, "/certificates/" + sub, body.get("body") or {})
+        name = sub.split("/")[0] if sub else ""
+        if status < 300 and m == "POST" and sub.endswith("/create"):
+            _call(_kvsec, _STORES["kvsecrets"], "PUT", f"/secrets/{name}", APIV, {},
+                  {"value": _kvc.secret_value(cs, vault, name), "contentType": "application/x-pem-file"})
+        elif status < 300 and m == "DELETE" and name:
+            _call(_kvsec, _STORES["kvsecrets"], "DELETE", f"/secrets/{name}", APIV, {}, b"")
+        return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": out}}
+
+    if operation == "KvData" and service in ("kvsecrets", "kvkeys"):
+        coll = "secrets" if service == "kvsecrets" else "keys"
+        core = _kvsec if service == "kvsecrets" else _kvkeys
+        sub = str(body.get("sub") or "").strip("/")
+        s, t = _call(core, _STORES[service], str(body.get("method") or "GET").upper(),
+                     f"/{coll}/{sub}" if sub else f"/{coll}", APIV, {}, body.get("body") or {})
+        try:
+            data = json.loads(t) if t else {}
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            data = {"value": data}
+        return {**data, "ok": s < 300, "status": s}
 
     # ---- Key Vault secrets (JSON) ----
     if service == "kvsecrets":
@@ -335,4 +377,4 @@ def resource_op(service, operation, name="", body=None):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": service}
 
 
-AZURE_DP_SERVICES = frozenset(_STORES.keys()) | frozenset(_SUB_SERVICES.keys())
+AZURE_DP_SERVICES = frozenset(_STORES.keys()) | frozenset(_SUB_SERVICES.keys()) | {"kvcerts"}  # kvcerts: Key Vault certificates (KvData only)

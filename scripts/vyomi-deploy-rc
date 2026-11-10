@@ -110,17 +110,18 @@ if [ -n "$LOCAL_TARBALL" ]; then
   TARBALL="$LOCAL_TARBALL"
   # Infer tag from filename
   if [ -z "$TAG" ]; then
-    TAG=$(basename "$TARBALL" .tar.gz | sed -E 's/^cloud-learn-//')
+    TAG=$(basename "$TARBALL" .tar.gz | sed -E 's/^(vyomi|cloud-learn)-//')
   fi
   echo "▸ Using local tarball: $TARBALL  (tag: $TAG)"
 else
-  TARBALL="/tmp/cloud-learn-${TAG}.tar.gz"
+  TARBALL="/tmp/vyomi-${TAG}.tar.gz"
   if [ -f "$TARBALL" ] && [ "$(stat -f %z "$TARBALL")" -gt 1000000 ]; then
     echo "▸ Cached tarball: $TARBALL"
   else
-    URL="https://github.com/${GH_OWNER}/${GH_REPO}/releases/download/v${TAG}/cloud-learn-${TAG}.tar.gz"
+    # vyomi-X.tar.gz (cloud-learn-X.tar.gz before v3.0.33).
+    URL="https://github.com/${GH_OWNER}/${GH_REPO}/releases/download/v${TAG}/vyomi-${TAG}.tar.gz"
     echo "▸ Downloading: $URL"
-    curl -fL --progress-bar -o "$TARBALL" "$URL" || {
+    curl -fL --progress-bar -o "$TARBALL" "$URL" || curl -fL --progress-bar -o "$TARBALL" "${URL%/vyomi-${TAG}.tar.gz}/cloud-learn-${TAG}.tar.gz" || {
       echo "✗ Download failed. Either the release doesn't exist or v${TAG} hasn't been built yet." >&2
       echo "  Check: https://github.com/${GH_OWNER}/${GH_REPO}/releases/tag/v${TAG}" >&2
       exit 5
@@ -130,8 +131,10 @@ else
 fi
 
 # ── Step 3: Transfer to VM ────────────────────────────────────────────────
-REMOTE_TARBALL="/home/ubuntu/cloud-learn-${TAG}.tar.gz"
-REMOTE_DIR="/home/ubuntu/cloud-learn-${TAG}"
+# The bundle's top-level folder is vyomi-X (cloud-learn-X in older releases).
+TOP_DIR="$(tar -tzf "$TARBALL" | head -1 | cut -d/ -f1)"
+REMOTE_TARBALL="/home/ubuntu/${TOP_DIR}.tar.gz"
+REMOTE_DIR="/home/ubuntu/${TOP_DIR}"
 echo "▸ Pushing tarball to $VYOMI_RC_VM..."
 multipass transfer "$TARBALL" "${VYOMI_RC_VM}:${REMOTE_TARBALL}"
 
@@ -153,7 +156,7 @@ fi
 # ── Step 4: Bring the stack up ────────────────────────────────────────────
 echo "▸ Stopping any previous RC stack..."
 multipass exec "$VYOMI_RC_VM" -- bash -c "
-  find /home/ubuntu/cloud-learn-* -maxdepth 1 -name docker-compose.appliance.yml 2>/dev/null | while read f; do
+  find /home/ubuntu/vyomi-* /home/ubuntu/cloud-learn-* -maxdepth 1 -name docker-compose.appliance.yml 2>/dev/null | while read f; do
     d=\$(dirname \$f)
     if [ \"\$d\" != '${REMOTE_DIR}' ]; then
       cd \"\$d\" && sudo docker compose -f docker-compose.appliance.yml down --remove-orphans 2>/dev/null || true
@@ -162,7 +165,7 @@ multipass exec "$VYOMI_RC_VM" -- bash -c "
 "
 
 echo "▸ Building simulator image (this takes 5-10 min on first run)..."
-COMPOSE_LOG="/home/ubuntu/cloud-learn-${TAG}-compose.log"
+COMPOSE_LOG="/home/ubuntu/${TOP_DIR}-compose.log"
 BUILD_CMD="cd ${REMOTE_DIR} && sudo docker compose -f docker-compose.appliance.yml build simulator 2>&1 | tee ${COMPOSE_LOG}"
 if [ "$VERBOSE" -eq 1 ]; then
   multipass exec "$VYOMI_RC_VM" -- bash -c "$BUILD_CMD"

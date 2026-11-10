@@ -377,28 +377,18 @@ async def api_gcp_iam_create_service_account_key(project: str, account: str, req
     sa = _iam_find_sa(project, account)
     if not sa:
         raise HTTPException(404, detail="Service account not found")
-    key_id = uuid.uuid4().hex
-    email = sa.get("email", account)
-    name = f"projects/{project}/serviceAccounts/{email}/keys/{key_id}"
-    keyfile = {
-        "type": "service_account", "project_id": project, "private_key_id": key_id,
-        "client_email": email, "client_id": str(sa.get("uniqueId") or ""),
-        "private_key": "-----BEGIN PRIVATE KEY-----\nSIMULATED-KEY\n-----END PRIVATE KEY-----\n",
-        "token_uri": "https://oauth2.googleapis.com/token",
-    }
-    rec = {
-        "name": name, "keyAlgorithm": "KEY_ALG_RSA_2048", "keyType": "USER_MANAGED",
-        "keyOrigin": "GOOGLE_PROVIDED", "validAfterTime": _now(), "validBeforeTime": "2099-12-31T23:59:59Z",
-        "privateKeyType": "TYPE_GOOGLE_CREDENTIALS_FILE",
-        "privateKeyData": base64.b64encode(json.dumps(keyfile).encode()).decode("ascii"),
-        "_key_id": key_id,
-    }
-    sa.setdefault("keys", {})[key_id] = rec
-    return rec  # create is the only call that returns privateKeyData
+    # A real RSA-2048 key file (core/gcp_iam_core, the same keys.create Nano runs).
+    from core import gcp_iam_core as _iamc
+    keys = sa.setdefault("keys", {})
+    if sum(1 for k in keys.values() if k.get("keyType") == "USER_MANAGED") >= _iamc.MAX_USER_KEYS:
+        raise HTTPException(400, detail="Precondition check failed: the service account has the maximum of 10 keys.")
+    rec, created = _iamc.new_key_record(project, sa.get("email", account), str(sa.get("uniqueId") or ""))
+    keys[rec["name"].rsplit("/", 1)[-1]] = rec
+    return created  # create is the only call that returns privateKeyData
 
 
 def _key_public_view(rec: dict) -> dict:
-    return {k: v for k, v in rec.items() if k not in ("privateKeyData", "_key_id")}
+    return {k: v for k, v in rec.items() if k not in ("privateKeyData", "_key_id", "publicKeyPem")}
 
 
 def api_gcp_iam_list_service_account_keys(project: str, account: str):

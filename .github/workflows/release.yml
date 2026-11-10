@@ -45,6 +45,7 @@ on:
 
 permissions:
   contents: write     # github-release needs to write the Release page
+  issues: write       # close the issues this release fixed, with a 'Shipped in' note
   packages: write     # if any job ever needs to push to GHCR
 
 env:
@@ -60,18 +61,22 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_brew:   ${{ steps.check.outputs.has_brew }}
+      has_plugins: ${{ steps.check.outputs.has_plugins }}
     steps:
       - id: check
         env:
           BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          PLUGINS: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
         run: |
           mask() { [ -n "$1" ] && echo true || echo false; }
           {
             echo "has_brew=$(mask "$BREW")"
+            echo "has_plugins=$(mask "$PLUGINS")"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Downstream targets"
             echo "- Homebrew tap : $(mask "$BREW")"
+            echo "- Claude Code plugins : $(mask "$PLUGINS")"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── source tarball + deb + rpm ──────────────────────────────────────────
@@ -132,6 +137,35 @@ jobs:
           print(f"services.json: {out['total']} services {counts}")
           PY
 
+      # `vyomi mcp` (MCP server for AI coding agents) is the compiled cmd/vyomi
+      # binary. Windows gets it inside vyomi.exe (MSI); macOS/Linux packages run
+      # the bash launcher, so ship the binary per OS/arch under
+      # packaging/docker/mcp/ (picked up by the tarball, the Homebrew formulas
+      # and the .deb/.rpm builds below) and as standalone release assets.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - name: Build vyomi-mcp (macOS/Linux/Windows)
+        # Never let this block the release: packaging tolerates missing binaries
+        # (formula + .deb/.rpm skip them; `vyomi mcp` then prints a clear error).
+        continue-on-error: true
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          # Embed THIS release's version + service registry in the MCP knowledge.
+          python3 scripts/gen_mcp_matrix.py
+          mkdir -p dist
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
+            os="${target%/*}"; arch="${target#*/}"; ext=""
+            [ "$os" = windows ] && ext=".exe"
+            out="packaging/docker/mcp/$os-$arch/vyomi-mcp$ext"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+              go -C cmd/vyomi build -trimpath -ldflags "-s -w" -o "../../$out" .
+            cp "$out" "dist/vyomi-mcp-$VER-$os-$arch$ext"
+          done
+          rm -rf packaging/docker/mcp/windows-amd64   # Windows ships vyomi.exe in the MSI
+          ls -l packaging/docker/mcp/*/ dist/vyomi-mcp-*
+
       - name: Build source tarball
         run: |
           mkdir -p dist
@@ -146,10 +180,15 @@ jobs:
           # editing this list (or adding a new COPY directive).
           # Past regressions: cloudsim-backbone was missing v1.0.0-v1.1.8;
           # routes + setup_cython.py were missing v1.0.0-v1.1.9.
-          tar czf "dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz" \
+          # vyomi-X.tar.gz is the release tarball. cloud-learn-X.tar.gz is the same
+          # bundle under the retired name, for ONE transition release (v3.0.33): the
+          # `vyomi update` of launchers <= 3.0.32 downloads cloud-learn-<latest>.tar.gz
+          # and reads cloud-learn-<latest>/docker-compose.cloudlite.yml from it.
+          for NAME in vyomi cloud-learn; do
+          tar czf "dist/$NAME-${{ steps.ver.outputs.version }}.tar.gz" \
             --exclude='.git' --exclude='__pycache__' --exclude='node_modules' \
             --exclude='dist' --exclude='**/target' --exclude='**/playwright-report' \
-            --transform "s,^,cloud-learn-${{ steps.ver.outputs.version }}/," \
+            --transform "s,^,$NAME-${{ steps.ver.outputs.version }}/," \
             core providers packs routes static \
             server.py setup_cython.py requirements.txt VERSION \
             Dockerfile docker-compose.yml docker-compose.appliance.yml \
@@ -157,6 +196,7 @@ jobs:
             cloudsim-backbone \
             .env.example packaging scripts docs install.sh \
             README.md CHANGELOG.md LICENSE
+          done
 
       - name: Build .deb
         run: bash packaging/debian/build-deb.sh "${{ steps.ver.outputs.version }}"
@@ -164,9 +204,13 @@ jobs:
       - name: Build .rpm via fpm
         run: |
           STAGE="$(mktemp -d)"
-          mkdir -p "$STAGE/usr/lib/cloud-learn" "$STAGE/usr/bin" "$STAGE/usr/share/doc/cloud-learn"
-          cp -r core providers packs static scripts \
-                server.py requirements.txt VERSION Dockerfile \
+          mkdir -p "$STAGE/usr/lib/cloud-learn" "$STAGE/usr/bin" "$STAGE/usr/share/doc/vyomi"
+          # Same bundle as the .deb (packaging/debian/build-deb.sh): routes,
+          # setup_cython.py, packaging (bind-mounted backend configs + the shared
+          # packaging/docker/vyomi launcher) and cloudsim-backbone were missing, so
+          # the RPM's backends crash-looped and vyomi --version/update fell back.
+          cp -r core providers packs routes static scripts packaging cloudsim-backbone \
+                server.py setup_cython.py requirements.txt VERSION Dockerfile \
                 docker-compose.yml docker-compose.appliance.yml docker-compose.cloudlite.yml \
                 .env.example install.sh \
                 "$STAGE/usr/lib/cloud-learn/"
@@ -187,28 +231,31 @@ jobs:
           exec /usr/bin/vyomi "$@"
           EOF
           chmod 0755 "$STAGE/usr/bin/cloud-learn"
-          cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/cloud-learn/"
+          cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/vyomi/"
+          # Package `vyomi` (was `cloud-learn`): Obsoletes/Provides the old name, so
+          # `dnf upgrade` moves existing installs over.
           fpm -s dir -t rpm \
-            -n cloud-learn -v "${{ steps.ver.outputs.version }}" \
+            -n vyomi -v "${{ steps.ver.outputs.version }}" \
+            --replaces "cloud-learn < ${{ steps.ver.outputs.version }}" --provides "cloud-learn = ${{ steps.ver.outputs.version }}" \
             --license BUSL-1.1 --architecture noarch \
             --maintainer "Vyomi <support@vyomi.cloud>" \
             --url "https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}" \
             --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
             --depends bash --depends curl \
             --chdir "$STAGE" \
-            --package "dist/cloud-learn-${{ steps.ver.outputs.version }}-1.noarch.rpm" \
+            --package "dist/vyomi-${{ steps.ver.outputs.version }}-1.noarch.rpm" \
             .
 
       - name: Build vyomi-docker (.deb + .rpm — Docker substrate, Free/Lite/Pro)
         # Thin Docker-substrate launcher: the `vyomi` wrapper + the pull-only
-        # docker-compose.cloudlite.yml, no Multipass/LXD. Conflicts with
-        # cloud-learn (both own /usr/bin/vyomi) — a host installs one or other.
+        # docker-compose.cloudlite.yml, no Multipass/LXD. Conflicts with the
+        # Max package `vyomi` (both own /usr/bin/vyomi) — a host installs one.
         run: bash packaging/docker/build-docker-packages.sh "${{ steps.ver.outputs.version }}"
 
       - name: Compute SHA256 of tarball (Homebrew formula bump needs it)
         id: shas
         run: |
-          TARBALL_SHA="$(sha256sum dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz | awk '{print $1}')"
+          TARBALL_SHA="$(sha256sum dist/vyomi-${{ steps.ver.outputs.version }}.tar.gz | awk '{print $1}')"
           echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
           {
             for f in dist/*; do sha256sum "$f"; done
@@ -242,7 +289,7 @@ jobs:
           $ver = "${{ needs.build.outputs.version }}"
           New-Item -ItemType Directory -Force -Path stage, stage/bin | Out-Null
           # Extract the exact same bundle the .tar.gz / .deb / .rpm ship.
-          tar -xzf "dist/cloud-learn-$ver.tar.gz" -C stage --strip-components=1
+          tar -xzf "dist/vyomi-$ver.tar.gz" -C stage --strip-components=1
           # Compile the native launcher (replaces the PowerShell script). winget
           # rejects scripted/wrapper apps, so the program a user runs must be a
           # compiled binary — see PR microsoft/winget-pkgs#392224.
@@ -267,7 +314,7 @@ jobs:
           $wix = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
           & $wix build packaging/windows/cloudlearn.wxs -arch x64 `
             -d Version=$ver -d "StageDir=$((Resolve-Path stage).Path)" `
-            -o "dist/cloud-learn-$ver-x64.msi"
+            -o "dist/vyomi-$ver-x64.msi"
 
       - name: Sign MSI (opt-in — Azure Trusted Signing)
         if: ${{ vars.ENABLE_MSI_SIGNING == 'true' }}
@@ -286,14 +333,14 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${{ needs.build.outputs.version }}"
-          $msi = "dist/cloud-learn-$ver-x64.msi"
+          $msi = "dist/vyomi-$ver-x64.msi"
           (Get-FileHash $msi -Algorithm SHA256).Hash.ToLower() |
             Set-Content "$msi.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
           name: msi
-          path: dist/cloud-learn-*-x64.msi*
+          path: dist/vyomi-*-x64.msi*
           retention-days: 30
 
   # ── GitHub Release page ─────────────────────────────────────────────────
@@ -305,6 +352,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # tags + history: the issues this release fixed
       - uses: actions/download-artifact@v4
         with: {name: release-artifacts, path: dist}
       - uses: actions/download-artifact@v4
@@ -350,8 +398,21 @@ jobs:
           # the GitHub repo home page.
           prerelease: ${{ contains(needs.build.outputs.version, '-rc') || contains(needs.build.outputs.version, '-beta') || contains(needs.build.outputs.version, '-alpha') }}
 
+      # Shipped: every issue this release fixed ("Fixes #N" in its commits) gets a
+      # "Shipped in vX.Y.Z" comment (reporter thanked by name when it was filed under a
+      # person's account) and is closed. Skipped for pre-releases.
+      - name: Close the issues this release shipped
+        if: ${{ !contains(needs.build.outputs.version, '-') }}
+        continue-on-error: true
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: |
+          VER="${{ needs.build.outputs.version }}"
+          PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$VER" | head -1)
+          [ -n "$PREV" ] || { echo "No previous release tag."; exit 0; }
+          python3 scripts/close_shipped_issues.py --version "$VER" --prev "$PREV" --repo "${{ github.repository }}"
+
   # ── Brew tap auto-bump ──────────────────────────────────────────────────
-  # Bumps cloud-learn.rb in the vyomi-cloud/homebrew-tap repo with the
+  # Bumps vyomi.rb + vyomi-docker.rb in the vyomi-cloud/homebrew-tap repo with the
   # new url + sha256. Requires HOMEBREW_TAP_TOKEN secret (PAT with `contents:write`
   # on vyomi-cloud/homebrew-tap). Falls back to a no-op if missing.
   brew-bump:
@@ -371,11 +432,11 @@ jobs:
         with:
           path: src
 
-      - name: Bump formulae (cloud-learn / Max + vyomi-docker / Free·Lite·Pro)
+      - name: Bump formulae (vyomi / Max + vyomi-docker / Free·Lite·Pro)
         run: |
           VER="${{ needs.build.outputs.version }}"
           SHA="${{ needs.build.outputs.tarball_sha256 }}"
-          URL="https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/releases/download/v${VER}/cloud-learn-${VER}.tar.gz"
+          URL="https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/releases/download/v${VER}/vyomi-${VER}.tar.gz"
           bump() {  # $1 = formula path — both ship from the SAME release tarball
             sed -i.bak \
               -e "s|url \".*\"|url \"${URL}\"|" \
@@ -384,7 +445,8 @@ jobs:
               "$1"
             rm -f "$1.bak"
           }
-          # Max (Multipass) formula — already in the tap.
+          # Max (Multipass) formula — copy the template too, so its text tracks the repo.
+          cp src/packaging/homebrew/Formula/vyomi.rb tap/Formula/vyomi.rb
           bump tap/Formula/vyomi.rb
           # Docker (Free/Lite/Pro) formula — copy the template from the main repo.
           cp src/packaging/homebrew/Formula/vyomi-docker.rb tap/Formula/vyomi-docker.rb
@@ -393,7 +455,55 @@ jobs:
           git config user.email "bot@vyomi.cloud"
           git config user.name  "Vyomi Release Bot"
           git add Formula/vyomi.rb Formula/vyomi-docker.rb
-          git commit -m "vyomi ${VER} (cloud-learn + vyomi-docker)"
+          git commit -m "vyomi ${VER} (vyomi + vyomi-docker)"
+          git push
+
+  # ── Claude Code plugin marketplace sync ─────────────────────────────────
+  # integrations/claude-plugins/ is the source of truth for the public
+  # marketplace repo vyomi-cloud/claude-plugins (users run
+  # `/plugin marketplace add vyomi-cloud/claude-plugins`). Kept in its own small
+  # repo because adding a marketplace clones it. Each release stamps the release
+  # version into the manifests and mirrors the folder. Skipped (not failed)
+  # until the CLAUDE_PLUGINS_TOKEN secret exists. Pre-releases are not synced.
+  plugins-sync:
+    needs: [preflight, build]
+    if: needs.preflight.outputs.has_plugins == 'true' && !contains(needs.build.outputs.version, '-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          path: src
+      - name: Checkout plugins repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GH_OWNER }}/claude-plugins
+          token: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
+          path: plugins
+      - name: Mirror + stamp version
+        run: |
+          VER="${{ needs.build.outputs.version }}"
+          find plugins -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a src/integrations/claude-plugins/. plugins/
+          python3 - "$VER" plugins <<'PY'
+          import json, pathlib, sys
+          ver, root = sys.argv[1], pathlib.Path(sys.argv[2])
+          mp = root / ".claude-plugin" / "marketplace.json"
+          m = json.loads(mp.read_text())
+          m.setdefault("metadata", {})["version"] = ver
+          for p in m["plugins"]:
+              p["version"] = ver
+          mp.write_text(json.dumps(m, indent=2) + "\n")
+          for pj in root.glob("plugins/*/.claude-plugin/plugin.json"):
+              d = json.loads(pj.read_text()); d["version"] = ver
+              pj.write_text(json.dumps(d, indent=2) + "\n")
+          PY
+          cd plugins
+          git config user.email "bot@vyomi.cloud"
+          git config user.name  "Vyomi Release Bot"
+          git add -A
+          if git diff --cached --quiet; then echo "plugins unchanged"; exit 0; fi
+          git commit -m "vyomi plugins ${VER}"
           git push
 
   # ── Snap Store publish — REMOVED ────────────────────────────────────────

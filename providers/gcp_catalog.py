@@ -19,9 +19,9 @@ works across providers. Each service entry has:
     - wizard:           Multi-step (or collapsible) wizard from core/gcp_wizards
     - subBlades:        Detail-page left sub-nav from core/gcp_subblades
 
-GCP "Project" maps to our "Space" — project name comes from the active space's
-``active_account`` (or "cloudlearn" default). The frontend substitutes it at
-request time.
+GCP "Project" maps to our "Space" — the space's project ID (core/gcp_project;
+the space's ``active_account`` is its project number). The frontend substitutes
+it at request time.
 """
 from __future__ import annotations
 
@@ -55,6 +55,7 @@ RESOURCE_CATALOG_GCP = [
             ["zone",              "Zone"],
             ["machineType",       "Machine type"],
             ["status",            "Status"],
+            ["creationTimestamp", "Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Name", "default": "instance-1"},
@@ -111,6 +112,7 @@ RESOURCE_CATALOG_GCP = [
             ["region",          "Region"],
             ["state",           "Status"],
             ["backendType",     "Type"],
+            ["createTime", "Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Instance ID", "default": "my-sql-instance"},
@@ -183,6 +185,7 @@ RESOURCE_CATALOG_GCP = [
             ["state",       "Status"],
             ["entryPoint",  "Entry point"],
             ["updateTime",  "Last deployed"],
+            ["createTime", "Created"],
         ],
         "createFields": [
             {"name": "name",       "label": "Function name", "default": "my-function"},
@@ -235,9 +238,10 @@ RESOURCE_CATALOG_GCP = [
         # IPv4Range is legacy-network-only and empty for every modern VPC. Caught by real-SPA conformance.
         "columns": [
             ["name",                 "Name"],
-            ["autoCreateSubnetworks","Mode"],
+            ["mode",                 "Mode"],
             ["routingConfig.routingMode", "Routing mode"],
             ["mtu",                  "MTU"],
+            ["creationTimestamp", "Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Network name", "default": "my-vpc"},
@@ -260,6 +264,7 @@ RESOURCE_CATALOG_GCP = [
             ["displayName", "Display name"],
             ["uniqueId",    "Unique ID"],
             ["disabled",    "State"],
+            ["createTime", "Created"],
         ],
         "createFields": [
             {"name": "name",        "label": "Service account name", "default": "my-service-account"},
@@ -318,6 +323,42 @@ RESOURCE_CATALOG_GCP = [
         ],
         "createFields": [
             {"name": "name", "label": "Name", "default": "my-secret"},
+        ],
+    },
+    # ========================================================================
+    # Artifact Registry — repositories for container images and language
+    # packages (core/gcp_artifactregistry_core.py, the engine the native
+    # artifactregistry/v1 wire serves).
+    # ========================================================================
+    {
+        "key": "artifactregistry", "label": "Artifact Registry", "icon": "inventory_2",
+        "namespace": "GCP/ArtifactRegistry", "service": "artifactregistry",
+        "collection_path": "/api/gcp/artifactregistry/repositories",
+        "resource_path":   "/api/gcp/artifactregistry/repositories/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "repositories": {"method": "GET",    "path": "/api/gcp/artifactregistry/repositories"},
+            "packages":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listPackages/{name}"},
+            "versions":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listVersions/{name}"},
+            "tags":         {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listTags/{name}"},
+            "images":       {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listImages/{name}"},
+            "pushSample":   {"method": "POST",   "path": "/api/gcp/sub/artifactregistry/pushSample/{name}"},
+            "delete":       {"method": "DELETE", "path": "/api/gcp/artifactregistry/repositories/{name}"},
+        },
+        "columns": [
+            ["name",       "Name"],
+            ["format",     "Format"],
+            ["mode",       "Mode"],
+            ["location",   "Location"],
+            ["encryption", "Encryption"],
+            ["size",       "Size"],
+            ["created",    "Created"],
+        ],
+        "createFields": [
+            {"name": "name",     "label": "Name",     "default": "my-repo"},
+            {"name": "format",   "label": "Format",   "default": "DOCKER"},
+            {"name": "location", "label": "Location", "default": "us-central1"},
         ],
     },
     # ========================================================================
@@ -391,7 +432,7 @@ RESOURCE_CATALOG_GCP = [
             {"name": "targetType",  "label": "Target type (HTTP or Pub/Sub)", "default": "HTTP"},
             {"name": "url",         "label": "URL (HTTP target)",            "default": "https://example.com/hook"},
             {"name": "httpMethod",  "label": "HTTP method",                  "default": "POST"},
-            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "projects/demo/topics/my-topic"},
+            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "my-topic"},
             {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
         ],
     },
@@ -472,6 +513,51 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Cloud Monitoring — alert policies (+ notification channels, custom metrics, time series,
+    # uptime checks, groups over the native API; core/gcp_monitoring_core.py). Console REST at
+    # /api/gcp/monitoring/*; the native /v3/projects/* wire serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "monitoring", "label": "Cloud Monitoring", "icon": "monitoring",
+        "namespace": "GCP/Monitoring", "service": "monitoring",
+        "collection_path": "/api/gcp/monitoring/policies",
+        "resource_path":   "/api/gcp/monitoring/policies/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "policies": {"method": "GET",    "path": "/api/gcp/monitoring/policies"},
+            "enable":   {"method": "POST",   "path": "/api/gcp/sub/monitoring/enable/{name}"},
+            "disable":  {"method": "POST",   "path": "/api/gcp/sub/monitoring/disable/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/monitoring/policies/{name}"},
+        },
+        "columns": [
+            ["display_name",      "Policy name"],
+            ["id",                "Policy ID"],
+            ["state",             "Status"],
+            ["severity_text",     "Severity"],
+            ["metric_type",       "Metric"],
+            ["threshold_text",    "Threshold"],
+            ["condition_count",   "Conditions"],
+            ["channels_text",     "Notification channels"],
+            ["incidents",         "Incidents"],
+            ["last_modified",     "Last modified"],
+            ["created", "Created"],
+        ],
+        "createFields": [
+            {"name": "name",             "label": "Policy name",                         "default": "High CPU utilization"},
+            {"name": "metricType",       "label": "Metric type",                         "default": "compute.googleapis.com/instance/cpu/utilization"},
+            {"name": "resourceType",     "label": "Resource type",                       "default": "gce_instance"},
+            {"name": "comparison",       "label": "Condition (COMPARISON_GT, _GE, _LT, _LE, _EQ, _NE)", "default": "COMPARISON_GT"},
+            {"name": "threshold",        "label": "Threshold value",                     "default": "0.8"},
+            {"name": "duration",         "label": "Retest window (duration)",            "default": "300s"},
+            {"name": "alignmentPeriod",  "label": "Alignment period",                    "default": "60s"},
+            {"name": "aligner",          "label": "Aligner (ALIGN_MEAN, ALIGN_MAX, ...)", "default": "ALIGN_MEAN"},
+            {"name": "email",            "label": "Notification e-mail address",         "default": "ops@example.com"},
+            {"name": "severity",         "label": "Severity (CRITICAL, ERROR or WARNING)", "default": "WARNING"},
+            {"name": "documentation",    "label": "Documentation",                       "default": "CPU utilization above 80% for 5 minutes. Check the instance for runaway processes."},
+        ],
+    },
+    # ========================================================================
     # Memorystore for Redis — instances (core/gcp_redis_core.py). Console REST at
     # /api/gcp/redis/*; the native /v1/projects/*/locations/*/instances wire serves the SDKs /
     # gcloud. Data plane: the shared Valkey container offline (control plane only in Nano).
@@ -544,12 +630,13 @@ def catalog_for_console() -> list[dict]:
     return out
 
 
-def build_console_payload(active_project: str = "cloudlearn",
+def build_console_payload(active_project: str = "vyomi-project",
                           active_region: str = "us-central1",
-                          active_zone: str = "us-central1-a") -> dict:
-    """Full payload for /api/gcp/catalog. Project comes from the active
-    space's account/project setting; region/zone default to us-central1/-a
-    which most GCP defaults use.
+                          active_zone: str = "us-central1-a",
+                          project_number: str = "") -> dict:
+    """Full payload for /api/gcp/catalog. Project is the space's project ID
+    (with its project number); region/zone default to us-central1/-a which
+    most GCP defaults use.
 
     `extras` carries per-stub schemas for the new Eventarc/Secret Manager/
     Cloud KMS services backed by /api/gcp/extras/...
@@ -558,6 +645,7 @@ def build_console_payload(active_project: str = "cloudlearn",
     slim_extras = {k: {**v, "seed": None} for k, v in EXTRAS.items()}
     return {
         "project": active_project,
+        "projectNumber": project_number,
         "region":  active_region,
         "zone":    active_zone,
         "services": catalog_for_console(),

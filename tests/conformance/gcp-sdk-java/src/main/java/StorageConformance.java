@@ -16,7 +16,7 @@ import java.util.Arrays;
  * pointed at the simulator endpoint (REST + fake-gcs-server backend).
  *
  * Endpoint + project come from env: ENDPOINT (default http://127.0.0.1:9000),
- * PROJECT (default gcp-dev).
+ * PROJECT (default vyomi-project).
  */
 public class StorageConformance {
   static int pass = 0, fail = 0;
@@ -28,7 +28,7 @@ public class StorageConformance {
 
   public static void main(String[] args) {
     String endpoint = System.getenv().getOrDefault("ENDPOINT", "http://127.0.0.1:9000");
-    String project = System.getenv().getOrDefault("PROJECT", "gcp-dev");
+    String project = System.getenv().getOrDefault("PROJECT", "vyomi-project");
     System.out.println("== google-cloud-storage (Java) against " + endpoint + " project=" + project + " ==");
 
     Storage storage = StorageOptions.newBuilder()

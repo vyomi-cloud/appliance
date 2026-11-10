@@ -30,9 +30,10 @@ concurrency:
 
 jobs:
   gate:
-    # Backend upgrades (expansion/upgrade-*) are reviewed and merged by a person,
+    # Backend upgrades (expansion/upgrade-*) and platform features (expansion/feature-*)
+    # are reviewed and merged by a person,
     # never gated or auto-merged here.
-    if: github.event_name == 'workflow_dispatch' || (startsWith(github.event.pull_request.head.ref, 'expansion/') && !startsWith(github.event.pull_request.head.ref, 'expansion/upgrade-'))
+    if: github.event_name == 'workflow_dispatch' || (startsWith(github.event.pull_request.head.ref, 'expansion/') && !startsWith(github.event.pull_request.head.ref, 'expansion/upgrade-') && !startsWith(github.event.pull_request.head.ref, 'expansion/feature-'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:

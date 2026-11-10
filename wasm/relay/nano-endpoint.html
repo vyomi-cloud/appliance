@@ -60,14 +60,14 @@ const CORES = [
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "lease.py", "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP cores — imported by aws_wire_router for the /storage/v1, /v1/projects/*, /sql/* routes.
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
+  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
   // Azure data-plane cores — imported by aws_wire_router for the x-ms-*/dbs/keys/secrets routes.
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
-  "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py",
+  "gcp_compute_core.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "kinesis_core.py", "cloudwatch_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
-  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
+  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (Fix #1/#2)
@@ -77,6 +77,7 @@ async function boot() {
   // RDS's SQL data-plane uses sqlite3 (a loadable Pyodide package); the control
   // plane doesn't, but load it so SQL-over-RDS works through the relay too.
   try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+  try { await py.loadPackage("tzdata"); } catch (e) { log("tzdata load skipped: " + e, "dim"); }   // zoneinfo zones (Cloud Scheduler time zones)
   // RDS data-plane engine swap: prefer REAL Postgres (PGlite) when it loads,
   // else keep the sqlite3 default. Both run behind the same SqlStore seam.
   const hasPg = await installPGlite();
@@ -152,12 +153,24 @@ builtins._capture = _capture; builtins._restore = _restore
   const scheduleStoresSave = () => { if (_timer) return; _timer = setTimeout(() => { _timer = null; saveStores(true); }, 400); };
   if (_bc) _bc.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
   try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
+  // Live engine status for Dashboard > Service status (same check as nano-boot.js).
+  const writeEngines = async () => {
+    try { await idbPut("engines:relay", { ts: Date.now(), stores: JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())")) }); }
+    catch (e) { try { await idbPut("engines:relay", { ts: Date.now(), error: String(e && e.message || e).slice(0, 200) }); } catch (_) {} }
+  };
+  writeEngines(); setInterval(writeEngines, 30000);
 
   function connect() {
     _announce();
     const ws = new WebSocket(RELAY);
     ws.onopen = () => { window.__nano.registered = true; log(`<span class="ok">registered</span> → ${RELAY}`); _announce(); };
-    ws.onclose = (ev) => { window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason); log(`disconnected (code ${ev.code}); retrying…`,'dim'); _announce(); setTimeout(connect, 1000); };
+    ws.onclose = (ev) => {
+      window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason);
+      // 1012 = another Nano window registered this session after us; reconnecting would
+      // make the two supersede each other forever. Stop; reload this page to take it back.
+      if (ev.code === 1012) { log('tunnel taken over by another Nano window — reload this page to take it back','dim'); _announce(); return; }
+      log(`disconnected (code ${ev.code}); retrying…`,'dim'); _announce(); setTimeout(connect, 1000);
+    };
     ws.onerror = () => log('ws error','err');
     ws.onmessage = async (ev) => {
       let req; try { req = JSON.parse(ev.data); } catch { return; }

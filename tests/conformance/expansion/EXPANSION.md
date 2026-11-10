@@ -12,6 +12,32 @@ the Nano relay at `$RELAY_HTTP`. The issue number is in `$ISSUE`; its body has
 the upstream id and the checklist.
 
 
+
+## Platform features
+
+Cross-cutting features (not a cloud service), labelled `platform-feature` with a
+marker `<!-- feature: slug=<slug> -->`. They are the **highest priority**: picked
+before backend upgrades and new services, even when an upgrade is in progress
+(its branch waits and resumes later).
+
+1. Build on `expansion/feature-<slug>`, cut from `origin/main`, exactly to the issue's
+   spec. Changes in this repo cover the offline appliance, sandboxes (the same
+   appliance) and Nano (`wasm/`, both copies of anything mirrored).
+2. **Portal changes** go on a branch `feature/<slug>` in `vyomi-cloud/portal` with a PR
+   there. **Never merge or deploy the portal** (every portal merge is a paid
+   production deploy); a person merges it after local verification.
+3. **Secrets and external setup** the issue says a person must create (a GitHub App,
+   new portal secrets) are not invented: build behind configuration so the feature
+   works without them (fallback path) and switches on when they are set.
+4. Tests: every behaviour the spec lists gets a test that fails before and passes
+   after (unit + the real path: appliance middleware, Nano service worker, console,
+   portal endpoint). Run the affected conformance suites so nothing regresses.
+5. Status file `tests/conformance/expansion/features/<slug>.json`:
+   `{"status": "building" | "ready", "title": "...", "pr_body": "<what was built,
+   how to configure, what a person must still do, test results>", "portal_pr": "<url>"}`.
+   `ready` only when everything in the spec is built and tested. The workflow then
+   opens a PR labelled `platform-feature` for human review; it is never auto-merged.
+
 ## Backend upgrades
 
 Some work arrives as a stack of existing PRs that improves services already

@@ -25,13 +25,13 @@ const CORES = [
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "lease.py", "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
+  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
-  "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py",
+  "gcp_compute_core.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "kinesis_core.py", "cloudwatch_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
-  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
+  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
@@ -78,6 +78,8 @@ setInterval(announce, 3000);
 let py = null, handle = null, booting = null, ws = null;
 let monitorTimer = null, localFails = 0, cloudFailStreak = 0;
 let scheduleStoresSave = () => {};   // real impl installed once Pyodide is up (store-sync in bootPyodide)
+let saveNow = async () => {};        // likewise: persist + notify now (awaited before each relayed response)
+let refreshStores = async () => {};  // likewise: re-read the shared snapshot (before each relayed request)
 
 // ── Tunnel selection: prefer the LOCAL relay when present, else CLOUD ─────────
 // A loopback fetch from an https tab is allowed (localhost is exempt from mixed
@@ -102,12 +104,28 @@ function externalFor(mode) {
     : state.cfg.cloudExternal + "/" + encodeURIComponent(state.session || "nano");
 }
 
+// zoneinfo has no zone files in Pyodide without the tzdata package (Cloud Scheduler and
+// the like would reject every time zone but UTC). py.loadPackage("tzdata") never settles
+// in this module worker, so unpack the wheel Pyodide's own lock file names, and never let
+// it hold up the tunnel (20 s cap; without it only non-UTC zones are affected).
+async function installTzdata() {
+  const job = (async () => {
+    const lock = await (await fetch(PYODIDE_INDEX + "pyodide-lock.json")).json();
+    const file = lock.packages && lock.packages.tzdata && lock.packages.tzdata.file_name;
+    if (!file) throw new Error("tzdata not in pyodide-lock.json");
+    py.unpackArchive(await (await fetch(PYODIDE_INDEX + file)).arrayBuffer(), "wheel");
+  })();
+  const cap = new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 20000));
+  try { await Promise.race([job, cap]); } catch (e) { log("tzdata skipped: " + e, "dim"); }
+}
+
 async function bootPyodide() {
   if (booting) return booting;
   booting = (async () => {
     log("loading Pyodide…", "dim");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+    await installTzdata();
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
@@ -126,12 +144,19 @@ from core import nano_registry as _reg, nano_persist as _persist
 _STORES = _reg.get()
 if _USE_PGLITE:
     from core.sql_store import PGliteSqlStore
-    _STORES["rds"] = PGliteSqlStore()                     # RDS = real Postgres (shared seam)
+    _STORES["rds"] = PGliteSqlStore(ns="rds")             # RDS = real Postgres (shared seam)
+    _STORES["gcp_sql"] = PGliteSqlStore(ns="gcp_sql")     # Cloud SQL = real Postgres too (MySQL instances keep their dialect fallback)
 _ROUTER = AwsWireRouter(stores=_STORES)
 def _capture(): return json.dumps(_persist.capture_registry())
 def _restore(blob_json):
     try: _persist.restore_registry(json.loads(blob_json or "{}"))
     except Exception: pass
+    # Databases the console created in its own context: open + publish them here, where PGlite and the tunnel live.
+    for _k in ("rds", "gcp_sql"):
+        _s = _STORES.get(_k)
+        if hasattr(_s, "ensure_bridges"):
+            try: _s.ensure_bridges()
+            except Exception: pass
 async def _handle(req_json):
     r = json.loads(req_json)
     body = base64.b64decode(r.get("body") or "")
@@ -142,6 +167,19 @@ async def _handle(req_json):
 import builtins; builtins._handle = _handle
 builtins._capture = _capture; builtins._restore = _restore
 `);
+    // CPU: time spent running Python here (each CLI / SDK request), reported every 5 s with
+    // the heap size — the Health view's Host utilization reads it (sw.js /api/host/cpu).
+    let _busyMs = 0, _busySince = performance.now();
+    const _timed = (fn) => (...a) => { const t = performance.now(); let r;
+      try { r = fn(...a); } catch (e) { _busyMs += performance.now() - t; throw e; }
+      if (r && typeof r.then === "function") return r.finally(() => { _busyMs += performance.now() - t; });
+      _busyMs += performance.now() - t; return r; };
+    py.runPython = _timed(py.runPython.bind(py)); py.runPythonAsync = _timed(py.runPythonAsync.bind(py));
+    setInterval(() => {
+      const now = performance.now(), heap = (py._module && py._module.HEAP8 && py._module.HEAP8.byteLength) || 0;
+      idbPut("load:relay", { ts: Date.now(), busy_ms: Math.round(_busyMs), window_ms: Math.round(now - _busySince), wasm_heap_bytes: heap }).catch(() => {});
+      _busyMs = 0; _busySince = now;
+    }, 5000);
     handle = (reqJson) => py.runPythonAsync(`await _handle(${JSON.stringify(reqJson)})`);
     log("cores loaded (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)", "ok");
     log(hasPg ? "RDS engine: PGlite (real Postgres)" : "RDS engine: sqlite3 (PGlite unavailable)", hasPg ? "ok" : "dim");
@@ -167,30 +205,57 @@ builtins._capture = _capture; builtins._restore = _restore
     let _storesBC = null; try { _storesBC = new BroadcastChannel("nano-stores"); } catch (_) {}
     let _restoring = false, _storeTimer = null;
     const capStores = () => { try { return py.runPython("_capture()"); } catch (_) { return null; } };
-    const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); } catch (_) {} };
-    async function saveStores(notify) { try { const j = capStores(); if (!j) return; await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+    // Publish only a change from the state last saved or restored here: a read must never write
+    // back a snapshot older than the console's latest change (it would undo it). Same as nano-boot.js.
+    let _lastStores = null;
+    const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); _lastStores = capStores(); } catch (_) {} };
+    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
+    saveNow = () => saveStores(true);
+    // PGlite publishes a host port after the console created the database: save + broadcast so the console shows it.
+    globalThis.__nano_stores_dirty = () => { try { scheduleStoresSave(); } catch (_) {} };
+    refreshStores = async () => { if (_restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } catch (_) {} finally { _restoring = false; } };
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
+    // Live engine status for Dashboard > Service status (same check as nano-boot.js).
+    const writeEngines = async () => {
+      try { await idbPut("engines:relay", { ts: Date.now(), stores: JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())")) }); }
+      catch (e) { try { await idbPut("engines:relay", { ts: Date.now(), error: String(e && e.message || e).slice(0, 200) }); } catch (_) {} }
+    };
+    writeEngines(); setInterval(writeEngines, 30000);
   })();
   return booting;
 }
 
 function connect() {
   if (state.stopped) return;
+  // One live socket per worker. The relay (relay.vyomi.cloud) lets a newer
+  // registration for a session supersede the older one, so two sockets here
+  // would close each other forever (the "connecting/disconnecting" loop).
+  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
   state.phase = "connecting"; announce();
   const url = wsUrlFor(state.mode);
-  ws = new WebSocket(url);
+  const sock = new WebSocket(url);
+  ws = sock;
   let opened = false;
-  ws.onopen = () => {
+  sock.onopen = () => {
+    if (sock !== ws) { try { sock.close(1000, "stale"); } catch (_) {} return; }
     opened = true; cloudFailStreak = 0; state.note = null; state.idle = false;
     state.phase = "connected"; state.external = externalFor(state.mode);
     state.lastActivity = Date.now();
     log("registered [" + state.mode + "] · apps → " + state.external, "ok");
     announce();
   };
-  ws.onclose = (ev) => {
+  sock.onclose = (ev) => {
+    if (sock !== ws) return;                       // a replaced socket: never schedules a reconnect
     if (state.stopped) { state.phase = "off"; announce(); return; }
+    // 1012 = another Nano window/browser registered this session after us. Grabbing
+    // it straight back makes the two take turns forever; stop and say so instead.
+    if (ev.code === 1012) {
+      state.phase = "off"; state.note = "tunnel moved to another Nano window — Reconnect to take it back";
+      log("Tunnel taken over by another Nano window or browser for this session. Reconnect here to take it back.", "dim");
+      announce(); return;
+    }
     if (state.idle) { state.phase = "idle"; announce(); return; }   // paused — wait for the user, no auto-reconnect
     // A registration that never opens: on LOCALHOST the local relay isn't running
     // (localhost never uses the cloud relay — it can't register there); on PROD the
@@ -208,17 +273,20 @@ function connect() {
     state.phase = "connecting"; log("disconnected (code " + ev.code + "); retrying…", "dim"); announce();
     setTimeout(connect, state.note ? 5000 : 1000);   // back off once the hint is shown
   };
-  ws.onerror = () => log("ws error [" + state.mode + "]", "err");
-  ws.onmessage = async (ev) => {
+  sock.onerror = () => { if (sock === ws) log("ws error [" + state.mode + "]", "err"); };
+  sock.onmessage = async (ev) => {
     let req; try { req = JSON.parse(ev.data); } catch { return; }
-    if (req.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
+    if (req.type === "ping") { sock.send(JSON.stringify({ type: "pong" })); return; }
     try {
+      await refreshStores();   // serve the latest shared state: a save from a stale copy would undo other tabs' changes
       const resp = JSON.parse(await handle(JSON.stringify(req)));
-      ws.send(JSON.stringify({ id: req.id, ...resp }));
+      // Persist + notify the consoles BEFORE answering: when the CLI/SDK gets the response,
+      // the change is already in the shared snapshot the console reads (parity, no race).
+      await saveNow();
+      sock.send(JSON.stringify({ id: req.id, ...resp }));
       state.served++; state.lastActivity = Date.now(); announce();
-      scheduleStoresSave();   // persist the shared registry + notify the console (parity)
     } catch (e) {
-      ws.send(JSON.stringify({ id: req.id, status: 500,
+      sock.send(JSON.stringify({ id: req.id, status: 500,
         headers: { "content-type": "text/plain" }, body: btoa("nano endpoint error: " + e) }));
     }
   };
@@ -263,8 +331,14 @@ function idlePause() {
   announce();
 }
 
+let starting = null;
 async function start(msg) {
   msg = msg || {};
+  if (starting) { if (msg.session) state.session = msg.session; announce(); return starting; }
+  starting = _start(msg).finally(() => { starting = null; });
+  return starting;
+}
+async function _start(msg) {
   if (msg.session) state.session = msg.session;
   if (msg.config) state.cfg = { ...DEFAULT_CFG, ...msg.config };
   if (state.phase === "connected" || (state.phase === "connecting" && !state.stopped && ws)) { announce(); return; }

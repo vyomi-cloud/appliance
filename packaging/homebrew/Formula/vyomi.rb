@@ -2,7 +2,7 @@
 #
 # Tap install (recommended):
 #   brew tap vyomi-cloud/tap
-#   brew install cloud-learn
+#   brew install vyomi-cloud/tap/vyomi
 #
 # Direct install (no tap):
 #   brew install --HEAD https://github.com/vyomi-cloud/appliance.git

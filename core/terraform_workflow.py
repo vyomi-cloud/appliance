@@ -331,7 +331,7 @@ def terraform_import_bundle(payload: dict[str, Any], space: dict[str, Any]) -> d
 
     region = _space_region(space)
     zone = _space_zone(space)
-    project = _string(space.get("active_account") or space.get("project_id") or space.get("name"), "cloudlearn")
+    project = _string(space.get("gcp_project_id") or space.get("active_account") or space.get("project_id") or space.get("name"), "cloudlearn")
     service_state_updates: dict[str, dict[str, Any]] = {}
     nodes: list[dict[str, Any]] = []
     unsupported: list[dict[str, Any]] = []

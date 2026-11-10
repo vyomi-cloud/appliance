@@ -12,6 +12,7 @@ boto3>=1.34.0        # AWS SigV4 → MinIO/DynamoDB/ElasticMQ; also AWS conforma
 azure-storage-blob>=12.19.0  # Azure Blob → Azurite (real bytes for the Azure data plane)
 azure-storage-queue>=12.9.0  # Azure Queue → Azurite (AMQP→HTTP substitution for Service Bus)
 cedarpy>=4.8.0       # Cedar policy engine (real AWS IAM eval; reused for GCP IAM + Azure RBAC)
+httpx>=0.27.0       # APIM gateway backend proxy (core/azure_dataplane.py; stdlib fallback if absent)
 docker>=7.0.0        # Lazy backend provisioner (core/backend_provisioner.py) — talks to
                      #   /var/run/docker.sock to pull + run sibling containers on demand.
                      #   Default install ships 4 services; the rest provision on first use.

@@ -1,0 +1,19 @@
+{
+  "name": "vyomi",
+  "version": "3.0.45",
+  "description": "Run and test cloud code locally against Vyomi, the local AWS/GCP/Azure simulator: scan a repo, see what is emulated, and wire SDKs to the simulator.",
+  "author": {
+    "name": "Vyomi",
+    "email": "support@vyomi.cloud",
+    "url": "https://vyomi.cloud"
+  },
+  "homepage": "https://vyomi.cloud",
+  "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "keywords": ["aws", "gcp", "azure", "local-cloud", "emulator", "testing"],
+  "mcpServers": {
+    "vyomi": {
+      "command": "vyomi",
+      "args": ["mcp"]
+    }
+  }
+}

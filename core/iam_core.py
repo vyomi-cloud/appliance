@@ -433,24 +433,77 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
     return ({"arn": ref, "type": "unknown", "name": name}, [])
 
 
+def simulate_xml(engine, action_name: str, docs: list, actions: list, resources: list, base_ctx: dict) -> IamResponse:
+    """Shared by SimulatePrincipalPolicy / SimulateCustomPolicy (core AND the offline server adapter)."""
+    if not actions:
+        raise IamError("ValidationError", "ActionNames is required.", 400)
+    results = []
+    for action in actions:
+        for resource in resources:
+            decision, reason = engine.evaluate(docs, action, resource, dict(base_ctx, **{"aws:ResourceArn": resource}))
+            results.append("<member>" + _el("EvalActionName", action) + _el("EvalResourceName", resource)
+                           + _el("EvalDecision", decision) + "<MatchedStatements/><MissingContextValues/></member>")
+    return _envelope(action_name, f"<EvaluationResults>{''.join(results)}</EvaluationResults><IsTruncated>false</IsTruncated>")
+
+
 def _simulate_principal_policy(store, params):
     source = str(params.get("PolicySourceArn", "")).strip()
     if not source:
         raise IamError("ValidationError", "PolicySourceArn is required.", 400)
-    actions = _members(params, "ActionNames")
-    resources = _members(params, "ResourceArns") or ["*"]
     identity, docs = _resolve_policy_docs(store, source)
+    if identity["type"] == "unknown":
+        raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
+    extra = [_json_param({"p": x}, "p") for x in _members(params, "PolicyInputList")]
     ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
            "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1"}
-    results = []
-    for action in actions:
-        for resource in resources:
-            ctx_r = dict(ctx, **{"aws:ResourceArn": resource})
-            decision, _ = store.engine.evaluate(docs, action, resource, ctx_r)
-            results.append("<member>" + _el("EvalActionName", action)
-                           + _el("EvalResourceName", resource)
-                           + _el("EvalDecision", decision) + "</member>")
-    return _envelope("SimulatePrincipalPolicy", f"<EvaluationResults>{''.join(results)}</EvaluationResults>")
+    return simulate_xml(store.engine, "SimulatePrincipalPolicy", docs + extra, _members(params, "ActionNames"),
+                        _members(params, "ResourceArns") or ["*"], ctx)
+
+
+def _simulate_custom_policy(store, params):
+    docs = [_json_param({"p": x}, "p") for x in _members(params, "PolicyInputList")]
+    if not docs:
+        raise IamError("ValidationError", "PolicyInputList is required.", 400)
+    return simulate_xml(store.engine, "SimulateCustomPolicy", docs, _members(params, "ActionNames"),
+                        _members(params, "ResourceArns") or ["*"], {"aws:RequestedRegion": "us-east-1"})
+
+
+def _delete_user_policy(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    pname = str(params.get("PolicyName", "")).strip()
+    if pname not in u["inline_policies"]:
+        raise IamError("NoSuchEntity", f"The user policy with name {pname} cannot be found.", 404)
+    del u["inline_policies"][pname]
+    store.persist()
+    return _envelope("DeleteUserPolicy")
+
+
+def _list_user_policies(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    names = "".join(f"<member>{_xml_escape(n)}</member>" for n in sorted(u["inline_policies"]))
+    return _envelope("ListUserPolicies", f"<PolicyNames>{names}</PolicyNames><IsTruncated>false</IsTruncated>")
+
+
+def _delete_access_key(store, params):
+    akid = str(params.get("AccessKeyId", "")).strip()
+    k = store.access_keys.get(akid)
+    if not k or (params.get("UserName") and k["user_name"] != params["UserName"]):
+        raise IamError("NoSuchEntity", f"The Access Key with id {akid} cannot be found.", 404)
+    del store.access_keys[akid]
+    store.persist()
+    return _envelope("DeleteAccessKey")
+
+
+def _update_access_key(store, params):
+    akid = str(params.get("AccessKeyId", "")).strip()
+    k = store.access_keys.get(akid)
+    if not k:
+        raise IamError("NoSuchEntity", f"The Access Key with id {akid} cannot be found.", 404)
+    if params.get("Status") not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    k["status"] = params["Status"]
+    store.persist()
+    return _envelope("UpdateAccessKey")
 
 
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
@@ -463,7 +516,9 @@ _OPS = {
     "PutUserPolicy": _put_user_policy, "GetUserPolicy": _get_user_policy,
     "CreateGroup": _create_group, "AddUserToGroup": _add_user_to_group, "AttachGroupPolicy": _attach_group_policy,
     "CreateAccessKey": _create_access_key, "ListAccessKeys": _list_access_keys,
-    "SimulatePrincipalPolicy": _simulate_principal_policy,
+    "SimulatePrincipalPolicy": _simulate_principal_policy, "SimulateCustomPolicy": _simulate_custom_policy,
+    "DeleteUserPolicy": _delete_user_policy, "ListUserPolicies": _list_user_policies,
+    "DeleteAccessKey": _delete_access_key, "UpdateAccessKey": _update_access_key,
 }
 
 

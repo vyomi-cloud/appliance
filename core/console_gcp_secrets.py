@@ -30,7 +30,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-PROJECT = "cloudlearn"
+
+def _project() -> str:
+    """The GCP space's project ID (core/gcp_project) — the project the console,
+    gcloud and the SDKs all name."""
+    try:
+        from core import gcp_project
+        return gcp_project.project_id()
+    except Exception:
+        return "vyomi-project"
+
 
 # GCP version-stage labels mapped onto the widget's stage tags: the newest version is
 # the "current" one, the prior version the "previous" one (mirrors AWSCURRENT /
@@ -63,7 +72,7 @@ def _now_iso() -> str:
 
 
 def _secret_path(name: str) -> str:
-    return f"projects/{PROJECT}/secrets/{name}"
+    return f"projects/{_project()}/secrets/{name}"
 
 
 def _stages_for(versions: list[dict], idx: int) -> list[str]:

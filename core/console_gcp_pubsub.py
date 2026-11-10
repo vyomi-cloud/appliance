@@ -37,7 +37,16 @@ import json
 import time
 from typing import Any
 
-PROJECT = "cloudlearn"
+
+def _project() -> str:
+    """The GCP space's project ID (core/gcp_project) — the project the console,
+    gcloud and the SDKs all name."""
+    try:
+        from core import gcp_project
+        return gcp_project.project_id()
+    except Exception:
+        return "vyomi-project"
+
 
 # In-memory store, independent from the AWS messaging facade:
 #   topics: { topic_name: { "created": iso, "subscriptions": set[str] } }
@@ -91,11 +100,11 @@ class PubSubError(Exception):
 
 
 def _topic_path(name: str) -> str:
-    return f"projects/{PROJECT}/topics/{name}"
+    return f"projects/{_project()}/topics/{name}"
 
 
 def _sub_path(name: str) -> str:
-    return f"projects/{PROJECT}/subscriptions/{name}"
+    return f"projects/{_project()}/subscriptions/{name}"
 
 
 def _msg_id(body: str) -> str:

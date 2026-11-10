@@ -22,12 +22,15 @@ Resource types
 Errors use the ARM shape ``{"error":{"code","message"}}``.
 
 ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}``; the caller adds the
-Azure-AsyncOperation headers when ``lro`` is true.  The service is control-plane only: model inference
-(data plane) is not served.
+Azure-AsyncOperation headers when ``lro`` is true.  Inference is SIMULATED (no model runs): OpenAI/AIServices accounts answer
+chat/completions, completions and embeddings with deterministic, clearly labelled output in the Azure OpenAI response shape,
+at ``.../accounts/{n}/openai/deployments/{d}/chat/completions`` (ARM-proxied, works in Nano) and, offline, at
+``/azure-data/openai/{account}/openai/deployments/{d}/...`` (the account endpoint the SDK can use as azure_endpoint).
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -74,6 +77,10 @@ MODELS = [
     ("OpenAI", "gpt-4o", "2024-08-06", 450, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
     ("OpenAI", "gpt-4o", "2024-11-20", 450, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
     ("OpenAI", "gpt-4o-mini", "2024-07-18", 1000, ("chatCompletion", "assistants", "jsonObjectResponse")),
+    ("OpenAI", "gpt-4.1", "2025-04-14", 1000, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
+    ("OpenAI", "gpt-4.1-mini", "2025-04-14", 1000, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
+    ("OpenAI", "gpt-4.1-nano", "2025-04-14", 1000, ("chatCompletion", "jsonObjectResponse")),
+    ("OpenAI", "gpt-4", "0613", 80, ("chatCompletion",)),
     ("OpenAI", "gpt-4", "turbo-2024-04-09", 80, ("chatCompletion",)),
     ("OpenAI", "gpt-35-turbo", "0125", 1000, ("chatCompletion",)),
     ("OpenAI", "o1", "2024-12-17", 100, ("chatCompletion", "reasoning")),
@@ -392,7 +399,103 @@ def _account_view(rec):
     out = _view(rec)
     out["properties"] = dict(rec["properties"])
     out["properties"]["privateEndpointConnections"] = [dict(v) for v in rec.get("_pec", {}).values()]
+    if rec["kind"] in MODEL_KINDS:
+        out["properties"]["vyomiInference"] = {
+            "simulated": True,
+            "note": "Vyomi runs no real model: chat/completions and embeddings return deterministic, clearly labelled simulated output.",
+            "armPath": f"{rec['id']}/openai/deployments/{{deployment}}/chat/completions"}
+        if _BASE[0]:
+            ep = f"{_BASE[0]}/azure-data/openai/{rec['name']}/"
+            out["properties"]["endpoint"] = ep
+            out["properties"]["vyomiInference"]["endpoint"] = ep
+            for k in list(out["properties"].get("endpoints", {})):
+                if "OpenAI" in k:
+                    out["properties"]["endpoints"] = dict(out["properties"]["endpoints"], **{k: ep})
     return out
+
+
+_BASE = [""]            # origin of the current request (offline sets it; Nano has none)
+
+
+def _embed_vec(text, dims):
+    out, i = [], 0
+    while len(out) < dims:
+        h = hashlib.sha256(f"{i}:{text}".encode()).digest()
+        out += [(b - 127.5) / 127.5 for b in h]
+        i += 1
+    v = out[:dims]
+    n = sum(x * x for x in v) ** 0.5 or 1.0
+    return [round(x / n, 8) for x in v]
+
+
+def _tokens(text):
+    return max(1, len(str(text).split()))
+
+
+SIM_TAG = "[SIMULATED by Vyomi - no real model ran]"
+
+
+def inference(rec, deployment, op, payload):
+    """Deterministic simulated Azure OpenAI data plane. Returns (status, body). op in chat|completions|embeddings."""
+    dep = (rec.get("_deployments") or {}).get(str(deployment).lower())
+    if dep is None:
+        return 404, {"error": {"code": "DeploymentNotFound", "message": "The API deployment for this resource does not exist. "
+                     "If you created the deployment within the last 5 minutes, please wait a moment and try again."}}
+    model = dep["properties"]["model"]["name"]
+    caps = dep["properties"].get("capabilities") or {}
+    need = {"chat": "chatCompletion", "completions": "chatCompletion", "embeddings": "embeddings"}[op]
+    if need not in caps:
+        return 400, {"error": {"code": "OperationNotSupported", "message": f"The {op} operation does not work with the specified model, {model}. "
+                     "Please choose different model and try again."}}
+    if not isinstance(payload, dict):
+        payload = {}
+    h = hashlib.sha256((deployment + "|" + json.dumps(payload, sort_keys=True, default=str)).encode()).hexdigest()
+    created = int(datetime.now(timezone.utc).timestamp())
+    if op == "embeddings":
+        inp = payload.get("input")
+        items = inp if isinstance(inp, list) else [inp]
+        if inp is None or not items or any(not isinstance(x, str) for x in items):
+            return 400, {"error": {"code": "BadRequest", "message": "'input' is required and must be a string or an array of strings."}}
+        dims = int(payload.get("dimensions") or (3072 if "large" in model else 1536))
+        data = [{"object": "embedding", "index": i, "embedding": _embed_vec(x, dims)} for i, x in enumerate(items)]
+        n = sum(_tokens(x) for x in items)
+        return 200, {"object": "list", "data": data, "model": model, "usage": {"prompt_tokens": n, "total_tokens": n}}
+    if op == "chat":
+        msgs = payload.get("messages")
+        if not isinstance(msgs, list) or not msgs:
+            return 400, {"error": {"code": "BadRequest", "message": "'messages' is a required property."}}
+        last = next((m for m in reversed(msgs) if isinstance(m, dict) and m.get("role") == "user"), msgs[-1])
+        c = last.get("content") if isinstance(last, dict) else ""
+        prompt = c if isinstance(c, str) else " ".join(p.get("text", "") for p in (c or []) if isinstance(p, dict))
+        text = f"{SIM_TAG} You said: {prompt.strip()[:200]!s} (model={model}, ref={h[:8]})"
+        pt = sum(_tokens(m.get("content") if isinstance(m, dict) and isinstance(m.get("content"), str) else "") for m in msgs)
+        ct = _tokens(text)
+        return 200, {"id": "chatcmpl-" + h[:29], "object": "chat.completion", "created": created, "model": model,
+                     "system_fingerprint": "vyomi-simulated",
+                     "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
+                     "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}}
+    prompt = payload.get("prompt")
+    prompt = " ".join(prompt) if isinstance(prompt, list) else prompt
+    if not isinstance(prompt, str):
+        return 400, {"error": {"code": "BadRequest", "message": "'prompt' is a required property."}}
+    text = f"{SIM_TAG} {prompt.strip()[:200]} (ref={h[:8]})"
+    pt, ct = _tokens(prompt), _tokens(text)
+    return 200, {"id": "cmpl-" + h[:29], "object": "text_completion", "created": created, "model": model,
+                 "choices": [{"index": 0, "text": text, "finish_reason": "stop", "logprobs": None}],
+                 "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}}
+
+
+def _openai_ops(rec, rest, method, payload):
+    # rest: ["openai","deployments",dep,"chat","completions"] | [...,"completions"] | [...,"embeddings"]
+    low = [x.lower() for x in rest]
+    if method != "POST" or len(rest) < 4 or low[1] != "deployments" or rec["kind"] not in MODEL_KINDS:
+        raise _E(404, "ResourceTypeNotSupported", f"The resource type '{NAMESPACE}/accounts/{'/'.join(rest)}' is not supported.")
+    tail = "/".join(low[3:])
+    op = {"chat/completions": "chat", "completions": "completions", "embeddings": "embeddings"}.get(tail)
+    if op is None:
+        raise _E(404, "ResourceTypeNotSupported", f"Unsupported inference operation '{tail}'.")
+    st, body = inference(rec, rest[2], op, payload)
+    return _ok(body, st)
 
 
 # ── deployments / commitment plans / RAI policies ────────────────────────────
@@ -400,6 +503,10 @@ def _find_model(fmt, name, version):
     for m in MODELS:
         if m[0].lower() == str(fmt or "").lower() and m[1].lower() == str(name or "").lower() and (not version or m[2] == version):
             return m
+    # a known model name with a version we don't list (newer/older/"latest"): deployable, version echoed back
+    for m in MODELS:
+        if m[0].lower() == str(fmt or "").lower() and m[1].lower() == str(name or "").lower():
+            return (m[0], m[1], str(version), m[3], m[4])
     return None
 
 
@@ -607,6 +714,8 @@ def _account_ops(state, rec, rest, method, payload, query):
         if rec["kind"] not in MODEL_KINDS:
             return _ok({"value": []})
         return _ok({"value": [_model_item(m, rec["kind"]) for m in MODELS]})
+    if r0 == "openai":
+        return _openai_ops(rec, rest, method, payload)
     if r0 == "deployments":
         return _deployment_ops(rec, rest[1:], method, payload)
     if r0 == "commitmentplans":
@@ -713,6 +822,7 @@ def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, bas
     """Handle one ``Microsoft.CognitiveServices`` ARM request (``chain`` = tokens after the namespace)."""
     method = (method or "GET").upper()
     payload = payload if isinstance(payload, dict) else {}
+    _BASE[0] = (base or "").rstrip("/")
     try:
         return _dispatch(state, method, sub, rg, list(chain), payload, query or {})
     except _E as e:

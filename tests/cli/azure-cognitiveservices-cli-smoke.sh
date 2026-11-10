@@ -10,7 +10,7 @@ ACCT="cliai$SFX"
 API="api-version=2024-10-01"
 P="$BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices"
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 if ! command -v az >/dev/null 2>&1; then echo "[FAIL] az CLI not installed"; exit 1; fi
 echo "== az against $BASE sub=$SUB rg=$RG account=$ACCT =="

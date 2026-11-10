@@ -145,6 +145,29 @@ func main() {
 		chk("listener now on 8080 forwarding to the target group", len(ds.Listeners) == 1 && *ds.Listeners[0].Port == 8080 &&
 			*ds.Listeners[0].DefaultActions[0].TargetGroupArn == tgArn, "")
 	}
+	certArn := "arn:aws:acm:us-east-1:000000000000:certificate/11111111-2222-3333-4444-555555555555"
+	ac, err := c.AddListenerCertificates(ctx, &elb.AddListenerCertificatesInput{ListenerArn: &lsArn,
+		Certificates: []types.Certificate{{CertificateArn: &certArn}}})
+	if step("AddListenerCertificates", err) {
+		chk("added certificate echoed", len(ac.Certificates) == 1 && *ac.Certificates[0].CertificateArn == certArn, "")
+	}
+	dc, err := c.DescribeListenerCertificates(ctx, &elb.DescribeListenerCertificatesInput{ListenerArn: &lsArn})
+	if step("DescribeListenerCertificates", err) {
+		found := false
+		for _, x := range dc.Certificates {
+			if x.CertificateArn != nil && *x.CertificateArn == certArn && x.IsDefault != nil && !*x.IsDefault {
+				found = true
+			}
+		}
+		chk("extra certificate listed as non-default", found, "")
+	}
+	_, err = c.RemoveListenerCertificates(ctx, &elb.RemoveListenerCertificatesInput{ListenerArn: &lsArn,
+		Certificates: []types.Certificate{{CertificateArn: &certArn}}})
+	step("RemoveListenerCertificates", err)
+	dc, err = c.DescribeListenerCertificates(ctx, &elb.DescribeListenerCertificatesInput{ListenerArn: &lsArn})
+	if step("DescribeListenerCertificates (after remove)", err) {
+		chk("certificate removed", len(dc.Certificates) == 0, "")
+	}
 	h, err = c.DescribeTargetHealth(ctx, &elb.DescribeTargetHealthInput{TargetGroupArn: &tgArn})
 	if step("DescribeTargetHealth (attached)", err) {
 		chk("both targets healthy", len(h.TargetHealthDescriptions) == 2 && h.TargetHealthDescriptions[0].TargetHealth.State == types.TargetHealthStateEnumHealthy, "")

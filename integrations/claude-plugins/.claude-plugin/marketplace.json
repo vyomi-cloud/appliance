@@ -1,0 +1,22 @@
+{
+  "name": "vyomi",
+  "owner": {
+    "name": "Vyomi",
+    "email": "support@vyomi.cloud"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for Vyomi, the local AWS / GCP / Azure simulator.",
+    "version": "3.0.45"
+  },
+  "plugins": [
+    {
+      "name": "vyomi",
+      "source": "./plugins/vyomi",
+      "description": "Run and test cloud code locally against Vyomi: scan a repo for AWS/GCP/Azure usage, see what the simulator emulates, and wire SDKs to it.",
+      "version": "3.0.45",
+      "category": "development",
+      "homepage": "https://vyomi.cloud",
+      "keywords": ["aws", "gcp", "azure", "local-cloud", "emulator", "localstack-alternative", "testing"]
+    }
+  ]
+}

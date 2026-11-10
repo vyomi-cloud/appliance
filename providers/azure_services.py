@@ -21,6 +21,8 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
+from core import azure_arm_core as _arm   # one subscription per space (shared with Nano)
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -71,7 +73,7 @@ RESOURCE_CATALOG: list[dict] = [
             "properties": {
                 "hardwareProfile": {"vmSize": "Standard_B1s"},
                 "storageProfile": {"imageReference": {"publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts", "version": "latest"}},
-                "osProfile": {"computerName": "vm-demo", "adminUsername": "azureuser"},
+                "osProfile": {"computerName": "__NAME__", "adminUsername": "azureuser"},
                 "provisioningState": "Succeeded",
                 "vmId": "__UUID__",
             },
@@ -113,7 +115,13 @@ RESOURCE_CATALOG: list[dict] = [
         "defaults": {
             "properties": {"administratorLogin": "sqladmin", "version": "12.0", "state": "Ready"},
         },
-        "endpoints": {"properties.fullyQualifiedDomainName": "/azure-data/sql/__NAME__"},
+        # Azure SQL here is HTTP-only (no TDS / port 1433). The FQDN shows the working HTTP data plane.
+        "endpoints": {"properties.fullyQualifiedDomainName": "/api/console/azure-sql/databases"},
+        "endpoints_force": {"properties.vyomiAccess": {
+            "protocol": "HTTP data plane only (no TDS wire protocol, nothing listens on 1433; sqlcmd/JDBC/ODBC cannot connect)",
+            "listDatabases": "GET __BASE__/api/console/azure-sql/databases",
+            "executeSql": "POST __BASE__/api/console/azure-sql/execute  {\"db\": \"<database id>\", \"sql\": \"...\"}",
+            "schema": "GET __BASE__/api/console/azure-sql/databases/<database id>/schema"}},
     },
     {
         "key": "servicebus", "label": "Service Bus", "icon": "queue",
@@ -133,7 +141,7 @@ RESOURCE_CATALOG: list[dict] = [
             "properties": {
                 "provisioningState": "Succeeded",
                 "status": "Active",
-                "serviceBusEndpoint": "http://localhost:9000/azure-data/servicebus/__NAME__",
+                "serviceBusEndpoint": "__BASE__/azure-data/servicebus/__NAME__",
                 "messagingProtocol": "REST (AMQP not supported in simulator)",
             },
         },
@@ -227,7 +235,7 @@ RESOURCE_CATALOG: list[dict] = [
             ["properties.provisioningState", "Status"],
         ],
         "create_fields": [
-            {"name": "name", "label": "Name", "type": "text", "required": True},
+            {"name": "name", "label": "Name", "type": "text", "required": True, "default": "nsg-cloudlearn"},
             {"name": "location", "label": "Location", "type": "text", "default": "eastus"},
         ],
         "defaults": {
@@ -331,6 +339,7 @@ RESOURCE_CATALOG: list[dict] = [
             },
         },
         "endpoints": {"properties.vaultUri": "/azure-data/keyvault/__NAME__/"},
+        "endpoints_force": {"properties.vaultUri": "__BASE__/azure-data/keyvault/__NAME__/"},   # https://<n>.vault.azure.net/ is not reachable here
     },
     {
         "key": "app", "label": "Container Apps", "icon": "deployed_code",
@@ -507,8 +516,9 @@ RESOURCE_CATALOG: list[dict] = [
             ["properties.type", "Type"],
         ],
         "create_fields": [
-            {"name": "properties.roleName", "label": "Role Name", "type": "text", "required": True},
-            {"name": "properties.description", "label": "Description", "type": "text"},
+            {"name": "name", "label": "Role definition name (GUID)", "type": "text", "default": "__UUID__"},
+            {"name": "properties.roleName", "label": "Role Name", "type": "text", "required": True, "default": "Custom Role - CloudLearn"},
+            {"name": "properties.description", "label": "Description", "type": "text", "default": "Custom role created from the Vyomi console"},
             {"name": "properties.type", "label": "Type", "type": "select", "options": ["BuiltInRole", "CustomRole"], "default": "CustomRole"},
         ],
         "defaults": {
@@ -643,7 +653,12 @@ def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[s
 
 def _view(rec: dict) -> dict:
     # Return a copy without the internal bookkeeping keys.
-    return {k: v for k, v in rec.items() if not k.startswith("_")}
+    out = {k: v for k, v in rec.items() if not k.startswith("_")}
+    props = out.get("properties")
+    if isinstance(props, dict) and "administratorLoginPassword" in props:
+        # Real Azure never returns the SQL admin password; it stays stored for the data plane.
+        out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    return out
 
 
 # Map ARM resource type → CloudSim bundle key for non-compute services.
@@ -722,23 +737,40 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     segs = [s for s in rest.split("/") if s != ""]
     if not segs:
         return _error(400, "BadRequest", "Missing subscription id.")
-    sub = segs[0]
+    if not _arm.is_space_subscription(segs[0]):
+        code, err = _arm.subscription_not_found(segs[0])
+        return JSONResponse(status_code=code, content=err)
+    _arm.adopt_foreign_subscriptions(_state)
+    sub = DEFAULT_SUBSCRIPTION
     rest_segs = segs[1:]
 
     # GET /subscriptions/{sub}
     if not rest_segs:
-        return JSONResponse({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
-                             "displayName": "CloudLearn Subscription", "state": "Enabled"})
+        return JSONResponse(_arm.subscription_doc())
+
+    if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
+        from core import azure_arm_ext_core as _ext_loc
+        return JSONResponse(_ext_loc.subscription_locations(sub))
 
     # Resource-group collection / item: /subscriptions/{sub}/resourcegroups[/{rg}]
     if rest_segs[0].lower() == "resourcegroups" and (len(rest_segs) == 1 or
                                                       (len(rest_segs) == 2)):
         if len(rest_segs) == 1:
             if method == "GET":
-                return JSONResponse({"value": _list_resource_groups(sub)})
+                return JSONResponse({"value": _arm.list_resource_groups(_state)})
             return _error(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
-        rg = rest_segs[1]
-        return _resource_group_item(method, sub, rg, await _safe_json(request))
+        if method == "DELETE":
+            _cascade_rg_delete_runtime(rest_segs[1])
+        code, body = _arm.resource_group_item(_state, method, rest_segs[1], await _safe_json(request))
+        return JSONResponse(status_code=code, content=body)
+
+    if len(rest_segs) == 3 and rest_segs[0].lower() == "resourcegroups" \
+            and rest_segs[2].lower() == "resources" and method == "GET":
+        res = _arm.list_group_resources(_state, rest_segs[1])
+        if res is None:
+            code, body = _arm.resource_group_item(_state, "GET", rest_segs[1], {})
+            return JSONResponse(status_code=code, content=body)
+        return JSONResponse({"value": res})
 
     # Provider resources. Two scopes:
     #   subscription scope: /subscriptions/{sub}/providers/{ns}/{type}[/{name}...]
@@ -765,6 +797,26 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return JSONResponse(_provider_info(after[0]))
     if len(after) < 2:
         return _error(400, "BadRequest", "Missing provider namespace/type.")
+
+    # Management locks guard every write under a locked scope; locks, identities,
+    # resource health, NICs/public IPs, auto-shutdown schedules, run commands and
+    # restore points are modelled by the shared core (same file Nano runs).
+    from core import azure_arm_ext_core as _ext
+    if method in ("PUT", "PATCH", "DELETE", "POST"):
+        _lk = _ext.lock_conflict(_state, _ext.target_id(sub, rg, after), method)
+        if _lk:
+            return JSONResponse(status_code=_lk["status"], content=_lk["body"])
+    _x = _ext.route(_state, method, sub, rg, after,
+                    await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {},
+                    dict(request.query_params), executor=_vm_run_executor, blob=_ArmBlobHook())
+    if _x is not None:
+        if method != "GET" and _x["status"] < 300 and _x.get("scope"):
+            _record_usage(f"azure.{method.lower()}", {"type": _x["type"], "name": _x["name"],
+                                                       "resource_id": _x["scope"]})
+        if _x["body"] is None:
+            return Response(status_code=_x["status"])
+        return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_x.get("headers") or {})
+
     namespace = after[0]
     # after = [ns, type, name?, childType?, childName?, ...]
     chain = after[1:]
@@ -824,7 +876,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if is_collection:
         if method != "GET":
             return _error(405, "MethodNotAllowed", "Collection supports GET only.")
-        return _list(sub, rg, full_type)
+        # A child collection lists only that parent's children.
+        parent = _canonical_id(sub, rg, type_chain[:-1], names) if names else None
+        return _list(sub, rg, full_type, parent)
 
     rid = _canonical_id(sub, rg, type_chain, names)
     key = rid.lower()
@@ -839,6 +893,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             rec = _apim_default_policy(type_chain, names, _state, rid)
         if not rec:
             return _error(404, "ResourceNotFound", f"Resource '{rid}' not found.")
+        _ext.after_upsert(_state, rec)
         return JSONResponse(_view(rec))
     if method in ("PUT", "PATCH"):
         payload = await _safe_json(request)
@@ -894,7 +949,12 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 raise
             except Exception:
                 pass
+        _bad = _ext.validate_write(_state, rid, full_type, payload)
+        if _bad:
+            return JSONResponse(status_code=_bad["status"], content=_bad["body"])
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+        if full_type.lower() == _ext.VM_T and key in _state:
+            _ext.after_vm_upsert(_state, _state[key])
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
         if lro:
@@ -911,6 +971,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return resp
     if method == "DELETE":
         rec = _state.pop(key, None)
+        _ext.on_delete(_state, rec)
         _deprovision_on_delete(full_type, rec)
         if rec is not None:
             _record_usage("azure.delete", {"type": full_type, "name": leaf_name, "resource_id": rid})
@@ -978,7 +1039,16 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
                                       names: list[str], base: str) -> JSONResponse:
     from core import azure_operationalinsights_core as _oi
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
-    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    q = dict(request.query_params)
+    if method == "POST" and len(chain) >= 3 and chain[2].lower() in ("api", "datacollectionrules"):
+        try:                                  # data plane bodies are JSON arrays; Log-Type is a header
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        for hk, qk in (("log-type", "logType"), ("time-generated-field", "time-generated-field")):
+            if request.headers.get(hk) and qk not in q:
+                q[qk] = request.headers[hk]
+    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base)
     api_version = request.query_params.get("api-version") or _oi.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
@@ -1118,6 +1188,50 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
     return JSONResponse({})
 
 
+class _ArmBlobHook:
+    """Blob data plane (Azurite, space-scoped) for ARM operations that read/write blobs
+    (API Management backup/restore) — the same store the Storage console + SDKs use."""
+
+    def _sid(self):
+        from core.azure_dataplane import _sid
+        return _sid()
+
+    def exists(self, account, container):
+        from core import azure_blob_store as bs
+        try:
+            return container in bs.list_containers(self._sid(), account)
+        except Exception:
+            return False
+
+    def put(self, account, container, name, data, content_type):
+        from core import azure_blob_store as bs
+        bs.put_blob(self._sid(), account, container, name, data, content_type)
+
+    def get(self, account, container, name):
+        from core import azure_blob_store as bs
+        got = bs.get_blob(self._sid(), account, container, name)
+        return got["data"] if got else None
+
+
+def _vm_run_executor(vm: dict, script: str):
+    """Run a VM run-command script in the VM's guest (its runtime container) through
+    the same exec path as the in-console terminal. None when the VM has no guest
+    runtime (metadata-only VM) — the run is then recorded as not executed."""
+    rt = ((vm.get("properties") or {}).get("runtime") or {})
+    if not isinstance(rt, dict) or not rt.get("containerName"):
+        return None
+    try:
+        import server as _srv
+        inst = _srv._azure_vm_flat_instance(vm)
+        _srv._azure_vm_sync(inst, vm)
+        if str(inst.get("state") or "").lower() != "running":
+            return None
+        res = _srv._console_execute(inst, script)
+        return (int(res.get("exit_code", 1)), str(res.get("stdout", res.get("output", ""))), str(res.get("stderr", "")))
+    except Exception:
+        return None
+
+
 async def _safe_json(request: Request) -> dict:
     try:
         body = await request.json()
@@ -1126,16 +1240,21 @@ async def _safe_json(request: Request) -> dict:
         return {}
 
 
-def _list(sub: str, rg: str | None, full_type: str) -> JSONResponse:
+def _list(sub: str, rg: str | None, full_type: str, parent: str | None = None) -> JSONResponse:
     ft = full_type.lower()
+    pfx = parent.lower() + "/" if parent else None
     items = []
-    for rec in _state.values():
+    for rec in list(_state.values()):
         if rec.get("_type", "").lower() != ft:
+            continue
+        if pfx and not str(rec.get("id", "")).lower().startswith(pfx):
             continue
         if rec.get("_sub") != sub:
             continue
         if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
             continue
+        from core import azure_arm_ext_core as _ext
+        _ext.after_upsert(_state, rec)
         items.append(_view(rec))
     return JSONResponse({"value": items})
 
@@ -1199,14 +1318,22 @@ def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
         rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
     if isinstance(payload.get("properties"), dict):
         rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
+    from core import azure_arm_ext_core as _ext
+    _ext.apply_identity(rec, payload)
+    _ext.mark_changed(rec)
 
     rec.setdefault("properties", {})
     rec["properties"].setdefault("provisioningState", "Succeeded")
+    _ext.after_upsert(_state, rec, payload)
 
     # fill simulator-origin endpoints if not provided
     for path_expr, suffix in endpoints.items():
         if _get_path(rec, path_expr) in (None, ""):
             _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
+
+    if is_top:     # always the simulator origin (a fake Azure hostname seeded by the core is unreachable)
+        for path_expr, val in (catalog.get("endpoints_force") or {}).items():
+            _set_path(rec, path_expr, _expand_tokens(val, name, base))
 
     _state[key] = rec
     return JSONResponse(status_code=200 if existed else 201, content=_view(rec))
@@ -1218,27 +1345,6 @@ def _rg_from_id(rid: str) -> str | None:
         if p.lower() == "resourcegroups" and i + 1 < len(parts):
             return parts[i + 1]
     return None
-
-
-def _list_resource_groups(sub: str) -> list[dict]:
-    names: dict[str, bool] = {DEFAULT_RG: True}
-    for rec in _state.values():
-        if rec.get("_sub") == sub and rec.get("_rg"):
-            names[rec["_rg"]] = True
-    return [{"id": f"/subscriptions/{sub}/resourceGroups/{n}", "name": n,
-             "type": "Microsoft.Resources/resourceGroups", "location": DEFAULT_LOCATION,
-             "properties": {"provisioningState": "Succeeded"}} for n in names]
-
-
-def _resource_group_item(method: str, sub: str, rg: str, payload: dict) -> JSONResponse:
-    body = {"id": f"/subscriptions/{sub}/resourceGroups/{rg}", "name": rg,
-            "type": "Microsoft.Resources/resourceGroups",
-            "location": (payload or {}).get("location") or DEFAULT_LOCATION,
-            "tags": (payload or {}).get("tags", {}),
-            "properties": {"provisioningState": "Succeeded"}}
-    if method == "DELETE":
-        return JSONResponse(status_code=200, content=None)
-    return JSONResponse(status_code=200 if method in ("PUT", "PATCH", "GET") else 405, content=body)
 
 
 # --- console support -------------------------------------------------------
@@ -1331,6 +1437,23 @@ def _provision_on_create(full_type: str, rec: dict | None, base: str) -> None:
         _dp.on_create(full_type, rec, base)
     except Exception:
         pass
+
+
+def _cascade_rg_delete_runtime(rg: str) -> None:
+    """Resource-group DELETE removes every child from ARM state; also tear down the
+    runtime / data-plane state each child owns (VM containers, Key Vault secrets,
+    managed SQL engines) exactly as a per-resource DELETE does. Best-effort."""
+    try:
+        kids = [r for r in list(_state.values())
+                if isinstance(r, dict) and (r.get("_rg") or "").lower() == rg.lower()
+                and r.get("type") != "Microsoft.Resources/resourceGroups"]
+    except Exception:
+        return
+    for rec in kids:
+        try:
+            _deprovision_on_delete(str(rec.get("type") or ""), rec)
+        except Exception:
+            pass
 
 
 def _deprovision_on_delete(full_type: str, rec: dict | None) -> None:
@@ -1458,7 +1581,16 @@ def register(app, _h=None) -> None:
     async def arm_dispatch(rest: str, request: Request):
         return await handle_arm(request, rest)
 
+    # `az login` discovers the account here: the space's one subscription and its tenant.
+    async def arm_subscriptions():
+        return JSONResponse({"value": [_arm.subscription_doc()]})
+
+    async def arm_tenants():
+        return JSONResponse(_arm.tenants_doc())
+
     if not _UNIFIED:
+        app.add_api_route("/subscriptions", arm_subscriptions, methods=["GET"], include_in_schema=False)
+        app.add_api_route("/tenants", arm_tenants, methods=["GET"], include_in_schema=False)
         app.add_api_route("/subscriptions/{rest:path}", arm_dispatch,
                           methods=["GET", "PUT", "POST", "PATCH", "DELETE"],
                           include_in_schema=False)

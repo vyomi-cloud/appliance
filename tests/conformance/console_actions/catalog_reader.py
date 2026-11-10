@@ -10,6 +10,7 @@ Net win: zero Python-import dependencies on the simulator. The harness
 works in any venv that has `requests` + `pytest`.
 """
 from __future__ import annotations
+import json
 import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -99,6 +100,7 @@ def _read_aws() -> list[ActionSpec]:
                 provider="aws", service=key, action=action_name,
                 method=str(api_path.get("method", "POST")).upper(),
                 path=str(api_path.get("path", "")),
+                payload=api_path.get("sample") if isinstance(api_path.get("sample"), dict) else None,
                 requires_resource="{name}" in str(api_path.get("path", "")),
                 name_field=name_field,
             ))
@@ -137,6 +139,13 @@ def _read_gcp() -> list[ActionSpec]:
         return []
     specs: list[ActionSpec] = []
     from .sample_payloads import payload_for, form_payload
+    # Payloads name the space's project, as the console does (other ids are refused).
+    project = str(cat.get("project") or "") if isinstance(cat, dict) else ""
+
+    def scoped(payload):
+        if not (payload and project):
+            return payload
+        return json.loads(json.dumps(payload).replace("@cloudlearn.iam.", f"@{project}.iam."))
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -152,7 +161,7 @@ def _read_gcp() -> list[ActionSpec]:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="create",
                 method=str(svc.get("create_method") or "POST").upper(),
-                path=coll, payload=payload_for("gcp", key) or form_payload("gcp", svc),
+                path=coll, payload=scoped(payload_for("gcp", key) or form_payload("gcp", svc)),
                 name_field=name_field,
             ))
         if res:
@@ -194,8 +203,15 @@ def _read_azure() -> list[ActionSpec]:
     services = cat.get("services") if isinstance(cat, dict) else cat
     if not isinstance(services, list):
         return []
+    # The subscription + resource group the console itself uses (catalog), not a
+    # made-up one: the space has one subscription, any other is SubscriptionNotFound.
+    meta = cat if isinstance(cat, dict) else {}
+    sub, rg = meta.get("subscription") or "00000000-0000-0000-0000-cloudlearn01", meta.get("resourceGroup") or "cloudlearn-rg"
     specs: list[ActionSpec] = []
     from .sample_payloads import payload_for, form_payload
+
+    def scoped(payload):
+        return json.loads(json.dumps(payload).replace("/subscriptions/sim-sub/", f"/subscriptions/{sub}/")) if payload else payload
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -203,7 +219,7 @@ def _read_azure() -> list[ActionSpec]:
         namespace = svc.get("namespace") or "Microsoft.Compute"
         rtype = svc.get("type") or "virtualMachines"
         coll = (
-            f"/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/"
+            f"/subscriptions/{sub}/resourceGroups/{rg}/"
             f"providers/{namespace}/{rtype}"
         )
         res = coll + "/{name}"
@@ -214,7 +230,7 @@ def _read_azure() -> list[ActionSpec]:
         specs.append(ActionSpec(
             provider="azure", service=key, action="create",
             method="PUT", path=res.replace("{name}", _azure_name(svc, key)),
-            payload=payload_for("azure", key) or form_payload("azure", svc), requires_resource=True,
+            payload=scoped(payload_for("azure", key) or form_payload("azure", svc)), requires_resource=True,
         ))
         specs.append(ActionSpec(
             provider="azure", service=key, action="get",

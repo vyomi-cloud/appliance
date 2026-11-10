@@ -102,7 +102,7 @@ gcloud refuses to run without an account and would otherwise phone home to real 
 equivalent of the dummy AWS creds:
 ```sh
 export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true
-export CLOUDSDK_CORE_PROJECT=demo                 # matches the Nano GCP console project
+export CLOUDSDK_CORE_PROJECT=nano-project         # the Nano GCP console project (`gcloud projects list`)
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=http://127.0.0.1:8090/storage/v1/
 
 gcloud storage buckets create gs://my-bucket
@@ -112,7 +112,7 @@ gcloud storage cp ./file.txt gs://my-bucket/
 Persistent equivalent (writes `~/.config/gcloud`, so you don't repeat it):
 ```sh
 gcloud config set auth/disable_credentials true
-gcloud config set project demo
+gcloud config set project nano-project
 gcloud config set api_endpoint_overrides/storage http://127.0.0.1:8090/storage/v1/
 ```
 Notes:
@@ -225,3 +225,19 @@ tunnel above.
 - **Local tunnel** (`vyomi-tunnel`, `local-relay.mjs`) is the same protocol with the
   relay on `localhost` — a drop-in offline/private alternative, auto-detected and
   preferred over the cloud tunnel when running. `brew install vyomi-cloud/tap/vyomi-tunnel`.
+
+## SSH into in-browser VMs (local tunnel 1.1.0+)
+
+With `localStorage.nano_vm_compute = "1"`, Nano runs every EC2 instance / Compute Engine
+instance / Azure VM as a real v86 VM in the browser (`../vm/`). Each VM worker opens
+`ws://127.0.0.1:8090/vm?vm=<id>&port=22`; the tunnel listens on a host port
+(22000-22999, `VM_PORT_MIN`/`VM_PORT_MAX`) and bridges every TCP connection to the
+guest's sshd through v86's in-browser TCP stack:
+
+```
+ssh (laptop) ──TCP──▶ vyomi-tunnel :22000 ──WS /vm──▶ VM worker (v86) ──▶ dropbear :22
+```
+
+Control frames are JSON (`vm-listening`, `tcp-open`, `tcp-opened`, `tcp-close`, `ping`);
+data frames are binary `[u32 stream id][payload]`. The Cloudflare tunnel does not carry
+raw TCP, so SSH needs the local tunnel. Connect tabs show the exact command.

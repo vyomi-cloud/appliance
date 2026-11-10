@@ -140,6 +140,19 @@ def gcp_gcutil_resolve(command: str) -> dict[str, Any]:
 
 
 def sdk_snippet(provider: str, language: str) -> dict[str, Any]:
+    out = _sdk_snippet(provider, language)
+    if provider == "gcp" and isinstance(out.get("snippet"), str):
+        # The snippets name the project `cloudlearn`; show the GCP space's project ID.
+        try:
+            from core import gcp_project
+            pid = gcp_project.project_id()
+        except Exception:
+            pid = "vyomi-project"
+        out["snippet"] = out["snippet"].replace("'cloudlearn'", f"'{pid}'").replace('"cloudlearn"', f'"{pid}"')
+    return out
+
+
+def _sdk_snippet(provider: str, language: str) -> dict[str, Any]:
     provider = provider.lower()
     language = language.lower()
     endpoint = "http://127.0.0.1:9000"
@@ -195,7 +208,7 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
             "language": "java",
             "endpoint": endpoint,
             "snippet": """AzureProfile profile = new AzureProfile(
-    "tenant-sim", "sub-001", AzureEnvironment.AZURE);
+    "tenant-sim", "00000000-0000-0000-0000-cloudlearn01", AzureEnvironment.AZURE);
 HttpPipeline pipeline = HttpPipelineProvider.buildHttpPipeline(
     new AzureCliCredentialBuilder().build(),
     new AzureProfile(AzureEnvironment.AZURE));
@@ -219,7 +232,7 @@ opts := &arm.ClientOptions{
         },
     },
 }
-client, _ := armcompute.NewVirtualMachinesClient("sub-001", cred, opts)""",
+client, _ := armcompute.NewVirtualMachinesClient("00000000-0000-0000-0000-cloudlearn01", cred, opts)""",
         }
     # ── Python SDK snippets ──────────────────────────────────────────────
     if provider == "aws" and language == "python":
@@ -262,7 +275,7 @@ from azure.mgmt.compute import ComputeManagementClient
 credential = DefaultAzureCredential()
 client = ComputeManagementClient(
     credential,
-    'sub-001',
+    '00000000-0000-0000-0000-cloudlearn01',
     base_url='http://127.0.0.1:9000',
 )
 vms = list(client.virtual_machines.list_all())
@@ -308,7 +321,7 @@ console.log(buckets);""",
 const { ComputeManagementClient } = require('@azure/arm-compute');
 
 const credential = new DefaultAzureCredential();
-const client = new ComputeManagementClient(credential, 'sub-001', {
+const client = new ComputeManagementClient(credential, '00000000-0000-0000-0000-cloudlearn01', {
     $host: 'http://127.0.0.1:9000',
 });
 const vms = [];

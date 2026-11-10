@@ -266,7 +266,8 @@ def is_gcp_native_path(path: str) -> bool:
         "/sql/v1beta4/",
         "/pubsub/v1/",
         "/firestore/v1/",
-        "/v1/projects/",
+        "/v1/projects",       # incl. Cloud Resource Manager GET /v1/projects (no slash)
+        "/v3/projects",       # Cloud Resource Manager v3 + Cloud Monitoring v3
         "/v1/operations/",
         "/api/gcp/s3/",
         "/api/gcp/iam/",
@@ -282,12 +283,14 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/pubsub/",
         "/api/gcp/firestore/",
         "/api/gcp/cloudfunctions/",
+        "/gcf/",              # Cloud Functions HTTPS trigger URL (core/gcp_eventing)
         "/api/gcp/console/",
         "/api/gcp/catalog",   # standalone console payload -- must NOT be path-stripped
         "/api/gcp/extras/",   # reserved for GCP-D (parity with /api/aws/extras)
         "/api/gcp/extras-config/",
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
+        "/api/gcp/artifactregistry/",   # Artifact Registry console CRUD
     ))
 
 
@@ -295,7 +298,7 @@ def is_azure_native_path(path: str) -> bool:
     """Azure ARM control-plane (``/subscriptions/...``) and the console catalog.
     These are served by the generic ARM dispatcher and must bypass the AWS
     action/capability gating (they are not S3/EC2 calls)."""
-    return path.startswith(("/subscriptions/", "/api/azure/", "/azure-data/"))
+    return path in ("/subscriptions", "/tenants") or path.startswith(("/subscriptions/", "/api/azure/", "/azure-data/"))
 
 
 # ── State initialization ───────────────────────────────────────────────────
@@ -990,7 +993,9 @@ rds_state = _SpaceScopedDictProxy("rds", lambda: {"db_instances": {}, "db_subnet
 apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": []})
 lambda_state = _SpaceScopedDictProxy("lambda", lambda: {"functions": {}, "events": [], "invocations": []})
 sqs_state = _SpaceScopedDictProxy("sqs", lambda: {"queues": {}, "events": []})
+sns_state = _SpaceScopedDictProxy("sns", lambda: {"topics": {}, "extra": {}})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
+kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "policies": {}, "seq": {"n": 0}})
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
 elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
 
@@ -1034,7 +1039,10 @@ def gcp_active_space_dict() -> dict:
 
 
 def gcp_project_name(project: str | None) -> str:
-    return str(project or "cloudlearn").strip() or "cloudlearn"
+    """The GCP space's project ID for a project ID / number / legacy id (empty →
+    the space's project); anything else is returned as given (core/gcp_project)."""
+    from core import gcp_project
+    return gcp_project.resolve(project) or str(project).strip()
 
 
 def gcp_record_matches_project(rec: dict, project: str) -> bool:
@@ -1345,6 +1353,8 @@ def resolve_provider_service(request) -> tuple[str, str]:
             return "gcp", "pubsub"
         if "/secrets/" in path:
             return "gcp", "secretmanager"
+        if "/repositories" in path and "/locations/" in path:
+            return "gcp", "artifactregistry"
         if "/cryptoKeys/" in path or "/keyRings/" in path:
             return "gcp", "kms"
         if "/triggers/" in path or "/channels/" in path:

@@ -56,6 +56,34 @@ jobs:
             if [ "$HOUR" -lt 22 ]; then echo "Waiting for 22:00 IST (now $HOUR:xx)."; exit 0; fi
           fi
           HEAD=$(git rev-parse origin/main)
+          # Drift guard: a Nano file edited directly in the portal (not in the appliance)
+          # is served by the portal but missing here, so local previews, the Nano UI tests
+          # and the release checks show the old version, and it can be lost later. Report
+          # it so it gets brought back to wasm/ (the sync itself still preserves it).
+          python3 - "$BASE" > /tmp/drift.txt <<'PY'
+          import os, subprocess, sys
+          sys.path.insert(0, "wasm")
+          from vendor_to_portal import in_bundle
+          base, root = sys.argv[1], "/tmp/portal/app/nano"
+          for d, _, fs in os.walk(root):
+              for f in fs:
+                  rel = os.path.relpath(os.path.join(d, f), root)
+                  if rel == "APPLIANCE_SYNC.json" or not in_bundle(rel):
+                      continue
+                  app = subprocess.run(["git", "show", f"{base}:wasm/{rel}"], capture_output=True)
+                  if app.returncode != 0:
+                      print(f"- `{rel}` (portal-only file)")
+                  elif open(os.path.join(d, f), "rb").read() != app.stdout:
+                      print(f"- `{rel}`")
+          PY
+          if [ -s /tmp/drift.txt ]; then
+            echo "::warning::Portal Nano has edits the appliance doesn't:"; cat /tmp/drift.txt
+            T="Portal Nano has edits the appliance doesn't (bring them back to wasm/)"
+            BODY=$(printf 'These Nano files differ in vyomi-cloud/portal app/nano from appliance %s (the last sync), so the appliance serves an older version (local previews, Nano UI tests, release checks):\n\n%s\n\nBring the portal change back into `wasm/` (a 3-way merge with the sync commit as base), then this closes on the next sync.' "${BASE:0:7}" "$(cat /tmp/drift.txt)")
+            N=$(GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" gh issue list -R "${{ github.repository }}" --state open --search "in:title \"$T\"" --json number -q '.[0].number')
+            if [ -n "$N" ]; then GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" gh issue edit "$N" -R "${{ github.repository }}" --body "$BODY" || true
+            else GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" gh issue create -R "${{ github.repository }}" --title "$T" --body "$BODY" || true; fi
+          fi
           echo "Nano changes $BASE..$HEAD"
           git diff --name-only "$BASE" "$HEAD" -- wasm/ > /tmp/changed.txt
           python3 - > /tmp/bundle-files.txt <<'PY'

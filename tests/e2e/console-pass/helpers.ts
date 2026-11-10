@@ -71,7 +71,7 @@ export async function provisionPostgresViaAzureSql(api: APIRequestContext, serve
   // connectionInfo via GET-after-PUT.
   const azureSpace = await switchToProviderSpace(api, 'azure');
   const api20230801 = 'api-version=2023-08-01';
-  const base = `/subscriptions/sub-e2e/resourceGroups/rg-e2e/providers/Microsoft.Sql/servers/${server}`;
+  const base = `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-e2e/providers/Microsoft.Sql/servers/${server}`;
   // server
   await api.put(`${base}?${api20230801}`, {
     data: { location: 'eastus', properties: { administratorLogin: 'azureadmin', administratorLoginPassword: 'Password123!' } },

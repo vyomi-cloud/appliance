@@ -55,7 +55,7 @@ public class IamCredentialsConformance {
 
   public static void main(String[] args) throws Exception {
     String endpoint = System.getenv().getOrDefault("ENDPOINT", "http://127.0.0.1:9000");
-    String project = System.getenv().getOrDefault("PROJECT", "java-iamc-proj");
+    String project = System.getenv().getOrDefault("PROJECT", "vyomi-project");
     String sfx = String.valueOf(System.currentTimeMillis() % 1000000);
     System.out.println("== google-cloud-iamcredentials (Java) against " + endpoint + " project=" + project + " ==");
 

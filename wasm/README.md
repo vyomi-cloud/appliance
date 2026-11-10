@@ -37,7 +37,7 @@ backends/store.py        generic primitives (object-store/nosql/queue + Resource
 providers/registry.py    plugin registry + dispatch() (incl. generic _resource CRUD)
 providers/{aws,gcp,azure,oracle}.py   per-cloud mappings (oracle = new-cloud proof)
 build_fixtures.py        dumps the REAL catalogs (aws+gcp) + spaces/tenants/host/runtime + routes.json
-make_pages.py            wraps the REAL Pro/Max pages verbatim (dashboard + 3 consoles)
+make_pages.py            RETIRED — the Nano pages are edited in wasm/ directly (it rebuilt them from static/ and restored old UI)
 nano-boot.js             consoles: boots Pyodide + the SW<->backend bridge + ready signal
 nano-sw.js               dashboard: registers the SW only (its /api reads come from fixtures)
 sw.js                    service worker: serves fixtures + provider-aware space + CRUD routing
@@ -53,7 +53,6 @@ The `wasm/` folder is a SELF-CONTAINED web root — serve only it, so the repo
 source is never exposed (`/server.py` etc. 404). Entry is the real dashboard at `/`.
 ```sh
 python3 wasm/build_fixtures.py            # dump the real catalogs + routes (regen after catalog changes)
-python3 wasm/make_pages.py                # wrap the real Pro/Max pages (dashboard + consoles)
 python3 wasm/test_conformance.py          # validate the backend (no browser)
 cd wasm && python3 -m http.server 8000    # serve wasm/ AS THE ROOT
 # open http://localhost:8000/             # real Workspaces dashboard → console

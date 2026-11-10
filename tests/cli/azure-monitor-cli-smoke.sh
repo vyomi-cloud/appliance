@@ -12,7 +12,7 @@ P="$BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Insights"
 VM="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Compute/virtualMachines/vm$SFX"
 AGID="/subscriptions/$SUB/resourceGroups/$RG/providers/microsoft.insights/actionGroups/$AG"
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 if ! command -v az >/dev/null 2>&1; then echo "[FAIL] az CLI not installed"; exit 1; fi
 echo "== az against $BASE sub=$SUB rg=$RG =="

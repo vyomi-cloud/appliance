@@ -59,8 +59,18 @@ jobs:
           if git ls-remote --exit-code origin "$B" >/dev/null 2>&1; then
             git fetch -q origin "$B"
             git checkout -q -B "$B" FETCH_HEAD
-            # Pick up anything merged to main since the branch was cut.
-            git merge -q --no-edit origin/main || git merge --abort
+            # Pick up anything merged to main since the branch was cut. A conflict here
+            # means the branch re-fixed something main already shipped (e.g. it was cut
+            # before the previous daily PR merged): main holds the released, verified
+            # code, so main wins the conflicting hunks and the branch keeps everything
+            # else. Never abort silently — that left the branch drifting all day.
+            if ! git merge -q --no-edit origin/main; then
+              CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+              git merge --abort
+              git merge -q --no-edit -X theirs origin/main \
+                -m "Merge main into $B (main wins conflicting hunks: $CONFLICTS)"
+              echo "::warning title=Daily branch conflicted with main::main won the conflicting hunks in: $CONFLICTS"
+            fi
           else
             git checkout -q -B "$B"
           fi
@@ -89,6 +99,10 @@ jobs:
           gh issue list -R "${{ github.repository }}" --label upstream-drift --state open --limit 200 \
             --json number,title,labels,createdAt,body > tests/conformance/hourly/out/upstream_issues.json || echo '[]' > tests/conformance/hourly/out/upstream_issues.json
           echo "open upstream-drift issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/upstream_issues.json'))))")"
+          # Issues filed automatically from users' simulators: the fixers take these first.
+          gh issue list -R "${{ github.repository }}" --label user-reported --state open --limit 200 \
+            --json number,title,labels,createdAt,body,author > tests/conformance/hourly/out/user_reported.json || echo '[]' > tests/conformance/hourly/out/user_reported.json
+          echo "open user-reported issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/user_reported.json'))))")"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -96,6 +110,7 @@ jobs:
           path: |
             prev/
             tests/conformance/hourly/out/upstream_issues.json
+            tests/conformance/hourly/out/user_reported.json
           retention-days: 7
 
   # Six shards in parallel, each on its own stack: wall time stays flat as

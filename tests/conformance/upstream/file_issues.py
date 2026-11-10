@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 
 OUT = os.environ.get("OUT", "out")
@@ -61,6 +62,25 @@ def body_for(c: dict) -> str:
     return "\n".join(lines)
 
 
+def open_op_keys() -> set[str]:
+    """Upstream keys of the open upstream-drift issues, without the trailing
+    shape signature: one open issue per operation is enough, whatever state
+    file the run started from."""
+    keys, page = set(), 1
+    while True:
+        try:
+            batch = gh("GET", f"/issues?state=open&labels=upstream-drift&per_page=100&page={page}")
+        except Exception:
+            return keys
+        for i in batch:
+            m = re.search(r"<!-- upstream-key: (\S+) -->", i.get("body") or "")
+            if m:
+                keys.add(m.group(1).rsplit(":", 1)[0])
+        if len(batch) < 100:
+            return keys
+        page += 1
+
+
 def main() -> int:
     ch = json.load(open(os.path.join(OUT, "changes.json")))
     st_path = os.path.join(OUT, "state.json")
@@ -69,6 +89,9 @@ def main() -> int:
     queue = [c for c in state.get("pending", []) if c["key"] not in filed]
     queue += [c for c in ch.get("changes", []) if c.get("actionable") and c["key"] not in filed
               and c["key"] not in {q["key"] for q in queue}]
+    if queue:
+        live = open_op_keys()
+        queue = [c for c in queue if not c["kind"].startswith("operation-") or c["key"].rsplit(":", 1)[0] not in live]
     if queue:
         ensure_labels({"upstream-drift"} | {f"cloud:{c['cloud']}" for c in queue} | {f"kind:{c['kind']}" for c in queue})
     created = []
