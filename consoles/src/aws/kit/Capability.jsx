@@ -36,8 +36,17 @@ import cap_sqs from "../../../../core/capabilities/aws/sqs.json";
 import cap_ssm from "../../../../core/capabilities/aws/ssm.json";
 import cap_states from "../../../../core/capabilities/aws/states.json";
 import cap_vpc from "../../../../core/capabilities/aws/vpc.json";
+import bk_cost_explorer from "../../../../core/capabilities/aws/cost-explorer.json";
+import bk_malware_protection from "../../../../core/capabilities/aws/malware-protection.json";
+import bk_panels from "../../../../core/capabilities/aws/panels.json";
+import bk_redshift from "../../../../core/capabilities/aws/redshift.json";
+import bk_securityhub from "../../../../core/capabilities/aws/securityhub.json";
+import BACKENDS from "vyomi-backends:aws";
 
 const REGISTRY = { ...cap_apigateway, ...cap_bedrock, ...cap_cloudformation, ...cap_cloudwatch, ...cap_dynamodb, ...cap_ec2, ...cap_ecr, ...cap_eks, ...cap_eventbridge, ...cap_iam, ...cap_kinesis, ...cap_kms, ...cap_lambda, ...cap_rds, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs, ...cap_ssm, ...cap_states, ...cap_vpc };
+
+/** Per-service registry files (service id == file name), incl. services the REGISTRY above does not spread. */
+const BY_SERVICE = { "apigateway": cap_apigateway, "bedrock": cap_bedrock, "cloudformation": cap_cloudformation, "cloudwatch": cap_cloudwatch, "cost-explorer": bk_cost_explorer, "dynamodb": cap_dynamodb, "ec2": cap_ec2, "ecr": cap_ecr, "eks": cap_eks, "eventbridge": cap_eventbridge, "iam": cap_iam, "kinesis": cap_kinesis, "kms": cap_kms, "lambda": cap_lambda, "malware-protection": bk_malware_protection, "panels": bk_panels, "rds": cap_rds, "redshift": bk_redshift, "s3": cap_s3, "secretsmanager": cap_secretsmanager, "securityhub": bk_securityhub, "sns": cap_sns, "sqs": cap_sqs, "ssm": cap_ssm, "states": cap_states, "vpc": cap_vpc };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
@@ -118,3 +127,7 @@ export function saveNotice(id) {
 export function notesFor(ids) {
   return ids.map(capability).filter((c) => c && c.level !== "full");
 }
+
+/** For the help panel's "How Vyomi runs this service": the narrative data file + that service's registry file. */
+export const BACKENDS_DATA = BACKENDS;
+export const registryFileFor = (serviceId) => BY_SERVICE[serviceId] || null;

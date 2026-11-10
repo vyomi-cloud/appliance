@@ -36,8 +36,13 @@ import cap_secret_manager from "../../../../core/capabilities/gcp/secret-manager
 import cap_sql from "../../../../core/capabilities/gcp/sql.json";
 import cap_vertex_ai from "../../../../core/capabilities/gcp/vertex-ai.json";
 import cap_storage from "../../../../core/capabilities/gcp/storage.json";
+import bk_hub from "../../../../core/capabilities/gcp/hub.json";
+import BACKENDS from "vyomi-backends:gcp";
 
 const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kms, ...cap_kubernetes, ...cap_logs, ...cap_memorystore, ...cap_monitoring, ...cap_networking, ...cap_pubsub, ...cap_resource_manager, ...cap_run, ...cap_secret_manager, ...cap_sql, ...cap_storage, ...cap_vertex_ai, ...cap_eventarc, ...cap_clouddeploy, ...cap_backupdr, ...cap_cloudbuild, ...cap_securitycenter };
+
+/** Per-service registry files (service id == file name), incl. services the REGISTRY above does not spread. */
+const BY_SERVICE = { "artifacts": cap_artifacts, "backupdr": cap_backupdr, "cloudbuild": cap_cloudbuild, "clouddeploy": cap_clouddeploy, "cloudscheduler": cap_cloudscheduler, "compute": cap_compute, "eventarc": cap_eventarc, "firestore": cap_firestore, "functions": cap_functions, "hub": bk_hub, "iam-admin": cap_iam_admin, "kms": cap_kms, "kubernetes": cap_kubernetes, "logs": cap_logs, "memorystore": cap_memorystore, "monitoring": cap_monitoring, "networking": cap_networking, "pubsub": cap_pubsub, "resource-manager": cap_resource_manager, "run": cap_run, "secret-manager": cap_secret_manager, "securitycenter": cap_securitycenter, "sql": cap_sql, "storage": cap_storage, "vertex-ai": cap_vertex_ai };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
@@ -122,3 +127,7 @@ export function saveNotice(id) {
   if (c?.level === "limited") return " Some behaviour is limited in Vyomi — see the badge for details.";
   return "";
 }
+
+/** For the help panel's "How Vyomi runs this service": the narrative data file + that service's registry file. */
+export const BACKENDS_DATA = BACKENDS;
+export const registryFileFor = (serviceId) => BY_SERVICE[serviceId] || null;

@@ -8,6 +8,8 @@ import SideNavigation from "@cloudscape-design/components/side-navigation";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import Flashbar from "@cloudscape-design/components/flashbar";
 import HelpPanel from "@cloudscape-design/components/help-panel";
+import BackendsSection from "../common/BackendsPanel.jsx";
+import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
 import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import { applyDensity, applyMode, Density, Mode } from "@cloudscape-design/global-styles";
@@ -109,7 +111,7 @@ export default function App() {
           <BreadcrumbGroup items={[{ text: "Console Home", href: "#/" }, { text: svc?.title || (svcId === "services" ? "All services" : svcId), href: `#/${svcId}` }, ...crumbs]} onFollow={follow} ariaLabel="Breadcrumbs" />
         )}
         notifications={<Flashbar items={notify.items} stackItems />}
-        tools={<HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>}
+        tools={<HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{svc && <BackendsSection cloud="aws" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0972d3" />}{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>}
         toolsOpen={toolsOpen}
         onToolsChange={({ detail }) => setToolsOpen(detail.open)}
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}

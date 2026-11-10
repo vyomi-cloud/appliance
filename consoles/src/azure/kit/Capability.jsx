@@ -39,8 +39,13 @@ import cap_subscriptions from "../../../../core/capabilities/azure/subscriptions
 import cap_vms from "../../../../core/capabilities/azure/vms.json";
 import cap_vnets from "../../../../core/capabilities/azure/vnets.json";
 import cap_panels from "../../../../core/capabilities/azure/panels.json";
+import bk_defender_storage from "../../../../core/capabilities/azure/defender-storage.json";
+import BACKENDS from "vyomi-backends:azure";
 
 const REGISTRY = { ...cap_panels, ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appconfiguration, ...cap_appservices, ...cap_cognitiveservices, ...cap_common, ...cap_containerapps, ...cap_cosmos, ...cap_cost, ...cap_defender, ...cap_dns, ...cap_entra, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_loganalytics, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql, ...cap_streamanalytics, ...cap_storage, ...cap_subscriptions, ...cap_vms, ...cap_vnets , ...cap_managedidentity };
+
+/** Per-service registry files (service id == file name), incl. services the REGISTRY above does not spread. */
+const BY_SERVICE = { "acr": cap_acr, "aks": cap_aks, "apim": cap_apim, "appconfiguration": cap_appconfiguration, "appservices": cap_appservices, "cognitiveservices": cap_cognitiveservices, "common": cap_common, "containerapps": cap_containerapps, "cosmos": cap_cosmos, "cost": cap_cost, "defender": cap_defender, "defender-storage": bk_defender_storage, "dns": cap_dns, "entra": cap_entra, "eventgrid": cap_eventgrid, "functionapp": cap_functionapp, "keyvaults": cap_keyvaults, "loganalytics": cap_loganalytics, "managedidentity": cap_managedidentity, "monitor": cap_monitor, "nsgs": cap_nsgs, "panels": cap_panels, "resourcegroups": cap_resourcegroups, "servicebus": cap_servicebus, "sql": cap_sql, "storage": cap_storage, "streamanalytics": cap_streamanalytics, "subscriptions": cap_subscriptions, "vms": cap_vms, "vnets": cap_vnets };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
@@ -117,3 +122,7 @@ export function saveNotice(id) {
   if (c?.level === "limited") return " Some behaviour is limited in Vyomi — see the badge for details.";
   return "";
 }
+
+/** For the help panel's "How Vyomi runs this service": the narrative data file + that service's registry file. */
+export const BACKENDS_DATA = BACKENDS;
+export const registryFileFor = (serviceId) => BY_SERVICE[serviceId] || null;
