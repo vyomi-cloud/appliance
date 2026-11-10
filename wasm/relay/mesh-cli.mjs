@@ -186,6 +186,12 @@ export async function main(argv) {
       return await f.done;
     } finally { transport.close(); }
   }
+  if (cmd === "gh-login") {                                          // sign in to GitHub (codespace scope) with the found/installed gh
+    const { ensureGh } = await import("./gh-manager.mjs");
+    const gh = await ensureGh({ log: (m) => console.error("vyomi-tunnel: " + m) }).catch((e) => { console.error("vyomi-tunnel: " + e.message); return null; });
+    if (!gh) return 1;
+    return await new Promise((res) => spawn(gh.path, ["auth", "login", "--web", "-s", "codespace"], { stdio: "inherit" }).on("error", () => res(1)).on("close", (c) => res(c || 0)));
+  }
   if (cmd === "connect") {
     const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; }
     const { relay, token } = load();

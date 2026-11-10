@@ -13,6 +13,13 @@ simulator HTTP API (Nano compute calls) over it. Browser VMs (tunnel 2) are unch
   container with `Host: simulator:9000`, `/shell` -> 501, `/booster` -> 410), `connectSsh` / `forwardSsh` for the CLI.
 - `local-relay.mjs`: `VYOMI_MESH_CODESPACE=<name>` selects the ssh hub. `mesh-cli.mjs`: `connect|forward ... --codespace <name>` (or the env) goes straight over ssh, no relay/token.
 
+## GitHub CLI handling
+`wasm/relay/gh-manager.mjs`: use a system `gh` (>= 2.40) if present, else a managed copy in `~/.vyomi/bin`, else download the pinned official release
+(v2.103.3; SHA-256 embedded in code; macOS/Linux/Windows, x64/arm64) and unpack there. Never touches PATH/Homebrew. `vyomi-tunnel gh-login` signs in
+(browser, `codespace` scope); `GH_TOKEN` is honoured. Without a login the CLI says so instead of surfacing a raw ssh error.
+Packaged copies of mesh-cli/mesh-ssh/gh-manager are in `packaging/tunnel/bin`; the generated `vyomi-tunnel.mjs` relay is NOT regenerated here
+(tunnel session owns it) so the relay-side Nano HTTP/shell hub needs that regeneration before a release.
+
 ## Design decisions
 | Decision | Alternatives rejected | Why |
 |---|---|---|

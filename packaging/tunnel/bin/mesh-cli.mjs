@@ -169,6 +169,29 @@ function openBrowser(url) {
 export async function main(argv) {
   const [cmd, ...rest] = argv;
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
+  // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
+  const ci = rest.indexOf("--codespace");
+  const cs = ci >= 0 ? rest[ci + 1] : process.env.VYOMI_MESH_CODESPACE;
+  if (ci >= 0) rest.splice(ci, 2);
+  if (cs && (cmd === "connect" || cmd === "forward")) {
+    const ssh = await import("./mesh-ssh.mjs");
+    const transport = ssh.createSshTransport({ codespace: cs });
+    try {
+      if (cmd === "connect") { const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; } return await ssh.connectSsh(vm, { port: Number(rest[1] || 22), transport }); }
+      const pos = rest.filter((x) => !x.startsWith("--")); const m = /^(\d{1,5}):(\d{1,5})$/.exec(pos[1] || "");
+      if (!pos[0] || !m) { console.error("usage: vyomi-tunnel forward <target> <local>:<remote> --codespace <name>"); return 2; }
+      const f = await ssh.forwardSsh(vmName(pos[0]), { local: Number(m[1]), remote: Number(m[2]), transport, net });
+      if (f.port) console.error(`forwarding 127.0.0.1:${f.port} -> ${vmName(pos[0])}:${m[2]} via ${cs} (Ctrl-C to stop)`);
+      for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
+      return await f.done;
+    } finally { transport.close(); }
+  }
+  if (cmd === "gh-login") {                                          // sign in to GitHub (codespace scope) with the found/installed gh
+    const { ensureGh } = await import("./gh-manager.mjs");
+    const gh = await ensureGh({ log: (m) => console.error("vyomi-tunnel: " + m) }).catch((e) => { console.error("vyomi-tunnel: " + e.message); return null; });
+    if (!gh) return 1;
+    return await new Promise((res) => spawn(gh.path, ["auth", "login", "--web", "-s", "codespace"], { stdio: "inherit" }).on("error", () => res(1)).on("close", (c) => res(c || 0)));
+  }
   if (cmd === "connect") {
     const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; }
     const { relay, token } = load();

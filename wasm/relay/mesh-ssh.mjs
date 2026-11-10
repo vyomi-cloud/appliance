@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
+import { ensureGh, ghAuthOk } from "./gh-manager.mjs";
 
 const NAME = /^[A-Za-z0-9._-]{1,80}$/;
 const CODESPACE = /^[A-Za-z0-9._-]{1,120}$/;
@@ -23,7 +24,7 @@ const HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade",
 const dockerIp = (rawName) => `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' ${rawName} 2>/dev/null`;
 
 /** @returns transport {resolve(name,port), open(host,port), exec(cmd), http(req,res,body), close(), simulatorTarget()} */
-export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = "gh", log = () => {}, ipTtlMs = 30000,
+export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null, log = () => {}, ipTtlMs = 30000,
                                      simulatorPort = 9000, hostSshPort = 2222, config = null } = {}) {
   if (!CODESPACE.test(String(codespace || ""))) throw new Error("a Codespace name is required (VYOMI_MESH_CODESPACE / --codespace)");
   let cfg = config;                         // {file, host} - tests inject it; otherwise `gh codespace ssh --config` provides it
@@ -42,6 +43,11 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = "gh",
 
   async function ensureConfig() {
     if (cfg) return cfg;
+    if (!ghBin) {                                                    // find gh, or install a private pinned copy (gh-manager.mjs)
+      ghBin = (await ensureGh({ spawn, log })).path;
+      const a = await ghAuthOk(ghBin, { spawn });
+      if (!a.ok) throw new Error(a.reason);
+    }
     dir = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "vm-"));   // short: a unix ControlPath is limited to ~100 chars
     const text = await collect(spawn(ghBin, ["codespace", "ssh", "-c", codespace, "--config"], { stdio: ["ignore", "pipe", "pipe"] }));
     const m = /^Host\s+(\S+)/m.exec(text);
