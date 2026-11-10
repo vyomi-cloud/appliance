@@ -62,6 +62,10 @@ assert.equal(lt.find((r) => r.name === "web").ip, "172.18.0.5"); assert.deepEqua
 assert.equal(spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "bogus"], { encoding: "utf8" }).status, 2);
 for (const sc of ["nano", "mesh", "all"]) { const r = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", sc, "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
   assert.ok(Array.isArray(JSON.parse(r.stdout).targets), "list " + sc); }
+const L = (...a) => spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", ...a], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
+for (const a of [["nano", "vm"], ["nano", "vms"], ["nano", "db"], ["nano", "dbs"], ["nano", "api"], ["vms"]]) assert.ok(Array.isArray(JSON.parse(L(...a, "--json").stdout).targets), "list " + a.join(" "));
+assert.equal(L("nano", "k3s").status, 2); assert.match(L("nano", "k3s").stderr, /nano types: api, vm, db/);   // type must belong to the scope
+assert.equal(L("mesh", "vm").status, 2); assert.equal(L("all", "vm").status, 2);
 const jl = spawnSync(process.execPath, [new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname, "list", "--json"], { encoding: "utf8", timeout: 40000, env: { ...process.env, RELAY_PORT: "8999" } });
 assert.ok(Array.isArray(JSON.parse(jl.stdout).targets));
 

@@ -180,13 +180,16 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
 <name>: host, k3s, or a Docker instance name. Start Mesh in the Vyomi console first.
 `;
 const DETAILS = {
-  list: `vyomi-tunnel list [nano|mesh|all|type] [--json]
+  list: `vyomi-tunnel list [nano|mesh|all] [type] [--json]
 
 Shows what you can reach right now, and the command for each.
   nano    the Nano endpoint, browser VMs and databases
   mesh    your Mesh Codespace: host, Docker instances, k3s, LLMs, services, and your forwards
   all     everything (the default)
-Or one type: api, vm, db, host, instance, k3s, llm, service, forward
+Add a type to narrow it:
+  vyomi-tunnel list nano vm        (also: api, db)
+  vyomi-tunnel list mesh k3s       (also: host, instance, llm, service, forward)
+A type alone works too: vyomi-tunnel list vm
   api       the Nano endpoint for aws/gcloud/az and SDKs (needs: vyomi-tunnel)
   vm, db    VMs and databases running in the Nano tab
   host, instance, k3s, llm, service   what runs in your Mesh Codespace
@@ -246,11 +249,17 @@ export async function main(argv) {
     return 0;
   }
   if (cmd === "list" || cmd === "ls") {                                // every transport line, with the command to use it
-    const json = rest.includes("--json"); const want = rest.find((x) => !x.startsWith("-"));
+    const json = rest.includes("--json"); const pos = rest.filter((x) => !x.startsWith("-"));
     const KINDS = ["api", "vm", "db", "host", "instance", "k3s", "llm", "service", "forward"];
     const SCOPES = { nano: ["api", "vm", "db"], mesh: ["host", "instance", "k3s", "llm", "service", "forward"], all: KINDS };      // forwards go to a Mesh target
-    if (want && !KINDS.includes(want) && !SCOPES[want]) { console.error(`vyomi-tunnel: unknown "${want}". Use: nano, mesh, all, or a type (${KINDS.join(", ")})`); return 2; }
-    const kinds = SCOPES[want] || (want ? [want] : KINDS);                                                                      // no argument = all
+    const norm = (w) => { w = String(w || "").toLowerCase(); return w === "k3s" || KINDS.includes(w) || SCOPES[w] ? w : w.replace(/(s|es)$/, "") && KINDS.includes(w.replace(/s$/, "")) ? w.replace(/s$/, "") : w; };   // vms -> vm, dbs -> db
+    let want = norm(pos[0]), kinds = SCOPES[want] || (want ? [want] : KINDS);
+    if (pos[1]) {                                                                                                               // list <scope> <type>
+      const t = norm(pos[1]);
+      if (!SCOPES[want] || want === "all") { console.error(`vyomi-tunnel: "${pos[0]}" cannot take a type. Use: list nano|mesh <type>`); return 2; }
+      if (!SCOPES[want].includes(t)) { console.error(`vyomi-tunnel: "${pos[1]}" is not a ${want} type. ${want} types: ${SCOPES[want].join(", ")}`); return 2; }
+      kinds = [t]; want = t;
+    } else if (want && !KINDS.includes(want) && !SCOPES[want]) { console.error(`vyomi-tunnel: unknown "${pos[0]}". Use: nano, mesh, all, or a type (${KINDS.join(", ")})`); return 2; }
     const rows = []; const notes = [];
     const ssh = await import("./mesh-ssh.mjs");
     const transport = ssh.createSshTransport({ codespace: cs, log: () => {} });
