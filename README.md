@@ -206,6 +206,23 @@ provider "aws" {
 }
 ```
 
+## Use with AI coding agents (MCP)
+
+`vyomi mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude Code, Claude Desktop, Cursor or VS Code can check the simulator, see which services Vyomi emulates, scan your project and wire its SDKs to the simulator.
+
+```sh
+claude mcp add --scope user vyomi -- vyomi mcp          # Claude Code: MCP server only
+```
+
+Or install the Claude Code plugin (the MCP server plus a setup skill):
+
+```
+/plugin marketplace add vyomi-cloud/claude-plugins
+/plugin install vyomi@vyomi
+```
+
+Then, in any project: *"Set this project up to run against Vyomi."* Claude scans the code for AWS / GCP / Azure usage, reports what is emulated and what isn't, and asks before writing a `.env.vyomi` with the local endpoints. Your production config is not touched. Tools: `vyomi_status`, `vyomi_services`, `vyomi_env`, `vyomi_scan_repo`, `vyomi_write_env`. Details: [`cmd/vyomi/README.md`](cmd/vyomi/README.md#mcp-server-vyomi-mcp).
+
 ## Reference apps
 
 Three minimal web apps that exercise each cloud's 7 core services through real SDKs:
