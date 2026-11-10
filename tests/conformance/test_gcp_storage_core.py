@@ -127,6 +127,19 @@ def run() -> int:
     mb = gcs.dispatch(st, "GET", "/storage/v1/b/nope", {}, {}, b"")
     _check("missing bucket 404", mb.status == 404)
 
+    # anywhereCaches (storage/v1 upstream #540): insert -> pause -> resume, 404s
+    gcs.dispatch(st, "POST", "/storage/v1/b", {}, {}, json.dumps({"name": "acb"}).encode())
+    r = gcs.dispatch(st, "POST", "/storage/v1/b/acb/anywhereCaches", {}, {}, json.dumps({"zone": "us-central1-a"}).encode())
+    _check("anywhereCaches.insert 200 operation", r.status == 200 and _jbody(r).get("done") is True)
+    r = gcs.dispatch(st, "POST", "/storage/v1/b/acb/anywhereCaches/us-central1-a/pause", {}, {}, b"")
+    _check("anywhereCaches.pause -> paused", r.status == 200 and _jbody(r)["state"] == "paused")
+    r = gcs.dispatch(st, "GET", "/storage/v1/b/acb/anywhereCaches/us-central1-a", {}, {}, b"")
+    _check("anywhereCaches.get shows paused + fields", _jbody(r)["state"] == "paused" and _jbody(r)["createTime"])
+    r = gcs.dispatch(st, "POST", "/storage/v1/b/acb/anywhereCaches/us-central1-a/resume", {}, {}, b"")
+    _check("anywhereCaches.resume -> running", _jbody(r)["state"] == "running")
+    r = gcs.dispatch(st, "POST", "/storage/v1/b/acb/anywhereCaches/nope/pause", {}, {}, b"")
+    _check("anywhereCaches.pause missing -> 404", r.status == 404)
+
     print("\nGCS storage-core conformance: ALL GREEN")
     return 0
 

@@ -345,6 +345,68 @@ def _gcs_resumable(store: ObjectStore) -> dict:
     return m
 
 
+def anywhere_cache_op(meta: dict, bucket: str, method: str, tail: list, body: dict,
+                      root: str = "https://storage.googleapis.com/storage/v1") -> tuple[int, dict | None]:
+    """storage.anywhereCaches.* on one bucket's metadata dict. `tail` = path segments after
+    /b/{bucket}/anywhereCaches. Returns (status, json). Real API: insert/update return a
+    long-running Operation; get/pause/resume/disable return the AnywhereCache."""
+    caches = meta.setdefault("anywhereCaches", {})
+
+    def err(code, reason, msg):
+        return code, {"error": {"code": code, "message": msg, "errors": [{"reason": reason, "message": msg}]}}
+
+    def view(c):
+        return {k: v for k, v in c.items()}
+
+    if not tail:
+        if method == "GET":
+            return 200, {"kind": "storage#anywhereCaches", "items": [view(c) for _, c in sorted(caches.items())]}
+        if method == "POST":
+            zone = (body or {}).get("zone")
+            if not zone:
+                return err(400, "required", "Zone is required.")
+            if zone in caches:
+                return err(409, "conflict", "An Anywhere Cache already exists for this bucket and zone.")
+            now = _now()
+            caches[zone] = {
+                "kind": "storage#anywhereCache", "id": f"{bucket}/{zone}", "selfLink": f"{root}/b/{bucket}/anywhereCaches/{zone}",
+                "bucket": bucket, "anywhereCacheId": zone, "zone": zone, "state": "running",
+                "ttl": (body or {}).get("ttl", "86400s"), "admissionPolicy": (body or {}).get("admissionPolicy", "admit-on-first-miss"),
+                "pendingUpdate": False, "createTime": now, "updateTime": now,
+            }
+            return 200, {"kind": "storage#operation", "name": f"projects/_/buckets/{bucket}/operations/ac-{zone}",
+                         "done": True, "response": view(caches[zone])}
+        return err(400, "invalid", f"Unsupported method {method} on anywhereCaches")
+    zone = unquote(tail[0])
+    c = caches.get(zone)
+    if c is None:
+        return err(404, "notFound", "The specified Anywhere Cache does not exist.")
+    verb = tail[1] if len(tail) > 1 else ""
+    if verb == "" and method == "GET":
+        return 200, view(c)
+    if verb in ("pause", "resume", "disable") and method == "POST":
+        if verb == "pause":
+            if c["state"] != "running":
+                return err(400, "invalid", "Only a running Anywhere Cache can be paused.")
+            c["state"] = "paused"
+        elif verb == "resume":
+            if c["state"] not in ("paused", "disabled"):
+                return err(400, "invalid", "Only a paused or disabled Anywhere Cache can be resumed.")
+            c["state"] = "running"
+        else:
+            c["state"] = "disabled"
+        c["updateTime"] = _now()
+        return 200, view(c)
+    if verb == "" and method in ("PATCH", "PUT"):
+        for k in ("ttl", "admissionPolicy"):
+            if k in (body or {}):
+                c[k] = body[k]
+        c["updateTime"] = _now()
+        return 200, {"kind": "storage#operation", "name": f"projects/_/buckets/{bucket}/operations/ac-{zone}",
+                     "done": True, "response": view(c)}
+    return err(400, "invalid", f"Unsupported anywhereCaches request {method} {'/'.join(tail)}")
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> GcsResponse:
@@ -431,6 +493,17 @@ def dispatch(store: ObjectStore, method: str, path: str,
         except BucketPatchError as e:
             return _err(e.status, e.reason, e.message)
         return _json(200, _bucket_view(store, bucket))
+
+    # ---- anywhereCaches ----
+    if len(segs) >= 3 and segs[2] == "anywhereCaches":
+        if not store.bucket_exists(bucket):
+            return _err(404, "notFound", "The specified bucket does not exist.")
+        try:
+            abody = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            abody = {}
+        code, obj = anywhere_cache_op(store.buckets[bucket], bucket, method, segs[3:], abody if isinstance(abody, dict) else {})
+        return _json(code, obj)
 
     # ---- objects ----
     if segs[2] == "o":

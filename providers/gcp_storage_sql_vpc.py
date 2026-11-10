@@ -237,6 +237,10 @@ async def api_gcp_storage_compose_object(bucket: str, destination: str, request:
     return await _server().api_gcp_storage_compose_object(bucket, destination, request)
 
 
+async def api_gcp_storage_anywhere_caches(bucket: str, request: Request, tail: str = ""):
+    return await _server().api_gcp_storage_anywhere_caches(bucket, request, tail)
+
+
 def api_gcp_storage_list_folders(bucket: str):
     return _server().api_gcp_storage_list_folders(bucket)
 

@@ -15500,6 +15500,22 @@ async def api_gcp_storage_compose_object(bucket: str, destination: str, request:
     return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, destination, obj)
 
 
+async def api_gcp_storage_anywhere_caches(bucket: str, request: Request, tail: str = ""):
+    """storage.anywhereCaches.{insert,get,list,update,pause,resume,disable}."""
+    from core import gcp_storage_core as _gcs_core
+    rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    if not rec:
+        return JSONResponse(status_code=404, content={"error": {"code": 404, "message": "The specified bucket does not exist."}})
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    code, obj = _gcs_core.anywhere_cache_op(rec, bucket, request.method, [t for t in tail.split("/") if t],
+                                            payload if isinstance(payload, dict) else {}, _gcp_gcs_root())
+    _persist_state()
+    return JSONResponse(status_code=code, content=obj)
+
+
 def api_gcp_storage_list_folders(bucket: str):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
