@@ -1723,24 +1723,26 @@ def register(app: FastAPI) -> None:
         return _sguard(lambda: _sec().create_secret(
             name, p.get("secret_string", ""), (p.get("description") or "").strip()))
 
-    @app.get("/api/console/secrets/{name}", include_in_schema=False)
-    def api_console_secrets_describe(name: str):
-        return _sguard(lambda: _sec().describe_secret(name))
-
-    @app.delete("/api/console/secrets/{name}", include_in_schema=False)
-    def api_console_secrets_delete(name: str):
-        return _sguard(lambda: _sec().delete_secret(name))
-
-    @app.get("/api/console/secrets/{name}/value", include_in_schema=False)
+    # Secret names may contain "/" (e.g. prod/db): {name:path}, with the /value routes
+    # registered first so the greedy path converter backtracks onto the suffix.
+    @app.get("/api/console/secrets/{name:path}/value", include_in_schema=False)
     def api_console_secrets_value(name: str,
                                   version_id: str = Query(default=None),
                                   version_stage: str = Query(default=None)):
         return _sguard(lambda: _sec().get_secret_value(name, version_id, version_stage))
 
-    @app.post("/api/console/secrets/{name}/value", include_in_schema=False)
+    @app.post("/api/console/secrets/{name:path}/value", include_in_schema=False)
     def api_console_secrets_put(name: str, payload: dict = Body(default=None)):
         p = payload or {}
         return _sguard(lambda: _sec().put_secret_value(name, p.get("secret_string", "")))
+
+    @app.get("/api/console/secrets/{name:path}", include_in_schema=False)
+    def api_console_secrets_describe(name: str):
+        return _sguard(lambda: _sec().describe_secret(name))
+
+    @app.delete("/api/console/secrets/{name:path}", include_in_schema=False)
+    def api_console_secrets_delete(name: str):
+        return _sguard(lambda: _sec().delete_secret(name))
 
     # ── GCP Secret Manager kv-secret-viewer (§13): the GCP lens's data plane for the
     #    SAME kv-secret-viewer widget — the manifest `api` block points here instead

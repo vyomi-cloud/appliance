@@ -1,5 +1,5 @@
 """Upstream drift (#502 Cosmos 2026-07-15, #500 CognitiveServices 2026-09-15-preview,
-#499 Web 2026-08-01, #520 KeyVault 2026-10-01-preview, #340 Compute 2026-11-01-preview): Vyomi's ARM layer must accept
+#499 Web 2026-08-01, #520 KeyVault 2026-10-01-preview, #528 Sql 2026-08-01-preview, #534 Storage 2027-03-07, #340 Compute 2026-11-01-preview): Vyomi's ARM layer must accept
 the newly published api-versions the same way it accepts older ones (create, get, delete)."""
 import json, os, sys, time, urllib.request, urllib.error
 
@@ -15,6 +15,10 @@ CASES = [
     ("Microsoft.KeyVault/vaults", "vyomidrift520", "2026-10-01-preview",
      {"location": "eastus", "properties": {"tenantId": "00000000-0000-0000-0000-000000000000",
                                           "sku": {"family": "A", "name": "standard"}}}),
+    ("Microsoft.Sql/servers", "vyomidrift528", "2026-08-01-preview",
+     {"location": "eastus", "properties": {"administratorLogin": "vyomiadmin", "administratorLoginPassword": "P@ssw0rd-Vyomi1"}}),
+    ("Microsoft.Storage/storageAccounts", "vyomidrift534", "2027-03-07",
+     {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {}}),
 ]
 fails = 0
 
@@ -47,5 +51,16 @@ sa, ba = call("PUT", cu + "?api-version=2024-07-01", body)
 sb, bb = call("PUT", cu + "?api-version=2026-11-01-preview", body)
 ok = sa == sb and b"InvalidApiVersion" not in bb and b"NoRegisteredProvider" not in bb
 print(f"[{'PASS' if ok else 'FAIL'}] Microsoft.Compute accepts api-version 2026-11-01-preview like 2024-07-01 ({sa} vs {sb})")
+fails += not ok
+
+# #534 Storage data plane: a blob request pinned to x-ms-version 2027-03-07 must be served like an older one.
+def blob_status(ver):
+    req = urllib.request.Request(f"{B}/devstoreaccount1?comp=list", headers={"x-ms-version": ver})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r: return r.status
+    except urllib.error.HTTPError as e: return e.code
+va, vb = blob_status("2023-11-03"), blob_status("2027-03-07")
+ok = va == vb and vb < 500
+print(f"[{'PASS' if ok else 'FAIL'}] Blob service accepts x-ms-version 2027-03-07 like 2023-11-03 ({va} vs {vb})")
 fails += not ok
 sys.exit(1 if fails else 0)

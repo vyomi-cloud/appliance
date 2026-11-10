@@ -111,6 +111,12 @@ def _ops_in(path: str) -> set[str]:
         tree = ast.parse(open(path, encoding="utf-8").read())
     except Exception:
         return set()
+    aws_core = _cloud_of(path) == "aws"
+    # AWS dispatch tables name SDK operations as PascalCase string keys mapped to
+    # handler functions; PascalCase dicts of plain variables (record fields such as
+    # StateReasonData) and helpers that are never named by a string are not operations.
+    all_fns = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    str_consts = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
     ops = set()
     fn_ops: dict[str, str] = {}
     keys_all: set[str] = set()
@@ -119,7 +125,9 @@ def _ops_in(path: str) -> set[str]:
         if isinstance(n, ast.Dict) and len(n.keys) >= 3:
             keys = [k.value for k in n.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
             if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) for v in n.values) \
-                    and all(OP_RE.match(k) for k in keys):
+                    and all(OP_RE.match(k) for k in keys) \
+                    and not (aws_core and not any(isinstance(v, (ast.Attribute, ast.Lambda)) or
+                                                  (isinstance(v, ast.Name) and v.id in all_fns) for v in n.values)):
                 ops |= set(keys)
                 keys_all |= set(keys)
                 dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)}
@@ -127,8 +135,11 @@ def _ops_in(path: str) -> set[str]:
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
-        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name) \
+                and not (aws_core and n.name.startswith("_")):  # AWS: _private helpers are not SDK operations
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
+            if aws_core and not os.path.basename(path).startswith("s3") and fn_ops[n.name] not in str_consts:   # AWS ops are always named by a dispatch string
+                continue
             ops.add(fn_ops[n.name])
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
