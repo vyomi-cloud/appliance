@@ -118,6 +118,14 @@ export async function configureSsh({ yes = false, cmd = "vyomi-tunnel", sshDir =
   fs.mkdirSync(HOME, { recursive: true, mode: 0o700 });
   const block = [
     "# Written by `vyomi-tunnel config`. Remove with `vyomi-tunnel config --remove`.",
+    // The Mesh Codespace's sshd trusts the key `gh codespace ssh` generates, for the `vscode` user. Without these two lines plain
+    // `ssh host.vyomi` offers the local user + default keys and gets "Permission denied (publickey)". Specific stanza first: ssh keeps
+    // the first value it finds for each option.
+    `Host host${SUFFIX}`,
+    "  User vscode",
+    `  IdentityFile ${path.join(os.homedir(), ".ssh", "codespaces.auto")}`,
+    "  IdentitiesOnly yes",
+    "",
     `Host *${SUFFIX}`,
     `  ProxyCommand ${cmd} connect %h`,
     "  ServerAliveInterval 30",
