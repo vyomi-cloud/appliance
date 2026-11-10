@@ -184,7 +184,7 @@ const DETAILS = {
   credentials: `Mesh credentials (like ~/.aws/credentials)
 
 Where to get it: https://vyomi.cloud/account/tunnel-credentials
-(in the console: avatar menu > Tunnel credentials)
+(in the console: avatar menu > Vyomi Credentials)
 
 1. Create an access key. The secret is shown once, so download it.
 2. Save the downloaded file as ~/.vyomi/credentials (it looks like this):
@@ -260,7 +260,7 @@ export async function main(argv) {
     finally { transport.close(); }
   }
   if (cmd === "login" || cmd === "gh-login") {                         // there is no login: credentials live in a file, like ~/.aws/credentials
-    console.error("vyomi-tunnel has no login. Save your access key as ~/.vyomi/credentials (console: avatar menu > Tunnel credentials). Run `vyomi-tunnel help credentials`.");
+    console.error("vyomi-tunnel has no login. Save your access key as ~/.vyomi/credentials (console: avatar menu > Vyomi Credentials). Run `vyomi-tunnel help credentials`.");
     return 2;
   }
   if (cmd === "list" || cmd === "ls") {                                // every transport line, with the command to use it
