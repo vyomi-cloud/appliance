@@ -224,6 +224,9 @@
     gh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Star on GitHub</span><b class="vy-n"></b>';
     var so = document.createElement('a'); so.href = '#'; so.setAttribute('data-act', 'signout'); so.setAttribute('role', 'menuitem'); so.style.display = 'none';
     so.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Sign out</span>';
+    // vyomi-tunnel access key + secret (AWS-CLI style): created and downloaded on the portal, saved as ~/.vyomi/credentials
+    var tc = document.createElement('a'); tc.href = '/account/tunnel-credentials'; tc.target = '_blank'; tc.rel = 'noopener'; tc.setAttribute('data-act', 'tunnel-credentials'); tc.setAttribute('role', 'menuitem'); tc.style.display = 'none';
+    tc.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Tunnel credentials</span>';
     var hr = document.createElement('div'); hr.className = 'vy-hr';
     var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'booster'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
     function paintBooster() {
@@ -235,7 +238,7 @@
       bo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>' + esc(label) + '</span>'; bo.style.display = '';
     }
     window.addEventListener('vyomi-booster-session', paintBooster); setInterval(paintBooster, 15000);
-    [who$, act, bo, gh, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
+    [who$, act, bo, gh, tc, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
     function closeMenu() { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -298,6 +301,7 @@
       btn.innerHTML = av; btn.title = signed && em ? 'Vyomi account \u2014 ' + em : 'Vyomi account';
       who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + (edl ? '<small class="vy-via">' + esc(edl) + (prof.role ? ' \u00b7 ' + esc(prof.role.charAt(0).toUpperCase() + prof.role.slice(1)) : '') + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
       so.style.display = (authed || (!NANO && st.tier && st.tier !== 'free') || (!NANO && t && t.activated)) ? '' : 'none';
+      tc.style.display = NANO && authed ? '' : 'none';      // the keys live on the portal: shown in the Nano console once signed in
     }
     function refreshAcct() {
       fetch('/api/license/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
