@@ -1,13 +1,13 @@
 {
- "at": "2026-11-10T20:59:46+00:00",
+ "at": "2026-11-10T21:59:51+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "storage/v1",
-   "kind": "operation-added",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:added",
-   "title": "GCP storage/v1: new operation storage.anywhereCaches.pause",
+   "kind": "operation-removed",
+   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
+   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
    "detail": {
     "params": [
      "anywhereCacheId",
@@ -18,52 +18,41 @@
     "http": "POST",
     "deprecated": false
    },
-   "actionable": true
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.44.0",
-   "title": "pypi:boto3: 1.43.127 \u2192 1.44.0",
    "actionable": false
   },
   {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.44.0",
-   "title": "pypi:botocore: 1.43.127 \u2192 1.44.0",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.114.10",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.9 \u2192 v1.114.10",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.53.0",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.11 \u2192 v1.53.0",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Compute Engine",
+   "cloud": "aws",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:gcp:56adc74ca4be",
-   "title": "Compute Engine: Feature (November 10, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_10_2026",
-   "detail": "For your regional managed instance groups (MIGs), you can view planned instance allocations across zones and machine types, check the number of instances waiting for capacity, and configure alerts based on this data. Compute Engine records these details in instance distribution logs in Cloud Logging when you create a regional MIG or increase its target size. For more information, see View instance distribution logs .",
+   "key": "feed:aws:bcf450af44c8",
+   "title": "Amazon RDS for PostgreSQL announces Extended Support minor versions 13.23-rds.20260819, 12.22-rds.20260820 and 11.22-rds.20260822",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-postgresql-extended-support/",
+   "detail": "Amazon Relational Database Service (RDS) for PostgreSQL announces Amazon RDS Extended Support minor versions 13.23-rds.20260819, 12.22-rds.20260820 and 11.22-rds.20260822. Amazon RDS Extended Support provides up to three additional years of fixes for critical Common Vulnerabilities and Exposures (CVE) and bugs beyond a major version's end of standard support date, giving you more time to upgrade to a new major version. You can upgrade your database using Amazon RDS Blue/Green Deployments , in-place upgrade, or restore from a snapshot. Learn more about performing version upgrades in the Amazon ",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon RDS",
+   "kind": "announcement",
+   "key": "feed:aws:e8755f8c8f10",
+   "title": "Amazon RDS for MySQL 26.10 is now available in Amazon RDS Database Preview Environment ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-mysql-26-10-preview-environment/",
+   "detail": "Starting today, Amazon RDS for MySQL 26.10 is available in the Amazon RDS Database Preview Environment , allowing you to evaluate the pre-release of MySQL 26.10 on Amazon RDS for MySQL. MySQL 26.10 includes bug fixes, security patches, and some improvements to READ COMMITTED workload performance and purge lag warnings in the error log. On busy READ COMMITTED workloads, NUMA systems performance could be impacted as each read view that closed required a global mutex. Read-view objects can now be reused which eliminates the global mutex on closure. The error log now reports warnings when the hist",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:acd972c05ac0",
+   "title": "[Launched] Generally Available: Azure Functions support for .NET 11",
+   "link": "https://azure.microsoft.com/updates?id=578773",
+   "detail": "Azure Functions support for .NET 11 is now generally available.You can now build Azure Functions apps targeting .NET 11 using the isolated worker model, while continuing to use the Azure Functions programming model and host integration. Your serverless ap",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out"
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
+  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out"
  ]
 }
