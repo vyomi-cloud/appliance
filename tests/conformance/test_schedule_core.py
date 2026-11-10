@@ -3,6 +3,7 @@
 Run: PYTHONPATH=. ../appliance/.venv/bin/python tests/conformance/test_schedule_core.py
 """
 import json
+import time
 from datetime import datetime, timezone
 
 from core import schedule_core as sc
@@ -102,7 +103,9 @@ def main():
     for d in range(6, 10):
         sc.tick(r, epoch(2026, 11, d, 3, 30))
     _check("retainedBackups pruning", len(cs._list_backup_ids(r.gcp_sql, "demo", "db1")) == 2)
-    # recovery-point expiry (DeleteAfterDays=1) by now: everything older than a day is gone
+    # recovery-point expiry (DeleteAfterDays=1): recovery points are stamped with the real clock, so sweep at
+    # real-now + 2 days (a hard-coded simulated date silently stops sweeping once the wall clock passes it)
+    sc.tick(r, time.time() + 2 * 86400)
     s, o = aws(r, "backup", "GET", "/backup-vaults/Default/recovery-points/")
     _check("DeleteAfterDays expiry sweeps AWS recovery points", s == 200 and len(o["RecoveryPoints"]) <= 1)
     st = sc.status(r)
