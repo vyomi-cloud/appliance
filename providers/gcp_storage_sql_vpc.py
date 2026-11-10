@@ -359,6 +359,17 @@ def api_gcp_sql_restart_instance(project: str, instance: str):
     return {"kind": "sql#operation", "operationType": "RESTART", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
 
 
+def api_gcp_sql_reconcile_networking(project: str, instance: str):
+    """POST .../reconcileNetworking (sql.projects.instances.reconcileNetworking)."""
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    rec["updateTime"] = _now()
+    return s._gcp_sql_make_operation(project, instance, "RECONCILE_NETWORKING")
+
+
 def api_gcp_sql_start_instance(project: str, instance: str):
     """POST .../start — Cloud SQL exposes this as setting activationPolicy=ALWAYS.
     We mirror that by flipping the cached state to RUNNABLE.

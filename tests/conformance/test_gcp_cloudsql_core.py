@@ -157,6 +157,12 @@ def run() -> int:
     _check("workloadCaptures unknown instance 404",
            csql.dispatch(st, "POST", PROJ + "/ghost/workloadCaptures:start", {}, {}, b"{}").status == 404)
 
+    # 7e. reconcileNetworking (v1beta4)
+    rn = csql.dispatch(st, "POST", PROJ + "/shopdb/reconcileNetworking", {}, {}, b"{}")
+    _check("reconcileNetworking op", rn.status == 200 and _jbody(rn)["operationType"] == "RECONCILE_NETWORKING")
+    _check("reconcileNetworking unknown instance 404",
+           csql.dispatch(st, "POST", PROJ + "/ghost/reconcileNetworking", {}, {}, b"{}").status == 404)
+
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")
     return 0
