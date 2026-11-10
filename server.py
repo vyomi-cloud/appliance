@@ -8000,13 +8000,19 @@ def _sync_docker_instance(instance: dict) -> None:
         return
     if status == "absent":
         instance["container_status"] = "missing"
+        # The launch thread hasn't created the container yet (cold image pull,
+        # thread-scheduler lag) — not the same as "stopped". A list/describe
+        # call racing create() used to see "absent" here and permanently mark
+        # the instance stopped before the launch finished, which then made an
+        # immediate reboot 409 (InstanceNotRunning) instead of riding out
+        # _await_reboot_ready's own wait-for-launch poll. Only a launch that
+        # has already concluded (ready, i.e. previously running then removed;
+        # or error) gets treated as a real stop.
+        launch_status = str(instance.get("launch_status") or "").strip().lower()
+        if launch_status in {"", "queued", "starting", "pending"}:
+            return
         if str(instance.get("state") or "").strip().lower() not in {"terminated", "stopped"}:
             instance["state"] = "stopped"
-        # A failed launch (e.g. docker.sock unreachable) must stay visible as
-        # launch_status=error + launch_error, not be reset to a silent "ready".
-        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "pending"}:
-            instance["launch_status"] = "ready"
-            instance["launch_error"] = ""
         return
     instance["container_status"] = status
     if status == "running":
