@@ -1,3 +1,19 @@
+### Upstream watch — 2026-11-10T20:59:46+00:00
+
+Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**6 change(s), 1 actionable.**
+- 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
+- · `announcement` Compute Engine: Feature (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.9 → v1.114.10
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.11 → v1.53.0
+- · `release` pypi:boto3: 1.43.127 → 1.44.0
+- · `release` pypi:botocore: 1.43.127 → 1.44.0
+
+Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-10T19:59:44+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,18 +3014,3 @@ Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-10-28T21:50:53+00:00
 
 Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**9 change(s), 4 actionable.**
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-- · `announcement` AWS IAM Identity Center's Identity Store now supports change notifications through Amazon EventBridge ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/aws-identity-store-change-notifications/))
-- · `announcement` AWS Lambda durable functions now exports live telemetry for execution insights  ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/lambda-durable-telemetry/))
-- · `announcement` Amazon ECS Managed Instances adds cross-instance and Spot consolidation ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/ecs-managed-instances-consolidation/))
-- · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
-- · `spec-commit` Azure servicebus: fix: improve Service Bus administration Swagger interoperability (#47269) ([link](https://github.com/Azure/azure-rest-api-specs/commit/1758295d22b6a143bb74383febd0c3f6bccfeda5))
-
-Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
-
-Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
