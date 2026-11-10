@@ -9,7 +9,7 @@ export class TunnelAuthError extends Error { constructor(code, message) { super(
 export const DEFAULT_PORTAL = "https://vyomi.cloud";
 export const keysUrl = (portal) => (portal || DEFAULT_PORTAL).replace(/\/$/, "") + "/account/tunnel-credentials";
 export const KEYS_URL = keysUrl();
-export const noCredentials = (portal) => `No Vyomi credentials. Download your access key and secret from ${keysUrl(portal)} (console: avatar menu > Tunnel credentials) and save the file as ~/.vyomi/credentials`;
+export const noCredentials = (portal) => `No Vyomi credentials. Download your access key and secret from ${keysUrl(portal)} (console: avatar menu > Vyomi Credentials) and save the file as ~/.vyomi/credentials`;
 export const NO_CREDENTIALS = noCredentials();
 
 export function parseIni(text) {
