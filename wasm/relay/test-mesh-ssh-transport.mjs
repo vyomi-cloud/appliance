@@ -6,7 +6,7 @@ import net from "node:net";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
-import { createSshTransport, createSshHub, connectSsh, forwardSsh } from "./mesh-ssh.mjs";
+import { createSshTransport, createSshHub, connectSsh, forwardSsh, findCodespace } from "./mesh-ssh.mjs";
 
 const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 const { WebSocketServer } = WS;
@@ -51,6 +51,13 @@ assert.equal(await t.resolve("vyomi-k3s-ZZ"), null);
 assert.deepEqual(await t.simulatorTarget(), { host: "10.0.0.2", port: 9000 });
 assert.ok(cmds.some((c) => /^W /.test(c)) === false);
 await assert.rejects(() => t.open("1.2.3.4; id", 22));         // open() only takes dotted quads
+
+// the user's Mesh Codespace is found automatically (newest running vyomi-mesh-*; never someone else's or an unrelated one)
+const lst = (rows) => (b, a) => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(JSON.stringify(rows)); c.emit("close", 0); }); return c; };
+assert.equal(await findCodespace("gh", lst([{ name: "other-app", state: "Available" }, { name: "vyomi-mesh-old", state: "Available", createdAt: "2026-11-01" },
+  { name: "vyomi-mesh-new", state: "Available", createdAt: "2026-11-09" }, { name: "vyomi-mesh-off", state: "Shutdown", createdAt: "2026-11-10" }])), "vyomi-mesh-new");
+await assert.rejects(() => findCodespace("gh", lst([{ name: "vyomi-mesh-off", state: "Shutdown" }])), /stopped/);
+await assert.rejects(() => findCodespace("gh", lst([{ name: "other", state: "Available" }])), /no Mesh Codespace/);
 
 // keepalive: starts by itself on first use, sends real ssh traffic on a schedule, stops on close
 const kaCmds = []; const kt = createSshTransport({ codespace: "cs-ka", config: { file: "/dev/null", host: "h" }, keepaliveMs: 40,
@@ -107,9 +114,9 @@ srv.close(); t.close();
 // help: every spelling prints the same usage; unknown commands fail with rc 2 and never start a relay
 const { spawnSync } = await import("node:child_process");
 const bin = new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname;
-for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["gh-login", "-h"], ["help", "forward"]]) {
+for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["login", "-h"], ["help", "forward"]]) {
   const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });
-  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? new RegExp("vyomi-tunnel " + (a[0] === "help" ? a[1] : a[0])) : /gh-login[\s\S]*forward[\s\S]*help <command>/);
+  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, a.length === 2 ? new RegExp("vyomi-tunnel " + (a[0] === "help" ? a[1] : a[0])) : /login[\s\S]*ssh <name>\.vyomi[\s\S]*forward/);
 }
 const badCmd = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
 assert.equal(badCmd.status, 2); assert.match(badCmd.stderr, /unknown command "bogus"/);

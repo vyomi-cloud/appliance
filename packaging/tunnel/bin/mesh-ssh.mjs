@@ -23,10 +23,26 @@ const HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade",
 
 const dockerIp = (rawName) => `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' ${rawName} 2>/dev/null`;
 
+/** Find the user's Mesh Codespace on their own account: the newest running (or starting) one named vyomi-mesh-* / vyomi-booster-*. */
+export async function findCodespace(ghBin, spawn = nodeSpawn) {
+  const text = await new Promise((resolve, reject) => {
+    let out = "", err = "";
+    const c = spawn(ghBin, ["codespace", "list", "--json", "name,state,createdAt"], { stdio: ["ignore", "pipe", "pipe"] });
+    c.stdout.on("data", (d) => { out += d; }); c.stderr?.on("data", (d) => { err += d; });
+    c.on("error", reject); c.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error((err || "gh codespace list failed").trim().slice(0, 200)))));
+  });
+  let list; try { list = JSON.parse(text); } catch { list = []; }
+  const mine = list.filter((c) => /^vyomi-(mesh|booster)-/.test(c.name || ""));
+  const rank = { Available: 0, Starting: 1, Queued: 1, Provisioning: 1 };
+  const live = mine.filter((c) => c.state in rank).sort((a, b) => rank[a.state] - rank[b.state] || String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (!live.length) throw new Error(mine.length ? "your Mesh Codespace is stopped. Start Mesh in the Vyomi console, then retry." : "no Mesh Codespace found on your GitHub account. Start Mesh in the Vyomi console first.");
+  return live[0].name;
+}
+
 /** @returns transport {resolve(name,port), open(host,port), exec(cmd), http(req,res,body), close(), simulatorTarget()} */
 export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null, log = () => {}, ipTtlMs = 30000,
                                      simulatorPort = 9000, hostSshPort = 2222, config = null, keepaliveMs = 240000 } = {}) {
-  if (!CODESPACE.test(String(codespace || ""))) throw new Error("a Codespace name is required (VYOMI_MESH_CODESPACE / --codespace)");
+  if (codespace && !CODESPACE.test(String(codespace))) throw new Error("bad Codespace name");   // none given: found on the user's account at first use
   let cfg = config;                         // {file, host} - tests inject it; otherwise `gh codespace ssh --config` provides it
   let dir = null;
   const ips = new Map();                    // container name -> {ip, at}
@@ -61,6 +77,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
       const a = await ghAuthOk(ghBin, { spawn });
       if (!a.ok) throw new Error(a.reason);
     }
+    if (!codespace) { codespace = await findCodespace(ghBin, spawn); log("using Codespace " + codespace); }
     dir = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "vm-"));   // short: a unix ControlPath is limited to ~100 chars
     const text = await collect(spawn(ghBin, ["codespace", "ssh", "-c", codespace, "--config"], { stdio: ["ignore", "pipe", "pipe"] }));
     const m = /^Host\s+(\S+)/m.exec(text);
@@ -165,7 +182,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
 
   function close() { closed = true; clearInterval(ka.timer); for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) spawn("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
 
-  return { resolve, open, exec, simulatorTarget, httpToSimulator, close, codespace, keepalive: () => ({ ...ka, timer: undefined }) };
+  return { resolve, open, exec, simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
 }
 
 /** A drop-in for booster-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.

@@ -169,49 +169,25 @@ function openBrowser(url) {
 
 const HELP = `vyomi-tunnel - connect your machine to Vyomi
 
-Usage: vyomi-tunnel [command]
+  vyomi-tunnel login      sign in with GitHub (one time)
+  ssh <name>.vyomi        connect to the Codespace, a Docker instance or k3s
+  vyomi-tunnel forward <name> <local>:<remote>
+                          forward a port, e.g. forward k3s 6443:6443
+  vyomi-tunnel            start the local relay for the Nano console
 
-  (none)      start the local relay for the Nano console
-  gh-login    sign in to GitHub (installs the GitHub CLI if needed)
-  connect     open a stream to a target (use as an ssh ProxyCommand)
-  forward     forward a local port to a target
-  login       sign in through the Vyomi relay
-  status      show sign-in state
-  config      add the *.vyomi block to ~/.ssh/config
-
-Targets: host, k3s, vyomi-k3s-<id>, or a Docker instance name
-
-Run 'vyomi-tunnel help <command>' for details.
-Add --codespace <name> (or set VYOMI_MESH_CODESPACE) to use your own GitHub login.
+<name>: host, k3s, or a Docker instance name. Start Mesh in the Vyomi console first.
 `;
 const DETAILS = {
-  "gh-login": `vyomi-tunnel gh-login
-
-Sign in to GitHub in your browser (codespace scope). Uses the GitHub CLI
-if you have it, otherwise installs a private copy in ~/.vyomi/bin.`,
-  connect: `vyomi-tunnel connect <target> [port] [--codespace <name>]
-
-Pipe stdin/stdout to a target. Meant for ssh:
-  ssh -o ProxyCommand="vyomi-tunnel connect host --codespace NAME" vscode@x
-
-With --codespace it uses your GitHub login. Without it, it uses the Vyomi
-relay (run 'vyomi-tunnel login' first) and <target> may be <vm>[.vyomi].`,
-  forward: `vyomi-tunnel forward <target> <local>:<remote> [--codespace <name>]
-
-Listen on 127.0.0.1:<local> and forward to <target>:<remote>.
-  vyomi-tunnel forward host 2222:22 --codespace NAME
-  vyomi-tunnel forward k3s 6443:6443 --codespace NAME
-
-Local ports below 1024 need --allow-privileged (relay mode).`,
   login: `vyomi-tunnel login
 
-Sign in with your browser and store a Mesh session token in ~/.vyomi.`,
-  status: `vyomi-tunnel status
+Signs you in to GitHub in your browser and sets up ssh so that
+'ssh <name>.vyomi' works. Installs the GitHub CLI for you if needed.
+Run it once.`,
+  forward: `vyomi-tunnel forward <name> <local>:<remote>
 
-Show whether you are signed in and when the Mesh session ends.`,
-  config: `vyomi-tunnel config [--yes | --remove]
-
-Add (or remove) the *.vyomi block in ~/.ssh/config so 'ssh my-vm.vyomi' works.`,
+Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespace.
+  vyomi-tunnel forward k3s 6443:6443
+  vyomi-tunnel forward host 2222:22`,
 };
 export const helpText = (topic) => (topic && DETAILS[topic]) || HELP;
 
@@ -224,27 +200,36 @@ export async function main(argv) {
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
-  const cs = ci >= 0 ? rest[ci + 1] : process.env.VYOMI_MESH_CODESPACE;
+  const cs = ci >= 0 ? rest[ci + 1] : process.env.VYOMI_MESH_CODESPACE;      // optional: normally found automatically on the user's account
   if (ci >= 0) rest.splice(ci, 2);
-  if (cs && (cmd === "connect" || cmd === "forward")) {
+  const ri = rest.indexOf("--relay-mode"); if (ri >= 0) rest.splice(ri, 1);   // legacy portal-token relay path
+  if (ri < 0 && (cmd === "connect" || cmd === "forward")) {
     const ssh = await import("./mesh-ssh.mjs");
-    const transport = ssh.createSshTransport({ codespace: cs });
+    const transport = ssh.createSshTransport({ codespace: cs, log: (m) => console.error("vyomi-tunnel: " + m) });
     try {
       if (cmd === "connect") { const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; } return await ssh.connectSsh(vm, { port: Number(rest[1] || 22), transport }); }
       const pos = rest.filter((x) => !x.startsWith("--")); const m = /^(\d{1,5}):(\d{1,5})$/.exec(pos[1] || "");
       if (!pos[0] || !m) { console.error("usage: vyomi-tunnel forward <target> <local>:<remote> --codespace <name>"); return 2; }
       const f = await ssh.forwardSsh(vmName(pos[0]), { local: Number(m[1]), remote: Number(m[2]), transport, net });
-      if (f.port) console.error(`forwarding 127.0.0.1:${f.port} -> ${vmName(pos[0])}:${m[2]} via ${cs} (Ctrl-C to stop)`);
+      if (f.port) console.error(`forwarding 127.0.0.1:${f.port} -> ${vmName(pos[0])}:${m[2]} via ${transport.codespace} (Ctrl-C to stop)`);
       for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
       return await f.done;
-    } finally { transport.close(); }
+    } catch (e) { console.error("vyomi-tunnel: " + e.message); return 1; }
+    finally { transport.close(); }
   }
-  if (cmd === "gh-login") {                                          // sign in to GitHub (codespace scope) with the found/installed gh
-    const { ensureGh } = await import("./gh-manager.mjs");
-    const gh = await ensureGh({ log: (m) => console.error("vyomi-tunnel: " + m) }).catch((e) => { console.error("vyomi-tunnel: " + e.message); return null; });
-    if (!gh) return 1;
-    return await new Promise((res) => spawn(gh.path, ["auth", "login", "--web", "-s", "codespace"], { stdio: "inherit" }).on("error", () => res(1)).on("close", (c) => res(c || 0)));
+  if (cmd === "login" && !rest.includes("--portal") && !rest.includes("--token")) {
+    const g = await import("./gh-manager.mjs"), sshm = await import("./mesh-ssh.mjs");
+    const say = (m) => console.error("vyomi-tunnel: " + m);
+    let gh; try { gh = await g.ensureGh({ log: say }); } catch (e) { say(e.message); return 1; }
+    const run = (args, stdio) => new Promise((res) => spawn(gh.path, args, { stdio }).on("error", () => res(1)).on("close", (c) => res(c || 0)));
+    if ((await run(["auth", "status"], "ignore")) !== 0 && !process.env.GH_TOKEN) { say("signing in to GitHub..."); if (await run(["auth", "login", "--web", "-s", "codespace"], "inherit")) return 1; }
+    if ((await run(["codespace", "list", "--limit", "1"], "ignore")) !== 0 && !process.env.GH_TOKEN) { if (await run(["auth", "refresh", "-h", "github.com", "-s", "codespace"], "inherit")) return 1; }
+    const r = await configureSsh({ yes: true });
+    let where = ""; try { where = ` Mesh Codespace: ${await sshm.findCodespace(gh.path)}.`; } catch (e) { where = " " + e.message[0].toUpperCase() + e.message.slice(1); }
+    console.log(`Signed in.${r.changed ? " SSH set up." : ""}${where}\nConnect with: ssh <name>${SUFFIX}`);
+    return 0;
   }
+  if (cmd === "gh-login") return main(["login", ...rest]);               // old name
   if (cmd === "connect") {
     const vm = vmName(rest[0]); if (!vm) { console.error("usage: vyomi-tunnel connect <vm>[.vyomi] [port]"); return 2; }
     const { relay, token } = load();
@@ -260,7 +245,7 @@ export async function main(argv) {
     for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => f.close());
     return f.done;
   }
-  if (cmd === "login") {
+  if (cmd === "login") {                                              // legacy: Vyomi portal token for the relay path (login --portal)
     const i = rest.indexOf("--token");
     if (i >= 0) { const { relay } = load(); save({ relay: rest[rest.indexOf("--relay") + 1] || relay, token: rest[i + 1] }); console.log("Saved."); return 0; }
     try { await login({ portal: process.env.VYOMI_PORTAL_URL || DEFAULT_PORTAL }); console.log("Signed in."); } catch (e) { console.error("vyomi-tunnel login: " + e.message); return 1; }

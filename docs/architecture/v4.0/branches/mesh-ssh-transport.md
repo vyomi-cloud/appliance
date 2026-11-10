@@ -13,6 +13,13 @@ simulator HTTP API (Nano compute calls) over it. Browser VMs (tunnel 2) are unch
   container with `Host: simulator:9000`, `/shell` -> 501, `/booster` -> 410), `connectSsh` / `forwardSsh` for the CLI.
 - `local-relay.mjs`: `VYOMI_MESH_CODESPACE=<name>` selects the ssh hub. `mesh-cli.mjs`: `connect|forward ... --codespace <name>` (or the env) goes straight over ssh, no relay/token.
 
+## User flow (one command)
+`vyomi-tunnel login` once: finds or installs gh, signs in to GitHub (browser, codespace scope), writes the `*.vyomi` ssh block and includes it in
+~/.ssh/config. After that `ssh <name>.vyomi` and `vyomi-tunnel forward <name> <local>:<remote>` just work: the user's running Mesh Codespace is found
+automatically (`findCodespace`: newest Available/Starting vyomi-mesh-* / vyomi-booster-*). No flags. Old pieces are hidden, not removed:
+`login --portal`/`--token` (portal-token relay), `connect|forward --relay-mode`, `--codespace`, `config`, `status`, `keep`, `gh-login` (alias of login).
+NOT verified: a real browser login end to end (device flow starts correctly), and that the user's own ssh key is accepted by the Codespace sshd on :2222.
+
 ## Idle timeout (automatic)
 GitHub resets a Codespace's idle timer on ssh traffic the client sends. The transport therefore runs a trivial command on the host every 4 min
 (`keepaliveMs`) for as long as it is in use (connect, forward, or the relay with VYOMI_MESH_CODESPACE), starting on first use and stopping on close.
