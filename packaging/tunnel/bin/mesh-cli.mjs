@@ -166,8 +166,52 @@ function openBrowser(url) {
   try { spawn(c, a, { stdio: "ignore", detached: true }).unref(); } catch { /* user pastes it */ }
 }
 
+
+const HELP = `vyomi-tunnel - reach Vyomi from your machine: Nano in the browser, and Mesh (Codespace, Docker, k3s)
+
+Usage:
+  vyomi-tunnel                          start the local relay for the Nano console (RELAY_PORT, default 8090)
+  vyomi-tunnel <command> [options]
+
+Mesh over your own GitHub login (needs a running Mesh Codespace):
+  gh-login                              sign in to GitHub (browser, codespace scope); installs the GitHub CLI if you do not have it
+  connect <target> [port] --codespace <name>
+                                        pipe stdin/stdout to a target (use as an ssh ProxyCommand)
+  forward <target> <local>:<remote> --codespace <name>
+                                        listen on 127.0.0.1:<local> and forward to <target>:<remote>
+      targets:  host | codespace        the Codespace's own sshd
+                vyomi-k3s-<id> | k3s    a cluster's API server (port 6443)
+                <instance>              a Docker instance in the Codespace (vyomi-i-<id>)
+  The Codespace can also come from the VYOMI_MESH_CODESPACE environment variable.
+
+Mesh over the Vyomi relay (token from the portal):
+  login                                 sign in with the browser; stores a Mesh session token in ~/.vyomi
+  connect <vm>[.vyomi] [port]           ssh/TCP to a VM through the relay
+  forward <target> <local>:<remote> [--allow-privileged]
+  status                                show sign-in and session end time
+  config [--yes|--remove]               add (or remove) the *.vyomi block in ~/.ssh/config
+  keep [--user u] [--key f] [--interval s]
+                                        hold an ssh session to the Codespace host to keep it from idling
+
+Help:
+  help | -h | --help | -help            this text
+  <command> --help                      the same text
+  --version | -v                        print the version
+
+Environment: RELAY_PORT, RELAY_HOST, VYOMI_MESH_CODESPACE, VYOMI_HOME (default ~/.vyomi), VYOMI_GH (path to a gh binary), GH_TOKEN, VYOMI_RELAY_URL
+Examples:
+  vyomi-tunnel gh-login
+  vyomi-tunnel forward host 2222:22 --codespace my-mesh-codespace
+  vyomi-tunnel forward vyomi-k3s-0123456789 6443:6443 --codespace my-mesh-codespace
+  ssh -o ProxyCommand="vyomi-tunnel connect host --codespace my-mesh-codespace" vscode@x
+Docs: https://vyomi.cloud
+`;
+export const helpText = () => HELP;
+
 export async function main(argv) {
   const [cmd, ...rest] = argv;
+  if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { process.stdout.write(HELP); return cmd ? 0 : 2; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.2.0"); return 0; }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
@@ -236,5 +280,5 @@ export async function main(argv) {
     for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => k.stop());
     const s = await k.done; return s.reason === "too many failed connects" ? 1 : 0;
   }
-  console.error("usage: vyomi-tunnel login | config [--yes|--remove] | connect <vm>[.vyomi] | keep [--user u] [--key f] [--interval s] | status"); return 2;
+  console.error(`vyomi-tunnel: unknown command "${cmd}". Run \`vyomi-tunnel help\`.`); return 2;
 }

@@ -95,5 +95,14 @@ const bad = await new Promise((res) => { const w = new WS(`ws://127.0.0.1:${srv2
 assert.match(bad, /BadRequest/);
 sim.close(); srv2.close();
 srv.close(); t.close();
+// help: every spelling prints the same usage; unknown commands fail with rc 2 and never start a relay
+const { spawnSync } = await import("node:child_process");
+const bin = new URL("../../packaging/tunnel/bin/vyomi-tunnel.mjs", import.meta.url).pathname;
+for (const a of [["help"], ["-help"], ["--help"], ["-h"], ["forward", "--help"], ["gh-login", "-h"]]) {
+  const r = spawnSync(process.execPath, [bin, ...a], { encoding: "utf8", env: { ...process.env, VYOMI_HOME: "/nonexistent" }, timeout: 15000 });
+  assert.equal(r.status, 0, a.join(" ")); assert.match(r.stdout, /Usage:[\s\S]*gh-login[\s\S]*forward <target>/);
+}
+const bad = spawnSync(process.execPath, [bin, "bogus"], { encoding: "utf8", timeout: 15000 });
+assert.equal(bad.status, 2); assert.match(bad.stderr, /unknown command "bogus"/);
 console.log("mesh-ssh transport: all checks passed");
 process.exit(0);
