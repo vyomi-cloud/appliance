@@ -1,7 +1,7 @@
 /* Vyomi Global Mesh widget for the AWS / GCP / Azure Nano consoles: an in-page card on the console HOME page (beside the "How Nano ... works" video banner).
  *   Pro / Max (or active trial) with mesh enabled -> Start / Leave the Mesh button
  *   Pro / Max entitled but switched off              -> "Turn on the Mesh"
- *   Free, trial never used                           -> Free tier note + "Start 1-month Pro/Max free trial"
+ *   Free, trial never used                           -> "Start 30-day trial" (one per account; same trial as the appliance)
  *   Trial ended / not entitled                       -> "Upgrade to Pro / Max"
  * Uses window.VyomiBooster (booster-link.js) and /api/account/booster. Cloud = data-cloud on this script tag. */
 (function () {
@@ -84,7 +84,7 @@
   }
   function enable(trial) {
     run(function () {
-      return api("/enable").then(function (r) {
+      return api(trial ? "/enable?trial=1" : "/enable").then(function (r) {
         if (!r.ok) { toast(r.j.message || "Could not turn on the mesh."); return; }
         // Pro = ONE cloud: a fresh trial pins the cloud of the console it was started from
         if (trial && r.j.clouds === "one" && !r.j.primary_cloud && CLOUD) return api("/primary-cloud", { cloud: CLOUD });
@@ -125,6 +125,9 @@
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
+    } else if (!a.trial_used) {                                     // Free, the account's one 30-day trial not started yet
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Try the Mesh free for 30 days: real compute and AI on your own free GitHub quota. One trial per account.</p>';
+      act = '<button class="go" data-tr ' + (busy ? "disabled" : "") + '>' + (busy ? "Starting trial\u2026" : "Start 30-day trial") + '</button><div class="sub">or <a href="' + PRICING + '" target="_blank" rel="noopener">compare plans</a></div>';
     } else {                                                        // trial used / expired
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">Upgrade to Pro / Max</a>';
