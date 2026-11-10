@@ -105,7 +105,9 @@
     } else if (a.effective) {                                       // Pro / Max / active trial, switched on
       var ss = x && x.session, stt = ss && ss.state, conn = !!(x && x.github && x.github.connected);
       var starting = stt === "pending" || stt === "starting", running = stt === "running", stopping = stt === "stopping";
-      var sub = a.source === "trial" && a.days_left != null ? a.days_left + " day" + (a.days_left === 1 ? "" : "s") + " of free trial left" : "";
+      var tierName = (a.tier || "pro").charAt(0).toUpperCase() + (a.tier || "pro").slice(1);
+      var cloudName = a.clouds === "one" && a.primary_cloud ? ({ aws: "AWS", gcp: "GCP", azure: "Azure" }[a.primary_cloud] || a.primary_cloud) : "";
+      var sub = a.source === "trial" && a.days_left != null ? tierName + " trial: " + a.days_left + " day" + (a.days_left === 1 ? "" : "s") + " left" + (cloudName ? " \u00b7 " + cloudName + " only" : "") : (cloudName ? tierName + " \u00b7 " + cloudName + " only" : "");
       var hrs = x && x.hours_remaining != null ? x.hours_remaining + " h left this cycle" : "";
       var line, btn;
       if (starting) { line = "Starting\u2026 about 2 minutes."; btn = '<button class="go" disabled>Starting\u2026</button>'; }
@@ -120,7 +122,7 @@
         line = (x && x.ended_note) || (conn ? "Runs on the free quota of your own GitHub account." : "Connect your GitHub account to start.");
         btn = '<button class="go" data-ss ' + (busy ? "disabled" : "") + '>' + (conn ? "Join the Mesh" : "Connect GitHub & join") + '</button>';
       }
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? "Trial" : (a.tier || "pro")) + '</span></h4><p>' + esc(line) + '</p>';
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p>' + esc(line) + '</p>';
       act = btn + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
