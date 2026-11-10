@@ -199,13 +199,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager
+from routes import gcp_resourcemanager, app_env
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager]:
+            gcp_resourcemanager, app_env]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -8000,13 +8000,19 @@ def _sync_docker_instance(instance: dict) -> None:
         return
     if status == "absent":
         instance["container_status"] = "missing"
+        # The launch thread hasn't created the container yet (cold image pull,
+        # thread-scheduler lag) — not the same as "stopped". A list/describe
+        # call racing create() used to see "absent" here and permanently mark
+        # the instance stopped before the launch finished, which then made an
+        # immediate reboot 409 (InstanceNotRunning) instead of riding out
+        # _await_reboot_ready's own wait-for-launch poll. Only a launch that
+        # has already concluded (ready, i.e. previously running then removed;
+        # or error) gets treated as a real stop.
+        launch_status = str(instance.get("launch_status") or "").strip().lower()
+        if launch_status in {"", "queued", "starting", "pending"}:
+            return
         if str(instance.get("state") or "").strip().lower() not in {"terminated", "stopped"}:
             instance["state"] = "stopped"
-        # A failed launch (e.g. docker.sock unreachable) must stay visible as
-        # launch_status=error + launch_error, not be reset to a silent "ready".
-        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "pending"}:
-            instance["launch_status"] = "ready"
-            instance["launch_error"] = ""
         return
     instance["container_status"] = status
     if status == "running":
@@ -24174,6 +24180,14 @@ else:
     # serves S3 + any native cloud wire no explicit route claims.
     from core.wire_ingress import mount as _mount_unified_ingress
     _mount_unified_ingress(app)
+
+# ── AMQP 1.0 listener for Azure Service Bus emulation (Phase B) ─────
+try:
+    from core.servicebus_amqp import mount as _mount_amqp_servicebus
+    _mount_amqp_servicebus(app)
+except Exception as _e:
+    print(f"[servicebus_amqp] AMQP mount skipped: {_e}")
+
 
 
 if __name__ == "__main__":

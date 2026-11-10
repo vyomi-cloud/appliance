@@ -77,7 +77,7 @@ multipass exec "$VM_NAME" -- bash -c '
 # ── Step 3: Pre-pull common base images (saves build time later) ──────────
 echo "▸ Pre-pulling base images (saves time on first deploy)..."
 multipass exec "$VM_NAME" -- sudo bash -c '
-  for img in python:3.14-slim postgres:16-alpine mysql:8.0 hashicorp/vault:1.15 \
+  for img in python:3.14-slim vyomi/postgres:16-alpine-pgvector postgres:16-alpine mysql:8.0 hashicorp/vault:1.15 \
              nats:2-alpine minio/minio:latest amazon/dynamodb-local:latest \
              softwaremill/elasticmq-native:latest fsouza/fake-gcs-server:latest \
              gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators caddy:2-alpine; do

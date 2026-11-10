@@ -4,6 +4,43 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.47] — 2026-11-10
+
+Daily conformance release. **4 product fixes** (AWS 1, Azure 2, all clouds 1); 2 reach Nano and 4 reach the offline appliance; 3 test and harness improvements.
+
+### Highlights
+
+- **Azure Service Bus now speaks AMQP 1.0.** Azure Service Bus clients that connect over AMQP 1.0 can work against the simulator, in Nano and offline.
+- **Siftly app profiles are supported.** Siftly now has app profiles, and the simulator runs Postgres 16 with pgvector, in Nano and offline.
+- **Azure Blob Storage behaves more like the real service.** Blob fidelity improvements make Azure Blob code act more like it does in Azure, in Nano and offline.
+- **EC2 launches no longer end up stopped by mistake.** A list or describe call made while an instance was still launching could flip it to stopped, and that no longer happens in the offline appliance.
+
+### Fixes — AWS
+
+- **[offline]** Don't let a racing list/describe poison an in-flight launch to stopped
+
+### Fixes — Azure
+
+- **[Nano + offline]** Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (#43→#44→#46)
+- **[Nano + offline]** Azure Service Bus over AMQP 1.0 (Rohith's stack #34→#45)
+
+### Fixes — all clouds
+
+- **[offline]** Stop running the CI simulator as root for docker.sock access
+
+<details><summary>Test and harness improvements (3)</summary>
+
+- Print docker.sock gid + simulator access for the EC2 regression
+- Don't redeclare group_add in the CI compose override
+- Stop running the CI simulator as root for docker.sock access
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.47`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.46] — 2026-11-10
 
 Daily conformance release. **2 product fixes** (all clouds 2); 0 reach Nano and 2 reach the offline appliance.

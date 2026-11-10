@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -84,4 +86,26 @@ func loadConfig() *Config {
 		addMultipassToPath()
 	}
 	return c
+}
+
+// simulatorPort returns the port the simulator is listening on (default 9000).
+func (c *Config) simulatorPort() int {
+	if pStr := envAny("", "VYOMI_SIMULATOR_PORT", "CLOUD_LEARN_SIMULATOR_PORT"); pStr != "" {
+		if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
+			return p
+		}
+	}
+	return 9000
+}
+
+// applianceURL returns the base URL to reach the simulator (honoring Multipass VM IP and custom port).
+func (c *Config) applianceURL() string {
+	port := c.simulatorPort()
+	host := "localhost"
+	if c.resolveSubstrate() == "multipass" {
+		if ip := c.applianceIp(); ip != "" {
+			host = ip
+		}
+	}
+	return fmt.Sprintf("http://%s:%d", host, port)
 }
