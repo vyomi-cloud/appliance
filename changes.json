@@ -1,25 +1,25 @@
 {
- "at": "2026-11-09T23:59:18+00:00",
+ "at": "2026-11-10T00:59:29+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon S3",
+   "service": "Identity and Access Management",
    "kind": "announcement",
-   "key": "feed:aws:5abefd3e15c1",
-   "title": "AWS Glue adds 100 new native connectors for popular SaaS applications",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-glue-adds-100-new-native-connectors/",
-   "detail": "AWS Glue now supports 100 new native connectors that simplify access to data in popular SaaS and REST API-based applications. Previously, bringing data from SaaS applications into AWS required writing custom code. Now, teams can create a connection once in the AWS Glue Data Catalog and reuse it across ETL jobs with the same permissions model they already use for AWS Glue. The new connectors span generative AI, finance, payments, marketing, product analytics, human resources, engineering, IT operations, and collaboration tools. AI teams can bring usage and cost data from model providers such as",
+   "key": "feed:aws:8e588b206383",
+   "title": "Amazon Bedrock AgentCore now offers a Web Search API",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-bedrock-agentcore-web-search-api/",
+   "detail": "Today, AWS announces the general availability of the Web Search API on Amazon Bedrock AgentCore, which lets you search the web with a single API call. Web Search on AgentCore has been available as an MCP tool through AgentCore Gateway. The new InvokeWebSearch API gives applications, custom agent loops, and data pipelines search results with no resources to create. The API returns ranked results from the Amazon-operated web index behind Web Search on AgentCore. Each result includes a text extract and, when available, the page title, URL, and publication time. You can filter each request by doma",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Identity and Access Management",
+   "service": "CloudWatch Logs, CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:8b20785c0d1e",
-   "title": "AWS Sign-In now supports OAuth 2.0 Token Exchange",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-signin-token-exchange/",
-   "detail": "AWS Sign-In now supports OAuth 2.0 Token Exchange (RFC 8693), enabling applications to exchange third-party OpenID Connect (OIDC) tokens for short-lived, AWS service-scoped OAuth access tokens. This allows customers to securely integrate third-party applications with supported AWS services without sharing AWS credentials, while maintaining access controls through AWS Identity and Access Management (IAM). This capability is available for supported AWS services that use AWS Sign-In OAuth , enabling customers to use existing identity providers to securely access AWS services without managing addi",
+   "key": "feed:aws:c45aff83cb46",
+   "title": "Amazon CloudWatch Logs announces account-level retention policies",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-log-retention/",
+   "detail": "Amazon CloudWatch Logs now supports account-level retention policies, so you can use a single policy to set how long log data is kept across all or subset of log groups in an AWS account. Account-level policies allow platform and security teams to bring each log group in line with their retention standards. With today's launch, you can create policies that cover all log groups in the account or apply to a specific set of log groups with names that start with a prefix, such as /aws/lambda. You can additionally choose whether it applies to existing log groups or only new ones. When more than one",
    "actionable": false
   }
  ],
