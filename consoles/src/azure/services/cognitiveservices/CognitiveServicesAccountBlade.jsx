@@ -17,10 +17,10 @@ import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, InfoBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { remember, forget } from "../../kit/recent.js";
+import { remember, forget, setInactive, isNotFound } from "../../kit/recent.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import TasksPanel from "../../kit/TasksPanel.jsx";
@@ -65,10 +65,13 @@ export default function CognitiveServicesAccountBlade({ params }) {
   const panel = params.panel || "overview";
   const acct = useAsync(() => api.getAccount(rg, name), [rg, name]);
   const self = `#/cognitiveservices/${encodeURIComponent(rg)}/${encodeURIComponent(name)}`;
-  useEffect(() => { if (acct.data) remember({ name, type: "Azure AI services", href: self }); }, [!!acct.data, self]);
+  useEffect(() => { if (acct.data) { remember({ name, type: "Azure AI services", href: self }); setInactive(self, false); } }, [!!acct.data, self]);
+  const gone = !!acct.error && isNotFound(acct.error);
+  useEffect(() => { if (gone) setInactive(self, true); }, [gone, self]);
 
   let body;
   if (acct.loading && !acct.data) body = <Loading />;
+  else if (gone) body = <><InfoBar>{name} is inactive. It was created in an earlier session and no longer exists in this one.</InfoBar><Link href="#/cognitiveservices">Back to Azure AI services</Link></>;
   else if (acct.error) body = <><ErrorBar error={acct.error} title="Failed to load the account" /><Link href="#/cognitiveservices">Back to Azure AI services</Link></>;
   else {
     const a = acct.data, reload = acct.reload;

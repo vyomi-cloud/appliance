@@ -1,6 +1,6 @@
 /* Portal Home: "Azure services" tile strip and the "Resources" list (Recent / Favorite). */
 import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button, Tab, TabList, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Link, Tooltip } from "@fluentui/react-components";
 import {
   Add24Regular, ArrowRight24Regular, Key24Regular, Cube24Regular, Grid24Regular, Board24Regular, Copy16Regular, Checkmark16Regular,
@@ -10,7 +10,8 @@ import { useAsync } from "../../common/useAsync.js";
 import { sdkEndpoint } from "../../common/connect.js";
 import { listStorageAccounts, listKeys } from "../services/storage/api.js";
 import { Glyph, NotSimulated } from "../kit/common.jsx";
-import { recent } from "../kit/recent.js";
+import { recent, setInactive } from "../kit/recent.js";
+import { listAccounts as listAiAccounts } from "../services/cognitiveservices/api.js";
 import { HOME_TILES, byId } from "../services/registry.js";
 
 const ago = (t) => {
@@ -93,6 +94,15 @@ import { useK8sLock, LockBadge } from "../../common/k8sTier.jsx";
 export default function Home() {
   const k8s = useK8sLock("azure");
   const [tab, setTab] = useState("recent");
+  const [tick, setTick] = useState(0);
+  // Reconcile remembered Azure AI services with what exists now; vanished ones become inactive.
+  useEffect(() => {
+    listAiAccounts().then((xs) => {
+      const live = new Set(xs.map((a) => `#/cognitiveservices/${encodeURIComponent(a.resourceGroup)}/${encodeURIComponent(a.name)}`));
+      recent().filter((r) => r.type === "Azure AI services").forEach((r) => setInactive(r.href, !live.has(r.href)));
+      setTick((t) => t + 1);
+    }).catch(() => {});
+  }, []);
   const rows = recent();
   return (
     <div className="vy-home">
@@ -118,7 +128,7 @@ export default function Home() {
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.href}>
-                  <TableCell><Link href={r.href}>{r.name}</Link></TableCell>
+                  <TableCell>{r.inactive ? <span style={{ opacity: 0.55, cursor: "not-allowed" }} title="Inactive: this resource no longer exists">{r.name} (inactive)</span> : <Link href={r.href}>{r.name}</Link>}</TableCell>
                   <TableCell>{r.type}</TableCell>
                   <TableCell>{ago(r.viewed)}</TableCell>
                 </TableRow>
