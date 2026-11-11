@@ -13,7 +13,7 @@ const run = promisify(execFile);
 
 const SIM = (process.env.SIM_URL || "http://127.0.0.1:19000").replace(/\/$/, "");
 const TOKEN = process.env.MESH_TOKEN || "";
-if (!TOKEN) { console.error("MESH_TOKEN is required"); process.exit(2); }
+// MESH_TOKEN is optional: a Mesh reached over the loopback tunnel may accept tokenless requests (a WRONG token is a 401, so never pass a placeholder).
 const SUB = "00000000-0000-0000-0000-cloudlearn01";
 const T = `${Date.now() % 1000000}`;
 const RG = `bd-rg-${T}`;
@@ -23,7 +23,7 @@ const rows = []; let fails = 0;
 const rec = (check, status, detail = "") => { rows.push({ check, status, detail }); if (status === "FAIL") fails++; console.log(`[${status}] ${check}${detail ? " :: " + String(detail).slice(0, 220) : ""}`); };
 const chk = (check, ok, detail = "") => rec(check, ok ? "PASS" : "FAIL", detail);
 
-const H = { "content-type": "application/json", "X-Vyomi-Session-Token": TOKEN };
+const H = { "content-type": "application/json", ...(TOKEN ? { "X-Vyomi-Session-Token": TOKEN } : {}) };
 const arm = async (method, path, body) => {
   const r = await fetch(SIM + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(60000) });
   const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch { /* */ }
@@ -43,7 +43,7 @@ const sshHost = process.env.SSH_HOST || "host.vyomi";
 const dockerState = async (cname) => {   // read-only: docker inspect of the container behind OUR vm
   try { const o = await run("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=25", sshHost, `docker inspect -f '{{.State.Status}}' ${cname} 2>/dev/null || echo absent`], { timeout: 45000 }); return o.stdout.trim().split("\n").pop(); } catch { return "ssh-failed"; }
 };
-const azRest = (method, url, body, extra = []) => run("az", ["rest", "--skip-authorization-header", "--only-show-errors", "--method", method, "--url", SIM + url, "--headers", `X-Vyomi-Session-Token=${TOKEN}`, "Content-Type=application/json", ...(body ? ["--body", JSON.stringify(body)] : []), ...extra], { env: { ...process.env, AZURE_CORE_COLLECT_TELEMETRY: "false" }, timeout: 90000 });
+const azRest = (method, url, body, extra = []) => run("az", ["rest", "--skip-authorization-header", "--only-show-errors", "--method", method, "--url", SIM + url, "--headers", ...(TOKEN ? [`X-Vyomi-Session-Token=${TOKEN}`] : []), "Content-Type=application/json", ...(body ? ["--body", JSON.stringify(body)] : []), ...extra], { env: { ...process.env, AZURE_CORE_COLLECT_TELEMETRY: "false" }, timeout: 90000 });
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2" };
 const server = http.createServer(async (req, res) => {
@@ -52,7 +52,7 @@ const server = http.createServer(async (req, res) => {
     if (/^\/(_wire|api|subscriptions|azure-data)\b/.test(u.pathname)) {
       const chunks = []; for await (const c of req) chunks.push(c);
       const hd = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !["host", "connection", "content-length"].includes(k)));
-      hd["x-vyomi-session-token"] = TOKEN;
+      if (TOKEN) hd["x-vyomi-session-token"] = TOKEN;
       const r = await fetch(SIM + req.url, { method: req.method, headers: hd, body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(chunks) });
       res.writeHead(r.status, Object.fromEntries([...r.headers].filter(([k]) => !["content-encoding", "transfer-encoding", "content-length"].includes(k))));
       return res.end(Buffer.from(await r.arrayBuffer()));
@@ -215,7 +215,7 @@ try {
     await waitPower(RG, NAMES.cli, "running", 120);
     const rowC = await listRow(NAMES.cli);
     chk("CLI->UI: `az rest` VM shows in the console list with same name/size/location/status", !!rowC && /Standard_B1s/.test(rowC) && /East US/i.test(rowC) && /Running/i.test(rowC), rowC || "not listed");
-  } catch (e) { rec("CLI->UI: `az rest` VM PUT", "FAIL", String(e.stderr || e.message).replace(TOKEN, "***").slice(0, 200)); }
+  } catch (e) { rec("CLI->UI: `az rest` VM PUT", "FAIL", String(e.stderr || e.message).replace(TOKEN || "\u0000", "***").slice(0, 200)); }
 
   await arm("DELETE", `${vmP(RG, NAMES.cli)}?api-version=${VMV}`); created.splice(Math.max(0, created.findIndex((c) => c[1] === NAMES.cli)), 1);
   // ---------------- (5) form validation

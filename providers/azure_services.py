@@ -768,6 +768,11 @@ def _view(rec: dict) -> dict:
     if isinstance(props, dict) and "administratorLoginPassword" in props:
         # Real Azure never returns the SQL admin password; it stays stored for the data plane.
         out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+        props = out["properties"]
+    osp = props.get("osProfile") if isinstance(props, dict) else None
+    if isinstance(osp, dict) and "adminPassword" in osp:
+        # Real ARM never echoes a VM's adminPassword (the Docker guest is still provisioned from the stored value).
+        out["properties"] = {**props, "osProfile": {k: v for k, v in osp.items() if k != "adminPassword"}}
     return out
 
 
@@ -1134,9 +1139,18 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         if not rec:
             return _error(404, "ResourceNotFound", f"Resource '{rid}' not found.")
         _ext.after_upsert(_state, rec)
-        return JSONResponse(_view(rec))
+        _v = _view(rec)
+        if full_type.lower() == _ext.VM_T and "instanceview" in str(request.query_params.get("$expand") or "").lower():
+            from core import azure_compute_disks_vm as _vmd
+            _v = _vmd.with_instance_view(_v, rec, lambda r: _ext.instance_view(r, _vm_run_executor))
+        return JSONResponse(_v)
     if method in ("PUT", "PATCH"):
         payload = await _safe_json(request)
+        if full_type.lower() == "microsoft.compute/virtualmachines":
+            from core import azure_compute_disks_vm as _vmd
+            _pwbad = _vmd.validate_password(payload)
+            if _pwbad:
+                return JSONResponse(status_code=_pwbad["status"], content=_pwbad["body"])
         # Host-budget gate for Azure VMs (clamp 30%-50% of host CPU+RAM). Run
         # BEFORE _upsert so over-budget creates don't leave dangling metadata.
         # Only on new-create (key not in _state) so updates aren't double-billed.
@@ -1231,6 +1245,8 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if full_type.lower() == _ext.VM_T and key in _state:
             _ext.after_vm_upsert(_state, _state[key])
+            from core import azure_compute_disks_vm as _vmd
+            _vmd.ensure_vm_disks(_state, _state[key])   # OS/data disks are real Microsoft.Compute/disks resources
         if _new_vault and key in _state:   # the creator gets data-plane access, as on the core engine + Nano
             from core.azure_arm_core import grant_vault_creator
             grant_vault_creator(_state, _state[key], rid, sub, rg)
@@ -1267,6 +1283,9 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         rec = _state.pop(key, None)
         _ext.on_delete(_state, rec)
         _deprovision_on_delete(full_type, rec)
+        if rec is not None and full_type.lower() == _ext.VM_T:
+            from core import azure_compute_disks_vm as _vmd
+            _vmd.delete_vm_disks(_state, rec)
         if rec is not None:
             _record_usage("azure.delete", {"type": full_type, "name": leaf_name, "resource_id": rid})
             _cloudsim_sync_arm_service(full_type, rid, leaf_name, str((rec or {}).get("location") or DEFAULT_LOCATION), action="delete")
@@ -1658,6 +1677,25 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
         rt = props.setdefault("runtime", {})
         container = rt.get("containerName")
         backend = rt.get("backend")
+        if container and backend == "docker":
+            # Docker-backed VM (Mesh / CloudLite+): drive the sibling container through the shared compute backend
+            # (core.azure_arm_core), the same path the ARM core uses. Previously this fell into the metadata-only
+            # branch, so powerOff/deallocate left the container running.
+            from core import azure_arm_core as _core
+            drove = _core._vm_drive_compute(rec, action)
+            new_status = {"start": "running", "restart": "running",
+                          "poweroff": "stopped", "deallocate": "deallocated"}[action]
+            rt["containerStatus"] = new_status
+            props["powerState"] = f"PowerState/{new_status}"
+            try:
+                import server as _srv
+                _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
+            except Exception:
+                pass
+            _record_usage(f"azure.vm.{action}", {"vm": resource_name, "container": container, "resource_id": parent_rid})
+            return JSONResponse({"status": "Succeeded", "action": action, "container": container,
+                                 "containerStatus": new_status,
+                                 "note": "runtime container updated" if drove else "unchanged (backend call failed)"})
         if not container or backend not in ("lxd", "multipass"):
             # Metadata-only VM (no host runtime). Update logical state so the
             # console still reflects the action; just no real container call.
@@ -1745,6 +1783,10 @@ def _vm_run_executor(vm: dict, script: str):
     rt = ((vm.get("properties") or {}).get("runtime") or {})
     if not isinstance(rt, dict) or not rt.get("containerName"):
         return None
+    if rt.get("backend") == "docker":
+        # Docker-backed VM: exec in the sibling container through the shared compute backend.
+        from core import azure_arm_core as _core
+        return _core._vm_guest_exec(vm, script)
     try:
         import server as _srv
         inst = _srv._azure_vm_flat_instance(vm)
