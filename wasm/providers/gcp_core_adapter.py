@@ -121,6 +121,20 @@ def _rec(d, name_field="name"):
 
 
 def _ok_list(svc, name_field="name"):
+    if svc == "kms":
+        # The console grid lists crypto keys of EVERY key ring (any location), the way the real console does; a key a
+        # client created natively in another ring (SDK / gcloud) must show up too, not only the wizard's default ring.
+        items = []
+        try:
+            rings = list(_kms._rings(_STORES["kms"]).keys())
+        except Exception:
+            rings = []
+        default = f"{_P}/locations/{LOC}/keyRings/{RING}"
+        for ring in rings if rings else [default]:
+            ring_path = ring if str(ring).startswith("projects/") else default
+            _st, parsed = _call("kms", "GET", "/v1/" + ring_path + "/cryptoKeys")
+            items.extend(_items(parsed) if isinstance(parsed, dict) else [])
+        return {"ok": True, "items": [_rec(x, name_field) for x in items]}
     st, parsed = _call(svc, "GET", _COLLECTION[svc]())
     return {"ok": True, "items": [_rec(x, name_field) for x in _items(parsed)]}
 
@@ -568,11 +582,26 @@ def _resource_op(service, operation, name="", body=None):
     # ---------------- KMS (cryptoKeys under a default key ring) ----------------
     if svc == "kms":
         base = f"{_P}/locations/{LOC}/keyRings/{RING}/cryptoKeys"
+        if name and operation not in ("List", "Create"):
+            # a key can live in any key ring/location (created natively or from the wizard): resolve its real ring
+            try:
+                for _ring in list(_kms._rings(_STORES["kms"]).keys()):
+                    if _STORES["kms"].get_key(f"{_ring}/cryptoKeys/{name}"):
+                        base = f"{_ring}/cryptoKeys"
+                        break
+            except Exception:
+                pass
         if operation == "List":
             _ensure_keyring()
             return _ok_list(svc)
         if operation == "Create":
-            _ensure_keyring()
+            # the wizard's Key ring and Region fields decide where the key is created (they were ignored: every key
+            # landed in global/demo, so `gcloud kms keys list --location <region> --keyring <ring>` could not find it)
+            _kr = str(body.get("keyring") or body.get("keyRing") or RING).strip() or RING
+            _loc = str(body.get("region") or body.get("location") or LOC).strip().split(" ")[0] or LOC
+            _ring_coll = f"{_P}/locations/{_loc}/keyRings"
+            _call("kms", "POST", _ring_coll, {"keyRingId": _kr}, {})     # idempotent; 409 if it exists is ignored
+            base = f"{_ring_coll}/{_kr}/cryptoKeys"
             st, p = _call(svc, "POST", base, {"cryptoKeyId": rid}, {"purpose": "ENCRYPT_DECRYPT"})
             return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}
         if operation == "Get":
@@ -580,7 +609,7 @@ def _resource_op(service, operation, name="", body=None):
             return {"ok": True, **_rec(p)} if st < 300 else {"ok": False, "code": "NotFound", "name": name}
         if operation == "Delete":
             # Cloud KMS keeps key material; drop it from the store for console UX.
-            _STORES["kms"].drop_key(f"projects/{PROJ}/locations/{LOC}/keyRings/{RING}/cryptoKeys/{name}")
+            _STORES["kms"].drop_key(f"{base}/{name}")
             return {"ok": True, "code": None, "name": name}
         if operation == "ListVersions":   # cryptoKeyVersions under a key
             st, p = _call(svc, "GET", f"{base}/{name}/cryptoKeyVersions")
