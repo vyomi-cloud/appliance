@@ -25,3 +25,24 @@ export default async function ({ page, base, name, sleep, SUB, arm, dispatch }) 
     await sleep(2000);
   }
 }
+
+// After the UI-created VM exists: the blade's Deallocate (confirm dialog) must hit the ARM deallocate POST and the VM must read Deallocated.
+export async function after({ page, base, hit, arm, q, sleep, rec }) {
+  const m = /resourceGroups\/([^/]+)\/providers\/Microsoft.Compute\/virtualMachines\/([^/]+)/i.exec(hit.id);
+  await page.goto(`${base}/v4/azure/index.html#/vms/${m[1]}/${m[2]}`, { waitUntil: "domcontentloaded" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const btn = page.getByRole("button", { name: /^Deallocate$/ }).first();
+  await btn.waitFor({ timeout: 30000 });
+  await btn.dispatchEvent("click");
+  const dlg = page.getByRole("dialog", { name: /Deallocate virtual machine/i });
+  await dlg.waitFor({ timeout: 10000 });
+  await dlg.getByRole("button", { name: /^Deallocate$/ }).dispatchEvent("click");
+  let st = "";
+  for (let i = 0; i < 30; i++) {
+    const iv = await arm("GET", hit.id + "/instanceView" + q("2023-09-01"));
+    st = ((iv.json?.statuses || []).map((x) => x.code).find((c) => /^PowerState\//.test(c))) || "";
+    if (/deallocated/i.test(st)) break;
+    await sleep(1500);
+  }
+  rec("UI->API: Deallocate button (confirm dialog) deallocates the VM", /deallocated/i.test(st) ? "PASS" : "FAIL", st);
+}

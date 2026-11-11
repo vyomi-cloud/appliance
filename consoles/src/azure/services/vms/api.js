@@ -1,7 +1,7 @@
 /* Virtual machines over the native Azure wire.
  *   Control plane: ARM  /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}
- *   Power actions: POST .../start | restart | powerOff | deallocate (metadata-only power state —
- *   see core/azure_arm_core.py's generic VM action handler). Auto-shutdown is ENFORCED lazily on
+ *   Power actions: POST .../start | restart | powerOff | deallocate (drive the VM's container —
+ *   see core/azure_arm_core.py's _vm_drive_compute). Auto-shutdown is ENFORCED lazily on
  *   read (core/azure_arm_core.py's _apply_auto_shutdown): no real scheduler runs, but once the
  *   configured local time has passed today the VM's own powerState really does flip to stopped.
  *   Network interface + (optional) public IP address + network security group + its security

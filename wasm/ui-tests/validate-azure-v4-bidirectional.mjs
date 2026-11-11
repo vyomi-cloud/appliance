@@ -223,6 +223,7 @@ try {
       rec(s.title, "UI->API: resource created in the console wizard is returned by the API", hit ? "PASS" : "FAIL", hit ? "" : `not in the ${s.type} list (HTTP ${all.status}, ${(all.json?.value || []).length} items)`);
       if (hit) {
         rec(s.title, "UI->API: same name and a real region in the API response", hit.name === un && (s.global || /\w/.test(hit.location || "")) ? "PASS" : "FAIL", JSON.stringify({ n: hit.name, l: hit.location }));
+        if (drv && drv.after) { try { await drv.after({ page, base, hit, arm, q, sleep, rec: (c, st, d) => rec(s.title, c, st, d) }); } catch (e) { rec(s.title, "driver after() hook", "FAIL", String(e.message).split("\n")[0].slice(0, 120)); } }
         await arm("DELETE", hit.id + q(s.ver));
       }
     }

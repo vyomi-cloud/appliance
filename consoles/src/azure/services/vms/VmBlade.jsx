@@ -198,6 +198,7 @@ function Overview({ a, reload, self }) {
   const notify = useNotify();
   const sub = useSubscription();
   const [del, setDel] = useState(false);
+  const [dealloc, setDealloc] = useState(false);
   const [busy, setBusy] = useState(null);
   const [gap, setGap] = useState(null);
   const [tab, setTab] = useState("properties");
@@ -221,6 +222,7 @@ function Overview({ a, reload, self }) {
         <ToolbarButton disabled={busy} onClick={() => act("start", "Start")}>{busy === "start" ? "Starting..." : "Start"}</ToolbarButton>
         <ToolbarButton disabled={busy} onClick={() => act("restart", "Restart")}>{busy === "restart" ? "Restarting..." : "Restart"}</ToolbarButton>
         <ToolbarButton disabled={busy} onClick={() => act("poweroff", "Stop")}>{busy === "poweroff" ? "Stopping..." : "Stop"}</ToolbarButton>
+        <ToolbarButton disabled={busy} onClick={() => setDealloc(true)}>{busy === "deallocate" ? "Deallocating..." : "Deallocate"}</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Hibernate")}>Hibernate</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Capture")}>Capture</ToolbarButton>
         <ToolbarButton icon={<Delete20Regular />} onClick={() => setDel(true)}>Delete</ToolbarButton>
@@ -262,6 +264,19 @@ function Overview({ a, reload, self }) {
       {tab === "capabilities" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.tools" title="Capabilities" /></div>}
       {tab === "recommendations" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.tools" title="Recommendations" /></div>}
       {tab === "tutorials" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.tools" title="Tutorials" /></div>}
+
+      <Dialog open={dealloc} onOpenChange={(_, d) => !d.open && setDealloc(false)}>
+        <DialogSurface aria-label="Deallocate virtual machine">
+          <DialogBody><DialogTitle>Deallocate virtual machine</DialogTitle>
+            <DialogContent>
+              <p style={{ fontSize: 13 }}>Deallocate '{a.name}'? The VM shuts down and its compute is released, so compute billing stops. Disks and the network interface are kept; a dynamic public IP address may change on the next start. Use <b>Stop</b> instead to shut the guest down but keep the compute reserved (still billed).</p>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" onClick={() => { setDealloc(false); act("deallocate", "Deallocate"); }}>Deallocate</Button>
+              <Button onClick={() => setDealloc(false)}>Cancel</Button>
+            </DialogActions></DialogBody>
+        </DialogSurface>
+      </Dialog>
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="virtual machine" names={[a.name]}
         onConfirm={async () => {
@@ -1102,9 +1117,9 @@ function NetworkSettings({ a }) {
   );
 }
 
-// ── Run command (POST .../virtualMachines/{vm}/runCommand) — a bounded, deterministic script
-// interpreter (core/azure_arm_core.AzureArm._vm_run_command, azure.vms.run_command): echo/
-// hostname/whoami/date/uname run for real against this VM's own data, and the IMDS-token +
+// ── Run command (POST .../virtualMachines/{vm}/runCommand) — runs the script inside the VM's
+// own container (core/azure_arm_core.AzureArm._vm_run_command, azure.vms.run_command); the
+// result carries the real stdout/stderr. The IMDS-token +
 // Key Vault secret-fetch pattern demonstrates a system-assigned identity's token really being
 // checked against a real role assignment (azure.vms.identity) — an unrecognized script fails
 // honestly (non-zero exit) instead of faking success. ─────────────────────────────────────
