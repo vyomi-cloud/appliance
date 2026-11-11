@@ -135,6 +135,14 @@ def _ops_in(path: str) -> set[str]:
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
             ops.discard(fn_ops[fname])
+    # AWS cores with a PascalCase dispatch table expose exactly that table; their other
+    # underscore-prefixed verb-named functions (_create_grand, _publish_to_topic, ...) are
+    # internal helpers, not SDK operations.
+    b = os.path.basename(path)
+    if keys_all and not b.startswith(("gcp_", "azure_")):
+        for fname, op in fn_ops.items():
+            if fname.startswith("_") and fname not in dispatched and op not in keys_all:
+                ops.discard(op)
     return ops
 
 
