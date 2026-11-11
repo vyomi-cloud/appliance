@@ -146,6 +146,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-gcp-sdk-info-routes",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_sdk_info_routes_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-sdk-info-routes",
       "target": "offline",
       "cloud": "aws",
