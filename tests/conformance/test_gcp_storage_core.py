@@ -127,6 +127,21 @@ def run() -> int:
     mb = gcs.dispatch(st, "GET", "/storage/v1/b/nope", {}, {}, b"")
     _check("missing bucket 404", mb.status == 404)
 
+    # 12. anywhereCaches.pause (upstream storage.anywhereCaches.pause)
+    gcs.dispatch(st, "POST", "/storage/v1/b", {"project": "p"}, {}, b'{"name":"cachebkt"}')
+    ac = "/storage/v1/b/cachebkt/anywhereCaches"
+    _check("anywhereCaches pause unknown cache 404",
+           gcs.dispatch(st, "POST", ac + "/us-central1-a/pause", {}, {}, b"").status == 404)
+    _check("anywhereCaches insert 200",
+           gcs.dispatch(st, "POST", ac, {}, {}, b'{"zone":"us-central1-a"}').status == 200)
+    pz = gcs.dispatch(st, "POST", ac + "/us-central1-a/pause", {}, {}, b"")
+    _check("anywhereCaches.pause -> AnywhereCache paused",
+           pz.status == 200 and _jbody(pz)["kind"] == "storage#anywhereCache" and _jbody(pz)["state"] == "paused")
+    rs = gcs.dispatch(st, "POST", ac + "/us-central1-a/resume", {}, {}, b"")
+    _check("anywhereCaches.resume -> running", _jbody(rs)["state"] == "running")
+    _check("anywhereCaches.list has cache",
+           len(_jbody(gcs.dispatch(st, "GET", ac, {}, {}, b""))["items"]) == 1)
+
     print("\nGCS storage-core conformance: ALL GREEN")
     return 0
 
