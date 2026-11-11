@@ -816,6 +816,7 @@ class AwsWireRouter:
         self.az_table = s.get("az_table") or AzureTableStore()
         self.az_arm = s.get("az_arm") or AzureArm()   # ARM control plane — read by the blob core for CORS/lifecycle/static-website enforcement
         self.az_arm.acr_store = None   # set below once the ACR store exists (Defender for Containers image scanning)
+        self.az_arm.kv_certs_store = self.az_kvcerts   # vault delete / RG delete purges the vault's secrets + certs
         self.az_arm.kv_secrets_store = self.az_kvsec   # APIM named values: Key Vault-type listValue resolves against this SAME space's KV secrets
         if getattr(self.az_arm, "sql_store", None) is None:   # Azure SQL export/import: this router's SQL data plane + Blob store
             self.az_arm.sql_store = self.rds
@@ -1880,7 +1881,19 @@ class AwsWireRouter:
 
         if svc == "az-openai":
             from core import ai_models_core
-            return ai_models_core.azure_openai_dispatch(self.az_arm.state, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            try:
+                from core import app_context as _ctx
+            except ImportError:      # Nano's flat layout has no space-scoped app_context: its az_arm.state is the one real state
+                _ctx = None
+            # The account + deployment records live in the AZURE space. /openai/... carries no provider marker, so the request runs
+            # as the default (AWS) provider and the space-scoped ARM state resolved to the empty AWS space -> DeploymentNotFound
+            # for a deployment that exists (the console chat playground's account-less call).
+            tok = _ctx.REQUEST_PROVIDER.set("azure") if _ctx is not None else None
+            try:
+                return ai_models_core.azure_openai_dispatch(self.az_arm.state, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            finally:
+                if tok is not None:
+                    _ctx.REQUEST_PROVIDER.reset(tok)
 
         if svc == "backup":
             from core import backup_core
@@ -2288,7 +2301,12 @@ class AwsWireRouter:
                 # the console sends the vault it's showing as `x-vyomi-vault` (azure/services/
                 # keyvaults/api.js setActiveVault) so the Networking blade's publicNetworkAccess /
                 # networkAcls can actually be enforced (azure.keyvaults.networking).
-                vault = lheaders.get("x-vyomi-vault", "")
+                vault = az_kvsec.vault_of(path, headers)
+                if vault and not az_kvsec.vault_exists(self.az_arm.state, vault):
+                    _nf = az_kvsec.vault_not_found(vault)
+                    return {"status": _nf.status, "headers": {"content-type": "application/json"}, "body": _nf.body}
+                if svc in ("az-kv-secrets", "az-kv-certs"):
+                    store = az_kvsec.scoped(store, vault)    # per-vault secrets/certs (no vault -> shared legacy namespace)
                 if vault and keyvault_network_denied(self.az_arm.state, vault):
                     body_json = json.dumps({"error": {"code": "Forbidden",
                         "message": f"Client address is not authorized and caller is not a trusted "

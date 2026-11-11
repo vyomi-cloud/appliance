@@ -86,7 +86,7 @@ def run() -> int:
     r = kv("PUT", "/secrets/s1", "", {"value": "x"})
     _check("no vault header: unaffected by any vault's networking", r["status"] == 200)
     r = kv("PUT", "/secrets/s1", "no-such-vault", {"value": "x"})
-    _check("unknown vault name: unaffected (not evidence of a restriction)", r["status"] == 200)
+    _check("unknown vault name: 404 VaultNotFound (the vault does not exist; never a 403 restriction)", r["status"] == 404 and b"VaultNotFound" in r["body"])
 
     # Enforcement is genuinely per-vault: netdenykv's restriction never leaks onto netopenkv,
     # which shares the SAME global keys/secrets/certs store (azure.keyvaults.access_configuration).

@@ -149,6 +149,10 @@ except ImportError:
     import azure_netcfg_core as netcfg             # type: ignore
     import azure_lb_core as lbcore                 # type: ignore
     import azure_disks_core as diskcore            # type: ignore
+try:
+    from core import azure_compute_disks_vm as vmdisks
+except ImportError:
+    import azure_compute_disks_vm as vmdisks       # type: ignore
 try:                                              # v4 AZ-02..05: KEDA / AKS extensions, Cosmos CORS+gateway+CMK, Service Bus CMK+network rules, App Config CMK, subnet delegation
     from core import azure_cfgext_core as cfgext
 except ImportError:
@@ -1079,7 +1083,15 @@ def _view(rec: dict) -> dict:
     if isinstance(props, dict) and "administratorLoginPassword" in props:
         # Real Azure never returns the SQL admin password; it stays stored for the data plane.
         out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    osp = (out.get("properties") or {}).get("osProfile") if isinstance(out.get("properties"), dict) else None
+    if isinstance(osp, dict) and "adminPassword" in osp:
+        # Real Azure never returns a VM's admin password on GET (found by the Mesh VM bi-directional run); it stays stored for the guest.
+        out["properties"] = {**out["properties"], "osProfile": {k: v for k, v in osp.items() if k != "adminPassword"}}
     return out
+
+
+def _wants_iv(query) -> bool:
+    return "instanceview" in str((query or {}).get("$expand") or "").lower()
 
 
 def _rg_from_id(rid: str):
@@ -1155,6 +1167,62 @@ def _err(status: int, code: str, message: str):
     return {"status": status, "headers": {}, "body": {"error": {"code": code, "message": message}}}
 
 
+# ── VM compute-backend seam (Docker VMs on Mesh / CloudLite+; metadata-only VMs have no runtime) ──
+def _vm_compute(rec: dict):
+    """(backend, Instance) when the VM is backed by a live-able Docker container, else None.
+    Tests monkeypatch this."""
+    try:
+        rt = (rec.get("properties") or {}).get("runtime") or {}
+        cn = str(rt.get("containerName") or "")
+        if rt.get("backend") != "docker" or not cn:
+            return None
+        import server as _srv
+        iid = rt.get("instanceId") or cn[len("vyomi-i-"):]
+        inst = _srv._docker_instance_obj({"instance_id": iid, "container_name": cn, "provider": "azure",
+                                          "name": rec.get("name") or iid, "runtime_backend": "docker"})
+        return _srv._docker_compute(), inst
+    except Exception:
+        return None
+
+
+def _vm_drive_compute(rec: dict, action: str) -> bool:
+    """Best effort: make the container follow the ARM power action. Never raises."""
+    ci = _vm_compute(rec)
+    if not ci:
+        return False
+    be, inst = ci
+    try:
+        if action in ("poweroff", "deallocate"):
+            be.stop(inst)
+        elif action == "start":
+            be.start(inst)
+        elif action == "restart":
+            if be.status(inst) == "running":
+                be.reboot(inst)
+            else:
+                be.start(inst)
+        return True
+    except Exception as exc:
+        print(f"[azure-vm] compute backend {action} failed: {exc}")
+        return False
+
+
+def _vm_guest_exec(rec: dict, script: str):
+    """Run `script` with sh -c (60s cap) in the VM's container -> (exit, stdout, stderr), or None if no container."""
+    ci = _vm_compute(rec)
+    if not ci:
+        return None
+    be, inst = ci
+    try:
+        if be.status(inst) != "running":
+            return None
+        cp = be.exec(inst, ["timeout", "60", "sh", "-c", script])
+        dec = lambda b: b.decode(errors="replace") if isinstance(b, (bytes, bytearray)) else str(b or "")
+        return cp.returncode, dec(cp.stdout), dec(cp.stderr)
+    except Exception as exc:
+        return 1, "", f"guest exec failed: {exc}"
+
+
 class AzureArm:
     """In-memory Azure Resource Manager control plane (one per Nano instance)."""
 
@@ -1166,6 +1234,7 @@ class AzureArm:
         self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
         self.graph_store = None                  # set by the router/registry: this space's Entra GraphStore (Managed identity sign-ins)
+        self.kv_certs_store = None
         self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
         self.sql_store = None                    # set by the platform: the Azure SQL data plane's SqlStore (database export/import)
         self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
@@ -1471,6 +1540,9 @@ class AzureArm:
         if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "resources" and len(rest_segs) == idx + 1:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Use GET to list resources in a resource group.")
+            # real ARM: listing a group that does not exist is 404, not an empty 200
+            if rg.lower() not in {g["name"].lower() for g in list_resource_groups(self.state)}:
+                return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
             items = [_view(r) for r in self.state.values()
                      if r.get("_sub") == sub and (r.get("_rg") or "").lower() == rg.lower()
                      and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)
@@ -2085,7 +2157,7 @@ class AzureArm:
             # level deeper than their top catalog type — scope the list to the specific parent
             # instance, else two sibling parents' children would bleed into each other's list.
             parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
-            return self._list(sub, rg, full_type, parent_prefix)
+            return self._list(sub, rg, full_type, parent_prefix, query)
 
         rid = _canonical_id(sub, rg, type_chain, names)
         key = rid.lower()
@@ -2100,8 +2172,14 @@ class AzureArm:
             if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             ext_engine.after_upsert(self.state, rec)
+            if full_type.lower() == vmdisks.VM and _wants_iv(query):
+                return _ok(vmdisks.with_instance_view(_view(rec), rec, ext_engine.instance_view))
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
+            if full_type.lower() == vmdisks.VM:
+                bad = vmdisks.validate_password(payload)
+                if bad:
+                    return bad
             bad = ext_engine.validate_write(self.state, rid, full_type, payload)
             if bad:
                 return {"status": bad["status"], "headers": {}, "body": bad["body"]}
@@ -2201,6 +2279,8 @@ class AzureArm:
             if lbcore.handles(full_type) and key in self.state:
                 lbcore.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
+            if full_type.lower() == vmdisks.VM and key in self.state:
+                vmdisks.ensure_vm_disks(self.state, self.state[key])
             if diskcore.handles(full_type) and key in self.state:
                 diskcore.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
@@ -2344,6 +2424,8 @@ class AzureArm:
                 netcfg.on_delete(self.state, rec)
                 lbcore.on_delete(self.state, rec)
                 diskcore.on_delete(self.state, rec)
+                if (rec.get("_type") or "").lower() == vmdisks.VM:
+                    vmdisks.delete_vm_disks(self.state, rec)
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
@@ -2352,6 +2434,21 @@ class AzureArm:
         """Tell the host a resource left ARM state (single DELETE or resource-group
         cascade) so it can drop the data-plane state the resource owned (Nano wires
         ``on_child_delete`` to purge Key Vault secrets/keys). Never breaks a delete."""
+        if str(rec.get("type") or "").lower() == "microsoft.keyvault/vaults":
+            try:       # the vault's own secrets + certificates go with it (data plane is per vault)
+                from core import azure_keyvault_secrets_core as _kvs
+                _vn = str(rec.get("name") or str(rec.get("id") or "").rstrip("/").rsplit("/", 1)[-1])
+                _stores = [getattr(self, "kv_secrets_store", None), getattr(self, "kv_certs_store", None)]
+                if _stores[0] is None:
+                    try:
+                        from core import appliance_stores as _aps
+                        _stores = [_aps.az_kv_secrets_store(), _aps.az_kv_certs_store()]
+                    except Exception:
+                        pass
+                for _s in _stores:
+                    _kvs.purge_vault(_s, _vn)
+            except Exception:
+                pass
         cb = getattr(self, "on_child_delete", None)
         if cb is not None:
             try:
@@ -3780,7 +3877,7 @@ class AzureArm:
             pass
 
     # ── CRUD primitives ───────────────────────────────────────────────────
-    def _list(self, sub, rg, full_type, parent_prefix=None):
+    def _list(self, sub, rg, full_type, parent_prefix=None, query=None):
         ft = full_type.lower()
         items = []
         for rec in list(self.state.values()):
@@ -3793,7 +3890,8 @@ class AzureArm:
             ext_engine.after_upsert(self.state, rec)
             if parent_prefix and not rec.get("id", "").lower().startswith(parent_prefix):
                 continue
-            items.append(_view(rec))
+            items.append(vmdisks.with_instance_view(_view(rec), rec, ext_engine.instance_view)
+                         if ft == vmdisks.VM and _wants_iv(query) else _view(rec))
         return _ok({"value": items})
 
     def _upsert(self, rid, key, full_type, name, catalog, payload, base, patch=False):
@@ -4370,8 +4468,11 @@ class AzureArm:
             props = rec.setdefault("properties", {})
             props.setdefault("runtime", {})["containerStatus"] = new_status
             props["powerState"] = f"PowerState/{new_status}"
+            drove = _vm_drive_compute(rec, action)
             return _ok({"status": "Succeeded", "action": action, "containerStatus": new_status,
-                        "note": "metadata-only (no runtime backing in-browser); logical state updated"})
+                        "note": ("runtime container " + ("updated" if drove else "unchanged (backend call failed)")
+                                 if _vm_compute(rec) else
+                                 "metadata-only (no runtime backing in-browser); logical state updated")})
         if ns == "microsoft.eventgrid" and typ == "topics" and action == "listeventgridmetrics":
             # Simulator-internal read of the topic's REAL, activity-derived counters
             # (core/azure_eventgrid_core.py publish/deliver) — not the generic
@@ -4567,6 +4668,16 @@ class AzureArm:
                         else:
                             ver = secret_rec["versions"].get(secret_rec["current"])
                             out.append(json.dumps({"value": ver.get("value") if ver else None}))
+
+        guest = None if (imds_m or kv_m) else _vm_guest_exec(rec, script)
+        if guest is not None:
+            code, so, se = guest
+            ok = code == 0
+            return {"value": [{"code": "ProvisioningState/succeeded" if ok else "ProvisioningState/failed/" + str(code),
+                               "level": "Info" if ok else "Error",
+                               "displayStatus": "Provisioning succeeded" if ok else "Provisioning failed",
+                               "message": ("Enable succeeded: " if ok else "Enable failed: ")
+                                          + f"\n[stdout]\n{so}\n[stderr]\n{se}\n"}]}
 
         if not imds_m and not kv_m:
             echo_m = self._ECHO_RE.match(stripped)

@@ -615,7 +615,12 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         # azure.keyvaults.networking. The console sends `x-vyomi-vault`; Key Vault's real wire
         # has no other way to say which vault's publicNetworkAccess/networkAcls apply.
         lh0 = {str(k).lower(): v for k, v in (headers or {}).items()}
-        vault0 = lh0.get("x-vyomi-vault", "")
+        vault0 = kvs.vault_of(path, headers)     # path /azure-data/keyvault/{vault}/, x-vyomi-vault, or <vault>.vault.azure.net
+        if vault0 and not kvs.vault_exists(r.az_arm.state, vault0):
+            resp404 = kvs.vault_not_found(vault0)
+            return {"status": resp404.status, "headers": {"content-type": "application/json"}, "body": resp404.body}
+        if kind in ("secrets", "deletedsecrets", "certificates"):
+            st = kvs.scoped(st, vault0)          # per-vault secrets/certs (no vault -> legacy shared namespace)
         if vault0 and keyvault_network_denied(r.az_arm.state, vault0):
             import json as _json
             body_json = _json.dumps({"error": {"code": "Forbidden",

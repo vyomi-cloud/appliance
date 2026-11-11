@@ -7,7 +7,8 @@ offline-cli-azure-app job executions (needs Docker to run the job), offline-post
 To verify on the runner stack (nightly-v4.yml), not here.
 UNCLEAR: offline-sdk-go-azure-operationalinsights prints PASS lines but is scored 0 passed / 400 failed: check how the Go runner output is counted (harness bug?).
 
-## Azure Key Vault data plane is per SPACE, not per VAULT (found 2026-11-11, real product gap)
+## FIXED 2026-11-12 (v4/azure-kv-per-vault, test_azure_keyvault_per_vault_core.py): secrets + certificates are now scoped per vault (vault from `/azure-data/keyvault/{vault}/`, `x-vyomi-vault` or `<vault>.vault.azure.net`; unknown/deleted vault -> 404 VaultNotFound; vault/RG delete purges its secrets+certs). Keys stay per-space (CMK envelopes resolve them from the unscoped store); returned ids still carry the request host (one relay host). Requests with no vault keep the legacy shared namespace.
+## (was) Azure Key Vault data plane is per SPACE, not per VAULT (found 2026-11-11, real product gap)
 Repro (v4-preview): create RG + vault `va`, `PUT /azure-data/keyvault/va/secrets/s1?api-version=7.4`, then
 `GET /azure-data/keyvault/neverexisted/secrets/s1?api-version=7.4` -> 200 with the same secret. Deleting the vault, or the whole RG, leaves the secret readable (200);
 the secret id is `https://<host>/secrets/s1/<ver>` without a vault name. Cause: `core/azure_keyvault_secrets_core.py` KvStore is one store per space; the vault

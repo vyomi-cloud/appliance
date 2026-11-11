@@ -70,7 +70,11 @@ def main():
     sc, _ = call("DELETE", f"{auth}/roleAssignments/{ra}?api-version=2022-04-01")
     check("delete_role_assignment", sc in (200, 204), sc)
 
-    kv = f"/azure-data/keyvault/kvpy{uuid.uuid4().hex[:5]}/keys"
+    kvname = f"kvpy{uuid.uuid4().hex[:5]}"
+    call("PUT", f"{scope}/resourcegroups/kvpy-rg?api-version=2021-04-01", {"location": "eastus"})
+    call("PUT", f"{scope}/resourceGroups/kvpy-rg/providers/Microsoft.KeyVault/vaults/{kvname}?api-version=2023-07-01",
+         {"location": "eastus", "properties": {"sku": {"family": "A", "name": "standard"}, "tenantId": "00000000-0000-0000-0000-000000000000"}})
+    kv = f"/azure-data/keyvault/{kvname}/keys"     # a data-plane call needs an existing vault (real Key Vault: VaultNotFound)
     sc, d = call("POST", f"{kv}/pykey/create?api-version=7.4", {"kty": "RSA"})
     check("create_key", sc == 200 and d.get("key", {}).get("kty") == "RSA", (sc, d))
     sc, d = call("GET", f"{kv}/pykey?api-version=7.4")

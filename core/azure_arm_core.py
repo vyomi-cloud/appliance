@@ -1232,6 +1232,7 @@ class AzureArm:
         self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
         self.graph_store = None                  # set by the router/registry: this space's Entra GraphStore (Managed identity sign-ins)
+        self.kv_certs_store = None
         self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
         self.sql_store = None                    # set by the platform: the Azure SQL data plane's SqlStore (database export/import)
         self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
@@ -2431,6 +2432,21 @@ class AzureArm:
         """Tell the host a resource left ARM state (single DELETE or resource-group
         cascade) so it can drop the data-plane state the resource owned (Nano wires
         ``on_child_delete`` to purge Key Vault secrets/keys). Never breaks a delete."""
+        if str(rec.get("type") or "").lower() == "microsoft.keyvault/vaults":
+            try:       # the vault's own secrets + certificates go with it (data plane is per vault)
+                from core import azure_keyvault_secrets_core as _kvs
+                _vn = str(rec.get("name") or str(rec.get("id") or "").rstrip("/").rsplit("/", 1)[-1])
+                _stores = [getattr(self, "kv_secrets_store", None), getattr(self, "kv_certs_store", None)]
+                if _stores[0] is None:
+                    try:
+                        from core import appliance_stores as _aps
+                        _stores = [_aps.az_kv_secrets_store(), _aps.az_kv_certs_store()]
+                    except Exception:
+                        pass
+                for _s in _stores:
+                    _kvs.purge_vault(_s, _vn)
+            except Exception:
+                pass
         cb = getattr(self, "on_child_delete", None)
         if cb is not None:
             try:
