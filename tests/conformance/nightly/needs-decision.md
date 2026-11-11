@@ -44,3 +44,11 @@ FOUND (Mesh pack / tunnel owner, not fixed by AWS-1):
 - FIXED: Secrets Manager "Secret value" tab showed `-` for Last changed on a secret with no version yet (details section fell back to nothing); now falls back to creation time (`test_secrets_detail_last_changed_core.py`).
 - NOT REPRODUCED alone: EventBridge / Step Functions SAVINGS_NOT_UPDATED (3 findings) are clean when those services are crawled on their own; they only appeared in the 4-hour full crawl (likely the census refresh racing the check). Left open.
 - OPEN, unexplained: RDS `CREATE_NO_ROW` (create with defaults adds no row to the list within the crawler's wait) reproduces alone; likely an async "creating" row that appears late, but not confirmed. Needs a look at the Nano RDS create flow.
+
+## AWS-1: v4 console UI <-> SDK bi-directional report (2026-11-11)
+Suite: `wasm/ui-tests/validate-aws-v4-roundtrip.mjs` (+ `_aws_roundtrip_sdk.py`). UI = the v4.0.0 console (`/v4/aws/`) in Playwright, SDK = boto3 on the same `/_wire`
+(run: `python3 consoles/dev_server.py --port 8741`, then `BASE=http://127.0.0.1:8741 PY=<python+boto3> node wasm/ui-tests/validate-aws-v4-roundtrip.mjs`).
+Result: 84/84 checks pass across 20 services (A UI create->SDK, B SDK create->UI, C SDK delete->UI, D UI delete->SDK): s3 sqs sns dynamodb kms secretsmanager iam vpc ec2 ssm kinesis ecr eventbridge cloudwatch apigateway backup networkmanager states lambda rds (+ cloudformation B,C).
+Product bug found + fixed: RDS ModifyDBInstance ignored DeletionProtection=false (a UI-created instance, default protected, could never be unprotected/deleted). core/rds_core.py + test_rds_modify_deletion_protection_core.py.
+NOT verified (printed as SKIP): EKS (needs k3s backend), Image Builder (pipelines adapter), CloudFormation UI create/delete wizard (B,C pass). Field-level comparison limited to existence/name (+ KMS PendingDeletion, RDS deleting semantics).
+Not covered: bedrock, securityhub, cost-explorer (read-mostly, no create flow). Nano old-console variant (`validate-aws-roundtrip.mjs`): s3 sqs sns dynamodb kms secretsmanager 24/24.

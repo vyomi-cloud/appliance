@@ -11,7 +11,7 @@ const SDK = join(HERE, "_aws_roundtrip_sdk.py");
 const PY = process.env.PY || "python3";
 const sdk = (svc, op, name) => JSON.parse(execFileSync(PY, [SDK, svc, op, name], { env: { ...process.env, VYOMI_BASE_URL: RELAY }, encoding: "utf8" }).trim().split("\n").pop());
 const ONLY = (process.env.ONLY || "s3,sqs,sns,dynamodb,kms,secretsmanager").split(",");
-const RAIL = { s3: /^s3$|simple storage/i, sqs: /\bsqs\b/i, sns: /\bsns\b/i, dynamodb: /dynamodb/i, kms: /\bkms\b|key management/i, secretsmanager: /secrets/i };
+const RAIL = { iam: /^iam$|identity and access/i, vpc: /\bvpc\b/i, ec2: /^ec2$|\bec2\b/i, ssm: /systems manager|^ssm$/i, kinesis: /kinesis/i, ecr: /\becr\b|container registry/i, eventbridge: /eventbridge/i, cloudwatch: /cloudwatch/i, apigateway: /api gateway/i, backup: /^backup$|aws backup/i, networkmanager: /network manager/i, states: /step functions/i, eks: /\beks\b|kubernetes/i, s3: /^s3$|simple storage/i, sqs: /\bsqs\b/i, sns: /\bsns\b/i, dynamodb: /dynamodb/i, kms: /\bkms\b|key management/i, secretsmanager: /secrets/i };
 
 const { server, base } = await startServer();
 const browser = await chromium.launch();

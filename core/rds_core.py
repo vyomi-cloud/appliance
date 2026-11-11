@@ -752,6 +752,8 @@ def _modify_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         if not db.get("master_user_secret"):
             raise RdsError("InvalidParameterCombination", "RotateMasterUserPassword requires ManageMasterUserPassword to be on.", 400)
         _managed_secret(store, "rotate", db)
+    if params.get("DeletionProtection") is not None:   # real RDS: ModifyDBInstance can switch deletion protection on AND off
+        db["deletion_protection"] = _is_true(params["DeletionProtection"])
     if params.get("MultiAZ") is not None:
         multi_az = str(params["MultiAZ"]).lower() == "true"
         db["multi_az"] = multi_az
