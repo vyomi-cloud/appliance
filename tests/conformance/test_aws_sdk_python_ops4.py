@@ -86,6 +86,10 @@ def main():
     check("ssm CancelCommand on a finished command is a no-op", lambda: ssm.list_commands(CommandId=cid)["Commands"][0]["Status"] == "Success")
     check("ssm CancelCommand with an unknown id is refused", lambda: raises(lambda: ssm.cancel_command(CommandId=str(uuid.uuid4())), "InvalidCommandId"))
     check("ssm DescribeInstanceInformation answers", lambda: "InstanceInformationList" in ssm.describe_instance_information())
+    role = "arn:aws:iam::000000000000:role/ssm-dhmc"
+    check("ssm RegisterDefaultHostManagementConfiguration returns the role", lambda: ssm.register_default_host_management_configuration(
+        PermissionModel="SSM", RoleArn=role)["RoleArn"] == role)
+    check("ssm DeregisterDefaultHostManagementConfiguration succeeds", lambda: bool(ssm.deregister_default_host_management_configuration()["ResponseMetadata"]))
 
     vpc = ec2.create_vpc(CidrBlock="10.77.0.0/16")["Vpc"]["VpcId"]
     rt = ec2.create_route_table(VpcId=vpc)["RouteTable"]["RouteTableId"]
