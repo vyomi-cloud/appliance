@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-11T04:00:01+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `spec-commit` Azure monitor: [Monitor] Restore .NET GA diagnostic setting names and fix tenant act… (#47977) ([link](https://github.com/Azure/azure-rest-api-specs/commit/727b3250d559076c6a30513dc6ac11e52decd292))
+- · `announcement` Cloud Monitoring: Feature (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
+
+Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-11T02:59:52+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3010,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 Tracking 4027 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-29T03:51:00+00:00
-
-Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 4 actionable.**
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed

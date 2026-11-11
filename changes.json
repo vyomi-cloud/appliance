@@ -1,27 +1,28 @@
 {
- "at": "2026-11-11T02:59:52+00:00",
+ "at": "2026-11-11T04:00:01+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "azure",
+   "service": "monitor",
+   "kind": "spec-commit",
+   "key": "azure:monitor:727b3250d5",
+   "title": "Azure monitor: [Monitor] Restore .NET GA diagnostic setting names and fix tenant act\u2026 (#47977)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/727b3250d559076c6a30513dc6ac11e52decd292",
+   "actionable": false
+  },
+  {
    "cloud": "gcp",
-   "service": "storage/v1",
-   "kind": "operation-removed",
-   "key": "gcp:storage/v1:storage.anywhereCaches.pause:removed",
-   "title": "GCP storage/v1: operation storage.anywhereCaches.pause removed",
-   "detail": {
-    "params": [
-     "anywhereCacheId",
-     "bucket"
-    ],
-    "request": "",
-    "response": "AnywhereCache",
-    "http": "POST",
-    "deprecated": false
-   },
+   "service": "Cloud Monitoring",
+   "kind": "announcement",
+   "key": "feed:gcp:6570248db9bc",
+   "title": "Cloud Monitoring: Feature (November 10, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_10_2026",
+   "detail": "VM Extension Manager extension policies for the Ops Agent are now available at the folder and organization levels in Preview . Extension policies provide zonal and global Ops Agent installation, version upgrades, and configuration management. For more information, see VM Extension Manager policies for the Ops Agent . In addition, new read-only APIs are available in Preview for querying the details and status of installed VM extensions. For more information, see View extension details and status .",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
  ]
 }
