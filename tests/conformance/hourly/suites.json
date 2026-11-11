@@ -2160,6 +2160,15 @@
     {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "node tests/conformance/nightly/gcp-validation.mjs", "timeout": 300},
     {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
     {"id": "nightly-gcp-v4-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-v4-roundtrip.mjs", "timeout": 900},
-    {"id": "nightly-gcp-tunnel-recovery", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "written (gcp-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/gcp-tunnel-recovery.py", "timeout": 900}
+    {"id": "nightly-gcp-tunnel-recovery", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "written (gcp-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/gcp-tunnel-recovery.py", "timeout": 900},
+    {"id": "aws-vpc-describe-unknown-ids-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_vpc_describe_unknown_ids_core.py", "timeout": 120},
+    {"id": "aws-dynamodb-wire-timestamps-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_dynamodb_wire_timestamps_core.py", "timeout": 120},
+    {"id": "aws-lambda-invocation-count-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_lambda_invocation_count_core.py", "timeout": 120},
+    {"id": "aws-secrets-detail-last-changed-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_secrets_detail_last_changed_core.py", "timeout": 120},
+    {"id": "aws-rds-modify-deletion-protection-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_rds_modify_deletion_protection_core.py", "timeout": 120},
+    {"id": "aws-cfn-template-url-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_cfn_template_url_core.py", "timeout": 120},
+    {"id": "aws-iam-list-member-shape-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_iam_list_member_shape_core.py", "timeout": 120},
+    {"id": "nightly-aws-v4-roundtrip", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 2400},
+    {"id": "nightly-aws-tunnel-recovery", "target": "offline", "cloud": "aws", "kind": "api", "pending": "written (aws-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/aws-tunnel-recovery.py", "timeout": 900}
   ]
 }
