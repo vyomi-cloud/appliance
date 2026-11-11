@@ -1,7 +1,7 @@
 /* IAM over the native Query protocol (form POST, XML response). See core/iam_core.py
  * for the exact action set and XML shapes; awsQuery() in common/wire.js parses the XML
  * response into a plain JS object keyed by `${Action}Response`. */
-import { asList, awsJson, awsQuery } from "../../../common/wire.js";
+import { asList, awsJson, awsQuery, pick } from "../../../common/wire.js";
 
 const call = (action, params = {}) => awsQuery("iam", action, params);
 
@@ -23,7 +23,7 @@ export const tagsFromXml = (t) => Object.entries(t || {}).length === 0 ? [] : as
 // ── users ────────────────────────────────────────────────────────────────
 export const createUser = async (params) => (await call("CreateUser", params)).CreateUserResponse.CreateUserResult.User;
 export const getUser = async (UserName) => (await call("GetUser", { UserName })).GetUserResponse.GetUserResult.User;
-export const listUsers = async () => asList((await call("ListUsers", {})).ListUsersResponse.ListUsersResult.Users?.User);
+export const listUsers = async () => asList(pick((await call("ListUsers", {})).ListUsersResponse.ListUsersResult.Users, "User"));
 export const deleteUser = (UserName) => call("DeleteUser", { UserName });
 export const updateUser = (UserName, params) => call("UpdateUser", { UserName, ...params });
 export const tagUser = (UserName, tags) => call("TagUser", { UserName, ...tagsParams(tags) });
@@ -44,15 +44,15 @@ export const deleteLoginProfile = (UserName) => call("DeleteLoginProfile", { Use
 
 // ── groups ───────────────────────────────────────────────────────────────
 export const createGroup = async (params) => (await call("CreateGroup", params)).CreateGroupResponse.CreateGroupResult.Group;
-export const listGroups = async () => asList((await call("ListGroups", {})).ListGroupsResponse.ListGroupsResult.Groups?.Group);
+export const listGroups = async () => asList(pick((await call("ListGroups", {})).ListGroupsResponse.ListGroupsResult.Groups, "Group"));
 export const getGroup = async (GroupName) => {
   const r = (await call("GetGroup", { GroupName })).GetGroupResponse.GetGroupResult;
-  return { group: r.Group, users: asList(r.Users?.User) };
+  return { group: r.Group, users: asList(pick(r.Users, "User")) };
 };
 export const deleteGroup = (GroupName) => call("DeleteGroup", { GroupName });
 export const addUserToGroup = (GroupName, UserName) => call("AddUserToGroup", { GroupName, UserName });
 export const removeUserFromGroup = (GroupName, UserName) => call("RemoveUserFromGroup", { GroupName, UserName });
-export const listGroupsForUser = async (UserName) => asList((await call("ListGroupsForUser", { UserName })).ListGroupsForUserResponse.ListGroupsForUserResult.Groups?.Group);
+export const listGroupsForUser = async (UserName) => asList(pick((await call("ListGroupsForUser", { UserName })).ListGroupsForUserResponse.ListGroupsForUserResult.Groups, "Group"));
 export const attachGroupPolicy = (GroupName, PolicyArn) => call("AttachGroupPolicy", { GroupName, PolicyArn });
 export const detachGroupPolicy = (GroupName, PolicyArn) => call("DetachGroupPolicy", { GroupName, PolicyArn });
 export const listAttachedGroupPolicies = async (GroupName) => asList((await call("ListAttachedGroupPolicies", { GroupName })).ListAttachedGroupPoliciesResponse.ListAttachedGroupPoliciesResult.AttachedPolicies?.member);
@@ -95,7 +95,7 @@ export const listVirtualMfaDevices = async (AssignmentStatus) =>
 // ── roles ────────────────────────────────────────────────────────────────
 export const createRole = async (params) => (await call("CreateRole", params)).CreateRoleResponse.CreateRoleResult.Role;
 export const getRole = async (RoleName) => (await call("GetRole", { RoleName })).GetRoleResponse.GetRoleResult.Role;
-export const listRoles = async () => asList((await call("ListRoles", {})).ListRolesResponse.ListRolesResult.Roles?.Role);
+export const listRoles = async () => asList(pick((await call("ListRoles", {})).ListRolesResponse.ListRolesResult.Roles, "Role"));
 export const deleteRole = (RoleName) => call("DeleteRole", { RoleName });
 export const updateRole = (RoleName, params) => call("UpdateRole", { RoleName, ...params });
 export const updateAssumeRolePolicy = (RoleName, PolicyDocument) => call("UpdateAssumeRolePolicy", { RoleName, PolicyDocument });
@@ -115,7 +115,7 @@ export const deleteRolePermissionsBoundary = (RoleName) => call("DeleteRolePermi
 // ── managed policies ─────────────────────────────────────────────────────
 export const createPolicy = async (params) => (await call("CreatePolicy", params)).CreatePolicyResponse.CreatePolicyResult.Policy;
 export const getPolicy = async (PolicyArn) => (await call("GetPolicy", { PolicyArn })).GetPolicyResponse.GetPolicyResult.Policy;
-export const listPolicies = async () => asList((await call("ListPolicies", {})).ListPoliciesResponse.ListPoliciesResult.Policies?.Policy);
+export const listPolicies = async () => asList(pick((await call("ListPolicies", {})).ListPoliciesResponse.ListPoliciesResult.Policies, "Policy"));
 export const deletePolicy = (PolicyArn) => call("DeletePolicy", { PolicyArn });
 export const createPolicyVersion = async (PolicyArn, PolicyDocument, SetAsDefault) =>
   (await call("CreatePolicyVersion", { PolicyArn, PolicyDocument, SetAsDefault: String(!!SetAsDefault) })).CreatePolicyVersionResponse.CreatePolicyVersionResult.PolicyVersion;
@@ -179,7 +179,7 @@ export const simulatePrincipalPolicy = async (PolicySourceArn, actionNames = [],
 
 // ── Organizations policies (SCP/RCP) — Vyomi-only, see core/iam_core.py ──
 export const createOrgPolicy = async (params) => (await call("CreateOrgPolicy", params)).CreateOrgPolicyResponse.CreateOrgPolicyResult.Policy;
-export const listOrgPolicies = async (Type) => asList((await call("ListOrgPolicies", Type ? { Type } : {})).ListOrgPoliciesResponse.ListOrgPoliciesResult.Policies?.Policy);
+export const listOrgPolicies = async (Type) => asList(pick((await call("ListOrgPolicies", Type ? { Type } : {})).ListOrgPoliciesResponse.ListOrgPoliciesResult.Policies, "Policy"));
 export const describeOrgPolicy = async (PolicyId) => (await call("DescribeOrgPolicy", { PolicyId })).DescribeOrgPolicyResponse.DescribeOrgPolicyResult.Policy;
 export const deleteOrgPolicy = (PolicyId) => call("DeleteOrgPolicy", { PolicyId });
 

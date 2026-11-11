@@ -2,7 +2,7 @@
  * EC2 and VPC share one AWS service ("ec2" credential scope) and one backend
  * core (core/vpc_core.py) — this file only covers the compute/storage/network
  * resource surface the v4 EC2 console needs. */
-import { awsQuery, awsJson, awsRest, asList } from "../../../common/wire.js";
+import { awsQuery, awsJson, awsRest, asList, pick } from "../../../common/wire.js";
 import { vmShownState } from "../../../common/NanoVmPanel.jsx";
 
 /** Flatten a JS object/array into the Query wire's dotted-index form:
@@ -496,6 +496,6 @@ export const addRoleToInstanceProfile = (profile, role) => IAM("AddRoleToInstanc
 export const listInstanceProfiles = () => IAM("ListInstanceProfiles").then((r) => asList(r.InstanceProfiles?.member));
 export const iamCreateRole = (name, trust) => IAM("CreateRole", { RoleName: name, AssumeRolePolicyDocument: trust });
 export const iamAttachRolePolicy = (role, arn) => IAM("AttachRolePolicy", { RoleName: role, PolicyArn: arn });
-export const iamListRoles = () => IAM("ListRoles").then((r) => asList(r.Roles?.Role));
-export const iamListPolicies = () => IAM("ListPolicies", { Scope: "AWS", MaxItems: 200 }).then((r) => asList(r.Policies?.Policy));
+export const iamListRoles = () => IAM("ListRoles").then((r) => asList(pick(r.Roles, "Role")));
+export const iamListPolicies = () => IAM("ListPolicies", { Scope: "AWS", MaxItems: 200 }).then((r) => asList(pick(r.Policies, "Policy")));
 export const asgAccountLimits = () => asg("DescribeAccountLimits");

@@ -147,7 +147,7 @@ export const describeStateMachine = (arn) => sfn("DescribeStateMachine", { state
 export const createStateMachine = (name, definition) => sfn("CreateStateMachine", { name, roleArn: SFN_ROLE_ARN, definition: JSON.stringify(definition) });
 
 // ── RDS databases / RDS Proxy connection helper (sweep AWS-09) ───────────────
-import { awsQuery, asList } from "../../../common/wire.js";
+import { awsQuery, asList, pick } from "../../../common/wire.js";
 const RDS = async (action, params = {}) => { const r = await awsQuery("rds", action, params); return r[`${action}Response`]?.[`${action}Result`] ?? {}; };
 const members = (prefix, xs) => Object.fromEntries((xs || []).map((x, i) => [`${prefix}.member.${i + 1}`, x]));
 export const rdsListProxies = async () => asList((await RDS("DescribeDBProxies")).DBProxies?.DBProxy);
@@ -156,7 +156,7 @@ export const rdsListInstances = async () => asList((await RDS("DescribeDBInstanc
 export const rdsListSecrets = async () => ((await awsJson("secretsmanager", "secretsmanager.ListSecrets", {}, { version: "1.1" })).SecretList || []);
 export const rdsListRoles = async () => {
   const r = await awsQuery("iam", "ListRoles", {}, { version: "2010-05-08" });
-  return asList(r.ListRolesResponse?.ListRolesResult?.Roles?.Role).map((x) => ({ name: x.RoleName, arn: x.Arn }));
+  return asList(pick(r.ListRolesResponse?.ListRolesResult?.Roles, "Role")).map((x) => ({ name: x.RoleName, arn: x.Arn }));
 };
 export async function connectToRds({ proxyName, family, roleArn, secretArn, dbId, subnets, securityGroups }) {
   await RDS("CreateDBProxy", { DBProxyName: proxyName, EngineFamily: family, RoleArn: roleArn, ...members("VpcSubnetIds", subnets), ...members("VpcSecurityGroupIds", securityGroups),

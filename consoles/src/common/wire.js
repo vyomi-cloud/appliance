@@ -85,6 +85,9 @@ export function xmlToObj(node) {
   }
   return o;
 }
+/** IAM/EC2-style list wrapper: real AWS wraps items as `<Users><member>..</member></Users>`; older Vyomi cores used `<Users><User>..</User></Users>`.
+ *  Accept both so a console build works against either wire shape. */
+export const pick = (c, k) => (c && typeof c === "object" ? (c.member ?? c[k]) : undefined);
 export const asList = (v) => (v === undefined || v === null || v === "" ? [] : Array.isArray(v) ? v : [v]);
 
 function parseXml(text) {

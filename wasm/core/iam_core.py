@@ -245,8 +245,15 @@ def _get_user(store, params):
     return _envelope("GetUser", _user_xml(store, u))
 
 
+def _as_member(xml: str, tag: str) -> str:
+    """Real AWS wraps every list item as <member>; the single-resource builders emit <Tag>..</Tag>, so re-tag the outer element."""
+    open_t, close_t = f"<{tag}>", f"</{tag}>"
+    assert xml.startswith(open_t) and xml.endswith(close_t), tag
+    return "<member>" + xml[len(open_t):-len(close_t)] + "</member>"
+
+
 def _list_users(store, params):
-    inner = "<Users>" + "".join(_user_xml(store, store.users[n]) for n in sorted(store.users)) + "</Users>"
+    inner = "<Users>" + "".join(_as_member(_user_xml(store, store.users[n]), "User") for n in sorted(store.users)) + "</Users><IsTruncated>false</IsTruncated>"
     return _envelope("ListUsers", inner)
 
 
@@ -291,7 +298,7 @@ def _get_role(store, params):
 
 
 def _list_roles(store, params):
-    inner = "<Roles>" + "".join(_role_xml(store, store.roles[n]) for n in sorted(store.roles)) + "</Roles>"
+    inner = "<Roles>" + "".join(_as_member(_role_xml(store, store.roles[n]), "Role") for n in sorted(store.roles)) + "</Roles><IsTruncated>false</IsTruncated>"
     return _envelope("ListRoles", inner)
 
 
@@ -331,7 +338,7 @@ def _get_policy(store, params):
 
 
 def _list_policies(store, params):
-    inner = "<Policies>" + "".join(_policy_xml(store, store.policies[a]) for a in sorted(store.policies)) + "</Policies>"
+    inner = "<Policies>" + "".join(_as_member(_policy_xml(store, store.policies[a]), "Policy") for a in sorted(store.policies)) + "</Policies><IsTruncated>false</IsTruncated>"
     return _envelope("ListPolicies", inner)
 
 
@@ -512,14 +519,14 @@ def _group_xml(store, g: dict) -> str:
 
 
 def _list_groups(store, params):
-    inner = "<Groups>" + "".join(_group_xml(store, store.groups[n]) for n in sorted(store.groups)) + "</Groups>"
+    inner = "<Groups>" + "".join(_as_member(_group_xml(store, store.groups[n]), "Group") for n in sorted(store.groups)) + "</Groups><IsTruncated>false</IsTruncated>"
     return _envelope("ListGroups", inner)
 
 
 def _get_group(store, params):
     g = _require_group(store, str(params.get("GroupName", "")).strip())
-    users = "".join(_user_xml(store, store.users[u]) for u in g["members"] if u in store.users)
-    return _envelope("GetGroup", _group_xml(store, g) + f"<Users>{users}</Users>")
+    users = "".join(_as_member(_user_xml(store, store.users[u]), "User") for u in g["members"] if u in store.users)
+    return _envelope("GetGroup", _group_xml(store, g) + f"<Users>{users}</Users><IsTruncated>false</IsTruncated>")
 
 
 def _delete_group(store, params):
@@ -549,7 +556,7 @@ def _remove_user_from_group(store, params):
 
 def _list_groups_for_user(store, params):
     u = _require_user(store, str(params.get("UserName", "")).strip())
-    inner = "<Groups>" + "".join(_group_xml(store, store.groups[n]) for n in u["groups"] if n in store.groups) + "</Groups>"
+    inner = "<Groups>" + "".join(_as_member(_group_xml(store, store.groups[n]), "Group") for n in u["groups"] if n in store.groups) + "</Groups><IsTruncated>false</IsTruncated>"
     return _envelope("ListGroupsForUser", inner)
 
 
@@ -724,7 +731,7 @@ def _list_virtual_mfa_devices(store, params):
         devices = [d for d in devices if d.get("user_name")]
     elif status == "Unassigned":
         devices = [d for d in devices if not d.get("user_name")]
-    items = "".join(_virtual_mfa_device_xml(store, d) for d in sorted(devices, key=lambda d: d["created"]))
+    items = "".join(_as_member(_virtual_mfa_device_xml(store, d), "VirtualMFADevice") for d in sorted(devices, key=lambda d: d["created"]))
     return _envelope("ListVirtualMFADevices", f"<VirtualMFADevices>{items}</VirtualMFADevices>")
 
 
