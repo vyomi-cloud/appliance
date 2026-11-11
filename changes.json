@@ -1,16 +1,6 @@
 {
- "at": "2026-11-11T08:00:02+00:00",
+ "at": "2026-11-11T09:00:01+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "azure",
-   "service": "compute",
-   "kind": "spec-commit",
-   "key": "azure:compute:4f229a4bfc",
-   "title": "Azure compute: Remove Compute and BulkActions C# safe flatten opt-outs (#48084)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/4f229a4bfcb883cc5e71ba600d399ab259976ef7",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
