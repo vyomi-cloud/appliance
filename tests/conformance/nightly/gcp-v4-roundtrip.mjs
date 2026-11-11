@@ -22,9 +22,29 @@ if (!BASE) {
   BASE = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + "/v4/gcp/")).ok) break; } catch (_) {} await new Promise((r) => setTimeout(r, 500)); }
 }
+// SIM_URL = a real simulator/appliance (e.g. a Mesh Codespace through `vyomi-tunnel forward`): the console bundle still comes from BASE, but a small
+// proxy sends the console's /_wire calls to SIM_URL, and the "SDK/CLI/API" side talks to SIM_URL directly, like gcloud/curl would.
+const SIM = (process.env.SIM_URL || "").replace(/\/$/, "");
+if (SIM) {
+  const origin = BASE, http = await import("node:http");
+  const proxy = http.createServer(async (rq, rs) => {
+    const chunks = []; for await (const c of rq) chunks.push(c);
+    const wire = rq.url.startsWith("/_wire/");
+    const url = (wire ? SIM + rq.url.slice(6) : origin + rq.url);
+    try {
+      const r = await fetch(url, { method: rq.method, headers: { "content-type": rq.headers["content-type"] || "application/json" }, body: ["GET", "HEAD"].includes(rq.method) ? undefined : Buffer.concat(chunks) });
+      const h = {}; r.headers.forEach((v, k) => { if (!["content-encoding", "content-length", "transfer-encoding", "connection"].includes(k)) h[k] = v; });
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (process.env.TRACE && wire && r.status >= 400 && rq.method !== "GET") console.log("  [wire-err]", rq.method, rq.url.slice(0, 100), "REQ", Buffer.concat(chunks).toString().slice(0, 600), "RESP", buf.toString().slice(0, 400));
+      rs.writeHead(r.status, h); rs.end(buf);
+    } catch (e) { rs.writeHead(502); rs.end(String(e)); }
+  });
+  await new Promise((res) => proxy.listen(0, "127.0.0.1", res));
+  BASE = `http://127.0.0.1:${proxy.address().port}`;
+}
 const UI = BASE + (process.env.UI_PATH || "/v4/gcp/index.html");
-const WIRE = BASE + (process.env.WIRE_PATH || "/_wire");
-const P = process.env.PROJECT || "nano-project";
+const WIRE = SIM ? SIM : BASE + (process.env.WIRE_PATH || "/_wire");
+const P = process.env.PROJECT || (SIM ? "vyomi-project" : "nano-project");
 const R = "us-central1", Z = "us-central1-a";
 const OUT = process.env.OUT || resolve(HERE, "../hourly/out/gcp-v4-roundtrip.json");
 
@@ -42,7 +62,9 @@ const SVC = {
   vpc: { ui: ["networking/networks/list", "networking/networks/add"],
     create: (n) => ["POST", `/compute/v1/projects/${P}/global/networks`, { name: n, autoCreateSubnetworks: false }],
     get: (n) => `/compute/v1/projects/${P}/global/networks/${n}`, del: (n) => `/compute/v1/projects/${P}/global/networks/${n}` },
-  compute: { fills: [["/^instance-\\d/.test(e.value)", "$N"]], ui: ["compute/instances", "compute/instances/create"],
+  // On a Mesh appliance VMs are admitted against a real memory budget (ZONE_RESOURCE_POOL_EXHAUSTED), so the UI create picks the smallest shape.
+  compute: { serial: true, pre: async (pg) => { const cb = pg.locator("[role=combobox]", { hasText: /e2-medium/ }).first(); if (await cb.count()) { await cb.click(); await pg.locator("[role=option]", { hasText: /^e2-micro/ }).first().click(); } },
+    fills: [["/^instance-\\d/.test(e.value)", "$N"]], ui: ["compute/instances", "compute/instances/create"],
     create: (n) => ["POST", `/compute/v1/projects/${P}/zones/${Z}/instances`, { name: n, machineType: `zones/${Z}/machineTypes/e2-micro`,
       disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }],
       networkInterfaces: [{ network: `projects/${P}/global/networks/default` }] }],
@@ -96,7 +118,10 @@ const SKIP = {
 const ONLY = (process.env.ONLY || [...Object.keys(SVC), "functions", "eventarc", "apigateway"].join(",")).split(",");
 
 const browser = await chromium.launch();
-const page = await (await browser.newContext({ viewport: { width: 1500, height: 1100 } })).newPage();
+const ctx = await browser.newContext({ viewport: { width: 1500, height: 1100 } });
+await ctx.addInitScript((p) => { try { localStorage.setItem("vyomi.v4.gcp.project", p); } catch (_) {} }, P);
+const page = await ctx.newPage();
+if (process.env.TRACE) page.on("response", (r) => { if (r.request().method() !== "GET" || r.status() >= 400) console.log("  [net]", r.request().method(), r.status(), r.url().replace(/^https?:\/\/[^/]+/, "").slice(0, 150)); });
 page.on("dialog", (d) => d.accept("delete").catch(() => {}));
 const results = [], skipped = [];
 const check = (svc, step, ok, extra = "") => {
@@ -125,6 +150,7 @@ async function uiCreate(svc, name) {
   await go(SVC[svc].ui[1]);
   if (SVC[svc].walk) return walkPolicy(name);
   const s = SVC[svc];
+  if (s.pre) await s.pre(page);
   for (const [pred, val] of s.fills || []) {
     const h = await page.evaluateHandle((src) => [...document.querySelectorAll("input,textarea")].find((e) => new Function("e", "return " + src)(e)) || null, pred);
     const el = h.asElement(); if (el) await el.fill(val.replace("$N", name));
@@ -161,16 +187,21 @@ for (const svc of ONLY) {
   const s = SVC[svc], a = "rta" + Date.now().toString(36).slice(-5), b = "rtb" + Date.now().toString(36).slice(-5); let aOk = false;
   try { await uiCreate(svc, a); const g = await nget(s, a); aOk = g.status === 200; check(svc, "A UI create -> native GET sees it", aOk, `${g.status} ${JSON.stringify(g.body)}`); }
   catch (e) { check(svc, "A UI create -> native GET sees it", false, String(e).split("\n")[0]); }
+  const stepD = async () => {
+  if (!aOk) { check(svc, "D UI delete -> native 404", false, "not run: A failed"); return; }
+  if (s.noUiDelete) { console.log(`[SKIP] ${svc}: D UI delete -> native 404 :: ${s.noUiDelete}`); skipped.push(svc + ":D"); try { await ndel(s, a); } catch (_) {} return; }
+  try { await uiDelete(svc, a); const g = await nget(s, a); check(svc, "D UI delete -> native 404", g.status === 404, `${g.status}`); }
+  catch (e) { check(svc, "D UI delete -> native 404", false, process.env.DEBUG ? String(e).slice(0, 900) : String(e).split("\n")[0]); }
+  try { await ndel(s, a); } catch (_) {}
+  };
+  // `serial`: the appliance admits one VM at a time (Mesh memory budget), so UI-delete A before native-creating B.
+  if (s.serial) await stepD();
   try { const [m, u, bd] = s.create(b); const c = await rest(m, u, bd); if (c.status >= 300) throw new Error(`native create ${c.status} ${JSON.stringify(c.body)}`); check(svc, "B native create -> UI lists it", await listed(svc, b), "native created, UI list lacks it"); }
   catch (e) { check(svc, "B native create -> UI lists it", false, String(e).split("\n")[0]); }
   if (s.noDelete) { console.log(`[SKIP] ${svc}: C/D delete both ways :: the real cloud has no delete for this resource`); continue; }
   try { const d = await ndel(s, b); if (d.status >= 300) throw new Error(`native delete ${d.status} ${JSON.stringify(d.body)}`); check(svc, "C native delete -> UI drops it", !(await listed(svc, b)), "UI still lists it"); }
   catch (e) { check(svc, "C native delete -> UI drops it", false, String(e).split("\n")[0]); }
-  if (!aOk) { check(svc, "D UI delete -> native 404", false, "not run: A failed"); continue; }
-  if (s.noUiDelete) { console.log(`[SKIP] ${svc}: D UI delete -> native 404 :: ${s.noUiDelete}`); skipped.push(svc + ":D"); try { await ndel(s, a); } catch (_) {} continue; }
-  try { await uiDelete(svc, a); const g = await nget(s, a); check(svc, "D UI delete -> native 404", g.status === 404, `${g.status}`); }
-  catch (e) { check(svc, "D UI delete -> native 404", false, process.env.DEBUG ? String(e).slice(0, 900) : String(e).split("\n")[0]); }
-  try { await ndel(s, a); } catch (_) {}
+  if (!s.serial) await stepD();
 }
 await browser.close(); if (dev) dev.kill();
 mkdirSync(dirname(OUT), { recursive: true });
