@@ -216,6 +216,7 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         # Resource-detail tab ops on generic-store parents (compute, vpc, functions, …).
         if _gca.is_tab_op(svc, operation):
             return _gca.tab_dispatch(svc, operation, name, body, backends.resources, account)
+        _gca.bridge_pre(svc, operation, account, backends.resources, _gcp_fill)   # console <-> native store (VPC)
     if provider == "azure":
         from . import azure_core_adapter as _aca
         if svc in _aca.AZURE_DP_SERVICES:
@@ -236,7 +237,11 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
                 from core import gcp_console_tabs as _gct
                 body = (_gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a") if svc == "compute"
                         else _gct.describe_function(body, "nano-project", "us-central1"))
-        return {"ok": True, **r.create(provider, account, svc, body)}
+        created = r.create(provider, account, svc, body)
+        if provider == "gcp":
+            from . import gcp_core_adapter as _gca
+            _gca.bridge_post_create(svc, account, r, created)
+        return {"ok": True, **created}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
         if rec and provider == "aws" and svc == "ec2":
@@ -260,6 +265,9 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
                 return err
     if operation == "Delete":
         ok = r.delete(provider, account, svc, name)
+        if provider == "gcp":
+            from . import gcp_core_adapter as _gca
+            _gca.bridge_post_delete(svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     # Lifecycle actions for compute-like resources (EC2 instances, GCE VMs, RDS
     # DBs, …). The console POSTs collection/{name}/{start,stop,reboot,terminate};

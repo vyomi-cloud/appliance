@@ -406,6 +406,31 @@ def _DEEP_MERGE(dst: dict, src: dict) -> dict:
     return dst
 
 
+class SqlSettingsError(Exception):
+    """A rejected settings patch: carries the HTTP status and the message to show."""
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status, self.message = status, message
+
+
+def patch_settings(database_version: str, current: dict, patch: dict) -> dict:
+    """Merge a `settings` patch into an instance's current settings for the offline appliance's
+    instances.patch (same rules as Nano's `_patch_instance`). Raises SqlSettingsError (400) when
+    tier, sslMode or backup settings are invalid; returns the new settings dict."""
+    class _S:
+        refs = None
+    bad = _check_settings(_S(), "", "", patch)
+    if bad:
+        raise SqlSettingsError(400, bad)
+    import copy
+    merged = _DEEP_MERGE(copy.deepcopy(current or {}), copy.deepcopy(patch))
+    try:
+        merged["settingsVersion"] = str(int(merged.get("settingsVersion", 0)) + 1)
+    except (TypeError, ValueError):
+        merged["settingsVersion"] = "1"
+    return merged
+
+
 def _patch_instance(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
     rec = _get_instance(store, project, instance)
     if not rec:

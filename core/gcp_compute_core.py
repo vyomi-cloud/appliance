@@ -226,7 +226,7 @@ def _delete_network(store: ComputeStore, project: str, name: str) -> ComputeResp
     rec = store.networks.get(key)
     if not rec:
         return _not_found(f"The resource 'projects/{project}/global/networks/{name}' was not found")
-    using = [s["name"] for s in rec.get("_subnets", [])]
+    using = [s["name"] for s in rec.get("_subnets", []) if not s.get("auto")]
     using += [f["name"] for f in store.firewalls.values() if f["project"] == project and f["networkName"] == name]
     using += [r["name"] for r in store.routes.values()
               if r["project"] == project and r["networkName"] == name and not r.get("_system")]
@@ -236,6 +236,8 @@ def _delete_network(store: ComputeStore, project: str, name: str) -> ComputeResp
                     f"The network resource '{name}' is already being used by {using[0]}")
     for rk in [k for k, r in store.routes.items() if r["project"] == project and r["networkName"] == name and r.get("_system")]:
         del store.routes[rk]
+    for s in [s for s in rec.get("_subnets", []) if s.get("auto")]:      # an auto-mode network takes its own subnets with it
+        store.subnetworks.pop(_sub_key(project, s["region"], s["name"]), None)
     for other in store.networks.values():     # the peer side flips to INACTIVE, like GCP
         for p in other.get("peerings", []):
             if _tail(p.get("network")) == name:
@@ -376,8 +378,10 @@ def _create_subnet(store: ComputeStore, project: str, region: str, body: dict, a
     if body.get("logConfig"):
         rec["logConfig"] = _norm_log_config(body["logConfig"])
         rec["flowLogs"] = bool(rec["logConfig"]["enable"])
+    if auto:
+        rec["_auto"] = True      # an auto-mode network's own subnets: deleted with the network, never a blocker
     store.subnetworks[_sub_key(project, region, name)] = rec
-    net.setdefault("_subnets", []).append({"region": region, "name": name})
+    net.setdefault("_subnets", []).append({"region": region, "name": name, **({"auto": True} if auto else {})})
     return rec
 
 

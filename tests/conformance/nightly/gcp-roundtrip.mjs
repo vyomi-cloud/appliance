@@ -56,6 +56,53 @@ const SERVICES = [
       { name: `projects/${P}/locations/us-central1/jobs/${n}`, schedule: "0 9 * * *", timeZone: "UTC", httpTarget: { uri: "https://example.com/", httpMethod: "GET" } }],
     path: (P, n) => `/_wire/v1/projects/${P}/locations/us-central1/jobs/${n}`,
     name: (j) => String(j.name || "").split("/").pop(), state: (j) => String(j.state || "") },
+  { id: "vpc", label: /VPC network/i,
+    create: (P, n) => ["POST", `/_wire/compute/v1/projects/${P}/global/networks`, { name: n, autoCreateSubnetworks: false }],
+    path: (P, n) => `/_wire/compute/v1/projects/${P}/global/networks/${n}`,
+    name: (j) => String(j.name || ""), state: () => "" },
+  { id: "cloudsql", label: /Cloud SQL/i,
+    create: (P, n, X) => ["POST", `/_wire/sql/v1beta4/projects/${P}/instances`, { name: n, databaseVersion: "POSTGRES_15", region: X.region, settings: { tier: "db-f1-micro" } }],
+    path: (P, n) => `/_wire/sql/v1beta4/projects/${P}/instances/${n}`,
+    name: (j) => String(j.name || ""), state: (j) => String(j.state || "") },
+  { id: "firestore", label: /Firestore/i,
+    create: (P, n) => ["POST", `/_wire/v1/projects/${P}/databases?databaseId=${n}`, { type: "FIRESTORE_NATIVE", locationId: "nam5" }],
+    path: (P, n) => `/_wire/v1/projects/${P}/databases/${n}`,
+    name: (j) => String(j.name || "").split("/").pop(), state: () => "" },
+  { id: "iam", label: /IAM & Admin|IAM and Admin/i,
+    create: (P, n) => ["POST", `/_wire/v1/projects/${P}/serviceAccounts`, { accountId: n, serviceAccount: { displayName: n } }],
+    path: (P, n) => `/_wire/v1/projects/${P}/serviceAccounts/${n}@${P}.iam.gserviceaccount.com`,
+    name: (j) => String(j.email || "").split("@")[0], state: () => "" },
+  { id: "apigateway", label: /API Gateway/i,
+    create: (P, n) => ["POST", `/_wire/v1/projects/${P}/locations/global/apis?apiId=${n}`, { displayName: n }],
+    path: (P, n) => `/_wire/v1/projects/${P}/locations/global/apis/${n}`,
+    name: (j) => String(j.name || "").split("/").pop(), state: (j) => String(j.state || "") },
+  { id: "artifactregistry", label: /Artifact Registry/i,
+    create: (P, n, X) => ["POST", `/_wire/v1/projects/${P}/locations/${X.region}/repositories?repositoryId=${n}`, { format: "DOCKER" }],
+    path: (P, n, X) => `/_wire/v1/projects/${P}/locations/${X.region}/repositories/${n}`,
+    name: (j) => String(j.name || "").split("/").pop(), state: () => "" },
+  { id: "compute", label: /Compute Engine/i,
+    create: (P, n, X) => ["POST", `/_wire/compute/v1/projects/${P}/zones/${X.zone}/instances`,
+      { name: n, machineType: `zones/${X.zone}/machineTypes/e2-micro`,
+        disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }],
+        networkInterfaces: [{ network: `projects/${P}/global/networks/default` }] }],
+    path: (P, n, X) => `/_wire/compute/v1/projects/${P}/zones/${X.zone}/instances/${n}`,
+    name: (j) => String(j.name || ""), state: (j) => String(j.status || "") },
+  { id: "functions", label: /Cloud Functions|Cloud Run functions/i,
+    create: (P, n, X) => ["POST", `/_wire/v2/projects/${P}/locations/${X.region}/functions?functionId=${n}`,
+      { buildConfig: { runtime: "python311", entryPoint: "main" } }],
+    path: (P, n, X) => `/_wire/v2/projects/${P}/locations/${X.region}/functions/${n}`,
+    name: (j) => String(j.name || "").split("/").pop(), state: (j) => String(j.state || "") },
+  { id: "eventarc", label: /Eventarc/i,
+    create: (P, n, X) => ["POST", `/_wire/v1/projects/${P}/locations/${X.region}/triggers?triggerId=${n}`,
+      { eventFilters: [{ attribute: "type", value: "google.cloud.pubsub.topic.v1.messagePublished" }],
+        destination: { cloudRun: { service: "rt-svc", region: X.region } } }],
+    path: (P, n, X) => `/_wire/v1/projects/${P}/locations/${X.region}/triggers/${n}`,
+    name: (j) => String(j.name || "").split("/").pop(), state: () => "" },
+  { id: "monitoring", label: /Cloud Monitoring|Monitoring/i, lookupByList: true,
+    create: (P, n) => ["POST", `/_wire/v3/projects/${P}/alertPolicies`,
+      { displayName: n, combiner: "OR", conditions: [{ displayName: "c", conditionThreshold: { filter: 'metric.type="compute.googleapis.com/instance/cpu/utilization"', comparison: "COMPARISON_GT", thresholdValue: 0.9, duration: "60s" } }] }],
+    path: (P, n) => `/_wire/v3/projects/${P}/alertPolicies`,
+    name: (j) => String(j.displayName || ""), state: () => "" },
   { id: "redis", label: /Memorystore for Redis/i,
     create: (P, n) => ["POST", `/_wire/v1/projects/${P}/locations/us-central1/instances?instanceId=${n}`, { tier: "BASIC", memorySizeGb: 1 }],
     path: (P, n) => `/_wire/v1/projects/${P}/locations/us-central1/instances/${n}`,
@@ -77,6 +124,7 @@ const page = await (await browser.newContext()).newPage();
 page.on("dialog", (d) => d.accept().catch(() => {}));
 await bootConsole(page, base, "/gcp-console.html");
 const P = await page.evaluate(() => PROJECT);
+const X = await page.evaluate(async () => { const c = await (await fetch("/api/gcp/catalog")).json(); return { region: c.region || "us-central1", zone: c.zone || "us-central1-a" }; });
 
 const api = (method, url, body) => page.evaluate(async ([m, u, b]) => {
   const r = await fetch(u, { method: m, headers: { "content-type": "application/json" }, body: b === undefined || m === "GET" || m === "DELETE" ? undefined : JSON.stringify(b) });
@@ -98,14 +146,15 @@ for (const s of SERVICES) {
   try {
     await open(s.label);
     // A. native create -> UI
-    const calls = s.create(P, nNative);
+    const calls = s.create(P, nNative, X);
     let c = { status: 0, body: null };
     for (const [m, u, b] of (Array.isArray(calls[0]) ? calls : [calls])) { c = await api(m, u, b); if (c.status >= 300 && c.status !== 409) break; }
     check(s.id, "native create succeeds", c.status >= 200 && c.status < 300, `${c.status} ${JSON.stringify(c.body).slice(0, 160)}`);
-    const g = s.lookup ? await s.lookup(api, P, nNative) : await api("GET", s.path(P, nNative));
+    const g = s.lookup ? await s.lookup(api, P, nNative, X) : await api("GET", s.path(P, nNative, X));
     check(s.id, "native get returns the resource", g.status === 200 && s.name(g.body || {}) === nNative, `${g.status} ${JSON.stringify(g.body).slice(0, 160)}`);
     await reopen(s.label);
-    const rowA = (await rows()).find((r) => r.name === nNative || r.text.includes(nNative));
+    const hit = (nm) => (r) => r.name === nm || r.text.includes(nm) || (s.rowMatch && s.rowMatch(r, nm));
+    const rowA = (await rows()).find(hit(nNative));
     check(s.id, "A: native-created resource is listed in the console grid", !!rowA, `rows: ${(await rows()).map((r) => r.name).join(", ").slice(0, 160)}`);
     if (rowA && s.state(g.body || {})) check(s.id, "A: grid shows the native state", rowA.text.toUpperCase().includes(s.state(g.body).toUpperCase()), rowA.text);
 
@@ -119,34 +168,35 @@ for (const s of SERVICES) {
     await page.locator("#main button.primary").filter({ hasText: /Create/ }).first().click({ timeout: 8000 });
     await sleep(2200);
     await reopen(s.label);
-    const rowB = (await rows()).find((r) => r.name === nUi || r.text.includes(nUi));
+    const rowB = (await rows()).find(hit(nUi));
     check(s.id, "B: console-created resource appears in its own grid", !!rowB, `rows: ${(await rows()).map((r) => r.name).join(", ").slice(0, 160)}`);
-    const gB = s.lookup ? await s.lookup(api, P, nUi) : await api("GET", s.path(P, nUi));
+    const gB = s.lookup ? await s.lookup(api, P, nUi, X) : await api("GET", s.path(P, nUi, X));
     check(s.id, "B: native API returns the console-created resource", gB.status === 200 && s.name(gB.body || {}) === nUi, `${gB.status} ${JSON.stringify(gB.body).slice(0, 160)}`);
     if (gB.status === 200 && s.state(gB.body || {}) && rowB) check(s.id, "B: native state matches the grid", rowB.text.toUpperCase().includes(s.state(gB.body).toUpperCase()), `${s.state(gB.body)} vs ${rowB.text}`);
 
     if (s.noDelete) { console.log(`[SKIP] ${s.id}: C/D delete both ways — the real cloud has no delete for this resource`); continue; }
     // C. native delete -> UI
-    const dN = await api("DELETE", s.path(P, nNative));
+    const dN = await api("DELETE", s.path(P, nNative, X));
     check(s.id, "native delete succeeds", dN.status >= 200 && dN.status < 300, `${dN.status} ${JSON.stringify(dN.body).slice(0, 120)}`);
     await reopen(s.label);
-    check(s.id, "C: natively deleted resource is gone from the console", !(await rows()).some((r) => r.name === nNative), nNative);
+    check(s.id, "C: natively deleted resource is gone from the console", !(await rows()).some(hit(nNative)), nNative);
 
     // D. UI delete -> native
-    const opened = await page.evaluate((nm) => { const a = document.querySelector(`#main table.gc tr[data-row-name="${nm}"] a.id`); if (a) { a.click(); return true; } return false; }, nUi);
+    const rowName = rowB ? rowB.name : nUi;
+    const opened = await page.evaluate((nm) => { const a = document.querySelector(`#main table.gc tr[data-row-name="${nm}"] a.id`); if (a) { a.click(); return true; } return false; }, rowName);
     if (opened) {
       await sleep(1500);
       await page.locator("#main button.danger").filter({ hasText: /Delete/ }).first().click({ timeout: 6000 }).catch(() => {});
       await sleep(1800);
-      const gD = await api("GET", s.path(P, nUi));
+      const gD = await api("GET", s.path(P, nUi, X));
       check(s.id, "D: console-deleted resource answers 404 on the native API", gD.status === 404, `${gD.status}`);
     } else {
       check(s.id, "D: console-deleted resource answers 404 on the native API", false, "could not open the resource from the grid to delete it");
-      await api("DELETE", s.path(P, nUi));
+      await api("DELETE", s.path(P, nUi, X));
     }
   } catch (e) {
     check(s.id, "run", false, String(e).split("\n")[0]);
-    for (const n of [nNative, nUi]) { try { await api("DELETE", s.path(P, n)); } catch (_) {} }
+    for (const n of [nNative, nUi]) { try { await api("DELETE", s.path(P, n, X)); } catch (_) {} }
   }
 }
 mkdirSync(dirname(OUT), { recursive: true });

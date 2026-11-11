@@ -475,6 +475,76 @@ def _mon_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "monitoring"}
 
 
+# ── Two-way bridge: console generic store <-> native core (VPC networks) ──────────────────────────
+# The console's VPC page keeps its networks in the generic resource store while the native API (SDK /
+# gcloud / REST) reads gcp_compute_core's ComputeStore: a network made in one place was invisible in the
+# other. The bridge keeps them one set: native networks are mirrored into the console list before it is
+# read, a console create/delete is written through to the native store, and a mirrored record disappears
+# when its native twin is deleted. Mirrored records carry `_bridged: True`.
+_BRIDGED_SERVICES = ("vpc",)
+
+
+def _native_vpc_snapshot():
+    out = {}
+    st = _R["gcp_compute"]
+    for _k, rec in list(getattr(st, "networks", {}).items()):
+        if rec.get("project") == PROJ:
+            out[rec["name"]] = {"name": rec["name"], "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks")),
+                                "mtu": rec.get("mtu", 1460),
+                                "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")},
+                                "description": rec.get("description", "")}
+    return out
+
+
+def bridge_pre(svc, operation, account, res, fill):
+    """Before a console List/Get/Delete: mirror native networks in, drop mirrored ones whose native twin is gone."""
+    if svc not in _BRIDGED_SERVICES or operation not in ("List", "Get", "Delete"):
+        return
+    try:
+        native = _native_vpc_snapshot()
+        existing = {x.get("name"): x for x in res.list("gcp", account, svc)}
+        for n, rec in native.items():
+            if n not in existing:
+                res.create("gcp", account, svc, dict(fill(svc, dict(rec)), _bridged=True))
+        for n, x in existing.items():
+            if x.get("_bridged") and n not in native:
+                res.delete("gcp", account, svc, n)
+    except Exception:
+        pass
+
+
+def _compute_native(method, path, body=None):
+    from core import gcp_compute_core as _gc
+    r = _gc.dispatch(_R["gcp_compute"], method, path, {}, {"content-type": "application/json"},
+                     json.dumps(body).encode() if body is not None else b"")
+    return r.status
+
+
+def bridge_post_create(svc, account, res, rec):
+    """After a console create: write the network through to the native store and mark the console record."""
+    if svc not in _BRIDGED_SERVICES or not isinstance(rec, dict) or not rec.get("name"):
+        return
+    try:
+        st = _compute_native("POST", f"/compute/v1/projects/{PROJ}/global/networks",
+                             {"name": rec["name"], "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)),
+                              "mtu": rec.get("mtu", 1460), "description": rec.get("description", ""),
+                              "routingConfig": rec.get("routingConfig") or {"routingMode": "REGIONAL"}})
+        if st < 300 or st == 409:
+            res.update("gcp", account, svc, rec["name"], {"_bridged": True})
+    except Exception:
+        pass
+
+
+def bridge_post_delete(svc, name):
+    """After a console delete: delete the native twin too."""
+    if svc not in _BRIDGED_SERVICES or not name:
+        return
+    try:
+        _compute_native("DELETE", f"/compute/v1/projects/{PROJ}/global/networks/{name}")
+    except Exception:
+        pass
+
+
 def resource_op(service, operation, name="", body=None):
     tab = tab_dispatch(service, operation, name, body)
     if tab is not None:
