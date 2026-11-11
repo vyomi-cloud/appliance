@@ -18,7 +18,7 @@ const freePort = () => new Promise((res) => { const s = net.createServer().liste
 let BASE = process.env.BASE || "";
 if (!BASE) {
   const port = await freePort();
-  dev = spawn(process.env.PY || "python3", [resolve(HERE, "../../../consoles/dev_server.py"), "--port", String(port)], { stdio: "ignore", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+  dev = spawn(process.env.PY || "python3", [resolve(HERE, "../../../consoles/dev_server.py"), "--port", String(port), "--tier", "max", "--primary", "gcp"], { stdio: "ignore", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
   BASE = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + "/v4/gcp/")).ok) break; } catch (_) {} await new Promise((r) => setTimeout(r, 500)); }
 }
@@ -34,6 +34,9 @@ const rest = async (method, path, body) => {
   return { status: r.status, body: j };
 };
 
+// Services addressed by a server-assigned id (Monitoring alert policies) give idOf(n): look the id up by display name.
+const nget = async (s, n) => { if (s.idOf) { const id = await s.idOf(n); return id ? rest("GET", s.get(id)) : { status: 404, body: null }; } return rest("GET", s.get(n)); };
+const ndel = async (s, n) => { if (s.idOf) { const id = await s.idOf(n); return id ? rest("DELETE", s.del(id)) : { status: 404, body: null }; } return rest("DELETE", s.del(n)); };
 // Each service: ui = [list route, create route|null]; create(n) -> [method, path, body]; get(n) -> path; del(n) -> path.
 const SVC = {
   vpc: { ui: ["networking/networks/list", "networking/networks/add"],
@@ -74,18 +77,23 @@ const SVC = {
   kms: { noDelete: true, ui: ["security/kms/keyrings", "security/kms/keyring/create"],
     create: (n) => ["POST", `/v1/projects/${P}/locations/global/keyRings?keyRingId=${n}`, {}],
     get: (n) => `/v1/projects/${P}/locations/${R}/keyRings/${n}`, del: (n) => `/v1/projects/${P}/locations/global/keyRings/${n}` },
+  kubernetes: { fills: [["/cluster-\\d/.test(e.value)", "$N"]], ui: ["kubernetes/clusters", "kubernetes/clusters/create"],
+    create: (n) => ["POST", `/v1/projects/${P}/locations/${R}/clusters`, { cluster: { name: n, initialNodeCount: 1 } }],
+    get: (n) => `/v1/projects/${P}/locations/${R}/clusters/${n}`, del: (n) => `/v1/projects/${P}/locations/${R}/clusters/${n}` },
+  monitoring: { walk: true, noUiDelete: "the v4 alert-policy list is read-only (no select/delete/detail), the real console can delete a policy", ui: ["monitoring/alerting", "monitoring/alerting/policies/create"],
+    idOf: async (n) => { const l = await rest("GET", `/v3/projects/${P}/alertPolicies`); const h = ((l.body || {}).alertPolicies || []).find((x) => x.displayName === n); return h ? String(h.name).split("/").pop() : ""; },
+    create: (n) => ["POST", `/v3/projects/${P}/alertPolicies`, { displayName: n, combiner: "OR", conditions: [{ displayName: "c", conditionThreshold: { filter: 'metric.type="compute.googleapis.com/instance/cpu/utilization"', comparison: "COMPARISON_GT", thresholdValue: 0.9, duration: "60s" } }] }],
+    get: (id) => `/v3/projects/${P}/alertPolicies/${id}`, del: (id) => `/v3/projects/${P}/alertPolicies/${id}` },
   cloudscheduler: { seq: ["$N", "rt job", "* * * * *", "https://example.com/handler"], ui: ["cloudscheduler/jobs", "cloudscheduler/jobs/new"],
     create: (n) => ["POST", `/v1/projects/${P}/locations/${R}/jobs`, { name: `projects/${P}/locations/${R}/jobs/${n}`, schedule: "* * * * *", timeZone: "UTC", httpTarget: { uri: "https://example.com/", httpMethod: "GET" } }],
     get: (n) => `/v1/projects/${P}/locations/${R}/jobs/${n}`, del: (n) => `/v1/projects/${P}/locations/${R}/jobs/${n}` },
 };
 const SKIP = {
-  "kubernetes:*": "GKE is tier-gated (Pro/Max); the dev stack has no k3s",
-  "monitoring:*": "alert policies are addressed by server-assigned ids; the v4 create form is multi-step (not automated yet)",
   "functions:*": "the v4 'functions' console IS Cloud Run (see run), not the Cloud Functions API",
   "eventarc:*": "no v4 Eventarc console service exists",
   "apigateway:*": "no v4 API Gateway console service exists",
 };
-const ONLY = (process.env.ONLY || [...Object.keys(SVC), "kubernetes", "monitoring", "functions", "eventarc", "apigateway"].join(",")).split(",");
+const ONLY = (process.env.ONLY || [...Object.keys(SVC), "functions", "eventarc", "apigateway"].join(",")).split(",");
 
 const browser = await chromium.launch();
 const page = await (await browser.newContext({ viewport: { width: 1500, height: 1100 } })).newPage();
@@ -101,8 +109,21 @@ const body = () => page.evaluate(() => document.body.innerText.replace(/\s+/g, "
 const listed = async (svc, name) => { await go(SVC[svc].ui[0]); await sleep(700); return (await body()).includes(name); };
 const INP = "input:visible:not([type=radio]):not([type=checkbox]):not([type=file]):not([type=number]):not([placeholder*=earch]), textarea:visible";
 
+async function walkPolicy(name) {   // Monitoring alert policy: condition step -> notifications -> name -> Create Policy
+  for (let i = 0; i < 8; i++) {
+    for (const [lab, val] of [["Condition name", "rt condition"], ["Alert policy name", name]]) {
+      const f = page.locator(`input[placeholder="${lab}"]:visible, input[aria-label="${lab}"]:visible`).first();
+      if (await f.count()) await f.fill(val);
+    }
+    const fin = vis("button", /^\s*Create Policy/i);
+    if (await fin.count()) { await fin.first().click({ timeout: 8000 }); await sleep(3000); return; }
+    await vis("button", /^\s*Continue/i).first().click({ timeout: 8000 }); await sleep(900);
+  }
+  throw new Error("policy stepper never reached Create Policy");
+}
 async function uiCreate(svc, name) {
   await go(SVC[svc].ui[1]);
+  if (SVC[svc].walk) return walkPolicy(name);
   const s = SVC[svc];
   for (const [pred, val] of s.fills || []) {
     const h = await page.evaluateHandle((src) => [...document.querySelectorAll("input,textarea")].find((e) => new Function("e", "return " + src)(e)) || null, pred);
@@ -138,17 +159,18 @@ async function uiDelete(svc, name) {
 for (const svc of ONLY) {
   if (!SVC[svc]) { const why = SKIP[`${svc}:*`] || "not covered"; skipped.push(svc); console.log(`[SKIP] ${svc} :: ${why}`); results.push({ service: svc, step: "skip", ok: null, detail: why }); continue; }
   const s = SVC[svc], a = "rta" + Date.now().toString(36).slice(-5), b = "rtb" + Date.now().toString(36).slice(-5); let aOk = false;
-  try { await uiCreate(svc, a); const g = await rest("GET", s.get(a)); aOk = g.status === 200; check(svc, "A UI create -> native GET sees it", aOk, `${g.status} ${JSON.stringify(g.body)}`); }
+  try { await uiCreate(svc, a); const g = await nget(s, a); aOk = g.status === 200; check(svc, "A UI create -> native GET sees it", aOk, `${g.status} ${JSON.stringify(g.body)}`); }
   catch (e) { check(svc, "A UI create -> native GET sees it", false, String(e).split("\n")[0]); }
   try { const [m, u, bd] = s.create(b); const c = await rest(m, u, bd); if (c.status >= 300) throw new Error(`native create ${c.status} ${JSON.stringify(c.body)}`); check(svc, "B native create -> UI lists it", await listed(svc, b), "native created, UI list lacks it"); }
   catch (e) { check(svc, "B native create -> UI lists it", false, String(e).split("\n")[0]); }
   if (s.noDelete) { console.log(`[SKIP] ${svc}: C/D delete both ways :: the real cloud has no delete for this resource`); continue; }
-  try { const d = await rest("DELETE", s.del(b)); if (d.status >= 300) throw new Error(`native delete ${d.status} ${JSON.stringify(d.body)}`); check(svc, "C native delete -> UI drops it", !(await listed(svc, b)), "UI still lists it"); }
+  try { const d = await ndel(s, b); if (d.status >= 300) throw new Error(`native delete ${d.status} ${JSON.stringify(d.body)}`); check(svc, "C native delete -> UI drops it", !(await listed(svc, b)), "UI still lists it"); }
   catch (e) { check(svc, "C native delete -> UI drops it", false, String(e).split("\n")[0]); }
   if (!aOk) { check(svc, "D UI delete -> native 404", false, "not run: A failed"); continue; }
-  try { await uiDelete(svc, a); const g = await rest("GET", s.get(a)); check(svc, "D UI delete -> native 404", g.status === 404, `${g.status}`); }
+  if (s.noUiDelete) { console.log(`[SKIP] ${svc}: D UI delete -> native 404 :: ${s.noUiDelete}`); skipped.push(svc + ":D"); try { await ndel(s, a); } catch (_) {} continue; }
+  try { await uiDelete(svc, a); const g = await nget(s, a); check(svc, "D UI delete -> native 404", g.status === 404, `${g.status}`); }
   catch (e) { check(svc, "D UI delete -> native 404", false, process.env.DEBUG ? String(e).slice(0, 900) : String(e).split("\n")[0]); }
-  try { await rest("DELETE", s.del(a)); } catch (_) {}
+  try { await ndel(s, a); } catch (_) {}
 }
 await browser.close(); if (dev) dev.kill();
 mkdirSync(dirname(OUT), { recursive: true });

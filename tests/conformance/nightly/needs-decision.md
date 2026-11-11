@@ -57,3 +57,4 @@ Not covered: bedrock, securityhub, cost-explorer (read-mostly, no create flow). 
 - Eventarc and API Gateway have NO v4 console service (`consoles/src/gcp/services` has neither), though both have native cores. Build the consoles or drop them from the catalog?
 - v4 IAM "Create service account": the Service account ID field is not derived from the name (the real console derives it live).
 - Storage accepts 2-char bucket names (real GCS: 3-63). Tighten after renaming the unit-test fixtures that use `bo`, `lc`, `sc`, `v1`.
+- v4 Monitoring: the alert-policy list is read-only (no select/delete/detail/edit); the real console can delete and edit a policy. Build it? (`gcp-v4-roundtrip` skips step D for monitoring with this reason.)
