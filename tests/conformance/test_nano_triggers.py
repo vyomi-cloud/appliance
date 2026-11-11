@@ -57,11 +57,11 @@ def run():
     call("POST", "/upload/storage/v1/b/other/o", b"x", {"content-type": "text/plain"}, {"uploadType": "media", "name": "z.txt"})
     _check("another bucket does not fire it", len(res.collections["gcp/acct/functions"]["fnE"]["invocations"]) == 1)
 
-    call("PUT", "/v1/projects/nano-project/topics/tp", {})
+    call("PUT", "/v1/projects/nano-project/topics/tpc", {})
     res.collections["gcp/acct/eventarc"]["t2"] = {"name": "t2", "eventFilters": [
         {"attribute": "type", "value": "google.cloud.pubsub.topic.v1.messagePublished"}],
-        "transport": {"pubsub": {"topic": "projects/p/topics/tp"}}, "destinationSpec": {"service": "fnE"}}
-    call("POST", "/v1/projects/nano-project/topics/tp:publish", {"messages": [{"data": base64.b64encode(b"ping").decode(), "attributes": {"k": "v"}}]})
+        "transport": {"pubsub": {"topic": "projects/p/topics/tpc"}}, "destinationSpec": {"service": "fnE"}}
+    call("POST", "/v1/projects/nano-project/topics/tpc:publish", {"messages": [{"data": base64.b64encode(b"ping").decode(), "attributes": {"k": "v"}}]})
     invs = res.collections["gcp/acct/functions"]["fnE"]["invocations"]
     _check("Pub/Sub publish fires the messagePublished CloudEvent",
            len(invs) == 2 and json.loads(invs[1]["response"])["msg"]["attributes"] == {"k": "v"}, invs)
