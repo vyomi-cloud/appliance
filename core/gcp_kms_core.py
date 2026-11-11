@@ -390,6 +390,9 @@ def _require(meta: dict, name: str, headers, permission: str) -> GcpKmsResponse 
 _PURPOSES = {1: "ENCRYPT_DECRYPT", 5: "ASYMMETRIC_SIGN", 6: "ASYMMETRIC_DECRYPT",
              7: "RAW_ENCRYPT_DECRYPT", 9: "MAC"}
 _ALGORITHMS = {1: "GOOGLE_SYMMETRIC_ENCRYPTION"}
+# ImportJob.ImportMethod proto enum numbers: the Google client libraries send ints (enum-encoding=int).
+_IMPORT_METHOD_ENUM = {1: "RSA_OAEP_3072_SHA1_AES_256", 2: "RSA_OAEP_4096_SHA1_AES_256", 3: "RSA_OAEP_3072_SHA256_AES_256",
+                       4: "RSA_OAEP_4096_SHA256_AES_256", 5: "RSA_OAEP_3072_SHA256", 6: "RSA_OAEP_4096_SHA256"}
 
 
 def _enum(value, table: dict, default: str) -> str:
@@ -1076,11 +1079,11 @@ def _import_jobs_dispatch(store, segs, verb, method, payload, query) -> GcpKmsRe
                 return _err(400, "INVALID_ARGUMENT", "importJobId is required.")
             if not re.match(r"^[a-zA-Z0-9_-]{1,63}$", str(jid)):
                 return _err(400, "INVALID_ARGUMENT", "importJobId must match [a-zA-Z0-9_-]{1,63}.")
-            method_name = _enum(payload.get("importMethod"), {}, "")
+            method_name = _enum(payload.get("importMethod"), _IMPORT_METHOD_ENUM, "")
             if method_name not in _imp.IMPORT_METHODS:
                 return _err(400, "INVALID_ARGUMENT",
                             "importMethod must be one of: " + ", ".join(sorted(_imp.IMPORT_METHODS)) + ".")
-            if payload.get("protectionLevel") not in (None, "", "SOFTWARE"):
+            if _enum(payload.get("protectionLevel"), {1: "SOFTWARE", 2: "HSM"}, "SOFTWARE") != "SOFTWARE":
                 return _err(400, "INVALID_ARGUMENT", "Only protectionLevel SOFTWARE is supported by Vyomi.")
             name = f"{ring}/importJobs/{jid}"
             if name in jobs:
@@ -1112,7 +1115,7 @@ def _import_version(store, key_name: str, meta: dict, versions: dict, payload: d
     view = _import_view(job_name, job)
     if view["state"] != "ACTIVE":
         return _err(400, "FAILED_PRECONDITION", f"ImportJob {job_name} is {view['state']}; create a new import job.")
-    algo = _enum(payload.get("algorithm"), {}, "")
+    algo = _enum(payload.get("algorithm"), _ALGORITHMS, "")
     if algo != "GOOGLE_SYMMETRIC_ENCRYPTION":
         return _err(400, "INVALID_ARGUMENT",
                     "Vyomi imports symmetric key material only: algorithm must be GOOGLE_SYMMETRIC_ENCRYPTION.")
