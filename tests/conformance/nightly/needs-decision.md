@@ -52,3 +52,8 @@ Result: 84/84 checks pass across 20 services (A UI create->SDK, B SDK create->UI
 Product bug found + fixed: RDS ModifyDBInstance ignored DeletionProtection=false (a UI-created instance, default protected, could never be unprotected/deleted). core/rds_core.py + test_rds_modify_deletion_protection_core.py.
 NOT verified (printed as SKIP): EKS (needs k3s backend), Image Builder (pipelines adapter), CloudFormation UI create/delete wizard (B,C pass). Field-level comparison limited to existence/name (+ KMS PendingDeletion, RDS deleting semantics).
 Not covered: bedrock, securityhub, cost-explorer (read-mostly, no create flow). Nano old-console variant (`validate-aws-roundtrip.mjs`): s3 sqs sns dynamodb kms secretsmanager 24/24.
+
+## GCP (2026-11-11): product gaps found by the v4 round-trip
+- Eventarc and API Gateway have NO v4 console service (`consoles/src/gcp/services` has neither), though both have native cores. Build the consoles or drop them from the catalog?
+- v4 IAM "Create service account": the Service account ID field is not derived from the name (the real console derives it live).
+- Storage accepts 2-char bucket names (real GCS: 3-63). Tighten after renaming the unit-test fixtures that use `bo`, `lc`, `sc`, `v1`.
