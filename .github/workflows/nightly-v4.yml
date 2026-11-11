@@ -1,0 +1,178 @@
+name: Nightly v4 conformance (analyse - find - fix - test - merge)
+
+# One job per cloud, base = v4-on-main (NOT main: the hourly/daily workflows are for v3 and release on merge).
+#   1 baseline   run_suites.py for the cloud (offline + nano)          -> out/before.json
+#   2 agent      headless Claude fixes what is red, per <CLOUD>-AGENT.md, pushes nightly/<cloud>-<date>
+#   3 re-test    same suites on the fixed branch                       -> out/after.json
+#   4 gate       tests/conformance/nightly/gate.py: nothing green may go red or vanish
+#   5 merge      fast-forward nightly branch -> v4-on-main (only if the gate says ok). No PR, no tag, no main, no image.
+# Tunnel checks (6) need a Codespace: tunnel job below runs only when NIGHTLY_CODESPACES_PAT is set.
+# Secrets: CLAUDE_CODE_OAUTH_TOKEN (subscription token only), CONFORMANCE_BOT_TOKEN (push to v4-on-main),
+#          VYOMI_TEST_LICENSE_JWT (optional), NIGHTLY_CODESPACES_PAT (tunnel job).
+
+on:
+  schedule:
+    - cron: '30 20 * * *'      # 02:00 IST
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: 'Cloud to run'
+        type: choice
+        options: [azure, aws, gcp, all]
+        default: azure
+      merge:
+        description: 'Merge to v4-on-main when the gate is green (false = push the nightly branch only)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: nightly-v4-${{ inputs.cloud || 'all' }}
+  cancel-in-progress: false
+
+env:
+  VYOMI_BASE_URL: http://localhost:9000
+  RELAY_HTTP: http://127.0.0.1:8090
+  NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+  TRUNK: v4-on-main
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      clouds: ${{ steps.c.outputs.clouds }}
+      day: ${{ steps.c.outputs.day }}
+    steps:
+      - id: c
+        run: |
+          IN="${{ inputs.cloud }}"; [ -n "$IN" ] || IN=all
+          if [ "$IN" = all ]; then echo 'clouds=["azure","aws","gcp"]' >> "$GITHUB_OUTPUT"; else echo "clouds=[\"$IN\"]" >> "$GITHUB_OUTPUT"; fi
+          echo "day=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
+
+  nightly:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: ${{ fromJSON(needs.plan.outputs.clouds) }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLOUD: ${{ matrix.cloud }}
+      NIGHTLY_BRANCH: nightly/${{ matrix.cloud }}-${{ needs.plan.outputs.day }}
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+    steps:
+      - name: Require the bot token
+        run: '[ -n "$GH_TOKEN" ] || { echo "::error::Set the CONFORMANCE_BOT_TOKEN secret"; exit 1; }'
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TRUNK }}
+          fetch-depth: 0
+          token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+      - name: Nightly branch (fresh from trunk, or today's existing one)
+        run: |
+          git config user.name "vyomi-nightly-bot"; git config user.email "nightly-bot@users.noreply.github.com"
+          if git ls-remote --exit-code origin "$NIGHTLY_BRANCH" >/dev/null 2>&1; then
+            git fetch -q origin "$NIGHTLY_BRANCH"; git checkout -q -B "$NIGHTLY_BRANCH" "origin/$NIGHTLY_BRANCH"
+            git merge -q --no-edit "origin/$TRUNK" || { git merge --abort; echo "::warning::could not merge trunk into today's branch"; }
+          else
+            git checkout -q -B "$NIGHTLY_BRANCH" "origin/$TRUNK"
+          fi
+          git push -q origin "HEAD:$NIGHTLY_BRANCH"
+
+      - uses: ./.github/actions/conformance-stack
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+
+      - name: Baseline (before any fix)
+        continue-on-error: true
+        run: |
+          python3 tests/conformance/hourly/run_suites.py --target offline --cloud "$CLOUD"
+          python3 tests/conformance/hourly/run_suites.py --target nano --cloud "$CLOUD"
+          python3 - <<'PY'
+          import json, glob, os
+          suites = []
+          for f in sorted(glob.glob("tests/conformance/hourly/out/results-*-" + os.environ["CLOUD"] + ".json")):
+              suites += json.load(open(f))["suites"]
+          json.dump({"suites": suites}, open("before.json", "w"))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "before-${{ matrix.cloud }}", path: "before.json\ntests/conformance/hourly/out/", include-hidden-files: true, retention-days: 7 }
+
+      - name: Agent - fix what is red (${{ matrix.cloud }})
+        continue-on-error: true
+        timeout-minutes: 180
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'github-actions'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Follow tests/conformance/nightly/${{ matrix.cloud == 'azure' && 'AZURE' || matrix.cloud == 'aws' && 'AWS' || 'GCP' }}-AGENT.md exactly.
+            Baseline results: before.json and tests/conformance/hourly/out/. Your branch is ${{ env.NIGHTLY_BRANCH }} (already checked out).
+            Push only to ${{ env.NIGHTLY_BRANCH }}. Never main, tags, or releases.
+          claude_args: >-
+            --max-turns 300
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Re-test on the fixed branch
+        id: retest
+        continue-on-error: true
+        run: |
+          git pull -q --rebase origin "$NIGHTLY_BRANCH" || true
+          rm -f tests/conformance/hourly/out/results-*.json
+          python3 tests/conformance/hourly/run_suites.py --target offline --cloud "$CLOUD"
+          python3 tests/conformance/hourly/run_suites.py --target nano --cloud "$CLOUD"
+          python3 - <<'PY'
+          import json, glob, os
+          suites = []
+          for f in sorted(glob.glob("tests/conformance/hourly/out/results-*-" + os.environ["CLOUD"] + ".json")):
+              suites += json.load(open(f))["suites"]
+          json.dump({"suites": suites}, open("after.json", "w"))
+          PY
+
+      - name: Gate (nothing green may go red)
+        id: gate
+        run: python3 tests/conformance/nightly/gate.py before.json after.json
+
+      - name: Merge to v4-on-main (fast-forward, no PR)
+        if: steps.gate.outcome == 'success' && (github.event_name == 'schedule' || inputs.merge)
+        run: |
+          git fetch -q origin "$TRUNK" "$NIGHTLY_BRANCH"
+          git checkout -q "$NIGHTLY_BRANCH"; git rebase -q "origin/$TRUNK"
+          AHEAD=$(git rev-list --count "origin/$TRUNK..HEAD")
+          [ "$AHEAD" -gt 0 ] || { echo "Nothing to merge tonight."; exit 0; }
+          VYOMI_INTEGRATOR=1 git push origin "HEAD:$TRUNK"
+          echo "Merged $AHEAD commit(s) to $TRUNK" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "after-${{ matrix.cloud }}", path: "after.json\ntests/conformance/hourly/out/\ntests/conformance/nightly/needs-decision.md", include-hidden-files: true, retention-days: 14 }
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
+
+  tunnel:
+    # Check 6 needs the cloud's own Codespace. Skipped (and reported as NOT RUN) until NIGHTLY_CODESPACES_PAT exists.
+    needs: [plan, nightly]
+    if: always()
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: ${{ fromJSON(needs.plan.outputs.clouds) }}
+    env:
+      CS_PAT: ${{ secrets.NIGHTLY_CODESPACES_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: v4-on-main }
+      - name: Tunnel conformance + auto-recovery (${{ matrix.cloud }})
+        run: |
+          if [ -z "$CS_PAT" ]; then echo "TUNNEL CHECK NOT RUN: NIGHTLY_CODESPACES_PAT not set" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          S=tests/conformance/nightly/${{ matrix.cloud }}-tunnel-recovery.py
+          if [ ! -f "$S" ]; then echo "TUNNEL CHECK NOT RUN: $S not written yet" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          python3 "$S"
