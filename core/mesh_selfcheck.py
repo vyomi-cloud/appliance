@@ -130,10 +130,40 @@ def check_ai() -> dict:
         if state == "ready":
             return _item("ai", "AI runtime", True, st.get("chip") or "ready")
         if state in ("starting",):
-            return _item("ai", "AI runtime", False, "model is still loading", "The AI model is still loading. Wait a minute and re-run the checks.")
+            return _item("ai", "AI runtime", True, "model is still loading; AI is available when it finishes")
         if state == "off":
             return _item("ai", "AI runtime", True, "not enabled on this Mesh")
         return _item("ai", "AI runtime", False, f"state: {state}", "The AI runtime refused to start. See the Mesh logs.")
+    except Exception as e:     # noqa: BLE001
+        return _item("ai", "AI runtime", False, type(e).__name__, "The AI runtime did not answer.")
+
+
+def _local_get(path: str, timeout: float = 5.0) -> dict:
+    import json
+    req = urllib.request.Request("http://localhost:9000" + path, headers={"user-agent": "vyomi-mesh-selfcheck"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
+def check_appliance_http(get: Callable[[str], dict] = _local_get) -> dict:
+    """Same question as check_appliance, asked of the LIVE server over loopback (used when this runs as its own process, e.g. from boot-mesh.sh)."""
+    try:
+        s = get("/mesh/status")
+        h = s.get("health") or {}
+        return _item("appliance", "Appliance healthy", bool(s.get("mesh")) and bool(h.get("ok")), f"v{s.get('version', '?')} · {h.get('state', '?')}",
+                     "The appliance is locked or not in Mesh mode. Check your plan and restart the Mesh.")
+    except Exception as e:     # noqa: BLE001
+        return _item("appliance", "Appliance healthy", False, type(e).__name__, "The appliance did not answer its own status call.")
+
+
+def check_ai_http(get: Callable[[str], dict] = _local_get) -> dict:
+    try:
+        st = get("/mesh/ai/status").get("state")
+        if st in ("ready", "off"):
+            return _item("ai", "AI runtime", True, "ready" if st == "ready" else "not enabled on this Mesh")
+        if st == "starting":
+            return _item("ai", "AI runtime", True, "model is still loading; AI is available when it finishes")
+        return _item("ai", "AI runtime", False, f"state: {st}", "The AI runtime refused to start. See the Mesh logs.")
     except Exception as e:     # noqa: BLE001
         return _item("ai", "AI runtime", False, type(e).__name__, "The AI runtime did not answer.")
 
@@ -158,3 +188,11 @@ def run(probes: Optional[tuple] = None, now: Callable[[], float] = time.time) ->
             items.append(_item(name, name, False, type(e).__name__, "This check crashed."))
     ex.shutdown(wait=False, cancel_futures=True)
     return {"ok": all(i["ok"] for i in items), "checked_at": int(now()), "items": items}
+
+
+STANDALONE_PROBES: tuple = (check_dns, check_apt, check_egress, check_disk, check_memory, check_appliance_http, check_ai_http)
+
+
+if __name__ == "__main__":      # `python3 - < selfcheck.py` inside the simulator container (boot-mesh.sh): print the report as JSON
+    import json
+    print(json.dumps(run(probes=STANDALONE_PROBES)))

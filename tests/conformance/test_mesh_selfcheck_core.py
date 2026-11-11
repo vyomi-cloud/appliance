@@ -39,6 +39,17 @@ def run():
     _check("memory ok at 4 GB", m.check_memory(avail_mb=4096)["ok"])
     _check("memory fails under the floor", not m.check_memory(avail_mb=300)["ok"])
 
+    _check("appliance (http): a live Mesh is healthy", m.check_appliance_http(lambda p: {"mesh": True, "version": "4.0", "health": {"ok": True, "state": "ok"}})["ok"])
+    _check("appliance (http): not a Mesh fails", not m.check_appliance_http(lambda p: {"mesh": False, "health": {"ok": False, "state": "not-a-mesh"}})["ok"])
+    def down(p):
+        raise OSError("refused")
+    _check("appliance (http): unreachable fails", not m.check_appliance_http(down)["ok"])
+    _check("ai (http): ready ok", m.check_ai_http(lambda p: {"state": "ready"})["ok"])
+    _check("ai (http): still loading must NOT block joining", m.check_ai_http(lambda p: {"state": "starting"})["ok"])
+    _check("ai (http): off is ok (not enabled)", m.check_ai_http(lambda p: {"state": "off"})["ok"])
+    _check("ai (http): refused fails with a hint", not m.check_ai_http(lambda p: {"state": "refused"})["ok"])
+    _check("ai (http): unreachable fails", not m.check_ai_http(down)["ok"])
+
     good = lambda: m._item("a", "A", True, "fine")          # noqa: E731
     bad = lambda: m._item("b", "B", False, "broken", "fix")  # noqa: E731
     boom = lambda: (_ for _ in ()).throw(RuntimeError("x"))  # noqa: E731
