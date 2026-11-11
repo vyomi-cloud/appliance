@@ -56,7 +56,10 @@ def main():
     row = next((x for x in r.json().get("budgets", []) if x["budget_id"] == bid), {}) if r.ok else {}
     check("list budgets shows spend + utilization", row.get("name") == name and "utilization_pct" in row, row)
     r = call("GET", f"/api/runtime/budgets/{bid}/status")
-    check("budget status", r.ok and r.json().get("budget_id") == bid and r.json().get("thresholds_breached") == [], r.text)
+    sj = r.json() if r.ok else {}
+    # Breached thresholds must follow the space's actual spend (it is not zero on a used stack).
+    want = [t for t in (50, 90) if sj.get("utilization_pct", 0) >= t]
+    check("budget status", r.ok and sj.get("budget_id") == bid and sj.get("thresholds_breached") == want, r.text)
     r = call("DELETE", f"/api/runtime/budgets/{bid}")
     check("delete budget", r.ok and r.json().get("deleted") is True, r.text)
     check("deleted budget status -> 404", call("GET", f"/api/runtime/budgets/{bid}/status").status_code == 404)
