@@ -725,6 +725,15 @@ def register(app) -> None:
             return _deny(request, st, code, code.replace("_", " "))
         return _cors(JSONResponse(out), request)
 
+    @app.get("/mesh/selfcheck", include_in_schema=False)
+    def _selfcheck(request: Request):
+        # "Did this Mesh come up healthy?" (DNS / apt / egress / disk / memory / appliance / AI). The portal gates Join on all-ok.
+        g = _guard(request)
+        if g:
+            return g
+        from core import mesh_selfcheck
+        return _cors(JSONResponse(mesh_selfcheck.run()), request)
+
     @app.get("/mesh/whoami", include_in_schema=False)
     def _whoami(request: Request):
         g = _guard(request)
