@@ -86,7 +86,9 @@ const SERVICES = [
         disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }],
         networkInterfaces: [{ network: `projects/${P}/global/networks/default` }] }],
     path: (P, n, X) => `/_wire/compute/v1/projects/${P}/zones/${X.zone}/instances/${n}`,
-    name: (j) => String(j.name || ""), state: (j) => String(j.status || "") },
+    // The Nano grid shows the in-browser VM state (consoles/src/gcp/services/compute/api.js nanoVm): RUNNING only once the v86 VM booted, so the
+    // native status is not comparable; name + zone + machine type (rowMatch) are.
+    name: (j) => String(j.name || ""), state: () => "" },
   { id: "functions", label: /Cloud Functions|Cloud Run functions/i,
     create: (P, n, X) => ["POST", `/_wire/v2/projects/${P}/locations/${X.region}/functions?functionId=${n}`,
       { buildConfig: { runtime: "python311", entryPoint: "main" } }],

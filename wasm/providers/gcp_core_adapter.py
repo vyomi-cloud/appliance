@@ -481,7 +481,7 @@ def _mon_op(operation, name, body):
 # other. The bridge keeps them one set: native networks are mirrored into the console list before it is
 # read, a console create/delete is written through to the native store, and a mirrored record disappears
 # when its native twin is deleted. Mirrored records carry `_bridged: True`.
-_BRIDGED_SERVICES = ("vpc",)
+_BRIDGED_SERVICES = ("vpc", "compute")
 
 
 def _native_vpc_snapshot():
@@ -496,12 +496,28 @@ def _native_vpc_snapshot():
     return out
 
 
+def _native_compute_snapshot():
+    out = {}
+    st = _R["gcp_compute_vm"]
+    for _k, rec in list(getattr(st, "instances", {}).items()):
+        selfl = str(rec.get("selfLink") or _k)
+        if "/projects/%s/" % PROJ not in selfl and ("projects/%s/" % PROJ) not in str(_k):
+            continue
+        zone = str(rec.get("zone") or "").rsplit("/", 1)[-1] or "us-central1-a"
+        out[rec["name"]] = dict(rec, zone=zone, machineType=str(rec.get("machineType") or "e2-medium").rsplit("/", 1)[-1])
+    return out
+
+
+def _native_snapshot(svc):
+    return _native_vpc_snapshot() if svc == "vpc" else _native_compute_snapshot()
+
+
 def bridge_pre(svc, operation, account, res, fill):
     """Before a console List/Get/Delete: mirror native networks in, drop mirrored ones whose native twin is gone."""
     if svc not in _BRIDGED_SERVICES or operation not in ("List", "Get", "Delete"):
         return
     try:
-        native = _native_vpc_snapshot()
+        native = _native_snapshot(svc)
         existing = {x.get("name"): x for x in res.list("gcp", account, svc)}
         for n, rec in native.items():
             if n not in existing:
@@ -520,15 +536,31 @@ def _compute_native(method, path, body=None):
     return r.status
 
 
+def _compute_vm_native(method, path, body=None):
+    from core import gcp_compute_instances_core as _gi
+    r = _gi.dispatch(_R["gcp_compute_vm"], method, path, {}, {"content-type": "application/json"},
+                     json.dumps(body).encode() if body is not None else b"", None, _R["gcp_compute"])
+    return r.status
+
+
 def bridge_post_create(svc, account, res, rec):
-    """After a console create: write the network through to the native store and mark the console record."""
+    """After a console create: write the resource through to the native store and mark the console record."""
     if svc not in _BRIDGED_SERVICES or not isinstance(rec, dict) or not rec.get("name"):
         return
     try:
-        st = _compute_native("POST", f"/compute/v1/projects/{PROJ}/global/networks",
-                             {"name": rec["name"], "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)),
-                              "mtu": rec.get("mtu", 1460), "description": rec.get("description", ""),
-                              "routingConfig": rec.get("routingConfig") or {"routingMode": "REGIONAL"}})
+        if svc == "vpc":
+            st = _compute_native("POST", f"/compute/v1/projects/{PROJ}/global/networks",
+                                 {"name": rec["name"], "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)),
+                                  "mtu": rec.get("mtu", 1460), "description": rec.get("description", ""),
+                                  "routingConfig": rec.get("routingConfig") or {"routingMode": "REGIONAL"}})
+        else:
+            zone = str(rec.get("zone") or "us-central1-a").rsplit("/", 1)[-1]
+            mt = str(rec.get("machineType") or "e2-medium").rsplit("/", 1)[-1]
+            st = _compute_vm_native("POST", f"/compute/v1/projects/{PROJ}/zones/{zone}/instances",
+                                    {"name": rec["name"], "machineType": f"zones/{zone}/machineTypes/{mt}",
+                                     "disks": [{"boot": True, "autoDelete": True, "initializeParams": {
+                                         "sourceImage": "projects/debian-cloud/global/images/family/debian-12"}}],
+                                     "networkInterfaces": [{"network": f"projects/{PROJ}/global/networks/default"}]})
         if st < 300 or st == 409:
             res.update("gcp", account, svc, rec["name"], {"_bridged": True})
     except Exception:
@@ -540,7 +572,12 @@ def bridge_post_delete(svc, name):
     if svc not in _BRIDGED_SERVICES or not name:
         return
     try:
-        _compute_native("DELETE", f"/compute/v1/projects/{PROJ}/global/networks/{name}")
+        if svc == "vpc":
+            _compute_native("DELETE", f"/compute/v1/projects/{PROJ}/global/networks/{name}")
+        else:
+            zone = (_native_compute_snapshot().get(name) or {}).get("zone")
+            if zone:
+                _compute_vm_native("DELETE", f"/compute/v1/projects/{PROJ}/zones/{zone}/instances/{name}")
     except Exception:
         pass
 
