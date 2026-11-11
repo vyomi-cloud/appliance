@@ -78,3 +78,17 @@ Azure OpenAI data plane: anonymous call was accepted (fixed: now 401, test_azure
 ## Azure, 2026-11-12: harness fixes
 - FIXED run_suites.count(): the Go suite offline-sdk-go-azure-operationalinsights was green (39 PASS, 0 FAIL) but scored 0/400 because the check name "unsupported KQL -> 400 error" matched the pytest summary regex (`400 error`). `error(s)` now counts only on a timed pytest summary line (test_run_suites_count.py).
 - `*-ui-azure-flat-create` (nano + offline) drive the OLD console (wasm/azure-console.html), so they are marked `pending` (reported every run, not gating v4). Decide: retarget to `/v4/azure/` (NSG + Role Definition flat create) or retire.
+||||||| parent of 24794b111 (fix(azure): Function app wizard sets kind; Service Bus shown endpoint is an appliance route)
+
+
+## Azure crawl + offline-red triage (2026-11-12, session Azure; branch v4/azure-crawl-triage)
+Source: nightly-v4 run 42956759997 (after-azure artifact): Nano UI crawl 23 findings, offline Azure 10 red suites.
+FIXED (tests fail without the fix): Function app wizard sent no `kind` -> site stored as Web App -> Functions tab 404 (`test_azure_functionapp_wizard_kind.py`; core/azure_wizards.py + wasm/fixtures/azure-catalog.json);
+Service Bus ARM `serviceBusEndpoint` showed Nano's `/api/servicebus/topics` on the appliance (404) -> `/azure-data/servicebus/<ns>` off Nano (`test_azure_shown_endpoints.py`).
+ENV, not product: 22 of 23 crawl findings are the same `/vendor/pyodide/pyodide.mjs -> 404` (wasm/vendor/ is git-ignored; the loaders fall back to the CDN, the crawler scores the 404 HEAD probe).
+  Fix on the runner: add `python3 wasm/fetch_pyodide.py` to nightly-v4.yml before the crawl (workflow file: owner pushes, vyomi-admin has no `workflow` scope).
+DECISIONS: (1) offline-ui-azure-* (metrics, rg-nav, flat-create, resource-group-detail, apim-appinsights) target `/console/azure`, which the headless v4 image does not serve -> they fail by construction (same as AWS item 2): retarget to the v4 consoles or retire.
+  (2) offline-post-create-azure-sql-fqdn: the appliance has no HTTP data plane for `fullyQualifiedDomainName` (shows Nano's `/api/azuresql/servers`, 404): decide a shown endpoint (e.g. /azure-data/sql/<server>) or accept "no TDS" text only.
+  (3) offline-post-create-azure-event-delivery needs the webhook receiver (env); offline-sweepA-azure: Key Vault is now per vault on trunk (c72c1dadb); re-check on the next nightly.
+HAZARD (found while vendoring; not fixed here): core/azure_arm_core.py now imports `azure_compute_disks_vm` (my VM disks merge 016ffb155) but `azure_compute_disks_vm.py` is not in the CORES lists
+(wasm/build_cores.py, wasm/nano-boot.js, wasm/relay/relay-shared-worker.js, wasm/relay/nano-endpoint.html): `python3 wasm/build_cores.py` aborts until it is added, and wasm/core/azure_arm_core.py is stale (VM password strip etc. not in Nano yet). wasm/core also lags aws_wire_router.py (az-openai provider fix). Vendoring is the owner's/portal session's step.

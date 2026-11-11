@@ -27,6 +27,7 @@ import datetime
 import hashlib
 import json
 import re
+import sys
 import threading
 import uuid
 from urllib.parse import unquote, urlsplit
@@ -892,6 +893,21 @@ _NANO_SHOWN = {
             "listServers": "GET __BASE__/api/azuresql/servers",
             "query": "POST __BASE__/api/azuresql/query"}},
 }
+# On the appliance the Service Bus REST data plane is served at /azure-data/servicebus/<namespace>
+# (core/wire_ingress); /api/servicebus/topics exists only in Nano's service worker.
+_APPLIANCE_SHOWN = {
+    "microsoft.servicebus/namespaces": {"properties.serviceBusEndpoint": "__BASE__/azure-data/servicebus/__NAME__"},
+}
+
+
+def _shown_for(full_type: str) -> dict:
+    """The 'shown endpoint' overrides for a top-level type, for the runtime we are in (Pyodide = Nano)."""
+    t = full_type.lower()
+    if sys.platform != "emscripten" and t in _APPLIANCE_SHOWN:
+        return _APPLIANCE_SHOWN[t]
+    return _NANO_SHOWN.get(t) or {}
+
+
 def _h(*parts, n=8):
     return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:n]
 
@@ -3944,7 +3960,7 @@ class AzureArm:
             pub = getattr(self, "_public_base", None)
             if pub is None:
                 pub = base
-            forced = _NANO_SHOWN.get(full_type.lower())
+            forced = _shown_for(full_type)
             for path_expr, val in (forced or {}).items():
                 _set_path(rec, path_expr, _expand_tokens(val, name, pub))
         # systemData.createdAt/lastModifiedAt: real ARM returns this on every resource; the

@@ -705,7 +705,11 @@ _FUNCTIONAPP_WIZARD = {
         _tags_tab(),
         _review_tab(),
     ],
-    "synthetic_map": {},
+    # A Function app is Microsoft.Web/sites with kind "functionapp[,linux]"; without it the
+    # site is stored as a Web App and its Functions tab/API 404s ("'functions' is not supported").
+    "synthetic_map": {
+        "__osType__": {"linux": {"kind": "functionapp,linux"}, "windows": {"kind": "functionapp"}},
+    },
 }
 
 
