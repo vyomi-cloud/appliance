@@ -1797,6 +1797,8 @@ def _dispatch_databases_collection(store: FirestoreStore, project: str, method: 
     if method == "POST":
         data = _load_json(body)
         dbid = query.get("databaseId") or "(default)"
+        if not _DB_ID.match(dbid):
+            return _err(400, "INVALID_ARGUMENT", "Database ID '%s' is invalid: 4-63 characters, lowercase letters, digits and hyphens, starting with a letter (or '(default)')." % dbid)
         if dbid in store.databases:
             return _err(409, "ALREADY_EXISTS", f"Database already exists: {dbid}")
         rec = _ensure_db(store, project, dbid)

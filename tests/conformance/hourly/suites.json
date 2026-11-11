@@ -2157,8 +2157,9 @@
     {"id": "offline-api-issue-report-middleware", "target": "offline", "cloud": "all", "kind": "api", "cmd": "python3 tests/conformance/test_issue_report_middleware.py", "timeout": 180},
     {"id": "nano-issue-reporter-js", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_issue_reporter_js.mjs", "timeout": 120},
     {"id": "nano-sw-issue-reporting", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_nano_sw_issue_reporting.mjs", "timeout": 120},
-    {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "validation/error-message suite not written yet (tests/conformance/nightly/GCP-AGENT.md, dimension 4)", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/nightly/gcp-validation.mjs", "timeout": 900},
+    {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "node tests/conformance/nightly/gcp-validation.mjs", "timeout": 300},
     {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
+    {"id": "nightly-gcp-v4-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-v4-roundtrip.mjs", "timeout": 900},
     {"id": "nightly-gcp-tunnel-recovery", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "tunnel auto-recovery suite not written yet (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} bash tests/conformance/nightly/gcp-tunnel-recovery.sh", "timeout": 900}
   ]
 }

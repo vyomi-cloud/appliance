@@ -814,6 +814,8 @@ def dispatch(store: KeyStore, method: str, path: str,
             ring_id = query.get("keyRingId") or payload.get("keyRingId")
             if not ring_id:
                 return _err(400, "INVALID_ARGUMENT", "keyRingId is required.")
+            if not re.match(r"^[A-Za-z0-9_-]{1,63}$", str(ring_id)):
+                return _err(400, "INVALID_ARGUMENT", f"Invalid key ring ID '{ring_id}': it must be 1-63 characters of letters, numbers, underscores and hyphens.")
             name = f"{parent}/{ring_id}"
             if name in rings:
                 return _err(409, "ALREADY_EXISTS", f"KeyRing {name} already exists.")

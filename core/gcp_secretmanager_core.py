@@ -526,6 +526,8 @@ def _create_secret(store: KvStore, project: str, secret_id: str, body: dict, loc
                    notifier=None, logger=None) -> GcpResponse:
     if not secret_id:
         return _err(400, "secretId is required (query parameter).")
+    if not re.match(r"^[A-Za-z0-9_-]{1,255}$", str(secret_id)):
+        return _err(400, f"Invalid secret ID '{secret_id}': it must be 1-255 characters of letters, numbers, underscores and hyphens.")
     key = _key(project, secret_id, location)
     if store.secret_exists(key):
         return _err(409, f"Secret [{_resource_name(project, secret_id, location)}] already exists.")

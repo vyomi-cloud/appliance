@@ -52,17 +52,17 @@ def run() -> int:
 
     # 1. create service account -> 200 with name/email/uniqueId
     cr = _post(st, f"/v1/projects/{project}/serviceAccounts",
-               {"accountId": "svc-a", "serviceAccount": {"displayName": "Service A"}})
+               {"accountId": "svc-aaa", "serviceAccount": {"displayName": "Service A"}})
     _check("create SA 200", cr.status == 200)
     sa = _jbody(cr)
-    _check("create SA email", sa["email"] == f"svc-a@{project}.iam.gserviceaccount.com")
+    _check("create SA email", sa["email"] == f"svc-aaa@{project}.iam.gserviceaccount.com")
     _check("create SA name", sa["name"] == f"projects/{project}/serviceAccounts/{sa['email']}")
     _check("create SA uniqueId 21 digits", sa["uniqueId"].isdigit() and len(sa["uniqueId"]) == 21)
     _check("create SA displayName", sa["displayName"] == "Service A")
 
     # 1b. duplicate accountId -> 409 ALREADY_EXISTS
     dup = _post(st, f"/v1/projects/{project}/serviceAccounts",
-                {"accountId": "svc-a", "serviceAccount": {}})
+                {"accountId": "svc-aaa", "serviceAccount": {}})
     _check("duplicate SA 409", dup.status == 409 and _jbody(dup)["error"]["status"] == "ALREADY_EXISTS")
 
     # 2. get service account (by email) -> matches
@@ -70,13 +70,13 @@ def run() -> int:
                       f"/v1/projects/{project}/serviceAccounts/{sa['email']}", {}, {}, b"")
     _check("get SA 200", g.status == 200 and _jbody(g)["email"] == sa["email"])
 
-    # 3. list service accounts -> contains svc-a
+    # 3. list service accounts -> contains svc-aaa
     _post(st, f"/v1/projects/{project}/serviceAccounts",
-          {"accountId": "svc-b", "serviceAccount": {"displayName": "Service B"}})
+          {"accountId": "svc-bbb", "serviceAccount": {"displayName": "Service B"}})
     ls = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts", {}, {}, b"")
     emails = [a["email"] for a in _jbody(ls)["accounts"]]
     _check("list SA has both", sa["email"] in emails and
-           f"svc-b@{project}.iam.gserviceaccount.com" in emails)
+           f"svc-bbb@{project}.iam.gserviceaccount.com" in emails)
 
     # 4. setIamPolicy then getIamPolicy round-trips bindings
     resource = f"projects/_/buckets/demo-bucket"

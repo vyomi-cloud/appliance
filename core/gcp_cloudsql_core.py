@@ -355,6 +355,9 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
     if _get_instance(store, project, name):
         return _err(409, "ALREADY_EXISTS",
                     f"The Cloud SQL instance already exists. Instance: {name}")
+    _dv = str(body.get("databaseVersion", "POSTGRES_15"))
+    if not re.match(r"^(POSTGRES_\d+|MYSQL_\d+_\d+|SQLSERVER_\d+_(STANDARD|ENTERPRISE|EXPRESS|WEB))$", _dv):
+        return _err(400, "INVALID_ARGUMENT", f"Invalid request: Invalid database version '{_dv}'. Use a value such as POSTGRES_15, MYSQL_8_0 or SQLSERVER_2019_STANDARD.")
     master = str(body.get("masterInstanceName", "") or "").strip()
     if master and not _get_instance(store, project, master):
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {master}")

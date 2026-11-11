@@ -63,6 +63,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -417,6 +418,8 @@ def _create_service_account(store, project, body, rm_store=None) -> GcpIamRespon
     account_id = str(body.get("accountId", "")).strip()
     if not account_id:
         return _err(400, "accountId is required.", "INVALID_ARGUMENT")
+    if not re.match(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$", account_id):
+        return _err(400, "Invalid service account ID '%s': it must be 6-30 characters, start with a lowercase letter, and contain only lowercase letters, digits and hyphens." % account_id, "INVALID_ARGUMENT")
     email = _sa_email(account_id, project)
     sas = _sa_ns(store)
     if email in sas:

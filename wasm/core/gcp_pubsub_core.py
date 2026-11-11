@@ -1065,6 +1065,9 @@ def _sync_subscription_metrics(store, name: str) -> None:
 
 # ── topic operations ──────────────────────────────────────────────────────
 def _create_topic(store, name: str, body: dict) -> PubsubResponse:
+    _tid = name.rsplit("/", 1)[-1]
+    if not re.match(r"^[A-Za-z][A-Za-z0-9._~+%-]{2,254}$", _tid) or _tid.lower().startswith("goog"):
+        raise PubsubError(400, "INVALID_ARGUMENT", f"Invalid [topics] name: (name={name}). Topic IDs must be 3-255 characters, start with a letter, contain only letters, numbers and - _ . ~ + %, and not start with 'goog'.")
     if store.get_topic(name):
         raise PubsubError(409, "ALREADY_EXISTS", f"Topic already exists: {name}")
     topic = {"name": name, "subscriptions": [], "created": _now_rfc3339(), "labels": dict(body.get("labels") or {})}
