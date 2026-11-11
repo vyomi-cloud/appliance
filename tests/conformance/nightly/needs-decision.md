@@ -98,3 +98,9 @@ nano-ui-crawl (25 Azure services, 3 finding classes): 103 x HTTP_5XX `https://re
 23 x `/vendor/pyodide/pyodide.mjs -> 404` = `wasm/vendor/` is git-ignored, loaders fall back to the CDN (env: nightly needs `python3 wasm/fetch_pyodide.py`);
 1 real finding FIXED: Function apps "Deployment slots" tab 404 (cef90d80a: tab removed, core refuses slots on a function app).
 Nano VM compute is metadata-only for power actions (no Docker backing); runCommand runs only echo/hostname/whoami/date/uname/IMDS+Key Vault and refuses everything else with exit 1 "nothing was executed" (honest, unchanged).
+||||||| parent of 096073ddf (docs(nightly): Azure Nano UI run - only the hosted-relay probe remains)
+
+## Azure Nano UI, 2026-11-12 (local Nano run, all 25 services + 25 nano-ui-azure-* suites)
+Result: 24/26 nano suites green; `nano-ui-azure-flat-create` is pending (old console, see above); `nano-ui-crawl` red.
+Crawl: 102 findings, ALL `HTTP_5XX https://relay.vyomi.cloud/health -> 503 no Nano tab registered` (hosted-relay probe in shared `wasm/nano-tunnel-tabs.js` / `nano-connect.js`), i.e. 0 Azure-specific deviations. Same root cause AWS-1 recorded: Nano tunnel owner must drop or soften that probe (the crawler scores any 5xx as a failure). Not touched here (shared Nano tunnel code).
+The one Azure finding (Function apps "Deployment slots" tab 404) was already fixed on trunk (cef90d80a); re-crawl of Function apps shows only the relay probe.
