@@ -17,7 +17,7 @@ AUTH = "AWS4-HMAC-SHA256 Credential=T/20261030/us-east-1/iam/aws4_request, Signe
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)
-    print(f"  ok  {name}")
+    print(f"[PASS] {name}")
 
 
 def iam(r, action, **p):

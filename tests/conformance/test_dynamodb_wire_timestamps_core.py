@@ -22,7 +22,7 @@ P = "DynamoDB_20120810."
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)
-    print(f"  ok  {name}")
+    print(f"[PASS] {name}")
 
 
 def _is_epoch(v):
