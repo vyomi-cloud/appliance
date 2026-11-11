@@ -167,7 +167,7 @@
       var row = vid.closest('[class*="awsui_child"]'), kids = row && row.parentElement ? row.parentElement.children : [], i;
       for (i = 0; i < kids.length; i++) if (kids[i] !== row && /^\s*Welcome to the/.test(kids[i].textContent) && kids[i].style.order !== "-1") kids[i].style.order = "-1";
     }
-    else { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (card.nextElementSibling !== tgt || !card.isConnected) tgt.parentElement.insertBefore(card, tgt); }
+    else if (h) { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (card.nextElementSibling !== tgt || !card.isConnected) tgt.parentElement.insertBefore(card, tgt); }
   }
 
   function boot() {

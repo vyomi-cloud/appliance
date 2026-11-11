@@ -109,7 +109,7 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
 const ctx = await browser.newContext({ serviceWorkers: "block" });
 const page = await ctx.newPage();
 const pageErrors = [];
-page.on("pageerror", (e) => pageErrors.push(String(e.message).split("\n")[0]));
+page.on("pageerror", (e) => pageErrors.push(process.env.STACK ? String(e.stack).split("\n").slice(0, 4).join(" <- ") : String(e.message).split("\n")[0]));
 
 const routeOf = (id) => (SVCS.find((x) => x.id === id) || {}).route || id;
 const goList = async (id) => {

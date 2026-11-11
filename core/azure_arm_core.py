@@ -1077,6 +1077,10 @@ def _view(rec: dict) -> dict:
     if isinstance(props, dict) and "administratorLoginPassword" in props:
         # Real Azure never returns the SQL admin password; it stays stored for the data plane.
         out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    osp = (out.get("properties") or {}).get("osProfile") if isinstance(out.get("properties"), dict) else None
+    if isinstance(osp, dict) and "adminPassword" in osp:
+        # Real Azure never returns a VM's admin password on GET (found by the Mesh VM bi-directional run); it stays stored for the guest.
+        out["properties"] = {**out["properties"], "osProfile": {k: v for k, v in osp.items() if k != "adminPassword"}}
     return out
 
 

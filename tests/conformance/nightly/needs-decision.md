@@ -58,3 +58,17 @@ Not covered: bedrock, securityhub, cost-explorer (read-mostly, no create flow). 
 - v4 IAM "Create service account": the Service account ID field is not derived from the name (the real console derives it live).
 - Storage accepts 2-char bucket names (real GCS: 3-63). Tighten after renaming the unit-test fixtures that use `bo`, `lc`, `sc`, `v1`.
 - v4 Monitoring: the alert-policy list is read-only (no select/delete/detail/edit); the real console can delete and edit a policy. Build it? (`gcp-v4-roundtrip` skips step D for monitoring with this reason.)
+||||||| parent of a74a74d71 (test+fix(mesh): live-Mesh E2E (EC2, Bedrock, Azure AI/VM, GCP GCE), tunnel recovery, 3 fixes)
+
+
+## Azure VM compute on the Mesh (live run 2026-11-11, `wasm/ui-tests/azure-mesh/vm-bidirectional.mjs`: 25 PASS, 6 FAIL, 1 NOT-AUTOMATED)
+Fixed in this batch (with tests): VM GET/list no longer echo `osProfile.adminPassword` (test_azure_vm_no_password_echo.py).
+Open, owner decision (release-known gaps; each is backend work, not hot-fixable on the published image):
+1. **powerOff / deallocate are metadata-only**: ARM + instanceView say stopped/deallocated but the Docker container keeps running until delete (the power route's own note says "metadata-only"). Real: stop frees compute. Fix = call the compute backend stop/start from the power route.
+2. **runCommand is not real compute**: returns 200 "The VM guest agent is not reachable: this virtual machine has no guest runtime (it is metadata-only)" although a Docker container with sshd exists. Fix = `docker exec` into the VM container for runCommand (and align the console text).
+3. **OS disk is not an ARM resource**: `osDisk.managedDisk.id` GET -> 404 (no `Microsoft.Compute/disks` handler). NIC exists.
+4. **Short password accepted over ARM** (3 chars, 200). Real: 6-72 chars + 3 of 4 complexity classes, error InvalidParameter. Wizard only checks the two fields match; with a 3-char password no VM was created and no message shown (unexplained).
+5. **`GET ...?$expand=instanceView` returns no instanceView** (only the separate /instanceView route works).
+6. **Capacity**: the Mesh admits ONE running B1s VM at a time (409 AllocationFailed, mesh admission control, by design); EC2 side admits about 2 instances (500 InsufficientInstanceCapacity with an "Availability Zone" message that reads wrong). A second concurrent user/run will be refused.
+7. Console has no **Deallocate** button (Start/Restart/Stop only).
+Azure OpenAI data plane: anonymous call was accepted (fixed: now 401, test_azure_openai_route_auth.py). The Mesh image must be rebuilt for both fixes to reach the Mesh.

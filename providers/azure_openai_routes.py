@@ -45,7 +45,8 @@ def register(app) -> None:
         body = await request.body()
         hdrs = dict(request.headers)
         if not (key or hdrs.get("authorization")):
-            hdrs["api-key"] = "none"      # the data-plane gate (key / bearer) is enforced above for supplied keys; keep prior leniency
+            # real Azure OpenAI refuses an anonymous data-plane call (found by the Mesh bi-directional run, 2026-11-11: it used to be accepted)
+            return JSONResponse(status_code=401, content={"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
         tok = ai_models_core.STREAM_OK.set(True)
         try:
             out = ai_models_core.azure_openai_dispatch({rec.get("id", account): rec}, "POST", f"/openai/deployments/{dep}/{op}",
