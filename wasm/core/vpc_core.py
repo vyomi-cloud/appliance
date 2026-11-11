@@ -2575,6 +2575,7 @@ def _find_instance(m, instance_id) -> dict:
 def _describe_instances(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("InstanceId.") or k.startswith("InstanceIds.")]
+    _require_ids(ids, [{"id": i} for i in m["instances"]], "InvalidInstanceID.NotFound", "instance")
     rows = [m["instances"][i] for i in ids if i in m["instances"]] if ids else list(m["instances"].values())
     items = "".join(f"<item><reservationId>{_rid('r')}</reservationId><ownerId>{OWNER_ID}</ownerId>"
                      f"<groupSet/><instancesSet>{_instance_xml(r)}</instancesSet></item>" for r in rows)
@@ -2889,6 +2890,7 @@ def _describe_images(store, params):
     owners = [v for k, v in params.items() if k.startswith("Owner.")]
     rows = list(m["images"].values())
     if ids:
+        _require_ids(ids, rows, "InvalidAMIID.NotFound", "image")
         rows = [i for i in rows if i["id"] in ids]
     if owners:
         rows = [i for i in rows if ("self" in owners and i["owner_id"] == OWNER_ID) or i["owner_id"] in owners]
@@ -2976,6 +2978,7 @@ def _find_volume(m, vid) -> dict:
 def _describe_volumes(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("VolumeId.")]
+    _require_ids(ids, [{"id": i} for i in m["volumes"]], "InvalidVolume.NotFound", "volume")
     rows = [m["volumes"][i] for i in ids if i in m["volumes"]] if ids else list(m["volumes"].values())
     return _envelope("DescribeVolumes", f"<volumeSet>{''.join(_volume_xml(v) for v in rows)}</volumeSet>")
 
@@ -3065,6 +3068,7 @@ def _describe_snapshots(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("SnapshotId.")]
     owners = [v for k, v in params.items() if k.startswith("Owner.")]
+    _require_ids(ids, [{"id": i} for i in m["snapshots"]], "InvalidSnapshot.NotFound", "snapshot")
     rows = [m["snapshots"][i] for i in ids if i in m["snapshots"]] if ids else list(m["snapshots"].values())
     if owners:
         rows = [s for s in rows if ("self" in owners and s["owner_id"] == OWNER_ID) or s["owner_id"] in owners]
@@ -3138,6 +3142,10 @@ def _import_key_pair(store, params):
 def _describe_key_pairs(store, params):
     m = _model(store)
     names = [v for k, v in params.items() if k.startswith("KeyName.")]
+    have = {kp["name"] for kp in m["key_pairs"].values()}
+    missing = [n for n in names if n not in have]
+    if missing:
+        raise VpcError("InvalidKeyPair.NotFound", f"The key pair '{', '.join(missing)}' does not exist")
     rows = [kp for kp in m["key_pairs"].values() if not names or kp["name"] in names]
     return _envelope("DescribeKeyPairs", f"<keySet>{''.join(_keypair_xml(kp) for kp in rows)}</keySet>")
 
@@ -3179,7 +3187,20 @@ def _allocate_address(store, params):
 
 def _describe_addresses(store, params):
     m = _model(store)
-    return _envelope("DescribeAddresses", f"<addressesSet>{''.join(_address_xml(a) for a in m['addresses'].values())}</addressesSet>")
+    rows = list(m["addresses"].values())
+    alloc = [v for k, v in params.items() if k.startswith("AllocationId.")]
+    ips = [v for k, v in params.items() if k.startswith("PublicIp.")]
+    missing = [a for a in alloc if a not in {r["allocation_id"] for r in rows}]
+    if missing:
+        raise VpcError("InvalidAllocationID.NotFound", f"The allocation ID '{', '.join(missing)}' does not exist")
+    missing = [a for a in ips if a not in {r["public_ip"] for r in rows}]
+    if missing:
+        raise VpcError("InvalidAddress.NotFound", f"Address '{', '.join(missing)}' not found.")
+    if alloc:
+        rows = [r for r in rows if r["allocation_id"] in alloc]
+    if ips:
+        rows = [r for r in rows if r["public_ip"] in ips]
+    return _envelope("DescribeAddresses", f"<addressesSet>{''.join(_address_xml(a) for a in rows)}</addressesSet>")
 
 
 def _associate_address(store, params):
