@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)
-    print(f"  ok  {name}")
+    print(f"  [PASS] {name}")
 
 
 def _b(r):
