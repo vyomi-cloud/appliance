@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-11T19:00:41+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 1 actionable.**
+- 🔧 `spec-commit` Azure cognitiveservices: Add CognitiveServices stable API version 2026-11-01 (#47307) ([link](https://github.com/Azure/azure-rest-api-specs/commit/bb09e375334d3e064aa5bc06d83a0568ffca0b4c))
+- · `spec-commit` Azure keyvault: [KeyVault] Add Go client customizations for EKM (#47780) ([link](https://github.com/Azure/azure-rest-api-specs/commit/ec1ca1d8221a84e9201bc0b3a4f60789e51c0fba))
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-11T18:00:19+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3008,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **1 change(s), 0 actionable.**
 - · `announcement` Amazon RDS for Oracle and SQL Server now support storage autoscaling on additional storage volumes ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-oracle-sqlserver-autoscaling-additional-storage-volumes))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-29T19:51:20+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**3 change(s), 0 actionable.**
-- · `announcement` Amazon DynamoDB Accelerator (DAX) is now available in additional Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/dax-additional-regions/))
-- · `release` pypi:boto3: 1.43.121 → 1.43.122
-- · `release` pypi:botocore: 1.43.121 → 1.43.122

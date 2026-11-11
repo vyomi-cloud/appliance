@@ -1,19 +1,25 @@
 {
- "at": "2026-11-11T18:00:19+00:00",
+ "at": "2026-11-11T19:00:41+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:415ce24082da",
-   "title": "Google Kubernetes Engine: Issue (November 11, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_11_2026",
-   "detail": "On nodes that have Linux syscall auditing enabled, such as Container-Optimized OS nodes where you enabled Linux auditd logging , mounting Cloud Storage FUSE CSI driver volumes can hang indefinitely. Pods that use these volumes don't start and remain in a status such as Init:0/1 or ContainerCreating . Pods that are being deleted remain in the Terminating state, and node drains, including drains during node pool upgrades, might not complete. Pod events show errors similar to the following: MountVolume.SetUp failed for volume \"VOLUME_NAME\" : rpc error: code = DeadlineExceeded desc = context deadl",
+   "cloud": "azure",
+   "service": "keyvault",
+   "kind": "spec-commit",
+   "key": "azure:keyvault:ec1ca1d822",
+   "title": "Azure keyvault: [KeyVault] Add Go client customizations for EKM (#47780)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/ec1ca1d8221a84e9201bc0b3a4f60789e51c0fba",
    "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:bb09e37533",
+   "title": "Azure cognitiveservices: Add CognitiveServices stable API version 2026-11-01 (#47307)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/bb09e375334d3e064aa5bc06d83a0568ffca0b4c",
+   "actionable": true
   }
  ],
- "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out"
- ]
+ "errors": []
 }
