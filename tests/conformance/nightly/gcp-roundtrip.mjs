@@ -72,7 +72,7 @@ const SERVICES = [
     create: (P, n) => ["POST", `/_wire/v1/projects/${P}/serviceAccounts`, { accountId: n, serviceAccount: { displayName: n } }],
     path: (P, n) => `/_wire/v1/projects/${P}/serviceAccounts/${n}@${P}.iam.gserviceaccount.com`,
     name: (j) => String(j.email || "").split("@")[0], state: () => "" },
-  { id: "apigateway", label: /API Gateway/i,
+  { id: "apigateway", pending: "no native /_wire route for API Gateway in Nano (405)", label: /API Gateway/i,
     create: (P, n) => ["POST", `/_wire/v1/projects/${P}/locations/global/apis?apiId=${n}`, { displayName: n }],
     path: (P, n) => `/_wire/v1/projects/${P}/locations/global/apis/${n}`,
     name: (j) => String(j.name || "").split("/").pop(), state: (j) => String(j.state || "") },
@@ -89,21 +89,28 @@ const SERVICES = [
     // The Nano grid shows the in-browser VM state (consoles/src/gcp/services/compute/api.js nanoVm): RUNNING only once the v86 VM booted, so the
     // native status is not comparable; name + zone + machine type (rowMatch) are.
     name: (j) => String(j.name || ""), state: () => "" },
-  { id: "functions", label: /Cloud Functions|Cloud Run functions/i,
+  { id: "functions", pending: "console uses the generic store, /_wire the native functions core (split-brain); native create also needs an uploaded source zip", label: /Cloud Functions|Cloud Run functions/i,
     create: (P, n, X) => ["POST", `/_wire/v2/projects/${P}/locations/${X.region}/functions?functionId=${n}`,
-      { buildConfig: { runtime: "python311", entryPoint: "main" } }],
+      { buildConfig: { runtime: "python311", entryPoint: "main", source: { storageSource: { bucket: "rt-src", object: "src.zip" } } } }],
     path: (P, n, X) => `/_wire/v2/projects/${P}/locations/${X.region}/functions/${n}`,
     name: (j) => String(j.name || "").split("/").pop(), state: (j) => String(j.state || "") },
-  { id: "eventarc", label: /Eventarc/i,
+  { id: "eventarc", pending: "console uses the generic store, /_wire the native eventarc core (split-brain); native create needs an existing Cloud Run service", label: /Eventarc/i,
     create: (P, n, X) => ["POST", `/_wire/v1/projects/${P}/locations/${X.region}/triggers?triggerId=${n}`,
       { eventFilters: [{ attribute: "type", value: "google.cloud.pubsub.topic.v1.messagePublished" }],
         destination: { cloudRun: { service: "rt-svc", region: X.region } } }],
     path: (P, n, X) => `/_wire/v1/projects/${P}/locations/${X.region}/triggers/${n}`,
     name: (j) => String(j.name || "").split("/").pop(), state: () => "" },
-  { id: "monitoring", label: /Cloud Monitoring|Monitoring/i, lookupByList: true,
+  // Alert policies are addressed by a server-assigned id: find it by display name (policy ids are remembered in IDS for the by-id path).
+  { id: "monitoring", label: /Cloud Monitoring|Monitoring/i,
     create: (P, n) => ["POST", `/_wire/v3/projects/${P}/alertPolicies`,
       { displayName: n, combiner: "OR", conditions: [{ displayName: "c", conditionThreshold: { filter: 'metric.type="compute.googleapis.com/instance/cpu/utilization"', comparison: "COMPARISON_GT", thresholdValue: 0.9, duration: "60s" } }] }],
-    path: (P, n) => `/_wire/v3/projects/${P}/alertPolicies`,
+    lookup: async (api, P, n) => {
+      const l = await api("GET", `/_wire/v3/projects/${P}/alertPolicies`);
+      const hit = ((l.body || {}).alertPolicies || []).find((x) => x.displayName === n);
+      if (hit) { IDS[n] = String(hit.name).split("/").pop(); return { status: 200, body: hit }; }
+      return { status: 404, body: l.body };
+    },
+    path: (P, n) => `/_wire/v3/projects/${P}/alertPolicies/${IDS[n] || n}`,
     name: (j) => String(j.displayName || ""), state: () => "" },
   { id: "redis", label: /Memorystore for Redis/i,
     create: (P, n) => ["POST", `/_wire/v1/projects/${P}/locations/us-central1/instances?instanceId=${n}`, { tier: "BASIC", memorySizeGb: 1 }],
@@ -111,6 +118,7 @@ const SERVICES = [
     name: (j) => String(j.name || "").split("/").pop(), state: (j) => String(j.state || "") },
 ];
 
+const IDS = {};
 const only = (process.argv[2] || "").split(",").filter(Boolean);
 const results = [];
 let fails = 0;
@@ -144,6 +152,7 @@ const reopen = async (label) => { await open(label); for (let i = 0, last = -1; 
 
 for (const s of SERVICES) {
   if (only.length && !only.includes(s.id)) continue;
+  if (s.pending && !only.includes(s.id)) { console.log(`[PENDING] ${s.id}: ${s.pending}`); results.push({ service: s.id, step: "pending", ok: null, detail: s.pending }); continue; }
   const nNative = `rt-n-${tag}`, nUi = `rt-u-${tag}`;
   try {
     await open(s.label);
