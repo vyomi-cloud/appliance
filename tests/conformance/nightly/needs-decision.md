@@ -92,3 +92,9 @@ DECISIONS: (1) offline-ui-azure-* (metrics, rg-nav, flat-create, resource-group-
   (3) offline-post-create-azure-event-delivery needs the webhook receiver (env); offline-sweepA-azure: Key Vault is now per vault on trunk (c72c1dadb); re-check on the next nightly.
 HAZARD (found while vendoring; not fixed here): core/azure_arm_core.py now imports `azure_compute_disks_vm` (my VM disks merge 016ffb155) but `azure_compute_disks_vm.py` is not in the CORES lists
 (wasm/build_cores.py, wasm/nano-boot.js, wasm/relay/relay-shared-worker.js, wasm/relay/nano-endpoint.html): `python3 wasm/build_cores.py` aborts until it is added, and wasm/core/azure_arm_core.py is stale (VM password strip etc. not in Nano yet). wasm/core also lags aws_wire_router.py (az-openai provider fix). Vendoring is the owner's/portal session's step.
+
+## Azure Nano target, 2026-11-12 (run_suites --target nano --cloud azure: 24/26 green, flat-create pending, nano-ui-crawl red)
+nano-ui-crawl (25 Azure services, 3 finding classes): 103 x HTTP_5XX `https://relay.vyomi.cloud/health -> 503 no Nano tab registered` = the hosted-relay probe of the Nano tunnel panel (Nano tunnel owner, same as the AWS finding; not an Azure bug);
+23 x `/vendor/pyodide/pyodide.mjs -> 404` = `wasm/vendor/` is git-ignored, loaders fall back to the CDN (env: nightly needs `python3 wasm/fetch_pyodide.py`);
+1 real finding FIXED: Function apps "Deployment slots" tab 404 (cef90d80a: tab removed, core refuses slots on a function app).
+Nano VM compute is metadata-only for power actions (no Docker backing); runCommand runs only echo/hostname/whoami/date/uname/IMDS+Key Vault and refuses everything else with exit 1 "nothing was executed" (honest, unchanged).
