@@ -38,6 +38,8 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 CLOUDS = ("aws", "gcp", "azure")
 ROUTE_RE = re.compile(r"""@(?:app|router)\.(get|post|put|patch|delete|api_route)\(\s*["']([^"']+)["']""")
 OP_RE = re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$")            # PascalCase: PutItem, CreateDBInstance
+# Dispatch-table keys may carry acronyms (SetSMSAttributes, CreateDBInstance, GetKMSKey).
+TABLE_KEY_RE = re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)*$")
 VERB_RE = re.compile(r"^_?(create|list|get|delete|update|put|patch|describe|publish|pull|acknowledge|ack|modify|set|"
                      r"insert|query|scan|upload|download|copy|invoke|add|remove|attach|detach|start|stop|restart|"
                      r"enable|disable|encrypt|decrypt|sign|verify|rotate|restore|purge|send|receive|batch|run|"
@@ -45,6 +47,12 @@ VERB_RE = re.compile(r"^_?(create|list|get|delete|update|put|patch|describe|publ
                      r"lease|break|renew|regenerate|deallocate|poweroff|reboot|resize|seek|snapshot)_[a-z0-9_]+$")
 # Private internal accessors whose names merely look like verb-named handlers (not SDK/REST operations).
 NOT_OPERATIONS = {"_get_target_backlog"}
+# Names that look like SDK operations in AWS cores but are not: Step Functions Choice-state comparators,
+# record-field names (CloudWatch alarm State*), and internal helpers of REST/in-process engines.
+AWS_NOT_OPERATIONS_RE = re.compile(
+    r"^(?:(?:String|Numeric|Timestamp|Boolean)(?:Equals|LessThan|GreaterThan|LessThanEquals|GreaterThanEquals|Matches)"
+    r"|Is(?:Null|Present|Numeric|String|Boolean|Timestamp)|State(?:Reason|ReasonData|Value|UpdatedTimestamp)"
+    r"|InvokeRaw|Run(?:Machine|State|Queries)|Set(?:LambdaInvoker|LambdaStore|TargetStore)|SendSqs)$")
 TEST_DIRS = ("tests", "wasm/ui-tests", "samples")
 SDK_TEST_EXT = (".java", ".go", ".py", ".sh", ".mjs", ".js")
 
@@ -114,6 +122,7 @@ def _ops_in(path: str) -> set[str]:
     except Exception:
         return set()
     ops = set()
+    cmp_ops: set[str] = set()   # names matched by `if op == "X"` dispatch
     fn_ops: dict[str, str] = {}
     keys_all: set[str] = set()
     dispatched = set()   # handlers wired into a dispatch table: reported under the table's SDK operation name
@@ -121,14 +130,16 @@ def _ops_in(path: str) -> set[str]:
         if isinstance(n, ast.Dict) and len(n.keys) >= 3:
             keys = [k.value for k in n.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
             if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) for v in n.values) \
-                    and all(OP_RE.match(k) for k in keys):
+                    and all((TABLE_KEY_RE if len(keys) >= 8 else OP_RE).match(k) for k in keys):
                 ops |= set(keys)
                 keys_all |= set(keys)
                 dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)}
         elif isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id in ("op", "action", "target", "operation"):
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
-                ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
+                found = {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
+                ops |= found
+                cmp_ops |= found
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name not in NOT_OPERATIONS and VERB_RE.match(n.name):
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
             ops.add(fn_ops[n.name])
@@ -140,9 +151,14 @@ def _ops_in(path: str) -> set[str]:
     # internal helpers, not SDK operations.
     b = os.path.basename(path)
     if keys_all and not b.startswith(("gcp_", "azure_")):
-        for fname, op in fn_ops.items():
-            if fname.startswith("_") and fname not in dispatched and op not in keys_all:
-                ops.discard(op)
+        # ...and everything else the module defines (engine methods run_machine, ASL comparison
+        # operators like NumericEquals) is not an SDK operation either.
+        ops &= (keys_all | cmp_ops)
+        ops -= {op for op in ops if op not in keys_all and op in fn_ops.values()}
+    if not b.startswith(("gcp_", "azure_")):
+        ops = {op for op in ops if not AWS_NOT_OPERATIONS_RE.match(op)}
+        if b == "apigatewayv2_core.py":   # REST routes are registered via add(); _create_grand/_get_child... are helpers
+            ops = {op for op in ops if op not in {"".join(p.capitalize() for p in f.strip("_").split("_")) for f in fn_ops if f.startswith("_")}}
     return ops
 
 
