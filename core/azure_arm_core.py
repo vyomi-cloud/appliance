@@ -1165,6 +1165,62 @@ def _err(status: int, code: str, message: str):
     return {"status": status, "headers": {}, "body": {"error": {"code": code, "message": message}}}
 
 
+# ── VM compute-backend seam (Docker VMs on Mesh / CloudLite+; metadata-only VMs have no runtime) ──
+def _vm_compute(rec: dict):
+    """(backend, Instance) when the VM is backed by a live-able Docker container, else None.
+    Tests monkeypatch this."""
+    try:
+        rt = (rec.get("properties") or {}).get("runtime") or {}
+        cn = str(rt.get("containerName") or "")
+        if rt.get("backend") != "docker" or not cn:
+            return None
+        import server as _srv
+        iid = rt.get("instanceId") or cn[len("vyomi-i-"):]
+        inst = _srv._docker_instance_obj({"instance_id": iid, "container_name": cn, "provider": "azure",
+                                          "name": rec.get("name") or iid, "runtime_backend": "docker"})
+        return _srv._docker_compute(), inst
+    except Exception:
+        return None
+
+
+def _vm_drive_compute(rec: dict, action: str) -> bool:
+    """Best effort: make the container follow the ARM power action. Never raises."""
+    ci = _vm_compute(rec)
+    if not ci:
+        return False
+    be, inst = ci
+    try:
+        if action in ("poweroff", "deallocate"):
+            be.stop(inst)
+        elif action == "start":
+            be.start(inst)
+        elif action == "restart":
+            if be.status(inst) == "running":
+                be.reboot(inst)
+            else:
+                be.start(inst)
+        return True
+    except Exception as exc:
+        print(f"[azure-vm] compute backend {action} failed: {exc}")
+        return False
+
+
+def _vm_guest_exec(rec: dict, script: str):
+    """Run `script` with sh -c (60s cap) in the VM's container -> (exit, stdout, stderr), or None if no container."""
+    ci = _vm_compute(rec)
+    if not ci:
+        return None
+    be, inst = ci
+    try:
+        if be.status(inst) != "running":
+            return None
+        cp = be.exec(inst, ["timeout", "60", "sh", "-c", script])
+        dec = lambda b: b.decode(errors="replace") if isinstance(b, (bytes, bytearray)) else str(b or "")
+        return cp.returncode, dec(cp.stdout), dec(cp.stderr)
+    except Exception as exc:
+        return 1, "", f"guest exec failed: {exc}"
+
+
 class AzureArm:
     """In-memory Azure Resource Manager control plane (one per Nano instance)."""
 
@@ -4394,8 +4450,11 @@ class AzureArm:
             props = rec.setdefault("properties", {})
             props.setdefault("runtime", {})["containerStatus"] = new_status
             props["powerState"] = f"PowerState/{new_status}"
+            drove = _vm_drive_compute(rec, action)
             return _ok({"status": "Succeeded", "action": action, "containerStatus": new_status,
-                        "note": "metadata-only (no runtime backing in-browser); logical state updated"})
+                        "note": ("runtime container " + ("updated" if drove else "unchanged (backend call failed)")
+                                 if _vm_compute(rec) else
+                                 "metadata-only (no runtime backing in-browser); logical state updated")})
         if ns == "microsoft.eventgrid" and typ == "topics" and action == "listeventgridmetrics":
             # Simulator-internal read of the topic's REAL, activity-derived counters
             # (core/azure_eventgrid_core.py publish/deliver) — not the generic
@@ -4591,6 +4650,16 @@ class AzureArm:
                         else:
                             ver = secret_rec["versions"].get(secret_rec["current"])
                             out.append(json.dumps({"value": ver.get("value") if ver else None}))
+
+        guest = None if (imds_m or kv_m) else _vm_guest_exec(rec, script)
+        if guest is not None:
+            code, so, se = guest
+            ok = code == 0
+            return {"value": [{"code": "ProvisioningState/succeeded" if ok else "ProvisioningState/failed/" + str(code),
+                               "level": "Info" if ok else "Error",
+                               "displayStatus": "Provisioning succeeded" if ok else "Provisioning failed",
+                               "message": ("Enable succeeded: " if ok else "Enable failed: ")
+                                          + f"\n[stdout]\n{so}\n[stderr]\n{se}\n"}]}
 
         if not imds_m and not kv_m:
             echo_m = self._ECHO_RE.match(stripped)
