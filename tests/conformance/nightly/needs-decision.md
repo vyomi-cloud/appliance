@@ -63,6 +63,7 @@ Not covered: bedrock, securityhub, cost-explorer (read-mostly, no create flow). 
 
 ## Azure VM compute on the Mesh (live run 2026-11-11, `wasm/ui-tests/azure-mesh/vm-bidirectional.mjs`: 25 PASS, 6 FAIL, 1 NOT-AUTOMATED)
 Fixed in this batch (with tests): VM GET/list no longer echo `osProfile.adminPassword` (test_azure_vm_no_password_echo.py).
+UPDATE 2026-11-12: items 1-5 FIXED on v4-on-main (016ffb155, 75876893f; tested, live on the Mesh only after the image is rebuilt). 6 is by design; 7 in progress.
 Open, owner decision (release-known gaps; each is backend work, not hot-fixable on the published image):
 1. **powerOff / deallocate are metadata-only**: ARM + instanceView say stopped/deallocated but the Docker container keeps running until delete (the power route's own note says "metadata-only"). Real: stop frees compute. Fix = call the compute backend stop/start from the power route.
 2. **runCommand is not real compute**: returns 200 "The VM guest agent is not reachable: this virtual machine has no guest runtime (it is metadata-only)" although a Docker container with sshd exists. Fix = `docker exec` into the VM container for runCommand (and align the console text).
