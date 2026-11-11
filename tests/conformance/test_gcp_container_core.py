@@ -54,6 +54,9 @@ s, ops = call(st, "GET", L + "/operations")
 check("operations list + get", s == 200 and len(ops["operations"]) >= 5 and call(st, "GET", L + "/operations/" + ops["operations"][0]["name"])[0] == 200)
 check("serverConfig", call(st, "GET", L + "/serverConfig")[1]["defaultClusterVersion"] == gk.DEFAULT_VERSION)
 sc = call(st, "GET", L + "/serverConfig")[1]
+check("R47: 1.36.4-gke.2377000 is the default; 1.36.4-gke.2326000 and 1.34.12-gke.1153000 deprecated (valid, in no channel)",
+      gk.DEFAULT_VERSION == "1.36.4-gke.2377000" and all(v in sc["validMasterVersions"] and all(v not in c["validVersions"] for c in sc["channels"])
+      for v in ("1.36.4-gke.2326000", "1.34.12-gke.1153000")) and "1.37.2-gke.1042000" in sc["validMasterVersions"])
 check("deprecated 1.35.8-gke.1919000 still valid but in no channel",
       "1.35.8-gke.1919000" in sc["validMasterVersions"] and all("1.35.8-gke.1919000" not in c["validVersions"] for c in sc["channels"]) and "1.35.8-gke.1975000" in sc["validMasterVersions"])
 s, op = call(st, "POST", L + "/clusters", {"cluster": {"name": "ap", "autopilot": {"enabled": True}}}, {"$alt": "json;enum-encoding=int"})
