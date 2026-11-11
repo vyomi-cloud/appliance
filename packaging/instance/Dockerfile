@@ -10,6 +10,19 @@
 #     -v vyomi-i-<id>-root:/var/lib/docker  vyomi/instance:ubuntu-24.04
 FROM ubuntu:24.04
 
+# Canonical's default archive/security/ports mirrors have recurring DNS/
+# availability outages that specifically break Docker builds (hit this
+# build repeatedly: "Could not resolve 'archive.ubuntu.com'" etc.). The
+# Azure regional mirrors are Canonical-operated but on separate DNS/CDN
+# infrastructure, so they stay up when the global ones don't — and
+# GitHub-hosted Linux runners already run on Azure, so it's also the
+# closest mirror.
+RUN sed -i \
+        -e 's|http://archive.ubuntu.com/ubuntu/|http://azure.archive.ubuntu.com/ubuntu/|g' \
+        -e 's|http://security.ubuntu.com/ubuntu/|http://azure.archive.ubuntu.com/ubuntu/|g' \
+        -e 's|http://ports.ubuntu.com/ubuntu-ports/|http://azure.ports.ubuntu.com/ubuntu-ports/|g' \
+        /etc/apt/sources.list.d/ubuntu.sources
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-server sudo ca-certificates curl iproute2 \
         docker.io docker-compose-v2 tini \
