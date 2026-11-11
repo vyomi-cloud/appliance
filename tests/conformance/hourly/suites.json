@@ -98,6 +98,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-core-aws-ssm",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_ssm_core.py",
+      "timeout": 60
+    },
+    {
       "id": "offline-core-aws-vpc-nacl",
       "target": "offline",
       "cloud": "aws",
@@ -729,6 +737,38 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-console-next-aws-lifecycle",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_console_next_aws_lifecycle_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-console-next-aws-topics-snapshots",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_console_next_aws_topics_snapshots_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-console-next-rds",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_console_next_rds_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-cloudsim-routes",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_cloudsim_routes_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-sdk-info-extras-config",
       "target": "offline",
       "cloud": "aws",
@@ -1168,6 +1208,14 @@
       "cloud": "gcp",
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-cloudscheduler-cli-smoke.sh",
+      "timeout": 300
+    },
+    {
+      "id": "offline-sdk-python-gcp-scheduler-pubsub",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "sdk",
+      "cmd": "python3 -m pip install -q google-cloud-pubsub >/dev/null 2>&1; VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_scheduler_pubsub_pysdk_api.py",
       "timeout": 300
     },
     {

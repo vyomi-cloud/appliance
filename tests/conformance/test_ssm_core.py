@@ -135,6 +135,16 @@ def run(store=None):
     _check("GetPatchBaseline", call("GetPatchBaseline", {"BaselineId": bid})[1]["OperatingSystem"] == "AMAZON_LINUX_2")
     _check("DeletePatchBaseline", call("DeletePatchBaseline", {"BaselineId": bid})[0] == 200)
 
+    # default host management configuration
+    st, b = call("RegisterDefaultHostManagementConfiguration", {})
+    _check("RegisterDHMC without PermissionModel → error", st == 400)
+    st, b = call("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "ServiceRole"})
+    _check("RegisterDHMC → RoleArn", st == 200 and b["RoleArn"].startswith("arn:aws:iam::") and "role/" in b["RoleArn"])
+    _check("RegisterDHMC overwrite with another role needs Overwrite", err("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "ServiceRole", "RoleArn": "arn:aws:iam::000000000000:role/Other"}, "InvalidParameters"))
+    st, b = call("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "ServiceRole", "RoleArn": "arn:aws:iam::000000000000:role/Other", "Overwrite": True})
+    _check("RegisterDHMC Overwrite → new RoleArn", st == 200 and b["RoleArn"].endswith("role/Other"))
+    _check("DeregisterDHMC", call("DeregisterDefaultHostManagementConfiguration", {}) == (200, {}))
+
     st, b = call("Bogus")
     _check("unknown action → UnknownOperationException", b["__type"] == "UnknownOperationException")
     _check("operations list", len(ssm.OPERATIONS) >= 40)

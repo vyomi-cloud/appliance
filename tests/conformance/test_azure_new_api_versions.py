@@ -1,5 +1,6 @@
 """Upstream drift (#502 Cosmos 2026-07-15, #500 CognitiveServices 2026-09-15-preview,
-#499 Web 2026-08-01, #520 KeyVault 2026-10-01-preview, #340 Compute 2026-11-01-preview): Vyomi's ARM layer must accept
+#499 Web 2026-08-01, #520 KeyVault 2026-10-01-preview,
+#534 Storage 2027-03-07, #528 SQL 2026-08-01-preview, #340 Compute 2026-11-01-preview): Vyomi's ARM layer must accept
 the newly published api-versions the same way it accepts older ones (create, get, delete)."""
 import json, os, sys, time, urllib.request, urllib.error
 
@@ -15,6 +16,10 @@ CASES = [
     ("Microsoft.KeyVault/vaults", "vyomidrift520", "2026-10-01-preview",
      {"location": "eastus", "properties": {"tenantId": "00000000-0000-0000-0000-000000000000",
                                           "sku": {"family": "A", "name": "standard"}}}),
+    ("Microsoft.Storage/storageAccounts", "vyomidrift534", "2027-03-07",
+     {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}}),
+    ("Microsoft.Sql/servers", "vyomidrift528", "2026-08-01-preview",
+     {"location": "eastus", "properties": {"administratorLogin": "sqladmin", "administratorLoginPassword": "P@ssw0rd-12345"}}),
 ]
 fails = 0
 

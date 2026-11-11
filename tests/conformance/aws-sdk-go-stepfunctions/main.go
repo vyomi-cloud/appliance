@@ -171,6 +171,13 @@ func main() {
 	v, err = c.ValidateStateMachineDefinition(ctx, &sfn.ValidateStateMachineDefinitionInput{Definition: aws.String(def)})
 	chk("ValidateStateMachineDefinition OK", err == nil && v.Result == types.ValidateStateMachineDefinitionResultCodeOk, fmt.Sprint(err))
 
+	mrArn := "arn:aws:states:us-east-1:000000000000:mapRun:" + name + "/none:00000000-0000-0000-0000-000000000000"
+	var rnf *types.ResourceNotFound
+	_, err = c.DescribeMapRun(ctx, &sfn.DescribeMapRunInput{MapRunArn: &mrArn})
+	chk("DescribeMapRun unknown ARN → ResourceNotFound", errors.As(err, &rnf), fmt.Sprint(err))
+	_, err = c.UpdateMapRun(ctx, &sfn.UpdateMapRunInput{MapRunArn: &mrArn, MaxConcurrency: aws.Int32(2)})
+	chk("UpdateMapRun unknown ARN → ResourceNotFound", errors.As(err, &rnf), fmt.Sprint(err))
+
 	_, err = c.DeleteStateMachine(ctx, &sfn.DeleteStateMachineInput{StateMachineArn: &arn})
 	must("DeleteStateMachine", err)
 	_, err = c.DescribeStateMachine(ctx, &sfn.DescribeStateMachineInput{StateMachineArn: &arn})
