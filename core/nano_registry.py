@@ -20,6 +20,19 @@ from core.nosql_store import InMemoryNoSqlStore
 from core.kms_keystore import InMemoryKeyStore
 from core.kv_store import InMemoryKvStore
 from core.sql_store import InMemorySqlStore
+
+# Set by nano-boot.js BEFORE the first get() once the PGlite bridge is installed: RDS and Cloud SQL then run on real Postgres.
+# The stores must be built that way from the start. Swapping them in after the console adapter imported the registry left
+# aws_core_adapter.RDB pointing at the discarded InMemorySqlStore: console-created databases went to a store that was never
+# snapshotted and vanished on reload (also dropping the rds->cloudwatch and azure-sql links wired in get()).
+USE_PGLITE = False
+
+
+def _sql_store(ns: str):
+    if USE_PGLITE:
+        from core.sql_store import PGliteSqlStore
+        return PGliteSqlStore(ns=ns)
+    return InMemorySqlStore()
 from core.iam_store import InMemoryIamStore
 from core.messaging_store import InMemoryMessagingStore
 from core.gcp_firestore_core import FirestoreStore
@@ -74,7 +87,7 @@ def get() -> dict:
             "ddb": InMemoryNoSqlStore(),
             "kms": InMemoryKeyStore(),
             "sec": InMemoryKvStore(),
-            "rds": InMemorySqlStore(),
+            "rds": _sql_store("rds"),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
@@ -107,7 +120,7 @@ def get() -> dict:
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
-            "gcp_sql": InMemorySqlStore(),
+            "gcp_sql": _sql_store("gcp_sql"),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
             "az_acr": AcrRegistryStore(),   # Azure Container Registry: repositories, tags, manifests
             "sched": SchedulerStore(),   # EventBridge Scheduler: schedules + schedule groups
