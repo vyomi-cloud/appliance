@@ -2108,7 +2108,7 @@ def secret_section(meta: dict, section: str, versions: list, name: str, arn: str
         rot = meta.get("rotation") or {}
         return {"name": name, "arn": arn, "description": meta.get("description", ""),
                 "kms_key_id": meta.get("kms_key_id") or "aws/secretsmanager", "created": meta.get("created", ""),
-                "last_changed": (versions[0]["created"] if versions else ""), "rotation_enabled": bool(rot.get("enabled")),
+                "last_changed": (versions[0]["created"] if versions else (meta.get("last_changed") or meta.get("created", ""))), "rotation_enabled": bool(rot.get("enabled")),
                 "last_rotated": rot.get("last_rotated", ""), "next_rotation": rot.get("next_rotation", "") if rot.get("enabled") else "",
                 "version_count": len(versions), "replica_count": len(meta.get("replicas") or [])}
     if section == "versions":
