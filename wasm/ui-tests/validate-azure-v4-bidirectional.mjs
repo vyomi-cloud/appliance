@@ -187,19 +187,27 @@ try {
     await page.goto(`${base}/v4/azure/index.html#/${routeOf(s.id)}/create`, { waitUntil: "domcontentloaded" });
     await page.reload({ waitUntil: "domcontentloaded" });
     let created = false, why = "";
+    let drv = null;
+    try { const f = new URL(`./azure-bd/${s.id}.mjs`, import.meta.url); if (existsSync(f)) drv = await import(f.href); } catch (e) { why = "driver load: " + e.message; }
     try {
+      if (drv) {
+        // per-service wizard driver: default export drives the create wizard for `name`; optional `find` looks the result up over the API
+        await drv.default({ page, base, name: un, sleep, SUB, arm, dispatch: (loc) => loc.dispatchEvent("click") });
+        await sleep(4000); created = true;
+      } else {
       const nameBox = page.getByLabel(/^(Storage account name|Name|Key vault name|Virtual network name|Registry name|Namespace name|Resource name|Workspace name|Instance name|Account name|Zone name|Topic name|Name\b).*/i).first();
       await nameBox.waitFor({ timeout: 20000 });
       await nameBox.fill(s.global ? un : un);
       await page.getByRole("button", { name: /Review \+ create|Review \+ Create/ }).first().dispatchEvent("click");
       await page.getByRole("button", { name: /^Create$/ }).first().dispatchEvent("click");
       await sleep(5000); created = true;
+      }
     } catch (e) { why = String(e.message).split("\n")[0]; }
     if (!created) { rec(s.title, "UI->API: console wizard", "NOT-AUTOMATED", `generic filler could not complete the wizard (${why.slice(0, 80)})`); }
     else {
       // the wizard creates in ITS default resource group, so look the resource up subscription-wide by name
       const all = await arm("GET", `/subscriptions/${SUB}/providers/${s.ns}/${s.type}` + q(s.ver));
-      const hit = (all.json?.value || []).find((x) => x.name === un);
+      const hit = drv && drv.find ? await drv.find({ arm, SUB, name: un, q }) : (all.json?.value || []).find((x) => x.name === un);
       rec(s.title, "UI->API: resource created in the console wizard is returned by the API", hit ? "PASS" : "FAIL", hit ? "" : `not in the ${s.type} list (HTTP ${all.status}, ${(all.json?.value || []).length} items)`);
       if (hit) {
         rec(s.title, "UI->API: same name and a real region in the API response", hit.name === un && (s.global || /\w/.test(hit.location || "")) ? "PASS" : "FAIL", JSON.stringify({ n: hit.name, l: hit.location }));
