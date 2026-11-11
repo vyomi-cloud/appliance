@@ -1,57 +1,36 @@
 {
- "at": "2026-11-11T00:59:56+00:00",
+ "at": "2026-11-11T01:59:59+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:5f3ad002d48a",
-   "title": "Amazon EC2 G7 instances now available in additional regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-g7-additional-regions/",
-   "detail": "Amazon Elastic Compute Cloud (Amazon EC2) G7 instances powered by NVIDIA RTX PRO 4500 Blackwell Server Edition GPUs are now available in Europe (London), Asia Pacific (Mumbai, Sydney) and South America (Sao Paulo) Regions. G7 instances deliver up to 4.6x AI inference performance and up to 2.1 graphics performance compared to G6 instances. G7 instances also deliver faster performance for GPU-accelerated data analytics workloads. Customers can use G7 instances for deploying AI models for language translation, video and image analysis, speech recognition and recommender systems. They also acceler",
-   "actionable": false
+   "cloud": "gcp",
+   "service": "storage/v1",
+   "kind": "operation-added",
+   "key": "gcp:storage/v1:storage.anywhereCaches.pause:added",
+   "title": "GCP storage/v1: new operation storage.anywhereCaches.pause",
+   "detail": {
+    "params": [
+     "anywhereCacheId",
+     "bucket"
+    ],
+    "request": "",
+    "response": "AnywhereCache",
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
   },
   {
-   "cloud": "aws",
-   "service": "AWS KMS, Key Management Service, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:23e391f19c78",
-   "title": "Amazon OpenSearch Service announces managed cross-Region disaster recovery",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-service-managed-cross-region-disaster-recovery/",
-   "detail": "Amazon OpenSearch Service now offers managed cross-Region disaster recovery, so you can meet strict availability and business continuity requirements for mission-critical search, AI, and analytics workloads without building or maintaining replication yourself. After you create domains in two Regions, you can pair them with a single API call or a few steps in the AWS Management Console. Managed disaster recovery delivers a recovery point objective (RPO) of under one minute and a recovery time objective (RTO) of under 20 minutes. The secondary domain stays continuously in sync with the primary. ",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon VPC",
-   "kind": "announcement",
-   "key": "feed:aws:a017b0e5738d",
-   "title": "AWS Network Firewall launches next-generation firewall policy",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/network-firewall-launches-ngfw-policy/",
-   "detail": "Today, AWS announces next-generation firewall (NGFW) policy for AWS Network Firewall, a new policy model that provides security teams with a simpler policy structure and increased rule capacity. AWS Network Firewall is a managed network security service that protects your Amazon VPCs with access control and threat detection. The new policy model strengthens your security posture by layering firewall and IPS protections instead of combining them, which also makes policies easier to manage. You author firewall rules that enforce deny-by-default access control, such as allowing traffic only to ap",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:339358611b03",
-   "title": "Amazon GameLift Servers now supports Game Session Placement Insights",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/gamelift-game-session-insights/",
-   "detail": "Amazon GameLift Servers now offers Game Session Placement Insights, delivering detailed, per-placement diagnostic logs for game session queue routing. Amazon GameLift Servers routes game session placement requests through queues that evaluate multiple fleet locations based on latency and cost factors. This feature is designed for game developers and engineers who need greater transparency into how their game session queues operate. Previously, developers had limited visibility into why placements succeeded, failed, or timed out, making queue optimization difficult. Game Session Placement Insig",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:9f1a725589ab",
-   "title": "Amazon DocumentDB (with MongoDB compatibility) now supports post-quantum TLS, wildcard indexes, and $unionWith in version 8.0.3 ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-documentdb-8-0-3/",
-   "detail": "Amazon DocumentDB (with MongoDB compatibility) 8.0.3 adds hybrid post-quantum key exchange for TLS, wildcard indexes, the $unionWith aggregation stage, and new change stream events. Post-quantum TLS protects data in transit from traffic that is recorded today and decrypted later with a quantum computer. The new MongoDB APIs let you move more MongoDB workloads to Amazon DocumentDB without changing application code. What's new in 8.0.3: Post-quantum TLS: TLS 1.3 connections use hybrid key exchange based on the Module-Lattice-Based Key-Encapsulation Mechanism (ML-KEM) when the client supports it.",
+   "cloud": "azure",
+   "service": "apimanagement",
+   "kind": "spec-commit",
+   "key": "azure:apimanagement:f5d8b5a7cd",
+   "title": "Azure apimanagement: Fix API Management nested resource operation identities (#47949)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/f5d8b5a7cd1a6abf2a38c39ada5be61035d4aafe",
    "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/software.amazon.awssdk:sqs: The read operation timed out"
+ ]
 }
