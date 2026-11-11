@@ -154,6 +154,10 @@ jobs:
         # The CloudSim-Plus backbone. Published so docker-compose pull-only
         # installs work without the cloudsim-backbone source present (matches
         # the simulator, which is also pulled). Compose keeps a build: fallback.
+        # !cancelled(): these four image builds are independent of each other —
+        # one failing (e.g. a transient apt-mirror DNS hiccup) shouldn't skip
+        # the rest, which is the default behavior for later steps otherwise.
+        if: ${{ !cancelled() }}
         uses: docker/build-push-action@v6
         with:
           context: ./cloudsim-backbone
@@ -173,6 +177,7 @@ jobs:
         # EC2/GCP/Azure compute instances (sshd + docker-in-instance + SSH-key
         # injection). Stable ubuntu-24.04 tag — it's the "AMI", independent of
         # the app version, so users can `docker pull vyomi/instance:ubuntu-24.04`.
+        if: ${{ !cancelled() }}
         uses: docker/build-push-action@v6
         with:
           context: ./packaging/instance
@@ -192,6 +197,7 @@ jobs:
         # VYOMI_POSTGRES_IMAGE for vyomi-sql-postgres in every docker-compose*.yml
         # (PG1). Previously never built here, so a clean `docker compose pull`
         # failed with "pull access denied" for this image.
+        if: ${{ !cancelled() }}
         uses: docker/build-push-action@v6
         with:
           context: ./packaging/postgres
