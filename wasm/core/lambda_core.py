@@ -240,6 +240,9 @@ def _extract_source(code: dict, handler: str = "") -> str:
 
 
 _NAME_OK = __import__("re").compile(r"^[A-Za-z0-9_-]{1,64}$")
+_RUNTIME_OK = __import__("re").compile(
+    r"^(python3\.\d{1,2}|nodejs\d{1,2}(\.x)?|java\d{1,2}(\.al2)?|dotnet\d(\.\d)?|dotnetcore\d\.\d|go1\.x|ruby\d\.\d|provided(\.al2(023)?)?)$")
+_ROLE_OK = __import__("re").compile(r"^arn:(aws[a-zA-Z-]*)?:iam::\d{12}:role/?[a-zA-Z_0-9+=,.@\-_/]+$")
 
 
 def _norm_name(name: str) -> str:
@@ -362,6 +365,25 @@ def _create_function(store, body):
                     "constraint: Member must satisfy regular expression pattern: [a-zA-Z0-9-_]+ (1-64 chars)")
     if name in _functions(store):
         return _err(409, "ResourceConflictException", f"Function already exist: {name}")
+    _rt = body.get("Runtime")
+    if _rt and not _RUNTIME_OK.match(str(_rt)):
+        return _err(400, "InvalidParameterValueException",
+                    f"Value {_rt} at 'runtime' failed to satisfy constraint: Member must satisfy enum value set "
+                    "(e.g. python3.12, nodejs20.x, java21, dotnet8, ruby3.3, provided.al2023, go1.x).")
+    _role = body.get("Role")
+    if _role and not _ROLE_OK.match(str(_role)):
+        return _err(400, "InvalidParameterValueException",
+                    f"1 validation error detected: Value '{_role}' at 'role' failed to satisfy constraint: Member must "
+                    "satisfy regular expression pattern: arn:(aws[a-zA-Z-]*)?:iam::\\d{12}:role/?[a-zA-Z_0-9+=,.@\\-_/]+")
+    _mem, _to = body.get("MemorySize"), body.get("Timeout")
+    if _mem is not None and not 128 <= int(_mem) <= 10240:
+        return _err(400, "InvalidParameterValueException",
+                    f"1 validation error detected: Value '{_mem}' at 'memorySize' failed to satisfy constraint: "
+                    "Member must have value between 128 and 10240")
+    if _to is not None and not 1 <= int(_to) <= 900:
+        return _err(400, "InvalidParameterValueException",
+                    f"1 validation error detected: Value '{_to}' at 'timeout' failed to satisfy constraint: "
+                    "Member must have value between 1 and 900")
     net_err = _validate_network_config(body.get("VpcConfig"), body.get("FileSystemConfigs"))
     if net_err:
         return _err(400, "InvalidParameterValueException", net_err)
@@ -1466,7 +1488,8 @@ def _invoke(store, name, body, headers=None, query=None, msg_store=None, lam_sto
     try:
         event = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
-        event = {}
+        return _err(400, "InvalidRequestContentException", "Could not parse request body into json: Could not parse "
+                    "payload into json: the payload is not valid JSON.")
     request_id = uuid.uuid4().hex
     context = {"function_name": name, "aws_request_id": request_id,
                "invoked_function_arn": _fn_arn(name), "memory_limit_in_mb": fn.get("memory_size", 128)}

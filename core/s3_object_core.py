@@ -385,6 +385,32 @@ def _validate_bucket_name(name: str) -> S3Response | None:
     return None
 
 
+def tagging_problem(body: bytes) -> str:
+    """Why a PutBucketTagging/PutObjectTagging TagSet is invalid (real S3 InvalidTag), or ''."""
+    try:
+        root = ET.fromstring(body or b"")
+    except ET.ParseError:
+        return ""
+    seen = set()
+    tags = [t for t in root.iter() if _local(t.tag) == "Tag"]
+    if len(tags) > 50:
+        return "The TagSet cannot contain more than 50 tags."
+    for t in tags:
+        k, v = _child_text(t, "Key") or "", _child_text(t, "Value") or ""
+        if not k:
+            return "The TagSet contains an empty tag key."
+        if len(k) > 128:
+            return "The TagKey you have provided is too long. Maximum length is 128."
+        if len(v) > 256:
+            return "The TagValue you have provided is too long. Maximum length is 256."
+        if k.lower().startswith("aws:"):
+            return "Your TagKey cannot be prefixed with aws:"
+        if k in seen:
+            return "Cannot provide multiple Tags with the same key."
+        seen.add(k)
+    return ""
+
+
 def parse_tagging_xml(body: bytes) -> dict:
     tags: dict = {}
     if not body:
@@ -2405,6 +2431,10 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                                       "Block Public Access setting that disallows public bucket policies.", f"/{bucket}", 403)
             if sub == "replication" and store.versioning_status(bucket) != "Enabled":
                 return _error_xml("InvalidRequest", "Versioning must be 'Enabled' on the bucket to apply a replication configuration.", f"/{bucket}", 400)
+            if sub == "tagging":
+                _tp = tagging_problem(text.encode("utf-8"))
+                if _tp:
+                    return _error_xml("InvalidTag", _tp, f"/{bucket}", 400)
             cfg[sub] = text
             if sub == "tagging":
                 meta["tags"] = parse_tagging_xml(text.encode("utf-8"))
@@ -2445,6 +2475,9 @@ def _object_subresource(store: ObjectStore, method: str, bucket: str, key: str,
                 ET.fromstring(body or b"")
             except ET.ParseError:
                 return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}/{key}", 400)
+            _tp = tagging_problem(body)
+            if _tp:
+                return _error_xml("InvalidTag", _tp, f"/{bucket}/{key}", 400)
             obj["tags"] = parse_tagging_xml(body)
         elif method == "DELETE":
             obj["tags"] = {}

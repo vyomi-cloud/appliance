@@ -1346,6 +1346,8 @@ def _create_stack(store, params, stores):
         raise CfnError("AlreadyExistsException", f"Stack [{name}] already exists", 400)
     raw_template = _template_body(params, stores)
     template = _parse_template(raw_template)
+    if not isinstance(template.get("Resources"), dict) or not template["Resources"]:
+        raise CfnError("ValidationError", "Template format error: At least one Resources member must be defined.", 400)
     capabilities = set(_members(params, "Capabilities"))
     _check_capabilities(template.get("Resources") or {}, capabilities)
     on_failure = _p(params, "OnFailure", "ROLLBACK")

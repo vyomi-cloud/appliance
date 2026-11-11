@@ -156,6 +156,9 @@ export async function awsRest(service, method, path, { query, body, headers = {}
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = r.text ? (() => { try { return JSON.parse(r.text); } catch { return { raw: r.text }; } })() : {};
-  if (!r.ok) throw new WireError(r.status, data.__type || data.message, data.message, r.text);
+  // REST-JSON services differ on casing: API Gateway/Lambda send `message`, Backup/Network Manager/… send `Code`+`Message`.
+  // Reading only `message` showed users a bare "HTTP 400" for every Backup/Network Manager validation error.
+  if (!r.ok) throw new WireError(r.status, (data.__type || data.Code || data.code || data.type || "").split("#").pop().split(":")[0] || data.message,
+    data.message || data.Message || data.errorMessage, r.text);
   return data;
 }

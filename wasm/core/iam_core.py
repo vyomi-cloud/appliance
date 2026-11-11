@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -229,6 +230,9 @@ def _create_user(store, params):
     name = str(params.get("UserName", "")).strip()
     if not name:
         raise IamError("ValidationError", "UserName is required.", 400)
+    if len(name) > 64 or not re.fullmatch(r"[\w+=,.@-]+", name):
+        raise IamError("ValidationError", f"1 validation error detected: Value '{name}' at 'userName' failed to satisfy "
+                       "constraint: Member must satisfy regular expression pattern: [\\w+=,.@-]+", 400)
     if store.get_user(name):
         raise IamError("EntityAlreadyExists", f"User with name {name} already exists.", 409)
     u = {"user_name": name, "user_id": _id("AIDA"), "path": params.get("Path", "/"),
@@ -321,6 +325,8 @@ def _create_policy(store, params):
     if store.get_policy(arn):
         raise IamError("EntityAlreadyExists", f"Policy {name} already exists.", 409)
     doc = _json_param(params, "PolicyDocument")
+    if not isinstance(doc, dict) or not doc.get("Statement"):
+        raise IamError("MalformedPolicyDocument", "Syntax errors in policy.", 400)
     now = _now()
     p = {"policy_name": name, "policy_id": _id("ANPA"), "arn": arn,
          "path": params.get("Path", "/"), "document": doc, "description": params.get("Description", ""),

@@ -38,7 +38,7 @@ def run() -> int:
     # 1. CreateDBInstance -> XML result with DBInstance + endpoint
     r = rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "appdb",
                           "Engine": "postgres", "MasterUsername": "appuser",
-                          "MasterUserPassword": "s3cret", "AllocatedStorage": "20"})
+                          "MasterUserPassword": "s3cret-pw1", "AllocatedStorage": "20"})
     _check("create 200", r.status == 200)
     xml = r.body
     _check("create CreateDBInstanceResult", "<CreateDBInstanceResult>" in xml)
@@ -105,7 +105,7 @@ def run() -> int:
     _check("describe snapshots lists it", "<DBSnapshotIdentifier>appdb-snap-1</DBSnapshotIdentifier>" in ds.body)
 
     # 9. DeleteDBInstance -> status deleting; then describe 404s
-    dl = rds.dispatch(st, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": "appdb"})
+    dl = rds.dispatch(st, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": "appdb", "SkipFinalSnapshot": "true"})
     _check("delete status deleting", "<DBInstanceStatus>deleting</DBInstanceStatus>" in dl.body)
     gone = rds.dispatch(st, {"Action": "DescribeDBInstances", "DBInstanceIdentifier": "appdb"})
     _check("describe deleted 404 DBInstanceNotFound", gone.status == 404 and "<Code>DBInstanceNotFound</Code>" in gone.body)

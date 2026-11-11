@@ -35,8 +35,8 @@ def run(store=None):
     vpc_id = xid(call({"Action": "CreateVpc", "CidrBlock": "10.0.0.0/16"}), "vpcId")
     web_sn = xid(call({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.0.1.0/24"}), "subnetId")
     call({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.0.2.0/24"})
-    web_sg = xid(call({"Action": "CreateSecurityGroup", "VpcId": vpc_id, "GroupName": "web"}), "groupId")
-    db_sg = xid(call({"Action": "CreateSecurityGroup", "VpcId": vpc_id, "GroupName": "db"}), "groupId")
+    web_sg = xid(call({"Action": "CreateSecurityGroup", "VpcId": vpc_id, "GroupName": "web", "GroupDescription": "web tier"}), "groupId")
+    db_sg = xid(call({"Action": "CreateSecurityGroup", "VpcId": vpc_id, "GroupName": "db", "GroupDescription": "db tier"}), "groupId")
 
     src = {"ip": "10.0.1.10", "security_group_ids": [web_sg]}
     dst = {"ip": "10.0.2.20", "security_group_ids": [db_sg]}

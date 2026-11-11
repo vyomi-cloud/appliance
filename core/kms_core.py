@@ -230,9 +230,22 @@ def _create_custom_store_key(store: KeyStore, body: dict) -> dict:
     return {"KeyMetadata": _key_metadata(store, key_id)}
 
 
+_KEY_SPECS = {"SYMMETRIC_DEFAULT", "RSA_2048", "RSA_3072", "RSA_4096", "ECC_NIST_P256", "ECC_NIST_P384",
+              "ECC_NIST_P521", "ECC_SECG_P256K1", "HMAC_224", "HMAC_256", "HMAC_384", "HMAC_512", "SM2",
+              "ECC_NIST_EDWARDS25519", "ML_DSA_44", "ML_DSA_65", "ML_DSA_87", "ML_KEM_512", "ML_KEM_768", "ML_KEM_1024"}
+
+
 def _create_key(store: KeyStore, body: dict) -> dict:
     if str(body.get("Origin", "AWS_KMS")) in ("AWS_CLOUDHSM", "EXTERNAL_KEY_STORE"):
         return _create_custom_store_key(store, body)
+    _spec = str(body.get("KeySpec") or body.get("CustomerMasterKeySpec") or "SYMMETRIC_DEFAULT")
+    if _spec not in _KEY_SPECS:
+        raise KmsError("ValidationException", f"1 validation error detected: Value '{_spec}' at 'keySpec' failed to satisfy "
+                       f"constraint: Member must satisfy enum value set: [{', '.join(sorted(_KEY_SPECS))}]", 400)
+    _usage = str(body.get("KeyUsage", "ENCRYPT_DECRYPT"))
+    if _usage not in ("ENCRYPT_DECRYPT", "SIGN_VERIFY", "GENERATE_VERIFY_MAC", "KEY_AGREEMENT", "ENCAPSULATE_DECAPSULATE"):
+        raise KmsError("ValidationException", f"1 validation error detected: Value '{_usage}' at 'keyUsage' failed to satisfy "
+                       "constraint: Member must satisfy enum value set: [ENCRYPT_DECRYPT, SIGN_VERIFY, GENERATE_VERIFY_MAC, KEY_AGREEMENT, ENCAPSULATE_DECAPSULATE]", 400)
     key_id = uuid.uuid4().hex
     material_id = uuid.uuid4().hex
     store.put_key(key_id, {
@@ -682,6 +695,10 @@ def _create_alias(store: KeyStore, body: dict) -> dict:
     key_id = _resolve_key_id(store, target)
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Target key '{target}' does not exist.", 400)
+    if alias.startswith("alias/aws/"):
+        raise KmsError("NotAuthorizedException", "Aliases starting with 'alias/aws/' are reserved for AWS managed keys.", 400)
+    if store.alias_target(alias) is not None:
+        raise KmsError("AlreadyExistsException", f"An alias with the name {_alias_arn(store, alias)} already exists", 400)
     store.set_alias(alias, key_id)
     store.persist()
     return {}

@@ -35,6 +35,9 @@ from core.sql_store import SqlStore, TransactionError, TransactionLimitError, en
 from core import cloudwatch_core as _cw_core
 
 RDS_NS = "http://rds.amazonaws.com/doc/2014-10-31/"
+_ENGINE_OK = re.compile(r"^(postgres|postgresql|mysql|mariadb|aurora|aurora-mysql|aurora-postgresql|oracle-(ee|se2)(-cdb)?|"
+                        r"sqlserver-(ee|se|ex|web)|db2-(se|ae)|custom-.*)$")
+_CLASS_OK = re.compile(r"^db\.(serverless|[a-z][a-z0-9-]*\d[a-z0-9-]*\.(nano|micro|small|medium|large|\d*xlarge|metal))$")
 _ENGINE_PORT = {"postgres": 5432, "postgresql": 5432, "aurora-postgresql": 5432,
                 "mysql": 3306, "mariadb": 3306, "aurora-mysql": 3306}
 
@@ -574,9 +577,28 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     db_id = str(params.get("DBInstanceIdentifier", "")).strip()
     if not db_id:
         raise RdsError("InvalidParameterValue", "DBInstanceIdentifier is required.", 400)
+    if len(db_id) > 63 or not re.fullmatch(r"[a-zA-Z](?:[a-zA-Z0-9]|-(?!-))*", db_id) or db_id.endswith("-"):
+        raise RdsError("InvalidParameterValue", f"The parameter DBInstanceIdentifier is not a valid identifier. Identifiers "
+                       "must begin with a letter; must contain only ASCII letters, digits, and hyphens; and must not end with "
+                       "a hyphen or contain two consecutive hyphens.", 400)
     if store.instance_exists(db_id):
         raise RdsError("DBInstanceAlreadyExists", f"DBInstance {db_id} already exists.", 400)
     engine = str(params.get("Engine", "postgres")).lower()
+    if not _ENGINE_OK.match(engine):
+        raise RdsError("InvalidParameterValue", f"Invalid DB engine: {params.get('Engine')}", 400)
+    _cls = str(params.get("DBInstanceClass", "db.t3.micro"))
+    if not _CLASS_OK.match(_cls):
+        raise RdsError("InvalidParameterValue", f"Invalid DB Instance class: {_cls}", 400)
+    _pw = str(params.get("MasterUserPassword", ""))
+    if _pw and not _is_true(params.get("ManageMasterUserPassword")) and (len(_pw) < 8 or len(_pw) > 128 or re.search(r'[/@" ]', _pw)):
+        raise RdsError("InvalidParameterValue", "The parameter MasterUserPassword is not a valid password. Only printable ASCII "
+                       "characters besides '/', '@', '\"', ' ' may be used, and it must be 8 to 128 characters long.", 400)
+    if params.get("AllocatedStorage") not in (None, "") and not engine.startswith("aurora"):
+        _gb = _int(params, "AllocatedStorage", 20)
+        _lo = 100 if str(params.get("StorageType", "gp3")) in ("io1", "io2") else 20
+        if _gb < _lo or _gb > 65536:
+            raise RdsError("InvalidParameterValue", f"Invalid storage size {_gb}. Must be between {_lo} and 65536 GiB for this "
+                           "engine and storage type.", 400)
     ca_cert = str(params.get("CACertificateIdentifier", DEFAULT_CA))
     _validate_ca_certificate(ca_cert)
     multi_az = str(params.get("MultiAZ", "false")).lower() == "true"
@@ -800,7 +822,10 @@ def _delete_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         raise RdsError("InvalidDBInstanceState",
                        f"DB instance {db_id} cannot be deleted because it has read replicas: "
                        f"{', '.join(db['read_replica_db_instance_identifiers'])}.", 400)
-    if str(params.get("SkipFinalSnapshot", "true")).lower() != "true":
+    if params.get("SkipFinalSnapshot") in (None, "") and not str(params.get("FinalDBSnapshotIdentifier") or "").strip():
+        raise RdsError("InvalidParameterCombination", "FinalDBSnapshotIdentifier is required unless SkipFinalSnapshot is "
+                       "specified.", 400)
+    if str(params.get("SkipFinalSnapshot", "false")).lower() != "true":
         snap_id = str(params.get("FinalDBSnapshotIdentifier", f"{db_id}-final"))
         _make_snapshot(store, db, snap_id, snapshot_type="automated", captured=params.get(_SNAPSHOT_DATA))
     source_id = db.get("read_replica_source_db_instance_identifier")

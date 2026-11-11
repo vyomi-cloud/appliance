@@ -664,9 +664,7 @@ def _validate_create_table(payload: dict, native: bool) -> None:
     if not native:
         return
     name = str(payload.get("TableName") or "")
-    # (DynamoDB also requires 3..255 characters; short names are accepted here — see
-    # core/capabilities/aws/dynamodb.json.)
-    if len(name) > 255 or not re.fullmatch(r"[a-zA-Z0-9_.-]+", name):
+    if len(name) < 3 or len(name) > 255 or not re.fullmatch(r"[a-zA-Z0-9_.-]+", name):
         raise _validation("Invalid table/index name.  Table/index names must be between 3 and 255 characters long, "
                           "and may contain only the characters a-z, A-Z, 0-9, '_', '-', and '.'")
     ks = payload.get("KeySchema") or []
@@ -695,6 +693,9 @@ def _validate_create_table(payload: dict, native: bool) -> None:
     # ProvisionedThroughput is an error there); we keep the pre-v4 lenient default of
     # on-demand for that case — see core/capabilities/aws/dynamodb.json.
     billing = str(payload.get("BillingMode") or "").upper()
+    if billing and billing not in ("PROVISIONED", "PAY_PER_REQUEST"):
+        raise _validation(f"1 validation error detected: Value '{payload.get('BillingMode')}' at 'billingMode' failed to "
+                          "satisfy constraint: Member must satisfy enum value set: [PROVISIONED, PAY_PER_REQUEST]")
     if billing == "PROVISIONED" and not payload.get("ProvisionedThroughput"):
         raise _validation("No provisioned throughput specified for the table")
     if billing == "PAY_PER_REQUEST" and payload.get("ProvisionedThroughput"):
@@ -750,7 +751,9 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
     table_name = str(payload.get("TableName") or payload.get("table_name") or "").strip()
     if not table_name:
         raise DdbError("ValidationException", "TableName is required.", 400)
-    native = bool(payload.get("KeySchema"))
+    # Native wire (SDK / v4 console: PascalCase) is validated; only the legacy flat console REST fields stay lenient.
+    flat = any(k in payload for k in ("table_name", "partition_key_name", "partition_key_type", "sort_key_name", "billing_mode"))
+    native = bool(payload.get("KeySchema")) or not flat
     _validate_create_table(payload, native)
     if store.table_exists(table_name):
         raise DdbError("ResourceInUseException", f"Table already exists: {table_name}", 400)

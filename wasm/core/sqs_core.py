@@ -274,6 +274,10 @@ def _require_queue(store, url_or_name: str) -> dict:
     return q
 
 
+_ATTR_RANGES = {"VisibilityTimeout": (0, 43200), "DelaySeconds": (0, 900), "MessageRetentionPeriod": (60, 1209600),
+                "MaximumMessageSize": (1024, 1048576), "ReceiveMessageWaitTimeSeconds": (0, 20)}
+
+
 def _create_queue(store, body):
     name = str(body.get("QueueName", "")).strip()
     if not name:
@@ -286,13 +290,24 @@ def _create_queue(store, body):
         raise SqsError("com.amazonaws.sqs#InvalidParameterValue",
                        "Can only include alphanumeric characters, hyphens, or underscores. "
                        "1 to 80 in length", 400)
+    for _k, (_lo, _hi) in _ATTR_RANGES.items():
+        _v = (body.get("Attributes") or {}).get(_k)
+        if _v is None:
+            continue
+        try:
+            _ok = _lo <= int(_v) <= _hi
+        except (TypeError, ValueError):
+            _ok = False
+        if not _ok:
+            raise SqsError("com.amazonaws.sqs#InvalidAttributeValue",
+                           f"Invalid value for the parameter {_k}. Reason: Must be between {_lo} and {_hi}, if provided.", 400)
     existing = store.get_queue(name)
     if existing is not None:
         # Real SQS: CreateQueue is idempotent, but not with different attribute values.
         incoming = {k: str(v) for k, v in dict(body.get("Attributes") or {}).items()}
         current = {k: str(v) for k, v in dict(existing.get("attributes") or {}).items()}
         if any(k in current and current[k] != v for k, v in incoming.items()):
-            raise SqsError("com.amazonaws.sqs#QueueAlreadyExists",
+            raise SqsError("com.amazonaws.sqs#QueueNameExists",
                            "A queue already exists with the same name and a different value for attribute(s) "
                            + ", ".join(sorted(k for k, v in incoming.items() if k in current and current[k] != v)), 400)
     if not store.queue_exists(name):

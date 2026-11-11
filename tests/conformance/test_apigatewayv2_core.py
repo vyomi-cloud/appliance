@@ -125,7 +125,7 @@ def run(store=None):
 
     # quick create + invoke (Lambda proxy payload 2.0)
     lam.dispatch(s, "POST", "/2015-03-31/functions", {}, {}, json.dumps({
-        "FunctionName": "hello", "Runtime": "python3.12", "Handler": "index.handler", "Role": "arn:aws:iam::0:role/r",
+        "FunctionName": "hello", "Runtime": "python3.12", "Handler": "index.handler", "Role": "arn:aws:iam::123456789012:role/r",
         "Code": {"ZipFile": ("def handler(event, ctx):\n    return {'statusCode': 200, 'body': 'hi ' + event['pathParameters']['name']}\n")},
     }).encode())
     out = gw.invoke(s, aid, "prod", "GET", "/hello/bob", lambda_store=s)

@@ -604,10 +604,50 @@ def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
 
 
 # ── operations: event buses ─────────────────────────────────────────────────
+_SCHED_FIELDS = (("minute", 0, 59), ("hour", 0, 23), ("day-of-month", 1, 31), ("month", 1, 12),
+                 ("day-of-week", 1, 7), ("year", 1970, 2199))
+
+
+def _validate_schedule(expr: str) -> None:
+    """rate(N unit) / cron(min hour dom month dow year) - the two forms PutRule accepts."""
+    import re as _re
+    e = expr.strip()
+    m = _re.fullmatch(r"rate\((\d+) (minute|minutes|hour|hours|day|days)\)", e)
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        if n < 1:
+            raise _E("ValidationException", "Parameter ScheduleExpression is not valid. Rate value must be a positive number.")
+        if (n == 1) != (not unit.endswith("s")):
+            raise _E("ValidationException", "Parameter ScheduleExpression is not valid. "
+                     "If the value is equal to 1, then the unit must be singular; otherwise plural.")
+        return
+    m = _re.fullmatch(r"cron\((.*)\)", e)
+    if not m:
+        raise _E("ValidationException", "Parameter ScheduleExpression is not valid. Use rate(<n> <minutes|hours|days>) or cron(<6 fields>).")
+    fields = m.group(1).split()
+    if len(fields) != 6:
+        raise _E("ValidationException", "Parameter ScheduleExpression is not valid. A cron expression needs exactly 6 fields: "
+                 "minutes hours day-of-month month day-of-week year.")
+    for tok, (label, lo, hi) in zip(fields, _SCHED_FIELDS):
+        if not _re.fullmatch(r"[0-9A-Za-z*?,/\-#]+", tok):
+            raise _E("ValidationException", f"Parameter ScheduleExpression is not valid. Invalid {label} field '{tok}'.")
+        for n in _re.findall(r"\d+", tok):
+            if not lo <= int(n) <= hi and not (label == "day-of-week" and tok.count("#")):
+                raise _E("ValidationException", f"Parameter ScheduleExpression is not valid. The {label} field value {n} "
+                         f"must be between {lo} and {hi}.")
+    if (fields[2] == "?") == (fields[4] == "?"):
+        raise _E("ValidationException", "Parameter ScheduleExpression is not valid. Exactly one of day-of-month and "
+                 "day-of-week must be '?'.")
+
+
 def _create_event_bus(store, body):
     name = str(body.get("Name", "")).strip()
     if not name:
         raise _E("ValidationException", "Name is required.")
+    import re as _re
+    if len(name) > 256 or not _re.fullmatch(r"[/.\-_A-Za-z0-9]+", name):
+        raise _E("ValidationException", f"1 validation error detected: Value '{name}' at 'name' failed to satisfy constraint: "
+                 "Member must satisfy regular expression pattern: [/\\.\\-_A-Za-z0-9]+")
     buses = _buses(store)
     if name in buses:
         raise _E("ResourceAlreadyExistsException", f"Event bus {name} already exists.")
@@ -736,9 +776,18 @@ def _put_rule(store, body):
     name = str(body.get("Name", "")).strip()
     if not name:
         raise _E("ValidationException", "Name is required.")
+    import re as _re
+    if len(name) > 64 or not _re.fullmatch(r"[.\-_A-Za-z0-9]+", name):
+        raise _E("ValidationException", f"1 validation error detected: Value '{name}' at 'name' failed to satisfy constraint: "
+                 "Member must satisfy regular expression pattern: [\\.\\-_A-Za-z0-9]+")
     bus = str(body.get("EventBusName", "default") or "default")
     if bus not in _buses(store):
         raise _E("ResourceNotFoundException", f"Event bus {bus} does not exist.")
+    _sched = str(body.get("ScheduleExpression") or "")
+    if _sched:
+        _validate_schedule(_sched)
+    elif not str(body.get("EventPattern") or "").strip():
+        raise _E("ValidationException", "Parameter(s) EventPattern or ScheduleExpression must be specified.")
     pattern = body.get("EventPattern")
     if isinstance(pattern, str) and pattern.strip():
         try:

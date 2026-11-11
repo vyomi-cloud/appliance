@@ -117,6 +117,8 @@ def _account(store) -> dict:
 
 # ── RestApi ──────────────────────────────────────────────────────────────────
 def _create_rest_api(store, body):
+    if not str(body.get("name", "")).strip():
+        raise BadRequest("Invalid API name specified")
     api_id = _new_id()
     root_id = _new_id()
     types = (body.get("endpointConfiguration") or {}).get("types") or ["EDGE"]
@@ -208,6 +210,11 @@ def _create_resource(store, api_id, parent_id, body):
     if not parent:
         raise NotFound(f"Invalid resource identifier: {parent_id}")
     path_part = str(body.get("pathPart", ""))
+    if not path_part or not re.fullmatch(r"\{[a-zA-Z0-9._:-]+\+?\}|[a-zA-Z0-9._:-]+", path_part):
+        raise BadRequest(f"Invalid path part: '{path_part}'. A path part may only contain letters, digits and . _ - : "
+                         "or be a {parameter} / {proxy+} placeholder.")
+    if any(r.get("parentId") == parent_id and r.get("pathPart") == path_part for r in api["resources"].values()):
+        raise _E("ConflictException", f"Another resource with the same parent already has this name: {path_part}", 409)
     rid = _new_id()
     base = parent["path"].rstrip("/")
     api["resources"][rid] = {"id": rid, "parentId": parent_id, "pathPart": path_part,

@@ -42,7 +42,7 @@ def run() -> int:
     # 1. Instance + tags round-trip through CreateDBInstance / ListTagsForResource.
     c = rds.dispatch(st, {
         "Action": "CreateDBInstance", "DBInstanceIdentifier": "v4db", "Engine": "postgres",
-        "MasterUsername": "admin", "MasterUserPassword": "s3cret",
+        "MasterUsername": "admin", "MasterUserPassword": "s3cret-pw1",
         "Tags.member.1.Key": "env", "Tags.member.1.Value": "prod",
     })
     _check("create 200", c.status == 200)
@@ -354,7 +354,7 @@ def run() -> int:
     _check("PromoteReadReplica 200", promoted.status == 200)
     source_desc2 = rds.dispatch(st, {"Action": "DescribeDBInstances", "DBInstanceIdentifier": "v4-src"})
     _check("promoted replica no longer listed on the source", "v4-src-ro" not in source_desc2.body)
-    unblocked = rds.dispatch(st, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": "v4-src"})
+    unblocked = rds.dispatch(st, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": "v4-src", "SkipFinalSnapshot": "true"})
     _check("source can now be deleted", unblocked.status == 200)
 
     # 19. rds.replication: Multi-AZ failover genuinely swaps the live AZ.

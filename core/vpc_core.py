@@ -193,9 +193,11 @@ def _create_default_nacl(m: dict, vpc_id: str) -> str:
 def _create_vpc(store, params):
     cidr = str(params.get("CidrBlock", ""))
     try:
-        ipaddress.ip_network(cidr, strict=False)
+        _net = ipaddress.ip_network(cidr, strict=False)
     except ValueError:
-        raise VpcError("InvalidParameterValue", f"Invalid CIDR: {cidr}")
+        raise VpcError("InvalidParameterValue", f"Value ({cidr}) for parameter cidrBlock is invalid. This is not a valid CIDR block.")
+    if _net.version == 4 and not 16 <= _net.prefixlen <= 28:
+        raise VpcError("InvalidVpc.Range", f"The CIDR '{cidr}' is invalid. The allowed VPC netmask range is /16 to /28.")
     m = _model(store)
     vpc_id = _rid("vpc")
     nacl_id = _create_default_nacl(m, vpc_id)
@@ -289,7 +291,16 @@ def _create_subnet(store, params):
         if _sn.version == 4 and not any(_sn.subnet_of(ipaddress.ip_network(c)) for c in [m["vpcs"][vpc_id]["cidr"], *m["vpcs"][vpc_id].get("secondary_cidrs", [])]):
             raise VpcError("InvalidSubnet.Range", f"The CIDR '{cidr}' is invalid (not within any CIDR block of {vpc_id}).")
     except ValueError:
-        pass
+        raise VpcError("InvalidParameterValue", f"Value ({cidr}) for parameter cidrBlock is invalid. This is not a valid CIDR block.")
+    _new = ipaddress.ip_network(cidr, strict=False)
+    for _o in m["subnets"].values():
+        if _o["vpc_id"] == vpc_id:
+            try:
+                _oo = ipaddress.ip_network(_o["cidr"], strict=False)
+            except ValueError:
+                continue
+            if _oo.version == _new.version and _oo.overlaps(_new):
+                raise VpcError("InvalidSubnet.Conflict", f"The CIDR '{cidr}' conflicts with another subnet")
     subnet_id = _rid("subnet")
     main_rt = next((rt["id"] for rt in m["route_tables"].values()
                     if rt["vpc_id"] == vpc_id and rt.get("main")), None)
@@ -348,6 +359,10 @@ def _create_security_group(store, params):
     vpc_id = str(params.get("VpcId", "")) or None
     if vpc_id and vpc_id not in m["vpcs"]:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    if not str(params.get("GroupDescription", "")).strip():
+        raise VpcError("MissingParameter", "The request must contain the parameter GroupDescription")
+    if not str(params.get("GroupName", "")).strip():
+        raise VpcError("MissingParameter", "The request must contain the parameter GroupName")
     if vpc_id is None:
         vpc_id, _subnet, _sg = _ensure_default_network(m)
     sg_id = _rid("sg")
@@ -2555,6 +2570,21 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
 def _run_instances(store, params):
     m = _model(store)
     tag_specs = _parse_tag_specifications(params)
+    _min, _max = params.get("MinCount"), params.get("MaxCount")
+    try:
+        _mn = int(_min) if _min not in (None, "") else None
+        _mx = int(_max) if _max not in (None, "") else None
+    except ValueError:
+        raise VpcError("InvalidParameterValue", "MinCount/MaxCount must be integers.")
+    _mn = 1 if _mn is None else _mn
+    _mx = _mn if _mx is None else _mx
+    if _mn < 1 or _mx < 1:
+        raise VpcError("InvalidParameterValue", f"Value ({min(_mn, _mx)}) for parameter MinCount is invalid. Minimum value allowed is 1.")
+    if _mn > _mx:
+        raise VpcError("InvalidParameterValue", "Value for parameter MinCount is invalid: it must not exceed MaxCount.")
+    _it = str(params.get("InstanceType") or "")
+    if _it and not re.fullmatch(r"[a-z][a-z0-9-]*\d[a-z0-9-]*\.(nano|micro|small|medium|large|\d*xlarge|metal(-[a-z0-9]+)*)", _it):
+        raise VpcError("InvalidParameterValue", f"The instance type '{_it}' is not valid. Use a type such as t3.micro.")
     count = max(1, int(params.get("MaxCount") or params.get("MinCount") or 1))
     insts = [_launch_one(m, params, tag_specs, i) for i in range(count)]
     items = "".join(_instance_xml(i) for i in insts)
@@ -2953,6 +2983,16 @@ def _create_volume(store, params):
     encrypted = str(params.get("Encrypted", "")).lower() == "true" or m["account"]["ebs_encryption_by_default"]
     vol_type = str(params.get("VolumeType") or "gp3")
     snap_id = str(params.get("SnapshotId") or "")
+    if params.get("Size") not in (None, ""):
+        try:
+            _sz = int(params["Size"])
+        except ValueError:
+            raise VpcError("InvalidParameterValue", f"Value ({params['Size']}) for parameter size is invalid.")
+        if _sz < 1:
+            raise VpcError("InvalidParameterValue", f"Value ({_sz}) for parameter size is invalid. Minimum allowed is 1 GiB.")
+    _az = str(params.get("AvailabilityZone") or "")
+    if _az and not re.fullmatch(r"[a-z]{2}(-[a-z]+)+-\d[a-z]", _az):
+        raise VpcError("InvalidParameterValue", f"Value ({_az}) for parameter availabilityZone is invalid. Zone does not exist.")
     size = int(params.get("Size") or (m["snapshots"].get(snap_id, {}).get("volume_size", 8) if snap_id else 8))
     m["volumes"][vol_id] = {
         "id": vol_id, "size": size, "type": vol_type,

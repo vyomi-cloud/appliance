@@ -304,6 +304,11 @@ def _create_secret(store: KvStore, body: dict, kms_store=None) -> dict:
     name = str(body.get("Name") or "").strip()
     if not name:
         raise SecretsError("ValidationException", "Name is required.", 400)
+    if len(name) > 512 or not re.fullmatch(r"[A-Za-z0-9/_+=.@!-]+", name):
+        raise SecretsError("ValidationException", "Invalid name. Must be a valid name containing alphanumeric characters, "
+                           "or any of the following: -/_+=.@!", 400)
+    if body.get("SecretString") is not None and body.get("SecretBinary") is not None:
+        raise SecretsError("InvalidParameterException", "You can't specify both SecretString and SecretBinary.", 400)
     if store.secret_exists(name):
         existing = store.get_secret(name)
         if existing.get("deleted_date"):
@@ -737,6 +742,9 @@ def _list_secret_version_ids(store: KvStore, body: dict) -> dict:
 def _delete_secret(store: KvStore, body: dict) -> dict:
     secret = _require_writable(store, body.get("SecretId") or "")
     _block_managed(secret, "Deleting the secret")
+    if body.get("ForceDeleteWithoutRecovery") and body.get("RecoveryWindowInDays") is not None:
+        raise SecretsError("InvalidParameterException", "You can't use ForceDeleteWithoutRecovery in conjunction with "
+                           "RecoveryWindowInDays.", 400)
     if secret.get("replicas"):
         raise SecretsError("InvalidParameterException",
                            "You can't delete a secret that still has replicas. Remove every "
