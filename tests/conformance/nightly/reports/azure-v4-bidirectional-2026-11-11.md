@@ -1,0 +1,81 @@
+# Azure v4 console <-> API / CLI bi-directional report
+
+| Service | Check | Result | Detail |
+|---|---|---|---|
+| (setup) | simulator reachable | PASS | {"status":"ok","tier":"free","packs_active":3} |
+| (setup) | create the test resource group over the relay | PASS | 200 {"id":"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/bd-rg-39594","name":"bd-rg |
+| Resource groups | API->UI: group created over the API is listed in the console | PASS | not listed |
+| Resource groups | API->UI: the list shows the region | PASS | Copilot vyomi@simulator.local VYOMI SIMULATOR (DEFAULT DIRECTORY) V Home>Resource groups Resource groups Vyomi simulator |
+| Resource groups | CLI->UI: group created with `az rest` is listed in the console | PASS |  |
+| Resource groups | UI->API: group created in the console wizard is returned by the API | PASS | GET 200 |
+| Resource groups | UI->API: same name and region in the API response | PASS | {"n":"bd-rg-39594-ui","l":"eastus"} |
+| Resource groups | UI delete -> API: group deleted in the console is gone from the API | PASS | GET 404 |
+| Resource groups | API delete -> UI: group deleted over the API disappears from the list | PASS | DELETE 200 |
+| Storage accounts | API->UI: resource created over the API is listed in the console | PASS |  |
+| Storage accounts | API->UI: the list shows the region | PASS |  |
+| Storage accounts | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Storage accounts | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Storage accounts | UI->API: same name and a real region in the API response | PASS | {"n":"storageubd258968","l":"eastus"} |
+| Storage accounts | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Key vaults | API->UI: resource created over the API is listed in the console | PASS |  |
+| Key vaults | API->UI: the list shows the region | PASS |  |
+| Key vaults | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Key vaults | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Key vaults | UI->API: same name and a real region in the API response | PASS | {"n":"keyvaults-ubd273482","l":"eastus"} |
+| Key vaults | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Virtual networks | API->UI: resource created over the API is listed in the console | PASS |  |
+| Virtual networks | API->UI: the list shows the region | PASS |  |
+| Virtual networks | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Virtual networks | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Virtual networks | UI->API: same name and a real region in the API response | PASS | {"n":"vnets-ubd287353","l":"eastus"} |
+| Virtual networks | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Network security groups | API->UI: resource created over the API is listed in the console | PASS |  |
+| Network security groups | API->UI: the list shows the region | PASS |  |
+| Network security groups | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Network security groups | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Network security groups | UI->API: same name and a real region in the API response | PASS | {"n":"nsgs-ubd300821","l":"eastus"} |
+| Network security groups | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| DNS zones | API->UI: resource created over the API is listed in the console | PASS |  |
+| DNS zones | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| DNS zones | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| DNS zones | UI->API: same name and a real region in the API response | PASS | {"n":"dns-ubd313766.example.com","l":"global"} |
+| DNS zones | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| App Configuration | API->UI: resource created over the API is listed in the console | PASS |  |
+| App Configuration | API->UI: the list shows the region | PASS |  |
+| App Configuration | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| App Configuration | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| App Configuration | UI->API: same name and a real region in the API response | PASS | {"n":"appconfiguration-ubd326929","l":"eastus"} |
+| App Configuration | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Service Bus | API->UI: resource created over the API is listed in the console | PASS |  |
+| Service Bus | API->UI: the list shows the region | PASS |  |
+| Service Bus | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Service Bus | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Service Bus | UI->API: same name and a real region in the API response | PASS | {"n":"servicebus-ubd340929","l":"eastus"} |
+| Service Bus | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Container registries | API->UI: resource created over the API is listed in the console | PASS |  |
+| Container registries | API->UI: the list shows the region | PASS |  |
+| Container registries | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Container registries | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Container registries | UI->API: same name and a real region in the API response | PASS | {"n":"acrubd353906","l":"eastus"} |
+| Container registries | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Log Analytics workspaces | API->UI: resource created over the API is listed in the console | PASS |  |
+| Log Analytics workspaces | API->UI: the list shows the region | PASS |  |
+| Log Analytics workspaces | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Log Analytics workspaces | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Log Analytics workspaces | UI->API: same name and a real region in the API response | PASS | {"n":"loganalytics-ubd366997","l":"eastus"} |
+| Log Analytics workspaces | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Azure AI services | API->UI: resource created over the API is listed in the console | PASS |  |
+| Azure AI services | API->UI: the list shows the region | PASS |  |
+| Azure AI services | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Azure AI services | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Azure AI services | UI->API: same name and a real region in the API response | PASS | {"n":"cognitiveservices-ubd381253","l":"eastus"} |
+| Azure AI services | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| Event Grid | API->UI: resource created over the API is listed in the console | PASS |  |
+| Event Grid | API->UI: the list shows the region | PASS |  |
+| Event Grid | CLI->UI: resource created with `az rest` is listed in the console | PASS |  |
+| Event Grid | UI->API: resource created in the console wizard is returned by the API | PASS |  |
+| Event Grid | UI->API: same name and a real region in the API response | PASS | {"n":"eventgrid-ubd394519","l":"eastus"} |
+| Event Grid | API delete -> UI: resource deleted over the API disappears from the list | PASS | DELETE 200 |
+| (run) | no uncaught page errors | NOTE | Cannot read properties of null (reading 'closest') / Cannot read properties of null (reading 'closest') / Cannot read pr |
+
+**74 pass, 0 fail, 0 not automated.**

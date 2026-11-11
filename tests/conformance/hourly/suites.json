@@ -361,6 +361,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-azure-v4-bidirectional",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm SIM_URL={ENDPOINT} node wasm/ui-tests/validate-azure-v4-bidirectional.mjs",
+      "timeout": 1500
+    },
+    {
       "id": "nano-ui-aws-metrics",
       "target": "nano",
       "cloud": "aws",
