@@ -432,6 +432,57 @@ def dispatch(store: ObjectStore, method: str, path: str,
             return _err(e.status, e.reason, e.message)
         return _json(200, _bucket_view(store, bucket))
 
+    # ---- anywhereCaches (insert/get/list/update/pause/resume/disable) ----
+    if segs[2] == "anywhereCaches":
+        if not store.bucket_exists(bucket):
+            return _err(404, "notFound", "The specified bucket does not exist.")
+        caches = getattr(store, "_gcs_anywhere_caches", None)
+        if caches is None:
+            caches = {}
+            store._gcs_anywhere_caches = caches
+        bc = caches.setdefault(bucket, {})
+        try:
+            meta = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            return _err(400, "parseError", "Parse Error")
+        if not isinstance(meta, dict):
+            meta = {}
+        if len(segs) == 3:
+            if method == "GET":
+                return _json(200, {"kind": "storage#anywhereCaches", "items": list(bc.values())})
+            if method == "POST":
+                zone = meta.get("zone")
+                if not zone:
+                    return _err(400, "required", "Zone is required.")
+                cid = zone
+                if cid in bc:
+                    return _err(409, "conflict", "An Anywhere Cache already exists for this bucket and zone.")
+                bc[cid] = {"kind": "storage#anywhereCache", "id": f"{bucket}/{cid}",
+                           "selfLink": f"https://www.googleapis.com/storage/v1/b/{bucket}/anywhereCaches/{cid}",
+                           "bucket": bucket, "anywhereCacheId": cid, "zone": zone,
+                           "state": "running", "ttl": meta.get("ttl", "86400s"),
+                           "admissionPolicy": meta.get("admissionPolicy", "admit-on-first-miss"),
+                           "createTime": _now(), "updateTime": _now(), "pendingUpdate": False}
+                return _json(200, {"kind": "storage#operation", "done": True, "response": bc[cid]})
+            return _err(400, "invalid", f"Unsupported method {method} on anywhereCaches")
+        cid = unquote(segs[3])
+        rec = bc.get(cid)
+        if rec is None:
+            return _err(404, "notFound", "The specified Anywhere Cache does not exist.")
+        if len(segs) == 4 and method == "GET":
+            return _json(200, rec)
+        if len(segs) == 4 and method in ("PATCH", "PUT"):
+            for k in ("ttl", "admissionPolicy"):
+                if k in meta:
+                    rec[k] = meta[k]
+            rec["updateTime"] = _now()
+            return _json(200, {"kind": "storage#operation", "done": True, "response": rec})
+        if len(segs) == 5 and method == "POST" and segs[4] in ("pause", "resume", "disable"):
+            rec["state"] = {"pause": "paused", "resume": "running", "disable": "disabled"}[segs[4]]
+            rec["updateTime"] = _now()
+            return _json(200, rec)
+        return _err(400, "invalid", f"Unsupported method {method} on anywhereCache")
+
     # ---- objects ----
     if segs[2] == "o":
         objs = store.bucket_objects(bucket)
