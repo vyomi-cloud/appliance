@@ -35,9 +35,12 @@ REGIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "europ
 DEFAULT_VERSION = "1.35.9-gke.1505000"
 # Release notes 2026-R46 (Oct 27 2026): these versions are now available; 1.35.8-gke.1919000 is
 # deprecated (still creatable, removed in 90 days) so it is no longer offered in any channel.
-DEPRECATED_VERSIONS = ("1.35.8-gke.1919000",)
+# 2026-R45 (Oct 26 2026): 1.34.11-gke.1056000 (Stable) and 1.36.4-gke.1495003 (Regular) are deprecated too;
+# 1.34.11-gke.1209000, 1.34.12-gke.1153000 and 1.36.4-gke.2326000 are the replacements.
+DEPRECATED_VERSIONS = ("1.35.8-gke.1919000", "1.34.11-gke.1056000", "1.36.4-gke.1495003")
 VALID_VERSIONS = ["1.37.1-gke.3020000", "1.36.5-gke.1982000", "1.36.4-gke.2377000", "1.35.9-gke.1505000",
-                  "1.35.8-gke.1975000", "1.35.8-gke.1919000", "1.34.12-gke.1539000", "1.33.13-gke.2207000",
+                  "1.35.8-gke.1975000", "1.35.8-gke.1919000", "1.34.12-gke.1539000", "1.34.12-gke.1153000", "1.34.11-gke.1209000",
+                  "1.34.11-gke.1056000", "1.36.4-gke.2326000", "1.36.4-gke.1495003", "1.33.13-gke.2207000",
                   "1.32.13-gke.2906000", "1.31.1-gke.1146000", "1.30.5-gke.1014001", "1.30.4-gke.1348000", "1.29.9-gke.1177000",
                   "1.28.14-gke.1022000"]
 IMAGE_TYPES = ["COS_CONTAINERD", "UBUNTU_CONTAINERD", "COS", "UBUNTU"]
