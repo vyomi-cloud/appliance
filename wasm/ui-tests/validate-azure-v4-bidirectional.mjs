@@ -37,6 +37,19 @@ const SVCS = [
   { id: "loganalytics", title: "Log Analytics workspaces", ns: "Microsoft.OperationalInsights", type: "workspaces", ver: "2022-10-01", body: { properties: { sku: { name: "PerGB2018" } } } },
   { id: "cognitiveservices", title: "Azure AI services", ns: "Microsoft.CognitiveServices", type: "accounts", ver: "2024-10-01", body: { kind: "OpenAI", sku: { name: "S0" }, properties: {} } },
   { id: "eventgrid", route: "eventgrid/topics", title: "Event Grid", ns: "Microsoft.EventGrid", type: "topics", ver: "2022-06-15", body: { properties: {} } },
+  { id: "sql", title: "SQL databases", ns: "Microsoft.Sql", type: "databases", ver: "2021-11-01", body: { sku: { name: "Basic" } },
+    prep: async (t) => { const sv = `bdsrv${t}`; await arm("PUT", resPath({ ns: "Microsoft.Sql", type: "servers" }, sv) + q("2021-11-01"), { location: "eastus", properties: { administratorLogin: "bdadmin", administratorLoginPassword: "Bd-Passw0rd!x" } }); return { parentPath: `servers/${sv}` }; } },
+  { id: "cosmos", title: "Cosmos DB", ns: "Microsoft.DocumentDB", type: "databaseAccounts", ver: "2023-11-15", body: { kind: "GlobalDocumentDB", properties: { databaseAccountOfferType: "Standard", locations: [{ locationName: "eastus", failoverPriority: 0 }] } } },
+  { id: "recoveryservices", title: "Recovery Services vaults", ns: "Microsoft.RecoveryServices", type: "vaults", ver: "2023-04-01", body: { sku: { name: "RS0", tier: "Standard" }, properties: {} } },
+  { id: "frontdoor", title: "Front Door", ns: "Microsoft.Cdn", type: "profiles", ver: "2023-05-01", body: { sku: { name: "Standard_AzureFrontDoor" } }, global: true },
+  { id: "networkmanagers", title: "Network managers", ns: "Microsoft.Network", type: "networkManagers", ver: "2023-11-01", body: { properties: { networkManagerScopes: { subscriptions: ["/subscriptions/" + SUB] }, networkManagerScopeAccesses: ["Connectivity"] } } },
+  { id: "streamanalytics", title: "Stream Analytics", ns: "Microsoft.StreamAnalytics", type: "streamingjobs", ver: "2021-10-01-preview", body: { sku: { name: "Standard" }, properties: { sku: { name: "Standard" } } } },
+  { id: "apim", title: "API Management", ns: "Microsoft.ApiManagement", type: "service", ver: "2022-08-01", body: { sku: { name: "Developer", capacity: 1 }, properties: { publisherEmail: "a@b.co", publisherName: "bd" } } },
+  { id: "aks", title: "Kubernetes services", ns: "Microsoft.ContainerService", type: "managedClusters", ver: "2023-10-01", body: { identity: { type: "SystemAssigned" }, properties: { dnsPrefix: "bd", agentPoolProfiles: [{ name: "np", count: 1, vmSize: "Standard_B2s", mode: "System" }] } } },
+  { id: "containerapps", title: "Container Apps", ns: "Microsoft.App", type: "containerApps", ver: "2023-05-01", body: { properties: {} },
+    prep: async (t) => { const env = `bdenv${t}`; await arm("PUT", resPath({ ns: "Microsoft.App", type: "managedEnvironments" }, env) + q("2023-05-01"), { location: "eastus", properties: {} }); return { body: { properties: { environmentId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.App/managedEnvironments/${env}`, template: { containers: [{ name: "app", image: "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" }] } } } }; } },
+  { id: "appservices", title: "App Service web apps", ns: "Microsoft.Web", type: "sites", ver: "2022-09-01", body: { kind: "app", properties: {} },
+    prep: async (t) => { const pl = `bdplan${t}`; await arm("PUT", resPath({ ns: "Microsoft.Web", type: "serverfarms" }, pl) + q("2022-09-01"), { location: "eastus", sku: { name: "B1" } }); return { body: { kind: "app", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${pl}` } } }; } },
 ];
 const only = (process.env.ONLY || "").split(",").filter(Boolean);
 const svcs = only.length ? SVCS.filter((s) => only.includes(s.id)) : SVCS;
@@ -55,7 +68,7 @@ const arm = async (method, path, body) => {
   return { status: r.status, json: j, text: t };
 };
 const rgPath = (rg) => `/subscriptions/${SUB}/resourcegroups/${rg}`;
-const resPath = (s, name) => `/subscriptions/${SUB}/resourceGroups/${RG}/providers/${s.ns}/${s.type}/${name}`;
+const resPath = (s, name) => `/subscriptions/${SUB}/resourceGroups/${RG}/providers/${s.ns}/${s.parentPath ? s.parentPath + "/" : ""}${s.type}/${name}`;
 const q = (v) => `?api-version=${v}`;
 const hasAz = await run("az", ["--version"]).then(() => true, () => false);
 const azPut = (url, body) => run("az", ["rest", "--skip-authorization-header", "--only-show-errors", "--method", "put", "--url", SIM + url, "--body", JSON.stringify(body)], { env: { ...process.env, AZURE_CORE_COLLECT_TELEMETRY: "false" }, timeout: 60000 });
@@ -157,6 +170,7 @@ try {
     const nmf = s.nm || ((n) => n);
     const name = nmf(`${s.id}-${tag}`.toLowerCase());
     const loc = s.global ? "global" : "eastus";
+    if (s.prep) { const pr = await s.prep(tag); if (pr.parentPath) s.parentPath = pr.parentPath; if (pr.body) s.body = pr.body; }
     const put = await arm("PUT", resPath(s, name) + q(s.ver), { location: loc, ...s.body });
     if (put.status >= 300) { rec(s.title, "API create", "FAIL", `PUT ${put.status} ${put.text.slice(0, 120)}`); continue; }
     const seen = await rowHas(s.id, name);
