@@ -730,6 +730,7 @@
     },
     {
       "id": "nano-ui-azure-flat-create",
+      "pending": "old Nano console (wasm/azure-console.html), not the v4 console; retarget to /v4/azure/ or retire after the v4 release (needs owner decision, see needs-decision.md)",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -738,6 +739,7 @@
     },
     {
       "id": "offline-ui-azure-flat-create",
+      "pending": "old Nano console (wasm/azure-console.html), not the v4 console; retarget to /v4/azure/ or retire after the v4 release (needs owner decision, see needs-decision.md)",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",

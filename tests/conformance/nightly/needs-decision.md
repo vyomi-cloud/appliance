@@ -73,3 +73,7 @@ Open, owner decision (release-known gaps; each is backend work, not hot-fixable 
 6. **Capacity**: the Mesh admits ONE running B1s VM at a time (409 AllocationFailed, mesh admission control, by design); EC2 side admits about 2 instances (500 InsufficientInstanceCapacity with an "Availability Zone" message that reads wrong). A second concurrent user/run will be refused.
 7. Console has no **Deallocate** button (Start/Restart/Stop only).
 Azure OpenAI data plane: anonymous call was accepted (fixed: now 401, test_azure_openai_route_auth.py). The Mesh image must be rebuilt for both fixes to reach the Mesh.
+
+## Azure, 2026-11-12: harness fixes
+- FIXED run_suites.count(): the Go suite offline-sdk-go-azure-operationalinsights was green (39 PASS, 0 FAIL) but scored 0/400 because the check name "unsupported KQL -> 400 error" matched the pytest summary regex (`400 error`). `error(s)` now counts only on a timed pytest summary line (test_run_suites_count.py).
+- `*-ui-azure-flat-create` (nano + offline) drive the OLD console (wasm/azure-console.html), so they are marked `pending` (reported every run, not gating v4). Decide: retarget to `/v4/azure/` (NSG + Role Definition flat create) or retire.
