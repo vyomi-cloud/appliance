@@ -48,6 +48,17 @@ const SVCS = [
   { id: "aks", title: "Kubernetes services", ns: "Microsoft.ContainerService", type: "managedClusters", ver: "2023-10-01", body: { identity: { type: "SystemAssigned" }, properties: { dnsPrefix: "bd", agentPoolProfiles: [{ name: "np", count: 1, vmSize: "Standard_B2s", mode: "System" }] } } },
   { id: "containerapps", title: "Container Apps", ns: "Microsoft.App", type: "containerApps", ver: "2023-05-01", body: { properties: {} },
     prep: async (t) => { const env = `bdenv${t}`; await arm("PUT", resPath({ ns: "Microsoft.App", type: "managedEnvironments" }, env) + q("2023-05-01"), { location: "eastus", properties: {} }); return { body: { properties: { environmentId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.App/managedEnvironments/${env}`, template: { containers: [{ name: "app", image: "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" }] } } } }; } },
+  { id: "functionapp", title: "Function apps", ns: "Microsoft.Web", type: "sites", ver: "2022-09-01", body: { kind: "functionapp", properties: {} },
+    prep: async (t) => { const pl = `bdfplan${t}`; await arm("PUT", resPath({ ns: "Microsoft.Web", type: "serverfarms" }, pl) + q("2022-09-01"), { location: "eastus", sku: { name: "Y1", tier: "Dynamic" } }); return { body: { kind: "functionapp", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${pl}` } } }; } },
+  { id: "vms", title: "Virtual machines", ns: "Microsoft.Compute", type: "virtualMachines", ver: "2023-09-01", body: { properties: {} },
+    prep: async (t) => {
+      const vn = `bdvn${t}`, nic = `bdnic${t}`, nic2 = `bdnic2${t}`;
+      const v = await arm("PUT", resPath({ ns: "Microsoft.Network", type: "virtualNetworks" }, vn) + q("2023-11-01"), { location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.1.0.0/16"] }, subnets: [{ name: "default", properties: { addressPrefix: "10.1.0.0/24" } }] } });
+      const subnetId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${vn}/subnets/default`;
+      for (const nn of [nic, nic2]) await arm("PUT", resPath({ ns: "Microsoft.Network", type: "networkInterfaces" }, nn) + q("2023-11-01"), { location: "eastus", properties: { ipConfigurations: [{ name: "ipconfig1", properties: { subnet: { id: subnetId } } }] } });
+      const mk = (nn) => ({ properties: { hardwareProfile: { vmSize: "Standard_B1s" }, storageProfile: { imageReference: { publisher: "Canonical", offer: "0001-com-ubuntu-server-jammy", sku: "22_04-lts-gen2", version: "latest" }, osDisk: { createOption: "FromImage" } }, osProfile: { computerName: "bdvm", adminUsername: "bdadmin", adminPassword: "Bd-Passw0rd!x" }, networkProfile: { networkInterfaces: [{ id: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${nn}` }] } } });   // a NIC attaches to one VM (real Azure: NicInUse)
+      return { body: (k) => mk(k === "cli" ? nic2 : nic) };
+    } },
   { id: "appservices", title: "App Service web apps", ns: "Microsoft.Web", type: "sites", ver: "2022-09-01", body: { kind: "app", properties: {} },
     prep: async (t) => { const pl = `bdplan${t}`; await arm("PUT", resPath({ ns: "Microsoft.Web", type: "serverfarms" }, pl) + q("2022-09-01"), { location: "eastus", sku: { name: "B1" } }); return { body: { kind: "app", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${pl}` } } }; } },
 ];
@@ -171,14 +182,15 @@ try {
     const name = nmf(`${s.id}-${tag}`.toLowerCase());
     const loc = s.global ? "global" : "eastus";
     if (s.prep) { const pr = await s.prep(tag); if (pr.parentPath) s.parentPath = pr.parentPath; if (pr.body) s.body = pr.body; }
-    const put = await arm("PUT", resPath(s, name) + q(s.ver), { location: loc, ...s.body });
+    const bodyOf = (k) => (typeof s.body === "function" ? s.body(k) : s.body);
+    const put = await arm("PUT", resPath(s, name) + q(s.ver), { location: loc, ...bodyOf("api") });
     if (put.status >= 300) { rec(s.title, "API create", "FAIL", `PUT ${put.status} ${put.text.slice(0, 120)}`); continue; }
     const seen = await rowHas(s.id, name);
     rec(s.title, "API->UI: resource created over the API is listed in the console", seen ? "PASS" : "FAIL", seen ? "" : "not listed in " + `#/${s.id}`);
     if (seen && !s.global) rec(s.title, "API->UI: the list shows the region", /East US|eastus/i.test(seen) ? "PASS" : "FAIL", "");
     if (hasAz) {
       const cn = nmf(`${s.id}-c${tag}`.toLowerCase());
-      const o = await azPut(resPath(s, cn) + q(s.ver), { location: loc, ...s.body }).catch((e) => ({ stderr: String(e.message) }));
+      const o = await azPut(resPath(s, cn) + q(s.ver), { location: loc, ...bodyOf("cli") }).catch((e) => ({ stderr: String(e.message) }));
       const sc = await rowHas(s.id, cn);
       rec(s.title, "CLI->UI: resource created with `az rest` is listed in the console", sc ? "PASS" : "FAIL", sc ? "" : String(o.stderr || "").slice(0, 120));
     } else rec(s.title, "CLI->UI (az not installed here)", "NOT-AUTOMATED");
