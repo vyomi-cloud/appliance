@@ -22,10 +22,12 @@ if (process.env.TRACE) page.on("request", (r) => { const t = r.postData() || "";
 if (process.env.TRACE) page.on("response", async (r) => { const t = r.request().postData() || ""; if (r.request().method() !== "GET" && /Delete|Terminate|Remove/i.test(t)) console.log("  resp>", r.status(), (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 400)); });
 const results = [];
 // Honest SKIPs (printed, never counted as PASS): checks this suite cannot drive yet, with the reason.
-const SKIP = { "eks:*": "EKS needs the Kubernetes (k3s) backend; absent on the dev/headless stack (CreateCluster -> ServiceUnavailable)",
+const SKIP = {
   "imagebuilder:*": "UI creates image pipelines (recipe + infra config needed); SDK adapter not written",
   "cloudformation:A": "multi-step create wizard (template URL -> params -> review) not automated yet", "cloudformation:D": "depends on A" };
 const skipped = [];
+// EKS runs wherever the k3s backend exists (the GitHub runner / Codespace); skip only when this stack has none.
+if (ONLY.includes("eks")) { try { const n = "rtprobe" + Date.now().toString(36); sdk("eks", "create", n); sdk("eks", "delete", n); } catch (e) { if (/ServiceUnavailable|Kubernetes backend/i.test(String(e))) SKIP["eks:*"] = "no Kubernetes (k3s) backend on this stack (CreateCluster -> ServiceUnavailable); runs on the runner where k3s is up"; } }
 const check = (name, ok, extra = "") => {
   const m = /^\[(\w+)\] ([ABCD]) /.exec(name); const why = m && (SKIP[`${m[1]}:*`] || SKIP[`${m[1]}:${m[2]}`]);
   if (why && !ok) { skipped.push(name); console.log(`[SKIP] ${name} :: ${why}`); return; } results.push(ok); console.log(`[${ok ? "PASS" : "FAIL"}] ${name}${ok ? "" : " :: " + extra}`); };
