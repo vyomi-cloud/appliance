@@ -1,8 +1,9 @@
 """Vendor the Pyodide runtime Nano needs into wasm/vendor/pyodide/ so Nano loads it from its
 own origin instead of cdn.jsdelivr.net (a CDN stall leaves Nano stuck at "booting Pyodide").
 
-The loaders (nano-boot.js, relay/relay-shared-worker.js, relay/nano-endpoint.html) use this
-folder when it exists and fall back to the CDN otherwise. ~13 MB; git-ignored (the repo is
+The loaders (nano-boot.js, relay/relay-shared-worker.js, relay/nano-endpoint.html) read
+wasm/pyodide-source.json: {"local": true} (written by this script) uses this folder, the tracked
+default {"local": false} uses the CDN, so no loader ever fires a request that is expected to 404. ~13 MB; git-ignored (the repo is
 public and must not carry the binaries) — run it in the build/deploy step that publishes the
 Nano bundle, or locally once.
 
@@ -49,7 +50,10 @@ def main() -> None:
         seen.add(n)
         fetch(lock[n]["file_name"])
         todo += [d.lower() for d in lock[n].get("depends", [])]
-    print(f"Pyodide {VERSION} vendored → {OUT}")
+    # tell the loaders this bundle carries the runtime (wasm/pyodide-source.json is tracked, default false)
+    with open(os.path.join(os.path.dirname(OUT), "..", "pyodide-source.json"), "w") as f:
+        json.dump({"local": True}, f); f.write("\n")
+    print(f"Pyodide {VERSION} vendored → {OUT}  (pyodide-source.json -> local)")
 
 
 if __name__ == "__main__":

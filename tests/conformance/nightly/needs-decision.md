@@ -104,3 +104,8 @@ Nano VM compute is metadata-only for power actions (no Docker backing); runComma
 Result: 24/26 nano suites green; `nano-ui-azure-flat-create` is pending (old console, see above); `nano-ui-crawl` red.
 Crawl: 102 findings, ALL `HTTP_5XX https://relay.vyomi.cloud/health -> 503 no Nano tab registered` (hosted-relay probe in shared `wasm/nano-tunnel-tabs.js` / `nano-connect.js`), i.e. 0 Azure-specific deviations. Same root cause AWS-1 recorded: Nano tunnel owner must drop or soften that probe (the crawler scores any 5xx as a failure). Not touched here (shared Nano tunnel code).
 The one Azure finding (Function apps "Deployment slots" tab 404) was already fixed on trunk (cef90d80a); re-crawl of Function apps shows only the relay probe.
+
+## Nano crawl findings, 2026-11-12: FIXED at source (branch v4/nano-crawl-findings)
+- hosted-relay `relay.vyomi.cloud/health -> 503` (103 findings per cloud): the tunnel panel now probes it only while the Cloudflare tab carries traffic (`wasm/nano-tunnel-tabs.js`); idle shows 'not in use'. Applies to AWS and GCP crawls too.
+- `/vendor/pyodide/pyodide.mjs -> 404` (24 per cloud): loaders read tracked `wasm/pyodide-source.json` ({"local": false}); `wasm/fetch_pyodide.py` flips it to true. No nightly-workflow change is needed for the crawl any more; a deploy that ships vendor/pyodide must run fetch_pyodide.py (it does the flip).
+- Azure Nano crawl after: 33/34 services clean (was 0/25, 127 findings); remaining: PLACEHOLDER_CELL 'Topic type' blank after create (2). `nano-ui-azure-tags-tab` fails 9 (Event Grid namespace/topics/domain/partner*, rediscache, dataexplorer have no Tags tab) - pre-existing on trunk, not from this change.

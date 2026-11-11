@@ -21,8 +21,9 @@ import { installParquet } from "../parquet/parquet-loader.js";   // RDS exports:
 // the public CDN as fallback — a CDN stall would otherwise leave the relay unable to boot.
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
 const PYODIDE_LOCAL = new URL("../vendor/pyodide/", import.meta.url).href;
-const pyodideIndex = () => fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" })
-  .then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+// pyodide-source.json (fetch_pyodide.py flips it to {"local": true}) says whether this bundle carries it.
+const pyodideIndex = () => fetch(new URL("../pyodide-source.json", import.meta.url).href, { cache: "no-store" })
+  .then((r) => r.json()).then((j) => (j && j.local ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
 // Cores live at ../core/ relative to THIS worker (works at web root AND /nano/).
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [

@@ -190,8 +190,10 @@ async function bootBackend() {
   // stuck here; the public CDN stays as the fallback when the bundle doesn't carry it.
   const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
   const PYODIDE_LOCAL = new URL(BASE + "/vendor/pyodide/", location.origin).href;
-  const pyodideBase = await fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" })
-    .then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+  // pyodide-source.json (tracked; wasm/fetch_pyodide.py flips it to {"local": true}) says whether this
+  // bundle carries the runtime, so a bundle without it never fires a request that is expected to 404.
+  const pyodideBase = await fetch(BASE + "/pyodide-source.json", { cache: "no-store" })
+    .then((r) => r.json()).then((j) => (j && j.local ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
   const { loadPyodide } = await import(pyodideBase + "pyodide.mjs");
   const py = await loadPyodide({ indexURL: pyodideBase });
   try { await py.loadPackage("tzdata"); } catch (_) {}   // zoneinfo database (Cloud Scheduler / Monitoring time zones)

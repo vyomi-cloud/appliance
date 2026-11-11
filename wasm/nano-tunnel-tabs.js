@@ -31,7 +31,7 @@
     ['local', 'cloud'].forEach(function (k) {
       var b = tabs.querySelector('[data-k=' + k + ']'), r = info[k];
       b.classList.toggle('up', !!r); b.classList.toggle('on', k === cur);
-      b.querySelector('small').textContent = r === null ? 'checking…' : act === k ? 'running · in use' : r ? 'running' : (k === 'local' ? 'not running' : 'unreachable');
+      b.querySelector('small').textContent = r === null ? 'checking…' : act === k ? 'running · in use' : r ? 'running' : (k === 'local' ? 'not running' : 'not in use');
     });
     var rows = [], r = info[cur], yes = '<span class="good">yes</span>', no = '<span class="bad">no</span>';
     if (cur === 'local') {
@@ -40,7 +40,7 @@
         'Features: <b>' + ((health.features || []).join(', ') || '—') + '</b>', 'VM ports forwarded: <b>' + ((health.vms || []).length) + '</b>');
       if (r === false) rows.push('Install: <b>npm i -g vyomi-tunnel</b> or <b>brew install vyomi-cloud/tap/vyomi-tunnel</b>, then run <b>vyomi-tunnel</b>');
     } else {
-      rows.push('Reachable: <b>' + (r === null ? '…' : r ? yes : no) + '</b>', 'Endpoint: <b>relay.vyomi.cloud</b>', 'VM / SSH bridge: <b>not available</b>');
+      rows.push(act === 'cloud' ? 'Reachable: <b>' + (r === null ? '…' : r ? yes : no) + '</b>' : 'Status: <b>not in use (the relay is only checked while connected through Cloudflare)</b>', 'Endpoint: <b>relay.vyomi.cloud</b>', 'VM / SSH bridge: <b>not available</b>');
     }
     det.innerHTML = rows.map(function (x) { return '<span>' + x + '</span>'; }).join('');
     var show = act === cur;   // the worker log belongs to the connected tunnel only
@@ -54,7 +54,10 @@
                                                                               function () { clearTimeout(t); info[k] = false; paint(); });
   }
   function tick() {
-    probe('local', 'http://127.0.0.1:8090/health'); probe('cloud', 'https://relay.vyomi.cloud/health');
+    probe('local', 'http://127.0.0.1:8090/health');
+    // The hosted relay answers 503 ("no Nano tab registered") to anyone not connected through it, so it is only
+    // probed while the Cloudflare tab is the one carrying traffic; otherwise it is simply idle, not "unreachable".
+    if (active() === 'cloud') probe('cloud', 'https://relay.vyomi.cloud/health'); else { info.cloud = false; paint(); }
     fetch('http://127.0.0.1:8090/health', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) { health = j; paint(); }, function () { health = null; });
   }
   tabs.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { cur = b.dataset.k; paint(); } });

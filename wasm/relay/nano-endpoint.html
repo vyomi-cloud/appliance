@@ -94,7 +94,8 @@ const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py"
 async function boot() {
   const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";   // fallback
   const PYODIDE_LOCAL = new URL("../vendor/pyodide/", location.href).href;   // wasm/fetch_pyodide.py
-  const pyodideBase = await fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" }).then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+  // pyodide-source.json says whether this bundle carries the runtime (fetch_pyodide.py flips it): no probe that 404s.
+  const pyodideBase = await fetch(new URL("../pyodide-source.json", location.href).href, { cache: "no-store" }).then((r) => r.json()).then((j) => (j && j.local ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
   const { loadPyodide } = await import(pyodideBase + "pyodide.mjs");
   const py = await loadPyodide({ indexURL: pyodideBase });
   // RDS's SQL data-plane uses sqlite3 (a loadable Pyodide package); the control
