@@ -3946,6 +3946,14 @@ class AzureArm:
                 rec["identity"] = _vm_identity_view(rid, rec["identity"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
+        if full_type.lower() == "microsoft.eventgrid/systemtopics":
+            # A system topic always has a source type + source (real ARM requires both); a create with
+            # neither (UI default action) gets the resource group itself as the source.
+            _sp = rec.setdefault("properties", {})
+            if not _sp.get("topicType"):
+                _sp["topicType"] = "Microsoft.Resources.ResourceGroups"
+                if not _sp.get("source"):
+                    _sp["source"] = "/".join(rid.split("/")[:5])
         if full_type.lower() == ext_engine.VM_T:   # VMs keep the ext-core identity shape; every other type uses _apply_identity above
             ext_engine.apply_identity(rec, payload)
         ext_engine.mark_changed(rec)
