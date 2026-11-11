@@ -3,7 +3,7 @@
  * (Query editor SQL execution) speaks the RDS Data API — a REST-JSON surface
  * reached directly over `/_wire/Execute` (no SigV4 routing needed: the path
  * alone identifies it to the router). */
-import { awsQuery, awsJson, asList, WIRE_BASE } from "../../../common/wire.js";
+import { awsQuery, awsJson, asList, WIRE_BASE, pick } from "../../../common/wire.js";
 
 const ACCOUNT_ID = "123456789012";
 
@@ -320,7 +320,7 @@ export async function describeAccountQuotas() {
 /** IAM roles RDS can assume (trust policy names rds.amazonaws.com) — what the console's role picker lists. */
 export async function listRdsRoles() {
   const r = await awsQuery("iam", "ListRoles", {}, { version: "2010-05-08" });
-  const roles = asList(r.ListRolesResponse?.ListRolesResult?.Roles?.Role);
+  const roles = asList(pick(r.ListRolesResponse?.ListRolesResult?.Roles, "Role"));
   const dec = (v) => { try { return decodeURIComponent(String(v || "")); } catch { return String(v || ""); } };
   return roles.filter((x) => dec(x.AssumeRolePolicyDocument).includes("rds.amazonaws.com")).map((x) => ({ name: x.RoleName, arn: x.Arn }));
 }

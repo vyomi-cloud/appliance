@@ -1,6 +1,6 @@
 /* Amazon EKS over its native REST-JSON wire (SigV4 scope `eks`) -> core/aws_eks_core.py, plus the AWS Backup wire for
  * "AWS Backup for EKS" (core/backup_vaults_core.py). The only non-AWS call is `kubectl` (Vyomi extension; EKS has no API to run it). */
-import { awsRest, awsQuery, asList } from "../../../common/wire.js";
+import { awsRest, awsQuery, asList, pick } from "../../../common/wire.js";
 
 const R = (method, path, opts) => awsRest("eks", method, path, opts);
 const B = (method, path, opts) => awsRest("backup", method, path, opts);
@@ -91,7 +91,7 @@ export const kubectl = (cluster, command) => R("POST", `/clusters/${enc(cluster)
 // ── pickers (IAM roles, VPC subnets / security groups through their native wires) ──
 export const listRoles = async () => {
   const r = await awsQuery("iam", "ListRoles", {});
-  return asList(r.ListRolesResponse?.ListRolesResult?.Roles?.Role).map((x) => ({ name: x.RoleName, arn: x.Arn }));
+  return asList(pick(r.ListRolesResponse?.ListRolesResult?.Roles, "Role")).map((x) => ({ name: x.RoleName, arn: x.Arn }));
 };
 export const listSubnets = async () => {
   const r = await awsQuery("ec2", "DescribeSubnets", {});
