@@ -1,14 +1,14 @@
 # Release checks — v3.0.47
 
-Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/42895260424) for tag `v3.0.47`.
+Generated 2026-11-11 17:54 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/43065572405) for tag `v3.0.47`.
 
 | Package / check | Platform | Result |
 |---|---|---|
 | DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
 | RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
-| CLI: aws / gcloud / az suites + CLI ↔ console both ways  | Linux, release images | ❌ failure |
-| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (75/76 checks passed) | Chromium, release wasm bundle | ❌ failure |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways (76/76 checks passed) | Linux, release images | ✅ passed |
+| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (76/76 checks passed) | Chromium, release wasm bundle | ✅ passed |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/42895260207)) |
 | Startup: all services + UI status | Linux, release images | ❌ failure ([run](https://github.com/vyomi-cloud/appliance/actions/runs/42896740426)) |
 | Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
@@ -41,7 +41,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker_3.0.47_all.deb | 2s |
+| ✅ | install vyomi-docker_3.0.47_all.deb | 4s |
 | ✅ | package manager reports version 3.0.47 | found '3.0.47' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -57,7 +57,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.47 | exit 0; compose v3.0.47; ==> Vyomi 3.0.47 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.47 (SHA256-checked) | exit 0; cached compose v3.0.47 |
-| ✅ | after update, vyomi runs the cached v3.0.47 |   compose   : v3.0.47 (/tmp/tmp.kgQ8NvH84A/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.47 |   compose   : v3.0.47 (/tmp/tmp.dFxDFXCKme/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.47) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -68,7 +68,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-3.0.47-1.noarch.rpm | 1s |
+| ✅ | install vyomi-3.0.47-1.noarch.rpm | 3s |
 | ✅ | package manager reports version 3.0.47 | found '3.0.47' |
 | ✅ | bundled VERSION is 3.0.47 | /usr/lib/cloud-learn/VERSION = 3.0.47 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -90,7 +90,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker-3.0.47-1.noarch.rpm | 1s |
+| ✅ | install vyomi-docker-3.0.47-1.noarch.rpm | 0s |
 | ✅ | package manager reports version 3.0.47 | found '3.0.47' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -106,7 +106,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.47 | exit 0; compose v3.0.47; ==> Vyomi 3.0.47 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.47 (SHA256-checked) | exit 0; cached compose v3.0.47 |
-| ✅ | after update, vyomi runs the cached v3.0.47 |   compose   : v3.0.47 (/tmp/tmp.50XkAiedB9/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.47 |   compose   : v3.0.47 (/tmp/tmp.VHZ7N0YIJG/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -117,7 +117,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 16s |
+| ✅ | install vyomi | 10s |
 | ✅ | package manager reports version 3.0.47 | found '3.0.47' |
 | ✅ | bundled VERSION is 3.0.47 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.47 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -140,7 +140,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 6s |
+| ✅ | install vyomi-docker | 4s |
 | ✅ | package manager reports version 3.0.47 | found '3.0.47' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -156,15 +156,120 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.47 | exit 0; compose v3.0.47; ==> Vyomi 3.0.47 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.47 (SHA256-checked) | exit 0; cached compose v3.0.47 |
-| ✅ | after update, vyomi runs the cached v3.0.47 |   compose   : v3.0.47 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.W6JzGiSaKP/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.47 |   compose   : v3.0.47 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.pTvuQGTuMc/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.47/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.47... (12 files, 27.5MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
 
+## CLI (aws / gcloud / az) and CLI ↔ console
+
+**76/76 checks passed** against `http://localhost:9000`.
+
+### CLIs (4/4)
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | aws installed |  |
+| ✅ | gcloud installed |  |
+| ✅ | az installed |  |
+| ✅ | appliance backends ready (17/17) |  |
+
+### Identity: CLI and console use the same account / project / subscription (3/3)
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | AWS: `aws sts get-caller-identity` account is the console's account |  |
+| ✅ | GCP: `gcloud projects list` returns the console's project |  |
+| ✅ | Azure: `az account list` (GET /subscriptions) returns the console's subscription |  |
+
+### Both directions: CLI → console and console → CLI (44/44)
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | AWS: S3 bucket created with the CLI |  |
+| ✅ | AWS: S3 bucket created with the CLI shows in the console |  |
+| ✅ | AWS: S3 bucket created in the console |  |
+| ✅ | AWS: S3 bucket created in the console shows in the CLI |  |
+| ✅ | AWS: SQS queue created with the CLI |  |
+| ✅ | AWS: SQS queue created with the CLI shows in the console |  |
+| ✅ | AWS: SQS queue created in the console |  |
+| ✅ | AWS: SQS queue created in the console shows in the CLI |  |
+| ✅ | AWS: DynamoDB table created with the CLI |  |
+| ✅ | AWS: DynamoDB table created with the CLI shows in the console |  |
+| ✅ | AWS: DynamoDB table created in the console |  |
+| ✅ | AWS: DynamoDB table created in the console shows in the CLI |  |
+| ✅ | AWS: SNS topic created with the CLI |  |
+| ✅ | AWS: SNS topic created with the CLI shows in the console |  |
+| ✅ | AWS: SNS topic created in the console |  |
+| ✅ | AWS: SNS topic created in the console shows in the CLI |  |
+| ✅ | AWS: Secrets Manager secret created with the CLI |  |
+| ✅ | AWS: Secrets Manager secret created with the CLI shows in the console |  |
+| ✅ | AWS: Secrets Manager secret created in the console |  |
+| ✅ | AWS: Secrets Manager secret created in the console shows in the CLI |  |
+| ✅ | GCP: Cloud Storage bucket created with the CLI |  |
+| ✅ | GCP: Cloud Storage bucket created with the CLI shows in the console |  |
+| ✅ | GCP: Cloud Storage bucket created in the console |  |
+| ✅ | GCP: Cloud Storage bucket created in the console shows in the CLI |  |
+| ✅ | GCP: Pub/Sub topic created with the CLI |  |
+| ✅ | GCP: Pub/Sub topic created with the CLI shows in the console |  |
+| ✅ | GCP: Pub/Sub topic created in the console |  |
+| ✅ | GCP: Pub/Sub topic created in the console shows in the CLI |  |
+| ✅ | GCP: Secret Manager secret created with the CLI |  |
+| ✅ | GCP: Secret Manager secret created with the CLI shows in the console |  |
+| ✅ | GCP: Secret Manager secret created in the console |  |
+| ✅ | GCP: Secret Manager secret created in the console shows in the CLI |  |
+| ✅ | Azure: resource group created with the CLI |  |
+| ✅ | Azure: resource group created with the CLI shows in the console |  |
+| ✅ | Azure: resource group created in the console |  |
+| ✅ | Azure: resource group created in the console shows in the CLI |  |
+| ✅ | Azure: storage account created with the CLI |  |
+| ✅ | Azure: storage account created with the CLI shows in the console |  |
+| ✅ | Azure: storage account created in the console |  |
+| ✅ | Azure: storage account created in the console shows in the CLI |  |
+| ✅ | Azure: virtual network created with the CLI |  |
+| ✅ | Azure: virtual network created with the CLI shows in the console |  |
+| ✅ | Azure: virtual network created in the console |  |
+| ✅ | Azure: virtual network created in the console shows in the CLI |  |
+
+### CLI suites, each on its own (25/25)
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
+| ✅ | aws: 15 passed, 0 failed |  |
+| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
+| ✅ | aws-ec2-sg-description: 2 passed, 0 failed |  |
+| ✅ | aws-elbv2: 27 passed, 0 failed |  |
+| ✅ | aws-kinesis: 20 passed, 0 failed |  |
+| ✅ | aws-logs: 19 passed, 0 failed |  |
+| ✅ | aws-sns: 76 passed, 0 failed |  |
+| ✅ | aws-ssm: 34 passed, 0 failed |  |
+| ✅ | aws-stepfunctions: 26 passed, 0 failed |  |
+| ✅ | azure-app: 23 passed, 0 failed |  |
+| ✅ | azure-appconfiguration: 32 passed, 0 failed |  |
+| ✅ | azure: 6 passed, 0 failed |  |
+| ✅ | azure-cognitiveservices: 20 passed, 0 failed |  |
+| ✅ | azure-dns: 24 passed, 0 failed |  |
+| ✅ | azure-monitor: 21 passed, 0 failed |  |
+| ✅ | azure-operationalinsights: 20 passed, 0 failed |  |
+| ✅ | gcp-artifactregistry: 11 passed, 0 failed |  |
+| ✅ | gcp: 6 passed, 0 failed |  |
+| ✅ | gcp-cloudscheduler: 13 passed, 0 failed |  |
+| ✅ | gcp-container: 14 passed, 0 failed |  |
+| ✅ | gcp-iamcredentials: 9 passed, 0 failed |  |
+| ✅ | gcp-monitoring: 15 passed, 0 failed |  |
+| ✅ | gcp-redis: 20 passed, 0 failed |  |
+| ✅ | gcp-scheduler-pubsub: 6 passed, 0 failed |  |
+
+### Released services with no CLI suite yet (36)
+
+AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS Lambda, AWS RDS, AWS S3, AWS SQS, AWS Secrets Manager, AWS VPC, AZURE API Management, AZURE Cosmos DB, AZURE Entra ID / RBAC, AZURE Event Grid topics, AZURE Function apps, AZURE Key vaults, AZURE Network Security Group, AZURE SQL servers, AZURE Service Bus, AZURE Storage accounts, AZURE Virtual Machines, AZURE Virtual networks, GCP API Gateway, GCP Cloud Functions, GCP Cloud KMS, GCP Cloud SQL, GCP Cloud Storage, GCP Compute Engine, GCP Eventarc, GCP Firestore, GCP IAM & Admin, GCP Pub/Sub, GCP Secret Manager, GCP VPC Network
+
+
 ## Nano CLI through the tunnel and CLI ↔ console
 
-**75/76 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
+**76/76 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
 
 ### CLIs (4/4)
 
@@ -232,7 +337,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 | ✅ | Azure: virtual network created in the console |  |
 | ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-### CLI suites, each on its own (24/25)
+### CLI suites, each on its own (25/25)
 
 | | Check | Detail |
 |---|---|---|
@@ -257,7 +362,7 @@ Generated 2026-11-10 21:07 UTC by [Release checks report](https://github.com/vyo
 | ✅ | gcp: 6 passed, 0 failed |  |
 | ✅ | gcp-cloudscheduler: 13 passed, 0 failed |  |
 | ✅ | gcp-container: 14 passed, 0 failed |  |
-| ❌ | gcp-iamcredentials: 8 passed, 1 failed | JWT payload carries the claims |
+| ✅ | gcp-iamcredentials: 9 passed, 0 failed |  |
 | ✅ | gcp-monitoring: 15 passed, 0 failed |  |
 | ✅ | gcp-redis: 20 passed, 0 failed |  |
 | ✅ | gcp-scheduler-pubsub: 6 passed, 0 failed |  |
@@ -275,79 +380,17 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Console UI (offline) — aws
 
-❌ 0/24 suites passed
-
-| Failing suite | Passed | Failed |
-|---|---|---|
-| `offline-ui-crawl` | 0 | 1 |
-| `offline-ui-core` | 0 | 1 |
-| `offline-ui-aws-metrics` | 0 | 1 |
-| `offline-ui-aws-ec2-detail-tabs` | 0 | 1 |
-| `offline-ui-aws-real-tabs` | 0 | 1 |
-| `offline-ui-aws-sqs-dlq-tab` | 0 | 1 |
-| `offline-ui-aws-rds-connectivity-tabs` | 0 | 1 |
-| `offline-ui-aws-vpc-details-tab` | 0 | 1 |
-| `offline-ui-aws-vpc-sg-iam-cells` | 0 | 1 |
-| `offline-ui-aws-detail-name` | 0 | 1 |
-| `offline-ui-aws-apigw-tabs` | 0 | 1 |
-| `offline-ui-aws-elbv2` | 0 | 1 |
-| `offline-ui-aws-logs` | 0 | 1 |
-| `offline-ui-aws-ssm` | 0 | 1 |
-| `offline-ui-aws-stepfunctions` | 0 | 1 |
-| `offline-ui-aws-detail-tabs` | 0 | 1 |
-| `offline-ui-aws-kinesis` | 0 | 1 |
-| `offline-ui-sdk-roundtrip` | 0 | 2 |
-| `offline-ui-console-home` | 0 | 1 |
-| `offline-ui-aws-apigatewayv2` | 0 | 1 |
-| `offline-ui-aws-cloudwatch` | 0 | 1 |
-| `offline-ui-aws-sns` | 0 | 1 |
-| `offline-ui-drawer` | 0 | 1 |
-| `offline-ui-default-cloud` | 0 | 1 |
+✅ 24/24 suites passed
 
 
 ## Console UI (offline) — azure
 
-❌ 0/15 suites passed
-
-| Failing suite | Passed | Failed |
-|---|---|---|
-| `offline-ui-crawl` | 0 | 1 |
-| `offline-ui-azure-metrics` | 2 | 1 |
-| `offline-ui-azure-flat-create` | 0 | 1 |
-| `offline-ui-azure-rg-nav` | 0 | 1 |
-| `offline-ui-azure-app` | 0 | 1 |
-| `offline-ui-azure-appconfiguration` | 0 | 1 |
-| `offline-ui-azure-cognitiveservices` | 0 | 1 |
-| `offline-ui-azure-dns` | 0 | 1 |
-| `offline-ui-azure-monitor` | 0 | 1 |
-| `offline-ui-azure-operationalinsights` | 0 | 1 |
-| `offline-ui-azure-nsg-roledef-create` | 0 | 1 |
-| `offline-ui-azure-tags-tab` | 0 | 1 |
-| `offline-ui-azure-nsg-rules` | 0 | 1 |
-| `offline-ui-azure-resource-group-detail` | 0 | 1 |
-| `offline-ui-azure-apim-appinsights` | 0 | 1 |
+✅ 15/15 suites passed
 
 
 ## Console UI (offline) — gcp
 
-❌ 0/14 suites passed
-
-| Failing suite | Passed | Failed |
-|---|---|---|
-| `offline-ui-crawl` | 0 | 1 |
-| `offline-ui-gcp-pubsub-subscriptions` | 0 | 1 |
-| `offline-ui-gcp-activity-detail` | 0 | 1 |
-| `offline-ui-gcp-grid-defaults` | 0 | 1 |
-| `offline-ui-gcp-pubsub-grid` | 0 | 1 |
-| `offline-ui-gcp-cloudscheduler` | 0 | 1 |
-| `offline-ui-gcp-container` | 0 | 1 |
-| `offline-ui-gcp-iamcredentials` | 0 | 1 |
-| `offline-ui-gcp-redis` | 0 | 1 |
-| `offline-ui-gcp-create-defaults` | 0 | 1 |
-| `offline-ui-gcp-artifactregistry` | 0 | 1 |
-| `offline-ui-gcp-metrics-tab` | 0 | 1 |
-| `offline-ui-gcp-monitoring` | 0 | 1 |
-| `offline-ui-gcp-properties` | 0 | 1 |
+✅ 14/14 suites passed
 
 
 ## Console UI (Nano) — aws
