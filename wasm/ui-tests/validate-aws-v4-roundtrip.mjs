@@ -23,7 +23,6 @@ if (process.env.TRACE) page.on("response", async (r) => { const t = r.request().
 const results = [];
 // Honest SKIPs (printed, never counted as PASS): checks this suite cannot drive yet, with the reason.
 const SKIP = {
-  "imagebuilder:*": "UI creates image pipelines (recipe + infra config needed); SDK adapter not written",
   "cloudformation:A": "multi-step create wizard (template URL -> params -> review) not automated yet", "cloudformation:D": "depends on A" };
 const skipped = [];
 // EKS runs wherever the k3s backend exists (the GitHub runner / Codespace); skip only when this stack has none.
@@ -48,7 +47,11 @@ let step = "";
 async function uiCreate(svc, name) {
   step = "open create form"; if (ROUTES[svc][1]) await go(svc, 1); else { await go(svc); await vis("button, a", /^\s*(create|add|launch|new|store)\b/i).first().click({ timeout: 8000 }); await sleep(1500); }
   step = "fill";
-  const els = page.locator(INP);
+  if (svc === "imagebuilder") {
+    await page.locator("input[aria-label='Pipeline name']").fill(name);
+    for (const ph of [/choose a recipe/i, /choose an infrastructure/i]) { await vis("button", ph).first().click({ timeout: 8000 }); await sleep(400); await page.locator("[role=option]:visible").first().click({ timeout: 8000 }); await sleep(300); }
+  }
+  const els = svc === "imagebuilder" ? page.locator("input[aria-label='__none__']") : page.locator(INP);
   for (let i = 0; i < await els.count(); i++) { const e = els.nth(i); const v = await e.inputValue().catch(() => "x"); if (!v && /s3\.amazonaws\.com/.test((await e.getAttribute("placeholder")) || "")) { await e.fill("https://s3.amazonaws.com/rt-cfn-templates/t.json").catch(() => {}); continue; } if (!v || /^(my|My|Music|new-|database-|\/vyomi|\/aws|default)/.test(v)) await e.fill(name).catch(() => {}); }
   step = "submit";
   for (let i = 0; i < 8; i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); const e2 = page.locator(INP); for (let j = 0; j < await e2.count(); j++) { const e = e2.nth(j); if (!(await e.inputValue().catch(() => "x"))) await e.fill(name).catch(() => {}); } }
@@ -79,7 +82,7 @@ async function uiDelete(svc, name) {
 
 for (const svc of ONLY) {
   const tag = `[${svc}]`, a = "rta" + Date.now().toString(36), b = "rtb" + Date.now().toString(36); let aOk = false;
-  try { if (svc === "cloudformation") sdk(svc, "prep", a); await uiCreate(svc, a); const d = sdk(svc, "describe", a); aOk = !!d.exists; check(`${tag} A UI create -> SDK sees it`, aOk, JSON.stringify(d) + (aOk ? "" : ` | UI lists it: ${await listed(svc, a)} | btns: ${await dump()}`)); } catch (e) { check(`${tag} A UI create -> SDK sees it`, false, `step=${step}: ` + String(e).split("\n")[0].slice(0, 260)); }
+  try { if (svc === "cloudformation" || svc === "imagebuilder") sdk(svc, "prep", a); await uiCreate(svc, a); const d = sdk(svc, "describe", a); aOk = !!d.exists; check(`${tag} A UI create -> SDK sees it`, aOk, JSON.stringify(d) + (aOk ? "" : ` | UI lists it: ${await listed(svc, a)} | btns: ${await dump()}`)); } catch (e) { check(`${tag} A UI create -> SDK sees it`, false, `step=${step}: ` + String(e).split("\n")[0].slice(0, 260)); }
   try { sdk(svc, "create", b); check(`${tag} B SDK create -> UI lists it`, await listed(svc, b), "SDK created, UI list lacks it"); } catch (e) { check(`${tag} B SDK create -> UI lists it`, false, String(e).split("\n")[0]); }
   try { sdk(svc, "delete", b); check(`${tag} C SDK delete -> UI drops it`, !(await listed(svc, b)), "UI still lists it"); } catch (e) { check(`${tag} C SDK delete -> UI drops it`, false, String(e).split("\n")[0]); }
   if (!aOk) { check(`${tag} D UI delete -> SDK no longer sees it`, false, "not run: A failed"); continue; }

@@ -168,9 +168,26 @@ def cloudformation():
     return _simple(lambda: c.create_stack(StackName=name, TemplateBody=t), lambda: name in [s["StackName"] for s in c.describe_stacks()["Stacks"] if s["StackStatus"] != "DELETE_COMPLETE"], lambda: c.delete_stack(StackName=name))
 
 
+def _ib_prereq():
+    """recipe + infra config the pipeline needs (the console create form asks to choose existing ones)"""
+    infra = next((i["arn"] for i in c.list_infrastructure_configurations()["infrastructureConfigurationSummaryList"] if i["name"] == "rt-infra"), None)
+    if not infra:
+        infra = c.create_infrastructure_configuration(name="rt-infra", instanceProfileName="rt-profile")["infrastructureConfigurationArn"]
+    rec = next((r["arn"] for r in c.list_image_recipes()["imageRecipeSummaryList"] if r["name"] == "rt-recipe"), None)
+    if not rec:
+        comp = c.create_component(name="rt-comp", semanticVersion="1.0.0", platform="Linux", data="name: rt\nschemaVersion: 1.0\nphases:\n  - name: build\n    steps:\n      - name: s\n        action: ExecuteBash\n        inputs:\n          commands: [echo hi]\n")["componentBuildVersionArn"]
+        rec = c.create_image_recipe(name="rt-recipe", semanticVersion="1.0.0", parentImage="ubuntu", components=[{"componentArn": comp}])["imageRecipeArn"]
+    return rec, infra
+
+
 def imagebuilder():
-    return _simple(lambda: c.create_infrastructure_configuration(name=name, instanceProfileName="p"), lambda: name in [i["name"] for i in c.list_infrastructure_configurations()["infrastructureConfigurationSummaryList"]],
-                   lambda: c.delete_infrastructure_configuration(infrastructureConfigurationArn=next(i["arn"] for i in c.list_infrastructure_configurations()["infrastructureConfigurationSummaryList"] if i["name"] == name)))
+    def pipes(): return [p for p in c.list_image_pipelines()["imagePipelineList"] if p["name"] == name]
+    def mk():
+        rec, infra = _ib_prereq()
+        c.create_image_pipeline(name=name, imageRecipeArn=rec, infrastructureConfigurationArn=infra)
+    def rm():
+        for p in pipes(): c.delete_image_pipeline(imagePipelineArn=p["arn"])
+    return _simple(mk, pipes, rm)
 
 
 if op == "prep":  # make a UI-created resource deletable (e.g. RDS console default = deletion protection ON, as in real AWS)
@@ -179,6 +196,7 @@ if op == "prep":  # make a UI-created resource deletable (e.g. RDS console defau
         try: s3c.create_bucket(Bucket="rt-cfn-templates")
         except ClientError: pass
         s3c.put_object(Bucket="rt-cfn-templates", Key="t.json", Body=json.dumps({"Resources": {"Q": {"Type": "AWS::SQS::Queue", "Properties": {"QueueName": name + "-q"}}}}))
+    if svc == "imagebuilder": _ib_prereq()
     if svc == "rds": c.modify_db_instance(DBInstanceIdentifier=name, DeletionProtection=False, ApplyImmediately=True)
     print("{}"); sys.exit(0)
 print(json.dumps((lambda_fn if svc == "lambda" else globals()[svc])(), default=str))
