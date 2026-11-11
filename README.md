@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-11 22:20 UTC · refreshes after every pipeline run_
+_Updated 2026-11-11 23:09 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-11 22:20 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 290 of 292 suites passing (run 18:37 UTC)
+- **Hourly tests:** 288 of 289 suites passing (run 23:01 UTC)
 - **Upstream watch:** 26 open changes from the real clouds to adopt
 
 ## By cloud
@@ -907,7 +907,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
 | offline-sdk-python-azure-ops | ✅ | 8/8 |
-| offline-api-azure-new-api-versions | ✅ | 7/7 |
+| offline-api-azure-new-api-versions | ✅ | 5/5 |
 | offline-sdk-python-azure-vm-runcommand | ✅ | 11/11 |
 | offline-api-azure-console-data-planes | ✅ | 36/36 |
 | offline-api-aws-provider-connect | ✅ | 11/11 |
@@ -915,7 +915,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-python-aws-kms-kem | ✅ | 6/6 |
 | offline-sdk-python-aws-ops5 | ✅ | 4/4 |
 | offline-core-aws-vpc-nacl | ✅ | 6/6 |
-| offline-sdk-python-aws-ops4 | ✅ | 19/19 |
+| offline-sdk-python-aws-ops4 | ✅ | 15/15 |
 | offline-sdk-python-aws-ops3 | ✅ | 12/12 |
 | offline-sdk-python-aws-ops2 | ✅ | 20/20 |
 | offline-sdk-python-aws-ops | ✅ | 12/12 |
@@ -941,7 +941,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | nano-ui-crawl | ✅ | 63/63 |
 | nano-cores | ✅ | 347/347 |
 | nano-gcp-kms-core | ✅ | 35/35 |
-| nano-gcp-cloudsql-core | ✅ | 45/45 |
+| nano-gcp-cloudsql-core | ✅ | 43/43 |
 | nano-gcp-compute-core | ✅ | 18/18 |
 | nano-store-delete-sync | ✅ | 4/4 |
 | nano-aws-iam-detail | ✅ | 8/8 |
@@ -1191,9 +1191,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-gcp-console-tools-routes | ✅ | 16/16 |
 | offline-cli-gcp-scheduler-pubsub-gcloud | ✅ | 7/7 |
 | offline-api-gcp-console-maintenance-routes | ✅ | 5/5 |
-| offline-api-aws-console-data-plane | ✅ | 28/28 |
-| offline-api-aws-console-rds-budgets | ❌ | 14/15 |
-| offline-api-gcp-sdk-info-routes | ✅ | 12/12 |
 
 </details>
 
