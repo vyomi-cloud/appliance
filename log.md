@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-11T08:00:02+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `spec-commit` Azure compute: Remove Compute and BulkActions C# safe flatten opt-outs (#48084) ([link](https://github.com/Azure/azure-rest-api-specs/commit/4f229a4bfcb883cc5e71ba600d399ab259976ef7))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-11T07:00:01+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3007,3 @@ Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-10-29T08:51:06+00:00
 
 Tracking 4196 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 4 actionable.**
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-
-Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
