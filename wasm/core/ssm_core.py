@@ -44,6 +44,7 @@ class SsmStore:
         self.associations: dict = {}
         self.windows: dict = {}         # window id -> window (targets inside)
         self.baselines: dict = {}
+        self.host_mgmt: dict = {}       # default host management configuration: {"RoleArn", "PermissionModel"}
         self._seeded = False
 
 
@@ -808,6 +809,20 @@ def _cancel_command(store: SsmStore, b: dict) -> dict:
     return {}   # already terminal (Success) — cancelling a finished command is a no-op, as on AWS
 
 
+def _register_default_host_mgmt(store: SsmStore, b: dict) -> dict:
+    _need(b, "PermissionModel")
+    if b["PermissionModel"] not in ("DEFAULT", "SERVICE_LINKED", "CUSTOM", "ACCOUNT_ROLE"):
+        raise SsmError("ValidationException", f"Value '{b['PermissionModel']}' at 'permissionModel' failed to satisfy constraint: Member must satisfy enum value set: [DEFAULT, SERVICE_LINKED, CUSTOM, ACCOUNT_ROLE]")
+    role = b.get("RoleArn") or f"arn:aws:iam::{ACCOUNT}:role/service-role/AWSSystemsManagerDefaultEC2InstanceManagementRole"
+    store.host_mgmt = {"RoleArn": role, "PermissionModel": b["PermissionModel"]}
+    return {"RoleArn": role}
+
+
+def _deregister_default_host_mgmt(store: SsmStore, b: dict) -> dict:
+    store.host_mgmt = {}
+    return {}
+
+
 def _describe_instance_info(store: SsmStore, b: dict) -> dict:
     return {"InstanceInformationList": []}   # no SSM agents register against the simulator
 
@@ -1055,6 +1070,8 @@ _OPS = {
     "SendCommand": _send_command, "ListCommands": _list_commands, "ListCommandInvocations": _list_invocations,
     "GetCommandInvocation": _get_invocation, "CancelCommand": _cancel_command,
     "DescribeInstanceInformation": _describe_instance_info,
+    "RegisterDefaultHostManagementConfiguration": _register_default_host_mgmt,
+    "DeregisterDefaultHostManagementConfiguration": _deregister_default_host_mgmt,
     "CreateAssociation": _create_association, "DescribeAssociation": _describe_association,
     "ListAssociations": _list_associations, "DeleteAssociation": _delete_association,
     "CreateMaintenanceWindow": _create_window, "GetMaintenanceWindow": _get_window,
