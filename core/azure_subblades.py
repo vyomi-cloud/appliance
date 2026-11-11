@@ -169,7 +169,7 @@ _FUNCTIONAPP_SUB = [
         *_settings_props_locks(),
     ]},
     {"group": "Deployment", "items": [
-        {"key": "slots",        "label": "Deployment slots",  "icon": "swap_horiz",   "type": "slots"},
+        # no "Deployment slots": azure_webapp_core refuses slots on a function app (ResourceTypeNotSupported)
         {"key": "deployCenter", "label": "Deployment Center", "icon": "rocket_launch","type": "deployCenter"},
     ]},
     {"group": "Monitoring", "items": [
