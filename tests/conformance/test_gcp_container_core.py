@@ -59,6 +59,11 @@ check("deprecated 1.35.8-gke.1919000 still valid but in no channel",
 for dv, nv in (("1.34.11-gke.1056000", "1.34.11-gke.1209000"), ("1.36.4-gke.1495003", "1.36.4-gke.2326000")):
     check("2026-R45: %s deprecated (creatable, in no channel), %s offered" % (dv, nv),
           dv in sc["validMasterVersions"] and all(dv not in c["validVersions"] for c in sc["channels"]) and nv in sc["validMasterVersions"])
+for dv in ("1.34.11-gke.1102000", "1.34.11-gke.1209000", "1.34.12-gke.1153000", "1.36.4-gke.2326000", "1.32.13-gke.2662000"):
+    check("2026-R47: %s deprecated (creatable, in no channel)" % dv,
+          dv in sc["validMasterVersions"] and all(dv not in c["validVersions"] for c in sc["channels"]))
+check("2026-R47: new versions offered, 1.36.4-gke.2377000 default",
+      sc["defaultClusterVersion"] == "1.36.4-gke.2377000" and all(v in sc["validMasterVersions"] for v in ("1.37.2-gke.1042000", "1.34.12-gke.1698000", "1.32.13-gke.3004000")))
 s, op = call(st, "POST", L + "/clusters", {"cluster": {"name": "ap", "autopilot": {"enabled": True}}}, {"$alt": "json;enum-encoding=int"})
 check("int enums on request (operationType/status)", s == 200 and op["operationType"] == 1 and op["status"] == 3, op)
 check("autopilot has no node pools", call(st, "GET", L + "/clusters/ap")[1]["nodePools"] == [])
