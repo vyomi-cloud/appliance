@@ -41,10 +41,17 @@ def run() -> int:
 
     # the offline appliance routes `/azure-data/keyvault/{vault}/...` through wire_ingress; the Nano router takes
     # root paths + the console's x-vyomi-vault header. Same scoping core, both entry points are asserted.
-    from core import wire_ingress
+    try:
+        from core import wire_ingress
+    except ImportError:          # Nano bundle (wasm/core) does not vendor the offline-only wire_ingress
+        wire_ingress = None
 
     def kv_path(method, path, body=None):
         b = json.dumps(body).encode() if body is not None else b""
+        if wire_ingress is None:  # same assertions through the Nano entry point (root path + x-vyomi-vault)
+            _pre = "/azure-data/keyvault/"
+            vname, _, rest = path[len(_pre):].partition("/")
+            return router.handle(method, "/" + rest, {"api-version": "7.4"}, {"x-vyomi-vault": vname}, b)
         return wire_ingress._dispatch_azure("azure_keyvault", router, method, path, {"api-version": "7.4"}, {}, b)
 
     arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{RG}", {"api-version": "2021-04-01"}, {"location": "eastus"})
@@ -67,6 +74,12 @@ def run() -> int:
     _check("no vault in the request keeps the legacy shared namespace working",
            kv("PUT", "/secrets/legacy", {"value": "L"})["status"] == 200
            and kv("GET", "/secrets/legacy")["status"] == 200)
+
+    # in-ARM consumers (VM runCommand IMDS secret fetch, APIM named value) resolve the SAME per-vault secret
+    _rec = arm._kv_secret_rec("vb", "s1")
+    _check("ARM consumers read vb's secret from vb's namespace",
+           bool(_rec) and _rec["versions"][_rec["current"]]["value"] == "B")
+    _check("ARM consumers do not read another vault's secret", arm._kv_secret_rec("vc", "s1") is None)
 
     # certificates are per vault too
     cr = kv_path("POST", P("va", "/certificates/c1/create"), {"policy": {"issuer": {"name": "Self"}, "x509_props": {"subject": "CN=a"}}})

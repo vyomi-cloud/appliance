@@ -29,6 +29,7 @@ import datetime
 import hashlib
 import json
 import re
+import sys
 import threading
 import uuid
 from urllib.parse import unquote, urlsplit
@@ -894,6 +895,21 @@ _NANO_SHOWN = {
             "listServers": "GET __BASE__/api/azuresql/servers",
             "query": "POST __BASE__/api/azuresql/query"}},
 }
+# On the appliance the Service Bus REST data plane is served at /azure-data/servicebus/<namespace>
+# (core/wire_ingress); /api/servicebus/topics exists only in Nano's service worker.
+_APPLIANCE_SHOWN = {
+    "microsoft.servicebus/namespaces": {"properties.serviceBusEndpoint": "__BASE__/azure-data/servicebus/__NAME__"},
+}
+
+
+def _shown_for(full_type: str) -> dict:
+    """The 'shown endpoint' overrides for a top-level type, for the runtime we are in (Pyodide = Nano)."""
+    t = full_type.lower()
+    if sys.platform != "emscripten" and t in _APPLIANCE_SHOWN:
+        return _APPLIANCE_SHOWN[t]
+    return _NANO_SHOWN.get(t) or {}
+
+
 def _h(*parts, n=8):
     return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:n]
 
@@ -3946,7 +3962,7 @@ class AzureArm:
             pub = getattr(self, "_public_base", None)
             if pub is None:
                 pub = base
-            forced = _NANO_SHOWN.get(full_type.lower())
+            forced = _shown_for(full_type)
             for path_expr, val in (forced or {}).items():
                 _set_path(rec, path_expr, _expand_tokens(val, name, pub))
         # systemData.createdAt/lastModifiedAt: real ARM returns this on every resource; the
@@ -4603,6 +4619,22 @@ class AzureArm:
     # azure.vms.run_command) — never a fabricated success for scripts it doesn't recognize. ──
     _IMDS_RE = re.compile(r"169\.254\.169\.254[^\s\"']*oauth2/token[^\s\"']*", re.IGNORECASE)
     _RESOURCE_RE = re.compile(r"resource=([^&\s\"']+)")
+    def _kv_secret_rec(self, vault: str, name: str):
+        """A secret by (vault, name): this vault's namespace first (data plane is per vault), then the legacy
+        shared namespace (state written before per-vault scoping / by a client that named no vault)."""
+        store = self.kv_secrets_store
+        if store is None or not name:
+            return None
+        try:
+            try:
+                from core import azure_keyvault_secrets_core as _kvs
+            except ImportError:
+                import azure_keyvault_secrets_core as _kvs
+            rec = _kvs.scoped(store, vault).get_secret(name) if vault else None
+        except Exception:
+            rec = None
+        return rec or store.get_secret(name)
+
     _KV_SECRET_RE = re.compile(r"https://([a-z0-9-]+)\.vault\.azure\.net/secrets/([A-Za-z0-9-]+)", re.IGNORECASE)
     _ECHO_RE = re.compile(r'^(?:echo|Write-Output|Write-Host)\s+(.*)$', re.IGNORECASE)
 
@@ -4660,7 +4692,7 @@ class AzureArm:
                             "Key Vault secrets are not wired on this platform."}}))
                         exit_code = 1
                     else:
-                        secret_rec = self.kv_secrets_store.get_secret(secret_name)
+                        secret_rec = self._kv_secret_rec(vault_name, secret_name)
                         if not secret_rec or secret_rec.get("deleted") or not secret_rec.get("versions"):
                             out.append(json.dumps({"error": {"code": "SecretNotFound", "message":
                                 f"A secret with (name/id) {secret_name} was not found in this key vault."}}))
@@ -4848,8 +4880,8 @@ class AzureArm:
         if not secret_id:
             return _ok({"value": props.get("value") or ""})
         secret_name, version = _parse_kv_secret_identifier(secret_id)
-        store = self.kv_secrets_store
-        secret_rec = store.get_secret(secret_name) if store and secret_name else None
+        _vm = re.match(r"https?://([a-z0-9-]+)\.vault\.azure\.net", str(secret_id), re.IGNORECASE)
+        secret_rec = self._kv_secret_rec(_vm.group(1) if _vm else "", secret_name)
         if not secret_rec or secret_rec.get("deleted") or not secret_rec.get("versions"):
             return _err(400, "KeyVaultErrorSecretNotFound",
                         f"Named value '{nv_name}' references Key Vault secret '{secret_name}', which was not found.")

@@ -4617,6 +4617,22 @@ class AzureArm:
     # azure.vms.run_command) — never a fabricated success for scripts it doesn't recognize. ──
     _IMDS_RE = re.compile(r"169\.254\.169\.254[^\s\"']*oauth2/token[^\s\"']*", re.IGNORECASE)
     _RESOURCE_RE = re.compile(r"resource=([^&\s\"']+)")
+    def _kv_secret_rec(self, vault: str, name: str):
+        """A secret by (vault, name): this vault's namespace first (data plane is per vault), then the legacy
+        shared namespace (state written before per-vault scoping / by a client that named no vault)."""
+        store = self.kv_secrets_store
+        if store is None or not name:
+            return None
+        try:
+            try:
+                from core import azure_keyvault_secrets_core as _kvs
+            except ImportError:
+                import azure_keyvault_secrets_core as _kvs
+            rec = _kvs.scoped(store, vault).get_secret(name) if vault else None
+        except Exception:
+            rec = None
+        return rec or store.get_secret(name)
+
     _KV_SECRET_RE = re.compile(r"https://([a-z0-9-]+)\.vault\.azure\.net/secrets/([A-Za-z0-9-]+)", re.IGNORECASE)
     _ECHO_RE = re.compile(r'^(?:echo|Write-Output|Write-Host)\s+(.*)$', re.IGNORECASE)
 
@@ -4674,7 +4690,7 @@ class AzureArm:
                             "Key Vault secrets are not wired on this platform."}}))
                         exit_code = 1
                     else:
-                        secret_rec = self.kv_secrets_store.get_secret(secret_name)
+                        secret_rec = self._kv_secret_rec(vault_name, secret_name)
                         if not secret_rec or secret_rec.get("deleted") or not secret_rec.get("versions"):
                             out.append(json.dumps({"error": {"code": "SecretNotFound", "message":
                                 f"A secret with (name/id) {secret_name} was not found in this key vault."}}))
@@ -4862,8 +4878,8 @@ class AzureArm:
         if not secret_id:
             return _ok({"value": props.get("value") or ""})
         secret_name, version = _parse_kv_secret_identifier(secret_id)
-        store = self.kv_secrets_store
-        secret_rec = store.get_secret(secret_name) if store and secret_name else None
+        _vm = re.match(r"https?://([a-z0-9-]+)\.vault\.azure\.net", str(secret_id), re.IGNORECASE)
+        secret_rec = self._kv_secret_rec(_vm.group(1) if _vm else "", secret_name)
         if not secret_rec or secret_rec.get("deleted") or not secret_rec.get("versions"):
             return _err(400, "KeyVaultErrorSecretNotFound",
                         f"Named value '{nv_name}' references Key Vault secret '{secret_name}', which was not found.")
