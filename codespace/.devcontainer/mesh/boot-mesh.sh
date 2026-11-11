@@ -109,6 +109,31 @@ mesh_verified() {
   docker compose -f "$COMPOSE" exec -T simulator curl -fsS -m 5 http://localhost:9000/mesh/status 2>/dev/null </dev/null | grep -Eq '"mesh": *true'
 }
 
+# Health report. A Codespace can be "running" and still be unusable (DNS broken so apt-get fails, no egress, services down). Run the checks
+# INSIDE the simulator container (selfcheck.py is core/mesh_selfcheck.py from the appliance repo; the container has python3, this host does not),
+# add the Codespace HOST's own DNS/apt check, and post the report to the portal. The console shows it and only lets the user Join when every
+# item is ok; otherwise the portal stops this Codespace. Never blocks readiness. `boot-mesh.sh selfcheck` re-runs it by hand.
+host_item() {
+  local h detail hint ok=false
+  h=$(cat /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null | sed -n 's#^[^\#]*https\{0,1\}://\([A-Za-z0-9.-]*\).*#\1#p' | head -1); h="${h:-archive.ubuntu.com}"
+  if getent hosts "$h" >/dev/null 2>&1 && getent hosts github.com >/dev/null 2>&1; then ok=true; detail="resolved github.com and $h"
+  else detail="cannot resolve $h or github.com"; hint="Name resolution is failing on the Codespace host, so apt-get and package installs will fail."; fi
+  printf '{"id":"host_dns","label":"Codespace host DNS (apt)","ok":%s,"detail":"%s","hint":"%s"}' "$ok" "$detail" "$hint"
+}
+selfcheck_report() {
+  local out rest payload i
+  out=$(docker compose -f "$COMPOSE" exec -T simulator python3 - < "$HERE/selfcheck.py" 2>/dev/null | tail -n 1)
+  case "$out" in
+    \{*\"items\":\ \[*) rest="${out#*\"items\": \[}"; payload="{\"codespace_id\":\"$CODESPACE\",\"items\":[$(host_item), $rest" ;;
+    *) payload="{\"codespace_id\":\"$CODESPACE\",\"items\":[$(host_item), {\"id\":\"selfcheck\",\"label\":\"Health checks\",\"ok\":false,\"detail\":\"could not run inside the simulator container\",\"hint\":\"The checks could not run. Stop the Mesh and start it again.\"}]}" ;;
+  esac
+  for i in 1 2 3; do
+    curl -fsS -m 10 -X POST "$PORTAL/api/mesh/session/selfcheck" -H 'Content-Type: application/json' -d "$payload" >/dev/null 2>&1 && { log "health report posted."; return 0; }
+    sleep 3
+  done
+  log "WARNING: could not post the health report to the portal."; return 1
+}
+
 start_stack() {
   [ -f "$RUN_DIR/EXPIRED" ] && { log "session already expired — not starting."; return 1; }
   fetch_session || true
@@ -122,6 +147,7 @@ start_stack() {
         return 1
       fi
       post /api/mesh/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
+      selfcheck_report || true
       start_ai
       log "mesh ready."; return 0
     fi; sleep 3
@@ -131,6 +157,7 @@ start_stack() {
 
 case "${1:-up}" in
   up|resume) start_stack && arm_expiry ;;
+  selfcheck) selfcheck_report ;;
   ttl-left)  echo $(( $(resolve_end) - $(date +%s) )) ;;
-  *) echo "usage: boot-mesh.sh [up|resume|ttl-left]" >&2; exit 2 ;;
+  *) echo "usage: boot-mesh.sh [up|resume|selfcheck|ttl-left]" >&2; exit 2 ;;
 esac
