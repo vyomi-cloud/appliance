@@ -190,6 +190,96 @@ def imagebuilder():
     return _simple(mk, pipes, rm)
 
 
+def _full():
+    """Comparable fields of the resource `name` as the SDK sees it: {field: [acceptable UI renderings]} (E check)."""
+    def V(*alts): return [str(a) for a in alts if a not in (None, "")]
+    if svc == "s3":
+        loc = c.get_bucket_location(Bucket=name).get("LocationConstraint") or "us-east-1"
+        return {"name": V(name), "region": V(loc)}
+    if svc == "sqs":
+        url = c.get_queue_url(QueueName=name)["QueueUrl"]
+        a = c.get_queue_attributes(QueueUrl=url, AttributeNames=["All"])["Attributes"]
+        return {"name": V(name), "arn": V(a["QueueArn"]), "type": V("FIFO" if a.get("FifoQueue") == "true" else "Standard"), "url": V(url)}
+    if svc == "sns":
+        arn = next(t["TopicArn"] for t in c.list_topics()["Topics"] if t["TopicArn"].endswith(":" + name))
+        a = c.get_topic_attributes(TopicArn=arn)["Attributes"]
+        return {"name": V(name), "arn": V(arn), "type": V("FIFO" if a.get("FifoTopic") == "true" else "Standard")}
+    if svc == "dynamodb":
+        t = c.describe_table(TableName=name)["Table"]
+        hash_key = next(k["AttributeName"] for k in t["KeySchema"] if k["KeyType"] == "HASH")
+        bm = (t.get("BillingModeSummary") or {}).get("BillingMode", "PROVISIONED")
+        return {"name": V(name), "arn": V(t["TableArn"]), "partition key": V(hash_key), "status": V(t["TableStatus"]),
+                "billing mode": V("On-demand", "PAY_PER_REQUEST") if bm == "PAY_PER_REQUEST" else V("Provisioned", "PROVISIONED")}
+    if svc == "kms":
+        al = next(a for a in c.list_aliases()["Aliases"] if a["AliasName"] == "alias/" + name)
+        k = c.describe_key(KeyId=al["TargetKeyId"])["KeyMetadata"]
+        return {"alias": V(name), "key id": V(k["KeyId"]), "arn": V(k["Arn"]), "state": V(k["KeyState"]),
+                "usage": V(k["KeyUsage"], k["KeyUsage"].replace("_", " "), "Encrypt and decrypt" if k["KeyUsage"] == "ENCRYPT_DECRYPT" else ""),
+                "key spec": V(k.get("KeySpec") or k.get("CustomerMasterKeySpec"))}
+    if svc == "secretsmanager":
+        d = c.describe_secret(SecretId=name)
+        return {"name": V(name), "arn": V(d["ARN"])}
+    if svc == "iam":
+        u = c.get_user(UserName=name)["User"]
+        return {"name": V(name), "arn": V(u["Arn"]), "path": V(u["Path"])}
+    if svc == "vpc":
+        v = next(v for v in c.describe_vpcs()["Vpcs"] if any(t["Value"] == name for t in v.get("Tags", [])))
+        return {"name": V(name), "vpc id": V(v["VpcId"]), "cidr": V(v["CidrBlock"]), "state": V(v["State"]), "tenancy": V(v.get("InstanceTenancy"))}
+    if svc == "ec2":
+        k = c.describe_key_pairs(KeyNames=[name])["KeyPairs"][0]
+        return {"name": V(name), "key pair id": V(k.get("KeyPairId")), "fingerprint": V(k.get("KeyFingerprint")), "type": V(k.get("KeyType"))}
+    if svc == "ssm":
+        d = next(x for x in c.describe_parameters()["Parameters"] if x["Name"] in (name, "/" + name))
+        p = c.get_parameter(Name=d["Name"])["Parameter"]
+        return {"name": V(name), "type": V(p["Type"]), "tier": V(d.get("Tier", "Standard")), "version": V(p["Version"]), "arn": V(p.get("ARN"))}
+    if svc == "kinesis":
+        d = c.describe_stream_summary(StreamName=name)["StreamDescriptionSummary"]
+        return {"name": V(name), "arn": V(d["StreamARN"]), "status": V(d["StreamStatus"]), "shards": V(d["OpenShardCount"]), "retention": V(d["RetentionPeriodHours"])}
+    if svc == "ecr":
+        r = c.describe_repositories(repositoryNames=[name])["repositories"][0]
+        return {"name": V(name), "uri": V(r["repositoryUri"]), "arn": V(r["repositoryArn"]), "tag mutability": V(r["imageTagMutability"], r["imageTagMutability"].title())}
+    if svc == "eventbridge":
+        b = c.describe_event_bus(Name=name)
+        return {"name": V(name), "arn": V(b["Arn"])}
+    if svc == "cloudwatch":
+        g = next(g for g in c.describe_log_groups(logGroupNamePrefix=name)["logGroups"] if g["logGroupName"] == name)
+        return {"name": V(name), "arn": V(g.get("arn", "").rstrip(":*"), g.get("arn")), "retention": V(g.get("retentionInDays", "Never expire"), "Never expire" if "retentionInDays" not in g else "")}
+    if svc == "apigateway":
+        a = next(a for a in c.get_rest_apis()["items"] if a["name"] == name)
+        et = (a.get("endpointConfiguration") or {}).get("types", ["EDGE"])[0]
+        return {"name": V(name), "id": V(a["id"]), "endpoint type": V(et, et.title())}
+    if svc == "backup":
+        v = c.describe_backup_vault(BackupVaultName=name)
+        return {"name": V(name), "arn": V(v["BackupVaultArn"])}
+    if svc == "networkmanager":
+        g = next(g for g in c.describe_global_networks()["GlobalNetworks"] if any(t["Value"] == name for t in g.get("Tags", [])))
+        return {"name": V(name), "id": V(g["GlobalNetworkId"]), "state": V(g["State"])}
+    if svc == "states":
+        m = next(m for m in c.list_state_machines()["stateMachines"] if m["name"] == name)
+        d = c.describe_state_machine(stateMachineArn=m["stateMachineArn"])
+        return {"name": V(name), "arn": V(m["stateMachineArn"]), "type": V(d["type"], d["type"].title()), "status": V(d["status"], d["status"].title())}
+    if svc == "lambda":
+        f = c.get_function_configuration(FunctionName=name)
+        return {"name": V(name), "arn": V(f["FunctionArn"]), "runtime": V(f["Runtime"]), "handler": V(f["Handler"]), "memory": V(f["MemorySize"]), "timeout": V(f["Timeout"])}
+    if svc == "rds":
+        d = c.describe_db_instances(DBInstanceIdentifier=name)["DBInstances"][0]
+        return {"name": V(name), "engine": V(d["Engine"]), "version": V(d["EngineVersion"]), "class": V(d["DBInstanceClass"]), "status": V(d["DBInstanceStatus"]),
+                "endpoint": V((d.get("Endpoint") or {}).get("Address"))}
+    if svc == "cloudformation":
+        s = c.describe_stacks(StackName=name)["Stacks"][0]
+        return {"name": V(name), "status": V(s["StackStatus"], s["StackStatus"].replace("_", " ")), "stack id": V(s["StackId"])}
+    if svc == "imagebuilder":
+        p = next(p for p in c.list_image_pipelines()["imagePipelineList"] if p["name"] == name)
+        return {"name": V(name), "arn": V(p["arn"]), "status": V(p.get("status"), (p.get("status") or "").title())}
+    return {}
+
+
+if op == "describe-full":
+    try: print(json.dumps(_full(), default=str))
+    except Exception as e: print(json.dumps({"_error": type(e).__name__ + ": " + str(e)[:200]}))
+    sys.exit(0)
+
+
 if op == "prep":  # make a UI-created resource deletable (e.g. RDS console default = deletion protection ON, as in real AWS)
     if svc == "cloudformation":   # the UI wizard takes a template URL: host one in S3 first
         s3c = boto3.client("s3", **KW)

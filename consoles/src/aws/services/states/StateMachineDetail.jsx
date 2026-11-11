@@ -278,6 +278,9 @@ export default function StateMachineDetail({ params, query }) {
         <Button variant="primary" href={href("states", "state-machines", name, "start")} onFollow={follow}>Start execution</Button>
       </SpaceBetween>
     }>{name}</Header>}>
+      <SpaceBetween size="l">
+      <KeyValue title="Details" columns={3}
+        items={[["Type", d.type === "EXPRESS" ? "Express" : "Standard"], ["Status", d.status], ["ARN", d.stateMachineArn || arn]]} />
       <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
         { id: "executions", label: "Executions", content: <Executions name={name} arn={arn} /> },
         { id: "definition", label: "Definition", content: <Definition d={d} reload={t.reload} /> },
@@ -285,6 +288,7 @@ export default function StateMachineDetail({ params, query }) {
         { id: "versions", label: "Versions", content: <Versions arn={arn} /> },
         { id: "tags", label: "Tags", content: <TagsTab arn={arn} /> },
       ]} />
+      </SpaceBetween>
       <DeleteModal visible={del} resourceType="state machine" names={[name]} confirmText="delete"
         onDismiss={() => setDel(false)}
         onConfirm={async () => { await api.deleteStateMachine(arn); navigate("states", "state-machines"); }} />

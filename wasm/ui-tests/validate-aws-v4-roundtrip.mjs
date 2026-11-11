@@ -1,6 +1,7 @@
 /* v4.0.0 AWS console (consoles/src/aws -> /v4/aws/) UI <-> SDK bi-directional round-trip.
  * UI = the v4 console in Playwright; SDK = boto3 (endpoint only changed) on the SAME wire (/_wire).
  *   A UI create -> SDK sees it   B SDK create -> UI lists it   C SDK delete -> UI drops it   D UI delete -> SDK gone
+ *   E field parity: every SDK-reported field (arn/id/status/type/region/class...) is shown by the UI (list row or detail), for an SDK-created AND a UI-created resource (NOFIELDS=1 skips E)
  * Env: BASE (default http://127.0.0.1:8741, = `python3 consoles/dev_server.py --port 8741` or the appliance),
  *      UI_PATH (/v4/aws/), WIRE_PATH (/_wire), PY (python with boto3), ONLY=s3,sqs,... */
 import { chromium, sleep } from "./lib.mjs";
@@ -90,11 +91,41 @@ async function uiDelete(svc, name) {
   await sleep(3000);
 }
 
+// ── E: field-level parity. The SDK's own values for a resource must appear in what the UI displays (list row + detail page). ──
+const norm = (t) => String(t).toLowerCase().replace(/\s+/g, " ").trim();
+const has = (text, v) => { const n = norm(v); if (!n) return false; const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(text); };
+async function uiText(svc, name) {
+  await go(svc); await sleep(500);
+  const row = page.locator("tr", { hasText: name }).first();
+  const rowTxt = norm((await row.count()) ? await row.innerText().catch(() => "") : "");
+  const lnk = row.locator("a").first();
+  let detail = "";
+  if (await lnk.count()) { await lnk.click({ timeout: 5000 }).catch(() => {}); await sleep(2500); detail = norm(await body());
+    // real consoles spread fields over tabs (Lambda Configuration, ...): include every tab's text
+    const tabs = page.getByRole("tab"); const n = await tabs.count().catch(() => 0);
+    for (let i = 0; i < Math.min(n, 8); i++) { await tabs.nth(i).click({ timeout: 3000 }).catch(() => {}); await sleep(700); detail += " " + norm(await body()); }
+  }
+  return { rowTxt, detail };
+}
+async function fieldCheck(svc, name, origin) {
+  const tag = `[${svc}] E(${origin})`;
+  let full;
+  try { full = sdk(svc, "describe-full", name); } catch (e) { check(`${tag} describe-full`, false, String(e).split("\n")[0]); return; }
+  if (full._error) { check(`${tag} describe-full`, false, "SDK: " + full._error); return; }
+  const t = await uiText(svc, name);
+  for (const [field, alts] of Object.entries(full)) {
+    const where = alts.some((v) => has(t.rowTxt, v)) ? "row" : alts.some((v) => has(t.detail, v)) ? "detail" : "";
+    check(`${tag} ${field} [${where || "-"}]`, !!where, `UI does not show "${alts[0]}" (SDK value) | row: ${t.rowTxt.slice(0, 150)} | detail: ${t.detail.slice(0, 120)}`);
+  }
+}
+
+const FIELDS = process.env.NOFIELDS !== "1";
 for (const svc of ONLY) {
   const tag = `[${svc}]`, a = "rta" + Date.now().toString(36), b = "rtb" + Date.now().toString(36); let aOk = false;
   try { if (svc === "cloudformation" || svc === "imagebuilder") sdk(svc, "prep", a); await uiCreate(svc, a); const d = sdk(svc, "describe", a); aOk = !!d.exists; check(`${tag} A UI create -> SDK sees it`, aOk, JSON.stringify(d) + (aOk ? "" : ` | UI lists it: ${await listed(svc, a)} | btns: ${await dump()}`)); } catch (e) { check(`${tag} A UI create -> SDK sees it`, false, `step=${step}: ` + String(e).split("\n")[0].slice(0, 160) + ` | btns: ${await dump()} | err: ${(await body()).match(/(error|invalid|required|must)[^.]{0,120}/i)?.[0] || ""}`); }
-  try { sdk(svc, "create", b); check(`${tag} B SDK create -> UI lists it`, await listed(svc, b), "SDK created, UI list lacks it"); } catch (e) { check(`${tag} B SDK create -> UI lists it`, false, String(e).split("\n")[0]); }
+  try { sdk(svc, "create", b); check(`${tag} B SDK create -> UI lists it`, await listed(svc, b), "SDK created, UI list lacks it"); if (FIELDS && svc !== "eks") await fieldCheck(svc, b, "SDK-created"); } catch (e) { check(`${tag} B SDK create -> UI lists it`, false, String(e).split("\n")[0]); }
   try { sdk(svc, "delete", b); check(`${tag} C SDK delete -> UI drops it`, !(await listed(svc, b)), "UI still lists it"); } catch (e) { check(`${tag} C SDK delete -> UI drops it`, false, String(e).split("\n")[0]); }
+  if (FIELDS && aOk && svc !== "eks") { try { await fieldCheck(svc, a, "UI-created"); } catch (e) { check(`${tag} E(UI-created)`, false, String(e).split("\n")[0]); } }
   if (!aOk) { check(`${tag} D UI delete -> SDK no longer sees it`, false, "not run: A failed"); continue; }
   try { sdk(svc, "prep", a); await uiDelete(svc, a); const d = sdk(svc, "describe", a); check(`${tag} D UI delete -> SDK no longer sees it`, !d.exists, JSON.stringify(d)); } catch (e) { check(`${tag} D UI delete -> SDK no longer sees it`, false, `step=${step}: ` + String(e).split("\n")[0].slice(0, 200) + ` | at ${await page.evaluate(() => location.hash)} | btns: ${await dump()} | dlg: ${(await page.evaluate(() => [...document.querySelectorAll("[role=dialog]")].map((d) => d.innerText.replace(/\s+/g, " ").slice(0, 160)).join(" || ")))}`); }
 }
