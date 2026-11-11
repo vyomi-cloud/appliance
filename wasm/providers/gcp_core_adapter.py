@@ -481,7 +481,10 @@ def _mon_op(operation, name, body):
 # other. The bridge keeps them one set: native networks are mirrored into the console list before it is
 # read, a console create/delete is written through to the native store, and a mirrored record disappears
 # when its native twin is deleted. Mirrored records carry `_bridged: True`.
-_BRIDGED_SERVICES = ("vpc", "compute")
+# "compute" is deliberately NOT bridged yet: mirroring instances into the native gcp_compute_vm store starts a second in-browser VM
+# (the VM host reads both stores) and breaks the VM-compute flow (nano-post-create-gcp-gce-ssh: create 500 "no client to run the in-browser
+# backend"). The two stores need one owner first; see the round-trip's pending note for compute.
+_BRIDGED_SERVICES = ("vpc",)
 
 
 def _native_vpc_snapshot():
@@ -558,6 +561,8 @@ def bridge_post_create(svc, account, res, rec):
             mt = str(rec.get("machineType") or "e2-medium").rsplit("/", 1)[-1]
             st = _compute_vm_native("POST", f"/compute/v1/projects/{PROJ}/zones/{zone}/instances",
                                     {"name": rec["name"], "machineType": f"zones/{zone}/machineTypes/{mt}",
+                                     **({"metadata": rec["metadata"]} if isinstance(rec.get("metadata"), dict) else {}),
+                                     **({"labels": rec["labels"]} if isinstance(rec.get("labels"), dict) else {}),
                                      "disks": [{"boot": True, "autoDelete": True, "initializeParams": {
                                          "sourceImage": "projects/debian-cloud/global/images/family/debian-12"}}],
                                      "networkInterfaces": [{"network": f"projects/{PROJ}/global/networks/default"}]})

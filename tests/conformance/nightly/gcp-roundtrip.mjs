@@ -80,7 +80,7 @@ const SERVICES = [
     create: (P, n, X) => ["POST", `/_wire/v1/projects/${P}/locations/${X.region}/repositories?repositoryId=${n}`, { format: "DOCKER" }],
     path: (P, n, X) => `/_wire/v1/projects/${P}/locations/${X.region}/repositories/${n}`,
     name: (j) => String(j.name || "").split("/").pop(), state: () => "" },
-  { id: "compute", label: /Compute Engine/i,
+  { id: "compute", pending: "console uses the generic store, /_wire the native gcp_compute_vm store (split-brain); mirroring them starts a second in-browser VM and breaks nano-post-create-gcp-gce-ssh, so the two stores need one owner first", label: /Compute Engine/i,
     create: (P, n, X) => ["POST", `/_wire/compute/v1/projects/${P}/zones/${X.zone}/instances`,
       { name: n, machineType: `zones/${X.zone}/machineTypes/e2-micro`,
         disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }],
