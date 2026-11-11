@@ -4,7 +4,7 @@
  * console source holds no seeded sparkline.
  * Nano by default; offline with VYOMI_CONSOLE_URL=$VYOMI_BASE_URL/console/azure. */
 import { startServer, bootConsole, chromium, sleep, RAIL_SEL } from "./lib.mjs";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 const offlineUrl = process.env.VYOMI_CONSOLE_URL;
 let server = null, base = null;
 if (!offlineUrl) ({ server, base } = await startServer());
@@ -21,6 +21,7 @@ const SUB = "00000000-0000-0000-0000-cloudlearn01", RG = "cloudlearn-rg";
 const vault = (n) => `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${n}?api-version=2023-07-01`;
 try {
   for (const f of ["static/azure-console.html", "wasm/azure-console.html"]) {
+    if (!existsSync(new URL(`../../${f}`, import.meta.url))) continue;   // static/azure-console.html no longer ships; wasm/ is the canonical copy
     const src = readFileSync(new URL(`../../${f}`, import.meta.url), "utf8");
     check(`${f} has no seeded sparkline`, !/buildSparkline/.test(src) && !/1103515245/.test(src));
   }
