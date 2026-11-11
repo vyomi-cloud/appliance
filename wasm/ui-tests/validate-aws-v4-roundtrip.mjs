@@ -18,12 +18,12 @@ const ONLY = (process.env.ONLY || ALL.join(",")).split(",");
 const browser = await chromium.launch();
 const page = await (await browser.newContext({ viewport: { width: 1500, height: 1100 } })).newPage();
 page.on("dialog", (d) => d.accept("delete").catch(() => {}));
-if (process.env.TRACE) page.on("request", (r) => { const t = r.postData() || ""; if (r.method() !== "GET" && /Delete|Terminate|Remove/i.test(t + r.url())) console.log("  wire>", (t || r.url()).slice(0, 160)); });
-if (process.env.TRACE) page.on("response", async (r) => { const t = r.request().postData() || ""; if (r.request().method() !== "GET" && /Delete|Terminate|Remove/i.test(t)) console.log("  resp>", r.status(), (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 400)); });
+if (process.env.TRACE) page.on("request", (r) => { const t = r.postData() || ""; if (r.method() !== "GET" && /Delete|Terminate|Remove|CreateStack/i.test(t + r.url())) console.log("  wire>", (t || r.url()).slice(0, 160)); });
+if (process.env.TRACE) page.on("response", async (r) => { const t = r.request().postData() || ""; if (r.request().method() !== "GET" && /Delete|Terminate|Remove|CreateStack/i.test(t)) console.log("  resp>", r.status(), (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 400)); });
 const results = [];
 // Honest SKIPs (printed, never counted as PASS): checks this suite cannot drive yet, with the reason.
 const SKIP = {
-  "cloudformation:A": "multi-step create wizard (template URL -> params -> review) not automated yet", "cloudformation:D": "depends on A" };
+};
 const skipped = [];
 // EKS runs wherever the k3s backend exists (the GitHub runner / Codespace); skip only when this stack has none.
 if (ONLY.includes("eks")) { try { const n = "rtprobe" + Date.now().toString(36); sdk("eks", "create", n); sdk("eks", "delete", n); } catch (e) { if (/ServiceUnavailable|Kubernetes backend/i.test(String(e))) SKIP["eks:*"] = "no Kubernetes (k3s) backend on this stack (CreateCluster -> ServiceUnavailable); runs on the runner where k3s is up"; } }
@@ -40,22 +40,32 @@ const ROUTES = { s3: ["s3", "s3/create"], sqs: ["sqs/queues", "sqs/create-queue"
 const go = async (svc, which = 0) => { await page.goto(`${UI}#/${ROUTES[svc][which] ?? ROUTES[svc][0]}`); await page.reload(); await sleep(2500); };
 const body = () => page.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
 const listed = async (svc, name) => { await go(svc); await sleep(500); return (await body()).includes(name); };
-const dump = () => page.evaluate(() => [...document.querySelectorAll("button")].filter((e) => e.offsetParent).map((e) => e.innerText.trim().replace(/\n/g, " ")).filter(Boolean).slice(0, 14).join(" | "));
+const dump = () => page.evaluate(() => [...document.querySelectorAll("button")].filter((e) => e.offsetParent).map((e) => e.innerText.trim().replace(/\n/g, " ") + (e.disabled ? "(disabled)" : "")).filter(Boolean).slice(0, 14).join(" | "));
 const INP = "input:visible:not([type=radio]):not([type=checkbox]):not([type=file]):not([type=number]):not([placeholder*=earch]), textarea:visible";
 let step = "";
 
 async function uiCreate(svc, name) {
   step = "open create form"; if (ROUTES[svc][1]) await go(svc, 1); else { await go(svc); await vis("button, a", /^\s*(create|add|launch|new|store)\b/i).first().click({ timeout: 8000 }); await sleep(1500); }
   step = "fill";
+  if (svc === "cloudformation") {   // wizard: template source -> stack name -> options -> review -> Create stack
+    await page.locator("input[type=radio][value=s3url]").check({ force: true }).catch(() => {});
+    await page.locator("input[placeholder*='s3.amazonaws.com']").fill("https://s3.amazonaws.com/rt-cfn-templates/t.json");
+    for (let i = 0; i < 4 && (await vis("button", /^\s*submit\s*$/i).count()) === 0; i++) {
+      await vis("button", /^\s*next\s*$/i).last().click({ timeout: 8000 }); await sleep(1500);
+      const sn = page.locator("input[aria-label='Stack name'], input[placeholder='Stack name']").first();
+      if (await sn.count()) { await sn.fill(name).catch(() => {}); }
+      // only the Stack name field gets the name; optional fields (RoleARN, tags...) stay empty
+    }
+  }
   if (svc === "imagebuilder") {
     await page.locator("input[aria-label='Pipeline name']").fill(name);
     for (const ph of [/choose a recipe/i, /choose an infrastructure/i]) { await vis("button", ph).first().click({ timeout: 8000 }); await sleep(400); await page.locator("[role=option]:visible").first().click({ timeout: 8000 }); await sleep(300); }
   }
-  const els = svc === "imagebuilder" ? page.locator("input[aria-label='__none__']") : page.locator(INP);
+  const els = svc === "imagebuilder" || svc === "cloudformation" ? page.locator("input[aria-label='__none__']") : page.locator(INP);
   for (let i = 0; i < await els.count(); i++) { const e = els.nth(i); const v = await e.inputValue().catch(() => "x"); if (!v && /s3\.amazonaws\.com/.test((await e.getAttribute("placeholder")) || "")) { await e.fill("https://s3.amazonaws.com/rt-cfn-templates/t.json").catch(() => {}); continue; } if (!v || /^(my|My|Music|new-|database-|\/vyomi|\/aws|default)/.test(v)) await e.fill(name).catch(() => {}); }
   step = "submit";
-  for (let i = 0; i < 8; i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); const e2 = page.locator(INP); for (let j = 0; j < await e2.count(); j++) { const e = e2.nth(j); if (!(await e.inputValue().catch(() => "x"))) await e.fill(name).catch(() => {}); } }
-  await vis("button", /^\s*(create|add|launch|store|save|finish)\b/i).last().click({ timeout: 8000 }); await sleep(3000);
+  for (let i = 0; i < (svc === "cloudformation" ? 0 : 8); i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); const e2 = page.locator(INP); for (let j = 0; j < await e2.count(); j++) { const e = e2.nth(j); if (!(await e.inputValue().catch(() => "x"))) await e.fill(name).catch(() => {}); } }
+  await vis("button", /^\s*(create|add|launch|store|save|finish|submit)\b/i).last().click({ timeout: 8000 }); await sleep(3000);
 }
 async function uiDelete(svc, name) {
   step = "open list"; await go(svc);
@@ -82,7 +92,7 @@ async function uiDelete(svc, name) {
 
 for (const svc of ONLY) {
   const tag = `[${svc}]`, a = "rta" + Date.now().toString(36), b = "rtb" + Date.now().toString(36); let aOk = false;
-  try { if (svc === "cloudformation" || svc === "imagebuilder") sdk(svc, "prep", a); await uiCreate(svc, a); const d = sdk(svc, "describe", a); aOk = !!d.exists; check(`${tag} A UI create -> SDK sees it`, aOk, JSON.stringify(d) + (aOk ? "" : ` | UI lists it: ${await listed(svc, a)} | btns: ${await dump()}`)); } catch (e) { check(`${tag} A UI create -> SDK sees it`, false, `step=${step}: ` + String(e).split("\n")[0].slice(0, 260)); }
+  try { if (svc === "cloudformation" || svc === "imagebuilder") sdk(svc, "prep", a); await uiCreate(svc, a); const d = sdk(svc, "describe", a); aOk = !!d.exists; check(`${tag} A UI create -> SDK sees it`, aOk, JSON.stringify(d) + (aOk ? "" : ` | UI lists it: ${await listed(svc, a)} | btns: ${await dump()}`)); } catch (e) { check(`${tag} A UI create -> SDK sees it`, false, `step=${step}: ` + String(e).split("\n")[0].slice(0, 160) + ` | btns: ${await dump()} | err: ${(await body()).match(/(error|invalid|required|must)[^.]{0,120}/i)?.[0] || ""}`); }
   try { sdk(svc, "create", b); check(`${tag} B SDK create -> UI lists it`, await listed(svc, b), "SDK created, UI list lacks it"); } catch (e) { check(`${tag} B SDK create -> UI lists it`, false, String(e).split("\n")[0]); }
   try { sdk(svc, "delete", b); check(`${tag} C SDK delete -> UI drops it`, !(await listed(svc, b)), "UI still lists it"); } catch (e) { check(`${tag} C SDK delete -> UI drops it`, false, String(e).split("\n")[0]); }
   if (!aOk) { check(`${tag} D UI delete -> SDK no longer sees it`, false, "not run: A failed"); continue; }

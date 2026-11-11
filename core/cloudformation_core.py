@@ -169,8 +169,8 @@ def _stack_arn(name: str, stack_uid: str) -> str:
 
 # ── template body / S3 URL fetch ────────────────────────────────────────────
 _S3_URL_RE = re.compile(
-    r"^https?://(?:s3[.\-][\w.\-]*\.amazonaws\.com/(?P<b1>[^/]+)/(?P<k1>.+)"
-    r"|(?P<b2>[^./]+)\.s3[.\-][\w.\-]*\.amazonaws\.com/(?P<k2>.+))$")
+    r"^https?://(?:s3(?:[.\-][\w.\-]*)?\.amazonaws\.com/(?P<b1>[^/]+)/(?P<k1>.+)"      # also the global endpoint s3.amazonaws.com
+    r"|(?P<b2>[^./]+)\.s3(?:[.\-][\w.\-]*)?\.amazonaws\.com/(?P<k2>.+))$")
 
 
 def _fetch_template_url(stores: dict, url: str) -> str:
