@@ -92,10 +92,16 @@ jobs:
           # base OS, NOT the app version — it's rebuilt only when the Ubuntu base
           # changes, so it keeps a stable ubuntu-24.04 + latest tag set.
           ITAGS="vyomi/instance:ubuntu-24.04,vyomi/instance:latest,ghcr.io/vyomi-cloud/instance:ubuntu-24.04,ghcr.io/vyomi-cloud/instance:latest"
+          # vyomi/postgres:16-alpine-pgvector — the Postgres 16 Alpine + pgvector image
+          # docker-compose.*.yml default VYOMI_POSTGRES_IMAGE to (PG1). Same stable-tag
+          # pattern as vyomi/instance above: tagged by what it ships, not the app version,
+          # and rebuilt on every release since it's cheap and keeps the tag fresh.
+          PGTAGS="vyomi/postgres:16-alpine-pgvector,ghcr.io/vyomi-cloud/postgres:16-alpine-pgvector"
           echo "version=${VER}"           >> "$GITHUB_OUTPUT"
           echo "tags=${TAGS}"             >> "$GITHUB_OUTPUT"
           echo "cloudsim_tags=${CTAGS}"   >> "$GITHUB_OUTPUT"
           echo "instance_tags=${ITAGS}"   >> "$GITHUB_OUTPUT"
+          echo "postgres_tags=${PGTAGS}"  >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
           {
             echo "## Will publish"
@@ -179,6 +185,25 @@ jobs:
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
           cache-from: type=gha,scope=instance
           cache-to: type=gha,mode=max,scope=instance
+
+      - name: Build + push postgres (pgvector, multi-arch)
+        # vyomi/postgres:16-alpine-pgvector — PostgreSQL 16 Alpine with pgvector
+        # compiled in (packaging/postgres/Dockerfile), the default
+        # VYOMI_POSTGRES_IMAGE for vyomi-sql-postgres in every docker-compose*.yml
+        # (PG1). Previously never built here, so a clean `docker compose pull`
+        # failed with "pull access denied" for this image.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./packaging/postgres
+          file: ./packaging/postgres/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.postgres_tags }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,mode=max,scope=postgres
 
       - name: Update Docker Hub description (stable tag only)
         # Pre-release tags don't update the Hub README — the README should
