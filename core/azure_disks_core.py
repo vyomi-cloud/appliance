@@ -55,7 +55,8 @@ def _vm_attachments(state: dict) -> dict:
     for rec in state.values():
         if (rec.get("_type") or "").lower() != VM:
             continue
-        for d in ((rec.get("properties") or {}).get("storageProfile") or {}).get("dataDisks") or []:
+        _sp = (rec.get("properties") or {}).get("storageProfile") or {}
+        for d in list(_sp.get("dataDisks") or []) + [_sp.get("osDisk") or {}]:
             mid = str(((d or {}).get("managedDisk") or {}).get("id") or "").lower()
             if mid:
                 out[mid] = rec

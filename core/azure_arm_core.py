@@ -147,6 +147,10 @@ except ImportError:
     import azure_netcfg_core as netcfg             # type: ignore
     import azure_lb_core as lbcore                 # type: ignore
     import azure_disks_core as diskcore            # type: ignore
+try:
+    from core import azure_compute_disks_vm as vmdisks
+except ImportError:
+    import azure_compute_disks_vm as vmdisks       # type: ignore
 try:                                              # v4 AZ-02..05: KEDA / AKS extensions, Cosmos CORS+gateway+CMK, Service Bus CMK+network rules, App Config CMK, subnet delegation
     from core import azure_cfgext_core as cfgext
 except ImportError:
@@ -1082,6 +1086,10 @@ def _view(rec: dict) -> dict:
         # Real Azure never returns a VM's admin password on GET (found by the Mesh VM bi-directional run); it stays stored for the guest.
         out["properties"] = {**out["properties"], "osProfile": {k: v for k, v in osp.items() if k != "adminPassword"}}
     return out
+
+
+def _wants_iv(query) -> bool:
+    return "instanceview" in str((query or {}).get("$expand") or "").lower()
 
 
 def _rg_from_id(rid: str):
@@ -2090,7 +2098,7 @@ class AzureArm:
             # level deeper than their top catalog type — scope the list to the specific parent
             # instance, else two sibling parents' children would bleed into each other's list.
             parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
-            return self._list(sub, rg, full_type, parent_prefix)
+            return self._list(sub, rg, full_type, parent_prefix, query)
 
         rid = _canonical_id(sub, rg, type_chain, names)
         key = rid.lower()
@@ -2105,8 +2113,14 @@ class AzureArm:
             if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             ext_engine.after_upsert(self.state, rec)
+            if full_type.lower() == vmdisks.VM and _wants_iv(query):
+                return _ok(vmdisks.with_instance_view(_view(rec), rec, ext_engine.instance_view))
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
+            if full_type.lower() == vmdisks.VM:
+                bad = vmdisks.validate_password(payload)
+                if bad:
+                    return bad
             bad = ext_engine.validate_write(self.state, rid, full_type, payload)
             if bad:
                 return {"status": bad["status"], "headers": {}, "body": bad["body"]}
@@ -2206,6 +2220,8 @@ class AzureArm:
             if lbcore.handles(full_type) and key in self.state:
                 lbcore.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
+            if full_type.lower() == vmdisks.VM and key in self.state:
+                vmdisks.ensure_vm_disks(self.state, self.state[key])
             if diskcore.handles(full_type) and key in self.state:
                 diskcore.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
@@ -2349,6 +2365,8 @@ class AzureArm:
                 netcfg.on_delete(self.state, rec)
                 lbcore.on_delete(self.state, rec)
                 diskcore.on_delete(self.state, rec)
+                if (rec.get("_type") or "").lower() == vmdisks.VM:
+                    vmdisks.delete_vm_disks(self.state, rec)
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
@@ -3785,7 +3803,7 @@ class AzureArm:
             pass
 
     # ── CRUD primitives ───────────────────────────────────────────────────
-    def _list(self, sub, rg, full_type, parent_prefix=None):
+    def _list(self, sub, rg, full_type, parent_prefix=None, query=None):
         ft = full_type.lower()
         items = []
         for rec in list(self.state.values()):
@@ -3798,7 +3816,8 @@ class AzureArm:
             ext_engine.after_upsert(self.state, rec)
             if parent_prefix and not rec.get("id", "").lower().startswith(parent_prefix):
                 continue
-            items.append(_view(rec))
+            items.append(vmdisks.with_instance_view(_view(rec), rec, ext_engine.instance_view)
+                         if ft == vmdisks.VM and _wants_iv(query) else _view(rec))
         return _ok({"value": items})
 
     def _upsert(self, rid, key, full_type, name, catalog, payload, base, patch=False):
