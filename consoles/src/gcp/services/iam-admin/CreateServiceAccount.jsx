@@ -31,6 +31,7 @@ export default function CreateServiceAccount() {
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const [idTouched, setIdTouched] = useState(false);
+  const [idManual, setIdManual] = useState(false);
   const [description, setDescription] = useState("");
   const [role, setRole] = useState("");
   const [users, setUsers] = useState("");
@@ -38,6 +39,8 @@ export default function CreateServiceAccount() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
+  // The real console derives the ID live from the name (lowercase, hyphens, starts with a letter, 6-30 chars) until the user edits the ID.
+  const deriveId = (n) => { let x = n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^[^a-z]+/, "").replace(/-+$/, "").slice(0, 30).replace(/-+$/, ""); return x; };
   const idErr = idTouched && !/^[a-z][a-z0-9-]{5,29}$/.test(id) ? "6-30 characters: lowercase letters, numbers and hyphens." : null;
 
   const submit = async (ev) => {
@@ -79,9 +82,9 @@ export default function CreateServiceAccount() {
       <PageHeader title="Create service account" back={<IconButton aria-label="Back" href="#/iam-admin/serviceaccounts"><ArrowBackIcon /></IconButton>} />
       <ErrorAlert error={error} title="Failed to create service account" />
       <Step n={1} title="Service account details">
-        <TextField label="Service account name" value={name} onChange={(e) => setName(e.target.value)}
+        <TextField label="Service account name" value={name} onChange={(e) => { setName(e.target.value); if (!idManual) setId(deriveId(e.target.value)); }}
           helperText="Display name for this service account" />
-        <TextField required label="Service account ID" value={id} onChange={(e) => setId(e.target.value.trim())} onBlur={() => setIdTouched(true)}
+        <TextField required label="Service account ID" value={id} onChange={(e) => { setId(e.target.value.trim()); setIdManual(true); setIdTouched(true); }} onBlur={() => setIdTouched(true)}
           error={!!idErr} helperText={idErr || `Email address: ${id || "<id>"}@${project}.iam.gserviceaccount.com`} />
         <TextField label="Service account description" multiline minRows={2} placeholder="Describe what this service account will do"
           value={description} onChange={(e) => setDescription(e.target.value)} />

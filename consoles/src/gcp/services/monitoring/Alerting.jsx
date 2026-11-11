@@ -8,6 +8,8 @@ import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
 import ScrollTable from "../../kit/ScrollTable.jsx";
+import DeleteDialog from "../../kit/DeleteDialog.jsx";
+import { useNotify } from "../../../common/notify.jsx";
 
 const SEVERITY_LABEL = { CRITICAL: "Critical", ERROR: "Error", WARNING: "Warning" };
 
@@ -15,7 +17,9 @@ export default function Alerting() {
   const project = useProject();
   const [showClosed, setShowClosed] = useState(false);
   const [showPast, setShowPast] = useState(false);
-  const { data } = useAsync(async () => ({
+  const notify = useNotify();
+  const [del, setDel] = useState(null);
+  const { data, reload } = useAsync(async () => ({
     policies: await api.listPolicies(), snoozes: await api.listSnoozes(), incidents: await api.listIncidents(),
   }), [project]);
   const policies = data?.policies || [];
@@ -79,7 +83,7 @@ export default function Alerting() {
 
         <Section title="Policies" actions={<Button size="small" href="#/monitoring/alerting/policies/create">Create policy</Button>}>
           <ScrollTable size="small">
-            <TableHead><TableRow><TableCell>Display name</TableCell><TableCell>Type</TableCell><TableCell>Last modified on</TableCell><TableCell>Labels</TableCell><TableCell>Enabled</TableCell></TableRow></TableHead>
+            <TableHead><TableRow><TableCell>Display name</TableCell><TableCell>Type</TableCell><TableCell>Last modified on</TableCell><TableCell>Labels</TableCell><TableCell>Enabled</TableCell><TableCell>Actions</TableCell></TableRow></TableHead>
             <TableBody>
               {policies.length ? policies.map((p) => (
                 <TableRow key={p.name}>
@@ -88,12 +92,21 @@ export default function Alerting() {
                   <TableCell>{p.mutationRecord?.mutateTime ? new Date(p.mutationRecord.mutateTime).toLocaleString() : "—"}</TableCell>
                   <TableCell>{Object.keys(p.userLabels || {}).length ? Object.entries(p.userLabels).map(([k, v]) => `${k}=${v}`).join(", ") : "—"}</TableCell>
                   <TableCell>{p.enabled ? "Enabled" : "Disabled"}</TableCell>
+                  <TableCell>
+                    <Button size="small" aria-label={`${p.enabled ? "Disable" : "Enable"} ${p.displayName}`}
+                      onClick={async () => { try { await api.patchPolicy(p.name.split("/").pop(), { enabled: !p.enabled }, "enabled"); notify.success(`${p.enabled ? "Disabled" : "Enabled"} policy "${p.displayName}"`); reload(); } catch (e) { notify.error(e); } }}>{p.enabled ? "Disable" : "Enable"}</Button>
+                    <Button size="small" color="error" aria-label={`Delete ${p.displayName}`} onClick={() => setDel(p)}>Delete</Button>
+                  </TableCell>
                 </TableRow>
-              )) : <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No policies yet.</Typography></TableCell></TableRow>}
+              )) : <TableRow><TableCell colSpan={6}><Typography variant="body2" color="text.secondary">No policies yet.</Typography></TableCell></TableRow>}
             </TableBody>
           </ScrollTable>
         </Section>
       </Stack>
+      <DeleteDialog open={!!del} onClose={() => setDel(null)} title="Delete alert policy?" confirmText={del?.displayName || ""} warning="This can't be undone."
+        onConfirm={async () => { await api.deletePolicy(del.name.split("/").pop()); notify.success(`Deleted policy "${del.displayName}"`); reload(); }}>
+        <Typography variant="body2">Policy <b>{del?.displayName}</b> will be permanently deleted.</Typography>
+      </DeleteDialog>
     </>
   );
 }

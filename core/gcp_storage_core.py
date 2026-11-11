@@ -1518,7 +1518,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
             name = meta.get("name") or query.get("name")
             if not name:
                 return _err(400, "required", "Bucket name is required.")
-            if not re.match(r"^[a-z0-9][a-z0-9._-]{0,61}[a-z0-9]$", str(name)) or re.match(r"^\d+\.\d+\.\d+\.\d+$", str(name)) or str(name).startswith("goog"):
+            if not re.match(r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$", str(name)) or re.match(r"^\d+\.\d+\.\d+\.\d+$", str(name)) or str(name).startswith("goog"):
                 return _err(400, "invalid", f"Invalid bucket name: '{name}'. Bucket names must be 3-63 characters of lowercase letters, numbers, dashes, underscores and dots, and start and end with a letter or number.")
             if store.bucket_exists(name):
                 return _err(409, "conflict", f"You already own this bucket. Please select another name.")

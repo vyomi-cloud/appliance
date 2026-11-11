@@ -61,16 +61,16 @@ def run() -> int:
 
     # 2. CORS headers are now real
     cors_rule = [{"origin": ["https://example.com"], "method": ["GET"], "responseHeader": ["Content-Type"], "maxAgeSeconds": 600}]
-    _call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "cb", "cors": cors_rule})
-    _call(st, "POST", "/upload/storage/v1/b/cb/o", {"uploadType": "media", "name": "a.txt"}, b"hi", "text/plain")
-    pre = _call(st, "OPTIONS", "/storage/v1/b/cb/o/a.txt", headers={"Origin": "https://example.com"})
+    _call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "cbk", "cors": cors_rule})
+    _call(st, "POST", "/upload/storage/v1/b/cbk/o", {"uploadType": "media", "name": "a.txt"}, b"hi", "text/plain")
+    pre = _call(st, "OPTIONS", "/storage/v1/b/cbk/o/a.txt", headers={"Origin": "https://example.com"})
     _check("preflight 200 for matching origin", pre.status == 200)
     _check("preflight carries ACAO for matching origin", pre.headers.get("access-control-allow-origin") == "https://example.com")
-    get = _call(st, "GET", "/storage/v1/b/cb/o/a.txt", headers={"Origin": "https://example.com"})
+    get = _call(st, "GET", "/storage/v1/b/cbk/o/a.txt", headers={"Origin": "https://example.com"})
     _check("matching-origin GET carries CORS headers", get.headers.get("access-control-allow-origin") == "https://example.com")
-    other = _call(st, "GET", "/storage/v1/b/cb/o/a.txt", headers={"Origin": "https://evil.example"})
+    other = _call(st, "GET", "/storage/v1/b/cbk/o/a.txt", headers={"Origin": "https://evil.example"})
     _check("non-matching origin gets no CORS header", "access-control-allow-origin" not in (other.headers or {}))
-    nohdr = _call(st, "GET", "/storage/v1/b/cb/o/a.txt")
+    nohdr = _call(st, "GET", "/storage/v1/b/cbk/o/a.txt")
     _check("no Origin header -> no CORS header", "access-control-allow-origin" not in (nohdr.headers or {}))
 
     # 3. CMEK: shape-validated, stamped onto new objects

@@ -102,7 +102,7 @@ const SVC = {
   kubernetes: { fills: [["/cluster-\\d/.test(e.value)", "$N"]], ui: ["kubernetes/clusters", "kubernetes/clusters/create"],
     create: (n) => ["POST", `/v1/projects/${P}/locations/${R}/clusters`, { cluster: { name: n, initialNodeCount: 1 } }],
     get: (n) => `/v1/projects/${P}/locations/${R}/clusters/${n}`, del: (n) => `/v1/projects/${P}/locations/${R}/clusters/${n}` },
-  monitoring: { walk: true, noUiDelete: "the v4 alert-policy list is read-only (no select/delete/detail), the real console can delete a policy", ui: ["monitoring/alerting", "monitoring/alerting/policies/create"],
+  monitoring: { walk: true, delBtn: (n) => `button[aria-label="Delete ${n}"]`, ui: ["monitoring/alerting", "monitoring/alerting/policies/create"],
     idOf: async (n) => { const l = await rest("GET", `/v3/projects/${P}/alertPolicies`); const h = ((l.body || {}).alertPolicies || []).find((x) => x.displayName === n); return h ? String(h.name).split("/").pop() : ""; },
     create: (n) => ["POST", `/v3/projects/${P}/alertPolicies`, { displayName: n, combiner: "OR", conditions: [{ displayName: "c", conditionThreshold: { filter: 'metric.type="compute.googleapis.com/instance/cpu/utilization"', comparison: "COMPARISON_GT", thresholdValue: 0.9, duration: "60s" } }] }],
     get: (id) => `/v3/projects/${P}/alertPolicies/${id}`, del: (id) => `/v3/projects/${P}/alertPolicies/${id}` },
@@ -161,17 +161,8 @@ async function uiCreate(svc, name) {
   for (let i = 0; i < 8; i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); }
   await vis("button", /^\s*(create|add|launch|store|save|finish|done)\b/i).last().click({ timeout: 8000 }); await sleep(3000);
 }
-async function uiDelete(svc, name) {
-  await go(SVC[svc].ui[0]);
-  const row = page.locator("tr", { hasText: name }).first();
-  const sel = row.locator("input[type=checkbox], input[type=radio]");
-  if (await sel.count()) await sel.first().check({ force: true, timeout: 8000 });
-  else { await row.locator("a").first().click({ timeout: 8000 }); await sleep(2500); }
-  const DEL = /^\s*(permanently )?(delete|terminate|remove)/i;
-  const direct = vis("button, a", DEL);
-  if (await direct.count()) await direct.first().click({ timeout: 8000 });
-  else { await vis("button", /^\s*(more )?actions\b/i).first().click({ timeout: 8000 }); await sleep(400); await vis("[role=menuitem], li, a, span", DEL).first().click({ timeout: 8000 }); }
-  await sleep(1000);
+const DEL = /^\s*(permanently )?(delete|terminate|remove)/i;
+async function confirmDelete(name) {
   const dlg = page.locator("[role=dialog]:visible, .MuiDialog-root:visible").last();
   if (await dlg.count()) {   // a confirm modal: type the name when it asks, then press its Delete
     const word = ((await dlg.innerText().catch(() => "")).match(/type\s+["\u201c]?([A-Za-z0-9_-]+)["\u201d]?/i) || [])[1] || name;
@@ -181,7 +172,32 @@ async function uiDelete(svc, name) {
   }
   await sleep(3000);
 }
+async function uiDelete(svc, name) {
+  await go(SVC[svc].ui[0]);
+  const row = page.locator("tr", { hasText: name }).first();
+  if (SVC[svc].delBtn) { await page.locator(SVC[svc].delBtn(name)).first().click({ timeout: 8000 }); await sleep(800); await confirmDelete(name); return; }
+  const sel = row.locator("input[type=checkbox], input[type=radio]");
+  if (await sel.count()) await sel.first().check({ force: true, timeout: 8000 });
+  else { await row.locator("a").first().click({ timeout: 8000 }); await sleep(2500); }
+  const direct = vis("button, a", DEL);
+  if (await direct.count()) await direct.first().click({ timeout: 8000 });
+  else { await vis("button", /^\s*(more )?actions\b/i).first().click({ timeout: 8000 }); await sleep(400); await vis("[role=menuitem], li, a, span", DEL).first().click({ timeout: 8000 }); }
+  await sleep(1000);
+  await confirmDelete(name);
+  await sleep(3000);
+}
 
+if (ONLY.includes("iam")) {   // the real console derives the Service account ID live from the name until the ID is edited
+  try {
+    await go("iam-admin/serviceaccounts/create");
+    await page.getByLabel("Service account name").first().fill("Round Trip Svc");
+    const v1 = await page.getByLabel("Service account ID").first().inputValue();
+    await page.getByLabel("Service account ID").first().fill("my-own-id-1");
+    await page.getByLabel("Service account name").first().fill("Another Name");
+    const v2 = await page.getByLabel("Service account ID").first().inputValue();
+    check("iam", "Service account ID is derived from the name, until edited", v1 === "round-trip-svc" && v2 === "my-own-id-1", `derived="${v1}" after-manual-edit="${v2}"`);
+  } catch (e) { check("iam", "Service account ID is derived from the name, until edited", false, String(e).split("\n")[0]); }
+}
 for (const svc of ONLY) {
   if (!SVC[svc]) { const why = SKIP[`${svc}:*`] || "not covered"; skipped.push(svc); console.log(`[SKIP] ${svc} :: ${why}`); results.push({ service: svc, step: "skip", ok: null, detail: why }); continue; }
   const s = SVC[svc], a = "rta" + Date.now().toString(36).slice(-5), b = "rtb" + Date.now().toString(36).slice(-5); let aOk = false;

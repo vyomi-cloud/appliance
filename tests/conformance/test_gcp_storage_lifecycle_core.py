@@ -52,65 +52,65 @@ def _backdate(st, bucket, name, days):
 
 def run() -> int:
     st = InMemoryObjectStore()
-    _call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "lc"})
+    _call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "lcy"})
 
     # 1. Delete action, age condition
-    _upload(st, "lc", "old.txt")
-    _upload(st, "lc", "new.txt")
-    _backdate(st, "lc", "old.txt", 40)
-    _call(st, "PATCH", "/storage/v1/b/lc", body={"lifecycle": {"rule": [
+    _upload(st, "lcy", "old.txt")
+    _upload(st, "lcy", "new.txt")
+    _backdate(st, "lcy", "old.txt", 40)
+    _call(st, "PATCH", "/storage/v1/b/lcy", body={"lifecycle": {"rule": [
         {"action": {"type": "Delete"}, "condition": {"age": 30}},
     ]}})
-    listed = _j(_call(st, "GET", "/storage/v1/b/lc/o"))
+    listed = _j(_call(st, "GET", "/storage/v1/b/lcy/o"))
     names = sorted(i["name"] for i in listed.get("items", []))
     _check("age-based Delete sweeps the old object on next read", names == ["new.txt"])
-    _check("younger object untouched", _call(st, "GET", "/storage/v1/b/lc/o/new.txt").status == 200)
-    _check("swept object is really gone (404)", _call(st, "GET", "/storage/v1/b/lc/o/old.txt").status == 404)
+    _check("younger object untouched", _call(st, "GET", "/storage/v1/b/lcy/o/new.txt").status == 200)
+    _check("swept object is really gone (404)", _call(st, "GET", "/storage/v1/b/lcy/o/old.txt").status == 404)
 
     # 2. SetStorageClass action, prefix/suffix condition
     st2 = InMemoryObjectStore()
-    _call(st2, "POST", "/storage/v1/b", {"project": "p"}, {"name": "sc", "storageClass": "STANDARD"})
-    _upload(st2, "sc", "logs/app.log")
-    _upload(st2, "sc", "data.csv")
-    _backdate(st2, "sc", "logs/app.log", 10)
-    _backdate(st2, "sc", "data.csv", 10)
-    _call(st2, "PATCH", "/storage/v1/b/sc", body={"lifecycle": {"rule": [
+    _call(st2, "POST", "/storage/v1/b", {"project": "p"}, {"name": "scl", "storageClass": "STANDARD"})
+    _upload(st2, "scl", "logs/app.log")
+    _upload(st2, "scl", "data.csv")
+    _backdate(st2, "scl", "logs/app.log", 10)
+    _backdate(st2, "scl", "data.csv", 10)
+    _call(st2, "PATCH", "/storage/v1/b/scl", body={"lifecycle": {"rule": [
         {"action": {"type": "SetStorageClass", "storageClass": "NEARLINE"}, "condition": {"age": 7, "matchesPrefix": ["logs/"]}},
     ]}})
-    log_obj = _j(_call(st2, "GET", "/storage/v1/b/sc/o/logs%2Fapp.log"))
-    csv_obj = _j(_call(st2, "GET", "/storage/v1/b/sc/o/data.csv"))
+    log_obj = _j(_call(st2, "GET", "/storage/v1/b/scl/o/logs%2Fapp.log"))
+    csv_obj = _j(_call(st2, "GET", "/storage/v1/b/scl/o/data.csv"))
     _check("prefix-matched object transitions to Nearline", log_obj["storageClass"] == "NEARLINE")
     _check("non-matching object keeps its class", csv_obj["storageClass"] == "STANDARD")
 
     # 3. createdBefore + matchesSuffix
     st3 = InMemoryObjectStore()
-    _call(st3, "POST", "/storage/v1/b", {"project": "p"}, {"name": "cb"})
-    _upload(st3, "cb", "a.tmp")
-    _upload(st3, "cb", "b.tmp")
-    _backdate(st3, "cb", "a.tmp", 100)
-    _call(st3, "PATCH", "/storage/v1/b/cb", body={"lifecycle": {"rule": [
+    _call(st3, "POST", "/storage/v1/b", {"project": "p"}, {"name": "cbk"})
+    _upload(st3, "cbk", "a.tmp")
+    _upload(st3, "cbk", "b.tmp")
+    _backdate(st3, "cbk", "a.tmp", 100)
+    _call(st3, "PATCH", "/storage/v1/b/cbk", body={"lifecycle": {"rule": [
         {"action": {"type": "Delete"}, "condition": {"createdBefore": "2020-01-01", "matchesSuffix": [".tmp"]}},
     ]}})
-    remaining = sorted(i["name"] for i in _j(_call(st3, "GET", "/storage/v1/b/cb/o")).get("items", []))
+    remaining = sorted(i["name"] for i in _j(_call(st3, "GET", "/storage/v1/b/cbk/o")).get("items", []))
     _check("createdBefore uses real timestamps (nothing older than year 2020 here)", remaining == ["a.tmp", "b.tmp"])
 
     # 4. version-dependent conditions never fire (no version history kept)
     st4 = InMemoryObjectStore()
-    _call(st4, "POST", "/storage/v1/b", {"project": "p"}, {"name": "nv"})
-    _upload(st4, "nv", "f.txt")
-    _backdate(st4, "nv", "f.txt", 40)
-    _call(st4, "PATCH", "/storage/v1/b/nv", body={"lifecycle": {"rule": [
+    _call(st4, "POST", "/storage/v1/b", {"project": "p"}, {"name": "nvr"})
+    _upload(st4, "nvr", "f.txt")
+    _backdate(st4, "nvr", "f.txt", 40)
+    _call(st4, "PATCH", "/storage/v1/b/nvr", body={"lifecycle": {"rule": [
         {"action": {"type": "Delete"}, "condition": {"numNewerVersions": 1}},
     ]}})
     _check("a rule that only checks noncurrent-version state never matches (honest: Vyomi keeps no versions)",
-           _call(st4, "GET", "/storage/v1/b/nv/o/f.txt").status == 200)
+           _call(st4, "GET", "/storage/v1/b/nvr/o/f.txt").status == 200)
 
     # 5. empty / no-rule bucket is untouched
     st5 = InMemoryObjectStore()
-    _call(st5, "POST", "/storage/v1/b", {"project": "p"}, {"name": "nr"})
-    _upload(st5, "nr", "keep.txt")
-    _backdate(st5, "nr", "keep.txt", 365)
-    _check("no lifecycle rules -> object never swept", _call(st5, "GET", "/storage/v1/b/nr/o/keep.txt").status == 200)
+    _call(st5, "POST", "/storage/v1/b", {"project": "p"}, {"name": "nrt"})
+    _upload(st5, "nrt", "keep.txt")
+    _backdate(st5, "nrt", "keep.txt", 365)
+    _check("no lifecycle rules -> object never swept", _call(st5, "GET", "/storage/v1/b/nrt/o/keep.txt").status == 200)
 
     print("\nGCS lifecycle enforcement conformance: ALL GREEN")
     return 0

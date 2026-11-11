@@ -45,11 +45,11 @@ def run():
     st, b, h = call("POST", "/gcf/p/us-central1/fnH", {"a": 1}, {"content-type": "application/json", "x-probe": "yes"})
     _check("POST /gcf: get_json + headers; return value is the HTTP response", st == 202 and json.loads(b) == {"echo": {"a": 1}, "x": "yes"}, (st, b))
 
-    call("POST", "/storage/v1/b", {"name": "b1"})
+    call("POST", "/storage/v1/b", {"name": "bkt1"})
     res.collections["gcp/acct/eventarc"] = {"t1": {"name": "t1", "eventFilters": [
-        {"attribute": "type", "value": "google.cloud.storage.object.v1.finalized"}, {"attribute": "bucket", "value": "b1"}],
+        {"attribute": "type", "value": "google.cloud.storage.object.v1.finalized"}, {"attribute": "bucket", "value": "bkt1"}],
         "destinationSpec": {"type": "cloud-function", "service": "fnE"}}}
-    call("POST", "/upload/storage/v1/b/b1/o", b"hello", {"content-type": "text/plain"}, {"uploadType": "media", "name": "dir/a.txt"})
+    call("POST", "/upload/storage/v1/b/bkt1/o", b"hello", {"content-type": "text/plain"}, {"uploadType": "media", "name": "dir/a.txt"})
     invs = res.collections["gcp/acct/functions"]["fnE"].get("invocations", [])
     _check("storage upload fires the Eventarc trigger at the in-browser function",
            len(invs) == 1 and json.loads(invs[0]["response"])["name"] == "dir/a.txt", invs)

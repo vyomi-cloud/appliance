@@ -42,28 +42,28 @@ def _upload(st, bucket, name, data=b"x"):
 
 def run() -> int:
     st = InMemoryObjectStore()
-    _call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "bo"})
+    _call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "bkto"})
     for n in ("logs/a.log", "logs/b.log", "data.csv"):
-        _upload(st, "bo", n)
+        _upload(st, "bkto", n)
 
     # 1. batch Delete job really deletes matching objects
-    j = _j(_call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "bo", "prefix": "logs/", "action": {"type": "Delete"}}))
+    j = _j(_call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "bkto", "prefix": "logs/", "action": {"type": "Delete"}}))
     _check("job reports state SUCCEEDED", j["state"] == "SUCCEEDED")
     _check("job matched+deleted the 2 logs/ objects", j["counts"] == {"matched": 2, "succeeded": 2, "failed": 0})
-    remaining = sorted(i["name"] for i in _j(_call(st, "GET", "/storage/v1/b/bo/o")).get("items", []))
+    remaining = sorted(i["name"] for i in _j(_call(st, "GET", "/storage/v1/b/bkto/o")).get("items", []))
     _check("objects really gone from the bucket", remaining == ["data.csv"])
 
     # 2. batch SetStorageClass job really rewrites storageClass
-    j2 = _j(_call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "bo", "prefix": "data", "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"}}))
+    j2 = _j(_call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "bkto", "prefix": "data", "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"}}))
     _check("SetStorageClass job succeeds", j2["counts"]["succeeded"] == 1)
-    _check("object storageClass really changed", _j(_call(st, "GET", "/storage/v1/b/bo/o/data.csv"))["storageClass"] == "ARCHIVE")
+    _check("object storageClass really changed", _j(_call(st, "GET", "/storage/v1/b/bkto/o/data.csv"))["storageClass"] == "ARCHIVE")
 
     # 3. a held object fails rather than silently succeeding
-    _upload(st, "bo", "held.txt")
-    _call(st, "PATCH", "/storage/v1/b/bo/o/held.txt", body={"temporaryHold": True})
-    j3 = _j(_call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "bo", "prefix": "held", "action": {"type": "Delete"}}))
+    _upload(st, "bkto", "held.txt")
+    _call(st, "PATCH", "/storage/v1/b/bkto/o/held.txt", body={"temporaryHold": True})
+    j3 = _j(_call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "bkto", "prefix": "held", "action": {"type": "Delete"}}))
     _check("held object counted as failed, not deleted", j3["counts"] == {"matched": 1, "succeeded": 0, "failed": 1})
-    _check("held object still present", _call(st, "GET", "/storage/v1/b/bo/o/held.txt").status == 200)
+    _check("held object still present", _call(st, "GET", "/storage/v1/b/bkto/o/held.txt").status == 200)
 
     # 4. job list/get/delete
     jobs = _j(_call(st, "GET", "/storage/v1/batchOperations"))
@@ -75,7 +75,7 @@ def run() -> int:
     _check("unknown bucket -> 404", _call(st, "POST", "/storage/v1/batchOperations", body={"bucket": "nope", "action": {"type": "Delete"}}).status == 404)
 
     # 5. insightsDatasets config CRUD (config_only)
-    d = _j(_call(st, "POST", "/storage/v1/insightsDatasets", body={"displayName": "My inventory", "sourceBucketPrefix": "bo"}))
+    d = _j(_call(st, "POST", "/storage/v1/insightsDatasets", body={"displayName": "My inventory", "sourceBucketPrefix": "bkto"}))
     _check("dataset config created", d["displayName"] == "My inventory" and d["state"] == "ACTIVE")
     ds_id = d["name"].split("/")[-1]
     lst = _j(_call(st, "GET", "/storage/v1/insightsDatasets"))
