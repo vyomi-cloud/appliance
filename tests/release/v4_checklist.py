@@ -86,12 +86,24 @@ def _copy_for_build(root: Path, dst: Path):
                     if Path(d) == root / "wasm" else [n for n in names if n in ("__pycache__", "node_modules")])
 
 
+_GEN_HDR = ("# GENERATED", "# Edit the canonical core/ source")
+
+
+def _body(path: Path) -> bytes:
+    """File content without the `GENERATED - DO NOT EDIT` banner build_cores.py prepends (older vendored copies lack it:
+    a banner-only difference is not drift; any other difference is)."""
+    lines = path.read_bytes().splitlines(keepends=True)
+    while lines and lines[0].decode("utf-8", "replace").startswith(_GEN_HDR):
+        lines.pop(0)
+    return b"".join(lines)
+
+
 def _diff_trees(a: Path, b: Path):
     out = []
     cmp = filecmp.dircmp(a, b)
     out += [f"only in repo: {a.name}/{n}" for n in cmp.left_only if n != "__pycache__"]
     out += [f"missing in repo: {a.name}/{n}" for n in cmp.right_only if n != "__pycache__"]
-    out += [f"differs: {a.name}/{n}" for n in cmp.diff_files]
+    out += [f"differs: {a.name}/{n}" for n in cmp.diff_files if _body(a / n) != _body(b / n)]
     for sub in cmp.common_dirs:
         if sub != "__pycache__":
             out += _diff_trees(a / sub, b / sub)
