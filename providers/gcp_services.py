@@ -6,6 +6,8 @@ import time
 from typing import Any
 
 from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
+import re as _re
 
 from core import gcp_pubsub_emulator as _ps_emu
 from core import gcp_firestore_emulator as _fs_emu
@@ -21,6 +23,11 @@ from core.app_context import (
     id_gen as _id,
     now as _now,
 )
+
+
+def _gcp_sql_err(code: int, status: str, message: str) -> JSONResponse:
+    """Google-shaped error object ({error:{code,message,status}}) like the real Cloud SQL Admin API."""
+    return JSONResponse(status_code=code, content={"error": {"code": code, "message": message, "status": status}})
 
 
 def _server():
@@ -384,6 +391,12 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
     from core import gcp_cloudsql_core as _csql, wire_ingress
+    # A bodyless POST is the old "is the URL wired" probe and keeps its default instance; any real body must carry a name and a valid version.
+    if payload and not str(payload.get("name") or payload.get("instance") or payload.get("instanceId") or "").strip():
+        return _gcp_sql_err(400, "INVALID_ARGUMENT", "Instance name is required.")
+    _dv = payload.get("databaseVersion")
+    if _dv is not None and not _re.match(r"^(POSTGRES_\d+|MYSQL_\d+_\d+|SQLSERVER_\d+_(STANDARD|ENTERPRISE|EXPRESS|WEB))$", str(_dv)):
+        return _gcp_sql_err(400, "INVALID_ARGUMENT", f"Invalid request: Invalid database version '{_dv}'. Use a value such as POSTGRES_15, MYSQL_8_0 or SQLSERVER_2019_STANDARD.")
     bad = _csql.validate_config(wire_ingress.appliance_router()._run_refs,
                                 s._gcp_location_name(payload.get("region") or "us-central1"), payload)
     if bad:
@@ -450,7 +463,7 @@ def api_gcp_sql_get_instance(project: str, instance: str):
     project = _gcp_project_name(project)
     rec = gcp_sql_state.get("instances", {}).get(instance)
     if not rec or str(rec.get("project") or project) != project:
-        raise HTTPException(404, detail="Instance not found")
+        return _gcp_sql_err(404, "NOT_FOUND", f"The Cloud SQL instance does not exist. Instance: {instance}")
     return s._gcp_sql_instance_view(project, rec)
 
 
