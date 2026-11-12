@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-12T22:09:50+00:00
+
+Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `announcement` Amazon Managed Service for Apache Flink introduces enhanced snapshots ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/managed-flink-enhanced-snapshots/))
+- · `announcement` Amazon RDS for SQL Server now supports M8id and R8id instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-sqlserver-supports-m8id-r8id-instances))
+
+Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-12T21:09:50+00:00
 
 Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2994,38 +3006,6 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **4 change(s), 0 actionable.**
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-
-Sources that failed this run (2): maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-31T00:47:45+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**5 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558) ([link](https://github.com/Azure/azure-rest-api-specs/commit/411fb227a905864f972d26ab88b21ef69e1f67b2))
-- · `spec-commit` Azure storage: Remove known-encoding suppressions immediately before rfc7231 in storage TypeSpec (#47794) ([link](https://github.com/Azure/azure-rest-api-specs/commit/759a12cf1df0cefd32ecc0968a3f201b905c02e2))
-- · `spec-commit` Azure storage: STG105 add handwritten swaggers for new api version (#47761) ([link](https://github.com/Azure/azure-rest-api-specs/commit/418fc8bf77b536fe624f81f60212aa5a12569354))
-- · `spec-commit` Azure storage: Storage STG105 (TypeSpec) (#47158) ([link](https://github.com/Azure/azure-rest-api-specs/commit/e92d56507558ffba90b5a9362d2ae4b64fdf4592))
-- · `announcement` Cloud Storage: Feature (October 30, 2026) ([link](https://docs.cloud.google.com/release-notes#October_30_2026))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-30T23:47:41+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**9 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558) ([link](https://github.com/Azure/azure-rest-api-specs/commit/411fb227a905864f972d26ab88b21ef69e1f67b2))
-- · `announcement` Managed Prometheus collectors now support Amazon MSK consumer-group metrics ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/prometheus-collectors-msk-metrics/))
-- · `spec-commit` Azure storage: Remove known-encoding suppressions immediately before rfc7231 in storage TypeSpec (#47794) ([link](https://github.com/Azure/azure-rest-api-specs/commit/759a12cf1df0cefd32ecc0968a3f201b905c02e2))
-- · `spec-commit` Azure storage: STG105 add handwritten swaggers for new api version (#47761) ([link](https://github.com/Azure/azure-rest-api-specs/commit/418fc8bf77b536fe624f81f60212aa5a12569354))
-- · `spec-commit` Azure storage: Storage STG105 (TypeSpec) (#47158) ([link](https://github.com/Azure/azure-rest-api-specs/commit/e92d56507558ffba90b5a9362d2ae4b64fdf4592))
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
