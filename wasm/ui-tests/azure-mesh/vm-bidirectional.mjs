@@ -148,13 +148,32 @@ try {
     chk("UI Stop -> ARM instanceView powerState stopped", pw === "stopped", pw);
     const d1 = cname ? await dockerState(cname) : "n/a";
     chk("real compute: container is stopped after the UI Stop", d1 !== "running" && d1 !== "ssh-failed", `container ${d1}`);
-    rec("UI Deallocate button -> ARM", "NOT-AUTOMATED", "the v4 VM blade toolbar has Start/Restart/Stop only (Stop = powerOff); no Deallocate control exists in the UI");
     await bladeText(uiRg, NAMES.ui);
     await click(page.getByRole("button", { name: /^Start$/ }).first());
     pw = await waitPower(uiRg, NAMES.ui, "running", 60);
     chk("UI Start -> ARM instanceView powerState running", pw === "running", pw);
     const d2 = cname ? await dockerState(cname) : "n/a";
     chk("real compute: container is running again after the UI Start", d2 === "running", `container ${d2}`);
+    // UI Deallocate (confirm dialog) -> ARM + container, then Start again so the later steps still see a running VM.
+    await bladeText(uiRg, NAMES.ui);
+    {
+      const db = page.getByRole("button", { name: /^Deallocate$/ }).first();
+      const found = await db.waitFor({ timeout: 20000 }).then(() => true, () => false);
+      if (!found) rec("UI Deallocate button -> ARM", "FAIL", "no Deallocate button on the VM blade toolbar");
+      else {
+        await db.dispatchEvent("click");
+        const dlg = page.getByRole("dialog", { name: /Deallocate virtual machine/i });
+        await dlg.waitFor({ timeout: 10000 }).catch(() => {});
+        await dlg.getByRole("button", { name: /^Deallocate$/ }).dispatchEvent("click").catch(() => {});
+        pw = await waitPower(uiRg, NAMES.ui, "deallocated", 40);
+        chk("UI Deallocate (confirm dialog) -> ARM instanceView powerState deallocated", pw === "deallocated", pw);
+        const d3 = cname ? await dockerState(cname) : "n/a";
+        chk("real compute: container is not running after the UI Deallocate", d3 !== "running" && d3 !== "ssh-failed", `container ${d3}`);
+        await bladeText(uiRg, NAMES.ui);
+        await click(page.getByRole("button", { name: /^Start$/ }).first());
+        await waitPower(uiRg, NAMES.ui, "running", 60);
+      }
+    }
     // ARM actions -> UI
     await arm("POST", `${vmP(uiRg, NAMES.ui)}/powerOff?api-version=${VMV}`);
     let bt = await bladeText(uiRg, NAMES.ui);

@@ -625,12 +625,22 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         # has no other way to say which vault's publicNetworkAccess/networkAcls apply.
         lh0 = {str(k).lower(): v for k, v in (headers or {}).items()}
         vault0 = kvs.vault_of(path, headers)     # path /azure-data/keyvault/{vault}/, x-vyomi-vault, or <vault>.vault.azure.net
-        if vault0 and not kvs.vault_exists(r.az_arm.state, vault0):
+        arm_st = r.az_arm.state
+        if vault0 and not kvs.vault_exists(arm_st, vault0):
+            # The appliance serves ARM from providers/azure_services (its own `_state`), not the core ARM object:
+            # a vault created over ARM lives there. Look in both (core-only/Nano callers have no provider state).
+            try:
+                from providers import azure_services as _azp
+                if kvs.vault_exists(_azp._state, vault0):
+                    arm_st = _azp._state
+            except Exception:
+                pass
+        if vault0 and not kvs.vault_exists(arm_st, vault0):
             resp404 = kvs.vault_not_found(vault0)
             return {"status": resp404.status, "headers": {"content-type": "application/json"}, "body": resp404.body}
         if kind in ("secrets", "deletedsecrets", "certificates"):
             st = kvs.scoped(st, vault0)          # per-vault secrets/certs (no vault -> legacy shared namespace)
-        if vault0 and keyvault_network_denied(r.az_arm.state, vault0):
+        if vault0 and keyvault_network_denied(arm_st, vault0):
             import json as _json
             body_json = _json.dumps({"error": {"code": "Forbidden",
                 "message": f"Client address is not authorized and caller is not a trusted "
