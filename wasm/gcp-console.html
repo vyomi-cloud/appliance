@@ -2311,6 +2311,36 @@ function _fmtBytes(n){
   const u = ["B","KB","MB","GB","TB"]; let i = 0; while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
   return (i === 0 ? n : n.toFixed(1)) + " " + u[i];
 }
+function buildSeriesChart(label, unit, pts, fields, colors){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, label));
+  const W = 300, H = 90, L = 34, B = 16, T = 6, R = 4;
+  const max = Math.max(1, ...pts.flatMap(p => fields.map(f => p[f] || 0)));
+  const niceMax = max <= 4 ? Math.ceil(max) : Math.ceil(max / 5) * 5;
+  const bw = (W - L - R) / Math.max(pts.length, 1);
+  const y = v => T + (H - T - B) * (1 - v / niceMax);
+  const tl = t => new Date(t*1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${label}">`;
+  svg += `<line x1="${L}" y1="${y(0)}" x2="${W-R}" y2="${y(0)}" stroke="#dadce0"/><line x1="${L}" y1="${y(niceMax)}" x2="${W-R}" y2="${y(niceMax)}" stroke="#f1f3f4"/>`;
+  svg += `<text x="${L-4}" y="${y(niceMax)+3}" font-size="9" text-anchor="end" fill="#5f6368">${niceMax}</text><text x="${L-4}" y="${y(0)+3}" font-size="9" text-anchor="end" fill="#5f6368">0</text>`;
+  if (pts.length) svg += `<text x="${L}" y="${H-3}" font-size="9" fill="#5f6368">${tl(pts[0].t)}</text><text x="${W-R}" y="${H-3}" font-size="9" text-anchor="end" fill="#5f6368">${tl(pts[pts.length-1].t)}</text>`;
+  if (fields.length === 1) {
+    pts.forEach((p, i) => { const v = p[fields[0]] || 0; if (!v) return;
+      svg += `<rect x="${(L + i*bw + 0.5).toFixed(1)}" y="${y(v).toFixed(1)}" width="${Math.max(bw-1,1).toFixed(1)}" height="${(y(0)-y(v)).toFixed(1)}" fill="${colors[0]}"><title>${tl(p.t)} — ${v} ${unit}</title></rect>`; });
+  } else {
+    fields.forEach((f, k) => {
+      const d = pts.map((p, i) => `${i?"L":"M"}${(L + (i+0.5)*bw).toFixed(1)},${y(p[f]||0).toFixed(1)}`).join(" ");
+      svg += `<path d="${d}" fill="none" stroke="${colors[k]}" stroke-width="1.5"/>`;
+    });
+  }
+  svg += `</svg>`;
+  card.append(el("div",{html:svg}));
+  const last = pts[pts.length-1] || {};
+  card.append(el("div",{style:"font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin-top:6px"},
+    fields.length === 1 ? pts.reduce((a, p) => a + (p[fields[0]]||0), 0) + " " + unit + " (last hour)"
+                        : "p50 " + (last.latency_p50||0) + " / p95 " + (last.latency_p95||0) + " " + unit));
+  return card;
+}
 function renderMetricsTab(host, svc){
   const item = STATE.item || {};
   const name = String(item.name || getPath(item, svc.name_field) || "");
@@ -2330,7 +2360,7 @@ function renderMetricsTab(host, svc){
 
   // API-activity panel (request time-series + ops-by-type + status) from events.
   const chartCard = el("div",{class:"kv-card",style:"padding:14px"});
-  chartCard.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, "API requests over time"));
+  chartCard.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, "Measured API requests (last hour)"));
   const chartBody = el("div",{}); chartCard.append(chartBody);
   host.append(chartCard);
 
@@ -2371,47 +2401,14 @@ function renderMetricsTab(host, svc){
       const r = await api("GET", "/api/cloudsim/events?" + qs);
       if (r.ok && r.json && Array.isArray(r.json.events)) events = r.json.events;
     } catch(_){}
-    if (!document.contains(chartBody)) return;
+    if (!document.contains(opsBody)) return;
     try { updated.textContent = "Updated " + new Date().toLocaleTimeString() + " · " + events.length + " event" + (events.length===1?"":"s"); } catch(_){}
 
     if (!events.length) {
-      const emptyMsg = () => el("div",{class:"empty",style:"padding:18px 0"},
-        el("div",{}, "No activity yet"),
-        el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:6px"},
-          "Operations on this resource will appear here live."));
-      chartBody.innerHTML = ""; chartBody.append(emptyMsg());
       opsBody.innerHTML = ""; opsBody.append(el("div",{style:"font-size:12.5px;color:var(--hint,#80868b);padding:10px 0"}, "—"));
       statusBody.innerHTML = ""; statusBody.append(el("div",{style:"font-size:12.5px;color:var(--hint,#80868b);padding:10px 0"}, "—"));
       return;
     }
-
-    // --- Time-series: bucket events by time (per-minute if span <2h, else per-hour) ---
-    const times = events.map(e => { const t = Date.parse(e.ts); return isNaN(t) ? null : t; }).filter(t => t != null);
-    const maxT = times.length ? Math.max(...times) : Date.now();
-    const minT = times.length ? Math.min(...times) : maxT;
-    const spanMs = maxT - minT;
-    const perHour = spanMs > 2*3600*1000;
-    const bucketMs = perHour ? 3600*1000 : 60*1000;
-    const nBuckets = Math.max(1, Math.min(60, Math.floor(spanMs / bucketMs) + 1));
-    const counts = new Array(nBuckets).fill(0);
-    times.forEach(t => { let idx = nBuckets - 1 - Math.floor((maxT - t) / bucketMs); if (idx < 0) idx = 0; if (idx > nBuckets-1) idx = nBuckets-1; counts[idx]++; });
-    chartBody.innerHTML = "";
-    const totalReq = events.length;
-    chartBody.append(el("div",{style:"font-size:24px;font-weight:500;font-family:'Google Sans',sans-serif;margin:4px 0 2px"},
-      String(totalReq) + " request" + (totalReq===1?"":"s")));
-    chartBody.append(el("div",{style:"font-size:11px;color:var(--hint,#80868b);margin-bottom:8px"},
-      "per " + (perHour ? "hour" : "minute") + " · " + nBuckets + " bucket" + (nBuckets===1?"":"s")));
-    // REAL series plotted as an SVG line + area (the actual bucketed counts).
-    const w=520, h=70, maxC=Math.max(1, ...counts);
-    const x = i => (nBuckets===1 ? w/2 : (i*(w-4)/(nBuckets-1)+2));
-    const y = c => (h-2-(c/maxC)*(h-8));
-    const path = counts.map((c,i)=>`${i===0?"M":"L"}${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
-    const area = path + ` L${x(nBuckets-1).toFixed(1)},${(h-1).toFixed(1)} L${x(0).toFixed(1)},${(h-1).toFixed(1)} Z`;
-    chartBody.append(el("div",{html:
-      `<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none" style="display:block">
-        <path d="${area}" fill="#1a73e833" stroke="none"/>
-        <path d="${path}" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
-      </svg>`}));
 
     // --- Operations by type (count events grouped by action) ---
     const byAction = {}; events.forEach(e => { const a = String(e.action || "?"); byAction[a] = (byAction[a]||0)+1; });
@@ -2443,7 +2440,26 @@ function renderMetricsTab(host, svc){
     statusBody.append(sg);
   }
 
-  function reload(){ reloadGauges(); reloadEvents(); }
+  // Measured series: GET /api/metrics/series (the service worker records every request it
+  // serves) — the same endpoint and chart code as the offline console. Idle → empty state.
+  async function reloadSeries(){
+    let d = null;
+    try {
+      const q = new URLSearchParams({provider:"gcp", resource: tabName(svc, STATE.item || {}), minutes:"60", step:"60"});
+      d = await (await fetch(ORIGIN+"/api/metrics/series?"+q)).json();
+    } catch(e){ d = null; }
+    if (!document.contains(chartBody)) return;
+    chartBody.innerHTML = "";
+    if (!d) { chartBody.append(el("div",{class:"empty"}, "Failed to load metrics")); return; }
+    if (!d.total_requests) { chartBody.append(el("div",{class:"empty",style:"padding:18px 0"}, "No requests for " + (name || "this resource") + " in the last hour")); return; }
+    const pts = d.points || [];
+    const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px"});
+    grid.append(buildSeriesChart("Requests", "requests", pts, ["requests"], ["#1a73e8"]));
+    grid.append(buildSeriesChart("Errors (4xx/5xx)", "errors", pts, ["errors"], ["#d93025"]));
+    grid.append(buildSeriesChart("Latency", "ms", pts, ["latency_p50","latency_p95"], ["#188038","#e37400"]));
+    chartBody.append(grid);
+  }
+  function reload(){ reloadGauges(); reloadSeries(); reloadEvents(); }
 
   // LIVE poll every ~4s; self-clean when the tab is unmounted (host left the DOM).
   // Clearing any prior metrics interval guards against overlap on fast tab switches.
