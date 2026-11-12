@@ -1,6 +1,6 @@
 # Gateway data plane on Nano: forwarding to a real backend (design spike, 2026-11-12)
 
-Status: spike. Nothing here is built except the relay CORES fix in section 5. Scope: GCP API Gateway first (`core/gcp_apigateway_gateway.py`); the same
+Status: BUILT 2026-11-12 for GCP API Gateway (section 7); sections 1-4 are the original spike text. Owner decisions are in section 7. Scope: GCP API Gateway first (`core/gcp_apigateway_gateway.py`); the same
 hook serves AWS API Gateway v2 (`apigatewayv2_gateway.py`) and Azure APIM (`azure_apim_gateway_core.py`) because they share the engine (blocker 1).
 
 ## 1. What works on Nano today, and what does not
@@ -51,3 +51,19 @@ Both lists now carry them (after `gcp_eventarc_core.py`, as in `nano-boot.js`); 
 
 `VYOMI_GATEWAY_BACKEND_OVERRIDES="https://backend.rt.test=http://127.0.0.1:PORT"` (`core/gcp_apigateway_gateway.py` `default_http_fetch`): redirects calls for an exact
 https origin to another origin, so the control plane's https-only rule stays intact and a loopback backend can be used by `gcp-v4-roundtrip.mjs`. Unset in production.
+
+## 7. Decisions (owner, 2026-11-12) and what was built
+
+Decisions: (a) the backends Nano may reach are declared by a tunnel CLI map `vyomi-tunnel gateway-backend <https origin>=<local origin>` (anything unmapped is refused); (b) the hosted
+relay MAY proxy PUBLIC https backends for Nano users without a local tunnel, behind an allow-list and strict limits; (c) the Chrome PNA prompt for page -> 127.0.0.1 is accepted.
+
+Built (branch v4/nano-gateway-forwarding; details in docs/architecture/v4.0/branches/nano-gateway-forwarding.md):
+1. `core/gcp_apigateway_gateway.py`: `plan()` / `finish()` / `ahandle()` / `js_backend_fetch()`; `handle()` unchanged and now plan -> fetch -> finish (quota counted once). AWS v1/v2 and APIM NOT split (seam documented).
+2. `core/aws_wire_router.py`: `ahandle` awaits the bridge for `gcp-gateway-invoke` only when the runtime has no sockets (or a host injects `async_backend_fetch`); the sync path is untouched.
+3. `wasm/gw-bridge.js` (`globalThis.vyomiBackendFetch`): local tunnel first, hosted relay for public https, otherwise a 503 that names the fix. Installed in nano-boot.js, relay-shared-worker.js, nano-endpoint.html.
+4. `wasm/relay/gw-egress.mjs` (runtime-neutral policy), `gw-egress-node.mjs` (map file, DNS pin, capped transport, token/Origin gate), routes in `local-relay.mjs` and `worker.js`.
+5. `vyomi-tunnel gateway-backend` (`mesh-cli.mjs`).
+SSRF/abuse: https-only + 443-only + allow-list on the hosted relay; no IP literals/internal names; loopback/private/link-local/metadata classification; DNS resolved and pinned for mapped targets; redirects never followed;
+request/response/time caps; hop + cookie headers stripped; per-session rate limit; GET/POST allow-list of methods (no CONNECT/TRACE); token + Origin + signed-in relay locally, registered session on the hosted relay; every call logged (origin + path, never the query).
+Known limit: a local NON-browser process can forge the Origin header to obtain the token; it is already on the machine and is still confined to mapped backends.
+Verified: Python split test, 43-check node suite, a real-Chromium Pyodide e2e (`wasm/relay/e2e-gateway.mjs`). NOT verified: console/service-worker path on :8099, SharedWorker path, a real Cloudflare deployment.
