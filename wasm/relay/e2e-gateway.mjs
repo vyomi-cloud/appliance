@@ -27,7 +27,7 @@ await new Promise((r) => backend.listen(0, "127.0.0.1", r)); const BP = backend.
 const home = mkdtempSync(join(tmpdir(), "gwe2e-")); const portal = await startStubPortal({});
 const RP = await free();
 const relay = spawn(process.execPath, [join(HERE, "local-relay.mjs")], { env: { ...process.env, WS_PKG: process.env.WS_PKG || join(HERE, "../../relay-deps/ws"), VYOMI_HOME: home, HOME: home, VYOMI_PORTAL_URL: portal.url, VYOMI_ACCESS_KEY_ID: "VYKAFREE", VYOMI_SECRET_ACCESS_KEY: "free-secret",
-  VYOMI_RELAY_AUTH: "1", RELAY_PORT: String(RP), RELAY_AMQP_PORT: "0", VYOMI_GATEWAY_BACKENDS_FILE: join(home, "gw.json"), VYOMI_GATEWAY_BACKENDS: `https://hello-e2e-uc.a.run.app=http://127.0.0.1:${BP}` } });
+  VYOMI_RELAY_AUTH: "1", RELAY_PORT: String(RP), RELAY_AMQP_PORT: "0", VYOMI_GATEWAY_BACKENDS_FILE: join(home, "gw.json"), VYOMI_GATEWAY_BACKENDS: `https://hello-e2e-uc.a.run.app=http://127.0.0.1:${BP},https://aws-e2e.example.com=http://127.0.0.1:${BP},https://azure-e2e.example.net=http://127.0.0.1:${BP}` } });
 let rlog = ""; relay.stdout.on("data", (d) => rlog += d); relay.stderr.on("data", (d) => rlog += d);
 for (let i = 0; i < 60 && !/health/.test(rlog); i++) await new Promise((r) => setTimeout(r, 250));
 const R = `http://127.0.0.1:${RP}`;
@@ -65,6 +65,45 @@ try {
   check("quota counted once per request across the async hop (200,200,429)", JSON.stringify(codes) === "[200,200,429]" && seen.length === n0 + 2, JSON.stringify(codes) + " " + (seen.length - n0));
   r = await call("GET", "/gcpgw/gw1/other");
   check("unmapped backend is REFUSED (503 naming vyomi-tunnel gateway-backend)", r.s === 503 && /gateway-backend/.test(JSON.stringify(r.j)), `${r.s} ${JSON.stringify(r.j)}`);
+  // ── AWS API Gateway v2 (HTTP_PROXY) and v1 (HTTP_PROXY) through the SAME bridge ──
+  let n1 = seen.length;
+  const a2 = (await call("POST", "/v2/apis", { name: "e2e", protocolType: "HTTP" })).j;
+  const hp = (await call("POST", `/v2/apis/${a2.apiId}/integrations`, { integrationType: "HTTP_PROXY", integrationMethod: "ANY", payloadFormatVersion: "1.0", integrationUri: "https://aws-e2e.example.com/svc/{proxy}" })).j;
+  await call("POST", `/v2/apis/${a2.apiId}/routes`, { routeKey: "ANY /p/{proxy+}", target: `integrations/${hp.integrationId}` });
+  await call("POST", `/v2/apis/${a2.apiId}/routes`, { routeKey: "GET /lim", target: `integrations/${hp.integrationId}` });
+  await call("POST", `/v2/apis/${a2.apiId}/stages`, { stageName: "$default", autoDeploy: true, routeSettings: { "GET /lim": { throttlingRateLimit: 0.0001, throttlingBurstLimit: 2 } } });
+  await call("POST", `/v2/apis/${a2.apiId}/deployments`, { stageName: "$default" });
+  r = await call("GET", `/apigw/${a2.apiId}/p/a/b?x=1`);
+  check("AWS API Gateway v2 HTTP_PROXY: a REAL 200 from the mapped backend on Nano", r.s === 200 && r.j.hello === "from-real-backend" && r.h.get("x-real-backend") === "yes", `${r.s} ${JSON.stringify(r.j)}`);
+  check("v2 backend saw the translated path + query", seen.some((x) => x.u === "/svc/a/b?x=1"), JSON.stringify(seen.slice(n1)));
+  n1 = seen.length; const c2 = []; for (let i = 0; i < 3; i++) c2.push((await call("GET", `/apigw/${a2.apiId}/lim`)).s);
+  check("v2 route throttle consumed once per request across the async hop (200,200,429)", JSON.stringify(c2) === "[200,200,429]" && seen.length === n1 + 2, JSON.stringify(c2) + " " + (seen.length - n1));
+  const hq = (await call("POST", `/v2/apis/${a2.apiId}/integrations`, { integrationType: "HTTP_PROXY", integrationMethod: "ANY", payloadFormatVersion: "1.0", integrationUri: "https://unmapped-aws.example.org/x" })).j;
+  await call("POST", `/v2/apis/${a2.apiId}/routes`, { routeKey: "GET /unm", target: `integrations/${hq.integrationId}` });
+  await call("POST", `/v2/apis/${a2.apiId}/deployments`, { stageName: "$default" });
+  r = await call("GET", `/apigw/${a2.apiId}/unm`);
+  check("v2 unmapped backend REFUSED (502 naming vyomi-tunnel gateway-backend in x-vyomi-backend-error)", r.s === 502 && /gateway-backend/.test(r.h.get("x-vyomi-backend-error") || ""), `${r.s} ${r.h.get("x-vyomi-backend-error")}`);
+  const a1 = (await call("POST", "/restapis", { name: "e2e1" })).j;
+  const rp = (await call("POST", `/restapis/${a1.id}/resources/${a1.rootResourceId}`, { pathPart: "{proxy+}" })).j.id;
+  await call("PUT", `/restapis/${a1.id}/resources/${rp}/methods/ANY`, { authorizationType: "NONE" });
+  await call("PUT", `/restapis/${a1.id}/resources/${rp}/methods/ANY/integration`, { type: "HTTP_PROXY", uri: "https://aws-e2e.example.com/v1/{proxy}", httpMethod: "ANY" });
+  await call("POST", `/restapis/${a1.id}/deployments`, { stageName: "prod" });
+  r = await call("GET", `/restapis/${a1.id}/prod/_user_request_/k/l`);
+  check("AWS API Gateway v1 HTTP_PROXY: a REAL 200 from the mapped backend on Nano", r.s === 200 && r.j.hello === "from-real-backend" && seen.some((x) => x.u === "/v1/k/l"), `${r.s} ${JSON.stringify(r.j)}`);
+  // ── Azure APIM ──
+  const AZ = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/e2e-rg", AB = "/providers/Microsoft.ApiManagement/service/e2esvc", AQ = "?api-version=2022-08-01";
+  await call("PUT", AZ + AQ, { location: "eastus" });
+  await call("PUT", AZ + AB + AQ, { location: "eastus", sku: { name: "Developer", capacity: 1 }, properties: { publisherEmail: "a@b.c", publisherName: "x" } });
+  await call("PUT", `${AZ}${AB}/apis/open${AQ}`, { properties: { displayName: "Open", path: "open", serviceUrl: "https://azure-e2e.example.net/base", protocols: ["https"], subscriptionRequired: false } });
+  await call("PUT", `${AZ}${AB}/apis/open/operations/g${AQ}`, { properties: { displayName: "g", method: "GET", urlTemplate: "/r/{id}" } });
+  await call("PUT", `${AZ}${AB}/apis/keyed${AQ}`, { properties: { displayName: "Keyed", path: "keyed", serviceUrl: "https://azure-e2e.example.net/base", protocols: ["https"], subscriptionRequired: true } });
+  await call("PUT", `${AZ}${AB}/apis/keyed/operations/g${AQ}`, { properties: { displayName: "g", method: "GET", urlTemplate: "/r/{id}" } });
+  await call("PUT", `${AZ}${AB}/apis/open/operations/g/policies/policy${AQ}`, { properties: { format: "xml", value: '<policies><inbound><base /><rate-limit calls="2" renewal-period="60" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>' } });
+  n1 = seen.length; const c3 = []; for (let i = 0; i < 3; i++) c3.push(await call("GET", `/azure-data/apim/e2esvc/open/r/${i}?z=1`));
+  check("Azure APIM: a REAL 200 from the mapped backend on Nano", c3[0].s === 200 && c3[0].j.hello === "from-real-backend" && seen.some((x) => x.u === "/base/r/0?z=1"), `${c3[0].s} ${JSON.stringify(c3[0].j)}`);
+  check("APIM rate-limit consumed once per request across the async hop (200,200,429)", JSON.stringify(c3.map((x) => x.s)) === "[200,200,429]" && seen.length === n1 + 2, JSON.stringify(c3.map((x) => x.s)) + " " + (seen.length - n1));
+  n1 = seen.length; r = await call("GET", "/azure-data/apim/e2esvc/keyed/r/1");
+  check("APIM subscription key still enforced in the tab: 401 and the backend is not called", r.s === 401 && seen.length === n1, `${r.s} ${seen.length - n1}`);
   check("relay logged the egress calls", /gw-egress/.test(rlog));
 } catch (e) { check("e2e ran", false, e && e.stack || e); }
 await browser.close(); console.log(fails ? "\nFAIL" : "\nPASS — Nano gateway e2e"); await done();

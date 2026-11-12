@@ -58,7 +58,7 @@ Decisions: (a) the backends Nano may reach are declared by a tunnel CLI map `vyo
 relay MAY proxy PUBLIC https backends for Nano users without a local tunnel, behind an allow-list and strict limits; (c) the Chrome PNA prompt for page -> 127.0.0.1 is accepted.
 
 Built (branch v4/nano-gateway-forwarding; details in docs/architecture/v4.0/branches/nano-gateway-forwarding.md):
-1. `core/gcp_apigateway_gateway.py`: `plan()` / `finish()` / `ahandle()` / `js_backend_fetch()`; `handle()` unchanged and now plan -> fetch -> finish (quota counted once). AWS v1/v2 and APIM NOT split (seam documented).
+1. `core/gcp_apigateway_gateway.py`: `plan()` / `finish()` / `ahandle()` / `js_backend_fetch()`; `handle()` unchanged and now plan -> fetch -> finish (quota counted once). AWS v1/v2 and APIM: see section 8.
 2. `core/aws_wire_router.py`: `ahandle` awaits the bridge for `gcp-gateway-invoke` only when the runtime has no sockets (or a host injects `async_backend_fetch`); the sync path is untouched.
 3. `wasm/gw-bridge.js` (`globalThis.vyomiBackendFetch`): local tunnel first, hosted relay for public https, otherwise a 503 that names the fix. Installed in nano-boot.js, relay-shared-worker.js, nano-endpoint.html.
 4. `wasm/relay/gw-egress.mjs` (runtime-neutral policy), `gw-egress-node.mjs` (map file, DNS pin, capped transport, token/Origin gate), routes in `local-relay.mjs` and `worker.js`.
@@ -67,3 +67,11 @@ SSRF/abuse: https-only + 443-only + allow-list on the hosted relay; no IP litera
 request/response/time caps; hop + cookie headers stripped; per-session rate limit; GET/POST allow-list of methods (no CONNECT/TRACE); token + Origin + signed-in relay locally, registered session on the hosted relay; every call logged (origin + path, never the query).
 Known limit: a local NON-browser process can forge the Origin header to obtain the token; it is already on the machine and is still confined to mapped backends.
 Verified: Python split test, 43-check node suite, a real-Chromium Pyodide e2e (`wasm/relay/e2e-gateway.mjs`). NOT verified: console/service-worker path on :8099, SharedWorker path, a real Cloudflare deployment.
+
+## 8. AWS API Gateway v1/v2 and Azure APIM on Nano (2026-11-12, branch v4/gateway-nano-aws-azure)
+
+These engines interleave Lambda invokers, throttle / usage-plan / policy state and the fetch, so a plan()/finish() split would have duplicated their bodies. Instead each is a
+resumable generator run (`core/gateway_common.py`: `Fetch`, `drive`, `adrive`): everything before the HTTP hop runs once inside the run, the run yields one `Fetch`, the driver
+performs it (sync `http_fetch` on the appliance / Mesh, the awaited JS bridge on Nano) and resumes the run. `handle()` / `invoke()` keep their signatures and results.
+`AwsWireRouter.ahandle` routes `apigw-invoke`, `apigateway` (`_user_request_`) and `azure-apim-gw` through `_agw_invoke` when the runtime has no sockets. Details and open issues:
+docs/architecture/v4.0/branches/gateway-nano-aws-azure.md. Verified in real Chromium by `wasm/relay/e2e-gateway.mjs`.

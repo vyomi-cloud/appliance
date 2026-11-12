@@ -330,7 +330,24 @@ def _lambda_result(res, version):
 # ── the handler ──────────────────────────────────────────────────────────────
 def handle(store, api_id, stage, method, path, headers=None, query=None, body=b"", *,
            invoker=None, http_fetch=None, verify_sig=None, source_ip="127.0.0.1", request_id=None):
-    """Serve one execute-api request against a deployed HTTP API."""
+    """Serve one execute-api request against a deployed HTTP API (synchronous: appliance / Mesh / tests)."""
+    gen = handle_steps(store, api_id, stage, method, path, headers, query, body, invoker=invoker, can_fetch=http_fetch is not None,
+                       verify_sig=verify_sig, source_ip=source_ip, request_id=request_id)
+    return gc.drive(gen, gc.sync_fetcher(http_fetch) if http_fetch is not None else (lambda f: None))
+
+
+async def ahandle(store, api_id, stage, method, path, headers=None, query=None, body=b"", *,
+                  invoker=None, async_fetch=None, verify_sig=None, source_ip="127.0.0.1", request_id=None):
+    """Nano: the same engine run, but the HTTP-integration hop is awaited (`async_fetch(gc.Fetch) -> (status, headers, bytes)`,
+    may raise gc.BackendUnavailable). Throttle / authorizers / Lambda run once, inside the run, before the hop."""
+    gen = handle_steps(store, api_id, stage, method, path, headers, query, body, invoker=invoker, can_fetch=async_fetch is not None,
+                       verify_sig=verify_sig, source_ip=source_ip, request_id=request_id)
+    return await gc.adrive(gen, async_fetch or (lambda f: None))
+
+
+def handle_steps(store, api_id, stage, method, path, headers=None, query=None, body=b"", *,
+                 invoker=None, can_fetch=True, verify_sig=None, source_ip="127.0.0.1", request_id=None):
+    """The engine as a resumable run: yields ONE `gc.Fetch` for an HTTP integration and resumes with (status, headers, body)."""
     api = store.apis.get(api_id)
     if not api or api["protocolType"] != "HTTP" or api.get("disableExecuteApiEndpoint"):
         return _resp(404, {"message": "Not Found"})
@@ -400,11 +417,13 @@ def handle(store, api_id, stage, method, path, headers=None, query=None, body=b"
             uri += ("&" if "?" in uri else "?") + urlencode(q2)
         m = integ.get("integrationMethod") or "ANY"
         m = method if m == "ANY" else m
-        if http_fetch is None:
+        if not can_fetch:
             return done(_resp(502, {"message": "Bad Gateway"}))
         try:
-            status, rh, rb = http_fetch(m, uri, {k: v for k, v in h2.items() if k.lower() not in ("host", "content-length")},
-                                        body or b"", (integ.get("timeoutInMillis") or 30000) / 1000)
+            status, rh, rb = yield gc.Fetch(m, uri, {k: v for k, v in h2.items() if k.lower() not in ("host", "content-length")},
+                                            body or b"", (integ.get("timeoutInMillis") or 30000) / 1000)
+        except gc.BackendUnavailable as e:
+            return done(_resp(502, {"message": "Bad Gateway"}, {"x-vyomi-backend-error": str(e)[:300]}))
         except Exception:
             return done(_resp(502, {"message": "Bad Gateway"}))
         rh = {k: v for k, v in (rh or {}).items() if k.lower() not in ("transfer-encoding", "connection", "content-length")}

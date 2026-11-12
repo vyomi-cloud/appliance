@@ -241,8 +241,7 @@ def finish_unreachable(message=None):
     return _err(503, message or "The backend is unreachable.", "UNAVAILABLE")
 
 
-class BackendUnavailable(Exception):
-    """Raised by an async backend hook with a user-facing reason (not mapped, relay down, refused ...) -> the gateway answers 503."""
+BackendUnavailable = gc.BackendUnavailable   # shared with the AWS / Azure engines (one bridge, one error)
 
 
 def no_runtime():

@@ -166,6 +166,11 @@ def _b64d(s):
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
+def _rs256_verifier():
+    """The shared RS256/JWKS verifier (None on Nano / without `cryptography`); module-level so tests can substitute it."""
+    return gc.make_rs256_verifier()
+
+
 def _jwt(ctx, e, now):
     hn = _a(e, "header-name")
     tok = ctx.headers.get((hn or "authorization").lower(), "")
@@ -197,7 +202,16 @@ def _jwt(ctx, e, now):
     elif alg.startswith(("RS", "ES", "PS")) or not keys:
         if alg.lower() == "none":
             raise fail()
-        ctx.warnings.append("jwt-signature-unverified")
+        # RS256 against the issuer's JWKS through the shared verifier (core/gateway_common): needs a discoverable issuer
+        # (openid-config url, else the first <issuer>) and a runtime that can verify (not Nano). Otherwise claims-only + warning.
+        oc = e.find("openid-config")
+        oc_url = (oc.get("url") or "").strip() if oc is not None else ""
+        iss0 = oc_url.split("/.well-known/")[0] if oc_url else next(((i.text or "").strip() for i in e.findall("issuers/issuer") if (i.text or "").strip()), "")
+        verify = _rs256_verifier() if (alg == "RS256" and iss0) else None
+        if verify is None:
+            ctx.warnings.append("jwt-signature-unverified")
+        elif not verify(tok, hdr, {"issuer": iss0}):
+            raise fail("Unauthorized. Access token signature is invalid.")
     skew = int(_a(e, "clock-skew", "0"))
     if "exp" in claims and now > float(claims["exp"]) + skew:
         raise fail("Unauthorized. Access token is expired.")
@@ -367,7 +381,21 @@ def _auth(state, svc, api, key):
 
 
 def handle(state, svc, method, path, query, headers, body, fetch=None, now=None, ip="127.0.0.1", gateway=None):
-    """Serve one gateway request. ``svc`` is the APIM service record; ``path`` is the gateway path (no query)."""
+    """Serve one gateway request. ``svc`` is the APIM service record; ``path`` is the gateway path (no query).
+    Synchronous: appliance / Mesh / tests (`handle_steps` driven with ``fetch``)."""
+    gen = handle_steps(state, svc, method, path, query, headers, body, can_fetch=fetch is not None, now=now, ip=ip, gateway=gateway)
+    return gc.drive(gen, (lambda f: fetch(f.method, f.url, f.headers, f.body)) if fetch is not None else (lambda f: None))
+
+
+async def ahandle(state, svc, method, path, query, headers, body, async_fetch=None, now=None, ip="127.0.0.1", gateway=None):
+    """Nano: the same run with the backend hop awaited (``async_fetch(gc.Fetch) -> (status, headers, bytes)``, may raise
+    gc.BackendUnavailable). Policies / subscription / rate-limit / quota run once, inside the run, before the hop."""
+    gen = handle_steps(state, svc, method, path, query, headers, body, can_fetch=async_fetch is not None, now=now, ip=ip, gateway=gateway)
+    return await gc.adrive(gen, async_fetch or (lambda f: None))
+
+
+def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True, now=None, ip="127.0.0.1", gateway=None):
+    """The engine as a resumable run: yields ONE `gc.Fetch` for the backend call and resumes with (status, headers, body)."""
     now = time.time() if now is None else now
     t0 = time.time()
     method = method.upper()
@@ -449,11 +477,11 @@ def handle(state, svc, method, path, query, headers, body, fetch=None, now=None,
                 url += "?" + urlencode(ctx.query)
             fh = gc.strip_hop(ctx.headers, extra=("ocp-apim-subscription-key",))
             data = ctx.set_body.encode() if ctx.set_body is not None else ctx.body
-            if fetch is None:
+            if not can_fetch:
                 resp = _body(502, "Bad Gateway: the backend cannot be reached from this runtime (no outbound network).")
             else:
                 try:
-                    st, rh, rb = fetch(method, url, fh, data)
+                    st, rh, rb = yield gc.Fetch(method, url, fh, data, 10.0)
                     resp = {"status": st, "headers": gc.strip_resp_hop(rh), "body": rb or b""}
                 except Exception as e:  # noqa: BLE001
                     resp = _body(502, f"Bad Gateway: {type(e).__name__}: {e}")

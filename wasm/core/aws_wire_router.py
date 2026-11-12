@@ -1539,7 +1539,82 @@ class AwsWireRouter:
                 r = await gcpgw.ahandle(self.gcp_mon, g, method, rest, headers or {}, query or {}, bytes(b), async_fetch=hook,
                                         verify_sig=gcpgw.default_verify_sig())
                 return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+        if svc in ("apigw-invoke", "apigateway", "azure-apim-gw"):
+            # AWS API Gateway v1/v2 and Azure APIM: the same awaited bridge, only the outbound HTTP hop is awaited; Lambda / MOCK /
+            # authorizers / throttle / usage plan / policies run once inside the engine run (core/gateway_common.adrive).
+            from core import gateway_common as _gc
+            from core import gcp_apigateway_gateway as gcpgw
+            hook = getattr(self, "async_backend_fetch", None) or (gcpgw.js_backend_fetch() if _gc.default_http_fetch() is None else None)
+            if hook is not None:
+                out = await self._agw_invoke(svc, method, path, query, lheaders, headers, bytes(b), hook)
+                if out is not None:
+                    return out
         return self.handle(method, path, query, headers, body)
+
+    async def _agw_invoke(self, svc, method, path, query, lheaders, headers, b, hook):
+        """Async twin of the apigw-invoke / apigateway(_user_request_) / azure-apim-gw branches of handle(); None = not mine, use handle()."""
+        from core import gateway_common as _gc
+        q1 = {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()}
+
+        def shape1(r):
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "azure-apim-gw":
+            from core import azure_apim_gateway_core as apim_gw
+            from core import azure_webhost_core as _wh
+            name, _, rest = path.split("?", 1)[0][len("/azure-data/apim/"):].partition("/")
+            svc_rec = apim_gw.find_service(self.az_arm.state, name, lheaders.get("x-vyomi-rg"))
+            if svc_rec is None:
+                return None   # the sync branch owns the 404 body
+            local = _wh.make_fetch(self.az_arm.state, None)   # vyomi-site:// backends are in-process; everything else is the bridge
+
+            async def afetch(f):
+                if f.url.startswith(_wh.SITE_SCHEME):
+                    return local(f.method, f.url, f.headers, f.body)
+                return await hook(f)
+            r = await apim_gw.ahandle(self.az_arm.state, svc_rec, method, "/" + rest, query or {}, lheaders, b, async_fetch=afetch,
+                                      ip=lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip(),
+                                      gateway=lheaders.get("x-vyomi-apim-gateway") or None)
+            return {"status": r["status"], "headers": r["headers"], "body": r["body"]}
+        if svc == "apigateway":
+            _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
+            if not _m:
+                return None
+            r = await apigw.ainvoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders, q1, b,
+                                    lambda_store=self.lam, async_fetch=hook, verify_sig=_gc.make_rs256_verifier())
+            return shape1(r)
+        # apigw-invoke: an HTTP API's (v2) or a REST API's (v1) invoke URL
+        api_id = _execute_api_id(path, lheaders)
+        rest = path.split("?", 1)[0]
+        if rest.startswith(f"/apigw/{api_id}"):
+            rest = rest[len(f"/apigw/{api_id}"):]
+        if api_id not in self.apigwv2.apis and api_id in apigw._apis(self.apigw):
+            r = await apigw.ainvoke(self.apigw, api_id, rest.strip("/").split("/", 1)[0], method,
+                                    "/" + rest.strip("/").split("/", 1)[1] if "/" in rest.strip("/") else "/", lheaders, q1, b,
+                                    lambda_store=self.lam, async_fetch=hook, verify_sig=_gc.make_rs256_verifier())
+            return shape1(r)
+        api = self.apigwv2.apis.get(api_id) or {}
+        first = rest.strip("/").split("/", 1)[0]
+        stage = first if first and first != "$default" and first in (api.get("stages") or {}) else "$default"
+        if stage != "$default":
+            rest = rest.strip("/")[len(stage):]
+        fstore = self.lam
+
+        def invoker(fn, event):
+            fn = str(fn).split(":function:", 1)[-1].split(":", 1)[0]
+            out = lam.dispatch(fstore, "POST", f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
+            if out.status >= 300 or (out.headers or {}).get("X-Amz-Function-Error"):
+                return {"_error": True}
+            try:
+                return json.loads((out.body or b"null").decode("utf-8"))
+            except Exception:
+                return None
+        r = await apigw2_gw.ahandle(self.apigwv2, api_id, stage, method, rest.lstrip("/"), headers or {}, query or {}, b,
+                                    invoker=invoker, async_fetch=hook, verify_sig=_gc.make_rs256_verifier())
+        return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
     def _gcp_gateway_target(self, path, lheaders):
         """(gateway record | None, path within the gateway) for a `*.gateway.dev` host or `/gcpgw/<id>/...` request."""

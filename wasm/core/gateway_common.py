@@ -166,6 +166,71 @@ def make_rs256_verifier(ttl: float = 300.0, timeout: float = 5.0, fetch_json=Non
     return verify
 
 
+# ── resumable forwarding (sync + Nano's awaited bridge share ONE engine run) ─────────────────────────────────────────
+class BackendUnavailable(Exception):
+    """Raised by an async backend hook with a user-facing reason (not mapped, relay down, refused ...)."""
+
+
+class Fetch:
+    """One outbound HTTP hop an engine generator asks its driver to perform. Carries no I/O. `as_dict()` is the bridge shape."""
+    __slots__ = ("method", "url", "headers", "body", "timeout")
+
+    def __init__(self, method, url, headers, body, timeout):
+        self.method, self.url, self.headers, self.body, self.timeout = method, url, dict(headers or {}), body or b"", timeout
+
+    def as_dict(self):
+        return {"method": self.method, "url": self.url, "headers": dict(self.headers), "body": self.body, "timeout": self.timeout}
+
+
+def drive(gen, fetch):
+    """Run an engine generator to completion. `fetch(Fetch) -> (status, headers, bytes)`; an exception it raises is thrown
+    INTO the generator at the yield, so the engine's own error mapping applies. Auth / throttle / quota / Lambda all run
+    exactly once, inside the generator, before the single yield."""
+    try:
+        req = next(gen)
+    except StopIteration as s:
+        return s.value
+    while True:
+        try:
+            res = fetch(req)
+        except Exception as e:  # noqa: BLE001
+            try:
+                req = gen.throw(e)
+            except StopIteration as s:
+                return s.value
+            continue
+        try:
+            req = gen.send(res)
+        except StopIteration as s:
+            return s.value
+
+
+async def adrive(gen, afetch):
+    """The async twin of drive(): `afetch(Fetch)` is awaited (Nano's JS bridge)."""
+    try:
+        req = next(gen)
+    except StopIteration as s:
+        return s.value
+    while True:
+        try:
+            res = await afetch(req)
+        except Exception as e:  # noqa: BLE001
+            try:
+                req = gen.throw(e)
+            except StopIteration as s:
+                return s.value
+            continue
+        try:
+            req = gen.send(res)
+        except StopIteration as s:
+            return s.value
+
+
+def sync_fetcher(fn):
+    """Adapt a 5-arg `http_fetch(method, url, headers, body, timeout)` to a drive() callback."""
+    return lambda f: fn(f.method, f.url, f.headers, f.body, f.timeout)
+
+
 # ── forwarding ───────────────────────────────────────────────────────────────
 def strip_hop(headers, extra=()):
     """Request headers minus hop-by-hop / host / content-length (and `extra`, lower-case names)."""

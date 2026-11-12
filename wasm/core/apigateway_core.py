@@ -373,6 +373,14 @@ def _lambda_name_from_uri(uri: str) -> str:
 
 def _run_integration(integ, method, path, headers, query, path_params, body, lambda_store, stage_ctx=None, http_fetch=None):
     """Execute one method's integration. Returns (status, headers, body_bytes, log_lines)."""
+    fetch = http_fetch or gc.default_http_fetch()
+    return gc.drive(_run_integration_steps(integ, method, path, headers, query, path_params, body, lambda_store, stage_ctx,
+                                           can_fetch=fetch is not None),
+                    gc.sync_fetcher(fetch) if fetch is not None else (lambda f: None))
+
+
+def _run_integration_steps(integ, method, path, headers, query, path_params, body, lambda_store, stage_ctx=None, can_fetch=True):
+    """The integration as a resumable run: an HTTP / HTTP_PROXY integration yields ONE `gc.Fetch`; everything else runs inline."""
     log = [f"Starting execution for request", f"HTTP Method: {method}, Resource Path: {path}"]
     if integ["type"] == "MOCK":
         mock_body = integ["mockBody"]
@@ -427,13 +435,12 @@ def _run_integration(integ, method, path, headers, query, path_params, body, lam
         if out_method == "ANY":
             out_method = (method or "GET").upper()
         log.append(f"Endpoint request URI: {uri}")
-        fetch = http_fetch or gc.default_http_fetch()
-        if fetch is None:
+        if not can_fetch:
             log.append("Endpoint request failed: no outbound network in this runtime")
             return 502, {}, json.dumps({"message": "Internal server error"}).encode(), log
         data = body if isinstance(body, (bytes, bytearray)) else (body or b"").encode()
         try:
-            st, rh, rb = fetch(out_method, uri, gc.strip_hop(headers) if proxy else {}, bytes(data), 29.0)
+            st, rh, rb = yield gc.Fetch(out_method, uri, gc.strip_hop(headers) if proxy else {}, bytes(data), 29.0)
             log.append(f"Endpoint responded with status {st}")
             return st, gc.strip_resp_hop(rh), rb or b"", log
         except Exception as e:
@@ -482,6 +489,24 @@ def _canary_pick(st: dict, rnd=None) -> bool:
 
 def invoke(store, api_id, stage, method, path, headers=None, query=None,
            body=b"", lambda_store=None, http_fetch=None, verify_sig=None, now=None):
+    """Synchronous front door (appliance / Mesh / tests): `invoke_steps` driven with `http_fetch` (default: the shared urllib fetch)."""
+    fetch = http_fetch or gc.default_http_fetch()
+    return gc.drive(invoke_steps(store, api_id, stage, method, path, headers, query, body, lambda_store, verify_sig, now,
+                                 can_fetch=fetch is not None),
+                    gc.sync_fetcher(fetch) if fetch is not None else (lambda f: None))
+
+
+async def ainvoke(store, api_id, stage, method, path, headers=None, query=None,
+                  body=b"", lambda_store=None, async_fetch=None, verify_sig=None, now=None):
+    """Nano: the same run with the HTTP-integration hop awaited (`async_fetch(gc.Fetch)`); authorizer / throttle / usage plan /
+    quota / Lambda run once, inside the run, before the hop."""
+    return await gc.adrive(invoke_steps(store, api_id, stage, method, path, headers, query, body, lambda_store, verify_sig, now,
+                                        can_fetch=async_fetch is not None),
+                           async_fetch or (lambda f: None))
+
+
+def invoke_steps(store, api_id, stage, method, path, headers=None, query=None,
+                 body=b"", lambda_store=None, verify_sig=None, now=None, can_fetch=True):
     """Route a request through a DEPLOYED API: match resource → method → integration
     → response. Returns an ApiGwResponse. Stage variables are substituted into the
     integration URI (`${stageVariables.name}`) and passed to Lambda; a request picked for the
@@ -516,8 +541,8 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
         integ["uri"] = _STAGE_VAR_RE.sub(lambda mm: str(variables.get(mm.group(1), "")), integ["uri"])
     ctx = {"stage": stage, "apiId": api_id, "deploymentId": deployment_id, "canary": canary, "variables": variables,
            "authorizer": authctx}
-    status, out_headers, out_body, _log = _run_integration(
-        integ, method, path, headers, query, path_params, body, lambda_store or store, ctx, http_fetch)
+    status, out_headers, out_body, _log = yield from _run_integration_steps(
+        integ, method, path, headers, query, path_params, body, lambda_store or store, ctx, can_fetch)
     out_headers = dict(out_headers or {})
     if canary:
         out_headers.setdefault("x-amzn-apigw-canary", "true")
