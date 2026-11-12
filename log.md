@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-12T12:05:34+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (8): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-12T11:05:32+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3007,4 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-10-30T15:51:51+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 0 actionable.**
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
