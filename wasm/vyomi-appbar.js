@@ -105,6 +105,11 @@
     '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){width:auto;gap:6px;padding:0 10px;font:400 12px Inter,system-ui,sans-serif;white-space:nowrap;box-shadow:0 0 0 1px rgba(255,255,255,.28),0 2px 8px rgba(0,0,0,.4)}#vy-appbar .vy-notch button.vy-exp .vy-exp-l{font:inherit}' +
     '#vy-appbar .vy-notch button.vy-exp:hover,#vy-appbar .vy-notch button.vy-exp[aria-expanded=true]{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){order:9}' +   /* expand = always the last icon; the info/download icons (order 2,3) sit before it */
+    /* collapse tab: a tiny chevron straddling the notch's top edge (absolute, so the drawer never grows wider); collapsed = just the tab */
+    '#vy-appbar .vy-notch button.vy-tog{position:absolute;left:50%;top:-9px;transform:translateX(-50%);z-index:2;width:30px;height:16px;padding:0;border:0;border-radius:8px 8px 0 0;background:#0f121c;color:#b4b8cc;cursor:pointer;display:flex;align-items:center;justify-content:center}' +
+    '#vy-appbar .vy-notch button.vy-tog:hover{color:#fff}#vy-appbar .vy-notch button.vy-tog svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}' +
+    '#vy-appbar.vy-min .vy-notch > *:not(.vy-tog){display:none !important}' +
+    '#vy-appbar.vy-min .vy-notch{height:16px;padding:0;gap:0}#vy-appbar.vy-min .vy-notch::before{display:none}#vy-appbar.vy-min::before{display:none}#vy-appbar.vy-min .vy-notch button.vy-tog{position:static;transform:none;top:auto}#vy-appbar.vy-min .vy-notch button.vy-tog svg{transform:rotate(180deg)}' +
     '#vy-appbar .vy-notch button.vy-exp svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     /* Expanded drawer = Vyomi Marketplace: standard black & white, landing-page grid field, thin borders, no shadows */
     '#vy-cap{position:fixed;inset:0;z-index:3010;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}#vy-cap.open{display:flex}' +
@@ -146,8 +151,16 @@
     document.body.appendChild(cap);
     var capFr = cap.querySelector('iframe');
     var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'Marketplace'; expBtn.setAttribute('aria-label', 'Marketplace'); expBtn.setAttribute('aria-expanded', 'false');
-    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></g></svg><span class="vy-exp-l">Marketplace</span>';
+    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.4"/></g></svg><span class="vy-exp-l">Marketplace</span>';
     bar.querySelector('.vy-notch').appendChild(expBtn);
+    // collapse / expand the drawer (remembered per browser)
+    var tog = document.createElement('button'); tog.type = 'button'; tog.className = 'vy-tog';
+    tog.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+    function setMin(m, keep) { bar.classList.toggle('vy-min', m); tog.title = m ? 'Expand drawer' : 'Collapse drawer'; tog.setAttribute('aria-label', tog.title); tog.setAttribute('aria-expanded', String(!m)); if (!keep) { try { localStorage.setItem('vyDrawerMin', m ? '1' : '0'); } catch (e) {} } }
+    var wasMin = false; try { wasMin = localStorage.getItem('vyDrawerMin') === '1'; } catch (e) {}
+    setMin(wasMin, true);
+    tog.addEventListener('click', function () { setMin(!bar.classList.contains('vy-min')); });
+    bar.querySelector('.vy-notch').appendChild(tog);
     function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); capFr.removeAttribute('src'); }
     function openCap() { capFr.src = CL + '?embed=1#marketplace'; cap.querySelectorAll('.ctab').forEach(function (x, i) { x.classList.toggle('on', i === 0); x.setAttribute('aria-selected', i === 0); }); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { expBtn.blur(); capFr.focus(); }, 60); }
     expBtn.addEventListener('click', function () { if (cap.classList.contains('open')) closeCap(); else openCap(); });
@@ -373,5 +386,34 @@
       e.preventDefault(); e.stopPropagation(); openView('spaces', 'Spaces', false);
     }, true);
   }
+  // ---- Beta pill beside the vyomi logo in every console header (v4.0.0 is a full uplift). The headers are React-owned, so the
+  //      pill is a fixed-position overlay tracked to the logo's rect rather than a child node (survives re-renders).
+  function betaPill() {
+    var el = document.createElement('span'); el.id = 'vy-beta'; el.textContent = 'Beta'; el.title = 'Vyomi v4.0.0 beta';
+    el.style.cssText = 'position:fixed;z-index:5000;display:none;pointer-events:none;transform:translateX(-100%);font:600 8px/1 Inter,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase';   // plain text under the wordmark, right-aligned (the Google "beta" look)
+    document.body.appendChild(el);
+    function logo() {
+      var l = document.querySelector('a.vy-co img'); if (l) return l;
+      var im = document.querySelectorAll('img[src^="data:image/svg+xml"]');
+      for (var i = 0; i < im.length; i++) { var r = im[i].getBoundingClientRect(); if (r.width > 30 && r.top < 70 && r.left < 260 && r.bottom > 0) return im[i]; }
+      return null;
+    }
+    var raf = 0;
+    function place() {
+      raf = 0; var l = logo();
+      if (!l) { el.style.display = 'none'; return; }
+      var r = l.getBoundingClientRect(); el.style.display = 'block';
+      // v4 headers draw the wordmark and the cloud label ("| AWS") as one image: pin the pill to the wordmark's top-right corner.
+      var legacy = !!l.closest('a.vy-co'), cl = (document.querySelector('script[data-cloud][src*="vyomi-appbar"]') || {}).dataset || {};
+      var wm = legacy ? r.width : ({ aws: 88, gcp: 104, azure: 90 }[cl.cloud] || r.width);
+      el.style.color = cl.cloud === 'gcp' ? '#5f6368' : 'rgba(255,255,255,.85)';
+      el.style.left = Math.round(r.left + wm) + 'px'; el.style.top = Math.round(r.bottom - (legacy ? 3 : 5)) + 'px';
+    }
+    function sched() { if (!raf) raf = requestAnimationFrame(place); }
+    addEventListener('resize', sched); new MutationObserver(sched).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style'] });
+    place(); setTimeout(place, 1500);
+  }
+  function startBeta() { if (!document.getElementById('vy-beta')) betaPill(); }
+  if (document.body) startBeta(); else document.addEventListener('DOMContentLoaded', startBeta);
   if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
 })();
