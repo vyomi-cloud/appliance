@@ -202,6 +202,7 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
 
 Everything needs a key (Free works for Nano; Mesh needs Pro or Max).
 Get one: 'vyomi-tunnel help credentials'.
+Log in to a Mesh VM over SSH: 'vyomi-tunnel help ssh'. Something failing? 'vyomi-tunnel help troubleshoot'.
 `;
 const DETAILS = {
   "gateway-backend": `Let a Nano API Gateway call a backend that runs on your machine
@@ -226,6 +227,9 @@ Where to get it: https://vyomi.cloud/account/tunnel-credentials
    vyomi_access_key_id     = VYKA...
    vyomi_secret_access_key = ...
 
+   portal                  = https://vyomi.cloud
+
+The portal line must start with https:// (http:// is redirected and the tunnel then fails with HTTP 405).
 Or set VYOMI_ACCESS_KEY_ID and VYOMI_SECRET_ACCESS_KEY.
 Use another profile with VYOMI_PROFILE. A Free key covers Nano; Mesh needs Pro or Max.
 The first Mesh command also sets up 'ssh <name>.vyomi' for you.`,
@@ -239,6 +243,35 @@ Add a type to narrow it:
   vyomi-tunnel list nano vm        (also: api, db)
   vyomi-tunnel list mesh k3s       (also: host, instance, llm, service, forward)
 A type alone works too: vyomi-tunnel list vm`,
+  ssh: `Log in to a Mesh VM over SSH
+
+1. See your Mesh and its VMs:
+     vyomi-tunnel list mesh
+2. Once, add the *.vyomi names to your SSH config:
+     vyomi-tunnel config
+3. Each Mesh makes its own VM login key. Fetch it once per Mesh:
+     ssh host.vyomi 'docker exec vyomi-mesh-simulator-1 cat /root/.vyomi/instance-keys/id_ed25519' > ~/.vyomi/mesh-instance-key
+     chmod 600 ~/.vyomi/mesh-instance-key
+4. Log in as 'ubuntu' with that key (use the instance id from step 1):
+     ssh -i ~/.vyomi/mesh-instance-key -o IdentitiesOnly=yes ubuntu@i-0123456789ab.vyomi
+
+A bare 'ssh i-0123456789ab.vyomi' offers neither the key nor the user, so it ends in 'Permission denied (publickey)'.
+A new Mesh is a new machine with a new key: repeat step 3. Problems: 'vyomi-tunnel help troubleshoot'.`,
+  troubleshoot: `Common problems
+
+  the portal refused the request (HTTP 405)
+      'portal' in ~/.vyomi/credentials must be https://vyomi.cloud (with https), not http://.
+  No Vyomi credentials / session invalid
+      Create an access key at https://vyomi.cloud/admin/credentials and save it as ~/.vyomi/credentials. See: help credentials.
+      A key from your local portal (portal = http://localhost:8099) does not work against vyomi.cloud.
+  your Mesh Codespace is stopped
+      Start the Mesh in the Vyomi console, wait until it says ready, then retry.
+  Permission denied (publickey) on a VM
+      Use the Mesh's VM key and the 'ubuntu' user. See: help ssh.
+  REMOTE HOST IDENTIFICATION HAS CHANGED (host.vyomi)
+      Every Mesh is a new machine. Run: ssh-keygen -R host.vyomi -f ~/.vyomi/known_hosts   and retry.
+  Mesh forward / SSH hangs or the console shows a loader forever
+      Restart the tunnel (it may hold a connection to a previous Mesh): stop 'vyomi-tunnel', start it again, reload the console tab.`,
   forward: `vyomi-tunnel forward <name> <local>:<remote>
 
 Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespace.
