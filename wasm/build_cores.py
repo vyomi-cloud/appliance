@@ -86,6 +86,7 @@ CORES = [
     "azure_graph_ext_core.py", "azure_graph_core.py", "azure_cdn_edge_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
     "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
+    "gateway_common.py", "apigateway_gateway.py",  # shared cross-cloud gateway primitives + AWS REST (v1) data plane enforcement
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)

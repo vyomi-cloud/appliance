@@ -1994,6 +1994,19 @@ class AwsWireRouter:
             rest = path.split("?", 1)[0]
             if rest.startswith(f"/apigw/{api_id}"):           # path-style: /apigw/{id}[/{stage}]/…
                 rest = rest[len(f"/apigw/{api_id}"):]
+            if api_id not in self.apigwv2.apis and api_id in apigw._apis(self.apigw):
+                # a REST (v1) API's invoke URL ({id}.execute-api.* or /apigw/{id}/{stage}/…) → v1 data plane
+                # (stage throttle, authorizers, API key + usage plan, integrations; core/apigateway_gateway)
+                from core import gateway_common as _gc
+                r = apigw.invoke(self.apigw, api_id, rest.strip("/").split("/", 1)[0], method,
+                                 "/" + rest.strip("/").split("/", 1)[1] if "/" in rest.strip("/") else "/", lheaders,
+                                 {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
+                                 bytes(body), lambda_store=self.lam, http_fetch=_gc.default_http_fetch(),
+                                 verify_sig=_gc.make_rs256_verifier())
+                hdrs = dict(r.headers or {})
+                if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                    hdrs["content-type"] = r.media_type
+                return {"status": r.status, "headers": hdrs, "body": r.body or b""}
             api = self.apigwv2.apis.get(api_id) or {}
             first = rest.strip("/").split("/", 1)[0]
             stage = first if first and first != "$default" and first in (api.get("stages") or {}) else "$default"
@@ -2041,10 +2054,12 @@ class AwsWireRouter:
 
         if svc == "apigateway":   # native API Gateway v1 control plane (/restapis) + the local invoke URL
             _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
-            if _m:   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
+            if _m:
+                from core import gateway_common as _gwc   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
                 r = apigw.invoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders,
                                  {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
-                                 bytes(body), lambda_store=self.lam)
+                                 bytes(body), lambda_store=self.lam, http_fetch=_gwc.default_http_fetch(),
+                                 verify_sig=_gwc.make_rs256_verifier())
                 hdrs = dict(r.headers or {})
                 if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                     hdrs["content-type"] = r.media_type

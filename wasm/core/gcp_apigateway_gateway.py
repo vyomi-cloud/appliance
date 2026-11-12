@@ -28,19 +28,19 @@ import json
 import re
 import sys
 import time
-from urllib.parse import urlencode, urlsplit
 
 try:
     from core import apigatewayv2_core as v2
     from core import apigatewayv2_gateway as eng
+    from core import gateway_common as gc
     from core import gcp_apigateway_core as ctl
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import apigatewayv2_core as v2  # type: ignore
     import apigatewayv2_gateway as eng  # type: ignore
+    import gateway_common as gc  # type: ignore
     import gcp_apigateway_core as ctl  # type: ignore
 
 _METHODS = ("get", "put", "post", "delete", "options", "head", "patch")
-_HOP = ("host", "content-length", "connection", "transfer-encoding", "keep-alive", "te", "upgrade")
 _COUNTERS: dict = {}
 _DOC_CACHE: dict = {}
 UNREGISTERED = ("Method doesn't allow unregistered callers (callers without established identity). "
@@ -167,14 +167,10 @@ def _quota(doc, op, project, consumer, now):
         # per-project limits count the project; per-user limits would need a user dimension — the API key is the nearest one here.
         who = project if "{project}" in unit or not consumer else consumer
         ck = (project, lim["name"], who)
-        start, used = _COUNTERS.get(ck, (now, 0))
-        if now - start >= window:
-            start, used = now, 0
-        if used + cost > cap:
-            retry = max(1, int(window - (now - start)))
+        ok, retry = gc.window_take(_COUNTERS, ck, now, window, cost, cap)
+        if not ok:
             return _err(429, "Quota exceeded for quota metric '%s' and limit '%s' of service '%s' for consumer 'project:%s'." % (
                 lim["metric"], lim["name"], (doc.get("host") or "gateway.vyomi.local"), project), "RESOURCE_EXHAUSTED"), retry
-        _COUNTERS[ck] = (start, used + cost)
     return None
 
 
@@ -186,16 +182,7 @@ def _backend(doc, op):
 
 
 def _target_url(b, path, params, query):
-    addr = str(b["address"])
-    has_path = bool(urlsplit(addr).path.strip("/"))
-    mode = b.get("path_translation") or ("CONSTANT_ADDRESS" if has_path else "APPEND_PATH_TO_ADDRESS")
-    q = dict(query or {})
-    if mode == "CONSTANT_ADDRESS":
-        q.update(params or {})
-        url = addr
-    else:
-        url = addr.rstrip("/") + "/" + path.strip("/") if path.strip("/") else addr
-    return url + (("&" if "?" in url else "?") + urlencode(q) if q else "")
+    return gc.build_backend_url(str(b["address"]), path, params, query, b.get("path_translation"))
 
 
 def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, http_fetch=None, verify_sig=None,
@@ -227,7 +214,7 @@ def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, 
     if http_fetch is None:
         return _err(503, "The backend cannot be reached from this runtime (no outbound network).", "UNAVAILABLE")
     url = _target_url(b, path, params, {k: v for k, v in query.items() if not (state.get("consumer") and k == "key")})
-    out_h = {k: v for k, v in headers.items() if k.lower() not in _HOP}
+    out_h = gc.strip_hop(headers)
     out_h["x-forwarded-for"] = source_ip
     if state.get("claims"):
         out_h["x-endpoint-api-userinfo"] = base64.urlsafe_b64encode(json.dumps(state["claims"]).encode()).decode().rstrip("=")
@@ -235,82 +222,15 @@ def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, 
         status, rh, rb = http_fetch(method, url, out_h, body or b"", float(b.get("deadline") or 15))
     except Exception:
         return _err(503, "The backend is unreachable.", "UNAVAILABLE")
-    rh = {k: v for k, v in (rh or {}).items() if k.lower() not in ("transfer-encoding", "connection", "content-length")}
+    rh = gc.strip_resp_hop(rh)
     return v2.ApiGwV2Response(status=status, body=rb or b"", headers=rh)
 
 
 # ── default injectables (appliance / dev server; Nano passes none) ───────────
-def _overrides():
-    """Operator/test hook: VYOMI_GATEWAY_BACKEND_OVERRIDES="https://backend.test=http://127.0.0.1:9999,..." sends calls for an exact https
-    origin to another origin. The control plane only accepts https:// backends, so a loopback test backend is reached through an alias.
-    Unset in production; it never widens what a config may name, it only redirects origins the operator listed."""
-    import os
-    out = {}
-    for part in (os.environ.get("VYOMI_GATEWAY_BACKEND_OVERRIDES") or "").split(","):
-        src, _, dst = part.strip().partition("=")
-        if src and dst:
-            out[src.rstrip("/")] = dst.rstrip("/")
-    return out
-
-
-def default_http_fetch():
-    if sys.platform == "emscripten":
-        return None
-    import urllib.error
-    import urllib.request
-
-    def fetch(method, url, headers, body, timeout):
-        for src, dst in _overrides().items():
-            if url == src or url.startswith(src + "/") or url.startswith(src + "?"):
-                url = dst + url[len(src):]
-                break
-        req = urllib.request.Request(url, data=body or None, method=method, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return r.status, dict(r.headers), r.read()
-        except urllib.error.HTTPError as e:
-            return e.code, dict(e.headers), e.read()
-    return fetch
-
-
-_JWKS: dict = {}
+default_http_fetch = gc.default_http_fetch   # honours VYOMI_GATEWAY_BACKEND_OVERRIDES (core/gateway_common.backend_overrides)
+_overrides = gc.backend_overrides
 
 
 def default_verify_sig():
     """RS256 against the definition's `x-google-jwks_uri` (else OIDC discovery of the issuer). Fails closed on anything else."""
-    if sys.platform == "emscripten":
-        return None
-    try:
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import padding, rsa
-    except ImportError:
-        return None
-    import urllib.request
-
-    def keys(cfg):
-        uri = cfg.get("jwks_uri")
-        hit = _JWKS.get(uri or cfg["issuer"])
-        if hit and hit[0] > time.time():
-            return hit[1]
-        if not uri:
-            with urllib.request.urlopen(cfg["issuer"].rstrip("/") + "/.well-known/openid-configuration", timeout=5) as r:
-                uri = json.load(r)["jwks_uri"]
-        with urllib.request.urlopen(uri, timeout=5) as r:
-            ks = json.load(r)["keys"]
-        _JWKS[cfg.get("jwks_uri") or cfg["issuer"]] = (time.time() + 300, ks)
-        return ks
-
-    def verify(token, header, cfg):
-        try:
-            if header.get("alg") != "RS256":
-                return False
-            h, p, sig = token.split(".")
-            key = next((k for k in keys(cfg) if k.get("kid") == header.get("kid") and k.get("kty") == "RSA"), None)
-            if key is None:
-                return False
-            n, e = (int.from_bytes(eng._b64u(key[x]), "big") for x in ("n", "e"))
-            rsa.RSAPublicNumbers(e, n).public_key().verify(eng._b64u(sig), ("%s.%s" % (h, p)).encode(), padding.PKCS1v15(), hashes.SHA256())
-            return True
-        except Exception:
-            return False
-    return verify
+    return gc.make_rs256_verifier()
