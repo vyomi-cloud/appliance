@@ -14,6 +14,8 @@ code written against the real clouds keeps working; any other id is the cloud's 
 from __future__ import annotations
 
 import fnmatch
+import os
+import sys
 
 # id, display name, vendor (provider), vertex publisher, kind, size class, role, best-for blurb, ollama tag
 _ROWS = [
@@ -28,12 +30,21 @@ _ROWS = [
     ("mistral-7b", "Mistral 7B", "Mistral AI", "mistralai", "chat", "Medium (7B)", "Another family", "A third family for agreement and disagreement checks", "mistral:7b"),
     ("qwen3-30b", "Qwen3 30B (MoE)", "Alibaba", "qwen", "chat", "Large (30B MoE)", "Pooled across 2 machines", "The strongest answer in the pool, split over two machines on the private mesh", "qwen3:30b"),
 ]
+# Nano (Pyodide, no Mesh): the only models are in-browser web LLMs (WebLLM). The ten-model pool exists only on a Mesh appliance.
+WEB = sys.platform == "emscripten" or os.environ.get("VYOMI_CATALOG") == "web"
+if WEB:
+    _ROWS = [
+        ("smollm2-360m", "SmolLM2 360M", "Hugging Face", "huggingface", "chat", "Tiny (360M)", "Fast chat", "Runs in your browser, nothing to install", "SmolLM2-360M-Instruct-q4f16_1-MLC"),
+        ("qwen2.5-0.5b", "Qwen2.5 0.5B", "Alibaba", "qwen", "chat", "Tiny (0.5B)", "General", "Small general assistant in your browser", "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"),
+        ("llama3.2-1b", "Llama 3.2 1B", "Meta", "meta", "chat", "Small (1B)", "Tool use / agents", "Compact instruction model in your browser", "Llama-3.2-1B-Instruct-q4f16_1-MLC"),
+        ("qwen2.5-1.5b", "Qwen2.5 1.5B", "Alibaba", "qwen", "chat", "Small (1.5B)", "Better answers", "Largest web LLM; needs a WebGPU laptop", "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"),
+    ]
 MODELS = [dict(id=r[0], name=r[1], vendor=r[2], publisher=r[3], kind=r[4], size=r[5], role=r[6], blurb=r[7], tag=r[8],
                pooled=r[0] == "qwen3-30b") for r in _ROWS]
 IDS = [m["id"] for m in MODELS]
 BY_ID = {m["id"]: m for m in MODELS}
-LOCAL_ID = "qwen2.5-3b"              # the only model that runs without a mesh (the in-appliance small model)
-DEFAULT_CHAT, DEFAULT_EMBED = "qwen2.5-3b", "nomic-embed-text"
+LOCAL_ID = IDS[0] if WEB else "qwen2.5-3b"   # the model that runs without a mesh (web LLM on Nano, small model on the appliance)
+DEFAULT_CHAT, DEFAULT_EMBED = (IDS[0], "") if WEB else ("qwen2.5-3b", "nomic-embed-text")
 NEEDS_MESH = "Needs Mesh (Pro/Max)"
 
 # Hidden compatibility map: cloud API id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest pattern.
@@ -57,6 +68,11 @@ ALIASES = {
         "Meta-Llama*": "llama3.1-8b", "Phi-*": "gemma2-9b", "gpt-oss*": "qwen3-30b", "text-embedding-*": "nomic-embed-text",
     },
 }
+
+
+if WEB:  # hidden compat aliases may only point at models that exist here
+    ALIASES = {c: {k: (v if v in BY_ID else (IDS[1] if v.startswith("qwen2.5-7b") or "7b" in v or "8b" in v or "9b" in v or "30b" in v else IDS[0]))
+                   for k, v in m.items()} for c, m in ALIASES.items()}
 
 
 def _generated(mid):
@@ -111,6 +127,8 @@ def availability(mid):
         return {"state": "starting", "label": "Starting", "available": False}
     if st in ("draining", "stopped"):
         return {"state": "stopped", "label": "Stopped", "available": False}
+    if WEB:
+        return {"state": "available", "label": "Web LLM (in browser)", "available": True}
     if mid == LOCAL_ID:
         return {"state": "available", "label": "Available", "available": True}
     return {"state": "needs_mesh", "label": NEEDS_MESH, "available": False}
