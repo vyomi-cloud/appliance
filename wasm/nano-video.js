@@ -44,8 +44,8 @@
       }
       w.style.cssText = "display:flex;align-items:center;gap:14px;margin:0 0 16px;padding:10px 14px 10px 10px;background:#fff;border:1px solid #e4e7ec;border-radius:10px;box-sizing:border-box;color:#16191f";
       w.innerHTML = '<button type="button" data-play aria-label="Play ' + c.title + '" style="position:relative;flex:none;width:176px;height:99px;padding:0;border:0;border-radius:8px;cursor:pointer;background:#000 url(' + B + 'assets/videos/' + cloud + '.jpg) center/cover"><span style="position:absolute;inset:0;display:grid;place-items:center;border-radius:8px;background:rgba(0,0,0,.28);color:#fff">' + ICON.replace(/12/g, "28") + '</span></button>'
-        + '<div style="flex:1;min-width:0"><div style="font:600 15px system-ui">' + c.title + '</div><div style="margin-top:2px;font:13px system-ui;color:#5f6b7a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.sub + '</div></div>'
-        + '<button type="button" data-play style="flex:none;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#16191f;font:600 13px system-ui;cursor:pointer">' + ICON + 'Watch &middot; 2 min</button>'
+        + '<div style="flex:1;min-width:0;align-self:center"><button type="button" data-play style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#16191f;font:600 13px system-ui;cursor:pointer">' + ICON + 'Watch &middot; 2 min</button>'
+        + '<div style="margin-top:8px;font:600 15px system-ui;line-height:1.25">' + c.title + '</div><div style="margin-top:2px;font:13px system-ui;line-height:1.35;color:#5f6b7a">' + c.sub + '</div></div>'
         + '<button type="button" data-x aria-label="Dismiss" title="Dismiss" style="flex:none;width:26px;height:26px;border:0;background:none;color:#5f6b7a;font:15px system-ui;cursor:pointer">&#10005;</button>';
       w.querySelectorAll("[data-play]").forEach(function (b) { b.onclick = function () { play(cloud); }; });
       w.querySelector("[data-x]").onclick = function () { setDismissed(cloud, true); paint(); };
