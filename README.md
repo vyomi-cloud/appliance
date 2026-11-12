@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-12 15:31 UTC · refreshes after every pipeline run_
+_Updated 2026-11-12 16:12 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-12 15:31 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
-- **Upstream watch:** 26 open changes from the real clouds to adopt
+- **Upstream watch:** 28 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -136,7 +136,7 @@ _Updated 2026-11-12 15:31 UTC · refreshes after every pipeline run_
 | Virtual networks | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Network Security Group | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | Event Grid topics | — | not audited | ✅ 16/16 · ✅ 16/16 | 0 · 0 | ✅ watched | before gate |
-| Key vaults | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
+| Key vaults | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+keyvault) | before gate |
 | Entra ID / RBAC | — | not audited | ✅ 6/6 · ✅ 6/6 | 0 · 0 | ✅ watched | before gate |
 | Container Apps | docker · Pro · + caddy gateway | 🟡 real containers on Pro/Max only; no ingress URL | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
 | App Configuration | in-process | ✅ real key-value data plane | ✅ 16/16 · ✅ 16/16 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
