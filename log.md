@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-12T15:09:39+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `release` pypi:google-cloud-kms: 3.18.0 → 3.19.0
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-12T14:09:47+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3007,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.72.2 → v1.72.3
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.7 → v1.52.8
 - · `release` pypi:boto3: 1.43.122 → 1.43.123
-- · `release` pypi:botocore: 1.43.122 → 1.43.123
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-30T18:47:33+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**5 change(s), 0 actionable.**
-- · `announcement` [In preview] Public Preview: Support database-level managed identity (including FIC) in Create Database Scoped Credential T-SQL  ([link](https://azure.microsoft.com/updates?id=577491))
