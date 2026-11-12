@@ -590,7 +590,8 @@ def _message_view(m: dict, state: str) -> dict:
         "SequenceNumber": m["SequenceNumber"],
         "MessageId": m["MessageId"],
         "EnqueuedTimeUtc": m["EnqueuedTimeUtc"],
-        "DeliveryCount": int(m.get("delivery_count", m.get("DeliveryCount", 0)) or 0),
+        # lease schema (delivery_count) or the legacy AMQP broker's DeliveryCount: whichever stack delivered it
+        "DeliveryCount": max(int(m.get("delivery_count") or 0), int(m.get("DeliveryCount") or 0)),
         "Label": m.get("subject") or (m.get("properties") or {}).get("Label"),
         "ContentType": m.get("content_type", "application/octet-stream"),
         "BodySize": len(body),

@@ -43,6 +43,11 @@ def register(app) -> None:
         port, tls = _port("VYOMI_AMQP_PORT", 5672), _port("VYOMI_AMQPS_PORT", 5671)
         if not port and not tls:
             return
+        # Two Service Bus AMQP stacks exist after the v3.0.47 -> v4 merge and they would race for 5672/5671.
+        # Default runtime listener = core/servicebus_amqp (lease schema, mounted in server.py). This legacy
+        # listener starts only when explicitly selected. See V4.0.0-KNOWN-ISSUES.md (SB-AMQP).
+        if os.environ.get("VYOMI_SB_AMQP_STACK", "lease").strip().lower() != "legacy":
+            return
         try:
             from core.amqp_server import AmqpServer
             from core.azure_servicebus_amqp import ServiceBusAmqp
