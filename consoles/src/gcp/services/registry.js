@@ -13,6 +13,7 @@ import FunctionsIcon from "@mui/icons-material/esm/FunctionsOutlined.js";
 import MessageIcon from "@mui/icons-material/esm/MessageOutlined.js";
 import ScheduleIcon from "@mui/icons-material/esm/ScheduleOutlined.js";
 import EventarcIcon from "@mui/icons-material/esm/BoltOutlined.js";
+import ApiGatewayIcon from "@mui/icons-material/esm/ApiOutlined.js";
 import SecretIcon from "@mui/icons-material/esm/PasswordOutlined.js";
 import KeyIcon from "@mui/icons-material/esm/VpnKeyOutlined.js";
 import IamIcon from "@mui/icons-material/esm/AdminPanelSettingsOutlined.js";
@@ -42,6 +43,7 @@ export const PRODUCTS = [
   { id: "pubsub", title: "Pub/Sub", description: "Global real-time messaging", category: "Integration Services", icon: MessageIcon, load: () => import("./pubsub/index.jsx") },
   { id: "cloudscheduler", title: "Cloud Scheduler", description: "Fully managed cron job service", category: "Integration Services", icon: ScheduleIcon, load: () => import("./cloudscheduler/index.jsx") },
   { id: "eventarc", title: "Eventarc", description: "Route events from Google Cloud services to Cloud Run", category: "Integration Services", icon: EventarcIcon, load: () => import("./eventarc/index.jsx") },
+  { id: "apigateway", title: "API Gateway", description: "Secure, manage and monitor APIs with a fully managed gateway", category: "Integration Services", icon: ApiGatewayIcon, load: () => import("./apigateway/index.jsx") },
   { id: "security/secret-manager", title: "Secret Manager", description: "Store API keys, passwords and other secrets", category: "Security", icon: SecretIcon, load: () => import("./security/secret-manager/index.jsx") },
   { id: "security/kms", title: "Cloud KMS", description: "Manage encryption keys", category: "Security", icon: KeyIcon, load: () => import("./security/kms/index.jsx") },
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },

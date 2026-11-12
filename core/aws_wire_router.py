@@ -59,6 +59,7 @@ from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not
 from core import gcp_firestore_core as gcp_fs
 from core import gcp_datastore_core as gcp_ds
 from core import gcp_eventarc_core as gcp_eventarc
+from core import gcp_apigateway_core as gcp_apigw
 from core import gcp_hub_core as gcp_hub
 from core import gcp_audit_core as gcp_audit
 from core.gcp_firestore_core import FirestoreStore
@@ -113,6 +114,8 @@ def _gcp_service(path):
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
             or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
         return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
+    if gcp_apigw.is_apigateway_path(path):
+        return "gcp-apigateway"   # API Gateway API v1: apis / api configs (OpenAPI 2.0) / gateways (core/gcp_apigateway_core)
     if gcp_vertex.handles(path):
         return "gcp-vertex"   # Vertex AI control plane (endpoints/models/datasets/jobs/indexes/feature store/metadata) + Workbench + Model Garden (core/gcp_vertex_core)
     if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
@@ -2180,7 +2183,7 @@ class AwsWireRouter:
             if self.STRICT_GCP_PROJECT and svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
                 body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
-                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-apigateway": (gcp_apigw, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),

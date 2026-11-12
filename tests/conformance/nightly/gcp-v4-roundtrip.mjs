@@ -59,6 +59,8 @@ const nget = async (s, n) => { if (s.idOf) { const id = await s.idOf(n); return 
 const ndel = async (s, n) => { if (s.idOf) { const id = await s.idOf(n); return id ? rest("DELETE", s.del(id)) : { status: 404, body: null }; } return rest("DELETE", s.del(n)); };
 // Each service: ui = [list route, create route|null]; create(n) -> [method, path, body]; get(n) -> path; del(n) -> path.
 const EA = { bucket: "rt-ea-" + Date.now().toString(36).slice(-6), svc: "rt-ea-dest" };
+const AG = { api: "rt-agw-api", cfg: "rt-agw-cfg" };
+const AG_SPEC = "swagger: \"2.0\"\ninfo:\n  title: rt\n  version: \"1\"\nx-google-backend:\n  address: https://example.com\npaths:\n  /ping:\n    get:\n      operationId: ping\n      responses:\n        \"200\":\n          description: ok\n";
 const SVC = {
   vpc: { ui: ["networking/networks/list", "networking/networks/add"],
     create: (n) => ["POST", `/compute/v1/projects/${P}/global/networks`, { name: n, autoCreateSubnetworks: false }],
@@ -76,6 +78,13 @@ const SVC = {
     nfill: 1, ui: ["eventarc/triggers", "eventarc/triggers/new"],
     create: (n) => ["POST", `/v1/projects/${P}/locations/${R}/triggers?triggerId=${n}`, { eventFilters: [{ attribute: "type", value: "google.cloud.storage.object.v1.finalized" }, { attribute: "bucket", value: EA.bucket }], destination: { cloudRun: { service: EA.svc, region: R } } }],
     get: (n) => `/v1/projects/${P}/locations/${R}/triggers/${n}`, del: (n) => `/v1/projects/${P}/locations/${R}/triggers/${n}` },
+  // API Gateway: gateways need an API + config natively created once, below; the API list/create is its own service.
+  apigateway: { nfill: 1, ui: ["apigateway/gateways", "apigateway/gateways/new"],
+    create: (n) => ["POST", `/v1/projects/${P}/locations/${R}/gateways?gatewayId=${n}`, { apiConfig: `projects/${P}/locations/global/apis/${AG.api}/configs/${AG.cfg}` }],
+    get: (n) => `/v1/projects/${P}/locations/${R}/gateways/${n}`, del: (n) => `/v1/projects/${P}/locations/${R}/gateways/${n}` },
+  "apigateway-apis": { nfill: 1, ui: ["apigateway/apis", "apigateway/apis/new"],
+    create: (n) => ["POST", `/v1/projects/${P}/locations/global/apis?apiId=${n}`, { displayName: n }],
+    get: (n) => `/v1/projects/${P}/locations/global/apis/${n}`, del: (n) => `/v1/projects/${P}/locations/global/apis/${n}` },
   storage: { ui: ["storage/browser", "storage/create-bucket"],
     create: (n) => ["POST", `/storage/v1/b?project=${P}`, { name: n }],
     get: (n) => `/storage/v1/b/${n}`, del: (n) => `/storage/v1/b/${n}` },
@@ -119,9 +128,8 @@ const SVC = {
 };
 const SKIP = {
   "functions:*": "the v4 'functions' console IS Cloud Run (see run), not the Cloud Functions API",
-  "apigateway:*": "no v4 API Gateway console service exists",
 };
-const ONLY = (process.env.ONLY || [...Object.keys(SVC), "functions", "apigateway"].join(",")).split(",");
+const ONLY = (process.env.ONLY || [...Object.keys(SVC), "functions"].join(",")).split(",");
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 1100 } });
@@ -193,6 +201,10 @@ async function uiDelete(svc, name) {
   await sleep(3000);
 }
 
+if (ONLY.includes("apigateway") || ONLY.includes("apigateway-apis")) {
+  await rest("POST", `/v1/projects/${P}/locations/global/apis?apiId=${AG.api}`, { displayName: "rt api" });
+  await rest("POST", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs?apiConfigId=${AG.cfg}`, { openapiDocuments: [{ document: { path: "o.yaml", contents: Buffer.from(AG_SPEC).toString("base64") } }] });
+}
 if (ONLY.includes("eventarc")) {
   await rest("POST", `/storage/v1/b?project=${P}`, { name: EA.bucket });
   await rest("POST", `/v2/projects/${P}/locations/${R}/services?serviceId=${EA.svc}`, { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } });
@@ -228,6 +240,30 @@ for (const svc of ONLY) {
   try { const d = await ndel(s, b); if (d.status >= 300) throw new Error(`native delete ${d.status} ${JSON.stringify(d.body)}`); check(svc, "C native delete -> UI drops it", !(await listed(svc, b)), "UI still lists it"); }
   catch (e) { check(svc, "C native delete -> UI drops it", false, String(e).split("\n")[0]); }
   if (!s.serial) await stepD();
+}
+if (ONLY.includes("apigateway-apis")) {   // API config create (OpenAPI 2.0) / routes / in-use refusal, through the console
+  const gid = "rtg" + Date.now().toString(36).slice(-5), cid = "rtc" + Date.now().toString(36).slice(-5);
+  try {
+    await go(`apigateway/apis/${AG.api}`);
+    await vis("button", /^\s*Create API config/i).first().click({ timeout: 8000 }); await sleep(700);
+    const dlg = page.locator("[role=dialog]:visible").last();
+    await dlg.locator('input[aria-label="Config ID"]').fill(cid);
+    await dlg.locator("button", { hasText: /^\s*create\s*$/i }).last().click({ timeout: 8000 }); await sleep(2500);
+    const g = await rest("GET", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs/${cid}`);
+    check("apigateway", "UI create API config (OpenAPI 2.0 sample) -> native GET sees it, routes derived", g.status === 200 && (g.body?.routes || []).some((r) => r.path === "/hello"), JSON.stringify(g.body).slice(0, 200));
+    await rest("POST", `/v1/projects/${P}/locations/${R}/gateways?gatewayId=${gid}`, { apiConfig: `projects/${P}/locations/global/apis/${AG.api}/configs/${cid}` });
+    await go(`apigateway/gateways/${R}/${gid}`);
+    const t = await body();
+    check("apigateway", "gateway detail shows hostname, config and the routes the config defines", t.includes(".gateway.dev") && t.includes(cid) && t.includes("/hello"), t.slice(0, 220));
+    const d = await rest("DELETE", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs/${cid}`);
+    check("apigateway", "native delete of a config served by a gateway is refused (FAILED_PRECONDITION)", d.status === 400 && /in use by gateway/.test(JSON.stringify(d.body)), `${d.status} ${JSON.stringify(d.body).slice(0, 160)}`);
+    await rest("DELETE", `/v1/projects/${P}/locations/${R}/gateways/${gid}`);
+    const d2 = await rest("DELETE", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs/${cid}`);
+    check("apigateway", "after the gateway is gone the config deletes", d2.status === 200, `${d2.status}`);
+    const bad = await rest("POST", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs?apiConfigId=badcfg`, { openapiDocuments: [{ document: { contents: Buffer.from("swagger: '3.0'").toString("base64") } }] });
+    check("apigateway", "invalid OpenAPI document -> 400 with a meaningful message", bad.status === 400 && /OpenAPI 2.0/.test(JSON.stringify(bad.body)), `${bad.status} ${JSON.stringify(bad.body).slice(0, 160)}`);
+  } catch (e) { check("apigateway", "api config / gateway detail", false, String(e).split("\n")[0]); }
+  await rest("DELETE", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs/${AG.cfg}`); await rest("DELETE", `/v1/projects/${P}/locations/global/apis/${AG.api}`);
 }
 if (ONLY.includes("eventarc")) {   // trigger detail page renders what the API holds, and a real storage event is delivered
   const n = "rtd" + Date.now().toString(36).slice(-5);

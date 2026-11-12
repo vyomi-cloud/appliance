@@ -55,7 +55,6 @@ NOT verified (printed as SKIP): EKS (needs k3s backend), Image Builder (pipeline
 Not covered: bedrock, securityhub, cost-explorer (read-mostly, no create flow). Nano old-console variant (`validate-aws-roundtrip.mjs`): s3 sqs sns dynamodb kms secretsmanager 24/24.
 
 ## GCP (2026-11-11): product gaps found by the v4 round-trip
-- Eventarc and API Gateway have NO v4 console service (`consoles/src/gcp/services` has neither), though both have native cores. Build the consoles or drop them from the catalog?
 ||||||| parent of a74a74d71 (test+fix(mesh): live-Mesh E2E (EC2, Bedrock, Azure AI/VM, GCP GCE), tunnel recovery, 3 fixes)
 
 

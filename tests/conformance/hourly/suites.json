@@ -2161,6 +2161,8 @@
     {"id": "nano-sw-issue-reporting", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_nano_sw_issue_reporting.mjs", "timeout": 120},
     {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "node tests/conformance/nightly/gcp-validation.mjs", "timeout": 300},
     {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
+    {"id": "offline-api-gcp-apigateway-core", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
+    {"id": "nano-api-gcp-apigateway-core", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
     {"id": "nightly-gcp-v4-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-v4-roundtrip.mjs", "timeout": 900},
     {"id": "nightly-gcp-compute-vertex-bidi", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-compute-vertex-bidi.mjs", "timeout": 1200},
     {"id": "nightly-gcp-tunnel-recovery", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "written (gcp-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/gcp-tunnel-recovery.py", "timeout": 900},

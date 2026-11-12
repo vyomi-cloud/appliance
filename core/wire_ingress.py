@@ -410,6 +410,10 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         from core import gcp_hub_core
         resp = gcp_hub_core.dispatch(r.gcp_mon, method, path, query, headers, body, inputs=r.hub_inputs)
         return {"status": resp.status, "headers": dict(resp.headers or {}), "body": resp.body or b""}
+    if service == "gcp_apigateway":
+        from core import gcp_apigateway_core
+        resp = gcp_apigateway_core.dispatch(r.gcp_mon, method, path, query, headers, body)
+        return {"status": resp.status, "headers": dict(resp.headers or {}), "body": resp.body or b""}
     if service == "gcp_eventarc":
         from core import gcp_eventarc_core
         resp = gcp_eventarc_core.dispatch(r.gcp_mon, method, path, query, headers, body, run_store=r.gcp_run,

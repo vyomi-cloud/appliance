@@ -1,0 +1,12 @@
+{
+ "$doc": "Vyomi capability registry — API Gateway (apigateway.googleapis.com v1). See kms.json for the contract.",
+ "gcp.apigateway.apis-configs-gateways": {
+  "title": "API Gateway API (apis, API configs from OpenAPI 2.0, gateways)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Real control plane: API configs are validated like the real service (swagger 2.0, info.title, paths, an operationId and an https x-google-backend address per operation, duplicate operationIds, base64 document contents), a config served by a gateway can't be deleted, an API with configs can't be deleted, gateways must point at an existing config and get a {id}-{hash}.{region code}.gateway.dev hostname. Every mutation is a long-running operation that is already done.",
+   "No traffic is proxied: a gateway has a hostname and a routing table derived from its config, it does not forward requests to the backend. Auth (API keys, JWT, Firebase) and managed-service (Service Management / Service Control) activation are not modelled."
+  ],
+  "tests": ["tests/conformance/test_gcp_apigateway_core.py"]
+ }
+}

@@ -29,7 +29,7 @@ const results = [];
 let seq = 0; const u = () => "rtv" + Date.now().toString(36).slice(-5) + (seq++);
 
 // [label, setup?, method, path, body, expected statuses, expected google status (optional)]
-const sA = u(), tA = u(), iA = u(), vA = u(), kA = u(), rA = u();
+const gA = u(), gB = u(), sA = u(), tA = u(), iA = u(), vA = u(), kA = u(), rA = u();
 const CASES = [
   ["storage: invalid bucket name", null, "POST", `/storage/v1/b?project=${P}`, { name: "A" }, [400]],
   ["storage: duplicate bucket", ["POST", `/storage/v1/b?project=${P}`, { name: sA }], "POST", `/storage/v1/b?project=${P}`, { name: sA }, [409]],
@@ -62,6 +62,14 @@ const CASES = [
   ["run: invalid service id", null, "POST", `/v2/projects/${P}/locations/${R}/services?serviceId=BAD_ID`, { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } }, [400]],
   ["artifactregistry: invalid repository id", null, "POST", `/v1/projects/${P}/locations/${R}/repositories?repositoryId=BAD_ID`, { format: "DOCKER" }, [400]],
   ["artifactregistry: repository without a format", null, "POST", `/v1/projects/${P}/locations/${R}/repositories?repositoryId=${rA}`, {}, [400]],
+  ["eventarc: trigger without a type filter", null, "POST", `/v1/projects/${P}/locations/${R}/triggers?triggerId=${u()}`, { eventFilters: [], destination: { cloudRun: { service: "x", region: R } } }, [400]],
+  ["eventarc: invalid trigger id", null, "POST", `/v1/projects/${P}/locations/${R}/triggers?triggerId=Bad_ID`, { eventFilters: [{ attribute: "type", value: "google.cloud.storage.object.v1.finalized" }] }, [400]],
+  ["eventarc: missing trigger", null, "GET", `/v1/projects/${P}/locations/${R}/triggers/${u()}`, undefined, [404]],
+  ["apigateway: invalid api id", null, "POST", `/v1/projects/${P}/locations/global/apis?apiId=Bad_ID`, {}, [400]],
+  ["apigateway: duplicate api", ["POST", `/v1/projects/${P}/locations/global/apis?apiId=${gA}`, {}], "POST", `/v1/projects/${P}/locations/global/apis?apiId=${gA}`, {}, [409]],
+  ["apigateway: config on a missing api", null, "POST", `/v1/projects/${P}/locations/global/apis/${u()}/configs?apiConfigId=c1x`, { openapiDocuments: [{ document: { contents: "e30=" } }] }, [404]],
+  ["apigateway: config without a document", ["POST", `/v1/projects/${P}/locations/global/apis?apiId=${gB}`, {}], "POST", `/v1/projects/${P}/locations/global/apis/${gB}/configs?apiConfigId=c1x`, {}, [400]],
+  ["apigateway: gateway pointing at a missing config", null, "POST", `/v1/projects/${P}/locations/${R}/gateways?gatewayId=${u()}`, { apiConfig: `projects/${P}/locations/global/apis/${gB}/configs/nope` }, [404]],
 ];
 
 for (const [label, setup, method, path, body, expect] of CASES) {
