@@ -383,7 +383,7 @@ if (ONLY.includes("eventarc")) {   // trigger detail page renders what the API h
     const dl = await rest("GET", `/v1/projects/${P}/locations/${R}/triggers/${n}/deliveries`);
     check("eventarc", "object upload fires the trigger (delivery recorded natively)", ((dl.body?.delivered || 0) + (dl.body?.failed || 0)) >= 1 || (dl.body?.deliveries || []).length >= 1, JSON.stringify(dl.body).slice(0, 200));
     await go(`eventarc/triggers/${R}/${n}`);
-    check("eventarc", "UI detail lists the delivery", /Deliveries \((\d+) delivered, (\d+) failed\)/.test(await body()) && !/Deliveries \(0 delivered, 0 failed\)/.test(await body()), (await body()).slice(-300));
+    check("eventarc", "UI detail lists the delivery", /Deliveries \((\d+) delivered, (\d+) retrying, (\d+) dead-lettered, (\d+) failed\)/.test(await body()) && !/Deliveries \(0 delivered, 0 retrying, 0 dead-lettered, 0 failed\)/.test(await body()), (await body()).slice(-300));
     await ndel(SVC.eventarc, n);
   } catch (e) { check("eventarc", "trigger detail / delivery", false, String(e).split("\n")[0]); }
 }
