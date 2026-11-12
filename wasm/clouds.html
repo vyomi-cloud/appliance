@@ -1066,6 +1066,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .rd-chev { width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .15s; margin-top: -3px; }
     #view-api .rd-grp.shut .rd-chev { transform: rotate(-45deg); margin-top: 0; } #view-api .rd-grp.shut .rd-grp-b { display: none; }
     #view-api .rd-main { position: relative; }
+    /* The dark samples column (right half of each operation row) runs the FULL height of the pane, so a service with few operations never ends in a white block under it. */
+    #view-api .rd-main { background: linear-gradient(to right, #fff 50%, #0e1322 50%); }
+    #view-api .rd-intro, #view-api .rd-body > :not(.rd-op) { max-width: 50%; box-sizing: border-box; padding-right: 24px; }   /* headings stay on the white half */
+    @media (max-width: 900px) { #view-api .rd-main { background: #fff; } #view-api .rd-intro, #view-api .rd-body > :not(.rd-op) { max-width: none; } }
     #view-api .rd-tog { position: sticky; top: 8px; float: left; z-index: 3; margin: 8px 0 0 8px; width: 30px; height: 30px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; cursor: pointer; background-image: linear-gradient(#475467,#475467), linear-gradient(#475467,#475467), linear-gradient(#475467,#475467); background-repeat: no-repeat; background-size: 14px 2px; background-position: center 9px, center 14px, center 19px; }
     #view-api .rd-tog:hover { background-color: #f2f4f7; }
     #view-api .rd-intro { padding-left: 50px; }
