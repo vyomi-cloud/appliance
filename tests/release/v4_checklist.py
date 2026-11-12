@@ -284,6 +284,18 @@ def check_image_published(root: Path, sha: str | None):
     return R(cid, "global", FAIL, f"no successful docker-publish run contains {want[:9]} in the last 20 runs")
 
 
+def _npm_versions():
+    """Published vyomi-tunnel versions (list), or None when the registry cannot be read. VYOMI_NPM_VERSIONS (comma list) overrides, for tests."""
+    env = os.environ.get("VYOMI_NPM_VERSIONS")
+    if env is not None:
+        return [v for v in env.split(",") if v]
+    try:
+        rc, out = run(["npm", "view", "vyomi-tunnel", "versions", "--json"], Path("."), 60)
+        return json.loads(out) if rc == 0 else None
+    except Exception:
+        return None
+
+
 def check_tunnel_sync(root: Path):
     cid = "tunnel-version-sync"
     pj, rb = root / "packaging/tunnel/package.json", root / "packaging/brew/vyomi-tunnel.rb"
@@ -294,7 +306,15 @@ def check_tunnel_sync(root: Path):
     if not m:
         return R(cid, "global", FAIL, "no vyomi-tunnel-<ver>.tgz url in the Homebrew formula")
     if m.group(1) != ver:
-        return R(cid, "global", FAIL, f"packaging/tunnel is {ver} but the Homebrew formula serves {m.group(1)} (publish + update url/sha256, or waive if the tunnel ships bundled)")
+        # package.json is bumped BEFORE the tunnel is published; the release workflow then publishes to npm and updates the tap.
+        # So a formula that trails an UNPUBLISHED package version is the normal pre-release state, not a failure. It IS a failure
+        # when the package version is already on npm (published, tap never updated) or when the registry cannot be asked.
+        published = _npm_versions()
+        if published is None:
+            return R(cid, "global", SKIPPED, f"packaging/tunnel is {ver}, formula serves {m.group(1)}; cannot read the npm registry to tell whether {ver} is published")
+        if ver not in published:
+            return R(cid, "global", PASS, f"packaging/tunnel {ver} is not published yet (npm has {', '.join(published[-3:])}); the formula ({m.group(1)}) follows at publish")
+        return R(cid, "global", FAIL, f"vyomi-tunnel {ver} is on npm but the Homebrew formula still serves {m.group(1)} (update url/sha256 in packaging/brew/vyomi-tunnel.rb and the tap)")
     ts = root / "scripts/tunnel_sync.py"
     if ts.exists():
         rc, out = run([sys.executable, str(ts), "status"], root, 90)

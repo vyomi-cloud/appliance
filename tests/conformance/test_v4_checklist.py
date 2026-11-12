@@ -69,7 +69,12 @@ check("console bundle missing -> FAIL", v4c.check_console_bundle(tree({}), "azur
 check("console bundle present -> PASS", v4c.check_console_bundle(tree({"wasm/v4/azure/index.html": "x", "wasm/v4/azure/main.js": "x"}), "azure")["status"] == "PASS")
 # 7 tunnel
 tj = lambda v, rb: tree({"packaging/tunnel/package.json": {"version": v}, "packaging/brew/vyomi-tunnel.rb": f'url "https://r/vyomi-tunnel-{rb}.tgz"'})
-check("tunnel: package 1.2.0 vs formula 1.0.0 -> FAIL", v4c.check_tunnel_sync(tj("1.2.0", "1.0.0"))["status"] == "FAIL")
+import os as _os
+_os.environ["VYOMI_NPM_VERSIONS"] = "1.0.0,1.1.0"
+check("tunnel: 1.2.0 unpublished, formula behind -> PASS (normal pre-release)", v4c.check_tunnel_sync(tj("1.2.0", "1.0.0"))["status"] == "PASS")
+_os.environ["VYOMI_NPM_VERSIONS"] = "1.0.0,1.1.0,1.2.0"
+check("tunnel: 1.2.0 published but formula still 1.0.0 -> FAIL", v4c.check_tunnel_sync(tj("1.2.0", "1.0.0"))["status"] == "FAIL")
+_os.environ.pop("VYOMI_NPM_VERSIONS")
 check("tunnel: in sync -> PASS", v4c.check_tunnel_sync(tj("1.2.0", "1.2.0"))["status"] == "PASS")
 check("tunnel: files absent -> SKIPPED", v4c.check_tunnel_sync(tree({}))["status"] == "SKIPPED")
 # 8 image (no token -> SKIPPED, never PASS)
