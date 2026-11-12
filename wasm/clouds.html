@@ -1037,8 +1037,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .api-op-wrap.open .api-caret { transform: rotate(180deg); color: #cdd8e6; }
 
     /* Redoc-style API reference: nav | description + parameters | dark samples pane */
-    #view-api .rd { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 0; border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden; background: #fff; color: #18181b; text-align: left; }
-    #view-api .rd-nav { border-right: 1px solid #e4e7ec; background: #fafafa; max-height: calc(100vh - 210px); overflow: auto; padding: 8px 0; position: sticky; top: 0; }
+    #view-api .rd { position: relative; display: block; gap: 0; border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden; background: #fff; color: #18181b; text-align: left; }
+    #view-api .rd-nav { border-right: 1px solid #e4e7ec; background: #fafafa; max-height: calc(100vh - 210px); overflow: auto; padding: 8px 0; position: absolute; left: 0; top: 0; width: 250px; z-index: 20; transition: width .15s ease, box-shadow .15s; box-sizing: border-box; }
     #view-api .rd-cat { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; padding: 12px 16px 4px; }
     #view-api .rd-svc { display: flex; width: 100%; justify-content: space-between; gap: 8px; align-items: center; background: none; border: 0; text-align: left; padding: 7px 16px; font: 600 13px inherit; font-family: inherit; color: #18181b; cursor: pointer; }
     #view-api .rd-svc em { font-style: normal; font-size: 11px; color: #667085; }
@@ -1046,7 +1046,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .rd-ops a { display: flex; gap: 8px; align-items: center; padding: 4px 16px 4px 22px; font-size: 12px; color: #344054; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     #view-api .rd-ops a:hover { background: #eee; } #view-api .rd-ops .rd-api-l { font-weight: 700; color: #18181b; padding-left: 16px; margin-top: 4px; }
     #view-api .rd-ops i.api-m { min-width: 36px; font-size: 8.5px; padding: 2px 4px; font-style: normal; }
-    #view-api .rd-main { min-width: 0; max-height: calc(100vh - 210px); overflow: auto; }
+    #view-api .rd-main { min-width: 0; max-height: calc(100vh - 210px); overflow: auto; margin-left: 56px; }   /* the side menu overlays the content when open; it never pushes it */
     #view-api .rd-intro, #view-api .rd-title, #view-api .rd-api { padding: 18px 28px 0; margin: 0; }
     #view-api .rd-intro h2 { margin: 0 0 4px; font-size: 20px; } #view-api .rd-intro p { margin: 0 0 8px; color: #667085; font-size: 13px; }
     #view-api .rd-title { font-size: 26px; font-weight: 800; letter-spacing: -.01em; } #view-api .rd-api { font-size: 17px; margin-top: 22px; padding-bottom: 8px; border-bottom: 1px solid #e4e7ec; } #view-api .rd-api small { font-size: 11.5px; color: #667085; font-weight: 500; margin-left: 8px; }
@@ -1070,13 +1070,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .rd-main { background: linear-gradient(to right, #fff 50%, #0e1322 50%); }
     #view-api .rd-intro, #view-api .rd-body > :not(.rd-op) { max-width: 50%; box-sizing: border-box; padding-right: 24px; }   /* headings stay on the white half */
     @media (max-width: 900px) { #view-api .rd-main { background: #fff; } #view-api .rd-intro, #view-api .rd-body > :not(.rd-op) { max-width: none; } }
-    #view-api .rd-tog { position: sticky; top: 8px; float: left; z-index: 3; margin: 8px 0 0 8px; width: 30px; height: 30px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; cursor: pointer; background-image: linear-gradient(#475467,#475467), linear-gradient(#475467,#475467), linear-gradient(#475467,#475467); background-repeat: no-repeat; background-size: 14px 2px; background-position: center 9px, center 14px, center 19px; }
+    #view-api .rd-tog { display: block; margin: 4px 0 4px 13px; flex: none; width: 30px; height: 30px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; cursor: pointer; background-image: linear-gradient(#475467,#475467), linear-gradient(#475467,#475467), linear-gradient(#475467,#475467); background-repeat: no-repeat; background-size: 14px 2px; background-position: center 9px, center 14px, center 19px; }
     #view-api .rd-tog:hover { background-color: #f2f4f7; }
-    #view-api .rd-intro { padding-left: 50px; }
     #view-api .rd-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-right: 9px; }
     #view-api .rd-cat > span { flex: 1; }
     /* collapsed: a slim rail of group icons only */
-    #view-api .rd.rd-hide { grid-template-columns: 56px minmax(0, 1fr); }
+    #view-api .rd.rd-hide .rd-nav { width: 56px; } #view-api .rd:not(.rd-hide) .rd-nav { box-shadow: 6px 0 24px rgba(16,24,40,.18); }
     #view-api .rd.rd-hide .rd-cat { justify-content: center; padding: 12px 0; } #view-api .rd.rd-hide .rd-cat > span, #view-api .rd.rd-hide .rd-chev, #view-api .rd.rd-hide .rd-grp-b { display: none; }
     #view-api .rd.rd-hide .rd-ic { margin: 0; width: 20px; height: 20px; } #view-api .rd.rd-hide .rd-cat:hover { background: #eee; }
     #view-api .rd-more { padding: 12px 28px; margin: 0; font-size: 12.5px; color: #667085; }
@@ -1090,7 +1089,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .rd-nav, #view-api .rd-main { max-height: none; height: calc(100vh - 118px); }
     html.vy-embed #view-api .rd-nav, html.vy-embed #view-api .rd-main { height: 100vh; }
     @media (max-width: 900px) { #view-api .rd-op { grid-template-columns: 1fr; } }
-    @media (max-width: 760px) { #view-api .rd { grid-template-columns: 1fr; } #view-api .rd-nav { position: static; max-height: 220px; border-right: 0; border-bottom: 1px solid #e4e7ec; } #view-api .rd-main { max-height: none; } }
+    @media (max-width: 760px) { #view-api .rd-nav, #view-api .rd.rd-hide .rd-nav { position: static; width: auto; max-height: 220px; border-right: 0; border-bottom: 1px solid #e4e7ec; box-shadow: none; } #view-api .rd-main { max-height: none; margin-left: 0; } }
     /* generated API reference + per-service SDK/CLI cards (nano-docs.js) */
     .nd-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 6px; }
     .nd-tab { border: 1px solid rgba(255,255,255,0.14); background: none; color: #a1a1aa; border-radius: 999px; padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit; }

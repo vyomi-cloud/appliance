@@ -219,12 +219,12 @@
       var list = (ix.clouds[cloud] || []).filter(function (s) { return s.o > 0 || s.ft > 0; }), q = (filter || '').toLowerCase();
       var cats = {}; list.forEach(function (s) { if (!q || s.t.toLowerCase().indexOf(q) >= 0) (cats[s.c] = cats[s.c] || []).push(s); });
       var shown = list.filter(function (s) { return !q || s.t.toLowerCase().indexOf(q) >= 0; });
-      var nav = '<nav class="rd-nav" aria-label="Services">' + (Object.keys(cats).sort().map(function (c) {
+      var nav = '<nav class="rd-nav" aria-label="Services">' + '<button type="button" class="rd-tog" title="Hide / show the service list" aria-label="Toggle service list" aria-expanded="true"></button>' + (Object.keys(cats).sort().map(function (c) {
         return '<div class="rd-grp" data-c="' + esc(c) + '"><button type="button" class="rd-cat" aria-expanded="true" title="' + esc(c) + '">' + rdIcon(c) + '<span>' + esc(c) + '</span><i class="rd-chev"></i></button><div class="rd-grp-b">' + cats[c].map(function (s) {
           return '<button type="button" class="rd-svc" data-f="' + esc(s.f) + '"><span>' + esc(s.t) + '</span><em>' + s.o + '</em></button><div class="rd-ops" data-f="' + esc(s.f) + '" hidden></div>';
         }).join('') + '</div></div>';
       }).join('') || '<p class="am-none">No services match.</p>') + '</nav>';
-      el.innerHTML = '<div class="rd">' + nav + '<div class="rd-main"><button type="button" class="rd-tog" title="Hide / show the service list" aria-label="Toggle service list" aria-expanded="true"></button><div class="rd-intro"><h2>' + esc(cloud === 'aws' ? 'AWS' : cloud === 'gcp' ? 'Google Cloud' : 'Azure') + ' API reference</h2>' +
+      el.innerHTML = '<div class="rd">' + nav + '<div class="rd-main"><div class="rd-intro"><h2>' + esc(cloud === 'aws' ? 'AWS' : cloud === 'gcp' ? 'Google Cloud' : 'Azure') + ' API reference</h2>' +
         '<p>' + list.length + ' services · ' + list.reduce(function (n, s) { return n + s.o; }, 0) + ' operations that answer on this simulator · endpoint <code>' + esc(EP) + '</code>. Pick a service on the left.</p></div><div class="rd-body"></div></div></div>';
       var body = el.querySelector('.rd-body'), main = el.querySelector('.rd-main'), rd = el.querySelector('.rd');
       function setGrp(g, openIt) { g.classList.toggle('shut', !openIt); g.querySelector('.rd-cat').setAttribute('aria-expanded', openIt); }
