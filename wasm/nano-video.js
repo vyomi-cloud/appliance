@@ -18,9 +18,9 @@
     m.id = "vy-video-modal";
     m.setAttribute("role", "dialog");
     m.setAttribute("aria-label", COPY[cloud].title);
-    m.style.cssText = "position:fixed;left:0;top:0;bottom:0;width:min(720px,48vw);z-index:200000;background:#05070d;display:flex;align-items:center;justify-content:center;box-shadow:8px 0 40px rgba(0,0,0,.45)";
-    m.innerHTML = '<video controls autoplay playsinline style="display:block;width:100%;height:100%;object-fit:contain;background:#05070d" src="' + B + 'assets/videos/' + cloud + '.mp4"></video>'
-      + '<button type="button" aria-label="Close video" style="position:absolute;right:14px;top:14px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font:18px system-ui;cursor:pointer">&#10005;</button>';
+    m.style.cssText = "position:fixed;inset:0;z-index:200000;background:rgba(10,14,28,.72);display:flex;align-items:center;justify-content:center;padding:32px";
+    m.innerHTML = '<video controls autoplay playsinline style="display:block;width:min(1100px,92vw);max-height:84vh;aspect-ratio:16/9;border-radius:12px;background:#000;box-shadow:0 30px 80px rgba(0,0,0,.5)" src="' + B + 'assets/videos/' + cloud + '.mp4"></video>'
+      + '<button type="button" aria-label="Close video" style="position:absolute;right:22px;top:18px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font:18px system-ui;cursor:pointer">&#10005;</button>';
     function close() { var v = m.querySelector("video"); if (v) { v.pause(); v.removeAttribute("src"); v.load(); } m.remove(); document.removeEventListener("keydown", onKey); }
     function onKey(e) { if (e.key === "Escape") close(); }
     m.addEventListener("click", function (e) { if (e.target === m || e.target.tagName === "BUTTON") close(); });
