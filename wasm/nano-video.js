@@ -42,11 +42,11 @@
         w.appendChild(a);
         return;
       }
-      w.style.cssText = "display:flex;align-items:center;gap:14px;margin:0 0 16px;padding:8px 12px 8px 8px;background:#fff;border:1px solid #e4e7ec;border-radius:10px;box-sizing:border-box;color:#16191f";
-      w.innerHTML = '<button type="button" data-play aria-label="Play ' + c.title + '" style="position:relative;flex:none;width:96px;height:54px;padding:0;border:0;border-radius:6px;cursor:pointer;background:#000 url(' + B + 'assets/videos/' + cloud + '.jpg) center/cover"><span style="position:absolute;inset:0;display:grid;place-items:center;border-radius:6px;background:rgba(0,0,0,.28);color:#fff">' + ICON.replace(/12/g, "20") + '</span></button>'
-        + '<div style="flex:1;min-width:0"><div style="font:600 15px system-ui">' + c.title + '</div><div style="margin-top:2px;font:13px system-ui;color:#5f6b7a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.sub + '</div></div>'
-        + '<button type="button" data-play style="flex:none;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#16191f;font:600 13px system-ui;cursor:pointer">' + ICON + 'Watch &middot; 2 min</button>'
-        + '<button type="button" data-x aria-label="Dismiss" title="Dismiss" style="flex:none;width:26px;height:26px;border:0;background:none;color:#5f6b7a;font:15px system-ui;cursor:pointer">&#10005;</button>';
+      w.style.cssText = "display:flex;align-items:stretch;gap:14px;margin:0 0 16px;padding:0 12px 0 0;min-height:76px;overflow:hidden;background:#fff;border:1px solid #e4e7ec;border-radius:10px;box-sizing:border-box;color:#16191f";
+      w.innerHTML = '<button type="button" data-play aria-label="Play ' + c.title + '" style="position:relative;flex:none;width:136px;align-self:stretch;padding:0;border:0;border-radius:0;cursor:pointer;background:#000 url(' + B + 'assets/videos/' + cloud + '.jpg) center/cover"><span style="position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.28);color:#fff">' + ICON.replace(/12/g, "20") + '</span></button>'
+        + '<div style="flex:1;min-width:0;align-self:center"><div style="font:600 15px system-ui">' + c.title + '</div><div style="margin-top:2px;font:13px system-ui;color:#5f6b7a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.sub + '</div></div>'
+        + '<button type="button" data-play style="flex:none;align-self:center;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#16191f;font:600 13px system-ui;cursor:pointer">' + ICON + 'Watch &middot; 2 min</button>'
+        + '<button type="button" data-x aria-label="Dismiss" title="Dismiss" style="flex:none;align-self:center;width:26px;height:26px;border:0;background:none;color:#5f6b7a;font:15px system-ui;cursor:pointer">&#10005;</button>';
       w.querySelectorAll("[data-play]").forEach(function (b) { b.onclick = function () { play(cloud); }; });
       w.querySelector("[data-x]").onclick = function () { setDismissed(cloud, true); paint(); };
     }
