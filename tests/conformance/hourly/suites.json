@@ -2192,6 +2192,8 @@
     {"id": "nano-api-apigateway-v1-gateway", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},
     {"id": "offline-api-gateway-rs256-jwks", "target": "offline", "cloud": "all", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gateway_rs256_jwks.py", "timeout": 120},
     {"id": "gcp-event-bus-engine-core", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_event_bus_engine.py", "timeout": 180},
-    {"id": "gcp-event-bus-engine-nano-core", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_event_bus_engine.py", "timeout": 180}
+    {"id": "gcp-event-bus-engine-nano-core", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_event_bus_engine.py", "timeout": 180},
+    {"id": "nano-ui-gateway-eventarc-portal-e2e", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "console + service-worker and SharedWorker gateway/Eventarc e2e (wasm/relay/e2e-gateway-portal.mjs) needs the portal serving the vendored Nano bundle and a signed-in cl_session cookie; run by hand against a portal on a COPY of the DB until the CI stack can start one", "cmd": "PORTAL=$PORTAL COOKIE=$COOKIE MODE=sw WS_PKG=$PWD/relay-deps/ws node wasm/relay/e2e-gateway-portal.mjs", "timeout": 900},
+    {"id": "nano-core-hosted-gw-egress-live", "target": "nano", "cloud": "gcp", "kind": "core", "pending": "hosted /gw-egress policy against the real worker.js needs `wrangler dev` (wasm/relay/test-worker-gw-live.mjs); wrangler is not in the CI tooling set, so it is run by hand; the mock-based test-gw-egress.mjs covers the same policy in CI", "cmd": "WS_PKG=$PWD/relay-deps/ws node wasm/relay/test-worker-gw-live.mjs", "timeout": 300}
   ]
 }

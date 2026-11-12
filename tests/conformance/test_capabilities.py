@@ -253,6 +253,8 @@ def main() -> int:
     for f in sorted(REG.rglob("*.json")):
         if f.name == "schema.json" or f.name.startswith("_"):
             continue
+        if "backends" in f.relative_to(REG).parts:
+            continue   # backends/<cloud>.json is the per-service "how it runs" registry (own schema, own test_backends_registry.py), not a feature-claim registry
         reg = json.loads(f.read_text())
         for fid, ent in reg.items():
             if fid.startswith("$"):

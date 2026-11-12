@@ -1,6 +1,6 @@
 # v4/nano-gateway-forwarding
 
-Owner: nano-gateway-forwarding session - Started: 2026-11-12 - Base: origin/v4-on-main (c4c1a075a) - Status: built, pending browser console (SW) and shared-worker verification
+Owner: nano-gateway-forwarding session - Started: 2026-11-12 - Base: origin/v4-on-main (c4c1a075a) - Status: built, pending browser console (SW) and shared-worker verification  [update 2026-11-12: console+SW, SharedWorker, wrangler-dev and packaged copy verified by v4/gateway-browser-verify]
 
 ## Purpose
 Make the Nano GCP API Gateway reach a real backend (v4.0.0 blocker 1), following docs/architecture/v4.0/GATEWAY-NANO-FORWARDING.md and the owner decisions of 2026-11-12.
