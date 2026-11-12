@@ -57,35 +57,50 @@ class VpcError(Exception):
         self.status = status
 
 
+_MODEL_KEYS = frozenset()   # set below, once _new_model exists
+
+
+def _new_model() -> dict:
+    return {"vpcs": {}, "subnets": {}, "sgs": {}, "route_tables": {},
+         "igws": {}, "nacls": {}, "nat_gateways": {}, "eigws": {},
+         "dhcp_options": {}, "prefix_lists": {}, "peering_connections": {},
+         "route_servers": {}, "flow_logs": {}, "subnet_cidr_reservations": {},
+         # EC2 compute/storage/network resources (same account, same Query-protocol
+         # wire — boto3's "ec2" client signs ALL of this under one service).
+         "instances": {}, "images": {}, "volumes": {}, "snapshots": {},
+         "key_pairs": {}, "addresses": {}, "enis": {}, "placement_groups": {},
+         "launch_templates": {}, "tags": {},
+         "account": {"ebs_encryption_by_default": False, "ebs_default_kms_key_id": "alias/aws/ebs",
+                     "vpc_block_public_access": {"internet_gateway_block_mode": "off"},
+                     "vpc_block_public_access_exclusions": {}, "local_zones_opt_in": False,
+                     "console_experiments": {},
+                     "allowed_images_enabled": False, "allowed_images_criteria": [],
+                     "serial_console_enabled": True,
+                     "default_credit_specification": {"t2": "standard", "t3": "unlimited", "t4g": "unlimited"},
+                     "asg_default_instance_warmup": 0},
+         # PrivateLink
+         "vpc_endpoints": {}, "vpc_endpoint_services": {}, "vpc_endpoint_connections": {},
+         # Network Access Analyzer
+         "access_scopes": {}, "access_scope_analyses": {},
+         # AWS Verified Access
+         "va_instances": {}, "va_trust_providers": {}, "va_groups": {}, "va_endpoints": {},
+         "seeded_amis": False}
+
+
 def _model(store) -> dict:
     m = getattr(store, "_vpc_model", None)
     if m is None:
-        m = {"vpcs": {}, "subnets": {}, "sgs": {}, "route_tables": {},
-             "igws": {}, "nacls": {}, "nat_gateways": {}, "eigws": {},
-             "dhcp_options": {}, "prefix_lists": {}, "peering_connections": {},
-             "route_servers": {}, "flow_logs": {}, "subnet_cidr_reservations": {},
-             # EC2 compute/storage/network resources (same account, same Query-protocol
-             # wire — boto3's "ec2" client signs ALL of this under one service).
-             "instances": {}, "images": {}, "volumes": {}, "snapshots": {},
-             "key_pairs": {}, "addresses": {}, "enis": {}, "placement_groups": {},
-             "launch_templates": {}, "tags": {},
-             "account": {"ebs_encryption_by_default": False, "ebs_default_kms_key_id": "alias/aws/ebs",
-                         "vpc_block_public_access": {"internet_gateway_block_mode": "off"},
-                         "vpc_block_public_access_exclusions": {}, "local_zones_opt_in": False,
-                         "console_experiments": {},
-                         "allowed_images_enabled": False, "allowed_images_criteria": [],
-                         "serial_console_enabled": True,
-                         "default_credit_specification": {"t2": "standard", "t3": "unlimited", "t4g": "unlimited"},
-                         "asg_default_instance_warmup": 0},
-             # PrivateLink
-             "vpc_endpoints": {}, "vpc_endpoint_services": {}, "vpc_endpoint_connections": {},
-             # Network Access Analyzer
-             "access_scopes": {}, "access_scope_analyses": {},
-             # AWS Verified Access
-             "va_instances": {}, "va_trust_providers": {}, "va_groups": {}, "va_endpoints": {},
-             "seeded_amis": False}
+        m = _new_model()
         store._vpc_model = m
+    elif not _MODEL_KEYS <= m.keys():
+        # A model persisted by an older version (Nano restores it from the browser, the appliance from disk) has only the keys that
+        # existed then; every EC2 read on it raised KeyError (HTTP 500 on Service health / Zones / the launch wizard). Fill in the rest.
+        for k, v in _new_model().items():
+            m.setdefault(k, v)
     return m
+
+
+_MODEL_KEYS = frozenset(_new_model())
 
 
 def _vpc_default_sg(m: dict, vpc_id: str, fallback: str) -> str:
