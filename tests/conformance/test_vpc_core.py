@@ -257,3 +257,17 @@ def test_model_persisted_by_an_older_version_is_healed_not_a_500():
     assert v._MODEL_KEYS <= st._vpc_model.keys()
     st._vpc_model["key_pairs"]["k"] = {"name": "k"}                 # healing never wipes data already there
     assert v._model(st)["key_pairs"] == {"k": {"name": "k"}}
+
+
+def test_quickstart_amis_have_stable_ids_across_stores():
+    """A launch form that listed AMIs earlier must still launch after the store was re-created (Nano reload): ids are stable."""
+    import re
+    class S: pass
+    def ids(store):
+        r = vpc.dispatch(store, {"Action": "DescribeImages", "Owner.1": "amazon"})
+        return re.findall(r"<imageId>(ami-[0-9a-f]+)</imageId>", r.body if isinstance(r.body, str) else r.body.decode())
+    a, b = S(), S()
+    ids_a, ids_b = ids(a), ids(b)
+    assert ids_a and ids_a == ids_b
+    r = vpc.dispatch(b, {"Action": "RunInstances", "ImageId": ids_a[0], "InstanceType": "t3.micro", "MinCount": "1", "MaxCount": "1"})
+    assert r.status == 200

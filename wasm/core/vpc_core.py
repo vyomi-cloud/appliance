@@ -2272,7 +2272,10 @@ def _seed_amis(m: dict) -> None:
         return
     m["seeded_amis"] = True
     for spec in _QUICKSTART_AMIS:
-        ami_id = "ami-" + uuid.uuid4().hex[:17]
+        # STABLE ids (like a real region's quickstart AMIs): a store that is re-created (Nano reload, worker restart, a model
+        # restored without its images) must hand out the SAME ids, or a launch form that listed AMIs earlier gets
+        # InvalidAMIID.NotFound on RunInstances.
+        ami_id = "ami-" + uuid.uuid5(uuid.NAMESPACE_URL, "vyomi/quickstart-ami/" + spec["name"] + "/" + spec["arch"]).hex[:17]
         m["images"][ami_id] = {
             "id": ami_id, "name": spec["name"], "description": spec["name"], "owner_id": "amazon",
             "public": True, "state": "available", "architecture": spec["arch"], "platform": spec["platform"],
