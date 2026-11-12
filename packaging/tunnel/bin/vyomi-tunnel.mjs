@@ -56,7 +56,7 @@ if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-
 { const { requireSession } = await import("./credentials.mjs"); const a = await requireSession();
   if (a.error) { console.error("vyomi-tunnel: " + a.error); process.exit(a.code === "NoCredentials" ? 2 : 1); } }
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 // Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own
 // `gh codespace ssh`; opened on first use). No hosted relay, no MESH_RELAY_URL. Needs a Pro/Max key + a running Mesh Codespace.
