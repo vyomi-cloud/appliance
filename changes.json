@@ -1,5 +1,5 @@
 {
- "at": "2026-11-11T22:58:59+00:00",
+ "at": "2026-11-11T23:59:05+00:00",
  "baseline": false,
  "changes": [
   {
@@ -9,15 +9,6 @@
    "key": "azure:storage:877ddd8c24",
    "title": "Azure storage: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "compute",
-   "kind": "spec-commit",
-   "key": "azure:compute:0cfe045409",
-   "title": "Azure compute: [Compute Recommender] Preserve GA C# compatibility and regular IsZonal naming (#48078)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/0cfe0454095022e6e28fcc64775aef2e90abc227",
    "actionable": false
   },
   {
@@ -63,52 +54,6 @@
    "key": "azure:operationalinsights:877ddd8c24",
    "title": "Azure operationalinsights: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.44.1",
-   "title": "pypi:boto3: 1.44.0 \u2192 1.44.1",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.44.1",
-   "title": "pypi:botocore: 1.44.0 \u2192 1.44.1",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:6a7d43e9cdc2",
-   "title": "AWS Cloud WAN now supports Flow Logs",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-cloud-wan-flow-logs/",
-   "detail": "AWS Cloud WAN now supports VPC Flow Logs, giving you central visibility into IP traffic across your global network. Flow Logs capture detailed information for each flow, so you can understand how traffic moves across your core network without leaving your AWS Cloud WAN account. Until now, network administrators had to stitch together VPC Flow Logs from many VPCs, accounts, and Regions to see traffic across their global network. They often depended on other teams for access to those logs. Cloud WAN Flow Logs give core network owners one consolidated view of traffic between VPCs, Regions, and on",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "DynamoDB",
-   "kind": "announcement",
-   "key": "feed:aws:601799f880df",
-   "title": "AWS Emulator is now available for building and testing AWS applications locally",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-emulator-now-available/",
-   "detail": "AWS Emulator is now available for building and testing AWS applications locally. Starting today, you can use AWS Emulator to build and test AWS applications on your computer or in your continuous integration (CI) environment. Your existing AWS SDK and CLI calls go to AWS Emulator and come back in milliseconds, so you and your coding agents can find and fix errors locally, with no deployments or AWS account required. You create and manage resources with the same AWS SDK and AWS CLI calls you use with AWS, signed with credentials the emulator provides. For the operations it supports, AWS Emulato",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:5823f03bb362",
-   "title": "Google Kubernetes Engine: Feature (November 11, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_11_2026",
-   "detail": "Capacity buffers, including active and standby capacity buffers, are generally available for GKE Standard and Autopilot clusters running version 1.37.1-gke.3020000 or later. Capacity buffers let you pre-provision and optionally suspend standby compute capacity using the CapacityBuffer custom resource (autoscaling.x-k8s.io/v1beta1) to accelerate workload scaling and mitigate capacity constraints. To get started, see About capacity buffers .",
    "actionable": false
   }
  ],
