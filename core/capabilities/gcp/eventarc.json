@@ -5,14 +5,14 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "Triggers are real: validated against the catalog (required eventFilters per event type, existing bucket/topic, the Cloud Run destination must exist in the trigger's region) and events are really delivered from real sources — object finalize/delete in the GCS core, Pub/Sub publishes, Admin Activity audit log entries and Firestore document writes — one CloudEvent per matching trigger to a Cloud Run service (invoked) or job (an execution is started with the CloudEvent in CLOUD_EVENT).",
-   "Cloud Run job destinations are a Vyomi extension (`destination.cloudRunJob`); real Eventarc reaches jobs through Workflows, and Workflows / GKE / Cloud Functions 1st-gen destinations are refused (not simulated). Cloud Audit Logs triggers fire for the audited control-plane mutations listed in core/gcp_audit_core.py (Admin Activity), not for Data Access reads. Delivery is synchronous, without retries or dead-lettering; channels, enrollments and pipelines are not modelled."
+   "Cloud Run job destinations are a Vyomi extension (`destination.cloudRunJob`); real Eventarc reaches jobs through Workflows, and Workflows / GKE / Cloud Functions 1st-gen destinations are refused (not simulated). Cloud Audit Logs triggers fire for the audited control-plane mutations listed in core/gcp_audit_core.py (Admin Activity), not for Data Access reads. Delivery goes through the shared event-bus engine (core/event_bus_engine.py, also used by EventBridge and Event Grid): the first attempt runs inline, failures retry with exponential backoff (trigger `retryPolicy` {maxAttempts, minRetryDelay, maxRetryDelay}; default 5 attempts, 1s to 60s) and, after the last attempt, the CloudEvent is published to the trigger's `deadLetterTopic` (Vyomi extension, a Pub/Sub topic) or dropped; events with the same ordering key (Pub/Sub orderingKey, GCS object name, Firestore document path) are delivered strictly in order; `/triggers/{t}/deliveries` and the console show per-attempt history. `destination.httpEndpoint` reaches a real HTTP receiver. Retries beyond a restart of the appliance resume lazily on the next Eventarc call; real Eventarc's 24 h retry window is shortened to the configured maxAttempts. Channels, enrollments and pipelines are not modelled."
   ],
-  "tests": ["tests/conformance/test_gcp_eventarc_core.py"]
+  "tests": ["tests/conformance/test_gcp_eventarc_core.py", "tests/conformance/test_event_bus_engine.py"]
  },
  "gcp.eventarc.triggers": {
   "title": "Eventarc triggers API (create, get, list, patch, delete, providers)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["See gcp.run.eventarc-job: long-running operations complete inline (done=true), channels/enrollments/pipelines/google-api-sources are not modelled."],
+  "limitations": ["Delivery retries, dead-lettering, per-key ordering and attempt history are real and proven (tests/conformance/test_event_bus_engine.py); see gcp.run.eventarc-job. Remaining limits: long-running operations complete inline (done=true), channels/enrollments/pipelines/google-api-sources are not modelled, Workflows/GKE/Functions 1st-gen destinations are refused."],
   "tests": ["tests/conformance/test_gcp_eventarc_core.py"]
  },
  "gcp.audit.admin-activity": {

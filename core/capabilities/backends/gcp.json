@@ -1216,7 +1216,7 @@
  },
  "eventarc": {
   "title": "Eventarc",
-  "summary": "Vyomi's own Eventarc v1 core validates triggers and delivers CloudEvents from real Vyomi sources (GCS, Pub/Sub, audit logs, Firestore) to Cloud Run.",
+  "summary": "Vyomi's own Eventarc v1 core validates triggers and delivers CloudEvents from real Vyomi sources (GCS, Pub/Sub, audit logs, Firestore) to Cloud Run or an HTTP endpoint through the shared event-bus engine (retries with backoff, dead-letter topic, per-key ordering, attempt history).",
   "wire": [
    "Eventarc REST API v1 /v1/projects/{p}/locations/{l}/triggers, providers",
    "gcloud eventarc"
@@ -1246,6 +1246,7 @@
   ],
   "sources": [
    "core/gcp_eventarc_core.py",
+   "core/event_bus_engine.py",
    "core/gcp_audit_core.py",
    "core/capabilities/gcp/eventarc.json"
   ],

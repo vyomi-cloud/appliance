@@ -2024,8 +2024,10 @@ class AwsWireRouter:
                     return json.loads((out.body or b"null").decode("utf-8"))
                 except Exception:
                     return None
+            from core import gateway_common as _gc
             r = apigw2_gw.handle(self.apigwv2, api_id, stage, method, rest.lstrip("/"), headers or {},
-                                 query or {}, bytes(body), invoker=invoker)
+                                 query or {}, bytes(body), invoker=invoker,
+                                 http_fetch=_gc.default_http_fetch(), verify_sig=_gc.make_rs256_verifier())
             return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
         if svc == "apigatewayv2":   # native API Gateway V2 control plane (/v2/apis, …)

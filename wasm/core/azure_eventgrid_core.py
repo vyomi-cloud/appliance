@@ -42,6 +42,11 @@ import datetime
 import json
 import uuid
 
+try:
+    from core import event_bus_engine as _ebus
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import event_bus_engine as _ebus  # type: ignore
+
 API_VERSION = "2022-06-15"
 
 # Real Azure Event Grid topic metric names (Microsoft.EventGrid/topics metric namespace).
@@ -331,22 +336,39 @@ def _attempt_delivery(rec: dict, event: dict, *, sb_store=None) -> str:
     dest = props.get("destination") or {}
     etype = (dest.get("endpointType") or "").lower()
     dprops = dest.get("properties") or {}
-    delivered = False
-    if etype in ("servicebusqueue", "servicebustopic") and sb_store is not None:
-        entity = dprops.get("queueName") or dprops.get("topicName") or \
-            str(dprops.get("resourceId") or "").rsplit("/", 1)[-1]
-        if entity:
-            try:
-                from core import azure_servicebus_core as sb
-                body = json.dumps(_cloud_event(event, props)).encode()
-                resp = sb.dispatch(sb_store, "POST", f"{entity}/messages", {}, {"content-type": "application/json"}, body)
-                delivered = resp.status == 201
-            except Exception:
-                delivered = False
-    elif etype == "storagequeue":
-        delivered = _deliver_storage_queue(dprops, event, props)
-    elif etype == "webhook":
-        delivered = _deliver_webhook(dprops, event, props)
+
+    def _once() -> bool:
+        if etype in ("servicebusqueue", "servicebustopic") and sb_store is not None:
+            entity = dprops.get("queueName") or dprops.get("topicName") or \
+                str(dprops.get("resourceId") or "").rsplit("/", 1)[-1]
+            if entity:
+                try:
+                    from core import azure_servicebus_core as sb
+                    body = json.dumps(_cloud_event(event, props)).encode()
+                    return sb.dispatch(sb_store, "POST", f"{entity}/messages", {}, {"content-type": "application/json"}, body).status == 201
+                except Exception:
+                    return False
+            return False
+        if etype == "storagequeue":
+            return _deliver_storage_queue(dprops, event, props)
+        if etype == "webhook":
+            return _deliver_webhook(dprops, event, props)
+        return False
+
+    # Delivery runs through the shared event-bus engine (core/event_bus_engine.py): attempt history is kept in rec["_attempts"].
+    # retryPolicy.maxDeliveryAttempts is honoured up to a local cap (retries run inline, no 24 h schedule); without an explicit
+    # policy a destination gets one attempt (real Event Grid defaults to 30 over 24 h).
+    try:
+        want = int((props.get("retryPolicy") or {}).get("maxDeliveryAttempts") or 1)
+    except (TypeError, ValueError):
+        want = 1
+    bus = _ebus.EventBus(lambda target, ev, ctx: True if ctx.get("dead_letter") else _once(), state={}, auto_pump=False)
+    r = bus.dispatch({"id": rec.get("name", ""), "target": {"type": etype},
+                      "retry": {"max_attempts": max(1, min(want, 3)), "min_backoff": 0, "sync": True},
+                      "dead_letter": {"dead": True} if props.get("deadLetterDestination") else None},
+                     {"id": event.get("id"), "type": event.get("eventType")})
+    rec["_attempts"] = (r["attempts"] + rec.get("_attempts", []))[:50]
+    delivered = r["status"] == _ebus.DELIVERED
     counters = rec.setdefault("_delivery", {"matched": 0, "delivered": 0, "failed": 0, "deadLettered": 0, "dropped": 0})
     if delivered:
         counters["delivered"] += 1
