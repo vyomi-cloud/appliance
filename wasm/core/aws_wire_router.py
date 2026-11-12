@@ -1535,10 +1535,17 @@ class AwsWireRouter:
             if hook is not None:
                 g, rest = self._gcp_gateway_target(path, lheaders)
                 if g is None:
-                    return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"code":404,"message":"No gateway serves this host."}'}
+                    _nf = {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"code":404,"message":"No gateway serves this host."}'}
+                    import time as _t2m
+                    self._record_async(svc, method, path, lheaders, bytes(b), _t2m.time(), _nf)
+                    return _nf
+                import time as _t0m
+                _t0 = _t0m.time()
                 r = await gcpgw.ahandle(self.gcp_mon, g, method, rest, headers or {}, query or {}, bytes(b), async_fetch=hook,
                                         verify_sig=gcpgw.default_verify_sig())
-                return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+                _res = {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+                self._record_async(svc, method, path, lheaders, bytes(b), _t0, _res)
+                return _res
         if svc in ("apigw-invoke", "apigateway", "azure-apim-gw"):
             # AWS API Gateway v1/v2 and Azure APIM: the same awaited bridge, only the outbound HTTP hop is awaited; Lambda / MOCK /
             # authorizers / throttle / usage plan / policies run once inside the engine run (core/gateway_common.adrive).
@@ -1546,10 +1553,25 @@ class AwsWireRouter:
             from core import gcp_apigateway_gateway as gcpgw
             hook = getattr(self, "async_backend_fetch", None) or (gcpgw.js_backend_fetch() if _gc.default_http_fetch() is None else None)
             if hook is not None:
+                import time as _t1m
+                _t1 = _t1m.time()
                 out = await self._agw_invoke(svc, method, path, query, lheaders, headers, bytes(b), hook)
                 if out is not None:
+                    self._record_async(svc, method, path, lheaders, bytes(b), _t1, out)
                     return out
         return self.handle(method, path, query, headers, body)
+
+    def _record_async(self, svc, method, path, lheaders, b, t0, res):
+        """The telemetry the sync front door (handle) records, for the awaited gateway paths on Nano."""
+        try:
+            import time as _t
+            from core import observability_core as _obsc
+            cloud = "gcp" if svc.startswith("gcp-") else ("azure" if svc.startswith("az") else "aws")
+            r_, op_ = _obsc.extract_resource(cloud, svc, method, path, lheaders, bytes(b))
+            _obsc.record(self.obs, cloud, svc, r_, op_, int(res.get("status", 0)), (_t.time() - t0) * 1000.0,
+                         traceparent=lheaders.get("traceparent", ""), nbytes_in=len(b), nbytes_out=len(res.get("body") or b""))
+        except Exception:
+            pass
 
     async def _agw_invoke(self, svc, method, path, query, lheaders, headers, b, hook):
         """Async twin of the apigw-invoke / apigateway(_user_request_) / azure-apim-gw branches of handle(); None = not mine, use handle()."""

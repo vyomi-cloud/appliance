@@ -112,6 +112,8 @@ o = asyncio.run(rt.ahandle("GET", "/gcpgw/gw1/items/1", {}, {}, b""))
 check("router.ahandle: auth still enforced before any backend call (401)", o["status"] == 401 and len(CALLS) == 1, o)
 o = asyncio.run(rt.ahandle("GET", "/gcpgw/missing/x", {}, {}, b""))
 check("router.ahandle: unknown gateway 404", o["status"] == 404)
+_gwrec = [e for e in rt.obs.recent if e[2] == "gcp-gateway-invoke"]
+check("router.ahandle: gateway requests are recorded in the request telemetry (like handle())", len(_gwrec) >= 3 and {e[5] for e in _gwrec} >= {200, 401, 404}, _gwrec[-3:])
 del rt.async_backend_fetch
 print("\nRESULT: %s — plan/finish split (%d failed)" % ("PASS" if not fails else "FAIL", fails))
 raise SystemExit(1 if fails else 0)
