@@ -655,7 +655,16 @@ def _model_garden(method, pub, mid, query):
         return _err(404, "NOT_FOUND", f"Publisher model publishers/{pub}/models/{mid} not found.")
     if pub and pub not in ("*", "-"):
         items = [i for i in items if i["name"].startswith(f"publishers/{pub}/")]
-    flt = (query.get("filter") or "").lower()
-    if flt:
+    raw = query.get("filter") or ""
+    # gcloud sends structured filters: is_hf_wildcard(false) [AND (model_user_id=~"(?i).*x.*" OR display_name=~"...")]. The catalogue
+    # holds no Hugging Face wildcard models, so is_hf_wildcard(false) matches everything; the =~ regexes narrow by id / display name.
+    pats = re.findall(r'=~"([^"]*)"', raw)
+    if pats:
+        def _hit(i):
+            hay = [i["name"].rsplit("/", 1)[-1], i["displayName"]]
+            return any(re.search(pt, h) for pt in pats for h in hay)
+        items = [i for i in items if _hit(i)]
+    elif raw and not re.search(r"[()=<>:~]", raw):
+        flt = raw.lower()
         items = [i for i in items if flt in (i["displayName"] + i["description"] + i["name"]).lower()]
     return _j(200, {"publisherModels": items})
