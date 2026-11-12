@@ -34,6 +34,7 @@
  */
 import { egress } from "./egress.mjs";
 import { createLazySshHub } from "./mesh-lazy-hub.mjs";
+import { createLocalGw } from "./gw-egress-node.mjs";
 import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
@@ -44,7 +45,7 @@ import { createRequire } from "node:module";
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
-if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   process.exit(await main(process.argv.slice(2)));
 }
@@ -71,6 +72,8 @@ const pending = new Map();     // id -> {resolve}
 // tab answers consistently — no need to force-close others (which would war with
 // their auto-reconnect).
 const tabs = new Set();        // live registrant sockets, insertion-ordered
+// Gateway backend egress for Nano (GET /gw-token, POST /gw-egress): mapped backends only — gw-egress-node.mjs
+const gw = createLocalGw();
 function pickTab() {           // most-recently-registered OPEN socket, or null
   let chosen = null;
   for (const ws of tabs) if (ws.readyState === ws.OPEN) chosen = ws;
@@ -107,7 +110,7 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "mesh-link", "mesh-shell"],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(gw.enabled ? ["gw-egress"] : []), "mesh-link", "mesh-shell"],
       mesh_sessions: hub.enabled() ? hub.linked().length : 0,
       mesh_streams: hub.streams(),
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
@@ -134,6 +137,7 @@ const server = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
+    if (gw.http(req, res, Buffer.concat(chunks))) return;        // gateway backend egress (mapped origins only)
     if (hub.http(req, res, Buffer.concat(chunks))) return;     // Mesh plane (carries X-Vyomi-Session-Token) -> the simulator in the Codespace
     const tab = pickTab();
     if (!tab) {

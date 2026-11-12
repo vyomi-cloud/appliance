@@ -196,12 +196,24 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
   ssh <name>.vyomi        connect to the Codespace, a Docker instance or k3s
   vyomi-tunnel forward <name> <local>:<remote>
                           forward a port, e.g. forward k3s 6443:6443
+  vyomi-tunnel gateway-backend <https origin>=<local origin>
+                          let a Nano API Gateway reach your local backend (see: help gateway-backend)
   vyomi-tunnel            start the local relay for the Nano console
 
 Everything needs a key (Free works for Nano; Mesh needs Pro or Max).
 Get one: 'vyomi-tunnel help credentials'.
 `;
 const DETAILS = {
+  "gateway-backend": `Let a Nano API Gateway call a backend that runs on your machine
+
+  vyomi-tunnel gateway-backend https://hello-abc123-uc.a.run.app=http://127.0.0.1:3000
+  vyomi-tunnel gateway-backend --list
+  vyomi-tunnel gateway-backend --remove https://hello-abc123-uc.a.run.app
+
+The left side is the backend address exactly as the API config's x-google-backend (or the HTTP integration) names it; the right side is
+where it really runs. The relay forwards ONLY the origins you list here (anything else is refused, never an open proxy) and only to the
+Nano page of your own browser. Saved in ~/.vyomi/gateway-backends.json; a running relay picks changes up without a restart.
+Public https backends need no mapping when the hosted relay is used (allow-listed hosts only).`,
   credentials: `Mesh credentials (like ~/.aws/credentials)
 
 Where to get it: https://vyomi.cloud/account/tunnel-credentials
@@ -287,6 +299,27 @@ export async function main(argv) {
       return await f.done;
     } catch (e) { console.error("vyomi-tunnel: " + e.message); return 1; }
     finally { transport.close(); }
+  }
+  if (cmd === "gateway-backend") {                                     // map a backend origin in an API config to a local origin (the relay refuses anything unmapped)
+    const auth = await requireSession();                                // like every command: a valid key, Free is enough
+    if (auth.error) { console.error("vyomi-tunnel: " + auth.error); return auth.code === "NoCredentials" ? 2 : 1; }
+    const g = await import("./gw-egress-node.mjs");
+    const cur = (() => { try { return JSON.parse(fs.readFileSync(g.mapFile(), "utf8")).backends || {}; } catch { return {}; } })();
+    if (rest[0] === "--list" || rest.length === 0) {
+      const ks = Object.keys(cur); if (!ks.length) console.log("No gateway backends mapped. Example: vyomi-tunnel gateway-backend https://hello-abc123-uc.a.run.app=http://127.0.0.1:3000");
+      for (const k of ks) console.log(`${k}  ->  ${cur[k]}`);
+      return 0;
+    }
+    if (rest[0] === "--remove") {
+      let o; try { o = new URL(rest[1] || "").origin; } catch { console.error("usage: vyomi-tunnel gateway-backend --remove <https origin>"); return 2; }
+      if (!(o in cur)) { console.error(`vyomi-tunnel: ${o} is not mapped`); return 1; }
+      delete cur[o]; g.saveMap(cur); console.log(`removed ${o}`); return 0;
+    }
+    const m = g.parseMapping(rest[0]);
+    if (m.error) { console.error("vyomi-tunnel: " + m.error); return 2; }
+    cur[m.from] = m.to; g.saveMap(cur);
+    console.log(`mapped ${m.from}  ->  ${m.to}\n(${g.mapFile()}; a running relay uses it immediately)`);
+    return 0;
   }
   if (cmd === "login" || cmd === "gh-login") {                         // there is no login: credentials live in a file, like ~/.aws/credentials
     console.error("vyomi-tunnel has no login. Save your access key as ~/.vyomi/credentials (console: avatar menu > Access Key). Run `vyomi-tunnel help credentials`.");
