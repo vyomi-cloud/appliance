@@ -104,6 +104,22 @@ def console_features(target: str, cloud: str) -> list[dict]:
     return feats
 
 
+# Verb-named private helpers that are internal accessors, not operations a client can call
+# (Service Bus message ops are _peek_lock/_complete/...; this only picks a list out of a subscription).
+NOT_OPERATIONS = {"_get_target_backlog",
+    # AWS cores: private/nested helpers whose names merely start with a verb
+    "_create_grand", "_create_mapping", "_create_vpclink", "_get_child", "_get_grand",
+    "_query_envelope", "run_queries", "_set_state", "_get_archive", "send_sqs", "_invoke_raw",
+    "_run_insights", "_publish_to_endpoint", "_publish_to_phone", "_publish_to_topic", "_subscribe_result", "_add_doc_version", "_get_version",
+    "_tag_holder", "_invoke_lambda", "run_machine", "run_state"}
+# PascalCase names that are not API operations: record fields compared/read by the engine
+# (CloudWatch alarm fields) and Step Functions Choice-state comparison operators (Amazon States Language).
+NOT_OPERATION_NAMES = {"StateReasonData", "StateUpdatedTimestamp"} | {
+    p + s for p in ("String", "Numeric", "Timestamp", "Boolean") for s in
+    ("Equals", "LessThan", "GreaterThan", "LessThanEquals", "GreaterThanEquals", "Matches")} | {
+    "IsNumeric", "IsPresent", "IsString", "IsTimestamp", "IsNull", "IsBoolean"}
+
+
 def _ops_in(path: str) -> set[str]:
     """Operation names an engine implements: PascalCase keys of its dispatch
     tables (AWS JSON/query cores) plus verb-named handlers (REST cores)."""
@@ -127,9 +143,11 @@ def _ops_in(path: str) -> set[str]:
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
-        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name) \
+                and n.name not in NOT_OPERATIONS:
             fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
             ops.add(fn_ops[n.name])
+    ops -= NOT_OPERATION_NAMES
     for fname in dispatched:
         if fname in fn_ops and fn_ops[fname] not in keys_all:
             ops.discard(fn_ops[fname])

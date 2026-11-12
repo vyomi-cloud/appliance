@@ -15,6 +15,13 @@ CASES = [
     ("Microsoft.KeyVault/vaults", "vyomidrift520", "2026-10-01-preview",
      {"location": "eastus", "properties": {"tenantId": "00000000-0000-0000-0000-000000000000",
                                           "sku": {"family": "A", "name": "standard"}}}),
+    # #567 CognitiveServices stable 2026-11-01; #534 Storage 2027-03-07; #528 SQL 2026-08-01-preview
+    ("Microsoft.CognitiveServices/accounts", "vyomidrift567", "2026-11-01",
+     {"location": "eastus", "kind": "OpenAI", "sku": {"name": "S0"}, "properties": {}}),
+    ("Microsoft.Storage/storageAccounts", "vyomidrift534", "2027-03-07",
+     {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {}}),
+    ("Microsoft.Sql/servers", "vyomidrift528", "2026-08-01-preview",
+     {"location": "eastus", "properties": {"administratorLogin": "vyomiadmin", "administratorLoginPassword": "Passw0rd!x1"}}),
 ]
 fails = 0
 

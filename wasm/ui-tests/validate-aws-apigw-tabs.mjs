@@ -30,7 +30,7 @@ try {
     await sleep(1500);
     check(`API Gateway ${tab} tab: no 404`, bad.length === 0, bad.join(","));
     const txt = await page.evaluate(() => document.querySelector("#main")?.innerText || "");
-    check(`API Gateway ${tab} tab: does not show a load error`, !/failed|error|404/i.test(txt), txt.slice(0, 120));
+    check(`API Gateway ${tab} tab: does not show a load error`, !/failed|error|\b404\b/i.test(txt), txt.slice(0, 120));
   }
 } catch (e) { check("run", false, String(e).split("\n")[0]); }
 await browser.close();

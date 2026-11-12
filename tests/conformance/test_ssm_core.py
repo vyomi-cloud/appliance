@@ -135,6 +135,12 @@ def run(store=None):
     _check("GetPatchBaseline", call("GetPatchBaseline", {"BaselineId": bid})[1]["OperatingSystem"] == "AMAZON_LINUX_2")
     _check("DeletePatchBaseline", call("DeletePatchBaseline", {"BaselineId": bid})[0] == 200)
 
+    # default host management configuration (upstream #529, #530)
+    _check("RegisterDefaultHostManagementConfiguration requires PermissionModel", err("RegisterDefaultHostManagementConfiguration", {}, "ValidationException"))
+    st, b = call("RegisterDefaultHostManagementConfiguration", {"PermissionModel": "DEFAULT", "RoleArn": "arn:aws:iam::000000000000:role/r"})
+    _check("RegisterDefaultHostManagementConfiguration → RoleArn", st == 200 and b == {"RoleArn": "arn:aws:iam::000000000000:role/r"})
+    _check("DeregisterDefaultHostManagementConfiguration", call("DeregisterDefaultHostManagementConfiguration", {}) [0] == 200 and s.host_mgmt == {})
+
     st, b = call("Bogus")
     _check("unknown action → UnknownOperationException", b["__type"] == "UnknownOperationException")
     _check("operations list", len(ssm.OPERATIONS) >= 40)
