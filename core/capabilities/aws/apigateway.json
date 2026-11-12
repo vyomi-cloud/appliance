@@ -9,7 +9,8 @@
   "limitations": [],
   "tests": [
    "tests/conformance/test_apigateway_core.py",
-   "tests/conformance/test_apigateway_console_v4_core.py"
+   "tests/conformance/test_apigateway_console_v4_core.py",
+   "tests/conformance/test_apigateway_gateway_v1.py"
   ]
  },
  "apigateway.rest.resources-methods": {
@@ -19,7 +20,7 @@
    "offline": "full"
   },
   "limitations": [
-   "AWS_IAM and COGNITO_USER_POOLS authorization types are stored and returned but not enforced; only NONE is evaluated on invoke/test."
+   "Invoke (host {id}.execute-api.*, /apigw/{id}/{stage}/..., /restapis/{id}/{stage}/_user_request_/...) enforces CUSTOM Lambda authorizers, COGNITO_USER_POOLS JWTs (RS256 through a verifier; fails closed without one, e.g. a browser tab), API keys with usage-plan throttle/quota, and stage throttle; AWS_IAM only needs a SigV4-shaped Authorization header (signature and IAM policy are not evaluated). Test Invoke (TestInvokeMethod) does not apply authorizers or keys, like the real console. HTTP/HTTP_PROXY integrations go out through the shared gateway fetch (not available in a browser tab: 502)."
   ],
   "tests": [
    "tests/conformance/test_apigateway_core.py",

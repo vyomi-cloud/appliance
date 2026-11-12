@@ -1068,7 +1068,7 @@
         "Vyomi API Gateway cores (Python)",
         "Caddy gateway (v2 execute-api listener, full profile)"
       ],
-      "notes": "The v2 data plane is handled in apigatewayv2_gateway.py behind the shared Caddy listener; REST (v1) invoke is exercised through Test Invoke. Whether v1 stages are served over a host-based listener is not verified."
+      "notes": "The v2 data plane is handled in apigatewayv2_gateway.py behind the shared Caddy listener. REST (v1) has its own invoke data plane (core/apigateway_core.invoke + core/apigateway_gateway.py) served through the wire router on {id}.execute-api.* and /apigw/{id}/{stage}/... and on /restapis/{id}/{stage}/_user_request_/...; it is not behind the Caddy listener. Throttle, quota, JWT/RS256 and forwarding primitives live in core/gateway_common.py, shared with the v2, GCP API Gateway and Azure APIM data planes."
     },
     "nano": {
       "kind": "inhouse",
@@ -1078,7 +1078,7 @@
       "notes": "Control plane and in-core invoke (Test); real HTTP proxy and Lambda integrations run through the in-browser cores."
     },
     "differs": [
-      "AWS_IAM and Cognito authorizers are stored but not enforced on v1; only NONE is evaluated.",
+      "REST (v1) enforcement: stage throttle, CUSTOM (TOKEN/REQUEST Lambda) authorizers, COGNITO_USER_POOLS (JWT claims + RS256 through a verifier; fails closed when none is available, e.g. in a browser tab), API keys with usage-plan throttle and DAY/WEEK/MONTH quota. AWS_IAM only requires a SigV4-shaped Authorization header: the signature and the IAM policy are not evaluated. Authorizer results are not cached; apiKeySource AUTHORIZER, per-method usage-plan throttles, request validators and mapping templates for non-proxy integrations are not applied on invoke.",
       "The execute-api invoke host is not resolvable from outside Vyomi; use Test or the appliance address.",
       "Custom domains, client certificates and VPC links are stored; no ACM, Route 53 or NLB exists behind them.",
       "WebSocket APIs have no connection registry or @connections management API.",
@@ -1087,13 +1087,16 @@
     "notInScope": [
       "Edge-optimized CloudFront distribution",
       "Real mTLS, WAF, usage metering and billing",
-      "Cognito user pools behind authorizers"
+      "A real Cognito user pool issuing the tokens (a JWKS you serve yourself works)"
     ],
     "sources": [
       "core/apigateway_core.py",
       "core/apigateway_gap_core.py",
       "core/apigatewayv2_core.py",
       "core/apigatewayv2_gateway.py",
+      "core/apigateway_gateway.py",
+      "core/gateway_common.py",
+      "tests/conformance/test_apigateway_gateway_v1.py",
       "docker-compose.cloudlite.yml: vyomi-gateway",
       "core/capabilities/aws/apigateway.json"
     ]

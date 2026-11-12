@@ -35,6 +35,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from core import lambda_core
+from core import gateway_common as gc
 
 REGION = "us-east-1"
 ACCOUNT = "000000000000"
@@ -370,7 +371,7 @@ def _lambda_name_from_uri(uri: str) -> str:
     return uri.rsplit("/", 1)[-1]
 
 
-def _run_integration(integ, method, path, headers, query, path_params, body, lambda_store, stage_ctx=None):
+def _run_integration(integ, method, path, headers, query, path_params, body, lambda_store, stage_ctx=None, http_fetch=None):
     """Execute one method's integration. Returns (status, headers, body_bytes, log_lines)."""
     log = [f"Starting execution for request", f"HTTP Method: {method}, Resource Path: {path}"]
     if integ["type"] == "MOCK":
@@ -396,6 +397,8 @@ def _run_integration(integ, method, path, headers, query, path_params, body, lam
             event["requestContext"] = {"stage": stage_ctx["stage"], "apiId": stage_ctx["apiId"],
                                        "deploymentId": stage_ctx["deploymentId"], "resourcePath": path,
                                        "httpMethod": (method or "GET").upper()}
+            if stage_ctx.get("authorizer"):
+                event["requestContext"]["authorizer"] = stage_ctx["authorizer"]
         lam_out = lambda_core.dispatch(
             lambda_store, "POST", f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
         if lam_out.headers.get("X-Amz-Function-Error"):
@@ -413,15 +416,26 @@ def _run_integration(integ, method, path, headers, query, path_params, body, lam
         return status, out_headers, out_body, log
 
     if integ["type"] in ("HTTP", "HTTP_PROXY"):
-        log.append(f"Endpoint request URI: {integ['uri']}")
+        # the shared gateway fetch (core/gateway_common): `{param}` / `{proxy+}` in the uri come from the matched path;
+        # HTTP_PROXY forwards the caller's query string and headers (hop-by-hop stripped), HTTP sends the body only.
+        uri = re.sub(r"\{([^/}]+)\}", lambda mm: str((path_params or {}).get(mm.group(1).rstrip("+"), mm.group(0))), integ["uri"])
+        proxy = integ["type"] == "HTTP_PROXY"
+        if proxy and query:
+            from urllib.parse import urlencode
+            uri += ("&" if "?" in uri else "?") + urlencode(query)
+        out_method = integ.get("httpMethod") or "POST"
+        if out_method == "ANY":
+            out_method = (method or "GET").upper()
+        log.append(f"Endpoint request URI: {uri}")
+        fetch = http_fetch or gc.default_http_fetch()
+        if fetch is None:
+            log.append("Endpoint request failed: no outbound network in this runtime")
+            return 502, {}, json.dumps({"message": "Internal server error"}).encode(), log
+        data = body if isinstance(body, (bytes, bytearray)) else (body or b"").encode()
         try:
-            import urllib.request
-            req = urllib.request.Request(integ["uri"], method=integ.get("httpMethod", "POST"),
-                                          data=body if isinstance(body, (bytes, bytearray)) else (body or b"").encode())
-            with urllib.request.urlopen(req, timeout=5) as r:
-                out_body = r.read()
-                log.append(f"Endpoint responded with status {r.status}")
-                return r.status, dict(r.headers.items()), out_body, log
+            st, rh, rb = fetch(out_method, uri, gc.strip_hop(headers) if proxy else {}, bytes(data), 29.0)
+            log.append(f"Endpoint responded with status {st}")
+            return st, gc.strip_resp_hop(rh), rb or b"", log
         except Exception as e:
             log.append(f"Endpoint request failed: {e}")
             return 502, {}, json.dumps({"message": "Internal server error"}).encode(), log
@@ -431,19 +445,23 @@ def _run_integration(integ, method, path, headers, query, path_params, body, lam
 
 
 def _match_resource(api: dict, path: str):
-    """Find the resource whose path template matches `path`, returning
-    (resource, path_params) or (None, {})."""
+    """Find the resource whose path template matches `path`, returning (resource, path_params) or (None, {}).
+    `{name}` matches one segment, `{name+}` (greedy) the rest of the path; the most specific template wins
+    (static > `{param}` > greedy), as in the real service."""
     req = "/" + path.strip("/")
+    best = None
     for res in api["resources"].values():
         template = res["path"]
-        regex = "^" + re.sub(r"\{[^/}]+\}", r"([^/]+)", template.rstrip("/")) + "/?$"
+        regex = "^" + re.sub(r"\{[^/}]+\}", r"([^/]+)", re.sub(r"\{[^/}]+\+\}", r"(.+)", template.rstrip("/"))) + "/?$"
         m = re.match(regex, req)
         if not m:
             continue
         names = re.findall(r"\{([^/}]+)\}", template)
         params = {n.rstrip("+"): v for n, v in zip(names, m.groups())}
-        return res, params
-    return None, {}
+        rank = (sum(1 for seg in template.split("/") if seg and not seg.startswith("{")), -sum(1 for n in names if n.endswith("+")))
+        if best is None or rank > best[0]:
+            best = (rank, res, params)
+    return (best[1], best[2]) if best else (None, {})
 
 
 _STAGE_VAR_RE = re.compile(r"\$\{stageVariables\.([A-Za-z0-9_]+)\}")
@@ -463,7 +481,7 @@ def _canary_pick(st: dict, rnd=None) -> bool:
 
 
 def invoke(store, api_id, stage, method, path, headers=None, query=None,
-           body=b"", lambda_store=None):
+           body=b"", lambda_store=None, http_fetch=None, verify_sig=None, now=None):
     """Route a request through a DEPLOYED API: match resource → method → integration
     → response. Returns an ApiGwResponse. Stage variables are substituted into the
     integration URI (`${stageVariables.name}`) and passed to Lambda; a request picked for the
@@ -481,6 +499,12 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
     if not m or not m.get("integration"):
         return _err(403, "MissingAuthenticationTokenException", "Missing Authentication Token")
     st = api["stages"][stage]
+    # the shared gateway layer (core/apigateway_gateway): stage throttle, authorizer, API key + usage plan throttle/quota
+    from core import apigateway_gateway as _gw
+    denied, authctx = _gw.enforce(store, api, stage, st, res, m, (method or "GET").upper(), path, path_params,
+                                  headers or {}, query or {}, lambda_store or store, verify_sig, now)
+    if denied is not None:
+        return denied
     canary = _canary_pick(st)
     variables = dict(st.get("variables") or {})
     deployment_id = st.get("deploymentId")
@@ -490,9 +514,10 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
     integ = dict(m["integration"])
     if isinstance(integ.get("uri"), str):
         integ["uri"] = _STAGE_VAR_RE.sub(lambda mm: str(variables.get(mm.group(1), "")), integ["uri"])
-    ctx = {"stage": stage, "apiId": api_id, "deploymentId": deployment_id, "canary": canary, "variables": variables}
+    ctx = {"stage": stage, "apiId": api_id, "deploymentId": deployment_id, "canary": canary, "variables": variables,
+           "authorizer": authctx}
     status, out_headers, out_body, _log = _run_integration(
-        integ, method, path, headers, query, path_params, body, lambda_store or store, ctx)
+        integ, method, path, headers, query, path_params, body, lambda_store or store, ctx, http_fetch)
     out_headers = dict(out_headers or {})
     if canary:
         out_headers.setdefault("x-amzn-apigw-canary", "true")
