@@ -135,6 +135,10 @@ def make_rs256_verifier(ttl: float = 300.0, timeout: float = 5.0, fetch_json=Non
         if fetch_json is not None:
             return fetch_json(url)
         import urllib.request
+        for src, dst in backend_overrides().items():   # the same operator hook as the backend fetch: an https issuer alias -> a loopback JWKS
+            if url == src or url.startswith(src + "/") or url.startswith(src + "?"):
+                url = dst + url[len(src):]
+                break
         with urllib.request.urlopen(url, timeout=timeout) as r:
             return json.load(r)
 
