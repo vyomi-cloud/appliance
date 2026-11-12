@@ -39,6 +39,43 @@ st, r = call("POST", P + "/global/apis/demo-api/configs", doc(SPEC.replace("oper
 check("duplicate operationId refused", st == 400 and "duplicate operationId" in r["error"]["message"], r)
 st, r = call("POST", P + "/global/apis/demo-api/configs", doc(SPEC.replace("https://example.com", "http://example.com")), {"apiConfigId": "http"})
 check("non-https backend refused", st == 400 and "https" in r["error"]["message"], r)
+# ── security / quota validation (JSON documents) ──
+def jspec(**extra):
+    d = {"swagger": "2.0", "info": {"title": "t", "version": "1"},
+         "paths": {"/a": {"get": {"operationId": "a", "x-google-backend": {"address": "https://example.com"}, "responses": {"200": {"description": "ok"}}}}}}
+    d.update(extra)
+    return d
+def cfg_try(label, spec, want, frag=""):
+    st, r = call("POST", P + "/global/apis/demo-api/configs", doc(json.dumps(spec)), {"apiConfigId": "sq" + str(abs(hash(label)) % 10**6)})
+    ok = (st == want) and (not frag or frag in json.dumps(r))
+    check(label, ok, (st, r))
+    if st == 200:
+        call("DELETE", P + "/global/apis/demo-api/configs/" + r["response"]["name"].split("/")[-1])
+GOOD_SD = {"key": {"type": "apiKey", "name": "key", "in": "query"}, "jwt": {"type": "oauth2", "x-google-issuer": "https://iss.example.com", "x-google-jwks_uri": "https://iss.example.com/jwks", "flow": "implicit", "authorizationUrl": ""}}
+cfg_try("security: valid apiKey+oauth2 accepted", jspec(securityDefinitions=GOOD_SD, security=[{"key": []}]), 200)
+cfg_try("security: apiKey without name refused", jspec(securityDefinitions={"k": {"type": "apiKey", "in": "query"}}), 400, "requires 'name'")
+cfg_try("security: apiKey bad 'in' refused", jspec(securityDefinitions={"k": {"type": "apiKey", "name": "k", "in": "cookie"}}), 400, "query or header")
+cfg_try("security: oauth2 without issuer refused", jspec(securityDefinitions={"j": {"type": "oauth2"}}), 400, "x-google-issuer")
+cfg_try("security: non-https jwks refused", jspec(securityDefinitions={"j": {"type": "oauth2", "x-google-issuer": "i", "x-google-jwks_uri": "http://x"}}), 400, "https")
+cfg_try("security: top-level requirement on undefined scheme refused", jspec(security=[{"ghost": []}]), 400, "security definition 'ghost', which is not defined")
+sp = jspec(securityDefinitions=GOOD_SD); sp["paths"]["/a"]["get"]["security"] = [{"nope": []}]
+cfg_try("security: operation requirement on undefined scheme refused", sp, 400, "GET /a")
+MG = {"metrics": [{"name": "reads", "displayName": "r", "valueType": "INT64", "metricKind": "DELTA"}], "quota": {"limits": [{"name": "rl", "metric": "reads", "unit": "1/min/{project}", "values": {"STANDARD": 100}}]}}
+sp = jspec(**{"x-google-management": MG}); sp["paths"]["/a"]["get"]["x-google-quota"] = {"metricCosts": {"reads": 1}}
+cfg_try("quota: valid metrics+limits+metricCosts accepted", sp, 200)
+bad = json.loads(json.dumps(MG)); bad["quota"]["limits"][0]["metric"] = "ghost"
+cfg_try("quota: limit on undefined metric refused", jspec(**{"x-google-management": bad}), 400, "metric 'ghost', which is not defined")
+bad = json.loads(json.dumps(MG)); bad["quota"]["limits"][0]["values"] = {"STANDARD": -5}
+cfg_try("quota: negative limit value refused", jspec(**{"x-google-management": bad}), 400, "non-negative")
+bad = json.loads(json.dumps(MG)); del bad["quota"]["limits"][0]["unit"]
+cfg_try("quota: limit without unit refused", jspec(**{"x-google-management": bad}), 400, "requires 'unit'")
+bad = json.loads(json.dumps(MG)); bad["metrics"][0]["valueType"] = "STRING"
+cfg_try("quota: non-INT64 metric refused", jspec(**{"x-google-management": bad}), 400, "INT64")
+sp = jspec(**{"x-google-management": MG}); sp["paths"]["/a"]["get"]["x-google-quota"] = {"metricCosts": {"ghost": 1}}
+cfg_try("quota: metricCosts on undefined metric refused", sp, 400, "GET /a")
+sp = jspec(**{"x-google-management": MG}); sp["paths"]["/a"]["get"]["x-google-quota"] = {"metricCosts": {"reads": -1}}
+cfg_try("quota: negative metric cost refused", sp, 400, "non-negative")
+
 st, r = call("POST", P + "/global/apis/demo-api/configs", doc(SPEC), {"apiConfigId": "c1"})
 check("create config from base64 YAML", st == 200 and r["response"]["state"] == "ACTIVE", r)
 st, r = call("GET", P + "/global/apis/demo-api/configs/c1")

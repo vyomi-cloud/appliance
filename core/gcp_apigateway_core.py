@@ -137,6 +137,76 @@ def parse_openapi(text: str) -> dict:
     return root
 
 
+def _validate_security_quota(doc: dict) -> None:
+    """Validate securityDefinitions / security / x-google-management (metrics, quota) / x-google-quota."""
+    def bad(msg):
+        raise _E(400, "INVALID_ARGUMENT", "Cannot convert to service config: " + msg)
+    defs = doc.get("securityDefinitions") or {}
+    if not isinstance(defs, dict):
+        bad("'securityDefinitions' must be an object.")
+    for name, d in defs.items():
+        if not isinstance(d, dict) or d.get("type") not in ("apiKey", "oauth2", "basic"):
+            bad("security definition '%s' needs a type of apiKey, oauth2 or basic." % name)
+        if d["type"] == "apiKey":
+            if not d.get("name"):
+                bad("apiKey security definition '%s' requires 'name'." % name)
+            if d.get("in") not in ("query", "header"):
+                bad("apiKey security definition '%s' requires 'in' of query or header." % name)
+        if d["type"] == "oauth2":
+            if not d.get("x-google-issuer"):
+                bad("oauth2 security definition '%s' requires 'x-google-issuer'." % name)
+            j = d.get("x-google-jwks_uri")
+            if j is not None and not str(j).startswith("https://"):
+                bad("'x-google-jwks_uri' of '%s' must be an https:// URL." % name)
+    def check_sec(sec, where):
+        if sec is None:
+            return
+        if not isinstance(sec, list) or not all(isinstance(r, dict) for r in sec):
+            bad("'security' %s must be a list of requirement objects." % where)
+        for req in sec:
+            for k in req:
+                if k not in defs:
+                    bad("'security' %s references security definition '%s', which is not defined." % (where, k))
+    check_sec(doc.get("security"), "at the top level")
+    mgmt = doc.get("x-google-management") or {}
+    if not isinstance(mgmt, dict):
+        bad("'x-google-management' must be an object.")
+    metrics = {}
+    for m in mgmt.get("metrics") or []:
+        if not isinstance(m, dict) or not m.get("name"):
+            bad("every x-google-management metric needs a 'name'.")
+        if m.get("valueType", "INT64") != "INT64" or m.get("metricKind", "DELTA") != "DELTA":
+            bad("metric '%s' must have valueType INT64 and metricKind DELTA." % m["name"])
+        metrics[m["name"]] = m
+    quota = mgmt.get("quota") or {}
+    if not isinstance(quota, dict):
+        bad("'x-google-management.quota' must be an object.")
+    for lim in quota.get("limits") or []:
+        if not isinstance(lim, dict) or not lim.get("name"):
+            bad("every quota limit needs a 'name'.")
+        if lim.get("metric") not in metrics:
+            bad("quota limit '%s' references metric '%s', which is not defined." % (lim["name"], lim.get("metric")))
+        if not lim.get("unit"):
+            bad("quota limit '%s' requires 'unit' (e.g. 1/min/{project})." % lim["name"])
+        vals = lim.get("values")
+        if not isinstance(vals, dict) or not vals or not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in vals.values()):
+            bad("quota limit '%s' requires 'values' with non-negative integers (e.g. STANDARD: 1000)." % lim["name"])
+    for path, ops in (doc.get("paths") or {}).items():
+        for method, op in (ops or {}).items():
+            if str(method).lower() not in _METHODS or not isinstance(op, dict):
+                continue
+            where = "on %s %s" % (str(method).upper(), path)
+            check_sec(op.get("security"), where)
+            costs = (op.get("x-google-quota") or {}).get("metricCosts") or {}
+            if not isinstance(costs, dict):
+                bad("'x-google-quota.metricCosts' %s must be an object." % where)
+            for mk, cv in costs.items():
+                if mk not in metrics:
+                    bad("'x-google-quota' %s references metric '%s', which is not defined." % (where, mk))
+                if not isinstance(cv, int) or isinstance(cv, bool) or cv < 0:
+                    bad("metric cost for '%s' %s must be a non-negative integer." % (mk, where))
+
+
 def openapi_routes(doc: dict) -> list:
     if str(doc.get("swagger") or "") != "2.0":
         raise _E(400, "INVALID_ARGUMENT", "Cannot convert to service config: API Gateway requires an OpenAPI 2.0 document ('swagger: \"2.0\"').")
@@ -145,6 +215,7 @@ def openapi_routes(doc: dict) -> list:
     paths = doc.get("paths") or {}
     if not isinstance(paths, dict) or not paths:
         raise _E(400, "INVALID_ARGUMENT", "Cannot convert to service config: the document defines no paths.")
+    _validate_security_quota(doc)
     default_backend = (doc.get("x-google-backend") or {}).get("address", "")
     out, seen = [], set()
     for path, ops in paths.items():
