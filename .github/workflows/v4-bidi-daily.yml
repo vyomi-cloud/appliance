@@ -1,0 +1,187 @@
+name: v4 bi-directional daily (find broken functionality, report to the known-issues file)
+
+# Every day, for ALL THREE clouds: run the UI <-> SDK/CLI/API bi-directional suites (created in the console is read by the client,
+# created by the client shows in the console, deleted both ways), then tests/conformance/nightly/bidi_report.py turns every failing
+# check into a row `AUTO-<cloud>-<suite>-<check>` in docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md and resolves the rows whose checks
+# pass again (self-healing). The hourly known-issues fixer (v4-known-issues-hourly.yml) works that register.
+# Base = v4-on-main. Only the known-issues file is committed back to v4-on-main. No tag, no main, no image, no release.
+# Secrets: CONFORMANCE_BOT_TOKEN (push the register), VYOMI_TEST_LICENSE_JWT (optional), NIGHTLY_CODESPACES_PAT (live-Mesh job).
+# Variable: NIGHTLY_MESH_SIM_URL (an already-forwarded Mesh endpoint for the live-Mesh job; without it that job says NOT RUN).
+
+on:
+  schedule:
+    - cron: '0 22 * * *'      # 03:30 IST
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: 'Cloud to run'
+        type: choice
+        options: [all, azure, aws, gcp]
+        default: all
+      record:
+        description: 'Commit the register changes to v4-on-main (false = report only)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: v4-bidi-daily
+  cancel-in-progress: false
+
+env:
+  VYOMI_BASE_URL: http://localhost:9000
+  RELAY_HTTP: http://127.0.0.1:8090
+  NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+  TRUNK: v4-on-main
+  REGISTER: docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      clouds: ${{ steps.c.outputs.clouds }}
+    steps:
+      - id: c
+        run: |
+          IN="${{ inputs.cloud }}"; [ -n "$IN" ] || IN=all
+          if [ "$IN" = all ]; then echo 'clouds=["azure","aws","gcp"]' >> "$GITHUB_OUTPUT"; else echo "clouds=[\"$IN\"]" >> "$GITHUB_OUTPUT"; fi
+
+  bidi:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: ${{ fromJSON(needs.plan.outputs.clouds) }}
+    permissions:
+      contents: read
+    env:
+      CLOUD: ${{ matrix.cloud }}
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+    steps:
+      - name: Require the bot token
+        run: '[ -n "$GH_TOKEN" ] || { echo "::error::Set the CONFORMANCE_BOT_TOKEN secret"; exit 1; }'
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TRUNK }}
+          fetch-depth: 0
+          token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+
+      - uses: ./.github/actions/conformance-stack
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+
+      - name: Run the bi-directional suites (offline + Nano)
+        id: run
+        continue-on-error: true      # a red suite is a finding to report, not a reason to skip the report
+        run: |
+          for T in offline nano; do
+            IDS=$(python3 tests/conformance/nightly/bidi_report.py select --cloud "$CLOUD" --target "$T")
+            if [ -z "$IDS" ]; then echo "No $T bi-directional suite registered for $CLOUD" | tee -a "$GITHUB_STEP_SUMMARY"; continue; fi
+            python3 tests/conformance/hourly/run_suites.py --target "$T" --cloud "$CLOUD" --only "$IDS" || true
+          done
+
+      - name: Report to the known-issues register
+        id: report
+        run: python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --by "${GITHUB_SHA::9}" --out changes.json --require-run
+
+      - name: Commit the register to v4-on-main
+        if: always() && steps.report.outcome == 'success' && (github.event_name == 'schedule' || inputs.record)
+        run: |
+          git config user.name "vyomi-bidi-bot"; git config user.email "bidi-bot@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch -q origin "$TRUNK"
+            git checkout -q -B bidi-register "origin/$TRUNK"       # start from the current register: three clouds push in parallel
+            python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --by "${GITHUB_SHA::9}" --out changes.json >/dev/null
+            if git diff --quiet -- "$REGISTER"; then echo "Register unchanged ($CLOUD)." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+            python3 - > commit-msg.txt <<'PY'
+          import json
+          c = json.load(open("changes.json"))
+          print(f"docs(v4.0.0): daily bi-directional {c['cloud']}: {len(c['added'])} new, {len(c['resolved'])} resolved")
+          print()
+          for k in ("added", "resolved"):
+              if c[k]: print(f"{k}: " + ", ".join(c[k]))
+          PY
+            git add "$REGISTER"
+            git commit -q -F commit-msg.txt
+            if VYOMI_INTEGRATOR=1 git push origin "HEAD:$TRUNK"; then echo "Register committed ($CLOUD)." >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+            echo "push raced (attempt $attempt), retrying"; sleep $((RANDOM % 20 + 5))
+          done
+          echo "::error::could not push the register after 5 attempts"; exit 1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: "bidi-${{ matrix.cloud }}"
+          path: "changes.json\ntests/conformance/hourly/out/"
+          include-hidden-files: true
+          retention-days: 14
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
+
+  mesh:
+    # Live-Mesh matrix (real Docker compute, real tunnel). Needs a Mesh endpoint the runner can reach: set the repo variable
+    # NIGHTLY_MESH_SIM_URL (e.g. a `vyomi-tunnel forward` URL) and the NIGHTLY_CODESPACES_PAT secret. Otherwise reported as NOT RUN.
+    needs: [plan, bidi]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: ${{ fromJSON(needs.plan.outputs.clouds) }}
+    permissions:
+      contents: read
+    env:
+      CLOUD: ${{ matrix.cloud }}
+      SIM_URL: ${{ vars.NIGHTLY_MESH_SIM_URL }}
+      CS_PAT: ${{ secrets.NIGHTLY_CODESPACES_PAT }}
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+    steps:
+      - name: Gate
+        id: gate
+        run: |
+          if [ -z "$CS_PAT" ] || [ -z "$SIM_URL" ]; then
+            echo "LIVE-MESH CHECK NOT RUN ($CLOUD): needs the NIGHTLY_CODESPACES_PAT secret and the NIGHTLY_MESH_SIM_URL variable" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else echo "run=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with: { ref: v4-on-main, fetch-depth: 0, token: "${{ secrets.CONFORMANCE_BOT_TOKEN }}" }
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with: { node-version: '20' }
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
+        with: { python-version: '3.12' }
+      - name: Live-Mesh bi-directional scripts (${{ matrix.cloud }})
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          npm i --no-audit --no-fund --prefix .ci-node playwright@1 >/dev/null 2>&1 && npx --prefix .ci-node playwright install --with-deps chromium >/dev/null 2>&1 || true
+          export NODE_PATH="$PWD/.ci-node/node_modules" NANO_DIR="$PWD/wasm"
+          mkdir -p mesh-logs; EXTRA=()
+          run() {   # run SUITE_ID SCRIPT : one live-Mesh script; its [PASS]/[FAIL] log is fed to the register
+            node "$2" > "mesh-logs/$1.log" 2>&1 || true
+            EXTRA+=(--extra "$1=mesh-logs/$1.log=$2")
+          }
+          case "$CLOUD" in
+            azure) run azure-mesh-vm wasm/ui-tests/azure-mesh/vm-bidirectional.mjs
+                   run azure-mesh-ai wasm/ui-tests/azure-mesh/azure-ai-bidirectional.mjs ;;
+            aws)   run aws-mesh-ec2 wasm/ui-tests/aws-bd/ec2-bidirectional.mjs
+                   run aws-mesh-bedrock wasm/ui-tests/aws-bd/bedrock-bidirectional.mjs ;;
+            gcp)   run gcp-mesh-gce wasm/ui-tests/gcp-bd/gce-bidirectional.mjs ;;
+          esac
+          git config user.name "vyomi-bidi-bot"; git config user.email "bidi-bot@users.noreply.github.com"
+          for _ in 1 2 3 4 5; do
+            git fetch -q origin v4-on-main; git checkout -q -B mesh-register origin/v4-on-main
+            python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --results /nonexistent --by "${GITHUB_SHA::9}" "${EXTRA[@]}" >> "$GITHUB_STEP_SUMMARY"
+            git diff --quiet -- docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md && exit 0
+            git add docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md; git commit -q -m "docs(v4.0.0): live-Mesh bi-directional $CLOUD (register update)"
+            VYOMI_INTEGRATOR=1 git push origin HEAD:v4-on-main && exit 0
+            sleep $((RANDOM % 20 + 5))
+          done; exit 1
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.gate.outputs.run == 'true'
+        with: { name: "mesh-${{ matrix.cloud }}", path: "mesh-logs/", retention-days: 14 }
