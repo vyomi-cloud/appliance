@@ -16,6 +16,8 @@ export default function LocalModelBar() {
   const [st, setSt] = useState(null);       // llm_core.status() on Nano
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const models = (typeof window !== "undefined" && window.vyomiWebLLMModels) || [];
+  const [pick, setPick] = useState("");
   const refresh = () => { try { setSt(window.vyomiLlmStatus ? window.vyomiLlmStatus() : null); } catch (_) { setSt(null); } };
   useEffect(() => {                         // the Nano engine boots after the page renders: wait for the bridge, then read the state
     if (!nano) return undefined;
@@ -34,7 +36,7 @@ export default function LocalModelBar() {
   const webgpu = typeof navigator !== "undefined" && "gpu" in navigator;
   const enable = async () => {
     setBusy(true); setMsg("Loading the in-browser model (first time downloads a few hundred MB)...");
-    try { const id = await window.vyomiEnableWebLLM(undefined, (p) => setMsg((p && p.text) || "Loading...")); setMsg(`Model ${id} is ready.`); }
+    try { const id = await window.vyomiEnableWebLLM(pick || (models[0] && models[0].id) || undefined, (p) => setMsg((p && p.text) || "Loading...")); setMsg(`Model ${id} is ready.`); }
     catch (e) { setMsg(String((e && e.message) || e)); }
     finally { setBusy(false); refresh(); }
   };
@@ -43,6 +45,9 @@ export default function LocalModelBar() {
       <span style={dot(ready ? "#16a34a" : busy ? "#f59e0b" : "#a1a1aa")} />
       {ready ? <span>In-browser model ready{st.model ? `: ${st.model}` : ""}. Answers are toy-grade; use them to exercise prompts and token accounting.</span>
         : <span>{webgpu ? "No model is loaded yet, so prompts return \"model not ready\"." : "This browser has no WebGPU, so Nano cannot run a model here. Use a recent Chrome/Edge on desktop."}</span>}
+      {webgpu && models.length > 0 && <select data-testid="webllm-model" value={pick || models[0].id} onChange={(e) => setPick(e.target.value)} disabled={busy} style={{ padding: "4px 6px", fontSize: 13 }}>
+        {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.size})</option>)}</select>}
+      {webgpu && ready && <button type="button" style={btn} disabled={busy} onClick={enable}>{busy ? "Loading..." : "Switch model"}</button>}
       {!ready && webgpu && <button type="button" style={btn} disabled={busy} onClick={enable}>{busy ? "Loading..." : "Enable in-browser model"}</button>}
       {msg && <span style={{ color: "#52525b" }}>{msg}</span>}
     </div>

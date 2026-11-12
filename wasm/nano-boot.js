@@ -349,15 +349,27 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
     py.runPython(`_llm_bridge_set(${JSON.stringify(engine ? String(engine.model || "webllm") : "")})`);
   };
   globalThis.vyomiLlmStatus = () => JSON.parse(py.runPython("_llm_bridge_status()"));
+  // The four web LLMs the Nano catalogue lists (core/ai_model_catalog.py, web mode). id = catalogue id, mlc = WebLLM model_id.
+  globalThis.vyomiWebLLMModels = [
+    { id: "smollm2-360m", name: "SmolLM2 360M", mlc: "SmolLM2-360M-Instruct-q4f16_1-MLC", size: "~0.3 GB" },
+    { id: "qwen2.5-0.5b", name: "Qwen2.5 0.5B", mlc: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", size: "~0.4 GB" },
+    { id: "llama3.2-1b", name: "Llama 3.2 1B", mlc: "Llama-3.2-1B-Instruct-q4f16_1-MLC", size: "~0.7 GB" },
+    { id: "qwen2.5-1.5b", name: "Qwen2.5 1.5B", mlc: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", size: "~1 GB" },
+  ];
+  let __webllmEngine = null;
   globalThis.vyomiEnableWebLLM = async (modelId, onProgress) => {
+    const known = globalThis.vyomiWebLLMModels.find((m) => m.id === modelId || m.mlc === modelId);
+    if (known) modelId = known.mlc;
     if (!("gpu" in navigator)) throw new Error("WebGPU is not available in this browser, so WebLLM cannot run here.");
     const webllm = globalThis.webllm || await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm");
     const list = (webllm.prebuiltAppConfig && webllm.prebuiltAppConfig.model_list) || [];
     const id = modelId || (list.find((m) => /SmolLM2-360M-Instruct/i.test(m.model_id)) || list.find((m) => /Qwen2\.5-0\.5B-Instruct/i.test(m.model_id)) || {}).model_id;
     if (!id) throw new Error("No small WebLLM model is listed by this WebLLM build.");
+    if (__webllmEngine) { try { await __webllmEngine.unload(); } catch (_) {} __webllmEngine = null; }   // one model resident at a time
     const engine = await webllm.CreateMLCEngine(id, { initProgressCallback: (p) => onProgress && onProgress(p) });
+    __webllmEngine = engine;
     vyomiRegisterLLM({
-      model: id,
+      model: (globalThis.vyomiWebLLMModels.find((m) => m.mlc === id) || {}).id || id,
       chat: async (reqJson) => {
         const q = JSON.parse(reqJson);
         const r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false });
