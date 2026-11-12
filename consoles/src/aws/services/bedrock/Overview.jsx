@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -15,10 +15,13 @@ export default function Overview() {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [webllm, setWebllm] = useState(null);
-  const canWebLLM = typeof window !== "undefined" && typeof window.vyomiEnableWebLLM === "function";   // only the Nano page provides the bridge
+  const [canWebLLM, setCan] = useState(typeof window !== "undefined" && typeof window.vyomiEnableWebLLM === "function");   // only the Nano page provides the bridge, once its engine has booted
+  useEffect(() => { if (canWebLLM) return undefined; const t = setInterval(() => { if (typeof window.vyomiEnableWebLLM === "function") setCan(true); }, 1000); return () => clearInterval(t); }, [canWebLLM]);
+  const webModels = (typeof window !== "undefined" && window.vyomiWebLLMModels) || [];
+  const [pick, setPick] = useState("");
   const enable = async () => {
     setWebllm({ msg: "Loading the in-browser model..." });
-    try { const id = await window.vyomiEnableWebLLM(undefined, (p) => setWebllm({ msg: p.text || "Loading..." })); setWebllm({ ok: true, msg: `WebLLM model ${id} is registered as the local model.` }); }
+    try { const id = await window.vyomiEnableWebLLM(pick || (webModels[0] && webModels[0].id) || undefined, (p) => setWebllm({ msg: p.text || "Loading..." })); setWebllm({ ok: true, msg: `WebLLM model ${id} is registered as the local model.` }); }
     catch (e) { setWebllm({ ok: false, msg: String(e.message || e) }); }
   };
   const check = async () => {
@@ -31,8 +34,10 @@ export default function Overview() {
       <SpaceBetween size="l">
         <Container header={<Header variant="h2" actions={<Button loading={busy} onClick={check}>Check local model</Button>}>Local model</Header>}>
           <SpaceBetween size="s">
-            <Box>The pool lists ten open models. Without the Mesh only the small local model (Qwen2.5 3B: llama.cpp on the appliance, WebLLM in the browser on Nano when it is available) answers; the other nine need the Mesh (Pro/Max). Quality is toy-grade; use it to exercise prompts, RAG, agents and token accounting.</Box>
-            {canWebLLM && <SpaceBetween direction="horizontal" size="xs"><Button onClick={enable}>Enable in-browser model (WebLLM)</Button>
+            <Box>Without the Mesh, Nano runs web LLMs inside your browser (WebGPU): pick one below. The ten-model open pool needs the Mesh (Pro/Max). Quality is toy-grade; use it to exercise prompts, RAG, agents and token accounting.</Box>
+            {canWebLLM && <SpaceBetween direction="horizontal" size="xs">
+              {webModels.length > 0 && <select data-testid="webllm-model" value={pick || webModels[0].id} onChange={(e) => setPick(e.target.value)} style={{ padding: "4px 6px" }}>{webModels.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.size})</option>)}</select>}
+              <Button onClick={enable}>Load in-browser model (WebLLM)</Button>
               {webllm && (webllm.ok === false ? <StatusIndicator type="warning">{webllm.msg}</StatusIndicator> : <StatusIndicator type={webllm.ok ? "success" : "in-progress"}>{webllm.msg}</StatusIndicator>)}</SpaceBetween>}
             {st?.ok && <StatusIndicator type="success">Model answered ({st.backend})</StatusIndicator>}
             {st && !st.ok && <Alert type="warning" header="No local model is running">{st.msg}</Alert>}
