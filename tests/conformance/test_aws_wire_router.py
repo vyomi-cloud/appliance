@@ -226,8 +226,8 @@ def run() -> int:
 
     # Cloud IAM — service account create + get
     R.handle("POST", f"{P}/serviceAccounts", {}, {"content-type": "application/json"},
-             _j.dumps({"accountId": "svc", "serviceAccount": {"displayName": "Svc"}}).encode())
-    sa = R.handle("GET", f"{P}/serviceAccounts/svc@nano-project.iam.gserviceaccount.com", {}, {}, b"")
+             _j.dumps({"accountId": "svcacct", "serviceAccount": {"displayName": "Svc"}}).encode())
+    sa = R.handle("GET", f"{P}/serviceAccounts/svcacct@nano-project.iam.gserviceaccount.com", {}, {}, b"")
     _check("gcp iam service account routes", sa["status"] == 200 and "email" in _body(sa))
 
     # Cloud SQL — instance insert + get

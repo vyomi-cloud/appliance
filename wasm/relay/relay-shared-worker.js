@@ -135,7 +135,9 @@ function externalFor(mode) {
 // the like would reject every time zone but UTC). py.loadPackage("tzdata") never settles
 // in this module worker, so unpack the wheel Pyodide's own lock file names, and never let
 // it hold up the tunnel (20 s cap; without it only non-UTC zones are affected).
+let PYODIDE_INDEX_URL = "";   // set by bootPyodide(); installTzdata() runs later in a different scope
 async function installTzdata() {
+  const PYODIDE_INDEX = PYODIDE_INDEX_URL;
   const job = (async () => {
     const lock = await (await fetch(PYODIDE_INDEX + "pyodide-lock.json")).json();
     const file = lock.packages && lock.packages.tzdata && lock.packages.tzdata.file_name;
@@ -150,7 +152,7 @@ async function bootPyodide() {
   if (booting) return booting;
   booting = (async () => {
     log("loading Pyodide…", "dim");
-    const PYODIDE_INDEX = await pyodideIndex();
+    const PYODIDE_INDEX = PYODIDE_INDEX_URL = await pyodideIndex();
     const { loadPyodide } = await import(PYODIDE_INDEX + "pyodide.mjs");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
