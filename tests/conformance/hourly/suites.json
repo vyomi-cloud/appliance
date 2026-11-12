@@ -2162,6 +2162,8 @@
     {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "node tests/conformance/nightly/gcp-validation.mjs", "timeout": 300},
     {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
     {"id": "offline-api-gcp-apigateway-core", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
+    {"id": "offline-api-gcp-apigateway-gateway", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_gateway.py", "timeout": 120},
+    {"id": "nano-api-gcp-apigateway-gateway", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_apigateway_gateway.py", "timeout": 120},
     {"id": "nano-api-gcp-apigateway-core", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
     {"id": "nightly-gcp-v4-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-v4-roundtrip.mjs", "timeout": 900},
     {"id": "nightly-gcp-compute-vertex-bidi", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-compute-vertex-bidi.mjs", "timeout": 1200},

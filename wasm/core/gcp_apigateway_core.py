@@ -442,3 +442,55 @@ def _gateways(store, method, project, location, gid, data, query):
         gws.pop(full)
         return _json(_lro(project, location, "delete", None, full))
     raise _E(400, "INVALID_ARGUMENT", "Unsupported method %s." % method)
+
+
+# ── API Keys API v2 (apikeys.googleapis.com) — the keys an `apiKey` security definition is checked against ──────────────────
+_KEYS = re.compile(r"^/v2/projects/([^/]+)/locations/global/keys(?:/([^/:]+))?(/keyString)?(?::(\w+))?$")
+
+
+def is_apikeys_path(path: str) -> bool:
+    return bool(_KEYS.match(path.split("?", 1)[0]))
+
+
+def dispatch_keys(store, method: str, path: str, query=None, headers=None, body: bytes = b"") -> FirestoreResponse:
+    query, method = query or {}, method.upper()
+    m = _KEYS.match(path.split("?", 1)[0])
+    project, kid, ks, verb = m.groups()
+    try:
+        data = json.loads(body.decode() or "{}") if body else {}
+        if not isinstance(data, dict):
+            raise ValueError
+    except Exception:
+        return _err(400, "INVALID_ARGUMENT", "Request body is not valid JSON.")
+    try:
+        keys, prefix = _coll(store, "keys"), "projects/%s/locations/global/keys/" % project
+        if kid is None:
+            if method == "POST":
+                rid = str(query.get("keyId") or "").strip() or "key-" + uuid.uuid4().hex[:8]
+                _check_id("key", rid)
+                if prefix + rid in keys:
+                    raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % (prefix + rid))
+                now = _now()
+                k = {"name": prefix + rid, "uid": uuid.uuid4().hex, "displayName": data.get("displayName") or rid, "createTime": now,
+                     "updateTime": now, "restrictions": data.get("restrictions") or {}, "etag": uuid.uuid4().hex[:12],
+                     "keyString": "AIza" + uuid.uuid4().hex[:35]}
+                keys[k["name"]] = k
+                oid = "projects/%s/locations/global/operations/apigw-%s" % (project, uuid.uuid4().hex[:16])
+                return _json({"name": oid, "done": True, "metadata": {"@type": "type.googleapis.com/google.protobuf.Empty"},
+                              "response": {"@type": "type.googleapis.com/google.api.apikeys.v2.Key", **{x: y for x, y in k.items() if x != "keyString"}}})
+            if method == "GET":
+                return _json({"keys": [{x: y for x, y in k.items() if x != "keyString"} for n, k in sorted(keys.items()) if n.startswith(prefix)]})
+            raise _E(400, "INVALID_ARGUMENT", "Unsupported method %s." % method)
+        k = keys.get(prefix + kid)
+        if k is None:
+            raise _E(404, "NOT_FOUND", "Key '%s' was not found." % (prefix + kid))
+        if ks and method == "GET":
+            return _json({"keyString": k["keyString"]})
+        if method == "GET":
+            return _json({x: y for x, y in k.items() if x != "keyString"})
+        if method == "DELETE":
+            del keys[k["name"]]
+            return _json({"name": "projects/%s/locations/global/operations/apigw-%s" % (project, uuid.uuid4().hex[:16]), "done": True})
+        raise _E(400, "INVALID_ARGUMENT", "Unsupported method %s." % method)
+    except _E as e:
+        return e.r

@@ -116,6 +116,8 @@ def _gcp_service(path):
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
             or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
         return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
+    if gcp_apigw.is_apikeys_path(path):
+        return "gcp-apikeys"   # API Keys API v2 (keys that an API Gateway apiKey security definition is checked against)
     if gcp_apigw.is_apigateway_path(path):
         return "gcp-apigateway"   # API Gateway API v1: apis / api configs (OpenAPI 2.0) / gateways (core/gcp_apigateway_core)
     if gcp_vertex.handles(path):
@@ -1216,6 +1218,8 @@ class AwsWireRouter:
         # them first so they never fall through to the S3 default.
         if path.startswith("/v2") and ecr_core.is_registry_request(lheaders, path):
             return "ecr-registry"   # docker push/pull against <acct>.dkr.ecr.<region>.<host> (AWS:<token> basic auth)
+        if (lheaders.get("host", "").split(":", 1)[0].lower().endswith(".gateway.dev")) or path.startswith("/gcpgw/"):
+            return "gcp-gateway-invoke"   # an API Gateway gateway's URL → the shared gateway engine (core/gcp_apigateway_gateway)
         gcp = _gcp_service(path)
         if gcp:
             return gcp
@@ -1965,6 +1969,25 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "gcp-gateway-invoke":
+            from core import gcp_apigateway_gateway as gcpgw
+            hostn = lheaders.get("host", "")
+            rest, gid = path.split("?", 1)[0], ""
+            if rest.startswith("/gcpgw/"):
+                gid, _, rest = rest[len("/gcpgw/"):].partition("/")
+                rest = "/" + rest
+                hostn = ""
+            g = gcpgw.find_gateway(self.gcp_mon, hostn, gid)
+            if g is None:
+                return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"code":404,"message":"No gateway serves this host."}'}
+            r = gcpgw.handle(self.gcp_mon, g, method, rest, headers or {}, query or {}, bytes(body),
+                             http_fetch=gcpgw.default_http_fetch(), verify_sig=gcpgw.default_verify_sig())
+            return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
+        if svc == "gcp-apikeys":
+            r = gcp_apigw.dispatch_keys(self.gcp_mon, method, path, query or {}, headers or {}, bytes(body))
+            return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
         if svc == "apigw-invoke":   # an HTTP API's invoke URL → the shared gateway engine
             api_id = _execute_api_id(path, lheaders)
