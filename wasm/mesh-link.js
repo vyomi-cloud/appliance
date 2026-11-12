@@ -147,7 +147,7 @@
       .then(function (r) { if (r.ok) { account = r.body; try { window.dispatchEvent(new CustomEvent("vyomi-mesh-account", { detail: account })); } catch (_) {} return true; } if (r.body && r.body.primary_cloud) { account = Object.assign({}, account, { primary_cloud: r.body.primary_cloud }); } return false; }, function () { return true; });
   }
   function meshOn() { return account === null || account.effective === true; }   // unknown -> don't hide anything
-  function start() { if (timer) return; loadSession(); sessTimer = setInterval(loadSession, POLL_MS); setInterval(sessionTick, 1000); loadAccount(); accTimer = setInterval(loadAccount, 60000); pollAll(); timer = setInterval(pollAll, POLL_MS); }
+  function start() { if (timer) return; checkTunnel(); setInterval(checkTunnel, 3000); setInterval(lockTunnelStop, 1000); loadSession(); sessTimer = setInterval(loadSession, POLL_MS); setInterval(sessionTick, 1000); loadAccount(); accTimer = setInterval(loadAccount, 60000); pollAll(); timer = setInterval(pollAll, POLL_MS); }
 
 
   // ── portal session (the portal-Nano flow: Start/Stop live on the vyomi.cloud dashboard; Nano only shows + uses it) ──────────
@@ -161,12 +161,194 @@
   function isComputeCall(wirePath, authorization) { return COMPUTE_SCOPE.test(authorization || "") || COMPUTE_PATH.test(wirePath || ""); }
   var LOCAL_TUNNEL = "http://127.0.0.1:8090";   // vyomi-tunnel's local relay (RELAY_PORT default)
   function httpBase(u) { try { var x = new URL(u); x.protocol = x.protocol === "wss:" ? "https:" : x.protocol === "ws:" ? "http:" : x.protocol; x.pathname = ""; x.search = ""; return x.toString().replace(/\/+$/, ""); } catch (_) { return ""; } }
+  // ── local tunnel health ──────────────────────────────────────────────────────────────────────────────────────────────────────
+  // The Mesh's control AND data plane (EC2 / VMs / Bedrock / Lambda / every compute+AI call) travel through the user's own `vyomi-tunnel`
+  // (127.0.0.1:8090). Without it the Codespace can say "running" while nothing works, so Join is refused until the tunnel is up.
+  //   unknown (not probed yet) | down (nothing answers: not installed / not running) | notab (running, but no Nano tab connected) | up
+  var T0 = Date.now(), tun = { state: "unknown", version: "", at: 0 }, tunBusy = null;      // tunBusy = the in-flight probe (callers share it, never a stale state)
+  function tunnel() { return { state: tun.state, version: tun.version, up: tun.state === "up" }; }
+  function checkTunnel() {
+    if (tunBusy) return tunBusy;
+    tunBusy = timed(LOCAL_TUNNEL + "/health").then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }).then(function (j) {
+      var next = j && j.ok ? (j.tab ? "up" : "notab") : "down";
+      // After a reload the strip resumes the tunnel by itself within seconds: not "go click Start tunnel" yet.
+      try { if (next === "notab" && localStorage.getItem("nano_tunnel_on") === "1" && Date.now() - T0 < 20000) next = "connecting"; } catch (_) {}
+      var changed = next !== tun.state;
+      tun = { state: next, version: (j && j.version) || "", at: Date.now() };
+      tunBusy = null;
+      if (changed) emit("vyomi-tunnel", tunnel());
+      return tunnel();
+    });
+    return tunBusy;
+  }
+  function meshActive() { return !!(sess && sess.active); }
+  // While a Mesh session is live the tunnel carries it: the strip's Stop must not drop it (Leave the Mesh first).
+  function lockTunnelStop() {
+    var b = document.getElementById("nano-foot-toggle"); if (!b) return;
+    var lock = meshActive() && /^stop$/i.test((b.getAttribute("data-vy-label") || b.textContent).trim());
+    if (lock) { b.style.opacity = ".45"; b.style.cursor = "not-allowed"; b.title = "The Mesh is using this tunnel. Leave the Mesh first."; b.setAttribute("aria-disabled", "true"); }
+    else if (b.getAttribute("aria-disabled") === "true") { b.style.opacity = ""; b.style.cursor = ""; b.title = ""; b.removeAttribute("aria-disabled"); }
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target && e.target.closest && e.target.closest("#nano-foot-toggle");
+    if (b && b.getAttribute("aria-disabled") === "true") { e.preventDefault(); e.stopImmediatePropagation(); toast("The Mesh is using this tunnel. Leave the Mesh first, then stop the tunnel."); }
+  }, true);
+  function tunnelBlockMessage() {
+    return tun.state === "connecting" ? "Your tunnel is still connecting. Try again in a few seconds." : tun.state === "notab" ? "The tunnel is running but this console is not connected to it. Click Start tunnel in the bar at the bottom, then join the Mesh."
+      : "The Mesh needs the Vyomi tunnel running on this computer (EC2, VMs and AI all go through it). Install and run vyomi-tunnel, click Start tunnel in the bar at the bottom, then join the Mesh.";
+  }
+
+  // ── pre-join health checks ──────────────────────────────────────────────────────────────────────────────────────────────────
+  // A Codespace can report "running" and still be unusable (DNS broken so apt-get fails, no egress, services down). Once the session is
+  // running the console verifies the Mesh THROUGH the tunnel (tunnel + reachability here, then the Mesh's own GET /mesh/selfcheck for DNS,
+  // apt, egress, disk, memory, appliance, AI). Only when every check is green can the user Join; compute/AI calls are routed to the Mesh
+  // only after Join, so an unhealthy Mesh is never silently used.
+  var CHECK_ORDER = [["tunnel", "Tunnel connected to this console"], ["reach", "Mesh reachable through the tunnel"], ["dns", "DNS resolution"], ["apt", "Package mirror (apt)"],
+    ["egress", "Outbound HTTPS"], ["disk", "Disk space"], ["memory", "Memory"], ["appliance", "Appliance healthy"], ["ai", "AI runtime"]];
+  var chk = { sid: 0, state: "idle", items: [], at: 0 }, chkRun = 0, lastFail = null;     // lastFail: the attempt that was stopped because a check failed       // state: idle | running | passed | failed
+  function sessId() { return sess && sess.session && sess.session.id || 0; }
+  function isJoined() { var id = sessId(); if (!id) return false; try { return sessionStorage.getItem("vy_mesh_joined:" + id) === "1"; } catch (_) { return false; } }
+  function setJoined(on) { var id = sessId(); if (!id) return; try { on ? sessionStorage.setItem("vy_mesh_joined:" + id, "1") : sessionStorage.removeItem("vy_mesh_joined:" + id); } catch (_) {} }
+  function checks() { return { sid: chk.sid, state: chk.state, items: chk.items.map(function (i) { return Object.assign({}, i); }), at: chk.at, joined: isJoined() }; }
+  function meshBase() { return sess && sess.relay_url ? httpBase(sess.relay_url) : LOCAL_TUNNEL; }
+  function runChecks() {
+    var ss = sess && sess.session; if (!ss || ss.state !== "running" || !ss.session_token) return Promise.resolve(checks());
+    var my = ++chkRun, hdr = { "x-vyomi-session-token": ss.session_token }, base = meshBase();
+    chk = { sid: ss.id, state: "running", items: CHECK_ORDER.map(function (c) { return { id: c[0], label: c[1], ok: null, detail: "", hint: "" }; }), at: Date.now() };
+    emit("vyomi-mesh-checks", checks());
+    function put(it) { if (my !== chkRun) return; var i = chk.items.findIndex(function (x) { return x.id === it.id; }); if (i < 0) chk.items.push(it); else chk.items[i] = Object.assign({}, chk.items[i], it); emit("vyomi-mesh-checks", checks()); }
+    function finish() { if (my !== chkRun) return checks(); chk.items.forEach(function (i) { if (i.ok === null) { i.ok = false; i.skipped = true; i.detail = "not checked (an earlier check failed)"; } }); chk.state = chk.items.every(function (i) { return i.ok; }) ? "passed" : "failed"; chk.at = Date.now();
+      if (chk.state === "passed") { joinMesh(); }                                          // the user already asked to join: all green means they are in
+      else {                                                                               // a buggy Mesh is never kept: remember why, stop the Codespace, the widget offers Join again
+        lastFail = { sid: chk.sid, at: Date.now(), items: chk.items.map(function (i) { return Object.assign({}, i); }) };
+        sessionStop();
+      }
+      emit("vyomi-mesh-checks", checks()); return checks(); }
+    function portalReport() {
+      var t0 = Date.now(), wait = (function () { try { var v = Number(localStorage.getItem("vyomi.mesh_report_wait_ms")); if (v >= 500) return v; } catch (_) {} return 150000; })();
+      return new Promise(function (res) {
+        (function poll() {
+          if (my !== chkRun) return res();
+          var sc = sess && sess.session && sess.session.selfcheck;
+          if (sc && sc.items && sc.items.length) { sc.items.forEach(function (it) { put(it); }); return res(); }
+          if (Date.now() - t0 > wait) { put({ id: "selfcheck", label: "Health checks", ok: false, detail: "the Codespace did not report its health checks", hint: "Stop the Mesh and start it again." }); return res(); }
+          loadSession().then(function () { setTimeout(poll, 3000); }, function () { setTimeout(poll, 3000); });
+        })();
+      });
+    }
+    return checkTunnel().then(function (t) {
+      if (!t.up) { put({ id: "tunnel", ok: false, detail: t.state === "notab" ? "running, but this console is not connected" : "not reachable on this computer", hint: tunnelBlockMessage() }); return finish(); }
+      put({ id: "tunnel", ok: true, detail: "vyomi-tunnel " + (t.version || "") });
+      // Right after the Codespace reports ready, the tunnel can still be attaching to it, so one 2.5 s probe is not a verdict:
+      // keep asking (8 s per try, 3 s apart) for up to 90 s, showing the wait in the dialog, and only then call it failed.
+      function reachMesh() {
+        var r0 = Date.now(), win = (function () { try { var v = Number(localStorage.getItem("vyomi.mesh_reach_wait_ms")); if (v >= 500) return v; } catch (_) {} return 90000; })(), tryMs = 8000;
+        return new Promise(function (res, rej) {
+          function again(why) {
+            var el = Date.now() - r0;
+            if (my !== chkRun) return res();
+            if (el > win) return rej(new Error(why === "timeout" ? "no answer from the Mesh through the tunnel after " + Math.round(el / 1000) + " seconds" : why));
+            put({ id: "reach", detail: "waiting for the tunnel to reach the Mesh (" + Math.round(el / 1000) + " s)" });
+            setTimeout(go, 3000);
+          }
+          function go() {
+            if (my !== chkRun) return res();
+            var ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, tryMs);
+            realFetch(base + "/mesh/status", { headers: hdr, cache: "no-store", signal: ctl.signal }).then(function (r) {
+              clearTimeout(tm);
+              if (r.ok) return res();
+              if (r.status >= 500) return again("HTTP " + r.status);          // the Mesh is not serving yet
+              rej(new Error("HTTP " + r.status));                              // 401/403/404: retrying will not help
+            }, function (e) { clearTimeout(tm); again(e && e.name === "AbortError" ? "timeout" : String(e && e.message || e)); });
+          }
+          go();
+        });
+      }
+      return reachMesh().then(function () {
+        put({ id: "reach", ok: true, detail: "answered through the tunnel" });
+      }).then(function () {
+        var ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, 25000);
+        return realFetch(base + "/mesh/selfcheck", { headers: hdr, cache: "no-store", signal: ctl.signal }).finally(function () { clearTimeout(tm); }).then(function (r) {
+          if (r.status === 404) return portalReport();          // this image has no /mesh/selfcheck: use the report boot-mesh.sh posted to the portal
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json().then(function (j) { (j.items || []).forEach(put); });
+        });
+      }, function (e) { put({ id: "reach", ok: false, detail: String(e && e.message || e), hint: "The tunnel is up but the Mesh does not answer through it. Wait a minute and re-run the checks." }); }).then(finish, function (e) { put({ id: "selfcheck", label: "Health checks", ok: false, detail: String(e && e.message || e), hint: "The Mesh did not answer its health checks." }); return finish(); });
+    });
+  }
+  function joinMesh() {
+    if (chk.state !== "passed" || chk.sid !== sessId()) return false;
+    setJoined(true); applySession(sess); emit("vyomi-mesh-checks", checks());
+    portalApi("joined", "POST").then(function () {}, function () {});      // tell the portal this person is IN (counts once, server-side) — never blocks the join
+    return true;
+  }
+  // ── one diagnostic dialog: startup progress + health checks (no buttons: Join / Leave / Re-run live on the widget) ───────────────
+  var BOOT = [[0, "Requesting your Codespace from GitHub"], [25, "Creating the Codespace"], [90, "Booting the Vyomi appliance"], [200, "Starting services and loading models"], [330, "Waiting for the appliance to report ready"]];
+  function progress() {
+    var ss = sess && sess.session; if (!ss || !sess.active || lastFail) return null;
+    var t0 = ss.started_at ? Date.parse(ss.started_at) : NaN, el = isNaN(t0) ? 0 : Math.max(0, (Date.now() - t0) / 1000), up = ss.state === "running", cur = 0, i, steps = [];
+    for (i = 0; i < BOOT.length; i++) if (el >= BOOT[i][0]) cur = i;
+    steps.push({ label: "Tunnel connected to this console", st: tun.state === "up" ? "done" : "bad" });
+    for (i = 0; i < BOOT.length; i++) steps.push({ label: BOOT[i][1], st: up || i < cur ? "done" : i === cur ? "now" : "todo" });
+    var ck = up && chk.sid === ss.id ? chk : { state: "idle", items: [] };
+    steps.push({ label: "Health checks", st: !up ? "todo" : ck.state === "passed" ? "done" : ck.state === "failed" ? "bad" : "now", items: up ? ck.items.filter(function (i) { return i.id !== "tunnel"; }) : [] });          // the tunnel is step 1 already
+    steps.push({ label: "Join the Mesh", st: up && ck.state === "passed" && !isJoined() ? "now" : isJoined() ? "done" : "todo", note: "use the Join button on the Mesh card" });
+    var n = steps.length, done = steps.filter(function (x) { return x.st === "done"; }).length, now = -1;
+    for (i = 0; i < n; i++) if (steps[i].st === "now" || steps[i].st === "bad") { now = i; break; }
+    return { steps: steps, el: el, n: n, done: done, now: now, bad: now >= 0 && steps[now].st === "bad", pct: Math.round((done + (now >= 0 && steps[now].st === "now" ? 0.5 : 0)) / n * 100) };
+  }
+  var chkCss = false, detTimer = 0;
+  function openDetails() {
+    if (document.getElementById("vyb-chk")) return;
+    dialogCss(); var c = cloudOf();
+    if (!chkCss) { chkCss = true; var st = document.createElement("style"); st.textContent = "#vyb-chk .vyb-tm{display:flex;flex-direction:column;width:min(860px,94vw);max-width:none;max-height:min(92vh,900px)}#vyb-chk .tm-h h3{font-size:24px}#vyb-chk .ck>li{font-size:15.5px;padding:8px 0}#vyb-chk .sub li{font-size:14.5px}#vyb-chk .dt{font-size:13px}#vyb-chk .hn{font-size:13.5px}#vyb-chk .errc{font-size:15px}#vyb-chk .tm-b{overflow:auto;min-height:0;padding-bottom:18px}"
+      + "#vyb-chk .errc{border:1px solid #f3b5ae;background:#fef3f2;color:#912018;border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13.5px;line-height:1.45}#vyb-chk .errc ul{margin:6px 0 6px;padding-left:18px}#vyb-chk .errc p{margin:6px 0 0;color:#7a271a}#vyb-chk .ck{list-style:none;margin:0;padding:0}#vyb-chk .ck>li{display:grid;grid-template-columns:22px 1fr;gap:1px 8px;padding:6px 0;border-bottom:1px solid rgba(128,128,128,.14);font-size:14px}"
+      + "#vyb-chk .ic{font-weight:700;text-align:center}#vyb-chk .ok{color:#067647}#vyb-chk .bad{color:#b42318}#vyb-chk .wait{color:#9ca3af}#vyb-chk .now{color:#1a56c4}#vyb-chk .lb.todo{color:#9ca3af}#vyb-chk .dt{grid-column:2;font-size:12px;color:#6b7280}#vyb-chk .hn{grid-column:2;font-size:12.5px;color:#b42318}"
+      + "#vyb-chk .sub{grid-column:2;list-style:none;margin:4px 0 0;padding:0 0 0 2px}#vyb-chk .sub li{display:grid;grid-template-columns:20px 1fr;gap:0 6px;padding:2px 0;font-size:13px}#vyb-chk .sub .dt,#vyb-chk .sub .hn{grid-column:2}"
+      + "@keyframes vychk{to{transform:rotate(360deg)}}#vyb-chk .sp{display:inline-block;animation:vychk 1s linear infinite}"; document.head.appendChild(st); }
+    function esc2(t) { return String(t == null ? "" : t).replace(/[&<>"]/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]; }); }
+    function mark(st) { return st === "done" || st === true ? '<span class="ic ok">✓</span>' : st === "bad" || st === false ? '<span class="ic bad">✗</span>' : st === "now" || st === null ? '<span class="ic now"><span class="sp">◠</span></span>' : '<span class="ic wait">○</span>'; }
+    var o = document.createElement("div"); o.id = "vyb-chk"; o.className = "vyb-tm-o"; o.setAttribute("data-cloud", c); o.setAttribute("data-vyb-keep", "1");
+    function mm(sec) { sec = Math.max(0, sec | 0); return Math.floor(sec / 60) + "m " + String(sec % 60).padStart(2, "0") + "s"; }
+    function failSteps() {                // the stopped attempt: everything booted, the checks are where it went wrong
+      var st = [{ label: "Tunnel connected to this console", st: "done" }].concat(BOOT.map(function (b) { return { label: b[1], st: "done" }; }));
+      st.push({ label: "Health checks", st: "bad", items: lastFail.items.filter(function (i) { return i.id !== "tunnel"; }) });
+      st.push({ label: "Join the Mesh", st: "todo" }); return st;
+    }
+    function errCard() {                  // why the last attempt was stopped: only the checks that really failed
+      var errs = lastFail.items.filter(function (i) { return i.ok === false && !i.skipped; });
+      return '<div class="errc"><b>Health check failed</b><ul>' + errs.map(function (i) { return "<li><b>" + esc2(i.label) + "</b>" + (i.detail ? ": " + esc2(i.detail) : "") + (i.hint ? "<br>" + esc2(i.hint) : "") + "</li>"; }).join("")
+        + "</ul><p>The Codespace was stopped, so nothing is left running or counting against your quota. Close this and click Join the Mesh to try again.</p></div>";
+    }
+    function paintM() {
+      var p = progress(), failed = !p && lastFail;
+      if (!p && !failed) { close(); return; }
+      var joined = isJoined(), head = failed ? "Health check failed. The Mesh was stopped" : joined ? "You are in the Mesh" : p.bad ? "Your Mesh is not healthy" : chk.state === "passed" ? "Your Mesh is healthy" : sess.session.state === "running" ? "Checking your Mesh…" : "Starting your Mesh…";
+      var steps = failed ? failSteps() : p.steps;
+      var li = steps.map(function (x) {
+        var sub = (x.items && x.items.length) ? '<ul class="sub">' + x.items.map(function (i) {
+          return "<li>" + mark(i.skipped ? "todo" : i.ok) + "<span>" + esc2(i.label) + "</span>" + (i.ok !== true && i.detail ? '<span class="dt">' + esc2(i.detail) + "</span>" : "") + (i.ok === false && !i.skipped && i.hint ? '<span class="hn">' + esc2(i.hint) + "</span>" : "") + "</li>"; }).join("") + "</ul>" : "";
+        return "<li>" + (x.note && x.st === "now" ? '<span class="ic now">\u25B6</span>' : mark(x.st)) + '<span class="lb ' + x.st + '">' + esc2(x.label) + (x.st === "now" && !x.items ? "…" : "") + "</span>" + (x.st === "now" && x.note ? '<span class="dt">' + esc2(x.note) + "</span>" : "") + sub + "</li>";
+      }).join("");
+      var sc = o.querySelector(".tm-b"), top = sc ? sc.scrollTop : 0;
+      o.innerHTML = '<div class="vyb-tm" data-cloud="' + c + '" role="dialog" aria-modal="true" aria-labelledby="vyb-chk-t"><button type="button" class="tm-x" data-no aria-label="Close">✕</button>'
+        + '<div class="tm-h"><h3 id="vyb-chk-t">' + head + '</h3></div><div class="tm-b">' + (failed ? errCard() : "") + '<p>' + (failed ? "" : "Step " + (p.now >= 0 ? p.now + 1 : p.n) + " of " + p.n + " · " + mm(p.el) + " elapsed · " + p.pct + "%. First starts commonly take 4 to 8 minutes.") + "</p>"
+        + '<ul class="ck">' + li + "</ul></div></div>";
+      var nb = o.querySelector(".tm-b"); if (nb) nb.scrollTop = top;
+    }
+    function close() { window.removeEventListener("vyomi-mesh-checks", paintM); window.removeEventListener("vyomi-mesh-session", paintM); clearInterval(detTimer); document.removeEventListener("keydown", key, true); o.remove(); }
+    function key(e) { if (e.key === "Escape") { e.stopPropagation(); close(); } }
+    o.addEventListener("click", function (e) { var t = e.target; if (t === o || (t.closest && t.closest("[data-no]"))) close(); });
+    window.addEventListener("vyomi-mesh-checks", paintM); window.addEventListener("vyomi-mesh-session", paintM); document.addEventListener("keydown", key, true);
+    paintM(); document.body.appendChild(o); detTimer = setInterval(paintM, 1000);
+  }
+
   function applySession(st) {
     var prev = JSON.stringify(sess && { s: sess.session && sess.session.state, e: sess.error && sess.error.code, n: sess.ended_note });
     sess = st;
     // No hosted relay (decision 2026-11-10: the link runs on the laptop): with no relay_url from the portal the console talks to the
     // user's own `vyomi-tunnel`, which holds the ssh session to the Codespace. A hosted relay_url, when set, still wins.
-    var live = st && st.session && st.session.state === "running" && st.session.session_token;
+    var live = st && st.session && st.session.state === "running" && st.session.session_token && isJoined();   // routed to only after the health checks passed and the user joined
     if (live) {
       var base = st.relay_url ? httpBase(st.relay_url) : LOCAL_TUNNEL;
       if (!vboost || vboost.token !== st.session.session_token || vboost.relay_url !== base) {
@@ -176,9 +358,38 @@
     } else if (vboost) { vboost = null; delete state[SESSION_ID]; }
     var now = JSON.stringify(sess && { s: sess.session && sess.session.state, e: sess.error && sess.error.code, n: sess.ended_note });
     if (prev !== now) emit("vyomi-mesh-session", { session: sess });
+    var rs = st && st.session && st.session.state === "running" && st.session.session_token;
+    if (rs && !isJoined() && canReattach(st.session)) {                   // already joined earlier + keep-alive: reattach quietly, no health-check dialog
+      reattach();
+    } else if (rs && chk.sid !== st.session.id && !isJoined()) {                  // Mesh just came up: verify it, and show the user
+      runChecks();
+    } else if (!rs && chk.state !== "idle") { chkRun++; chk = { sid: 0, state: "idle", items: [], at: 0 }; var m = document.getElementById("vyb-chk"); if (m && !lastFail) m.remove(); emit("vyomi-mesh-checks", checks()); }
     ensureHeartbeat();
     render();
   }
+  // ── Keep-alive reattach: the Mesh outlives the tab (portal keeps it for the whole 8 h). A refresh, reopened tab or another device has no
+  // sessionStorage "joined" flag, but the portal remembers the session was joined. Reattaching = tunnel up + Mesh answers through it; that is all,
+  // never the full health-check run (which stops a Mesh whose tunnel is merely down). Retries every 5 s until it works or the TTL ends it.
+  var reBusy = false, reTimer = null;
+  function canReattach(ss) { return !!(ss && ss.joined && ss.keep_alive !== false && ss.state === "running" && ss.session_token); }
+  function reattach() {
+    if (reBusy) return; reBusy = true;
+    var ss = sess && sess.session, sid = ss && ss.id;
+    function done(ok) {
+      reBusy = false;
+      if (ok) { setJoined(true); applySession(sess); emit("vyomi-mesh-checks", checks()); return; }
+      clearTimeout(reTimer); reTimer = setTimeout(function () { var cur = sess && sess.session; if (cur && cur.id === sid && !isJoined() && canReattach(cur)) reattach(); }, 5000);
+    }
+    checkTunnel().then(function (t) {
+      if (!t.up) return done(false);
+      var ctl = new AbortController(), tm = setTimeout(function () { ctl.abort(); }, 8000);
+      return realFetch(meshBase() + "/mesh/status", { headers: { "x-vyomi-session-token": ss.session_token }, cache: "no-store", signal: ctl.signal })
+        .then(function (r) { clearTimeout(tm); done(r.ok); }, function () { clearTimeout(tm); done(false); });
+    }).catch(function () { done(false); });
+  }
+  function setKeepAlive(on) { return portalApi("keep-alive", "POST", { enabled: !!on }).then(function (r) { return loadSession().then(function () { return r; }); }); }
+  // Back in the tab (or the laptop woke): refresh the timer and heartbeat now instead of waiting for the next throttled tick.
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible" && sess && sess.active) { loadSession(); portalApi("heartbeat", "POST"); } });
   function loadSession() {
     return realFetch("/api/mesh/status", { credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { applySession(j && typeof j.entitled === "boolean" && j.entitled ? j : null); }, function () { applySession(null); });
@@ -442,8 +653,8 @@
 
   // ── Start / Stop from the console (same portal API the legacy dashboard card used) ──────────────────────────────────────────
   var hbTimer = null;
-  function portalApi(path, method) {
-    return realFetch("/api/mesh/" + path, { method: method || "GET", credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store" })
+  function portalApi(path, method, body) {
+    return realFetch("/api/mesh/" + path, { method: method || "GET", credentials: "same-origin", headers: body ? { accept: "application/json", "content-type": "application/json" } : { accept: "application/json" }, body: body ? JSON.stringify(body) : undefined, cache: "no-store" })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j || {} }; }); });
   }
   function ensureHeartbeat() {            // the portal ends a session whose Vyomi tab has been closed for 5 minutes: the open console is that tab
@@ -524,9 +735,15 @@
   function termsAgreed() { var W = window.VyomiMeshWidget; if (W) return W.agreed(); try { return localStorage.getItem("vy_mesh_terms") === "1"; } catch (_) { return false; } }
   function termsAccept() { var W = window.VyomiMeshWidget; if (W) W.accept(); else { try { localStorage.setItem("vy_mesh_terms", "1"); } catch (_) {} } }
   function sessionStart(cloud) {
+    return checkTunnel().then(function (t) {
+      if (!t.up) return { ok: false, j: { action: "tunnel", error: "tunnel_required", message: tunnelBlockMessage() } };
+      return sessionStart2(cloud);
+    });
+  }
+  function sessionStart2(cloud) {
     return (termsAgreed() ? Promise.resolve(true) : termsModal()).then(function (ok) {      // terms are a modal dialog, never inline
       if (!ok) return { cancelled: true };
-      termsAccept();
+      termsAccept(); lastFail = null;
       return portalApi("start" + (cloud ? "?cloud=" + encodeURIComponent(cloud) : ""), "POST").then(function (r) { return loadSession().then(function () { return r; }); });
     });
   }
@@ -554,6 +771,8 @@
     state: function (id) { return stateOf(id); }, status: function (id) { return (state[id] || {}).status || null; },
     pollNow: pollAll, setActive: setActive, refreshActive: refreshActive, activeHome: activeHome,
     homeOptions: homeOptions, defaultHome: defaultHome, cloudAllowed: cloudAllowed, planCloud: planCloud, pinCloud: pinCloud, homePayload: homePayload, account: function () { return account; }, loadAccount: loadAccount, setMesh: setMesh, badgeHtml: badgeHtml, openPairDialog: openPairDialog,
+    checks: checks, runChecks: runChecks, joinMesh: joinMesh, openDetails: openDetails, lastFailure: function () { return lastFail && { at: lastFail.at, failed: lastFail.items.filter(function (i) { return i.ok === false && !i.skipped; }).map(function (i) { return i.label; }) }; }, progress: progress, rerunChecks: runChecks, joined: isJoined,
+    setKeepAlive: setKeepAlive, tunnel: tunnel, checkTunnel: checkTunnel, tunnelMessage: tunnelBlockMessage, meshActive: meshActive,
     session: function () { return sess; }, sessionMesh: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall, aiChip: aiChip,
     shellTarget: shellTarget, openShell: openShell, sessionLive: sessionLive,
     // apiFetch(path, init): call the mesh's own API (e.g. /api/mesh/models, /v1/chat/completions) with its token. Rejects when no mesh is reachable.

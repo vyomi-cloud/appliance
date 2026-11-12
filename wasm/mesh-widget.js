@@ -33,9 +33,15 @@
       + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}"
       + "#vy-bw .cd{margin-top:6px;text-align:center;font:600 22px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.04em;font-variant-numeric:tabular-nums}#vy-bw .cdl{text-align:center;font-size:11px;color:#6b7280;margin-top:-2px}"
       + "#vy-bw .err{color:#b42318;font-size:13px;margin-top:4px}"
+      + "#vy-bw .ka{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#6b7280;cursor:pointer;user-select:none}#vy-bw .ka .sw{position:relative;width:32px;height:18px;border-radius:999px;border:0;padding:0;background:#c3c9d1;cursor:pointer;transition:background .15s}#vy-bw .ka .sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}#vy-bw .ka .sw[aria-checked=true]{background:#2f6fdc}#vy-bw .ka .sw[aria-checked=true]::after{transform:translateX(14px)}#vy-bw .ka .sw[disabled]{opacity:.6;cursor:default}"
+      + "#vy-bw .go[disabled]{background:#e9ebed!important;color:#8a94a3!important;border-color:#e9ebed!important;cursor:not-allowed!important;opacity:1!important}"
+      + "#vy-bw .foot:has(.pgw){flex-direction:column;align-items:stretch}#vy-bw .foot .stg{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2px 18px;margin:6px 0 2px}#vy-bw .pgw{width:100%}#vy-bw .pgb{height:8px;border-radius:999px;background:#e9ebed;overflow:hidden}#vy-bw .pgb i{display:block;height:100%;border-radius:999px;background:#2f6fdc;transition:width .6s ease}#vy-bw .pgb.bad i{background:#b42318}#vy-bw .ex{border:1px solid #d5dbdb;background:#fff;color:#4b5563;border-radius:6px;width:26px;height:22px;line-height:1;cursor:pointer;font-size:12px;padding:0}#vy-bw .ex:hover{background:#f2f3f3}#vy-bw .pgl{font-size:12px;color:#6b7280;margin-top:4px}#vy-bw .stg .badx{color:#b42318;font-weight:600}"
+      + "#vy-bw .steps{margin:2px 0 0;padding-left:20px;color:#414d5c}#vy-bw .steps li{padding:2px 0}#vy-bw .steps code{background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:1px 6px;font-size:12px;user-select:all}"
+      + "#vy-bw .warn{color:#b54708;font-size:13px}#vy-bw .stg{list-style:none;margin:6px 0 0;padding:0;font-size:13px;color:#4b5563}#vy-bw .stg li{display:flex;gap:8px;align-items:baseline;padding:1px 0}"
+      + "#vy-bw .stg .m{width:14px;text-align:center;flex:0 0 14px}#vy-bw .stg .done{color:#067647}#vy-bw .stg .now{color:#16191f;font-weight:600}#vy-bw .stg .todo{color:#9ca3af}"
       // ── native look per cloud ──
       // AWS · Cloudscape: Open Sans / Amazon Ember, 1px #c6c6cd-ish container, orange primary pill (as "Add widgets"), outlined blue pill for normal actions
-      + "#vy-bw[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border:1px solid #e9ebed;border-radius:8px;box-shadow:0 1px 1px 0 rgba(0,28,36,.3),1px 1px 1px 0 rgba(0,28,36,.15),-1px 1px 1px 0 rgba(0,28,36,.15);color:#0f141a;font-size:14px}"
+      + "#vy-bw[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border:1px solid #e9ebed;border-radius:8px;box-shadow:none;color:#0f141a;font-size:14px}"
       + "#vy-bw[data-cloud=aws] h4{font-size:16px;font-weight:700;letter-spacing:.005em}#vy-bw[data-cloud=aws] p{color:#414d5c}"
       + "#vy-bw[data-cloud=aws] .tag{border-radius:4px;background:#0972d3;color:#fff;letter-spacing:.02em}#vy-bw[data-cloud=aws] .tag.free{background:#5f6b7a;color:#fff}"
       + "#vy-bw[data-cloud=aws] .go{border-radius:20px;background:#ff9900;color:#0f141a!important;font-weight:700;padding:6px 20px;border:2px solid #ff9900}"
@@ -49,7 +55,7 @@
       + "#vy-bw[data-cloud=gcp] .go.stop{background:#fff;color:#b3261e!important;border:1px solid #dadce0}"
       + "#vy-bw[data-cloud=gcp] a{color:#0b57d0}"
       // Azure · Fluent 2: Segoe UI, 4px radius, #e0e0e0 stroke, brand #0f6cbd, subtle buttons
-      + "#vy-bw[data-cloud=azure]{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;border:1px solid #e0e0e0;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);color:#242424;font-size:14px}"
+      + "#vy-bw[data-cloud=azure]{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;border:1px solid #e0e0e0;border-radius:4px;box-shadow:none;color:#242424;font-size:14px}"
       + "#vy-bw[data-cloud=azure] h4{font-size:16px;font-weight:600}#vy-bw[data-cloud=azure] p{color:#616161}"
       + "#vy-bw[data-cloud=azure] .tag{border-radius:2px;background:#ebf3fc;color:#0f6cbd;font-weight:600}#vy-bw[data-cloud=azure] .tag.free{background:#f0f0f0;color:#424242}"
       + "#vy-bw[data-cloud=azure] .go{border-radius:4px;background:#0f6cbd;font-weight:600;padding:7px 14px}"
@@ -95,9 +101,21 @@
     });
   }
 
+  // Staged progress while the Mesh comes up. The portal reports only pending/starting/running + started_at, so the stages are paced by elapsed
+  // time; the last stage stays active until the appliance reports ready. First starts commonly take 4 to 8 minutes.
+  function mmss(sec) { sec = Math.max(0, sec | 0); return Math.floor(sec / 60) + "m " + String(sec % 60).padStart(2, "0") + "s"; }
+  // Progress bar + current step; the full done/awaiting list is in the diagnostic dialog (Details). Steps come from mesh-link (progress()).
+  function progressHtml() {
+    var p = B().progress && B().progress(); if (!p) return "";
+    var cur = p.now >= 0 ? p.steps[p.now] : null;
+    return '<div class="pgw"><div class="pgb' + (p.bad ? " bad" : "") + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + p.pct + '"><i style="width:' + p.pct + '%"></i></div>'
+      + '<div class="pgl">Step ' + (p.now >= 0 ? p.now + 1 : p.n) + ' of ' + p.n + (cur ? " · " + esc(cur.label) : "") + ' · ' + mmss(p.el) + ' · <a href="#" data-vc>Details</a></div></div>';
+  }
+  function tunnelState() { var b = B(); return b && b.tunnel ? b.tunnel().state : "unknown"; }
+
   function paint() {
     if (!card) return;
-    var b = B(), a = b && b.account && b.account(), x = b && b.session && b.session(), main, act = "";
+    var b = B(), a = b && b.account && b.account(), x = b && b.session && b.session(), main, act = "", ka = "";
     card.className = "";
     if (!a) {                                                       // not signed in / account unavailable
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Your Free plan runs everything in the browser. Pro and Max add the Vyomi Global Mesh: real compute and AI on your own free GitHub quota.</p>';
@@ -114,25 +132,58 @@
       var CLOUD_NAMES = { aws: "AWS", gcp: "GCP", azure: "Azure" };
       var offCloud = !!(a.clouds === "one" && a.primary_cloud && CLOUD && String(a.primary_cloud).toLowerCase() !== CLOUD);   // Pro = one cloud; this console is another
       var hrs = x && x.hours_remaining != null ? x.hours_remaining + " h left this cycle" : "";
-      var line, btn;
-      if (starting) { line = "Starting\u2026 about 2 minutes."; btn = '<button class="go" disabled>Starting\u2026</button>'; }
+      var line, btn, warn = false, tunLink = "";
+      var stg = "";
+      if (starting) { var el0 = ss && ss.started_at ? Math.max(0, (Date.now() - Date.parse(ss.started_at)) / 1000) : 0; line = "Your Mesh is coming up on a GitHub Codespace."; stg = progressHtml(); btn = '<button class="go" disabled>Starting\u2026 ' + esc(mmss(el0)) + '</button>'; }
       else if (stopping) { line = "Stopping\u2026"; btn = '<button class="go" disabled>Stopping\u2026</button>'; }
+      else if (running && !(B().joined && B().joined()) && ss.joined && ss.keep_alive !== false) {   // keep-alive reattach: no dialog, just reconnect through the tunnel
+        var sec0 = Math.max(0, ss.countdown_seconds | 0), q2 = function (n) { return String(n).padStart(2, "0"); }, tup = tunnelState() === "up";
+        line = tup ? "Reconnecting to your Mesh\u2026" : "Your Mesh is still running. Start your local tunnel (vyomi-tunnel), then click Start tunnel in the bar at the bottom, and this tab reconnects by itself.";
+        warn = !tup;
+        btn = '<button class="go" disabled>Reconnecting\u2026</button><div class="cd" title="Time left in this session">' + q2(Math.floor(sec0 / 3600)) + ':' + q2(Math.floor(sec0 % 3600 / 60)) + ':' + q2(sec0 % 60) + '</div><div class="cdl">session time left</div>';
+        tunLink = '<div class="sub"><a href="#" data-leave>Leave the Mesh</a></div>';
+      }
+      else if (running && !(B().joined && B().joined())) {           // up, but not yet verified + joined: the health-check modal gates Join
+        var k = B().checks ? B().checks() : { state: "idle" };
+        line = k.state === "passed" ? "Your Mesh is healthy. Joining\u2026" : k.state === "failed" ? "A health check failed. Stopping the Codespace\u2026" : "Your Mesh is up. Running health checks\u2026";
+        warn = k.state === "failed"; stg = progressHtml();
+        btn = k.state === "passed" ? '<button class="go" data-jn>Join the Mesh</button>' : '<button class="go" disabled>' + (k.state === "failed" ? "Join the Mesh" : "Checking\u2026") + '</button>';
+        tunLink = k.state === "failed" ? "" : '<div class="sub"><a href="#" data-leave>Cancel and leave</a></div>';
+      }
       else if (running) {
         var sec = Math.max(0, ss.countdown_seconds | 0), p2 = function (n) { return String(n).padStart(2, "0"); };
         line = "Running on your own GitHub Codespace.";
+        tunLink = '<div class="sub"><a href="#" data-vc>Details</a></div>';
+        if (tunnelState() !== "up") { line = "The tunnel is disconnected. EC2, VMs and AI will not work until it is back. Click Start tunnel in the bar at the bottom."; warn = true; }
         btn = '<button class="go stop" data-ss ' + (busy ? "disabled" : "") + '>Leave the Mesh</button>'
           + '<div class="cd" aria-live="off" title="Time left in this session">' + p2(Math.floor(sec / 3600)) + ':' + p2(Math.floor(sec % 3600 / 60)) + ':' + p2(sec % 60) + '</div><div class="cdl">session time left</div>';
       }
       else {
-        line = (x && x.ended_note) || (conn ? "Runs on the free quota of your own GitHub account." : "Connect your GitHub account to start.");
+        line = (x && x.ended_note) || (conn ? "Runs inside your GitHub account, at no cost to you." : "Connect your GitHub account to start.");
         btn = '<button class="go" data-ss ' + (busy ? "disabled" : "") + '>' + (conn ? "Join the Mesh" : "Connect GitHub & join") + '</button>';
+        var tst = tunnelState();
+        if (conn && tst === "connecting") {                             // just reloaded: the strip is resuming the tunnel by itself
+          line = "Connecting to your tunnel\u2026"; btn = '<button class="go" disabled>Join the Mesh</button>';
+        } else if (conn && tst !== "up" && tst !== "unknown") {                // Mesh data + control plane run over the local tunnel: no tunnel, no Join
+          line = "Join needs your local Vyomi tunnel, because EC2, VMs and AI all travel through it.";
+          stg = tst === "notab" ? '<ol class="steps"><li>The tunnel is running. Click <b>Start tunnel</b> in the bar at the bottom of this page.</li></ol>'
+            : '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
+          btn = '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>';
+          tunLink = '<div class="sub"><a href="#" data-tun>Check again</a> \u00b7 <a href="https://www.npmjs.com/package/vyomi-tunnel" target="_blank" rel="noopener">Install the tunnel</a></div>';
+        }
+        var lf = B().lastFailure && B().lastFailure();
+        if (conn && lf && (tst === "up" || tst === "unknown")) { tunLink = '<div class="sub"><a href="#" data-vc>Last attempt failed. See details</a></div>'; }
         if (offCloud) {                                             // not this cloud's plan: no Join here, say why and where to go
           line = "Your " + (a.source === "trial" ? "trial" : tierName + " plan") + " covers " + cloudName + " only. The Mesh on " + (CLOUD_NAMES[CLOUD] || CLOUD) + " is part of Max.";
           btn = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">See plans</a>';
         }
       }
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p>' + esc(line) + '</p>';
-      act = btn + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
+      if (running && ss) {          // footer, right-aligned: survive a closed / inactive tab for the whole 8 h window
+        var kon = ss.keep_alive !== false;
+        ka = '<label class="ka" title="' + (kon ? "Your Mesh stays up for the whole 8 hours even if this tab is closed or inactive. Open any Vyomi console to reattach (your local tunnel must be running). If the tunnel is lost, the Mesh still ends at the 8-hour limit." : "Off: the Mesh stops after 30 minutes with no Vyomi tab open.") + '">Keep running when this tab is closed <button type="button" class="sw" role="switch" data-ka aria-checked="' + kon + '" aria-label="Keep the Mesh running when this tab is closed"' + (busy ? " disabled" : "") + '></button></label>';
+      }
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p' + (warn ? ' class="warn"' : '') + '>' + esc(line) + '</p>' + stg;
+      act = btn + tunLink + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
@@ -147,7 +198,7 @@
     var tm = /^(<h4>[\s\S]*?<\/h4>)([\s\S]*)$/.exec(main), title = tm ? tm[1] : main, notes = tm ? tm[2] : "", subs = "";
     act = act.replace(/<div class="sub">[\s\S]*?<\/div>/g, function (s) { if (s.replace(/<[^>]*>/g, "").trim()) subs += s; return ""; });
     card.innerHTML = '<div class="main">' + title + '</div><div class="act">' + act + '</div>'
-      + '<div class="foot">' + notes + subs + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div>';
+      + '<div class="foot">' + notes + subs + ka + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div>';
   }
 
   // Mount as an in-page card on the console HOME page: directly beside the "How Nano ... works" video banner; if that banner was dismissed,
@@ -177,6 +228,12 @@
       var t = e.target;
       if (t.closest("[data-ss]")) startStop();
       else if (t.closest("[data-gh]")) { location.href = "/api/mesh/github/connect"; }
+      else if (t.closest("[data-tun]")) { e.preventDefault(); if (B() && B().checkTunnel) B().checkTunnel().then(paint); }
+      else if (t.closest("[data-rr]")) { e.preventDefault(); if (B() && B().rerunChecks) B().rerunChecks(); }
+      else if (t.closest("[data-vc]")) { e.preventDefault(); if (B() && B().openDetails) B().openDetails(); }
+      else if (t.closest("[data-jn]")) { if (B() && B().joinMesh()) paint(); }
+      else if (t.closest("[data-leave]")) { e.preventDefault(); run(function () { return B().sessionStop(); }); }
+      else if (t.closest("[data-ka]")) { e.preventDefault(); var cur = B().session && B().session(), on = !(cur && cur.session && cur.session.keep_alive !== false); run(function () { return B().setKeepAlive(on); }); }
       else if (t.closest("[data-back]")) { e.preventDefault(); view = "main"; paint(); }
       else if (t.closest("[data-en]")) enable(false);
       else if (t.closest("[data-tr]")) enable(true);
@@ -185,9 +242,9 @@
     new MutationObserver(function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; place(); }); })
       .observe(document.body, { childList: true, subtree: true });
     place(); paint();
-    window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint);
+    window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint); window.addEventListener("vyomi-tunnel", paint); window.addEventListener("vyomi-mesh-checks", paint);
     window.VyomiMeshWidget = { agreed: agreed, accept: function () { try { localStorage.setItem(termsKey(), "1"); } catch (_) {} }, show: function (v) { view = v; paint(); place(); if (card.scrollIntoView) card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
-    setInterval(function () { var x = B() && B().session && B().session(); if (x && x.session && x.session.state === "running" && view === "main") paint(); }, 1000);
+    setInterval(function () { var x = B() && B().session && B().session(); if (x && x.session && (x.session.state === "running" || x.session.state === "starting" || x.session.state === "pending") && view === "main") paint(); }, 1000);
     var tries = 0; (function wait() { if (B() && B().loadAccount) { refresh(); setInterval(refresh, 60000); } else if (tries++ < 40) setTimeout(wait, 250); })();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
