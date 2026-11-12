@@ -1,0 +1,86 @@
+name: v4 release checklist
+
+# Runs the deterministic release checklist (tests/release/v4_checklist.py) for ALL THREE clouds on every release.
+# Nothing is pushed anywhere: the report goes to the job summary and an artifact. A FAIL turns the job red.
+#   - a published GitHub Release
+#   - the 'Release' workflow finishing (the existing release pipeline)
+#   - by hand: Actions > v4 release checklist > Run workflow (version = the tag, e.g. 4.0.0; waive = "id=reason,id=reason")
+# Checks (see the script docstring): known-issues has no open S1; wasm/core is in sync with core/; Nano loaders import-closed;
+# pyodide-source consistent; no stray *.bak; suites.json valid + per-cloud suites and a bi-directional suite registered;
+# per-cloud v4 console bundle; docker-publish succeeded for the release sha; tunnel package/formula version sync;
+# suite results when the run_suites.py outputs are attached (SKIPPED, never PASS, when they are not).
+# Installing: this file lives in ci/v4/ because the integrator token cannot push under .github/workflows; the owner moves it.
+
+on:
+  release:
+    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version/tag to check (e.g. 4.0.0). Blank = trunk (v4-on-main).'
+        required: false
+      waive:
+        description: 'Accepted FAILs: comma list of check-id=reason (shown as WAIVED in the report)'
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: v4-release-checklist-${{ github.event.release.tag_name || github.event.workflow_run.head_branch || inputs.version || 'trunk' }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.r.outputs.ref }}
+      ver: ${{ steps.r.outputs.ver }}
+    steps:
+      - id: r
+        run: |
+          V="${{ github.event.release.tag_name || github.event.workflow_run.head_branch || inputs.version }}"
+          if [ -n "$V" ]; then
+            case "$V" in v*) REF="$V";; *) REF="v$V";; esac
+            echo "ref=$REF" >> "$GITHUB_OUTPUT"; echo "ver=${REF#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=v4-on-main" >> "$GITHUB_OUTPUT"; echo "ver=trunk" >> "$GITHUB_OUTPUT"
+          fi
+
+  checklist:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: [azure, aws, gcp]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Checklist (${{ matrix.cloud }})
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WAIVE: ${{ inputs.waive }}
+        run: |
+          set -o pipefail
+          ARGS=()
+          IFS=',' read -ra W <<< "${WAIVE:-}"; for w in "${W[@]}"; do [ -n "$w" ] && ARGS+=(--waive "$w"); done
+          python3 tests/release/v4_checklist.py --cloud "${{ matrix.cloud }}" \
+            --version "${{ needs.resolve.outputs.ver }}" --sha "$(git rev-parse HEAD)" --out report "${ARGS[@]}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v4-checklist-${{ matrix.cloud }}-${{ needs.resolve.outputs.ver }}
+          path: report/
+          retention-days: 30
