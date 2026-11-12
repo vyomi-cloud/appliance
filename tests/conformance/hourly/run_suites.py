@@ -55,7 +55,10 @@ def count(log: str) -> tuple[int, int]:
     if py:
         passed = sum(int(n) for n, k in py if k == "passed")
         failed = sum(int(n) for n, k in py if k != "passed")
-        return passed, failed
+        # A zero-total match is a "RESULT: PASS - ... (0 failed)" footer, not a pytest summary: fall through to the PASS/FAIL lines
+        # (returning 0/0 here scored every such suite "NO CHECKS RAN" = red although all its checks passed).
+        if passed + failed:
+            return passed, failed
     return len(PASS_RE.findall(log)), len(FAIL_RE.findall(log))
 
 

@@ -19,11 +19,13 @@ from core import apigateway_core as v1core
 
 rt = AwsWireRouter()
 fails = 0
+npass = 0
 SEEN = []
 
 
 def check(name, cond, extra=""):
-    global fails
+    global fails, npass
+    npass += 1 if cond else 0
     print(("  ok   " if cond else "  FAIL ") + name + ("" if cond else "  -> %s" % (extra,)))
     fails += 0 if cond else 1
 
@@ -199,5 +201,5 @@ codes = [inv(API, "prod", "GET", "/ping")["status"] for _ in range(4)]
 check("stage throttle burst 2 -> 429 after", codes[:2] == [200, 200] and codes[2:] == [429, 429], codes)
 
 srv.shutdown()
-print("\nRESULT: " + ("PASS" if not fails else "FAIL") + " — API Gateway v1 data plane (%d failed)" % fails)
+print("\nRESULT: " + ("PASS" if not fails else "FAIL") + " — API Gateway v1 data plane (%d passed, %d failed)" % (npass, fails))
 raise SystemExit(1 if fails else 0)

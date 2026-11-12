@@ -157,4 +157,4 @@ try {
   c = await run(["gateway-backend", `https://other.run.app=${BASE}`]); g = await go("https://other.run.app/live"); assert.equal(g.status, 200);   // picked up without restart
   assert.match(rout, /gw-egress/); ok("real relay process: preflight (PNA) ok, mapped 2xx, unmapped 502, map change picked up live, egress logged");
 } finally { relayP.kill(); portal.close(); }
-console.log(`\n${n} checks passed`); process.exit(0);
+console.log(`\n${n} passed, 0 failed (checks)`); process.exit(0);

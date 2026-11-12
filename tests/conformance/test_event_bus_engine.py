@@ -8,7 +8,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from core import event_bus_engine as eb
 
 
+_N = [0]
+
+
 def _check(name, cond):
+    _N[0] += 1
     if not cond:
         raise AssertionError(name)
     print(f"  ok  {name}")
@@ -189,7 +193,7 @@ def run() -> int:
     json.dumps(bus.state)
     _check("state is JSON-serialisable (persistable)", True)
     rx.close()
-    print("event bus engine: all green")
+    print("event bus engine: all green (%d passed, 0 failed)" % _N[0])
     return 0
 
 
