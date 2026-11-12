@@ -16,11 +16,12 @@
  "apigateway.rest.resources-methods": {
   "title": "Resources, methods and integrations (Lambda, HTTP, Mock)",
   "level": {
-   "nano": "full",
+   "nano": "limited",
    "offline": "full"
   },
   "limitations": [
-   "Invoke (host {id}.execute-api.*, /apigw/{id}/{stage}/..., /restapis/{id}/{stage}/_user_request_/...) enforces CUSTOM Lambda authorizers, COGNITO_USER_POOLS JWTs (RS256 through a verifier; fails closed without one, e.g. a browser tab), API keys with usage-plan throttle/quota, and stage throttle; AWS_IAM only needs a SigV4-shaped Authorization header (signature and IAM policy are not evaluated). Test Invoke (TestInvokeMethod) does not apply authorizers or keys, like the real console. HTTP/HTTP_PROXY integrations (v1 and v2) go out through the shared gateway fetch. In a browser tab (Nano) the engine run is resumable: Lambda / MOCK / authorizers / throttle / usage-plan quota run once inside the run and only the outbound hop is awaited through the same bridge as GCP API Gateway (wasm/gw-bridge.js -> your local `vyomi-tunnel gateway-backend <https origin>=<local origin>` map, or the hosted relay for allow-listed public https backends); with neither the call answers 502 (x-vyomi-backend-error names the fix). COGNITO_USER_POOLS still fails closed in a tab (no verifier). Verified in Python (handle == plan+finish == ahandle) and in a real-Chromium Nano e2e (wasm/relay/e2e-gateway.mjs)."
+   "Invoke (host {id}.execute-api.*, /apigw/{id}/{stage}/..., /restapis/{id}/{stage}/_user_request_/...) enforces CUSTOM Lambda authorizers, COGNITO_USER_POOLS JWTs (RS256 through a verifier; fails closed without one, e.g. a browser tab), API keys with usage-plan throttle/quota, and stage throttle; AWS_IAM only needs a SigV4-shaped Authorization header (signature and IAM policy are not evaluated). Test Invoke (TestInvokeMethod) does not apply authorizers or keys, like the real console. HTTP/HTTP_PROXY integrations (v1 and v2) go out through the shared gateway fetch. In a browser tab (Nano) the engine run is resumable: Lambda / MOCK / authorizers / throttle / usage-plan quota run once inside the run and only the outbound hop is awaited through the same bridge as GCP API Gateway (wasm/gw-bridge.js -> your local `vyomi-tunnel gateway-backend <https origin>=<local origin>` map, or the hosted relay for allow-listed public https backends); with neither the call answers 502 (x-vyomi-backend-error names the fix). COGNITO_USER_POOLS still fails closed in a tab (no verifier). Verified in Python (handle == plan+finish == ahandle) and in a real-Chromium Nano e2e (wasm/relay/e2e-gateway.mjs).",
+   "Known limit (v4.0.0 beta): on Nano, JWT/Cognito authorizers fail closed (a valid RS256 token answers 401); use the offline appliance or Mesh for those."
   ],
   "tests": [
    "tests/conformance/test_apigateway_core.py",
