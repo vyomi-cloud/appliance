@@ -104,6 +104,7 @@ body { font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, B
 .vy-wizard { display: flex; flex-direction: column; flex: 1 0 auto; }
 .vy-wizard-body { flex: 1; padding: 0 20px 96px; max-width: 900px; }
 .vy-wizard-body .fui-TabList { margin: 8px 0 16px; border-bottom: 1px solid var(--colorNeutralStroke2); }
+body:has(#nano-foot) .vy-wizard-foot { bottom: 34px; }   /* Nano: the fixed relay-tunnel bar (34px) used to cover the Create / Next buttons */
 .vy-wizard-foot { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--colorNeutralStroke2); background: var(--colorNeutralBackground1); z-index: 5; }
 .vy-form-section { margin: 20px 0 8px; }
 .vy-form-section.vy-cap-card { border: 1px solid var(--colorNeutralStroke2, #d1d1d1); border-radius: 8px; padding: 12px 16px; background: var(--colorNeutralBackground1, #fff); }
