@@ -1,3 +1,5 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """GCP Vertex AI resource core — substrate-independent. Speaks the native **Vertex AI REST API**
 (`aiplatform.googleapis.com` v1/v1beta1: `/v1/projects/{p}/locations/{l}/{collection}...`) and the
 Workbench Instances API (`notebooks.googleapis.com` v2) so `google-cloud-aiplatform`,
