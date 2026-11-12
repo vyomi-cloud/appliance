@@ -1,0 +1,74 @@
+# vyomi-tunnel release: independent of the appliance release (v4.0.1+ ships the Mesh image only; the tunnel is the
+# Mesh client and keeps its own npm + Homebrew release).
+#
+# Trigger: push tag  tunnel-vX.Y.Z  (must equal packaging/tunnel/package.json version), or manual dispatch (dry_run default).
+# npm: TRUSTED PUBLISHING (OIDC), no stored token. One-time setup on npmjs.com -> vyomi-tunnel -> Settings ->
+#      Trusted Publisher: repo vyomi-cloud/appliance, workflow  tunnel-release.yml
+# Homebrew: HOMEBREW_TAP_TOKEN (repo secret) bumps vyomi-cloud/homebrew-tap Formula/vyomi-tunnel.rb.
+name: Tunnel release
+
+on:
+  push:
+    tags: ['tunnel-v*.*.*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (npm publish --dry-run, no tap push)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  tunnel:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write      # npm trusted publishing
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install -g npm@^11.5.1     # trusted publishing needs npm >= 11.5.1
+      - name: Tag must match package.json
+        if: github.ref_type == 'tag'
+        run: |
+          PKG=$(node -p "require('./packaging/tunnel/package.json').version")
+          TAG="${GITHUB_REF_NAME#tunnel-v}"
+          [ "$PKG" = "$TAG" ] || { echo "::error::tag $GITHUB_REF_NAME != packaging/tunnel/package.json $PKG"; exit 1; }
+      - name: Package contents (dry pack)
+        working-directory: packaging/tunnel
+        run: npm pack --dry-run
+      - name: Status (npm / tap)
+        id: st
+        run: |
+          python3 scripts/tunnel_sync.py status --json > /tmp/st.json || true
+          cat /tmp/st.json
+          echo "ver=$(python3 -c "import json;print(json.load(open('/tmp/st.json'))['version'])")" >> "$GITHUB_OUTPUT"
+          echo "npm=$(python3 -c "import json;print(str(json.load(open('/tmp/st.json'))['npm_published']).lower())")" >> "$GITHUB_OUTPUT"
+          echo "tap=$(python3 -c "import json;d=json.load(open('/tmp/st.json'));print(str(d['tap_version']==d['version']).lower())")" >> "$GITHUB_OUTPUT"
+      - name: npm publish vyomi-tunnel
+        if: steps.st.outputs.npm == 'false'
+        working-directory: packaging/tunnel
+        run: |
+          if [ "$DRY" = "true" ]; then npm publish --access public --dry-run; else npm publish --access public; fi
+      - name: Bump the Homebrew tap formula
+        if: steps.st.outputs.tap == 'false' && env.DRY != 'true'
+        run: |
+          [ -n "$TAP_TOKEN" ] || { echo "::error::HOMEBREW_TAP_TOKEN missing"; exit 1; }
+          VER="${{ steps.st.outputs.ver }}"
+          SHA=$(python3 scripts/tunnel_sync.py sha "$VER") || { echo "::error::registry tarball for $VER never settled"; exit 1; }
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/vyomi-cloud/homebrew-tap.git" tap
+          cd tap
+          sed -i -e "s|vyomi-tunnel-[0-9][^\"]*\.tgz|vyomi-tunnel-${VER}.tgz|" -e "s|sha256 \"[0-9a-f]*\"|sha256 \"${SHA}\"|" Formula/vyomi-tunnel.rb
+          git diff --stat
+          git config user.email "bot@vyomi.cloud"; git config user.name "Vyomi Release Bot"
+          git add Formula/vyomi-tunnel.rb && git commit -m "vyomi-tunnel ${VER}" && git push
+      - name: Summary
+        if: always()
+        run: |
+          { echo "## vyomi-tunnel"; python3 scripts/tunnel_sync.py status || echo "not in sync"; } >> "$GITHUB_STEP_SUMMARY"
