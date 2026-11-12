@@ -142,6 +142,12 @@ def _deliver_eventarc(topic_full: str, messages: list) -> None:
         from core import gcp_run_core as _run_core
         from routes import gcp_run as _run_routes
         _run_core.deliver_event(_run_routes.store(), topic_full, messages, log_fn=_run_routes._log_fn)
+        try:   # …and the Eventarc core's triggers (shared event bus: retries, dead-letter, httpEndpoint destinations)
+            from core import gcp_eventarc_core as _ea
+            from core import wire_ingress as _wi
+            _ea.on_pubsub_publish((_wi.new_services_router() or _wi.appliance_router()).gcp_mon, _run_routes.store(), topic_full, messages, log_fn=_run_routes._log_fn)
+        except Exception:
+            _log.debug("pubsub: eventarc core delivery skipped", exc_info=True)
         if _run_routes._slot() is not None:   # the core persisted Pub/Sub before calling this hook
             _run_routes.ctx.persist_state()
     except Exception:

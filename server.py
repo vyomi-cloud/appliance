@@ -209,6 +209,13 @@ try:
     _azsb_amqp.register(app)
 except Exception as _e:   # never let this break appliance boot
     print(f"[servicebus-amqp] listener not mounted: {_e}")
+# v4.0.0 — the shared gateway + event-bus backends (GCP API Gateway/API Keys/Eventarc, /gcpgw + *.gateway.dev data plane, Azure APIM data
+# plane) on the real appliance: same router Nano uses (routes/gateway_eventbus_unified.py). Before nats_routes' legacy Eventarc stubs and the provider routes so these paths win.
+try:
+    from routes import gateway_eventbus_unified as _gw_eb_unified
+    _gw_eb_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] gateway/event-bus core mount skipped: {_e}")
 try:
     from core import vault_routes as _vault_routes
     _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)

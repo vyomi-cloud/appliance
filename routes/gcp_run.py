@@ -20,6 +20,16 @@ _KEYS = ("services", "revisions", "jobs", "executions", "tasks", "operations", "
 
 
 def _slot() -> dict | None:
+    # The Cloud Run slot lives in the DEFAULT (aws-scoped) provider's active space, whichever request context asks:
+    # an Eventarc trigger create runs under the "gcp" provider and must still see the services the /v2 run routes made.
+    tok = ctx.REQUEST_PROVIDER.set("aws")
+    try:
+        return _slot_in_context()
+    finally:
+        ctx.REQUEST_PROVIDER.reset(tok)
+
+
+def _slot_in_context() -> dict | None:
     spaces_state = PLATFORM.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
     active_id = spaces_state.get("active_space_id", "")
     if not active_id:
@@ -110,6 +120,12 @@ def _topic_exists(topic_full):
 def _on_object_event(bucket, name, event, obj):
     """A real GCS object finalize/delete -> Eventarc Cloud Storage triggers (see core/gcp_run_core)."""
     run.deliver_storage_event(_STORE, bucket, name, event, obj, log_fn=_log_fn)
+    try:   # …and the Eventarc core's triggers (retry / dead-letter bus, httpEndpoint destinations) the v4 console and `gcloud eventarc` manage
+        from core import gcp_eventarc_core as ea
+        from core import wire_ingress as wi
+        ea.on_storage_event((wi.new_services_router() or wi.appliance_router()).gcp_mon, _STORE, bucket, name, event, obj, log_fn=_log_fn)
+    except Exception:
+        pass   # an Eventarc hiccup never fails the object write
 
 
 def register(app: FastAPI) -> None:

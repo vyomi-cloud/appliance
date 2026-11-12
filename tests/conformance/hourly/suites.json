@@ -2160,6 +2160,7 @@
     {"id": "nano-issue-reporter-js", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_issue_reporter_js.mjs", "timeout": 120},
     {"id": "nano-sw-issue-reporting", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_nano_sw_issue_reporting.mjs", "timeout": 120},
     {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "node tests/conformance/nightly/gcp-validation.mjs", "timeout": 300},
+    {"id": "nightly-gcp-gateway-eventbus-real", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "SIM_URL={ENDPOINT} PROJECT=vyomi-project node tests/conformance/nightly/gcp-gateway-eventbus-real.mjs", "timeout": 300},
     {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
     {"id": "offline-api-gcp-apigateway-core", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
     {"id": "offline-api-gcp-apigateway-gateway", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_gateway.py", "timeout": 120},

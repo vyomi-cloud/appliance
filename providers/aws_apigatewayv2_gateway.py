@@ -84,7 +84,11 @@ def register(app, lambda_invoke):
         store = core.shared_store()
         api = store.apis.get(api_id)
         if not api:
-            return Response(content=b'{"message":"Not Found"}', status_code=404, media_type="application/json")
+            # not an HTTP (v2) API: a REST (v1) API's invoke URL /apigw/{id}/{stage}/... is served by the wire router (core/apigateway_gateway)
+            from core import wire_ingress as _wi
+            _r = _wi.new_services_router() or _wi.appliance_router()
+            out = await _r.ahandle(request.method, request.url.path, dict(request.query_params), dict(request.headers), await request.body())
+            return Response(content=out["body"], status_code=out["status"], headers=dict(out["headers"] or {}))
         first = path.split("/", 1)[0]
         if first and first != "$default" and first in (api.get("stages") or {}):
             stage, path = first, path[len(first):].lstrip("/")

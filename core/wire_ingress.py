@@ -160,6 +160,11 @@ def offline_runtime_stores() -> dict:
     aps.install_core_slot_stores()
     out = dict(aps.aws_runtime_core_stores())
     out["az_queue"] = aps.az_queue_store()   # the root Storage Queue wire (Azure space slot)
+    # The router's GCP project is Nano's fixed `nano-project` unless told otherwise; the appliance's is the GCP space's
+    # (core/gcp_project.current: `vyomi-project` by default), so Eventarc / API Gateway answers name the right project
+    # and validate destinations (Cloud Run services, buckets) under the id the request carries.
+    from core import gcp_project as _gp
+    out["gcp_project"] = _gp.current
     for key, mod, attr in (("kinesis", "routes.aws_kinesis", "STORE"), ("logs", "routes.aws_logs", "STORE"),
                            ("asg", "routes.aws_autoscaling", "STORE"), ("elbv2", "routes.aws_elbv2", "STORE"),
                            ("gcp_run", "routes.gcp_run", "_STORE"), ("gcp_pam", "routes.gcp_pam", "_STORE"),
