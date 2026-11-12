@@ -40,6 +40,17 @@ out=$(gcloud workbench instances create "$S-wb" --location=${R}-a --project=$PRO
 out=$(gcloud workbench instances list --location=${R}-a --project=$PROJECT --format='value(name)' 2>&1); echo "$out" | grep -q "$S-wb"
 chk $? "workbench instances list" "$out"
 out=$(gcloud workbench instances delete "$S-wb" --location=${R}-a --project=$PROJECT --quiet 2>&1); chk $? "workbench instances delete" "$out"
+# Model Garden: the LLM listing a user types. gcloud asks publishers/*/models with filter=is_hf_wildcard(false) [AND (model_user_id=~"..." OR display_name=~"...")]
+# (it once returned "Listed 0 items" because the structured filter was matched as text and no check used this command).
+mg=$(gcloud ai model-garden models list --format='value(name)' 2>&1); n=$(echo "$mg" | grep -c '^publishers/')
+[ "$n" -ge 3 ]; chk $? "model-garden models list returns the LLM catalogue (>=3)" "n=$n :: $mg"
+mq=$(gcloud ai model-garden models list --model-filter=qwen --format='value(name)' 2>&1); nq=$(echo "$mq" | grep -c 'qwen')
+[ "$nq" -ge 1 ] && [ "$nq" -lt "$n" ]; chk $? "model-garden --model-filter=qwen narrows the list" "nq=$nq n=$n :: $mq"
+mn=$(gcloud ai model-garden models list --model-filter=zzz-no-such-model --format='value(name)' 2>&1 | grep -c '^publishers/'); [ "$mn" = 0 ]
+chk $? "model-garden --model-filter with no match lists none" "$mn"
+first=$(echo "$mg" | head -1); fid=$(echo "$first" | awk -F/ '{print $NF}')
+out=$(gcloud ai model-garden models list --model-filter="$fid" --format='value(name)' 2>&1); echo "$out" | grep -q "/$fid$"
+chk $? "model-garden --model-filter=<id> finds $fid" "$out"
 out=$(gcloud ai endpoints delete "$EP" $F 2>&1); chk $? "ai endpoints delete" "$out"
 out=$(gcloud ai endpoints list $F --filter="displayName=$S-ep" --format='value(name)' 2>/dev/null); [ -z "$out" ]
 chk $? "endpoint is gone" "$out"

@@ -119,7 +119,14 @@ def register(app: FastAPI) -> None:
     except Exception:
         pass
     async def _wire(request: Request):
-        r = run.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
+        if "/operations/vtx-" in request.url.path:
+            # Workbench (Notebooks v2) long-running operations share /v2/projects/{p}/locations/{l}/operations/{id} with Cloud Run;
+            # the vtx- ids are Vertex's, so poll them there (gcloud workbench instances create/delete waits on this).
+            from core import gcp_vertex_core as _vx
+            r = _vx.dispatch(_vx.shared_store(), request.method, request.url.path, dict(request.query_params),
+                             dict(request.headers), await request.body())
+        else:
+            r = run.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
                          dict(request.headers), await request.body(), log_fn=_log_fn, topic_exists=_topic_exists)
         status, headers, body = (r.status, getattr(r, "headers", {}) or {}, r.body) if hasattr(r, "status") \
             else (r["status"], r.get("headers") or {}, r.get("body", b""))
