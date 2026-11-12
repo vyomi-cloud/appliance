@@ -1,3 +1,35 @@
+### Upstream watch — 2026-11-12T21:09:50+00:00
+
+Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**24 change(s), 19 actionable.**
+- 🔧 `operation-added` AWS cloudwatch: new operation DeleteMetricDataQueryDefinition
+- 🔧 `operation-added` AWS cloudwatch: new operation GetMetricDataQueryDefinition
+- 🔧 `operation-added` AWS cloudwatch: new operation ListMetricDataQueryDefinitions
+- 🔧 `operation-added` AWS cloudwatch: new operation PutMetricDataQueryDefinition
+- 🔧 `operation-added` AWS ec2: new operation CreateMetricCategory
+- 🔧 `operation-added` AWS ec2: new operation DeleteMetricCategory
+- 🔧 `operation-added` AWS ec2: new operation DescribeMetricCategories
+- 🔧 `operation-added` AWS ec2: new operation ModifyMetricCategory
+- 🔧 `operation-changed` AWS ec2: operation ModifyVpcEncryptionControl changed
+- 🔧 `operation-changed` AWS ec2: operation MonitorInstances changed
+- 🔧 `operation-changed` AWS ec2: operation UnmonitorInstances changed
+- 🔧 `operation-added` AWS secretsmanager: new operation AssociateCrossAccountReplica
+- 🔧 `operation-added` AWS secretsmanager: new operation DisassociateCrossAccountReplica
+- 🔧 `operation-added` AWS secretsmanager: new operation ListResourcePolicies
+- 🔧 `operation-changed` AWS secretsmanager: operation CreateSecret changed
+- 🔧 `operation-changed` AWS secretsmanager: operation DeleteResourcePolicy changed
+- 🔧 `operation-changed` AWS secretsmanager: operation DescribeSecret changed
+- 🔧 `operation-changed` AWS secretsmanager: operation GetResourcePolicy changed
+- 🔧 `operation-changed` AWS secretsmanager: operation PutResourcePolicy changed
+- · `operation-changed` AWS ec2: operation ModifyAccountVpcEncryptionControl changed
+- · `announcement` Amazon MWAA Serverless supports DuckDB operators ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-mwaa-serverless-duckdb-operators/))
+- · `release` cli:aws: 2.40.1 → 2.40.2
+- · `release` pypi:boto3: 1.44.1 → 1.44.2
+- · `release` pypi:botocore: 1.44.1 → 1.44.2
+
+Filed 19 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-12T20:09:49+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3030,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-
-Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-10-30T22:47:43+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558) ([link](https://github.com/Azure/azure-rest-api-specs/commit/411fb227a905864f972d26ab88b21ef69e1f67b2))
