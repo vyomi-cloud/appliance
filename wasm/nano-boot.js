@@ -612,6 +612,8 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
   K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
   // Public readiness signal (tests, embedding pages): the in-browser backend now answers.
   // Host access to in-browser databases: psql / mysql / ORMs reach RDS + Cloud SQL instances through `vyomi-tunnel` (db-bridge.js).
+  // API Gateway data plane: backend calls leave the tab through the local tunnel / hosted relay (core/gcp_apigateway_gateway.ahandle).
+  try { import("./gw-bridge.js").then((m) => m.installGatewayBridge()).catch((e) => console.warn("[nano] gateway bridge skipped:", e)); } catch (_) {}
   try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
   window.__vyomiNanoReady = true;
   try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}

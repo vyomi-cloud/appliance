@@ -210,6 +210,8 @@ async def _handle(req_json):
 import builtins; builtins._handle = _handle
 builtins._capture = _capture; builtins._restore = _restore
 `);
+    // API Gateway data plane: backend calls go out through the local tunnel / hosted relay (wasm/gw-bridge.js). Workers have no localStorage: use the page-provided config.
+    try { import(new URL("../gw-bridge.js", import.meta.url).href).then((m) => m.installGatewayBridge({ local: () => state.cfg.localExternal, hosted: () => state.cfg.cloudExternal, session: () => state.session })).catch((e) => log("gateway bridge skipped: " + e, "dim")); } catch (_) {}
     // Host access to in-browser databases (psql / mysql / ORMs via vyomi-tunnel): see wasm/db-bridge.js.
     try { import(new URL("../db-bridge.js", import.meta.url).href).then((m) => m.installDbBridge(py)).catch((e) => log("db bridge skipped: " + e, "dim")); } catch (_) {}
     // CPU: time spent running Python here (each CLI / SDK request), reported every 5 s with

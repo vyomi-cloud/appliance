@@ -15,7 +15,8 @@
                      1-second windows per consumer project; over the limit -> 429 RESOURCE_EXHAUSTED
   backend            `x-google-backend` (operation overrides document): `path_translation` CONSTANT_ADDRESS (path params go to the query)
                      or APPEND_PATH_TO_ADDRESS; forwarded through the injected `http_fetch(method, url, headers, body, timeout)`; a runtime
-                     with none (Nano in a browser tab) answers 503 — auth, quota and 404s still work everywhere.
+                     with none answers 503 — auth, quota and 404s still work everywhere. `handle()` = `plan()` (route/auth/quota, quota counted
+                     once) + the fetch + `finish()`; Nano's async router calls plan(), awaits a JS bridge, then finish() (core/aws_wire_router.ahandle).
 
 Everything that touches the world is injected, like the v2 engine. No fastapi / socket imports at module level.
 """
@@ -183,9 +184,23 @@ def _target_url(b, path, params, query):
     return gc.build_backend_url(str(b["address"]), path, params, query, b.get("path_translation"))
 
 
-def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, http_fetch=None, verify_sig=None,
-           source_ip="127.0.0.1", now=None):
-    """Serve one request for `gateway` (a gateway record from the control plane)."""
+class Forward:
+    """What `plan()` decided must go to the backend: the request to send plus what `finish()` needs. Carries no I/O."""
+    __slots__ = ("method", "url", "headers", "body", "timeout")
+
+    def __init__(self, method, url, headers, body, timeout):
+        self.method, self.url, self.headers, self.body, self.timeout = method, url, headers, body, timeout
+
+    def as_dict(self):
+        return {"method": self.method, "url": self.url, "headers": dict(self.headers), "body": self.body, "timeout": self.timeout}
+
+
+NO_RUNTIME_MSG = "The backend cannot be reached from this runtime (no outbound network)."
+
+
+def plan(store, gateway, method, path, headers=None, query=None, body=b"", *, verify_sig=None, source_ip="127.0.0.1", now=None):
+    """Everything `handle()` does BEFORE the backend call: route match, authentication, quota (counted here, once).
+    Returns a final response (404 / 401 / 429 / 503 ...) or a `Forward` the caller must perform and hand to `finish()`."""
     now = time.time() if now is None else now
     headers, query, method = dict(headers or {}), dict(query or {}), (method or "GET").upper()
     cfg, doc = _document(store, gateway.get("apiConfig"))
@@ -209,19 +224,87 @@ def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, 
     b = _backend(doc, op)
     if not b.get("address"):
         return _err(503, "No backend is configured for this operation.", "UNAVAILABLE")
-    if http_fetch is None:
-        return _err(503, "The backend cannot be reached from this runtime (no outbound network).", "UNAVAILABLE")
     url = _target_url(b, path, params, {k: v for k, v in query.items() if not (state.get("consumer") and k == "key")})
     out_h = gc.strip_hop(headers)
     out_h["x-forwarded-for"] = source_ip
     if state.get("claims"):
         out_h["x-endpoint-api-userinfo"] = base64.urlsafe_b64encode(json.dumps(state["claims"]).encode()).decode().rstrip("=")
+    return Forward(method, url, out_h, body or b"", float(b.get("deadline") or 15))
+
+
+def finish(fwd, status, headers, body):
+    """Shape the gateway's answer from the backend's (status, headers, body)."""
+    return v2.ApiGwV2Response(status=status, body=body or b"", headers=gc.strip_resp_hop(headers))
+
+
+def finish_unreachable(message=None):
+    return _err(503, message or "The backend is unreachable.", "UNAVAILABLE")
+
+
+class BackendUnavailable(Exception):
+    """Raised by an async backend hook with a user-facing reason (not mapped, relay down, refused ...) -> the gateway answers 503."""
+
+
+def no_runtime():
+    return _err(503, NO_RUNTIME_MSG, "UNAVAILABLE")
+
+
+def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, http_fetch=None, verify_sig=None,
+           source_ip="127.0.0.1", now=None):
+    """Serve one request for `gateway` (a gateway record from the control plane): plan() -> http_fetch -> finish()."""
+    fwd = plan(store, gateway, method, path, headers, query, body, verify_sig=verify_sig, source_ip=source_ip, now=now)
+    if not isinstance(fwd, Forward):
+        return fwd
+    if http_fetch is None:
+        return no_runtime()
     try:
-        status, rh, rb = http_fetch(method, url, out_h, body or b"", float(b.get("deadline") or 15))
+        status, rh, rb = http_fetch(fwd.method, fwd.url, fwd.headers, fwd.body, fwd.timeout)
     except Exception:
-        return _err(503, "The backend is unreachable.", "UNAVAILABLE")
-    rh = gc.strip_resp_hop(rh)
-    return v2.ApiGwV2Response(status=status, body=rb or b"", headers=rh)
+        return finish_unreachable()
+    return finish(fwd, status, rh, rb)
+
+
+async def ahandle(store, gateway, method, path, headers=None, query=None, body=b"", *, async_fetch=None, verify_sig=None,
+                  source_ip="127.0.0.1", now=None):
+    """The async twin of handle() for runtimes whose only way out is an awaited call (Nano: a JS bridge to the local relay).
+    `async_fetch(fwd) -> (status, headers, bytes)` may raise BackendUnavailable(reason). Same plan() / finish(), so auth and
+    quota (counted once, in plan()) behave exactly as in handle()."""
+    fwd = plan(store, gateway, method, path, headers, query, body, verify_sig=verify_sig, source_ip=source_ip, now=now)
+    if not isinstance(fwd, Forward):
+        return fwd
+    if async_fetch is None:
+        return no_runtime()
+    try:
+        status, rh, rb = await async_fetch(fwd)
+    except BackendUnavailable as e:
+        return finish_unreachable(str(e))
+    except Exception:
+        return finish_unreachable()
+    return finish(fwd, status, rh, rb)
+
+
+def js_backend_fetch():
+    """Nano: an async hook over `globalThis.vyomiBackendFetch` (wasm/gw-bridge.js, installed by every context that serves the wire);
+    None when not running in a browser or when no bridge was installed."""
+    if sys.platform != "emscripten":
+        return None
+    try:
+        import js
+        fn = getattr(js.globalThis, "vyomiBackendFetch", None)
+    except Exception:
+        return None
+    if fn is None:
+        return None
+
+    async def call(fwd):
+        req = fwd.as_dict()
+        req["body"] = base64.b64encode(req["body"] or b"").decode()
+        raw = await fn(json.dumps(req))
+        out = json.loads(str(raw))
+        if out.get("error"):
+            raise BackendUnavailable(str(out["error"]))
+        return int(out["status"]), out.get("headers") or {}, base64.b64decode(out.get("body") or "")
+    return call
 
 
 # ── default injectables (appliance / dev server; Nano passes none) ───────────

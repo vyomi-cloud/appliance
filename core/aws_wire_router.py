@@ -1525,7 +1525,30 @@ class AwsWireRouter:
                 r"/providers/microsoft\.cognitiveservices/accounts/[^/]+/openai/", path.lower())):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
             from core import llm_core
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
+        if svc == "gcp-gateway-invoke":
+            # A runtime with no outbound socket (Nano) reaches the backend through an awaited bridge (core/gcp_apigateway_gateway.ahandle);
+            # a runtime that has one (appliance, tests) keeps the synchronous path in handle(). `self.async_backend_fetch` lets a host inject the hook.
+            from core import gcp_apigateway_gateway as gcpgw
+            hook = getattr(self, "async_backend_fetch", None) or (gcpgw.js_backend_fetch() if gcpgw.default_http_fetch() is None else None)
+            if hook is not None:
+                g, rest = self._gcp_gateway_target(path, lheaders)
+                if g is None:
+                    return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"code":404,"message":"No gateway serves this host."}'}
+                r = await gcpgw.ahandle(self.gcp_mon, g, method, rest, headers or {}, query or {}, bytes(b), async_fetch=hook,
+                                        verify_sig=gcpgw.default_verify_sig())
+                return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
         return self.handle(method, path, query, headers, body)
+
+    def _gcp_gateway_target(self, path, lheaders):
+        """(gateway record | None, path within the gateway) for a `*.gateway.dev` host or `/gcpgw/<id>/...` request."""
+        from core import gcp_apigateway_gateway as gcpgw
+        hostn = lheaders.get("host", "")
+        rest, gid = path.split("?", 1)[0], ""
+        if rest.startswith("/gcpgw/"):
+            gid, _, rest = rest[len("/gcpgw/"):].partition("/")
+            rest = "/" + rest
+            hostn = ""
+        return gcpgw.find_gateway(self.gcp_mon, hostn, gid), rest
 
     def _eks_cluster_info(self, name):
         """{vpc_id, subnet_ids} of an EKS cluster in the account bag (Network Firewall container associations), or None."""
@@ -1970,13 +1993,7 @@ class AwsWireRouter:
 
         if svc == "gcp-gateway-invoke":
             from core import gcp_apigateway_gateway as gcpgw
-            hostn = lheaders.get("host", "")
-            rest, gid = path.split("?", 1)[0], ""
-            if rest.startswith("/gcpgw/"):
-                gid, _, rest = rest[len("/gcpgw/"):].partition("/")
-                rest = "/" + rest
-                hostn = ""
-            g = gcpgw.find_gateway(self.gcp_mon, hostn, gid)
+            g, rest = self._gcp_gateway_target(path, lheaders)
             if g is None:
                 return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"code":404,"message":"No gateway serves this host."}'}
             r = gcpgw.handle(self.gcp_mon, g, method, rest, headers or {}, query or {}, bytes(body),

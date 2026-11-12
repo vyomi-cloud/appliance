@@ -30,6 +30,7 @@
  *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
 import { egress } from "./egress.mjs";
+import { createLocalGw } from "./gw-egress-node.mjs";
 import { createHub } from "./mesh-hub.mjs";
 import { createSshHub, createSshTransport } from "./mesh-ssh.mjs";
 import { createLazySshHub } from "./mesh-lazy-hub.mjs";
@@ -45,7 +46,7 @@ import { createRequire } from "node:module";
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status
-if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   process.exit(await main(process.argv.slice(2)));
 }
@@ -70,6 +71,8 @@ const pending = new Map();     // id -> {resolve}
 // tab answers consistently — no need to force-close others (which would war with
 // their auto-reconnect).
 const tabs = new Set();        // live registrant sockets, insertion-ordered
+// Gateway backend egress for Nano (GET /gw-token, POST /gw-egress): mapped backends only — wasm/relay/gw-egress-node.mjs
+const gw = createLocalGw();
 // Mesh link (outbound-dialed mesh <-> token-paired clients). Inert unless VYOMI_MESH_SESSION_KEY is set.
 // VYOMI_MESH_CODESPACE=<name>: the link runs on THIS machine over the user's own `gh codespace ssh` session (mesh-ssh.mjs); the Codespace dials nothing.
 const hub = process.env.VYOMI_MESH_CODESPACE
@@ -119,7 +122,7 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "amqp", ...(hub.enabled() ? ["mesh-link", "mesh-shell"] : [])],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", "amqp", ...(gw.enabled ? ["gw-egress"] : []), ...(hub.enabled() ? ["mesh-link", "mesh-shell"] : [])],
       mesh_sessions: hub.enabled() ? hub.linked().length : undefined,
       mesh_streams: hub.enabled() ? hub.streams() : undefined,
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
@@ -146,6 +149,7 @@ const server = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
+    if (gw.http(req, res, Buffer.concat(chunks))) return;        // gateway backend egress (mapped origins only)
     if (meshHub && meshHub.http(req, res)) return;               // LLM mesh peer table (/mesh-llm/_peers)
     if (llmHub.http(req, res, Buffer.concat(chunks))) return;   // remote-LLM plane (/llm/*)
     if (hub.http(req, res, Buffer.concat(chunks))) return;     // mesh plane (carries X-Vyomi-Session-Token)

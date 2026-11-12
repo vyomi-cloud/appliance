@@ -158,6 +158,7 @@ import builtins; builtins._handle = _handle; builtins._sql = _sql
 builtins._capture = _capture; builtins._restore = _restore
 `);
   // Host access to in-browser databases (psql / mysql / ORMs via vyomi-tunnel): see wasm/db-bridge.js.
+  try { import("../gw-bridge.js").then((m) => m.installGatewayBridge()).catch((e) => console.warn("gateway bridge skipped:", e)); } catch (_) {}
   try { import("../db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("db bridge skipped:", e)); } catch (_) {}
   log('<span class="ok">cores loaded</span> (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)');
   log(hasPg ? '<span class="ok">RDS engine: PGlite (real Postgres)</span>' : 'RDS engine: sqlite3 (PGlite unavailable)', hasPg ? "" : "dim");
