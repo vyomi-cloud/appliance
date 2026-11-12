@@ -263,7 +263,7 @@ class EventBus:
                 tried = set()
                 for rid in list(self.state["order"]):
                     rec = self.state["deliveries"].get(rid)
-                    if not rec or rec["status"] in TERMINAL or rid in tried:
+                    if not rec or rec["status"] in TERMINAL or rid in tried or rec.get("inflight"):
                         continue
                     if rec["next_at"] is not None and rec["next_at"] > now:
                         continue
@@ -271,7 +271,11 @@ class EventBus:
                         continue
                     tried.add(rid)
                     while True:
-                        self._attempt(rec, now)
+                        rec["inflight"] = True      # a re-entrant tick (target -> another bus) must not re-attempt this delivery
+                        try:
+                            self._attempt(rec, now)
+                        finally:
+                            rec["inflight"] = False
                         made += 1
                         progress = True
                         if rec["status"] in TERMINAL or not rec["retry"]["sync"]:

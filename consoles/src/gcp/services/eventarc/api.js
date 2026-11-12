@@ -15,6 +15,7 @@ export const destinationOf = (t) => {
   const d = t.destination || {};
   if (d.cloudRun) return { kind: "Cloud Run service", name: d.cloudRun.service, region: d.cloudRun.region };
   if (d.cloudRunJob) return { kind: "Cloud Run job", name: d.cloudRunJob.job, region: d.cloudRunJob.region };
+  if (d.httpEndpoint) return { kind: "HTTP endpoint", name: d.httpEndpoint.uri };
   const k = Object.keys(d)[0];
   return { kind: k || "—", name: k ? JSON.stringify(d[k]) : "—" };
 };

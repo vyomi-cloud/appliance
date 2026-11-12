@@ -89,6 +89,33 @@ def eventarc_section(rx):
     _check("httpEndpoint destination must be an http(s) URL", call("POST", T, {"eventFilters": flt, "destination": {"httpEndpoint": {"uri": "ftp://x"}}}, {"triggerId": "bad"})[0] == 400)
 
 
+def eventgrid_section(rx):
+    """Event Grid webhook delivery goes through the same engine: retryPolicy.maxDeliveryAttempts retries a real flaky receiver."""
+    import urllib.request
+    from core import azure_eventgrid_core as eg
+
+    def post(url, body, headers):
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            return urllib.request.urlopen(req, timeout=5).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    eg.bind_destinations(webhook_post=post)
+    try:
+        def rec(props):
+            return {"name": "sub", "properties": {"eventDeliverySchema": "EventGridSchema", "destination": {"endpointType": "WebHook", "properties": {"endpointUrl": rx.url + "/eg"}}, **props}}
+        ev = {"id": "e1", "eventType": "t", "subject": "s", "data": {}}
+        rx.fail_first["/eg"] = 2
+        r = rec({"retryPolicy": {"maxDeliveryAttempts": 3}})
+        _check("event grid retries a flaky webhook through the engine", eg._attempt_delivery(r, ev) == "delivered" and [a["ok"] for a in r["_attempts"]] == [False, False, True])
+        rx.fail_first["/eg"] = 9
+        r = rec({"retryPolicy": {"maxDeliveryAttempts": 2}, "deadLetterDestination": {"endpointType": "StorageBlob"}})
+        _check("event grid dead-letters after maxDeliveryAttempts", eg._attempt_delivery(r, ev) == "dead-lettered" and len(r["_attempts"]) == 2)
+        rx.fail_first["/eg"] = 0
+    finally:
+        eg.bind_destinations()
+
+
 def run() -> int:
     rx = Receiver()
     now = [1000.0]
@@ -158,6 +185,7 @@ def run() -> int:
     rec = sb.dispatch({"id": "q", "target": "x", "retry": {"max_attempts": 5, "sync": True, "min_backoff": 0}}, eb.cloud_event("t", "//s"))
     _check("sync retries resolve inline", rec["status"] == eb.DELIVERED and len(calls) == 3)
     eventarc_section(rx)
+    eventgrid_section(rx)
     json.dumps(bus.state)
     _check("state is JSON-serialisable (persistable)", True)
     rx.close()

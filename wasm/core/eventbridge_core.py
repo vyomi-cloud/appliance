@@ -32,6 +32,7 @@ from datetime import datetime, timedelta, timezone
 
 from core.messaging_store import MessagingStore, REGION
 from core import sqs_core
+from core import event_bus_engine as _ebus
 from core import sns_core as sns_mod
 from core import lambda_core as lam_mod
 from core import kinesis_core as kinesis_mod
@@ -548,26 +549,40 @@ _MAX_LOCAL_RETRIES = 3   # the simulator caps retries (no 24 h backoff window)
 
 
 def _deliver_with_retry(tgt, fn, store, lam_store, envelope_str) -> bool:
-    """Call `fn()` (True = delivered); on failure/exception retry per the target's RetryPolicy.MaximumRetryAttempts, then
-    send the event to DeadLetterConfig.Arn (an SQS queue) if set. Never raises: EventBridge swallows target failures,
-    so PutEvents succeeds regardless."""
+    """Deliver through the shared event-bus engine (core/event_bus_engine.py): `fn()` (True = delivered) is attempted, then retried
+    per the target's RetryPolicy.MaximumRetryAttempts (capped locally), then the event goes to DeadLetterConfig.Arn (an SQS queue)
+    if set. Retries run inline (`sync` policy): EventBridge swallows target failures, so PutEvents succeeds regardless. Every
+    attempt is recorded in the engine's delivery log (`store._eb_bus_state`, in-memory)."""
     try:
         extra = int((tgt.get("RetryPolicy") or {}).get("MaximumRetryAttempts", 0) or 0)
     except (TypeError, ValueError):
         extra = 0
-    for _ in range(1 + max(0, min(extra, _MAX_LOCAL_RETRIES))):
-        try:
-            if fn():
-                return True
-        except Exception:
-            continue
     dlq = str((tgt.get("DeadLetterConfig") or {}).get("Arn") or "")
-    if dlq and ":sqs:" in dlq:
+
+    def _call(target, event, ctx):
+        if ctx.get("dead_letter"):
+            return bool(deliver(store, lam_store, target["arn"], envelope_str, {}))
+        return bool(fn())
+    state = getattr(store, "_eb_bus_state", None)
+    if state is None:
+        state = {}
         try:
-            deliver(store, lam_store, dlq, envelope_str, {})
+            store._eb_bus_state = state
         except Exception:
             pass
-    return False
+    bus = _ebus.EventBus(_call, state=state, max_records=200, auto_pump=False)
+    sub = {"id": "%s/%s" % (tgt.get("_rule_arn", ""), tgt.get("Id", "")), "target": {"arn": tgt.get("Arn", "")},
+           "retry": {"max_attempts": 1 + max(0, min(extra, _MAX_LOCAL_RETRIES)), "min_backoff": 0, "sync": True},
+           "dead_letter": {"arn": dlq} if dlq and ":sqs:" in dlq else None}
+    try:
+        env = json.loads(envelope_str)
+        env = env if isinstance(env, dict) else {}
+    except Exception:
+        env = {}
+    try:
+        return bus.dispatch(sub, {"id": env.get("id", ""), "type": env.get("detail-type", ""), "source": env.get("source", "")})["status"] == _ebus.DELIVERED
+    except Exception:
+        return False
 
 
 def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
