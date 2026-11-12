@@ -57,6 +57,9 @@ sc = call(st, "GET", L + "/serverConfig")[1]
 check("R47: 1.36.4-gke.2377000 is the default; 1.36.4-gke.2326000 and 1.34.12-gke.1153000 deprecated (valid, in no channel)",
       gk.DEFAULT_VERSION == "1.36.4-gke.2377000" and all(v in sc["validMasterVersions"] and all(v not in c["validVersions"] for c in sc["channels"])
       for v in ("1.36.4-gke.2326000", "1.34.12-gke.1153000")) and "1.37.2-gke.1042000" in sc["validMasterVersions"])
+check("R45: 1.34.11-gke.1056000 + 1.36.4-gke.1495003 deprecated (valid, in no channel); R45 builds available",
+      all(v in sc["validMasterVersions"] and all(v not in c["validVersions"] for c in sc["channels"]) for v in ("1.34.11-gke.1056000", "1.36.4-gke.1495003"))
+      and all(v in sc["validMasterVersions"] for v in ("1.37.1-gke.2097000", "1.36.5-gke.1259000", "1.35.8-gke.2308000", "1.34.12-gke.1363000", "1.34.11-gke.1209000")))
 check("deprecated 1.35.8-gke.1919000 still valid but in no channel",
       "1.35.8-gke.1919000" in sc["validMasterVersions"] and all("1.35.8-gke.1919000" not in c["validVersions"] for c in sc["channels"]) and "1.35.8-gke.1975000" in sc["validMasterVersions"])
 s, op = call(st, "POST", L + "/clusters", {"cluster": {"name": "ap", "autopilot": {"enabled": True}}}, {"$alt": "json;enum-encoding=int"})
