@@ -48,18 +48,22 @@ async def _serve(request: Request, path: str | None = None, provider: str | None
 async def _gcp_control(request: Request):
     from core import gcp_apigateway_core as _agw, gcp_eventarc_core as _arc
     p = request.url.path.split("?", 1)[0]
+    if p.endswith(":fire"):   # the demo `triggers/{t}:fire` helper stays on core/nats_routes (the native API has no such verb)
+        for r in request.app.router.routes:
+            if getattr(r, "name", "") == "gcp_eventarc_trigger_fire":
+                return await r.endpoint(request.path_params["project"], request.path_params["location"], request.path_params["rest"].split(":")[0].split("/")[0], request)
     if not (_agw.is_apigateway_path(p) or _agw.is_apikeys_path(p) or _arc.is_eventarc_path(p)):
         return _json_err(404, "Unknown path: " + p)
-    return await _serve(request, provider="gcp")
+    return await _serve(request)
 
 
 async def _gcp_data(request: Request):
-    return await _serve(request, provider="gcp")
+    return await _serve(request)
 
 
 async def _gcp_host(request: Request):
     p = request.url.path
-    return await _serve(request, path=(p[len(_HOST_PREFIX):] or "/"), provider="gcp")
+    return await _serve(request, path=(p[len(_HOST_PREFIX):] or "/"))
 
 
 async def _azure_apim(request: Request):
