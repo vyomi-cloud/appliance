@@ -54,7 +54,9 @@ async def _gcp_control(request: Request):
                 return await r.endpoint(request.path_params["project"], request.path_params["location"], request.path_params["rest"].split(":")[0].split("/")[0], request)
     if not (_agw.is_apigateway_path(p) or _agw.is_apikeys_path(p) or _arc.is_eventarc_path(p)):
         return _json_err(404, "Unknown path: " + p)
-    return await _serve(request)
+    # under the GCP provider: retries / dead-letter publishes this call runs reach the SAME Pub/Sub space the native Pub/Sub routes write
+    # (the Cloud Run slot is pinned to its own provider in routes/gcp_run._slot, so this does not change what Eventarc sees of Cloud Run)
+    return await _serve(request, provider="gcp")
 
 
 async def _gcp_data(request: Request):
@@ -84,7 +86,14 @@ class GatewayHostMiddleware:
                     host = v.decode("latin-1").split(":", 1)[0].lower()
                     break
             p = scope.get("path") or ""
-            if host.endswith(".gateway.dev") and not p.startswith(_HOST_PREFIX):
+            if ".execute-api." in host and not p.startswith(("/apigw/", "/restapis/", "/_apigw/", "/api/", "/_wire/")):
+                # {id}.execute-api.<anything>[/{stage}]/path (the host-style invoke URL) -> the path-style route the router serves
+                scope = dict(scope)
+                scope["path"] = "/apigw/" + host.split(".", 1)[0] + (p if p.startswith("/") else "/" + p)
+                raw = scope.get("raw_path")
+                if isinstance(raw, (bytes, bytearray)):
+                    scope["raw_path"] = ("/apigw/" + host.split(".", 1)[0]).encode() + bytes(raw)
+            elif host.endswith(".gateway.dev") and not p.startswith(_HOST_PREFIX):
                 scope = dict(scope)
                 scope["path"] = _HOST_PREFIX + (p if p.startswith("/") else "/" + p)
                 raw = scope.get("raw_path")

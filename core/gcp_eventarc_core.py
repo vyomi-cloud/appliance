@@ -247,9 +247,18 @@ def _make_deliver(holder: dict):
         if ctx.get("dead_letter"):       # DLQ: publish the CloudEvent to the Pub/Sub dead-letter topic
             from core import gcp_pubsub_core as ps
             import base64
-            r = ps.dispatch(c["pubsub_store"], "POST", "/v1/%s:publish" % target["topic"], {}, {},
-                            json.dumps({"messages": [{"data": base64.b64encode(json.dumps(ce).encode()).decode(),
-                                                      "attributes": {"ce-type": str(ce.get("type")), "ce-id": str(ce.get("id"))}}]}).encode())
+            try:   # the appliance keeps Pub/Sub in the GCP space: a retry that fires from another request context must still reach it (no app_context on Nano)
+                from core import app_context as _ctx
+                _tok = _ctx.REQUEST_PROVIDER.set("gcp")
+            except Exception:
+                _ctx = _tok = None
+            try:
+                r = ps.dispatch(c["pubsub_store"], "POST", "/v1/%s:publish" % target["topic"], {}, {},
+                                json.dumps({"messages": [{"data": base64.b64encode(json.dumps(ce).encode()).decode(),
+                                                          "attributes": {"ce-type": str(ce.get("type")), "ce-id": str(ce.get("id"))}}]}).encode())
+            finally:
+                if _tok is not None:
+                    _ctx.REQUEST_PROVIDER.reset(_tok)
             return {"ok": r.status == 200, "status": r.status, "error": "" if r.status == 200 else "dead-letter publish failed"}
         try:
             if kind == "http":
