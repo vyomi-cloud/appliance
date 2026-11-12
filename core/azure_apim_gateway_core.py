@@ -39,6 +39,11 @@ import re
 import time
 import xml.etree.ElementTree as ET
 
+try:
+    from core import gateway_common as gc
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import gateway_common as gc  # type: ignore
+
 APIM = "microsoft.apimanagement/service"
 LOG_MAX = 1000
 # nominal sustained requests/second one unit of each SKU is rated at (used only for the simulated capacity gauge)
@@ -150,13 +155,8 @@ def _limit(ctx, e, key_extra, bag, now, kind):
     calls = int(_a(e, "calls", "0"))
     period = _period(e)
     key = "|".join([kind, _a(e, "counter-key", "") and ctx.expr(_a(e, "counter-key")) or "", key_extra, str(calls), str(period)])
-    w = bag.get(key)
-    if not w or now - w[0] >= period:
-        w = [now, 0]
-    w[1] += 1
-    bag[key] = w
-    if w[1] > calls:
-        wait = max(1, int(period - (now - w[0])))
+    ok, wait = gc.window_take(bag, key, now, period, 1, calls, count_rejected=True)
+    if not ok:
         if kind == "quota":
             raise PolicyError(403, f"Out of call volume quota. Quota will be replenished in {wait} seconds.", {"Retry-After": str(wait)})
         raise PolicyError(429, f"Rate limit is exceeded. Try again in {wait} seconds.", {"Retry-After": str(wait)})
@@ -447,14 +447,14 @@ def handle(state, svc, method, path, query, headers, body, fetch=None, now=None,
             if ctx.query:
                 from urllib.parse import urlencode
                 url += "?" + urlencode(ctx.query)
-            fh = {k: v for k, v in ctx.headers.items() if k not in ("host", "content-length", "ocp-apim-subscription-key", "connection")}
+            fh = gc.strip_hop(ctx.headers, extra=("ocp-apim-subscription-key",))
             data = ctx.set_body.encode() if ctx.set_body is not None else ctx.body
             if fetch is None:
                 resp = _body(502, "Bad Gateway: the backend cannot be reached from this runtime (no outbound network).")
             else:
                 try:
                     st, rh, rb = fetch(method, url, fh, data)
-                    resp = {"status": st, "headers": {k: v for k, v in (rh or {}).items() if k.lower() not in ("transfer-encoding", "content-length", "connection")}, "body": rb or b""}
+                    resp = {"status": st, "headers": gc.strip_resp_hop(rh), "body": rb or b""}
                 except Exception as e:  # noqa: BLE001
                     resp = _body(502, f"Bad Gateway: {type(e).__name__}: {e}")
         ctx.resp_headers = resp["headers"]
