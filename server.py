@@ -253,6 +253,13 @@ try:
     _giam_unified.register(app)
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] GCP IAM core mount skipped: {_e}")
+# v4.0.0 — the shared gateway + event-bus backends (GCP API Gateway/API Keys/Eventarc, /gcpgw + *.gateway.dev data plane, Azure APIM data
+# plane) on the real appliance: same router Nano uses (routes/gateway_eventbus_unified.py). Before the provider routes so these paths win.
+try:
+    from routes import gateway_eventbus_unified as _gw_eb_unified
+    _gw_eb_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] gateway/event-bus core mount skipped: {_e}")
 # v4 C0h — ONE engine: Microsoft Graph (Entra ID directory, /v1.0 + /beta) on the shared core.
 try:
     from routes import azure_graph_unified as _graph_unified
