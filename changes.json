@@ -1,19 +1,17 @@
 {
- "at": "2026-11-12T18:09:47+00:00",
+ "at": "2026-11-12T19:09:43+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "azure",
-   "service": "Azure SQL",
+   "service": "Azure Monitor",
    "kind": "announcement",
-   "key": "feed:azure:04622603a72e",
-   "title": "[In preview] Public Preview: SQL performance monitoring for Azure SQL Managed Instance",
-   "link": "https://azure.microsoft.com/updates?id=574158",
-   "detail": "The public preview of Microsoft-managed performance monitoring for Azure SQL Managed Instance is now available. Customers monitoring business-critical SQL Managed Instance workloads often rely on custom scripts and disconnected monitoring tools. This requ",
+   "key": "feed:azure:00b46e7434c1",
+   "title": "[In preview] Public Preview: Auto scaling of ingestion limits in Azure Monitor workspace",
+   "link": "https://azure.microsoft.com/updates?id=578207",
+   "detail": "Auto scaling introduces a per-workspace capability in Azure Monitor Workspace (AMW) to automatically scale ingestion limits based on observed usage patterns. When enabled, the system dynamically adjusts ingestion limits (quota ceiling) to maintain healthy",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/software.amazon.awssdk:dynamodb: The read operation timed out"
- ]
+ "errors": []
 }
