@@ -12,7 +12,7 @@ Owner: Sudhir. Order proposed 2026-11-12. Every step marked **OWNER** writes to 
 - Repo secrets present: CLAUDE_CODE_OAUTH_TOKEN, CONFORMANCE_BOT_TOKEN, DOCKERHUB_*, HOMEBREW_TAP_TOKEN, NPM_TOKEN. Not seen: NIGHTLY_CODESPACES_PAT (needed only for live Mesh crawl). Repo variables V4_AUTO_RELEASE / V4_RELEASE_PAUSE: none set.
 
 ## 0. Before anything
-- [ ] Pause the v3 automation: set repo variable `V4_RELEASE_PAUSE=true`; disable `conformance-hourly`, `conformance-daily-pr`, `conformance-release`, `service-gate` (they auto-bump v3.0.x and would race the release).
+- [x] Pause the v3 automation (done 2026-11-12 15:47 UTC): `V4_RELEASE_PAUSE=true` set; hourly, daily-pr, release-on-daily-PR-merge and service-gate disabled (verified in `gh workflow list --all`). Watchdog, Release, Docker Publish left active (tag-only).
 - [ ] Freeze: no merges to `main` or `v4-on-main` except runbook steps.
 - [ ] Update AZ-10 row in `V4.0.0-KNOWN-ISSUES.md`; confirm AWS/GCP rows are final.
 
