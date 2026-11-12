@@ -241,3 +241,19 @@ def run_resources(store=None):
 if __name__ == "__main__":
     run()
     run_resources()
+
+def test_model_persisted_by_an_older_version_is_healed_not_a_500():
+    """Nano restores the EC2/VPC model from the browser; one saved by an older version has only the keys that existed then. Every EC2 read on it
+    raised KeyError ('key_pairs', 'instances', 'account', 'seeded_amis', ...), i.e. HTTP 500 on Service health / Zones and an empty launch wizard."""
+    from core import vpc_core as v
+
+    class Store:
+        pass
+
+    st = Store()
+    st._vpc_model = {"vpcs": {}, "subnets": {}, "sgs": {}}          # an old persisted shape
+    for fn in (v._describe_key_pairs, v._describe_availability_zones):
+        fn(st, {})
+    assert v._MODEL_KEYS <= st._vpc_model.keys()
+    st._vpc_model["key_pairs"]["k"] = {"name": "k"}                 # healing never wipes data already there
+    assert v._model(st)["key_pairs"] == {"k": {"name": "k"}}
