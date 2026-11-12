@@ -28,9 +28,11 @@ from datetime import datetime, timezone
 
 try:
     from core import gcp_run_core as run
+    from core import event_bus_engine as ebus
     from core.gcp_firestore_core import FirestoreResponse
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import gcp_run_core as run  # type: ignore
+    import event_bus_engine as ebus  # type: ignore
     from gcp_firestore_core import FirestoreResponse  # type: ignore
 
 EVENT_TYPES = {
@@ -49,6 +51,7 @@ PROVIDERS = [
     ("cloudaudit.googleapis.com", "Cloud Audit Logs"), ("firestore.googleapis.com", "Firestore"),
     ("pubsub.googleapis.com", "Cloud Pub/Sub"), ("storage.googleapis.com", "Cloud Storage"),
 ]
+TRIGGER_RETRY = {"max_attempts": 5, "min_backoff": 1.0, "max_backoff": 60.0, "multiplier": 2.0}   # Vyomi default (real Eventarc retries for 24 h)
 _ID = re.compile(r"^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$")
 _SA = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$|^\d+-compute@developer\.gserviceaccount\.com$")
 
@@ -115,15 +118,23 @@ def _validate(store, run_store, project, location, tid, payload, pubsub_store, g
     if sa and not _SA.match(sa):
         raise _E(400, "INVALID_ARGUMENT", "serviceAccount must be a service account email, got %r." % sa)
     dest = payload.get("destination") or {}
-    kinds = [k for k in ("cloudRun", "cloudRunJob", "workflow", "cloudFunction", "gke") if k in dest]
+    kinds = [k for k in ("cloudRun", "cloudRunJob", "httpEndpoint", "workflow", "cloudFunction", "gke") if k in dest]
     if len(kinds) != 1:
-        raise _E(400, "INVALID_ARGUMENT", "destination must name exactly one of cloudRun, cloudRunJob (Vyomi), workflow, cloudFunction, gke.")
+        raise _E(400, "INVALID_ARGUMENT", "destination must name exactly one of cloudRun, cloudRunJob (Vyomi), httpEndpoint, workflow, cloudFunction, gke.")
     k = kinds[0]
     if k in ("workflow", "gke"):
         raise _E(400, "FAILED_PRECONDITION", "Destination %s is not simulated by Vyomi (no Workflows / GKE delivery backend); use cloudRun or cloudRunJob." % k)
     if k == "cloudFunction":
         raise _E(400, "FAILED_PRECONDITION", "Cloud Functions 1st-gen destinations are not simulated; deploy the function as a Cloud Run service.")
     target = dest[k]
+    if k == "httpEndpoint":
+        if not str(target.get("uri") or "").startswith(("http://", "https://")):
+            raise _E(400, "INVALID_ARGUMENT", "destination.httpEndpoint.uri must be an http(s) URL.")
+        pol = _retry_policy(payload)
+        dlt = payload.get("deadLetterTopic")
+        if dlt and pubsub_store is not None and pubsub_store.get_topic(dlt) is None:
+            raise _E(400, "INVALID_ARGUMENT", "deadLetterTopic '%s' does not exist." % dlt)
+        return {"etype": etype, "filters": filters, "topic": _topic(etype, payload, project, location, tid, pubsub_store), "dest_kind": k, "dest_name": target["uri"]}
     region = target.get("region") or location
     if region != location:
         raise _E(400, "INVALID_ARGUMENT", "The destination must be in the same region as the trigger (%s)." % location)
@@ -134,6 +145,14 @@ def _validate(store, run_store, project, location, tid, payload, pubsub_store, g
         (run._get_service if k == "cloudRun" else run._get_job)(run_store, project, location, name)
     except run._E as e:
         raise _E(400, "FAILED_PRECONDITION", "Destination Cloud Run %s '%s' does not exist in %s." % ("service" if k == "cloudRun" else "job", name, location))
+    _retry_policy(payload)
+    dlt = payload.get("deadLetterTopic")
+    if dlt and pubsub_store is not None and pubsub_store.get_topic(dlt) is None:
+        raise _E(400, "INVALID_ARGUMENT", "deadLetterTopic '%s' does not exist." % dlt)
+    return {"etype": etype, "filters": filters, "topic": _topic(etype, payload, project, location, tid, pubsub_store), "dest_kind": k, "dest_name": name}
+
+
+def _topic(etype, payload, project, location, tid, pubsub_store) -> str:
     transport = payload.get("transport") or {}
     topic = ((transport.get("pubsub") or {}).get("topic")) or ""
     if etype.endswith("messagePublished") and not topic:
@@ -143,7 +162,29 @@ def _validate(store, run_store, project, location, tid, payload, pubsub_store, g
             ps.dispatch(pubsub_store, "PUT", "/v1/" + topic, {}, {}, b"{}")
     elif topic and pubsub_store is not None and pubsub_store.get_topic(topic) is None:
         raise _E(400, "INVALID_ARGUMENT", "Pub/Sub topic '%s' does not exist." % topic)
-    return {"etype": etype, "filters": filters, "topic": topic, "dest_kind": k, "dest_name": name}
+    return topic
+
+
+def _dur(v, default):
+    if v is None or v == "":
+        return default
+    try:
+        return float(str(v).rstrip("s"))
+    except ValueError:
+        raise _E(400, "INVALID_ARGUMENT", "retryPolicy durations must look like '10s', got %r." % (v,))
+
+
+def _retry_policy(payload: dict) -> dict:
+    """Eventarc Advanced pipeline-style `retryPolicy` {maxAttempts, minRetryDelay, maxRetryDelay} (Vyomi applies it to triggers)."""
+    rp = payload.get("retryPolicy") or {}
+    d = ebus.DEFAULT_RETRY
+    try:
+        return ebus.normalize_retry({"max_attempts": rp.get("maxAttempts", TRIGGER_RETRY["max_attempts"]),
+                                     "min_backoff": _dur(rp.get("minRetryDelay"), TRIGGER_RETRY["min_backoff"]),
+                                     "max_backoff": _dur(rp.get("maxRetryDelay"), TRIGGER_RETRY["max_backoff"]),
+                                     "multiplier": rp.get("backoffMultiplier", TRIGGER_RETRY["multiplier"])})
+    except (TypeError, ValueError):
+        raise _E(400, "INVALID_ARGUMENT", "retryPolicy.maxAttempts must be an integer >= 1.")
 
 
 def _create(store, run_store, project, location, query, payload, **kw):
@@ -162,7 +203,11 @@ def _create(store, run_store, project, location, query, payload, **kw):
          "transport": {"pubsub": {"topic": v["topic"]}} if v["topic"] else {},
          "labels": payload.get("labels") or {}, "eventDataContentType": payload.get("eventDataContentType") or "application/json",
          "etag": uuid.uuid4().hex[:16], "conditions": {"Ready": {"code": "OK", "message": ""}},
-         "_event_type": v["etype"], "_deliveries": [], "_delivered": 0, "_failed": 0}
+         "_event_type": v["etype"]}
+    if payload.get("retryPolicy"):
+        t["retryPolicy"] = payload["retryPolicy"]
+    if payload.get("deadLetterTopic"):
+        t["deadLetterTopic"] = payload["deadLetterTopic"]
     trg[full] = t
     return _lro(project, location, _view(t))
 
@@ -184,9 +229,77 @@ def _match_filters(t: dict, attrs: dict) -> bool:
     return True
 
 
-# ── delivery ───────────────────────────────────────────────────────────────
-def deliver(store, run_store, event_type: str, attrs: dict, ce: dict, log_fn=None, topic=None) -> int:
-    """Fire every trigger matching (event_type, attrs) with CloudEvent `ce`. Never raises. -> number delivered."""
+# ── delivery (shared event-bus engine: core/event_bus_engine.py) ─────────────
+_BUSES: dict = {}   # id(store) -> {"bus": EventBus, "ctx": {run_store, pubsub_store, log_fn}}
+
+
+def _target_of(t: dict, project: str, location: str) -> dict:
+    d = t["destination"]
+    if "cloudRun" in d:
+        return {"kind": "service", "project": project, "location": location, "name": d["cloudRun"]["service"]}
+    if "cloudRunJob" in d:
+        return {"kind": "job", "project": project, "location": location, "name": d["cloudRunJob"]["job"]}
+    return {"kind": "http", "url": d["httpEndpoint"]["uri"]}
+
+
+def _make_deliver(holder: dict):
+    def _deliver(target: dict, ce: dict, ctx: dict) -> dict:
+        c, kind = holder["ctx"], target["kind"]
+        err = ""
+        if ctx.get("dead_letter"):       # DLQ: publish the CloudEvent to the Pub/Sub dead-letter topic
+            from core import gcp_pubsub_core as ps
+            import base64
+            r = ps.dispatch(c["pubsub_store"], "POST", "/v1/%s:publish" % target["topic"], {}, {},
+                            json.dumps({"messages": [{"data": base64.b64encode(json.dumps(ce).encode()).decode(),
+                                                      "attributes": {"ce-type": str(ce.get("type")), "ce-id": str(ce.get("id"))}}]}).encode())
+            return {"ok": r.status == 200, "status": r.status, "error": "" if r.status == 200 else "dead-letter publish failed"}
+        try:
+            if kind == "http":
+                out = ebus.http_deliver(target, ce, ctx)
+                ok, err = 200 <= int(out.get("status") or 0) < 300, out.get("error", "")
+            elif kind == "service":
+                out = run.invoke_service(c["run_store"], target["project"], target["location"], target["name"], ce, internal=True)
+                ok = out["status"] < 500
+                if not ok:
+                    err = str(out["body"].get("error", "")) if isinstance(out["body"], dict) else "delivery failed"
+                    err = err or "HTTP %s" % out["status"]
+            else:
+                run.run_job(c["run_store"], target["project"], target["location"], target["name"],
+                            {"overrides": {"containerOverrides": [{"env": [{"name": "CLOUD_EVENT", "value": json.dumps(ce)[:4000]}]}]}})
+                ok = True
+        except Exception as e:   # noqa: BLE001
+            ok, err = False, getattr(e, "message", str(e))
+        if c.get("log_fn") and kind in ("service", "job"):
+            c["log_fn"](kind, target["project"], target["location"], target["name"],
+                        "Eventarc trigger %s attempt %d %s %s" % (ctx["subscription"].rsplit("/", 1)[-1], ctx["attempt"], "failed: " + err if err else "delivered", ce.get("type")),
+                        "ERROR" if err else "INFO")
+        return {"ok": ok, "status": 200 if ok else 500, "error": err}
+    return _deliver
+
+
+def bus_for(store, run_store=None, pubsub_store=None, log_fn=None):
+    """The engine bound to this store (state persisted in store.ext). Refreshes the injected substrate handles on every call."""
+    if getattr(store, "ext", None) is None:
+        store.ext = {}
+    h = _BUSES.get(id(store))
+    state = store.ext.setdefault("eventarc_bus", {})
+    if h is None or h["state"] is not state:
+        h = {"ctx": {}, "state": state}
+        h["bus"] = ebus.EventBus(_make_deliver(h), state=h["state"])
+        _BUSES[id(store)] = h
+    if run_store is not None:
+        h["ctx"]["run_store"] = run_store
+    if pubsub_store is not None:
+        h["ctx"]["pubsub_store"] = pubsub_store
+    if log_fn is not None:
+        h["ctx"]["log_fn"] = log_fn
+    return h["bus"]
+
+
+def deliver(store, run_store, event_type: str, attrs: dict, ce: dict, log_fn=None, topic=None, pubsub_store=None) -> int:
+    """Hand `ce` to the shared event bus once per matching trigger; the first attempt runs inline, failures retry with exponential
+    backoff and dead-letter after maxAttempts. Never raises. -> number delivered by the first attempt."""
+    bus = bus_for(store, run_store, pubsub_store, log_fn)
     n = 0
     for full, t in list(_coll(store, "triggers").items()):
         if t.get("_event_type") != event_type or not _match_filters(t, attrs):
@@ -194,43 +307,41 @@ def deliver(store, run_store, event_type: str, attrs: dict, ce: dict, log_fn=Non
         if topic is not None and ((t.get("transport") or {}).get("pubsub") or {}).get("topic") != topic:
             continue
         parts = full.split("/")
-        project, location = parts[1], parts[3]
-        dest = t["destination"]
-        err, status = "", "DELIVERED"
+        sub = {"id": full, "target": _target_of(t, parts[1], parts[3]), "retry": _retry_policy(t), "ordered": True}
+        if t.get("deadLetterTopic"):
+            sub["dead_letter"] = {"kind": "pubsub", "topic": t["deadLetterTopic"]}
         try:
-            if "cloudRun" in dest:
-                out = run.invoke_service(run_store, project, location, dest["cloudRun"]["service"], ce, internal=True)
-                if out["status"] >= 500:
-                    err = str(out["body"].get("error", "")) if isinstance(out["body"], dict) else "delivery failed"
-            else:
-                run.run_job(run_store, project, location, dest["cloudRunJob"]["job"],
-                            {"overrides": {"containerOverrides": [{"env": [{"name": "CLOUD_EVENT", "value": json.dumps(ce)[:4000]}]}]}})
-        except Exception as e:   # noqa: BLE001
-            err = getattr(e, "message", str(e))
-        if err:
-            status = "FAILED"
-            t["_failed"] += 1
-        else:
-            t["_delivered"] += 1
-            n += 1
-        t["_deliveries"] = ([{"time": _now(), "eventId": ce.get("id"), "type": ce.get("type"), "status": status, "error": err,
-                              "destination": dest.get("cloudRun", dest.get("cloudRunJob"))}] + t["_deliveries"])[:50]
-        if log_fn:
-            kind = "service" if "cloudRun" in dest else "job"
-            rid = dest["cloudRun"]["service"] if kind == "service" else dest["cloudRunJob"]["job"]
-            log_fn(kind, project, location, rid, "Eventarc trigger %s %s %s" % (parts[-1], "failed: " + err if err else "delivered", ce.get("type")),
-                   "ERROR" if err else "INFO")
+            rec = bus.dispatch(sub, ce, ce.get("orderingkey"))
+            n += rec["status"] == ebus.DELIVERED
+        except Exception:   # noqa: BLE001
+            pass
     return n
 
 
-def _ce(etype, source, subject, data):
+def trigger_deliveries(store, full: str, limit: int = 50) -> dict:
+    bus = bus_for(store)
+    bus.tick()
+    st = bus.stats(full)
+    items = []
+    for h in bus.history(full, limit):
+        last = h["attempts"][-1] if h["attempts"] else {}
+        items.append({"time": last.get("time", h["createTime"]), "eventId": h["eventId"], "type": h["eventType"],
+                      "status": {"DELIVERED": "DELIVERED", "DEAD_LETTERED": "DEAD_LETTERED", "FAILED": "FAILED"}.get(h["status"], "RETRYING"),
+                      "error": h["lastError"], "destination": h["target"], "attemptCount": h["attemptCount"], "maxAttempts": h["maxAttempts"],
+                      "nextAttemptTime": h["nextAttemptAt"], "orderingKey": h["orderingKey"], "attempts": h["attempts"],
+                      **({"deadLetter": h["deadLetter"]} if "deadLetter" in h else {})})
+    return {"deliveries": items, "delivered": st["delivered"], "failed": st["failed"] + st["deadLettered"], "retrying": st["retrying"] + st["pending"],
+            "deadLettered": st["deadLettered"], "attempts": st["attempts"]}
+
+
+def _ce(etype, source, subject, data, ok=None):
     return {"specversion": "1.0", "type": etype, "id": uuid.uuid4().hex[:16], "source": source, "subject": subject, "time": _now(),
-            "datacontenttype": "application/json", "data": data}
+            "datacontenttype": "application/json", "data": data, **({"orderingkey": ok} if ok else {})}
 
 
 def on_storage_event(store, run_store, bucket, name, event, obj, log_fn=None):
     etype = "google.cloud.storage.object.v1.%s" % event
-    return deliver(store, run_store, etype, {"bucket": bucket}, _ce(etype, "//storage.googleapis.com/projects/_/buckets/%s" % bucket, "objects/%s" % name, obj), log_fn)
+    return deliver(store, run_store, etype, {"bucket": bucket}, _ce(etype, "//storage.googleapis.com/projects/_/buckets/%s" % bucket, "objects/%s" % name, obj, ok=name), log_fn)
 
 
 def on_pubsub_publish(store, run_store, topic_full, messages, log_fn=None):
@@ -239,7 +350,7 @@ def on_pubsub_publish(store, run_store, topic_full, messages, log_fn=None):
     for m in messages or []:
         ce = _ce(etype, "//pubsub.googleapis.com/%s" % topic_full, "",
                  {"message": {"data": m.get("data", ""), "attributes": m.get("attributes") or {}, "messageId": m.get("messageId", "")},
-                  "subscription": "eventarc"})
+                  "subscription": "eventarc"}, ok=m.get("orderingKey") or None)
         n += deliver(store, run_store, etype, {}, ce, log_fn, topic=topic_full)
     return n
 
@@ -271,7 +382,7 @@ def on_firestore_write(store, run_store, project, db, rel, old, new, log_fn=None
             if v:
                 v["name"] = base
         ce = _ce(etype, "//firestore.googleapis.com/projects/%s/databases/%s" % (project, db), "documents/%s" % rel,
-                 {"oldValue": ov or {}, "value": nv or {}, **({"updateMask": {"fieldPaths": sorted(set((old or {}).get("fields", {})) ^ set((new or {}).get("fields", {})))}} if old and new else {})})
+                 {"oldValue": ov or {}, "value": nv or {}, **({"updateMask": {"fieldPaths": sorted(set((old or {}).get("fields", {})) ^ set((new or {}).get("fields", {})))}} if old and new else {})}, ok=rel)
         n += deliver(store, run_store, etype, {"database": db, "document": rel, "namespace": "(default)"}, ce, log_fn)
     return n
 
@@ -285,6 +396,7 @@ def dispatch(store, method: str, path: str, query=None, headers=None, body: byte
              gcs_store=None, log_fn=None) -> FirestoreResponse:
     query = query or {}
     method = method.upper()
+    bus_for(store, run_store, pubsub_store, log_fn).tick()   # lazy tick: due retries run on any API call
     m = re.match(r"^/v1/projects/([^/]+)/locations/([^/]+)/(\w+)(?:/([^/:]+))?(?:/(\w+))?$", path.split("?", 1)[0])
     if not m:
         return _err(404, "NOT_FOUND", "Unknown path: " + path)
@@ -323,7 +435,7 @@ def dispatch(store, method: str, path: str, query=None, headers=None, body: byte
             if t is None:
                 return _err(404, "NOT_FOUND", f"Resource '{full}' was not found.")
             if sub == "deliveries" and method == "GET":
-                return _json({"deliveries": t["_deliveries"], "delivered": t["_delivered"], "failed": t["_failed"]})
+                return _json(trigger_deliveries(store, full))
             if method == "GET":
                 return _json(_view(t))
             if method == "PATCH":
@@ -344,6 +456,7 @@ def dispatch(store, method: str, path: str, query=None, headers=None, body: byte
                 return _json(_lro(project, location, _view(t), "update"))
             if method == "DELETE":
                 trg.pop(full)
+                bus_for(store).cancel(full)
                 return _json(_lro(project, location, _view(t), "delete"))
     except _E as e:
         return e.r

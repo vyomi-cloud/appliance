@@ -90,7 +90,7 @@ CORES = [
     "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
-    "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
+    "event_bus_engine.py", "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
     "autoscaling_core.py",                          # AWS: Auto Scaling groups (CloudWatch alarm actions)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "ram_core.py",                                  # AWS: Resource Access Manager (subnet/SG resource shares)
