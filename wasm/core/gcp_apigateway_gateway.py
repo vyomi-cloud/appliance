@@ -240,6 +240,19 @@ def handle(store, gateway, method, path, headers=None, query=None, body=b"", *, 
 
 
 # ── default injectables (appliance / dev server; Nano passes none) ───────────
+def _overrides():
+    """Operator/test hook: VYOMI_GATEWAY_BACKEND_OVERRIDES="https://backend.test=http://127.0.0.1:9999,..." sends calls for an exact https
+    origin to another origin. The control plane only accepts https:// backends, so a loopback test backend is reached through an alias.
+    Unset in production; it never widens what a config may name, it only redirects origins the operator listed."""
+    import os
+    out = {}
+    for part in (os.environ.get("VYOMI_GATEWAY_BACKEND_OVERRIDES") or "").split(","):
+        src, _, dst = part.strip().partition("=")
+        if src and dst:
+            out[src.rstrip("/")] = dst.rstrip("/")
+    return out
+
+
 def default_http_fetch():
     if sys.platform == "emscripten":
         return None
@@ -247,6 +260,10 @@ def default_http_fetch():
     import urllib.request
 
     def fetch(method, url, headers, body, timeout):
+        for src, dst in _overrides().items():
+            if url == src or url.startswith(src + "/") or url.startswith(src + "?"):
+                url = dst + url[len(src):]
+                break
         req = urllib.request.Request(url, data=body or None, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:

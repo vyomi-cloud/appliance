@@ -9,6 +9,8 @@ import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section, fmtDate } from "../../kit/common.jsx";
+import TryIt from "./TryIt.jsx";
+import Policy from "./Policy.jsx";
 import * as api from "./api.js";
 
 export default function GatewayDetail({ params }) {
@@ -45,6 +47,8 @@ export default function GatewayDetail({ params }) {
           columns={[{ id: "m", header: "Method", cell: (r) => r.method }, { id: "p", header: "Path", cell: (r) => r.path }, { id: "u", header: "URL", cell: (r) => `https://${gw.defaultHostname}${r.path}` }, { id: "b", header: "Backend", cell: (r) => r.backend }]}
           empty={<Typography variant="body2" color="text.secondary">This config defines no routes.</Typography>} />
       </Section>
+      <Policy policy={cfg.data?.policy} />
+      <TryIt key={gw.apiConfig + (routes.length ? "r" : "")} gateway={gw} gid={name} routes={routes} policy={cfg.data?.policy} />
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete gateway?" confirmText={name} warning="This can't be undone."
         onConfirm={async () => { await api.deleteGateway(region, name); notify.success(`Deleted gateway "${name}"`); location.hash = "/apigateway"; }}>
         <Typography variant="body2">Gateway <b>{name}</b> will be permanently deleted.</Typography>

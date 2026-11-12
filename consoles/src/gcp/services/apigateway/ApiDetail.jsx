@@ -11,6 +11,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import FormDialog from "../../kit/FormDialog.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section, fmtDate } from "../../kit/common.jsx";
+import Policy from "./Policy.jsx";
 import * as api from "./api.js";
 
 export default function ApiDetail({ params }) {
@@ -21,7 +22,8 @@ export default function ApiDetail({ params }) {
   const [view, setView] = useState(null);   // a config whose routes are shown
   const a = useAsync(() => api.getApi(aid), [aid]);
   const cfgs = useAsync(() => api.listConfigs(aid), [aid]);
-  const routes = useAsync(async () => (view ? (await api.getConfig(aid, api.last(view.name))).routes || [] : []), [view?.name]);
+  const detail = useAsync(async () => (view ? api.getConfig(aid, api.last(view.name)) : null), [view?.name]);
+  const routes = { data: detail.data?.routes || [], loading: detail.loading };
 
   if (a.loading) return <Box sx={{ textAlign: "center", py: 8 }}><CircularProgress /></Box>;
   if (a.error) return <ErrorAlert error={a.error} title="Failed to load API" />;
@@ -49,6 +51,7 @@ export default function ApiDetail({ params }) {
         <ResourceTable resourceName="routes" items={routes.data || []} rowKey={(r) => r.operationId} loading={routes.loading}
           columns={[{ id: "m", header: "Method", cell: (r) => r.method }, { id: "p", header: "Path", cell: (r) => r.path }, { id: "o", header: "Operation", cell: (r) => r.operationId }, { id: "b", header: "Backend", cell: (r) => r.backend }]} />
       </Section>}
+      {view && <Policy policy={detail.data?.policy} />}
       {adding && <FormDialog open title="Create API config" submitLabel="Create" onClose={(ok) => { setAdding(false); if (ok) cfgs.reload(); }}
         fields={[{ key: "id", label: "Config ID", helper: "Lowercase letters, numbers and hyphens" },
           { key: "sa", label: "Gateway service account (optional)", default: "" },

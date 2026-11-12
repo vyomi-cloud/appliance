@@ -240,6 +240,27 @@ def openapi_routes(doc: dict) -> list:
     return out
 
 
+def describe_policy(doc: dict) -> dict:
+    """What the console shows for a config: the document's security schemes, quota limits and which operations they apply to (read-only
+    summary parsed from the stored, already-validated document)."""
+    mg = doc.get("x-google-management") or {}
+    schemes = []
+    for n, d in (doc.get("securityDefinitions") or {}).items():
+        schemes.append({"name": n, "type": d.get("type"), "in": d.get("in"), "keyName": d.get("name"), "issuer": d.get("x-google-issuer"),
+                        "jwksUri": d.get("x-google-jwks_uri"), "audiences": d.get("x-google-audiences")})
+    ops = []
+    for path, pops in (doc.get("paths") or {}).items():
+        for method, op in (pops or {}).items():
+            if str(method).lower() in _METHODS and isinstance(op, dict):
+                sec = op["security"] if "security" in op else doc.get("security")
+                ops.append({"operationId": op.get("operationId"), "method": str(method).upper(), "path": path,
+                            "security": [list(r) for r in (sec or [])], "metricCosts": (op.get("x-google-quota") or {}).get("metricCosts") or {}})
+    return {"securityDefinitions": schemes, "security": [list(r) for r in (doc.get("security") or [])],
+            "metrics": [{"name": m.get("name"), "displayName": m.get("displayName")} for m in mg.get("metrics") or []],
+            "quotaLimits": [{"name": l.get("name"), "metric": l.get("metric"), "unit": l.get("unit"), "values": l.get("values")}
+                            for l in (mg.get("quota") or {}).get("limits") or []], "operations": ops}
+
+
 def _decode(contents: str) -> str:
     try:
         raw = base64.b64decode(contents, validate=True).decode("utf-8")
@@ -351,11 +372,16 @@ def _configs(store, method, project, aid, cid, data, query):
             if not isinstance(docs, list) or not docs:
                 raise _E(400, "INVALID_ARGUMENT", "openapiDocuments must contain at least one OpenAPI document.")
             routes: list = []
+            policy: dict = {}
             for d in docs:
                 contents = ((d or {}).get("document") or {}).get("contents")
                 if not contents:
                     raise _E(400, "INVALID_ARGUMENT", "openapiDocuments[].document.contents is required (base64 of the OpenAPI document).")
-                routes += openapi_routes(parse_openapi(_decode(contents)))
+                parsed = parse_openapi(_decode(contents))
+                routes += openapi_routes(parsed)
+                pol = describe_policy(parsed)
+                for k, v in pol.items():
+                    policy[k] = (policy.get(k) or []) + v if isinstance(v, list) else v
             sa = data.get("gatewayServiceAccount")
             if sa and not re.match(r"^(projects/[^/]+/serviceAccounts/)?[^@\s/]+@[^@\s/]+$", sa):
                 raise _E(400, "INVALID_ARGUMENT", "gatewayServiceAccount must be a service account email or resource name, got '%s'." % sa)
@@ -363,7 +389,7 @@ def _configs(store, method, project, aid, cid, data, query):
             cfgs[full] = {"name": full, "createTime": now, "updateTime": now, "displayName": data.get("displayName") or rid,
                           "labels": data.get("labels") or {}, "state": "ACTIVE", "gatewayServiceAccount": sa or "",
                           "serviceConfigId": "%s-%s" % (rid, hashlib.sha256((full + now).encode()).hexdigest()[:6]),
-                          "openapiDocuments": docs, "_routes": routes}
+                          "openapiDocuments": docs, "_routes": routes, "_policy": policy}
             return _json(_lro(project, "global", "create", _view(cfgs[full]), full))
         if method == "GET":
             full_view = str(query.get("view") or "").upper() == "FULL"
@@ -376,6 +402,7 @@ def _configs(store, method, project, aid, cid, data, query):
     if method == "GET":
         d = _view(c, str(query.get("view") or "").upper() == "FULL")
         d["routes"] = c["_routes"]   # Vyomi extension: the routes the document defines (the console's Routes table)
+        d["policy"] = c.get("_policy") or {}   # Vyomi extension: security schemes + quota limits parsed from the document
         return _json(d)
     if method == "PATCH":
         for f in [x for x in str(query.get("updateMask") or "").split(",") if x] or [k for k in ("displayName", "labels") if k in data]:

@@ -29,7 +29,7 @@ const results = [];
 let seq = 0; const u = () => "rtv" + Date.now().toString(36).slice(-5) + (seq++);
 
 // [label, setup?, method, path, body, expected statuses, expected google status (optional)]
-const gA = u(), gB = u(), sA = u(), tA = u(), iA = u(), vA = u(), kA = u(), rA = u();
+const aK = u(), gA = u(), gB = u(), sA = u(), tA = u(), iA = u(), vA = u(), kA = u(), rA = u();
 const CASES = [
   ["storage: invalid bucket name", null, "POST", `/storage/v1/b?project=${P}`, { name: "A" }, [400]],
   ["storage: duplicate bucket", ["POST", `/storage/v1/b?project=${P}`, { name: sA }], "POST", `/storage/v1/b?project=${P}`, { name: sA }, [409]],
@@ -72,9 +72,14 @@ const CASES = [
   ["apigateway: security requirement on an undefined scheme", null, "POST", `/v1/projects/${P}/locations/global/apis/${gB}/configs?apiConfigId=c2x`, { openapiDocuments: [{ document: { path: "o.json", contents: Buffer.from(JSON.stringify({ swagger: "2.0", info: { title: "t", version: "1" }, security: [{ ghost: [] }], paths: { "/a": { get: { operationId: "a", "x-google-backend": { address: "https://example.com" } } } } })).toString("base64") } }] }, [400]],
   ["apigateway: quota limit on an undefined metric", null, "POST", `/v1/projects/${P}/locations/global/apis/${gB}/configs?apiConfigId=c3x`, { openapiDocuments: [{ document: { path: "o.json", contents: Buffer.from(JSON.stringify({ swagger: "2.0", info: { title: "t", version: "1" }, "x-google-management": { metrics: [], quota: { limits: [{ name: "l", metric: "ghost", unit: "1/min/{project}", values: { STANDARD: 1 } }] } }, paths: { "/a": { get: { operationId: "a", "x-google-backend": { address: "https://example.com" } } } } })).toString("base64") } }] }, [400]],
   ["apigateway: gateway pointing at a missing config", null, "POST", `/v1/projects/${P}/locations/${R}/gateways?gatewayId=${u()}`, { apiConfig: `projects/${P}/locations/global/apis/${gB}/configs/nope` }, [404]],
+  ["apikeys: invalid key id", null, "POST", `/v2/projects/${P}/locations/global/keys?keyId=Bad_ID`, {}, [400], "INVALID_ARGUMENT"],
+  ["apikeys: duplicate key id", ["POST", `/v2/projects/${P}/locations/global/keys?keyId=${aK}`, {}], "POST", `/v2/projects/${P}/locations/global/keys?keyId=${aK}`, {}, [409], "ALREADY_EXISTS"],
+  ["apikeys: missing key", null, "GET", `/v2/projects/${P}/locations/global/keys/${u()}`, undefined, [404], "NOT_FOUND"],
+  ["apikeys: keyString of a missing key", null, "GET", `/v2/projects/${P}/locations/global/keys/${u()}/keyString`, undefined, [404], "NOT_FOUND"],
+  ["apikeys: delete a missing key", null, "DELETE", `/v2/projects/${P}/locations/global/keys/${u()}`, undefined, [404], "NOT_FOUND"],
 ];
 
-for (const [label, setup, method, path, body, expect] of CASES) {
+for (const [label, setup, method, path, body, expect, gstatus] of CASES) {
   if (setup) await call(...setup);
   const r = await call(method, path, body);
   const e = r.json && r.json.error;
@@ -88,6 +93,7 @@ for (const [label, setup, method, path, body, expect] of CASES) {
     // Google API errors carry a gRPC status name; the Cloud Storage JSON API instead carries errors[].reason (no "status").
     const gcsStyle = Array.isArray(e.errors) && e.errors[0] && e.errors[0].reason;
     if (!gcsStyle && (!e.status || !/^[A-Z_]+$/.test(String(e.status)))) probs.push(`error.status "${e.status}" is not a gRPC status name`);
+    if (gstatus && e.status !== gstatus) probs.push(`error.status "${e.status}", wanted ${gstatus}`);
     if (BAD.test(String(e.message))) probs.push(`unfriendly message: ${String(e.message).slice(0, 120)}`);
   }
   if (BAD.test(r.text) && !BAD.test(String(e && e.message))) probs.push("body contains a raw stack/placeholder token");

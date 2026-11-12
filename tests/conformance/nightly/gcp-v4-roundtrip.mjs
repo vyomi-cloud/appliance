@@ -10,15 +10,19 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import net from "node:net";
+import { createServer } from "node:http";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // BASE unset -> start `consoles/dev_server.py` (the same router the appliance and Nano use) on a free port for this run.
 let dev = null;
 const freePort = () => new Promise((res) => { const s = net.createServer().listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => res(p)); }); });
 let BASE = process.env.BASE || "";
+// A real local HTTP backend for the API Gateway data-plane checks. The control plane only accepts https:// backends, so the spawned dev server
+// is told (VYOMI_GATEWAY_BACKEND_OVERRIDES, a test hook) to send https://backend.rt.test to this loopback port. Skipped against BASE/SIM_URL.
+const BACKEND = await new Promise((res) => { const srv = createServer((rq, rs) => { const c = []; rq.on("data", (d) => c.push(d)); rq.on("end", () => { rs.writeHead(200, { "content-type": "application/json", "x-rt-backend": "1" }); rs.end(JSON.stringify({ hit: rq.url, method: rq.method })); }); }).listen(0, "127.0.0.1", () => res({ srv, port: srv.address().port })); });
 if (!BASE) {
   const port = await freePort();
-  dev = spawn(process.env.PY || "python3", [resolve(HERE, "../../../consoles/dev_server.py"), "--port", String(port), "--tier", "max", "--primary", "gcp"], { stdio: "ignore", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+  dev = spawn(process.env.PY || "python3", [resolve(HERE, "../../../consoles/dev_server.py"), "--port", String(port), "--tier", "max", "--primary", "gcp"], { stdio: "ignore", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", VYOMI_GATEWAY_BACKEND_OVERRIDES: `https://backend.rt.test=http://127.0.0.1:${BACKEND.port}` } });
   BASE = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + "/v4/gcp/")).ok) break; } catch (_) {} await new Promise((r) => setTimeout(r, 500)); }
 }
@@ -85,6 +89,11 @@ const SVC = {
   "apigateway-apis": { nfill: 1, ui: ["apigateway/apis", "apigateway/apis/new"],
     create: (n) => ["POST", `/v1/projects/${P}/locations/global/apis?apiId=${n}`, { displayName: n }],
     get: (n) => `/v1/projects/${P}/locations/global/apis/${n}`, del: (n) => `/v1/projects/${P}/locations/global/apis/${n}` },
+  // API keys page (API Keys v2): the "create" is a dialog on the list page.
+  "apigateway-keys": { fills: [["e.getAttribute('aria-label')==='Key ID (optional)'", "$N"]], delBtn: (n) => `button[aria-label="Delete key ${n}"]`, pre: async (pg) => { await pg.getByRole("button", { name: /^Create API key/ }).first().click(); await sleep(500); },
+    ui: ["apigateway/keys", "apigateway/keys"],
+    create: (n) => ["POST", `/v2/projects/${P}/locations/global/keys?keyId=${n}`, { displayName: n }],
+    get: (n) => `/v2/projects/${P}/locations/global/keys/${n}`, del: (n) => `/v2/projects/${P}/locations/global/keys/${n}` },
   storage: { ui: ["storage/browser", "storage/create-bucket"],
     create: (n) => ["POST", `/storage/v1/b?project=${P}`, { name: n }],
     get: (n) => `/storage/v1/b/${n}`, del: (n) => `/storage/v1/b/${n}` },
@@ -205,6 +214,20 @@ if (ONLY.includes("apigateway") || ONLY.includes("apigateway-apis")) {
   await rest("POST", `/v1/projects/${P}/locations/global/apis?apiId=${AG.api}`, { displayName: "rt api" });
   await rest("POST", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs?apiConfigId=${AG.cfg}`, { openapiDocuments: [{ document: { path: "o.yaml", contents: Buffer.from(AG_SPEC).toString("base64") } }] });
 }
+if (ONLY.includes("apigateway-keys")) {   // keyString reveal in the UI = the native keyString; delete through the UI refuses the key at the gateway
+  const kid = "rtk" + Date.now().toString(36).slice(-5);
+  try {
+    await rest("POST", `/v2/projects/${P}/locations/global/keys?keyId=${kid}`, { displayName: "rt key" });
+    await go("apigateway/keys");
+    await page.locator(`button[aria-label="Show key string of ${kid}"]`).click({ timeout: 8000 }); await sleep(800);
+    const ui = await page.locator(`[data-testid="keystring-${kid}"]`).innerText();
+    const nat = await rest("GET", `/v2/projects/${P}/locations/global/keys/${kid}/keyString`);
+    check("apigateway-keys", "UI 'Show key' displays the native keyString", !!ui && ui === nat.body?.keyString, `ui=${ui} native=${JSON.stringify(nat.body)}`);
+    await page.locator(`button[aria-label="Delete key ${kid}"]`).click({ timeout: 8000 }); await sleep(600); await confirmDelete(kid);
+    const g = await rest("GET", `/v2/projects/${P}/locations/global/keys/${kid}`);
+    check("apigateway-keys", "UI delete key -> native 404", g.status === 404, `${g.status}`);
+  } catch (e) { check("apigateway-keys", "keyString reveal / delete", false, String(e).split("\n")[0]); }
+}
 if (ONLY.includes("eventarc")) {
   await rest("POST", `/storage/v1/b?project=${P}`, { name: EA.bucket });
   await rest("POST", `/v2/projects/${P}/locations/${R}/services?serviceId=${EA.svc}`, { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } });
@@ -240,6 +263,89 @@ for (const svc of ONLY) {
   try { const d = await ndel(s, b); if (d.status >= 300) throw new Error(`native delete ${d.status} ${JSON.stringify(d.body)}`); check(svc, "C native delete -> UI drops it", !(await listed(svc, b)), "UI still lists it"); }
   catch (e) { check(svc, "C native delete -> UI drops it", false, String(e).split("\n")[0]); }
   if (!s.serial) await stepD();
+}
+if (ONLY.includes("apigateway-apis")) {   // gateway detail: invoke URLs, config policy, and the Try-it panel through the real gateway data plane
+  const gid = "rtt" + Date.now().toString(36).slice(-5), cid = "rtp" + Date.now().toString(36).slice(-5), kid = "rtq" + Date.now().toString(36).slice(-5);
+  const spec = `swagger: "2.0"
+info:
+  title: rt-try
+  version: "1"
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: key
+    in: query
+x-google-management:
+  metrics:
+    - name: reads
+      displayName: Reads
+      valueType: INT64
+      metricKind: DELTA
+  quota:
+    limits:
+      - name: reads-per-min
+        metric: reads
+        unit: 1/min/{project}
+        values:
+          STANDARD: 2
+x-google-backend:
+  address: https://backend.rt.test
+paths:
+  /open:
+    get:
+      operationId: open
+      responses:
+        "200":
+          description: ok
+  /secure:
+    get:
+      operationId: secure
+      security:
+        - api_key: []
+      x-google-quota:
+        metricCosts:
+          reads: 1
+      responses:
+        "200":
+          description: ok
+`;
+  const tryIt = async (route, key) => {
+    await page.getByRole("combobox", { name: "Route" }).click(); await page.getByRole("option", { name: new RegExp(route.replace("/", "\\/")) }).click();
+    await page.getByRole("textbox", { name: "API key", exact: true }).fill(key || "");
+    await page.getByRole("button", { name: /^Send request/ }).click();
+    await page.locator('[data-testid="tryit-status"]').waitFor({ timeout: 10000 });
+    return { status: await page.locator('[data-testid="tryit-status"]').innerText(), body: await page.locator('[data-testid="tryit-body"]').innerText() };
+  };
+  try {
+    const cc = await rest("POST", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs?apiConfigId=${cid}`, { openapiDocuments: [{ document: { path: "o.yaml", contents: Buffer.from(spec).toString("base64") } }] });
+    if (cc.status >= 300) throw new Error(`config create ${cc.status} ${JSON.stringify(cc.body)}`);
+    await rest("POST", `/v2/projects/${P}/locations/global/keys?keyId=${kid}`, {});
+    const keyString = (await rest("GET", `/v2/projects/${P}/locations/global/keys/${kid}/keyString`)).body?.keyString;
+    await rest("POST", `/v1/projects/${P}/locations/${R}/gateways?gatewayId=${gid}`, { apiConfig: `projects/${P}/locations/global/apis/${AG.api}/configs/${cid}` });
+    await go(`apigateway/gateways/${R}/${gid}`);
+    const t = await body();
+    const val = (lab) => page.locator(`input[aria-label^="${lab}"]`).first().inputValue();
+    const hostU = await val("Host-style"), pathU = await val("Path-style"), curl = await val("curl");
+    check("apigateway", "gateway detail shows host-style and path-style invoke URLs and a curl", hostU.includes(".gateway.dev") && pathU.endsWith(`/gcpgw/${gid}`) && curl.startsWith("curl ") && curl.includes(`/gcpgw/${gid}`), `${hostU} | ${pathU} | ${curl}`);
+    check("apigateway", "gateway detail shows the config's security scheme and quota limit parsed from the document", t.includes("api_key") && t.includes("API key in query") && t.includes("reads-per-min") && t.includes("STANDARD: 2"), t.slice(0, 300));
+    const open = await tryIt("/open");
+    const nopen = await fetch(`${WIRE}/gcpgw/${gid}/open`);
+    check("apigateway", "Try-it on an open route shows the gateway's real answer (same status as the native call)", open.status === `HTTP ${nopen.status}`, `${open.status} native=${nopen.status}`);
+    if (!SIM && !process.env.BASE) {
+      check("apigateway", "Try-it reaches the local backend through the gateway (200 + backend body)", open.status === "HTTP 200" && open.body.includes('"hit"') && open.body.includes("/open"), `${open.status} ${open.body.slice(0, 120)}`);
+    } else console.log("[SKIP] apigateway: Try-it backend reach :: needs the spawned dev server (loopback backend override)");
+    const noKey = await tryIt("/secure", "");
+    check("apigateway", "Try-it without a key on a keyed route -> 401", noKey.status === "HTTP 401", `${noKey.status} ${noKey.body.slice(0, 120)}`);
+    const badKey = await tryIt("/secure", "AIzaNotARealKey");
+    check("apigateway", "Try-it with a wrong key -> 400 API key not valid", badKey.status === "HTTP 400" && /API key not valid/.test(badKey.body), `${badKey.status} ${badKey.body.slice(0, 120)}`);
+    const good1 = await tryIt("/secure", keyString), good2 = await tryIt("/secure", keyString), over = await tryIt("/secure", keyString);
+    check("apigateway", "Try-it with the key created through the API Keys API passes, then quota (2/min) -> 429", good1.status !== "HTTP 401" && good1.status !== "HTTP 400" && good2.status !== "HTTP 429" && over.status === "HTTP 429",
+      `${good1.status} ${good2.status} ${over.status}`);
+    const nat = await fetch(`${WIRE}/gcpgw/${gid}/secure?key=${keyString}`);
+    check("apigateway", "native call via /gcpgw/ is over quota too (shared counter)", nat.status === 429, `${nat.status}`);
+  } catch (e) { check("apigateway", "gateway invoke URLs / policy / Try-it", false, String(e).split("\n")[0]); }
+  await rest("DELETE", `/v1/projects/${P}/locations/${R}/gateways/${gid}`); await rest("DELETE", `/v1/projects/${P}/locations/global/apis/${AG.api}/configs/${cid}`);
+  await rest("DELETE", `/v2/projects/${P}/locations/global/keys/${kid}`);
 }
 if (ONLY.includes("apigateway-apis")) {   // API config create (OpenAPI 2.0) / routes / in-use refusal, through the console
   const gid = "rtg" + Date.now().toString(36).slice(-5), cid = "rtc" + Date.now().toString(36).slice(-5);
@@ -281,7 +387,7 @@ if (ONLY.includes("eventarc")) {   // trigger detail page renders what the API h
     await ndel(SVC.eventarc, n);
   } catch (e) { check("eventarc", "trigger detail / delivery", false, String(e).split("\n")[0]); }
 }
-await browser.close(); if (dev) dev.kill();
+await browser.close(); BACKEND.srv.close(); if (dev) dev.kill();
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, JSON.stringify({ cloud: "gcp", console: "v4", base: BASE, project: P, results }, null, 1));
 const done = results.filter((r) => r.ok !== null), pass = done.filter((r) => r.ok).length;
