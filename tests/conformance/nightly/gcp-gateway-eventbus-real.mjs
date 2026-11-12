@@ -15,6 +15,7 @@
  *             and this script's backend/JWKS/event receiver (BACKEND_PORT, default 9411) is reachable from it as host.docker.internal.
  *             Without LOCAL (a Codespace cannot reach this laptop) every check that needs a backend or the JWKS is an honest SKIP; control-plane,
  *             401/400/429 gateway behaviour and the event bus's retry/dead-letter bookkeeping still run.
+ *   PUBLIC_URL  https URL that reaches this script's server from the appliance (e.g. `ngrok http 9411`); enables the forwarding/JWKS/receiver checks on Mesh
  *   BACKEND_PORT (9411)   BACKEND_HOST (host.docker.internal)   OUT (json report)
  * Exit code 1 if any check FAILs; SKIPs are printed with their reason and never counted as PASS. */
 import http from "node:http";
@@ -24,9 +25,11 @@ import { dirname } from "node:path";
 
 const SIM = (process.env.SIM_URL || "http://127.0.0.1:9000").replace(/\/$/, "");
 const P = process.env.PROJECT || "vyomi-project";
-const LOCAL = process.env.LOCAL === "1";
+const PUB = (process.env.PUBLIC_URL || "").replace(/\/$/, "");   // https URL that reaches THIS script's server from the appliance (e.g. an ngrok tunnel) - the Mesh/Codespace mode
+const LOCAL = process.env.LOCAL === "1" || !!PUB;                  // checks that need a reachable backend/JWKS/receiver run when either mode is on
 const BPORT = Number(process.env.BACKEND_PORT || 9411);
 const BHOST = process.env.BACKEND_HOST || "host.docker.internal";
+const RB = PUB || `http://${BHOST}:${BPORT}`;   // base URL the appliance uses for backend / receiver
 const R = "us-central1";
 const sfx = Date.now().toString(36).slice(-6);
 const results = [];
@@ -76,7 +79,7 @@ const srv = http.createServer((rq, rs) => {
 await new Promise((res, rej) => { srv.once("error", rej); srv.listen(BPORT, "0.0.0.0", res); });
 const backendUp = (path) => seen.some((s) => s.url.split("?")[0] === path);
 
-console.log(`SIM_URL=${SIM} PROJECT=${P} LOCAL=${LOCAL ? 1 : 0} backend :${BPORT}`);
+console.log(`SIM_URL=${SIM} PROJECT=${P} LOCAL=${process.env.LOCAL === "1" ? 1 : 0} PUBLIC_URL=${PUB || "-"} backend :${BPORT}`);
 const health = await raw("GET", "/healthz").catch((e) => ({ status: 0, text: String(e) }));
 if (health.status !== 200) { console.log("appliance not reachable: " + health.text); process.exit(2); }
 
@@ -91,7 +94,7 @@ if (!probeKeys.json || !probeGw.json || probeGw.json.code !== 404 || /NoSuchBuck
 
 // =============================== GCP API Gateway ===============================
 const G = `rtg-${sfx}`;
-const BACKEND = "https://backend.rt.test", ISS = "https://issuer.rt.test", AUD = "rt-aud";
+const BACKEND = PUB || "https://backend.rt.test", ISS = PUB || "https://issuer.rt.test", AUD = "rt-aud";
 const spec = {
   swagger: "2.0", info: { title: "rt-real", version: "1" },
   securityDefinitions: { api_key: { type: "apiKey", name: "key", in: "query" }, jwt: { type: "oauth2", "x-google-issuer": ISS, "x-google-jwks_uri": ISS + "/jwks", "x-google-audiences": AUD } },
@@ -162,7 +165,7 @@ let gwHost = "", keyString = "";
   const api = await rest("POST", "/v2/apis", { name: "rt-http-" + sfx, protocolType: "HTTP" });
   const id = api.json?.apiId; check(g, "create HTTP API", !!id, api.text);
   if (id) {
-    const integ = await rest("POST", `/v2/apis/${id}/integrations`, { integrationType: "HTTP_PROXY", integrationMethod: "ANY", payloadFormatVersion: "1.0", integrationUri: `http://${BHOST}:${BPORT}/{proxy}` });
+    const integ = await rest("POST", `/v2/apis/${id}/integrations`, { integrationType: "HTTP_PROXY", integrationMethod: "ANY", payloadFormatVersion: "1.0", integrationUri: `${RB}/{proxy}` });
     const rt = await rest("POST", `/v2/apis/${id}/routes`, { routeKey: "ANY /p/{proxy+}", target: `integrations/${integ.json?.integrationId}` });
     const mock = await rest("POST", `/v2/apis/${id}/routes`, { routeKey: "GET /none" });
     check(g, "create integration + route", integ.status < 300 && rt.status < 300, integ.text + rt.text);
@@ -186,7 +189,7 @@ let gwHost = "", keyString = "";
     const root = ((await rest("GET", `/restapis/${id}/resources`, undefined, sig)).json?.item || [])[0]?.id;
     const res = await rest("POST", `/restapis/${id}/resources/${root}`, { pathPart: "items" }, sig); const rid = res.json?.id;
     await rest("PUT", `/restapis/${id}/resources/${rid}/methods/GET`, { authorizationType: "NONE" }, sig);
-    const ig = await rest("PUT", `/restapis/${id}/resources/${rid}/methods/GET/integration`, { type: "HTTP_PROXY", httpMethod: "GET", uri: `http://${BHOST}:${BPORT}/items` }, sig);
+    const ig = await rest("PUT", `/restapis/${id}/resources/${rid}/methods/GET/integration`, { type: "HTTP_PROXY", httpMethod: "GET", uri: `${RB}/items` }, sig);
     check(g, "create resource + method + HTTP_PROXY integration", !!rid && ig.status < 300, res.text + ig.text);
     const dep = await rest("POST", `/restapis/${id}/deployments`, { stageName: "prod" }, sig); check(g, "deploy stage prod", dep.status < 300, dep.text);
     const miss = await raw("GET", `/restapis/${id}/prod/_user_request_/nothing`); check(g, "invoke an unrouted path -> 403/404 'Missing Authentication Token'-style JSON", [403, 404].includes(miss.status), `${miss.status} ${miss.text}`);
@@ -204,7 +207,7 @@ let gwHost = "", keyString = "";
   const Q = "?api-version=2022-08-01", S = `/subscriptions/${sub}/resourceGroups/rt-gw-${sfx}`, base = `${S}/providers/Microsoft.ApiManagement/service/rtapim${sfx}`;
   const rg = await rest("PUT", S + "?api-version=2022-09-01", { location: "eastus" }); check(g, "create resource group", rg.status < 300, rg.text);
   const sv = await rest("PUT", base + Q, { location: "eastus", sku: { name: "Developer", capacity: 1 }, properties: { publisherEmail: "a@b.c", publisherName: "rt" } }); check(g, "create APIM service", sv.status < 300, sv.text);
-  const ap = await rest("PUT", base + "/apis/echo" + Q, { properties: { displayName: "Echo", path: "echo", serviceUrl: `http://${BHOST}:${BPORT}/base`, protocols: ["https"], subscriptionRequired: true } }); check(g, "create API", ap.status < 300, ap.text);
+  const ap = await rest("PUT", base + "/apis/echo" + Q, { properties: { displayName: "Echo", path: "echo", serviceUrl: `${RB}/base`, protocols: ["https"], subscriptionRequired: true } }); check(g, "create API", ap.status < 300, ap.text);
   const op = await rest("PUT", base + "/apis/echo/operations/get1" + Q, { properties: { displayName: "get1", method: "GET", urlTemplate: "/r/{id}" } }); check(g, "create operation", op.status < 300, op.text);
   const sb = await rest("PUT", base + "/subscriptions/s1" + Q, { properties: { scope: `${base}/apis`, displayName: "s1" } }); check(g, "create subscription", sb.status < 300, sb.text);
   const sec = await rest("POST", base + "/subscriptions/s1/listSecrets" + Q); const key = sec.json?.primaryKey || ""; check(g, "listSecrets returns a primary key", !!key, sec.text);
@@ -229,8 +232,8 @@ let gwHost = "", keyString = "";
     eventFilters: [{ attribute: "type", value: "google.cloud.pubsub.topic.v1.messagePublished" }], transport: { pubsub: { topic: `projects/${P}/topics/${topic}` } },
     destination: { httpEndpoint: { uri } }, retryPolicy: { maxAttempts: 4, minRetryDelay: "1s", maxRetryDelay: "2s" }, ...extra });
   const tRetry = `rt-retry-${sfx}`, tDlq = `rt-dlq-${sfx}`;
-  const a = await mk(tRetry, `http://${BHOST}:${BPORT}/events/${tRetry}?fail=2`, {}); check(g, "create trigger with retryPolicy -> http receiver", a.status < 300, a.text);
-  const b = await mk(tDlq, `http://${BHOST}:${BPORT}/events/${tDlq}?fail=all`, { deadLetterTopic: `projects/${P}/topics/${dlq}`, retryPolicy: { maxAttempts: 2, minRetryDelay: "1s", maxRetryDelay: "1s" } }); check(g, "create trigger with deadLetterTopic", b.status < 300, b.text);
+  const a = await mk(tRetry, `${RB}/events/${tRetry}?fail=2`, {}); check(g, "create trigger with retryPolicy -> http receiver", a.status < 300, a.text);
+  const b = await mk(tDlq, `${RB}/events/${tDlq}?fail=all`, { deadLetterTopic: `projects/${P}/topics/${dlq}`, retryPolicy: { maxAttempts: 2, minRetryDelay: "1s", maxRetryDelay: "1s" } }); check(g, "create trigger with deadLetterTopic", b.status < 300, b.text);
   const pub = await rest("POST", `/v1/projects/${P}/topics/${topic}:publish`, { messages: [{ data: Buffer.from("hello-event").toString("base64"), attributes: { k: "v" } }] }); check(g, "publish an event to the trigger's topic", pub.status < 300, pub.text);
   const deliveries = async (t) => ((await rest("GET", `/v1/projects/${P}/locations/${R}/triggers/${t}/deliveries`)).json) || {};
   let dRetry = {}, dDlq = {};
