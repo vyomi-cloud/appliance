@@ -1,299 +1,477 @@
-# Vyomi — the Multi-Cloud Digital Twin Runtime
+# Release checks — v4.0.0
 
-[![CI](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml/badge.svg)](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml)
-[![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.0.0-green.svg)](CHANGELOG.md)
-[![Docker](https://img.shields.io/badge/docker-vyomi%2Fappliance-blue.svg)](https://hub.docker.com/r/vyomi/appliance)
+Generated 2026-11-12 18:55 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/43256905260) for tag `v4.0.0`.
 
-**Build for the cloud, without the cloud.** Vyomi is a **multi-cloud digital twin runtime** — a faithful, *running* replica of your AWS, GCP, and Azure environment on your own machine. Real services, real SDKs, real backends; no cloud account, no cloud bill, no network required.
+| Package / check | Platform | Result |
+|---|---|---|
+| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
+| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
+| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways (78/84 checks passed) | Linux, release images | ❌ failure |
+| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (79/84 checks passed) | Chromium, release wasm bundle | ❌ failure |
+| MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/43256905286)) |
+| Startup: all services + UI status | Linux, release images | ❌ null ([run](https://github.com/vyomi-cloud/appliance/actions/runs/null)) |
+| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | — not run |
 
-> Often searched for as a *local multi-cloud simulator* or a *LocalStack alternative* — Vyomi goes further: a real digital twin on real backends across all three clouds, not single-cloud mocks.
+## DEB
 
-Point your existing SDKs/CLIs — `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*`, plus `aws` / `gcloud` / `gsutil` / `az` / `terraform` — at `http://localhost:9000`, and your code runs unchanged. When you're ready, one-click **Terraform export** promotes the same stack to production cloud.
+#### deb · `vyomi_4.0.0_all.deb` — 17/17 passed
 
-### Why a digital twin, not a mock? (vs LocalStack / Moto / Azurite)
+| | Check | Detail |
+|---|---|---|
+| ✅ | install vyomi_4.0.0_all.deb | 6s |
+| ✅ | package manager reports version 4.0.0 | found '4.0.0' |
+| ✅ | bundled VERSION is 4.0.0 | /usr/share/vyomi/packaging/common/VERSION = 4.0.0 |
+| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
+| ✅ | vyomi help runs | exit 0; vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance) |
+| ✅ | vyomi doctor runs | exit 0; cloud-learn root: /usr/lib/cloud-learn |
+| ✅ | vyomi --version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi -V reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi --version shows the simulator state |   simulator : not running |
+| ✅ | vyomi help lists update + version |  |
+| ✅ | vyomi status → docker compose ps | exit 0 |
+| ✅ | vyomi logs → docker compose logs | exit 0 |
+| ✅ | vyomi down → docker compose down | exit 0 |
+| ✅ | vyomi update → latest release v4.0.0 | exit 0; compose v4.0.0; ==> Vyomi 4.0.0 is the latest release. |
+| ✅ | uninstall vyomi | Removing vyomi (4.0.0) ... |
+| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-LocalStack mocks AWS; Moto, [Azurite](https://github.com/Azure/Azurite), and the GCP emulators each cover a single cloud. **Vyomi runs all three major clouds on real backends** (Postgres, MySQL, MinIO/S3, DynamoDB, Vault, NATS, Azurite, the Firestore emulator) with native **multi-cloud NoSQL** — DynamoDB, Firestore, and Cosmos DB — so the twin behaves like the real thing while you build and test cross-cloud apps locally. Full head-to-head: **[vyomi.cloud/compare/localstack](https://vyomi.cloud/compare/localstack)**.
+#### deb · `vyomi-docker_4.0.0_all.deb` — 19/19 passed
 
-> The CLI is `vyomi` (with a `cloud-learn` deprecation shim through v2.x), the Docker image is `vyomi/appliance`, and the brew tap is `vyomi-cloud/tap`. **Upgrading from v1.x?** Read [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) first.
+| | Check | Detail |
+|---|---|---|
+| ✅ | install vyomi-docker_4.0.0_all.deb | 2s |
+| ✅ | package manager reports version 4.0.0 | found '4.0.0' |
+| ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
+| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
+| ✅ | vyomi help runs | exit 0; vyomi (Docker substrate) — Free/Lite/Pro tiers |
+| ✅ | vyomi doctor runs | exit 0; vyomi (Docker substrate) doctor |
+| ✅ | vyomi --version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi -V reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi --version shows the simulator state |   simulator : not running |
+| ✅ | vyomi help lists update + version |  |
+| ✅ | vyomi status → docker compose ps | exit 0 |
+| ✅ | vyomi logs → docker compose logs | exit 0 |
+| ✅ | vyomi down → docker compose down | exit 0 |
+| ✅ | vyomi update → latest release v4.0.0 | exit 0; compose v4.0.0; ==> Vyomi 4.0.0 is the latest release. |
+| ✅ | vyomi update from v3.0.0 → v4.0.0 (SHA256-checked) | exit 0; cached compose v4.0.0 |
+| ✅ | after update, vyomi runs the cached v4.0.0 |   compose   : v4.0.0 (/tmp/tmp.25LT402755/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | uninstall vyomi-docker | Removing vyomi-docker (4.0.0) ... |
+| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-<!-- latest-release:start (generated by scripts/release_notes.py on every release) -->
-## Latest release: v4.0.0 (2026-11-07)
 
-Major release. The first release built from the v4 line: about 1,450 commits on top of v3.0.45 (the per-fix lists below cover only the commits the release tooling could attribute).
+## RPM
 
-- **Native-fidelity consoles for AWS, GCP and Azure.** The three Nano consoles were rebuilt to follow each cloud's own console layout, with 1,415 registered capabilities (AWS 459, GCP 329, Azure 627) each carrying an honest support level; anything not simulated shows a plain "Not simulated in Vyomi" panel, never a fake page.
-- **Headless appliance.** The offline appliance no longer ships its own console UI; Nano is the only UI, and the appliance serves the native API, SDK and CLI endpoints (`vyomi up`, `vyomi update`).
-- **Booster: your own Codespace, AI included.** Pro and Max users can connect a GitHub App and run compute and AI in their own Codespace (2-core, 8 GB RAM, 8 h hard session limit). The AI pack runs a native llama.cpp Qwen2.5-3B (Q4) model behind Bedrock, Vertex AI and Azure OpenAI.
-- **Tiers.** Free runs Nano in the browser; Pro unlocks one cloud's depth features; Max unlocks all three clouds.
-- **Capability badges.** Settings and pages are labelled "Dev Simplified" (works, with the limits listed) or "Config only" (stored and returned like the cloud, not enforced); pages that need a booster show a "Booster" pill.
-- **New engines.** Vertex AI (full section), Binary Authorization, BigQuery, Cloud Functions, Cloud DNS and Security Command Center on GCP; Redshift, X-Ray, CloudFront, Glue, DMS, Systems Manager, EC2 Instance Connect and Application Migration Service on AWS; enforced customer-managed keys, SQL security, storage service properties and Cosmos dedicated-gateway cache, Defender workflow automation, Activity-log export, Event Grid Resource Graph query and network-rule enforcement on Azure.
-- **Agent runtimes.** Bedrock AgentCore Runtime (AWS) and Vertex AI Agent Engine (GCP) run Vyomi agent specs over the shared local-model core (Dev Simplified), next to Bedrock Guardrails and Azure OpenAI Responses and Assistants agents.
-- **Nano VM runtime.** A VM-process runtime in the browser backs Container Apps tools, Azure VM guest views, GCP Compute guest data plane (osInfo, guest attributes, serial output) and AWS Session Manager sessions; GCP also gets VPC flow logs and a daemonless OCI layer builder for Cloud Build/Run.
-- **Azure operations tooling.** Network Watcher packet capture backed by real flows (pcap into storage), Log Analytics Workbooks that run KQL query items, linked storage accounts, computer groups and workspace Diagnose, and Resource Group force delete with Insights; a Resource Graph route is served by the Nano service worker.
-- **Honest labels.** Sections that are not simulated now read "Coming soon" instead of a bare "Not simulated" (AWS, GCP, Azure).
-- **Booster terms and runner-LLM spike.** A Booster terms-of-use draft (60-minute idle destroy, limits, acceptable use) and a runner-hosted LLM mesh spike (eager runner pool, rotation, idle destroy) are included; the runner LLM mesh is OFF by default and is not part of the supported booster.
-- **One AI model catalogue.** All AI consoles (Bedrock, Vertex AI, Azure OpenAI) list only the 10 mesh models from the shared catalogue (`core/ai_model_catalog.py`), so a model shown is a model the booster can serve.
-- **AI agent lanes.** Bedrock InvokeModel streaming and Guardrails, a Gemini Developer API alias, and Azure OpenAI Responses and Assistants run on the shared local-model seam (tools, structured output and streaming included).
+#### rpm · `vyomi-4.0.0-1.noarch.rpm` — 17/17 passed
 
-[Full release notes](https://github.com/vyomi-cloud/appliance/releases/tag/v4.0.0) · [CHANGELOG](CHANGELOG.md) · upgrade: `vyomi update` · Nano: reload [vyomi.cloud](https://vyomi.cloud)
-<!-- latest-release:end -->
+| | Check | Detail |
+|---|---|---|
+| ✅ | install vyomi-4.0.0-1.noarch.rpm | 2s |
+| ✅ | package manager reports version 4.0.0 | found '4.0.0' |
+| ✅ | bundled VERSION is 4.0.0 | /usr/lib/cloud-learn/VERSION = 4.0.0 |
+| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
+| ✅ | vyomi help runs | exit 0; vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance) |
+| ✅ | vyomi doctor runs | exit 0; cloud-learn root: /usr/lib/cloud-learn |
+| ✅ | vyomi --version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi -V reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi --version shows the simulator state |   simulator : not running |
+| ✅ | vyomi help lists update + version |  |
+| ✅ | vyomi status → docker compose ps | exit 0 |
+| ✅ | vyomi logs → docker compose logs | exit 0 |
+| ✅ | vyomi down → docker compose down | exit 0 |
+| ✅ | vyomi update → latest release v4.0.0 | exit 0; compose v4.0.0; ==> Vyomi 4.0.0 is the latest release. |
+| ✅ | uninstall vyomi | Complete! |
+| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-## What's in v4.0.0
+#### rpm · `vyomi-docker-4.0.0-1.noarch.rpm` — 19/19 passed
 
-Everything below is cumulative — every capability shipped from v1.0 through v4.0.0
+| | Check | Detail |
+|---|---|---|
+| ✅ | install vyomi-docker-4.0.0-1.noarch.rpm | 1s |
+| ✅ | package manager reports version 4.0.0 | found '4.0.0' |
+| ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
+| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
+| ✅ | vyomi help runs | exit 0; vyomi (Docker substrate) — Free/Lite/Pro tiers |
+| ✅ | vyomi doctor runs | exit 1; vyomi: Docker is required but was not found on PATH. |
+| ✅ | vyomi --version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi -V reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi --version shows the simulator state |   simulator : not running |
+| ✅ | vyomi help lists update + version |  |
+| ✅ | vyomi status → docker compose ps | exit 0 |
+| ✅ | vyomi logs → docker compose logs | exit 0 |
+| ✅ | vyomi down → docker compose down | exit 0 |
+| ✅ | vyomi update → latest release v4.0.0 | exit 0; compose v4.0.0; ==> Vyomi 4.0.0 is the latest release. |
+| ✅ | vyomi update from v3.0.0 → v4.0.0 (SHA256-checked) | exit 0; cached compose v4.0.0 |
+| ✅ | after update, vyomi runs the cached v4.0.0 |   compose   : v4.0.0 (/tmp/tmp.HCgp6CT2hY/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | uninstall vyomi-docker | Complete! |
+| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-| Area | What you get |
-|---|---|
-| **Three clouds, real backends** | AWS, GCP and Azure — 35+ services backed by real engines: Postgres, MySQL, MinIO (S3/GCS), DynamoDB Local, ElasticMQ (SQS), Vault (KMS + secrets), NATS (eventing), Azurite, fake-gcs, the Pub/Sub and Firestore emulators |
-| **Native SDKs and CLIs, unchanged** | boto3, aws-sdk-java/go, google-cloud-\*, azure-sdk-for-\*; `aws`, `gcloud`, `gsutil`, `az`, `terraform` — only the endpoint changes |
-| **Operation depth** | S3 multipart + CopyObject, DynamoDB transactions + GSIs, SQS FIFO + DLQ redrive, KMS rotation, API Gateway (MOCK + Lambda proxy), VPC with a reachability analyzer, Azure Service Bus topics + Azure SQL, Cosmos queries |
-| **Real compute** | EC2 / GCE / Azure VM instances as SSH-able Docker containers (Pro and Max; WASM Edge VMs in the browser on Nano), with cloud CLIs pre-installed and working SSH + `.pem` connect info |
-| **API reference + SDK/CLI usage** | Every service's API reference and CLI/SDK snippets (aws/boto3, gcloud/google-genai, az/azure-mgmt) are generated into the consoles - see [docs/guides/api-and-sdk-reference.md](docs/guides/api-and-sdk-reference.md) |
-| **Native consoles (Nano)** | The AWS, GCP and Azure consoles live in Nano (https://vyomi.cloud/nano); the 4.0.0 appliance is headless. Second-level detail tabs, per-resource events, and per-service **cost savings** (what the same resources would cost on real cloud) |
-| **Spaces** | Isolated per-cloud workspaces (API/CLI; UI in Nano) with live host telemetry, per-space TTL countdowns, Renew/Force-shutdown, and enterprise/shared sandbox modes |
-| **Vyomi Nano** | The whole simulator in the browser (no install) at [vyomi.cloud](https://vyomi.cloud) — Pyodide + PGlite + IndexedDB persistence, with a local (`vyomi-tunnel`) or cloud relay so external SDKs/CLIs reach it |
-| **Two substrates: WASM Edge + Docker** | Nano runs entirely in your browser (WASM Edge); `vyomi up` runs the full appliance on Docker for every paid tier. Multipass/LXD is retired as of v4.0.0 |
-| **Install anywhere** | Homebrew (`vyomi`, `vyomi-docker`), `.deb` / `.rpm` (`cloud-learn`, `vyomi-docker`), Windows MSI, Docker Compose, source |
-| **Licensing and trial** | Free · Lite · Pro · Max · Enterprise, activated from the portal; offline appliances get a **14-day Pro trial**, then drop to Free |
-| **Enterprise** | Multi-tenant RBAC, shared cohort sandboxes, cloud sandboxes on GitHub Codespaces, SSO, Helm + air-gapped install, audit sinks |
-| **Terraform** | Export simulator state to HCL and import it back |
-| **Verified every release** | Hourly conformance agent across Nano + offline (UI, SDK, CLI, API, cost savings), plus per-release install checks for MSI / DEB / RPM / Homebrew, a full startup + UI-status check, and a Windows end-to-end run — results on each `release/vX.Y.Z` branch |
-| **Privacy** | Anonymous install counting only; opt out with `VYOMI_NO_TELEMETRY=1` |
 
-### Release history
+## BREW
 
-<details open><summary><b>3.0.x</b> — trial, sandboxes, Nano depth</summary>
+#### brew · `vyomi` — 18/18 passed
 
-- **4.0.0** — **Native-fidelity consoles for AWS, GCP and Azure.** The three Nano consoles were rebuilt to follow each cloud's own console layout, with 1,415 registered capabilities (AWS 459, GCP 329, Azure 627) each carrying an honest support level; anything not simulated shows a plain "Not simulated in Vyomi" panel, never a fake page.
-- **3.0.45** — **Black-and-white Health and API reference.** Health and the API reference now use a complete black-and-white theme, with no outer panels, section headers that run edge to edge, and rounded Service status tiles (Nano and offline).
-- **3.0.44** — **DynamoDB bulk operations are now supported.** You can start, list, describe and cancel bulk put-item jobs against DynamoDB, both in Nano and in the offline appliance.
-- **3.0.43** — **Postgres is now reachable from your host apps.** Apps running on your machine can connect to the simulated Postgres through the tunnel, in both Nano and the offline appliance.
-- **3.0.42** — **EventBridge rules now deliver to more targets.** Rules can send events to Kinesis streams, CloudWatch Logs, Step Functions state machines (which start an execution) and other event buses, in both Nano and the offline appliance.
-- **3.0.41** — **Nano and the offline appliance are back in sync.** This release brings the latest Nano console changes into the offline appliance, so both now behave the same way.
-- **3.0.40** — **EventBridge is much more complete (Nano and offline).** You can now create, describe, list and delete event buses with boto3 (it used to fail with InternalFailure), and use archives and replays, connections and API destinations (HTTP targets get the transformed event with API-key or basic auth), plus delivery to Kinesis, CloudWatch Logs, other event buses and Step Functions targets, with retries and dead-lettering to an SQS queue.
-- **3.0.39** — **EC2, Compute Engine and Azure VMs now run as real in-browser VMs in Nano.** You can SSH in through the vyomi-tunnel bridge, the VM image includes apk and standard CLI tools with allow-listed network access so apk, pip and npm work, and consoles show the true power state and a Connect panel that names the instance. SSH to GCE and Azure VMs also works in the offline appliance.
-- **3.0.38** — **Deleted resources now stay deleted.** Resources you delete no longer reappear when you switch between Nano tabs or work through the tunnel, in Nano and the offline appliance.
-- **3.0.37** — **New "How Nano works" videos in Nano.** Each cloud console Home in Nano now has a slim banner that opens a pop-up player with a short video explaining how Nano works for that cloud.
-- **3.0.36** — **A redesigned console, on Nano and offline.** The appliance has a new vyomi wordmark, a light theme, rounded panels and cards, and a side menu that is now the same on Nano and offline. Refreshing the page also keeps you on the current view instead of sending you back to Spaces.
-- **3.0.35** — **GCP projects now work the same in gcloud and the console.** Each GCP space has a single project, which you can address by ID or number, and gcloud and the console both show it. The old project ids (cloudlearn, demo, gcp-dev) now refer to other projects.
-- **3.0.34** — **Detail tabs now show real data across all three clouds.** About 34 resource tabs and blades in AWS, GCP and Azure now read the resource's actual state instead of placeholder content, in both Nano and the offline appliance.
-- **3.0.33** — **Metrics tabs now show real traffic.** In AWS and Azure (Nano and offline), Metrics and Monitoring tabs chart the requests, errors and latency your own calls produce instead of made-up sparklines, and AWS detail tabs are no longer cut off at 10 (VPC Metrics and Flow logs were hidden).
-- **3.0.32** — **Metrics tabs now show real data on all three clouds.** AWS Monitoring and Azure Metrics tabs draw the requests, errors and latency your app actually made, replacing the seeded sparklines and random EC2 CloudWatch values. This works in Nano and offline, and VPC Metrics and Flow logs tabs are no longer hidden.
-- **3.0.31** — **Cloud Scheduler now runs jobs for real (GCP, Nano + offline).** In the offline appliance, jobs fire on their own about every 15 seconds without needing a read, and HTTP-target jobs send an actual request (method, headers, body, bearer token) and report success, failure or timeout on the job; Nano still only records them.
-- **3.0.30** — **GCP Cloud Monitoring is now a Vyomi service.** The offline appliance includes a Cloud Monitoring engine, so you can develop against it without a real GCP project.
-- **3.0.29** — **A GCP container registry is now available in Nano and offline.** You can `docker push` images to it and they show up in the simulator, and the console catalog's sub-blades now merge correctly.
-- **3.0.28** — **Amazon SNS is now available in Nano and offline.** You can work with topics, subscriptions, publish, batch publish, FIFO topics, platform applications and SMS, with a matching console experience in the browser and the offline appliance.
-- **3.0.27** — **Amazon Kinesis Data Streams is now available.** The offline appliance includes a new Kinesis Data Streams engine, and it is wired into the console, service catalog and cost model in both Nano and the offline appliance.
-- **3.0.26** — **Metrics get a shared VictoriaMetrics backend.** Metrics from the simulator are now stored in VictoriaMetrics, in both Nano and the offline appliance.
-- **3.0.25** — **New service: AWS API Gateway V2, in Nano and offline.** It now has a working data plane with live routes, Lambda proxy (1.0 and 2.0), JWT and Lambda authorizers, throttling, CORS and HTTP proxy, plus a console, Go SDK and CLI coverage.
-- **3.0.24** — **Nano relay tunnel works again.** It failed to start since 3.0.18 because six Azure engines weren't loaded; external SDKs and CLIs can reach Nano through the tunnel again.
-- **3.0.8** — `/api/spaces` no longer 500s on binary S3 objects; EC2/GCE create no longer 500s on an unwritable deploy dir; Nano Azure home fixed; `VYOMI_NO_TELEMETRY` opt-out; release checks published per release.
-- **3.0.7** — 14-day Pro trial on "Activate appliance"; redesigned space cards (single status pill, icon actions); Nano tunnel fix.
-- **3.0.6** — Docker Desktop auto-start/install on macOS; console-conformance CI fixes.
-- **3.0.5** — Per-space TTL timer shows on launched cloud sandboxes.
-- **3.0.4** — Per-space TTL for enterprise/shared spaces; winget channel dropped.
-- **3.0.3** — `aws s3 ls` at the service root fixed; Nano second-level consoles, durable in-browser state, per-service cost savings; remote SSH/DB via Codespaces.
-- **3.0.2** — Console polish and backend warm-up.
-- **3.0.1** — Real SSH into simulated compute; honest install-globe geography.
-</details>
+| | Check | Detail |
+|---|---|---|
+| ✅ | install vyomi | 8s |
+| ✅ | package manager reports version 4.0.0 | found '4.0.0' |
+| ✅ | bundled VERSION is 4.0.0 | /opt/homebrew/opt/vyomi/libexec/VERSION = 4.0.0 |
+| ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
+| ✅ | vyomi help runs | exit 0; vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance) |
+| ✅ | vyomi doctor runs | exit 0; cloud-learn root: /opt/homebrew/Cellar/vyomi/4.0.0/libexec |
+| ✅ | vyomi --version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi -V reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi · docker substrate) |
+| ✅ | vyomi --version shows the simulator state |   simulator : not running |
+| ✅ | vyomi help lists update + version |  |
+| ✅ | vyomi status → docker compose ps | exit 0 |
+| ✅ | vyomi logs → docker compose logs | exit 0 |
+| ✅ | vyomi down → docker compose down | exit 0 |
+| ✅ | vyomi update → latest release v4.0.0 | exit 0; compose v4.0.0; ==> Vyomi 4.0.0 is the latest release. |
+| ✅ | brew test vyomi | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi/4.0.0/bin/cloud-learn help 2>&1[0m |
+| ✅ | uninstall vyomi | Uninstalling /opt/homebrew/Cellar/socat/1.8.1.3... (16 files, 1.1MB) |
+| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-<details><summary><b>2.x</b> — real backends, Nano, parity, launcher</summary>
+#### brew · `vyomi-docker` — 20/20 passed
 
-- **2.9.0** — Compiled `vyomi` launcher (Go) for Windows; console data-plane integration.
-- **2.8.1** — All parity work reachable on every tier; Azure SQL + Azure IAM live.
-- **2.8.0** — VPC data plane with a reachability analyzer.
-- **2.7.0** — API Gateway data plane (MOCK + Lambda proxy).
-- **2.6.0** — Parity finish: S3 multipart, DynamoDB GSIs, SQS FIFO + DLQ, KMS rotation, Azure SQL.
-- **2.5.0** — Parity close-out: Azure Service Bus topics, S3 CopyObject, DynamoDB transactions, richer Cosmos queries.
-- **2.4.0** — Tri-cloud on every tier: anti-drift conformance gate; MinIO/Postgres/Vault-backed stores.
-- **2.3.2** — Nano sign-in to save; stable relay URL; install analytics once per machine.
-- **2.3.1** — In-app Swagger and SDK/CLI usage views.
-- **2.3.0** — Free tier = Vyomi Nano in the browser; Cloudflare + local relay tunnels.
-- **2.2.2** — Tier-aware launcher: Docker for Free/Lite/Pro, Multipass for Max.
-- **2.2.1** — `vyomi-docker` packages (.deb / .rpm / brew).
-- **2.2.0** — Pro Docker compute (SSH-able containers); Lite/Nano/Micro tiers; cloudlite compose.
-- **2.1.0.2 / 2.1.0.1 / 2.1.0** — Windows MSI, VirtualBox NAT port-forward, readiness fixes.
-- **2.0.9.2 / 2.0.9.1 / 2.0.9** — Compose as a front door; native-SDK Secrets/KMS/Messaging conformance; Azure Storage Queue.
-- **2.0.8** — Progressive startup (console usable in ~30–60 s); Azure/GCP object stores in the consoles.
-- **2.0.7** — Fresh-install regression fixed; disk cleanup; launch progress.
-- **2.0.6** — Real-SPA conformance 35/35; install funnel from every package manager; version + update check.
-- **2.0.5** — Cloud CLIs bundled into every compute instance.
-- **2.0.4.1 / 2.0.4** — `/clouds` workspaces dashboard, live host telemetry, Docker inside Vyomi EC2.
-- **2.0.1** — Zero-config first launch (localhost bridge, auto browser open).
-- **2.0.0** — The Vyomi rebrand (CLI, image, tap, license BSL 1.1); HTTPS via mkcert + Caddy.
-</details>
+| | Check | Detail |
+|---|---|---|
+| ✅ | install vyomi-docker | 3s |
+| ✅ | package manager reports version 4.0.0 | found '4.0.0' |
+| ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
+| ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
+| ✅ | vyomi help runs | exit 0; vyomi (Docker substrate) — Free/Lite/Pro tiers |
+| ✅ | vyomi doctor runs | exit 1; vyomi: Docker is required but was not found on PATH. |
+| ✅ | vyomi --version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi version reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi -V reports 4.0.0 | exit 0; vyomi 4.0.0 (vyomi-docker · Free/Lite/Pro) |
+| ✅ | vyomi --version shows the simulator state |   simulator : not running |
+| ✅ | vyomi help lists update + version |  |
+| ✅ | vyomi status → docker compose ps | exit 0 |
+| ✅ | vyomi logs → docker compose logs | exit 0 |
+| ✅ | vyomi down → docker compose down | exit 0 |
+| ✅ | vyomi update → latest release v4.0.0 | exit 0; compose v4.0.0; ==> Vyomi 4.0.0 is the latest release. |
+| ✅ | vyomi update from v3.0.0 → v4.0.0 (SHA256-checked) | exit 0; cached compose v4.0.0 |
+| ✅ | after update, vyomi runs the cached v4.0.0 |   compose   : v4.0.0 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.UCsAWgEPAV/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/4.0.0/bin/vyomi --help[0m |
+| ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/4.0.0... (12 files, 27.6MB) |
+| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-<details><summary><b>1.x</b> — launch and launcher hardening</summary>
 
-- **1.2.5** — Default spaces `aws-default` / `gcp-default` / `azure-default`.
-- **1.2.4 / 1.2.3** — Every install path reachable at `vyomi.local:9000` (mDNS).
-- **1.2.2 / 1.2.1** — Launcher installs Multipass when missing (macOS, Linux, Windows).
-- **1.2.0** — Activation and EC2 state-refresh fixes.
-- **1.1.11 → 1.1.1** — Launcher hardening: health probes, bundle verification, tar+transfer sync, phase counters, failure banners, logs.
-- **1.1.0** — Console-actions conformance 100% (253/253) across AWS/GCP/Azure.
-- **1.0.0** — First GA: 29 services across AWS/GCP/Azure, 8 real backends, native SDKs/CLIs, consoles, tiers, Terraform export, reference apps.
-</details>
+## CLI (aws / gcloud / az) and CLI ↔ console
 
-Full details: [`CHANGELOG.md`](CHANGELOG.md) · per-release checks: the `release/vX.Y.Z` branches.
+**78/84 checks passed** against `http://localhost:9000`.
 
-## Quick start
+### CLIs (4/4)
 
-### Homebrew (macOS / Linux)
-```bash
-brew install vyomi-cloud/tap/vyomi
-vyomi up
-```
+| | Check | Detail |
+|---|---|---|
+| ✅ | aws installed |  |
+| ✅ | gcloud installed |  |
+| ✅ | az installed |  |
+| ✅ | appliance backends ready (17/17) |  |
 
-### Docker Compose (development)
-```bash
-git clone https://github.com/vyomi-cloud/appliance && cd appliance
-docker compose up -d
-# headless: API/SDK/CLI only — use Nano (https://vyomi.cloud/nano) for the UI
-curl http://localhost:9000/healthz
-```
+### Identity: CLI and console use the same account / project / subscription (3/3)
 
-### From source
-```bash
-git clone https://github.com/vyomi-cloud/appliance && cd appliance
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 9000
-```
+| | Check | Detail |
+|---|---|---|
+| ✅ | AWS: `aws sts get-caller-identity` account is the console's account |  |
+| ✅ | GCP: `gcloud projects list` returns the console's project |  |
+| ✅ | Azure: `az account list` (GET /subscriptions) returns the console's subscription |  |
 
-**Appliance 4.0.0 is headless** — it serves the API, SDK and CLI endpoints only (no console UI). **Vyomi Nano** at https://vyomi.cloud/nano is the only UI. Useful endpoints:
-- `/api/runtime/tier` — current tier policy
-- `/api/runtime/backends` — health of all 8 real backends
-- `/docs` — auto-generated OpenAPI swagger
+### Both directions: CLI → console and console → CLI (43/44)
 
-## Using your existing cloud SDKs
+| | Check | Detail |
+|---|---|---|
+| ✅ | AWS: S3 bucket created with the CLI |  |
+| ✅ | AWS: S3 bucket created with the CLI shows in the console |  |
+| ✅ | AWS: S3 bucket created in the console |  |
+| ✅ | AWS: S3 bucket created in the console shows in the CLI |  |
+| ✅ | AWS: SQS queue created with the CLI |  |
+| ✅ | AWS: SQS queue created with the CLI shows in the console |  |
+| ✅ | AWS: SQS queue created in the console |  |
+| ✅ | AWS: SQS queue created in the console shows in the CLI |  |
+| ✅ | AWS: DynamoDB table created with the CLI |  |
+| ❌ | AWS: DynamoDB table created with the CLI shows in the console | console lists [] |
+| ✅ | AWS: DynamoDB table created in the console |  |
+| ✅ | AWS: DynamoDB table created in the console shows in the CLI |  |
+| ✅ | AWS: SNS topic created with the CLI |  |
+| ✅ | AWS: SNS topic created with the CLI shows in the console |  |
+| ✅ | AWS: SNS topic created in the console |  |
+| ✅ | AWS: SNS topic created in the console shows in the CLI |  |
+| ✅ | AWS: Secrets Manager secret created with the CLI |  |
+| ✅ | AWS: Secrets Manager secret created with the CLI shows in the console |  |
+| ✅ | AWS: Secrets Manager secret created in the console |  |
+| ✅ | AWS: Secrets Manager secret created in the console shows in the CLI |  |
+| ✅ | GCP: Cloud Storage bucket created with the CLI |  |
+| ✅ | GCP: Cloud Storage bucket created with the CLI shows in the console |  |
+| ✅ | GCP: Cloud Storage bucket created in the console |  |
+| ✅ | GCP: Cloud Storage bucket created in the console shows in the CLI |  |
+| ✅ | GCP: Pub/Sub topic created with the CLI |  |
+| ✅ | GCP: Pub/Sub topic created with the CLI shows in the console |  |
+| ✅ | GCP: Pub/Sub topic created in the console |  |
+| ✅ | GCP: Pub/Sub topic created in the console shows in the CLI |  |
+| ✅ | GCP: Secret Manager secret created with the CLI |  |
+| ✅ | GCP: Secret Manager secret created with the CLI shows in the console |  |
+| ✅ | GCP: Secret Manager secret created in the console |  |
+| ✅ | GCP: Secret Manager secret created in the console shows in the CLI |  |
+| ✅ | Azure: resource group created with the CLI |  |
+| ✅ | Azure: resource group created with the CLI shows in the console |  |
+| ✅ | Azure: resource group created in the console |  |
+| ✅ | Azure: resource group created in the console shows in the CLI |  |
+| ✅ | Azure: storage account created with the CLI |  |
+| ✅ | Azure: storage account created with the CLI shows in the console |  |
+| ✅ | Azure: storage account created in the console |  |
+| ✅ | Azure: storage account created in the console shows in the CLI |  |
+| ✅ | Azure: virtual network created with the CLI |  |
+| ✅ | Azure: virtual network created with the CLI shows in the console |  |
+| ✅ | Azure: virtual network created in the console |  |
+| ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-```python
-# Python (boto3) — AWS
-import boto3
-s3 = boto3.client("s3", endpoint_url="http://localhost:9000",
-                  aws_access_key_id="test", aws_secret_access_key="test",
-                  region_name="us-east-1")
-s3.create_bucket(Bucket="my-bucket")
-s3.put_object(Bucket="my-bucket", Key="hello.txt", Body=b"world")
-```
+### CLI suites, each on its own (28/33)
 
-```bash
-# AWS CLI — dummy creds + region are required; AWS_PAGER="" stops CLI v2's
-# pager from swallowing short output
-export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""
-aws --endpoint-url http://localhost:9000 s3 ls
-aws --endpoint-url http://localhost:9000 rds describe-db-instances
-```
+| | Check | Detail |
+|---|---|---|
+| ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
+| ✅ | aws: 15 passed, 0 failed |  |
+| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
+| ✅ | aws-ec2-sg-description: 2 passed, 0 failed |  |
+| ✅ | aws-elbv2: 27 passed, 0 failed |  |
+| ✅ | aws-kinesis: 20 passed, 0 failed |  |
+| ✅ | aws-logs: 19 passed, 0 failed |  |
+| ✅ | aws-sns: 76 passed, 0 failed |  |
+| ✅ | aws-ssm: 34 passed, 0 failed |  |
+| ✅ | aws-stepfunctions: 26 passed, 0 failed |  |
+| ✅ | azure-app: 23 passed, 0 failed |  |
+| ✅ | azure-appconfiguration: 32 passed, 0 failed |  |
+| ✅ | azure: 6 passed, 0 failed |  |
+| ✅ | azure-cognitiveservices: 20 passed, 0 failed |  |
+| ❌ | azure-defender-automation: 14 passed, 4 failed | Defender raises the storage alert; the automation ran for the alert; the alert is a SecurityAlert row in the workspace; Resource Graph query returns the topic |
+| ✅ | azure-dns: 24 passed, 0 failed |  |
+| ✅ | azure-loganalytics-tools: 12 passed, 0 failed |  |
+| ✅ | azure-monitor: 21 passed, 0 failed |  |
+| ❌ | azure-netenforce: 5 passed, 3 failed | Service Bus: other IP BLOCKED (201); Cosmos CORS preflight: unlisted origin BLOCKED (200); diagnostic setting delivered an OperationalLogs row to the workspace |
+| ✅ | azure-operationalinsights: 20 passed, 0 failed |  |
+| ✅ | azure-packetcapture: 11 passed, 0 failed |  |
+| ❌ | azure-rgtools: 6 passed, 1 failed | Insights: 2 resources, 1 untagged, 1 VM |
+| ❌ | azure-workbooks: 7 passed, 1 failed | render returns the KQL table (west 17, east 5) |
+| ✅ | gcp-artifactregistry: 11 passed, 0 failed |  |
+| ✅ | gcp: 6 passed, 0 failed |  |
+| ✅ | gcp-cloudscheduler: 13 passed, 0 failed |  |
+| ✅ | gcp-container: 14 passed, 0 failed |  |
+| ✅ | gcp-iamcredentials: 9 passed, 0 failed |  |
+| ✅ | gcp-monitoring: 15 passed, 0 failed |  |
+| ✅ | gcp-redis: 20 passed, 0 failed |  |
+| ✅ | gcp-scheduler-pubsub: 6 passed, 0 failed |  |
+| ✅ | gcp-vertex: 21 passed, 0 failed |  |
+| ❌ | gcp-wire-gaps: 1 passed, 20 failed | ets delete; dns managed-zones delete; functions deploy (gen2); functions list finds it; functions describe state ACTIVE; function URL runs the uploaded code (allow-unauthenticated honoured); functions delete; scc findings list; scc assets l |
 
-```java
-// Java (aws-sdk-java-v2)
-S3Client s3 = S3Client.builder()
-    .endpointOverride(URI.create("http://localhost:9000"))
-    .region(Region.US_EAST_1)
-    .credentialsProvider(StaticCredentialsProvider.create(
-        AwsBasicCredentials.create("test", "test")))
-    .build();
-```
+### Released services with no CLI suite yet (36)
 
-```go
-// Go (google-cloud-go)
-client, _ := storage.NewClient(ctx,
-    option.WithEndpoint("http://localhost:9000"),
-    option.WithoutAuthentication())
-bucket := client.Bucket("my-bucket")
-```
+AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS Lambda, AWS RDS, AWS S3, AWS SQS, AWS Secrets Manager, AWS VPC, AZURE API Management, AZURE Cosmos DB, AZURE Entra ID / RBAC, AZURE Event Grid topics, AZURE Function apps, AZURE Key vaults, AZURE Network Security Group, AZURE SQL servers, AZURE Service Bus, AZURE Storage accounts, AZURE Virtual Machines, AZURE Virtual networks, GCP API Gateway, GCP Cloud Functions, GCP Cloud KMS, GCP Cloud SQL, GCP Cloud Storage, GCP Compute Engine, GCP Eventarc, GCP Firestore, GCP IAM & Admin, GCP Pub/Sub, GCP Secret Manager, GCP VPC Network
 
-```hcl
-# Terraform
-provider "aws" {
-  endpoints {
-    s3 = "http://localhost:9000"
-  }
-  skip_credentials_validation = true
-  skip_requesting_account_id  = true
-  region = "us-east-1"
-}
-```
 
-## Reference apps
+## Nano CLI through the tunnel and CLI ↔ console
 
-Three minimal web apps that exercise each cloud's 7 core services through real SDKs:
+**79/84 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
 
-| App | Cloud | Stack | Services exercised |
-|---|---|---|---|
-| [`tests/e2e/java-orders`](tests/e2e/java-orders) | **AWS** | Spring Boot, Java 17 | RDS · S3 · SQS · EventBridge · Secrets Mgr · KMS · IAM |
-| [`tests/e2e/go-inventory`](tests/e2e/go-inventory) | **GCP** | Go + chi | Cloud SQL · GCS · Pub/Sub · Eventarc · Secret Mgr · Cloud KMS · IAM |
-| [`tests/e2e/azure-tickets`](tests/e2e/azure-tickets) | **Azure** | Go + chi | Postgres Flex · Blob · Service Bus · Event Grid · KV-secrets · KV-keys · RBAC |
+### CLIs (4/4)
 
-Each has its own `api_pass_test.go` / `ApiPassTest.java` that round-trips against a live simulator.
+| | Check | Detail |
+|---|---|---|
+| ✅ | aws installed |  |
+| ✅ | gcloud installed |  |
+| ✅ | az installed |  |
+| ✅ | Nano tab registered with the relay tunnel |  |
 
-## Architecture
+### Identity: CLI and console use the same account / project / subscription (3/3)
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                            FastAPI (port 9000)                        │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐                        │
-│  │ /aws/* (S3)│ │ /v1/* (GCP)│ │ /sub/* (Az)│   ← provider routes    │
-│  └─────┬──────┘ └─────┬──────┘ └─────┬──────┘                        │
-│        │              │              │                                │
-│  ┌─────┴──────────────┴──────────────┴────────┐                       │
-│  │  Middleware: rate-limit → SSO → tier-gate │                       │
-│  │             → Cedar → custom-domain       │                       │
-│  └─────┬──────────────────────────────────┬──┘                       │
-│        │                                  │                          │
-│  ┌─────┴─────┐   ┌──────────────┐   ┌─────┴─────┐                    │
-│  │  CloudSim │   │ tier_policy  │   │   state   │                    │
-│  │  backbone │   │   (4 tiers)  │   │ (SQLite)  │                    │
-│  └─────┬─────┘   └──────────────┘   └───────────┘                    │
-└────────┼─────────────────────────────────────────────────────────────┘
-         │
-   ┌─────┴───────────────────────────────────────────────────────┐
-   │                  Real backends (sidecar containers)          │
-   │  Vault  NATS  MinIO  DDB-local  ElasticMQ  PG  MySQL  Cedar │
-   └──────────────────────────────────────────────────────────────┘
-```
+| | Check | Detail |
+|---|---|---|
+| ✅ | AWS: `aws sts get-caller-identity` account is the console's account |  |
+| ✅ | GCP: `gcloud projects list` returns the console's project |  |
+| ✅ | Azure: `az account list` (GET /subscriptions) returns the console's subscription |  |
 
-Full design: [`docs/architecture/CLOUDLEARN_FULL_ARCHITECTURE.md`](docs/architecture/CLOUDLEARN_FULL_ARCHITECTURE.md)
-Production deployment: [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYMENT.md)
+### Both directions: CLI → console and console → CLI (44/44)
 
-## Tiers
+| | Check | Detail |
+|---|---|---|
+| ✅ | AWS: S3 bucket created with the CLI |  |
+| ✅ | AWS: S3 bucket created with the CLI shows in the console |  |
+| ✅ | AWS: S3 bucket created in the console |  |
+| ✅ | AWS: S3 bucket created in the console shows in the CLI |  |
+| ✅ | AWS: SQS queue created with the CLI |  |
+| ✅ | AWS: SQS queue created with the CLI shows in the console |  |
+| ✅ | AWS: SQS queue created in the console |  |
+| ✅ | AWS: SQS queue created in the console shows in the CLI |  |
+| ✅ | AWS: DynamoDB table created with the CLI |  |
+| ✅ | AWS: DynamoDB table created with the CLI shows in the console |  |
+| ✅ | AWS: DynamoDB table created in the console |  |
+| ✅ | AWS: DynamoDB table created in the console shows in the CLI |  |
+| ✅ | AWS: SNS topic created with the CLI |  |
+| ✅ | AWS: SNS topic created with the CLI shows in the console |  |
+| ✅ | AWS: SNS topic created in the console |  |
+| ✅ | AWS: SNS topic created in the console shows in the CLI |  |
+| ✅ | AWS: Secrets Manager secret created with the CLI |  |
+| ✅ | AWS: Secrets Manager secret created with the CLI shows in the console |  |
+| ✅ | AWS: Secrets Manager secret created in the console |  |
+| ✅ | AWS: Secrets Manager secret created in the console shows in the CLI |  |
+| ✅ | GCP: Cloud Storage bucket created with the CLI |  |
+| ✅ | GCP: Cloud Storage bucket created with the CLI shows in the console |  |
+| ✅ | GCP: Cloud Storage bucket created in the console |  |
+| ✅ | GCP: Cloud Storage bucket created in the console shows in the CLI |  |
+| ✅ | GCP: Pub/Sub topic created with the CLI |  |
+| ✅ | GCP: Pub/Sub topic created with the CLI shows in the console |  |
+| ✅ | GCP: Pub/Sub topic created in the console |  |
+| ✅ | GCP: Pub/Sub topic created in the console shows in the CLI |  |
+| ✅ | GCP: Secret Manager secret created with the CLI |  |
+| ✅ | GCP: Secret Manager secret created with the CLI shows in the console |  |
+| ✅ | GCP: Secret Manager secret created in the console |  |
+| ✅ | GCP: Secret Manager secret created in the console shows in the CLI |  |
+| ✅ | Azure: resource group created with the CLI |  |
+| ✅ | Azure: resource group created with the CLI shows in the console |  |
+| ✅ | Azure: resource group created in the console |  |
+| ✅ | Azure: resource group created in the console shows in the CLI |  |
+| ✅ | Azure: storage account created with the CLI |  |
+| ✅ | Azure: storage account created with the CLI shows in the console |  |
+| ✅ | Azure: storage account created in the console |  |
+| ✅ | Azure: storage account created in the console shows in the CLI |  |
+| ✅ | Azure: virtual network created with the CLI |  |
+| ✅ | Azure: virtual network created with the CLI shows in the console |  |
+| ✅ | Azure: virtual network created in the console |  |
+| ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-Tier middleware enforces the gates server-side; standard SDKs work natively on every tier. Current pricing: [vyomi.cloud/pricing](https://vyomi.cloud/pricing) (USD, billed in INR).
+### CLI suites, each on its own (28/33)
 
-- **Free** — Vyomi Nano in your browser, no install, plus the self-hosted appliance on the Free tier.
-- **Lite** ($9/mo), **Pro** ($19/mo), **Max** ($29/mo) — self-hosted appliance tiers: more services, spaces and storage; Pro and Max add Docker compute and the booster; they differ in one way: **Pro gets every service on one cloud of your choice, Max gets all three clouds**. New offline activations start with a **14-day Pro trial**.
-- **Enterprise** — cloud sandboxes for teams on GitHub Codespaces, pay per use; multi-tenant RBAC, SSO, audit sinks, air-gapped install.
+| | Check | Detail |
+|---|---|---|
+| ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
+| ✅ | aws: 15 passed, 0 failed |  |
+| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
+| ✅ | aws-ec2-sg-description: 2 passed, 0 failed |  |
+| ✅ | aws-elbv2: 27 passed, 0 failed |  |
+| ✅ | aws-kinesis: 20 passed, 0 failed |  |
+| ✅ | aws-logs: 19 passed, 0 failed |  |
+| ✅ | aws-sns: 60 passed, 0 failed |  |
+| ✅ | aws-ssm: 34 passed, 0 failed |  |
+| ✅ | aws-stepfunctions: 26 passed, 0 failed |  |
+| ✅ | azure-app: 23 passed, 0 failed |  |
+| ✅ | azure-appconfiguration: 32 passed, 0 failed |  |
+| ✅ | azure: 6 passed, 0 failed |  |
+| ❌ | azure-cognitiveservices: 18 passed, 2 failed | account usages list model quotas; location models list |
+| ❌ | azure-defender-automation: 11 passed, 7 failed | an automation without scopes/sources/actions is rejected; list automations in the resource group; the automation ran for the alert; the alert is a SecurityAlert row in the workspace; DELETE automation; Resource Graph query returns the topic |
+| ✅ | azure-dns: 24 passed, 0 failed |  |
+| ✅ | azure-loganalytics-tools: 12 passed, 0 failed |  |
+| ✅ | azure-monitor: 21 passed, 0 failed |  |
+| ❌ | azure-netenforce: 6 passed, 2 failed | Cosmos CORS preflight: listed origin allowed (204); Cosmos CORS preflight: unlisted origin BLOCKED (204) |
+| ✅ | azure-operationalinsights: 20 passed, 0 failed |  |
+| ✅ | azure-packetcapture: 11 passed, 0 failed |  |
+| ❌ | azure-rgtools: 6 passed, 1 failed | Insights: 2 resources, 1 untagged, 1 VM |
+| ✅ | azure-workbooks: 8 passed, 0 failed |  |
+| ✅ | gcp-artifactregistry: 11 passed, 0 failed |  |
+| ✅ | gcp: 6 passed, 0 failed |  |
+| ✅ | gcp-cloudscheduler: 13 passed, 0 failed |  |
+| ❌ | gcp-container: 0 passed, 14 failed | ols list shows both pools; gcloud container clusters resize; resize persisted (3 nodes); gcloud container clusters update --update-labels; labels persisted; gcloud container operations list; gcloud container get-server-config; gcloud contai |
+| ✅ | gcp-iamcredentials: 9 passed, 0 failed |  |
+| ✅ | gcp-monitoring: 15 passed, 0 failed |  |
+| ✅ | gcp-redis: 20 passed, 0 failed |  |
+| ✅ | gcp-scheduler-pubsub: 6 passed, 0 failed |  |
+| ✅ | gcp-vertex: 21 passed, 0 failed |  |
+| ✅ | gcp-wire-gaps: 21 passed, 0 failed |  |
 
-## Conformance & testing
+### Not applicable on this target (1) — not counted as passed
 
-```bash
-# Run the conformance harness against a live simulator
-python tests/conformance/run_conformance.py \
-  --endpoint http://localhost:9000 \
-  --isolate-spaces \
-  --fail-under 85.0
-```
+| Suite | Check | Why |
+|---|---|---|
+| aws-sns | HTTP/S endpoint delivery (confirmation POST, signed messages, retries, dead-letter queue) | Nano: a browser tab cannot push to HTTP endpoints |
 
-CI workflows in `.github/workflows/`:
-- `ci.yml` — lint + conformance (≥85% gate) + tier-middleware smoke + 3-cloud refapp build matrix on every PR
-- `release.yml` — tag-triggered release artifact build
-- `conformance-hourly.yml` — hourly conformance agent (UI + SDK/CLI/API, Nano + offline); report on the `conformance-report` branch
-- `msi-validate.yml`, `release-startup-validate.yml`, `release-checks.yml` — per-release MSI / startup / DEB·RPM·Homebrew checks → `RELEASE-CHECKS.md` on `release/vX.Y.Z`
+### Released services with no CLI suite yet (36)
 
-## Contributing
+AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS Lambda, AWS RDS, AWS S3, AWS SQS, AWS Secrets Manager, AWS VPC, AZURE API Management, AZURE Cosmos DB, AZURE Entra ID / RBAC, AZURE Event Grid topics, AZURE Function apps, AZURE Key vaults, AZURE Network Security Group, AZURE SQL servers, AZURE Service Bus, AZURE Storage accounts, AZURE Virtual Machines, AZURE Virtual networks, GCP API Gateway, GCP Cloud Functions, GCP Cloud KMS, GCP Cloud SQL, GCP Cloud Storage, GCP Compute Engine, GCP Eventarc, GCP Firestore, GCP IAM & Admin, GCP Pub/Sub, GCP Secret Manager, GCP VPC Network
 
-- Adding a service: update the per-provider catalog + tier_policy category mapping. See `docs/architecture/CLOUDLEARN_LLD.md`.
-- Adding a tier feature: extend `core/tier_policy.py` and add an `_enforce_tier_feature("X")` gate at the endpoint.
-- Footguns + design decisions documented in [`docs/architecture/`](docs/architecture/).
 
-## License
+## Console UI (offline) — aws
 
-Source-available under the **Business Source License 1.1** with a Vyomi-specific Additional Use Grant. Auto-converts to Apache 2.0 four years after each release.
+❌ 5/19 suites passed
 
-What this means in plain English:
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `offline-ui-aws-metrics` | 0 | 1 |
+| `offline-ui-aws-ec2-detail-tabs` | 0 | 1 |
+| `offline-ui-aws-real-tabs` | 0 | 1 |
+| `offline-ui-aws-sqs-dlq-tab` | 0 | 1 |
+| `offline-ui-aws-rds-connectivity-tabs` | 0 | 1 |
+| `offline-ui-aws-vpc-details-tab` | 0 | 1 |
+| `offline-ui-aws-vpc-sg-iam-cells` | 0 | 1 |
+| `offline-ui-aws-detail-name` | 0 | 1 |
+| `offline-ui-aws-apigw-tabs` | 0 | 1 |
+| `offline-ui-aws-detail-tabs` | 0 | 1 |
+| `offline-ui-sdk-roundtrip` | 1 | 1 |
+| `offline-ui-console-home` | 3 | 3 |
+| `offline-ui-drawer` | 0 | 1 |
+| `offline-ui-default-cloud` | 0 | 1 |
 
-- **You can:** read the source, use Vyomi non-commercially, run it internally at your company, audit the licensing/tier code, send pull requests
-- **You can't (without a separate commercial agreement):** offer Vyomi as a hosted multi-cloud simulator service, modify/bypass the tier-enforcement code, or rebrand and resell it
 
-See [`LICENSE`](LICENSE) for the full text. For commercial hosting, white-label, or OEM arrangements, contact licensing@vyomi.cloud.
+## Console UI (offline) — azure
 
+❌ 7/11 suites passed
+
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `offline-ui-azure-metrics` | 1 | 1 |
+| `offline-ui-azure-rg-nav` | 0 | 1 |
+| `offline-ui-azure-resource-group-detail` | 0 | 1 |
+| `offline-ui-azure-apim-appinsights` | 0 | 1 |
+
+
+## Console UI (offline) — gcp
+
+❌ 5/11 suites passed
+
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `offline-ui-gcp-pubsub-subscriptions` | 0 | 1 |
+| `offline-ui-gcp-activity-detail` | 0 | 1 |
+| `offline-ui-gcp-grid-defaults` | 0 | 1 |
+| `offline-ui-gcp-pubsub-grid` | 0 | 1 |
+| `offline-ui-gcp-create-defaults` | 0 | 1 |
+| `offline-ui-gcp-properties` | 0 | 1 |
+
+
+## Console UI (Nano) — aws
+
+❌ 35/37 suites passed
+
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `nano-ui-default-cloud` | 4 | 1 |
+| `nightly-aws-v4-roundtrip` | 89 | 1 |
+
+
+## Console UI (Nano) — azure
+
+❌ 24/26 suites passed
+
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `nano-ui-crawl` | 33 | 1 |
+| `nano-ui-azure-cognitiveservices` | 26 | 3 |
+
+
+## Console UI (Nano) — gcp
+
+❌ 23/25 suites passed
+
+| Failing suite | Passed | Failed |
+|---|---|---|
+| `nano-ui-crawl` | 16 | 2 |
+| `nano-ui-gcp-create-defaults` | 35 | 1 |
+
+
+
+---
+Project README: https://github.com/vyomi-cloud/appliance#readme
