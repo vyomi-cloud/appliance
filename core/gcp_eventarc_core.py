@@ -21,6 +21,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
+import sys
 import uuid
 from datetime import datetime, timezone
 
@@ -261,6 +262,12 @@ def _make_deliver(holder: dict):
                     _ctx.REQUEST_PROVIDER.reset(_tok)
             return {"ok": r.status == 200, "status": r.status, "error": "" if r.status == 200 else "dead-letter publish failed"}
         try:
+            if kind == "http" and sys.platform == "emscripten":   # no sockets in Pyodide: the router awaits the gateway bridge (apump)
+                return {"deferred": {"method": "POST", "url": target["url"], "timeout": float(target.get("timeout", 10)),
+                                     "headers": {"content-type": "application/cloudevents+json; charset=utf-8", "ce-id": str(ce.get("id", "")),
+                                                 "ce-type": str(ce.get("type", "")), "ce-specversion": "1.0",
+                                                 "x-vyomi-delivery-attempt": str(ctx.get("attempt", 1))},
+                                     "body": json.dumps(ce).encode()}}
             if kind == "http":
                 out = ebus.http_deliver(target, ce, ctx)
                 ok, err = 200 <= int(out.get("status") or 0) < 300, out.get("error", "")
@@ -301,6 +308,22 @@ def bus_for(store, run_store=None, pubsub_store=None, log_fn=None):
     if log_fn is not None:
         h["ctx"]["log_fn"] = log_fn
     return h["bus"]
+
+
+async def apump(afetch) -> int:
+    """Nano: finish every Eventarc httpEndpoint hop. `afetch(Fetch) -> (status, headers, body)` (gcp_apigateway_gateway.js_backend_fetch)."""
+    from core import gateway_common as gc
+
+    async def hop(f):
+        try:
+            st, _h, _b = await afetch(gc.Fetch(f["method"], f["url"], f["headers"], f["body"], f["timeout"]))
+        except Exception as e:   # noqa: BLE001
+            return {"status": 0, "error": str(e)[:200]}
+        return {"status": st, "error": "" if 200 <= st < 300 else "HTTP %d" % st}
+    n = 0
+    for h in list(_BUSES.values()):
+        n += await h["bus"].apump(hop)
+    return n
 
 
 def deliver(store, run_store, event_type: str, attrs: dict, ce: dict, log_fn=None, topic=None, pubsub_store=None) -> int:

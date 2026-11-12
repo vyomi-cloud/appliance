@@ -230,8 +230,20 @@ class EventBus:
 
     def _attempt(self, rec: dict, now: float) -> None:
         n = len(rec["attempts"]) + 1
-        t0 = now
-        ok, status, err = self._call(rec["target"], rec["event"], {"attempt": n, "delivery_id": rec["id"], "subscription": rec["subscription"], "dead_letter": False})
+        ctx = {"attempt": n, "delivery_id": rec["id"], "subscription": rec["subscription"], "dead_letter": False}
+        try:
+            res = self.deliver_fn(rec["target"], rec["event"], ctx) if self._ctx_arg else self.deliver_fn(rec["target"], rec["event"])
+        except Exception as e:   # noqa: BLE001
+            res = {"ok": False, "error": (getattr(e, "message", None) or str(e) or e.__class__.__name__)[:300]}
+        if isinstance(res, dict) and isinstance(res.get("deferred"), dict):
+            # A runtime with no sockets (Nano/Pyodide): the hop is awaited by the host (apump) and finished by complete().
+            rec["deferred"], rec["next_at"], rec["_t0"] = res["deferred"], None, now
+            return
+        self._finish(rec, now, _outcome(res))
+
+    def _finish(self, rec: dict, t0: float, outcome) -> None:
+        n = len(rec["attempts"]) + 1
+        ok, status, err = outcome
         rec["attempts"].append({"attempt": n, "time": _iso(t0), "ok": ok, "status": status, "error": err})
         pol = rec["retry"]
         if ok:
@@ -261,7 +273,7 @@ class EventBus:
                 tried = set()
                 for rid in list(self.state["order"]):
                     rec = self.state["deliveries"].get(rid)
-                    if not rec or rec["status"] in TERMINAL or rid in tried or rec.get("inflight"):
+                    if not rec or rec["status"] in TERMINAL or rid in tried or rec.get("inflight") or rec.get("deferred"):
                         continue
                     if rec["next_at"] is not None and rec["next_at"] > now:
                         continue
@@ -276,7 +288,7 @@ class EventBus:
                             rec["inflight"] = False
                         made += 1
                         progress = True
-                        if rec["status"] in TERMINAL or not rec["retry"]["sync"]:
+                        if rec["status"] in TERMINAL or rec.get("deferred") or not rec["retry"]["sync"]:
                             break
                         d = backoff_for(rec["retry"], len(rec["attempts"]))
                         if self.sleep and d:
@@ -287,6 +299,45 @@ class EventBus:
         if pending and self.auto_pump:
             self.start_pump()
         return made
+
+    # -- async hop (Nano) ----------------------------------------------------
+    def deferred(self) -> list:
+        """Deliveries whose current attempt waits for the host to perform an HTTP hop: [(delivery_id, fetch_dict)]."""
+        with self._lock:
+            return [(r["id"], r["deferred"]) for r in self.state["deliveries"].values() if r.get("deferred") and r["status"] not in TERMINAL]
+
+    def complete(self, delivery_id: str, res) -> None:
+        """Finish a deferred attempt with the hop's outcome (same shapes `deliver` may return) and continue the retry policy."""
+        with self._lock:
+            rec = self.state["deliveries"].get(delivery_id)
+            if not rec or not rec.get("deferred"):
+                return
+            rec.pop("deferred", None)
+            t0 = rec.pop("_t0", self.clock())
+            if rec["status"] in TERMINAL:
+                return
+            rec["inflight"] = True
+            try:
+                self._finish(rec, t0, _outcome(res))
+            finally:
+                rec["inflight"] = False
+
+    async def apump(self, afetch, rounds: int = 20) -> int:
+        """Nano's tick: run what is due, await each deferred hop with `afetch(fetch_dict) -> result`, finish it. -> hops made."""
+        hops = 0
+        for _ in range(rounds):
+            self.tick()
+            todo = self.deferred()
+            if not todo:
+                break
+            for did, f in todo:
+                try:
+                    res = await afetch(f)
+                except Exception as e:   # noqa: BLE001
+                    res = {"ok": False, "error": (getattr(e, "message", None) or str(e) or e.__class__.__name__)[:300]}
+                self.complete(did, res)
+                hops += 1
+        return hops
 
     def cancel(self, sub_id: str, reason: str = "subscription deleted") -> int:
         """Terminate every in-flight delivery of a subscription (FAILED, attempt history kept)."""

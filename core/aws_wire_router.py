@@ -1557,7 +1557,21 @@ class AwsWireRouter:
                 if out is not None:
                     self._record_async(svc, method, path, lheaders, bytes(b), _t1, out)
                     return out
-        return self.handle(method, path, query, headers, body)
+        res = self.handle(method, path, query, headers, body)
+        await self._pump_eventarc()
+        return res
+
+    async def _pump_eventarc(self):
+        """Nano: finish the Eventarc httpEndpoint hops the sync handle() deferred (and any retry now due) through the gateway bridge."""
+        try:
+            if not any(h["bus"].deferred() or h["bus"].next_due() is not None for h in gcp_eventarc._BUSES.values()):
+                return
+            from core import gcp_apigateway_gateway as gcpgw
+            hook = getattr(self, "async_backend_fetch", None) or (gcpgw.js_backend_fetch() if gcpgw.default_http_fetch() is None else None)
+            if hook is not None:
+                await gcp_eventarc.apump(hook)
+        except Exception:
+            pass
 
     def _record_async(self, svc, method, path, lheaders, b, t0, res):
         """The telemetry the sync front door (handle) records, for the awaited gateway paths on Nano."""
