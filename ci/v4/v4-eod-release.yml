@@ -1,0 +1,238 @@
+name: v4 end-of-day release (crawl, identify, gate, release)
+
+# The last stage of the agentic loop (docs/architecture/v4.0/V4-AGENTIC-PIPELINE.md), for ALL THREE clouds (azure, aws, gcp):
+#   hourly fixer (v4-known-issues-hourly) fixes -> daily bi-directional (v4-bidi-daily) finds -> THIS workflow re-crawls, gates and releases.
+# CRAWL SCOPE (owner), per cloud, on a fresh stack built from v4-on-main:
+#   (1) CLI<->UI  tests/release/cli_crosscheck.py + suites bidi-<cloud>-cli-ui   (2) SDK<->UI  bidi-<cloud>-sdk-ui + the per-cloud round-trip suites
+#   (3) API<->UI  bidi-<cloud>-api-ui     (each: create on one side, read/compare data on the other, both directions, delete both ways)
+#   (4) the UI exhaustively  crawl-<cloud>-ui + nano-ui-crawl (all sections/subsections, every click/toggle/dropdown, PAGE_ERROR, 5xx, dead tab,
+#       placeholder pane, empty panel, [object Object]/undefined/Internal Server Error) + validation-<cloud>-ui (field-level validation wording).
+# Findings become `AUTO-<cloud>-...` rows in V4.0.0-KNOWN-ISSUES.md (self-healing); the gate then decides.
+# SAFETY: the release job runs ONLY when repo variable V4_AUTO_RELEASE == 'true' AND this is not a dry run AND V4_RELEASE_PAUSE != 'true'.
+#   It never touches `main`. VERSION must already be 4.x (v4.0.0 is cut by the owner). The tag is made on v4-on-main HEAD after the gate.
+#   Portal Nano sync is NOT dispatched (owner step) unless the dispatch input sync_portal is true.
+# Secrets: CONFORMANCE_BOT_TOKEN (push + tag), CLAUDE_CODE_OAUTH_TOKEN (subscription token only, optional highlights), VYOMI_TEST_LICENSE_JWT (optional).
+# NOTE: scheduled runs fire only from the DEFAULT branch, so this starts on its own once the v4 workflows are on main; until then dispatch by hand.
+# NOTE: pushing the v* tag triggers release.yml + docker-publish.yml (a real image publish): that is what arming V4_AUTO_RELEASE means.
+
+on:
+  schedule:
+    - cron: '30 17 * * *'      # 23:00 IST, after the hourly fixer and the 03:30 IST daily run
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: 'Cloud scope'
+        type: choice
+        options: [all, azure, aws, gcp]
+        default: all
+      dry_run:
+        description: 'Dry run: crawl, record findings, gate and print the plan; never tag (default true)'
+        type: boolean
+        default: true
+      record:
+        description: 'Commit crawl findings to the known-issues register on v4-on-main'
+        type: boolean
+        default: true
+      sync_portal:
+        description: 'After a release, dispatch portal-nano-sync.yml'
+        type: boolean
+        default: false
+
+concurrency:
+  group: v4-eod-release
+  cancel-in-progress: false
+
+env:
+  VYOMI_BASE_URL: http://localhost:9000
+  RELAY_HTTP: http://127.0.0.1:8090
+  NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+  TRUNK: v4-on-main
+  REGISTER: docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md
+
+jobs:
+  guard:
+    if: vars.V4_RELEASE_PAUSE != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      clouds: ${{ steps.c.outputs.clouds }}
+      busy: ${{ steps.busy.outputs.busy }}
+      commits: ${{ steps.c.outputs.commits }}
+      last_tag: ${{ steps.c.outputs.last_tag }}
+      tags: ${{ steps.c.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: v4-on-main, fetch-depth: 0 }
+      - id: c
+        run: |
+          IN="${{ inputs.cloud }}"; [ -n "$IN" ] || IN=all
+          if [ "$IN" = all ]; then echo 'clouds=["azure","aws","gcp"]' >> "$GITHUB_OUTPUT"; else echo "clouds=[\"$IN\"]" >> "$GITHUB_OUTPUT"; fi
+          LAST=$(git tag --list 'v4.*' --sort=-v:refname | head -1)
+          echo "last_tag=$LAST" >> "$GITHUB_OUTPUT"
+          echo "tags=$(git tag --list 'v4.*' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+          if [ -n "$LAST" ]; then echo "commits=$(git rev-list --count "$LAST..origin/v4-on-main")" >> "$GITHUB_OUTPUT"; else echo "commits=0" >> "$GITHUB_OUTPUT"; fi
+      - id: busy
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: |
+          # the fixer and the daily run must not be mid-flight (they push to the same trunk and register)
+          B=""
+          for W in v4-known-issues-hourly.yml v4-bidi-daily.yml; do
+            N=$(gh run list -R "${{ github.repository }}" --workflow "$W" --status in_progress --json databaseId --jq length 2>/dev/null || echo 0)
+            [ "${N:-0}" -gt 0 ] && B="$B,${W%.yml}"
+          done
+          echo "busy=${B#,}" >> "$GITHUB_OUTPUT"
+
+  crawl:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: ${{ fromJSON(needs.guard.outputs.clouds) }}
+    permissions:
+      contents: read
+    env:
+      CLOUD: ${{ matrix.cloud }}
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+    steps:
+      - name: Require the bot token
+        run: '[ -n "$GH_TOKEN" ] || { echo "::error::Set the CONFORMANCE_BOT_TOKEN secret"; exit 1; }'
+      - uses: actions/checkout@v4
+        with: { ref: v4-on-main, fetch-depth: 0, token: '${{ secrets.CONFORMANCE_BOT_TOKEN }}' }
+      - uses: ./.github/actions/conformance-stack
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+
+      - name: "Crawl scope (1)-(4) - bi-directional, validation and UI suites"
+        continue-on-error: true       # red suites are findings, not a reason to skip the report
+        run: |
+          for T in offline nano; do
+            IDS=$(python3 tests/conformance/nightly/bidi_report.py select --cloud "$CLOUD" --target "$T")
+            if [ -z "$IDS" ]; then echo "No $T crawl/bidi/validation suite registered for $CLOUD" | tee -a "$GITHUB_STEP_SUMMARY"; continue; fi
+            python3 tests/conformance/hourly/run_suites.py --target "$T" --cloud "$CLOUD" --only "$IDS" || true
+          done
+          # the full per-cloud suites too: they are what the release gate reads
+          python3 tests/conformance/hourly/run_suites.py --target offline --cloud "$CLOUD" || true
+          python3 tests/conformance/hourly/run_suites.py --target nano --cloud "$CLOUD" || true
+      - name: CLI<->UI cross-check (offline appliance)
+        continue-on-error: true
+        run: ENDPOINT="$VYOMI_BASE_URL" OUT=cli-check python3 tests/release/cli_crosscheck.py
+
+      - name: Identify (findings -> known-issues register rows)
+        id: report
+        run: python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --cli-results cli-check/results.json --by "${GITHUB_SHA::9}" --out changes.json
+
+      - name: Commit the register to v4-on-main
+        if: always() && steps.report.outcome == 'success' && (github.event_name == 'schedule' || inputs.record)
+        run: |
+          git config user.name "vyomi-eod-bot"; git config user.email "eod-bot@users.noreply.github.com"
+          for _ in 1 2 3 4 5; do
+            git fetch -q origin "$TRUNK"; git checkout -q -B eod-register "origin/$TRUNK"
+            python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --cli-results cli-check/results.json --by "${GITHUB_SHA::9}" --out changes.json >/dev/null
+            if git diff --quiet -- "$REGISTER"; then echo "Register unchanged ($CLOUD)." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+            git add "$REGISTER"; git commit -q -m "docs(v4): end-of-day crawl $CLOUD (register update)"
+            VYOMI_INTEGRATOR=1 git push origin "HEAD:$TRUNK" && exit 0
+            sleep $((RANDOM % 20 + 5))
+          done
+          echo "::error::could not push the register after 5 attempts"; exit 1
+
+      - name: Release checklist for this cloud (the gate input)
+        id: gate
+        run: |
+          git fetch -q origin "$TRUNK"; git checkout -q -B eod-gate "origin/$TRUNK"
+          python3 tests/release/v4_checklist.py --cloud "$CLOUD" --results tests/conformance/hourly/out --sha "$(git rev-parse HEAD)" --out report | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Record the cloud status
+        if: always()
+        run: |
+          mkdir -p status
+          if [ "${{ steps.gate.outcome }}" = success ]; then echo ok > "status/$CLOUD"
+          else echo "red: release checklist failed or did not run" > "status/$CLOUD"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eod-${{ matrix.cloud }}
+          path: "status/\nreport/\nchanges.json\ncli-check/\ntests/conformance/hourly/out/"
+          include-hidden-files: true
+          retention-days: 14
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
+
+  decide:
+    needs: [guard, crawl]
+    if: always() && needs.guard.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.p.outputs.decision }}
+      next: ${{ steps.p.outputs.next }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: v4-on-main, fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'eod-*', path: eod }
+      - id: p
+        run: |
+          CS=(); for c in azure aws gcp; do
+            case "${{ needs.guard.outputs.clouds }}" in *"\"$c\""*) f="eod/eod-$c/status/$c"; if [ -f "$f" ]; then CS+=(--cloud-status "$c=$(cat "$f")"); else CS+=(--cloud-status "$c=missing"); fi;;
+            *) CS+=(--cloud-status "$c=ok");; esac   # a cloud outside the dispatch scope is not judged by this run
+          done
+          ARGS=(); [ "${{ vars.V4_AUTO_RELEASE }}" = true ] && ARGS+=(--auto-release)
+          [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.dry_run }}" != false ] && ARGS+=(--dry-run)
+          python3 tests/release/v4_eod_plan.py plan --version-file VERSION --last-tag "${{ needs.guard.outputs.last_tag }}" \
+            --commits-since "${{ needs.guard.outputs.commits }}" --existing-tags "${{ needs.guard.outputs.tags }}" \
+            --busy "${{ needs.guard.outputs.busy }}" "${CS[@]}" "${ARGS[@]}" --out plan.json
+          echo "decision=$(python3 -c 'import json;print(json.load(open("plan.json"))["decision"])')" >> "$GITHUB_OUTPUT"
+          echo "next=$(python3 -c 'import json;print(json.load(open("plan.json"))["next_version"] or "")')" >> "$GITHUB_OUTPUT"
+          { echo "## v4 end-of-day plan"; echo '```json'; cat plan.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with: { name: eod-plan, path: plan.json, retention-days: 30 }
+
+  release:
+    needs: [guard, decide]
+    if: needs.decide.outputs.decision == 'release' && vars.V4_AUTO_RELEASE == 'true' && vars.V4_RELEASE_PAUSE != 'true' && (github.event_name == 'schedule' || inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+      NEW: ${{ needs.decide.outputs.next }}
+    steps:
+      - name: Require the bot token
+        run: '[ -n "$GH_TOKEN" ] || { echo "::error::Set the CONFORMANCE_BOT_TOKEN secret"; exit 1; }'
+      - uses: actions/checkout@v4
+        with: { ref: v4-on-main, fetch-depth: 0, token: '${{ secrets.CONFORMANCE_BOT_TOKEN }}' }
+      - name: Re-check (trunk must not have moved past a green gate unnoticed)
+        run: |
+          [ "$(tr -d '[:space:]' < VERSION)" != "$NEW" ] || { echo "::error::VERSION already $NEW"; exit 1; }
+          case "$(tr -d '[:space:]' < VERSION)" in 4.*) ;; *) echo "::error::VERSION is not 4.x, refusing"; exit 1;; esac
+          if git ls-remote --exit-code --tags origin "v$NEW" >/dev/null 2>&1; then echo "::error::tag v$NEW exists"; exit 1; fi
+      - name: Bump, notes, commit, tag, release branch (v4-on-main only; never main)
+        env: { PREV_TAG: '${{ needs.guard.outputs.last_tag }}' }
+        run: |
+          git config user.name "vyomi-eod-bot"; git config user.email "eod-bot@users.noreply.github.com"
+          echo "$NEW" > VERSION
+          python3 scripts/release_notes.py --version "$NEW" --prev "$PREV_TAG" --kind "v4 end-of-day release" --write-changelog --write-readme
+          git add VERSION CHANGELOG.md README.md
+          git commit -q -m "release(v$NEW): v4 end-of-day release (all three clouds gated green)"
+          SHA=$(git rev-parse HEAD)
+          VYOMI_INTEGRATOR=1 git push -q origin "HEAD:v4-on-main"
+          git tag -a "v$NEW" "$SHA" -m "v$NEW: v4 end-of-day release"
+          git push -q origin "v$NEW"
+          git checkout -q -B "release/v$NEW" "$SHA"
+          git push -q origin "HEAD:refs/heads/release/v$NEW"
+          echo "Released v$NEW at $SHA (tag triggers release.yml + docker-publish.yml)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Portal Nano sync (only when asked)
+        if: inputs.sync_portal == true
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh workflow run portal-nano-sync.yml -R "${{ github.repository }}" --ref v4-on-main -f force=true
+
+  summary:
+    needs: [guard, crawl, decide]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          {
+            echo "## v4 end-of-day: ${{ needs.decide.outputs.decision || 'skipped (paused)' }}"
+            echo "- crawl: ${{ needs.crawl.result }}; busy workflows: ${{ needs.guard.outputs.busy || 'none' }}"
+            echo "- armed: V4_AUTO_RELEASE=${{ vars.V4_AUTO_RELEASE || 'unset' }}, pause: V4_RELEASE_PAUSE=${{ vars.V4_RELEASE_PAUSE || 'unset' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

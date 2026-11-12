@@ -121,6 +121,20 @@ def _rec(d, name_field="name"):
 
 
 def _ok_list(svc, name_field="name"):
+    if svc == "kms":
+        # The console grid lists crypto keys of EVERY key ring (any location), the way the real console does; a key a
+        # client created natively in another ring (SDK / gcloud) must show up too, not only the wizard's default ring.
+        items = []
+        try:
+            rings = list(_kms._rings(_STORES["kms"]).keys())
+        except Exception:
+            rings = []
+        default = f"{_P}/locations/{LOC}/keyRings/{RING}"
+        for ring in rings if rings else [default]:
+            ring_path = ring if str(ring).startswith("projects/") else default
+            _st, parsed = _call("kms", "GET", "/v1/" + ring_path + "/cryptoKeys")
+            items.extend(_items(parsed) if isinstance(parsed, dict) else [])
+        return {"ok": True, "items": [_rec(x, name_field) for x in items]}
     st, parsed = _call(svc, "GET", _COLLECTION[svc]())
     return {"ok": True, "items": [_rec(x, name_field) for x in _items(parsed)]}
 
@@ -252,6 +266,11 @@ def _sched_op(operation, name, body):
 
 def _gke_op(operation, name, body):
     """Kubernetes Engine console CRUD (+ resize/upgrade) over core/gcp_container_core."""
+    from core import k8s_tier_gate as _tg
+    _v = _tg.check("gcp")     # Nano: managed Kubernetes is Pro/Max/Enterprise only (fails closed to Free if the tier is unknown)
+    if _v:
+        return {"ok": False, "status": 403, "code": "PERMISSION_DENIED", "message": _v["reason"], "upgrade_to": _v["upgrade_to"],
+                "required_tiers": _v["required_tiers"], "active_tier": _v["active_tier"], "service": "gke"}
     store = _STORES["container"]
 
     def find(nm):
@@ -456,6 +475,118 @@ def _mon_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "monitoring"}
 
 
+# ── Two-way bridge: console generic store <-> native core (VPC networks) ──────────────────────────
+# The console's VPC page keeps its networks in the generic resource store while the native API (SDK /
+# gcloud / REST) reads gcp_compute_core's ComputeStore: a network made in one place was invisible in the
+# other. The bridge keeps them one set: native networks are mirrored into the console list before it is
+# read, a console create/delete is written through to the native store, and a mirrored record disappears
+# when its native twin is deleted. Mirrored records carry `_bridged: True`.
+# "compute" is deliberately NOT bridged yet: mirroring instances into the native gcp_compute_vm store starts a second in-browser VM
+# (the VM host reads both stores) and breaks the VM-compute flow (nano-post-create-gcp-gce-ssh: create 500 "no client to run the in-browser
+# backend"). The two stores need one owner first; see the round-trip's pending note for compute.
+_BRIDGED_SERVICES = ("vpc",)
+
+
+def _native_vpc_snapshot():
+    out = {}
+    st = _R["gcp_compute"]
+    for _k, rec in list(getattr(st, "networks", {}).items()):
+        if rec.get("project") == PROJ:
+            out[rec["name"]] = {"name": rec["name"], "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks")),
+                                "mtu": rec.get("mtu", 1460),
+                                "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")},
+                                "description": rec.get("description", "")}
+    return out
+
+
+def _native_compute_snapshot():
+    out = {}
+    st = _R["gcp_compute_vm"]
+    for _k, rec in list(getattr(st, "instances", {}).items()):
+        selfl = str(rec.get("selfLink") or _k)
+        if "/projects/%s/" % PROJ not in selfl and ("projects/%s/" % PROJ) not in str(_k):
+            continue
+        zone = str(rec.get("zone") or "").rsplit("/", 1)[-1] or "us-central1-a"
+        out[rec["name"]] = dict(rec, zone=zone, machineType=str(rec.get("machineType") or "e2-medium").rsplit("/", 1)[-1])
+    return out
+
+
+def _native_snapshot(svc):
+    return _native_vpc_snapshot() if svc == "vpc" else _native_compute_snapshot()
+
+
+def bridge_pre(svc, operation, account, res, fill):
+    """Before a console List/Get/Delete: mirror native networks in, drop mirrored ones whose native twin is gone."""
+    if svc not in _BRIDGED_SERVICES or operation not in ("List", "Get", "Delete"):
+        return
+    try:
+        native = _native_snapshot(svc)
+        existing = {x.get("name"): x for x in res.list("gcp", account, svc)}
+        for n, rec in native.items():
+            if n not in existing:
+                res.create("gcp", account, svc, dict(fill(svc, dict(rec)), _bridged=True))
+        for n, x in existing.items():
+            if x.get("_bridged") and n not in native:
+                res.delete("gcp", account, svc, n)
+    except Exception:
+        pass
+
+
+def _compute_native(method, path, body=None):
+    from core import gcp_compute_core as _gc
+    r = _gc.dispatch(_R["gcp_compute"], method, path, {}, {"content-type": "application/json"},
+                     json.dumps(body).encode() if body is not None else b"")
+    return r.status
+
+
+def _compute_vm_native(method, path, body=None):
+    from core import gcp_compute_instances_core as _gi
+    r = _gi.dispatch(_R["gcp_compute_vm"], method, path, {}, {"content-type": "application/json"},
+                     json.dumps(body).encode() if body is not None else b"", None, _R["gcp_compute"])
+    return r.status
+
+
+def bridge_post_create(svc, account, res, rec):
+    """After a console create: write the resource through to the native store and mark the console record."""
+    if svc not in _BRIDGED_SERVICES or not isinstance(rec, dict) or not rec.get("name"):
+        return
+    try:
+        if svc == "vpc":
+            st = _compute_native("POST", f"/compute/v1/projects/{PROJ}/global/networks",
+                                 {"name": rec["name"], "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)),
+                                  "mtu": rec.get("mtu", 1460), "description": rec.get("description", ""),
+                                  "routingConfig": rec.get("routingConfig") or {"routingMode": "REGIONAL"}})
+        else:
+            zone = str(rec.get("zone") or "us-central1-a").rsplit("/", 1)[-1]
+            mt = str(rec.get("machineType") or "e2-medium").rsplit("/", 1)[-1]
+            st = _compute_vm_native("POST", f"/compute/v1/projects/{PROJ}/zones/{zone}/instances",
+                                    {"name": rec["name"], "machineType": f"zones/{zone}/machineTypes/{mt}",
+                                     **({"metadata": rec["metadata"]} if isinstance(rec.get("metadata"), dict) else {}),
+                                     **({"labels": rec["labels"]} if isinstance(rec.get("labels"), dict) else {}),
+                                     "disks": [{"boot": True, "autoDelete": True, "initializeParams": {
+                                         "sourceImage": "projects/debian-cloud/global/images/family/debian-12"}}],
+                                     "networkInterfaces": [{"network": f"projects/{PROJ}/global/networks/default"}]})
+        if st < 300 or st == 409:
+            res.update("gcp", account, svc, rec["name"], {"_bridged": True})
+    except Exception:
+        pass
+
+
+def bridge_post_delete(svc, name):
+    """After a console delete: delete the native twin too."""
+    if svc not in _BRIDGED_SERVICES or not name:
+        return
+    try:
+        if svc == "vpc":
+            _compute_native("DELETE", f"/compute/v1/projects/{PROJ}/global/networks/{name}")
+        else:
+            zone = (_native_compute_snapshot().get(name) or {}).get("zone")
+            if zone:
+                _compute_vm_native("DELETE", f"/compute/v1/projects/{PROJ}/zones/{zone}/instances/{name}")
+    except Exception:
+        pass
+
+
 def resource_op(service, operation, name="", body=None):
     tab = tab_dispatch(service, operation, name, body)
     if tab is not None:
@@ -563,11 +694,26 @@ def _resource_op(service, operation, name="", body=None):
     # ---------------- KMS (cryptoKeys under a default key ring) ----------------
     if svc == "kms":
         base = f"{_P}/locations/{LOC}/keyRings/{RING}/cryptoKeys"
+        if name and operation not in ("List", "Create"):
+            # a key can live in any key ring/location (created natively or from the wizard): resolve its real ring
+            try:
+                for _ring in list(_kms._rings(_STORES["kms"]).keys()):
+                    if _STORES["kms"].get_key(f"{_ring}/cryptoKeys/{name}"):
+                        base = f"{_ring}/cryptoKeys"
+                        break
+            except Exception:
+                pass
         if operation == "List":
             _ensure_keyring()
             return _ok_list(svc)
         if operation == "Create":
-            _ensure_keyring()
+            # the wizard's Key ring and Region fields decide where the key is created (they were ignored: every key
+            # landed in global/demo, so `gcloud kms keys list --location <region> --keyring <ring>` could not find it)
+            _kr = str(body.get("keyring") or body.get("keyRing") or RING).strip() or RING
+            _loc = str(body.get("region") or body.get("location") or LOC).strip().split(" ")[0] or LOC
+            _ring_coll = f"{_P}/locations/{_loc}/keyRings"
+            _call("kms", "POST", _ring_coll, {"keyRingId": _kr}, {})     # idempotent; 409 if it exists is ignored
+            base = f"{_ring_coll}/{_kr}/cryptoKeys"
             st, p = _call(svc, "POST", base, {"cryptoKeyId": rid}, {"purpose": "ENCRYPT_DECRYPT"})
             return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}
         if operation == "Get":
@@ -575,7 +721,7 @@ def _resource_op(service, operation, name="", body=None):
             return {"ok": True, **_rec(p)} if st < 300 else {"ok": False, "code": "NotFound", "name": name}
         if operation == "Delete":
             # Cloud KMS keeps key material; drop it from the store for console UX.
-            _STORES["kms"].drop_key(f"projects/{PROJ}/locations/{LOC}/keyRings/{RING}/cryptoKeys/{name}")
+            _STORES["kms"].drop_key(f"{base}/{name}")
             return {"ok": True, "code": None, "name": name}
         if operation == "ListVersions":   # cryptoKeyVersions under a key
             st, p = _call(svc, "GET", f"{base}/{name}/cryptoKeyVersions")

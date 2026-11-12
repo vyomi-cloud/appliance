@@ -37,6 +37,9 @@ class StepFunctionsStore:
         self.activities: dict = {}    # activityArn -> activity record
         self.tokens: dict = {}        # taskToken -> {executionArn, activityArn|None, ...}
         self.tags: dict = {}          # resource arn -> {key: value}
+        self.xray_traces: dict = {}   # trace id -> {"segments": {...}} - X-Ray traces (core/xray_core), recorded for tracing-enabled machines
+
+    logs_store = None   # runtime link to the CloudWatch Logs store (set by the wire router / Nano) — never persisted
 
 
 _SHARED: StepFunctionsStore | None = None
@@ -657,6 +660,70 @@ def _iso8601(ts):
     return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(ts))
 
 
+_ERROR_EVENTS = ("Failed", "TimedOut", "Aborted")
+_DATA_KEYS = ("input", "output", "cause", "parameters", "resource")
+
+
+def _log_events(store, ex):
+    """loggingConfiguration is ENFORCED: when level != OFF and a CloudWatch Logs destination is set,
+    the finished execution's history events are written to that log group (ALL = every event,
+    ERROR = failure events, FATAL = only the execution-level failure/abort/timeout event);
+    includeExecutionData=false strips payloads. Best-effort, like AWS's asynchronous delivery."""
+    logs = getattr(store, "logs_store", None)
+    sm = store.machines.get(str(ex.get("stateMachineArn", "")).rsplit(":", 1)[-1])
+    cfg = (sm or {}).get("loggingConfiguration") or {}
+    level = cfg.get("level", "OFF")
+    if logs is None or level == "OFF":
+        return
+    group = None
+    for d in cfg.get("destinations") or []:
+        arn = ((d or {}).get("cloudWatchLogsLogGroup") or {}).get("logGroupArn", "")
+        if ":log-group:" in arn:
+            group = arn.split(":log-group:", 1)[1].split(":")[0]
+            break
+    if not group:
+        return
+    from core import logs_core
+    evs = []
+    for e in ex["_history"]:
+        t = e["type"]
+        if level == "ERROR" and not t.endswith(_ERROR_EVENTS):
+            continue
+        if level == "FATAL" and not (t.startswith("Execution") and t.endswith(_ERROR_EVENTS)):
+            continue
+        det = {k: v for k, v in e.items() if k.endswith("Details")}
+        if not cfg.get("includeExecutionData"):
+            det = {k: {a: b for a, b in (v or {}).items() if a not in _DATA_KEYS} for k, v in det.items()}
+        evs.append({"timestamp": int(float(e["timestamp"]) * 1000),
+                    "message": _dumps({"id": str(e["id"]), "type": t, "details": det,
+                                       "previous_event_id": str(e.get("previousEventId", 0)),
+                                       "event_timestamp": str(int(float(e["timestamp"]) * 1000)),
+                                       "execution_arn": ex["executionArn"]})})
+    if not evs:
+        return
+    stream = f"states/{sm['name']}/{time.strftime('%Y-%m-%d', time.gmtime())}/{uuid.uuid5(uuid.NAMESPACE_URL, ex['executionArn']).hex[:8]}"
+    try:
+        if group not in logs.log_groups:
+            logs_core._create_log_group(logs, {"logGroupName": group})
+        if stream not in logs.log_groups[group]["streams"]:
+            logs_core._create_log_stream(logs, {"logGroupName": group, "logStreamName": stream})
+        logs_core._put_log_events(logs, {"logGroupName": group, "logStreamName": stream, "logEvents": evs})
+    except Exception:
+        pass
+
+
+def _record_trace(store, ex):
+    """X-Ray active tracing: a finished execution of a tracingConfiguration.enabled machine becomes a real trace."""
+    try:
+        sm = store.machines.get(ex["stateMachineArn"].split(":")[-1].split(":")[0]) or next(
+            (m for m in store.machines.values() if m.get("stateMachineArn") == ex["stateMachineArn"]), None)
+        if sm and (sm.get("tracingConfiguration") or {}).get("enabled"):
+            from core import xray_core
+            xray_core.record_sfn_execution(store, ex, sm)
+    except Exception:
+        pass
+
+
 def _finish(store, ex, status, output=None, error=None, cause=None):
     ex["status"] = status
     ex["stopDate"] = _now()
@@ -667,6 +734,8 @@ def _finish(store, ex, status, output=None, error=None, cause=None):
     if cause is not None:
         ex["cause"] = cause
     _RUNNING.pop(ex["executionArn"], None)
+    _log_events(store, ex)
+    _record_trace(store, ex)
     for tok in [t for t, v in store.tokens.items() if v["executionArn"] == ex["executionArn"]]:
         store.tokens.pop(tok, None)
 
@@ -695,7 +764,7 @@ def _step(store, ex, gen, send=None, throw=None):
     ex.pop("_waiting", None)
 
 
-def _start(store, sm, name, input_text, lambda_store):
+def _start(store, sm, name, input_text, lambda_store, trace_header=""):
     try:
         inp = json.loads(input_text) if input_text not in (None, "") else {}
     except Exception:
@@ -705,6 +774,9 @@ def _start(store, sm, name, input_text, lambda_store):
           "startDate": _now(), "input": input_text if input_text not in (None, "") else "{}",
           "_input_obj": inp, "_history": [], "redriveCount": 0, "definition": sm["definition"],
           "roleArn": sm["roleArn"], "type": sm["type"]}
+    if (sm.get("tracingConfiguration") or {}).get("enabled"):
+        from core import xray_core
+        ex["traceId"] = xray_core.trace_header_root(trace_header) or xray_core.new_trace_id(ex["startDate"])
     store.executions[arn] = ex
     ex["_history"].append({"timestamp": ex["startDate"], "type": "ExecutionStarted", "id": 1, "previousEventId": 0,
                            "executionStartedEventDetails": {"input": ex["input"], "inputDetails": {"truncated": False},
@@ -943,7 +1015,7 @@ def op_start_execution(store, b):
         if prior["status"] == "RUNNING" and prior["input"] == (b.get("input") or "{}"):
             return {"executionArn": arn, "startDate": prior["startDate"]}
         raise _E("ExecutionAlreadyExists", f"Execution Already Exists: '{arn}'")
-    ex = _start(store, sm, name, b.get("input"), _LAMBDA_STORE)
+    ex = _start(store, sm, name, b.get("input"), _LAMBDA_STORE, b.get("traceHeader") or "")
     return {"executionArn": ex["executionArn"], "startDate": ex["startDate"]}
 
 
@@ -951,7 +1023,7 @@ def op_start_sync_execution(store, b):
     sm = _resolve_sm(store, b.get("stateMachineArn"))
     if sm["type"] != "EXPRESS":
         raise _E("StateMachineTypeNotSupported", "This operation is not supported by this type of state machine")
-    ex = _start(store, sm, _ex_name(b), b.get("input"), _LAMBDA_STORE)
+    ex = _start(store, sm, _ex_name(b), b.get("input"), _LAMBDA_STORE, b.get("traceHeader") or "")
     out = {"executionArn": ex["executionArn"], "stateMachineArn": ex["stateMachineArn"], "name": ex["name"],
            "startDate": ex["startDate"], "stopDate": ex.get("stopDate") or _now(), "input": ex["input"],
            "inputDetails": {"included": True}, "status": ex["status"] if ex["status"] != "RUNNING" else "TIMED_OUT",
@@ -984,6 +1056,8 @@ def _ex_view(ex, full=True):
     if full:
         out["input"] = ex["input"]
         out["inputDetails"] = {"included": True}
+        if ex.get("traceId"):
+            out["traceHeader"] = "Root=" + ex["traceId"] + ";Sampled=1"
         if "output" in ex:
             out["output"] = ex["output"]
             out["outputDetails"] = {"included": True}

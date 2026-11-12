@@ -216,6 +216,7 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         # Resource-detail tab ops on generic-store parents (compute, vpc, functions, …).
         if _gca.is_tab_op(svc, operation):
             return _gca.tab_dispatch(svc, operation, name, body, backends.resources, account)
+        _gca.bridge_pre(svc, operation, account, backends.resources, _gcp_fill)   # console <-> native store (VPC)
     if provider == "azure":
         from . import azure_core_adapter as _aca
         if svc in _aca.AZURE_DP_SERVICES:
@@ -236,7 +237,11 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
                 from core import gcp_console_tabs as _gct
                 body = (_gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a") if svc == "compute"
                         else _gct.describe_function(body, "nano-project", "us-central1"))
-        return {"ok": True, **r.create(provider, account, svc, body)}
+        created = r.create(provider, account, svc, body)
+        if provider == "gcp":
+            from . import gcp_core_adapter as _gca
+            _gca.bridge_post_create(svc, account, r, created)
+        return {"ok": True, **created}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
         if rec and provider == "aws" and svc == "ec2":
@@ -260,6 +265,9 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
                 return err
     if operation == "Delete":
         ok = r.delete(provider, account, svc, name)
+        if provider == "gcp":
+            from . import gcp_core_adapter as _gca
+            _gca.bridge_post_delete(svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     # Lifecycle actions for compute-like resources (EC2 instances, GCE VMs, RDS
     # DBs, …). The console POSTs collection/{name}/{start,stop,reboot,terminate};
@@ -348,6 +356,14 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     `operation` carries the HTTP method; params carries {path, query, body}.
     Returns the raw HTTP envelope under __http so the SW can honour the real
     ARM status code, headers (Azure-AsyncOperation/Location) and body."""
+    # The native-wire router wires the ARM state to its sibling stores (ACR, Key Vault secrets, SQL/Blob stores) and installs the
+    # Azure Monitor hooks (request telemetry, per-resource metric definitions/series). Build it before ARM serves anything so
+    # ARM-only sessions behave like /_wire ones (otherwise metricDefinitions lack the measured request metrics).
+    try:
+        from wasm.providers import wire_adapter
+        wire_adapter.router()
+    except Exception:
+        import traceback; traceback.print_exc()
     arm = getattr(backends, "_azure_arm", None)
     if arm is None:
         # Prefer the SHARED registry instance (the one nano_persist captures/
@@ -594,6 +610,49 @@ def _vm_mem(itype: str) -> int:
     return 1024 if any(x in t for x in ("xlarge", "standard_b2", "standard_d", "e2-standard", "n2-")) else 512
 
 
+def _wire_vms() -> list:
+    """EC2 + GCE instances created through the native wire (v4 consoles, SDK, CLI): the vpc_core model's instances
+    and the Compute Engine core's instances, as the same desired-state items the host reconciles."""
+    out = []
+    try:
+        from core import nano_registry, vpc_core
+        reg = nano_registry.get()
+    except Exception:
+        return out
+    try:
+        for iid, r in (vpc_core._model(reg["vpc_net"]).get("instances") or {}).items():
+            st = str(r.get("state") or "running").lower()
+            img = str(r.get("image_id") or "").lower()
+            user = "ubuntu" if "ubuntu" in img or "ubuntu" in str(r.get("platform_details") or "").lower() else "ec2-user"
+            out.append({"cloud": "aws", "id": iid, "ref": iid, "name": r.get("name") or iid,
+                        "desired": "terminate" if st in ("terminated", "shutting-down") else
+                                   "stop" if st in ("stopped", "stopping") else "run",
+                        "user": user, "mem_mb": _vm_mem(r.get("instance_type")), "keys": [],
+                        "key_name": r.get("key_name") or "", "instance_type": r.get("instance_type") or ""})
+    except Exception:
+        pass
+    try:
+        for key, r in (getattr(reg.get("gcp_compute_vm"), "instances", {}) or {}).items():
+            n = str(r.get("name") or key).rsplit("/", 1)[-1]
+            st = str(r.get("status") or "RUNNING").upper()
+            keys, user = [], ""
+            md = r.get("metadata")
+            for it in (md.get("items") or []) if isinstance(md, dict) else []:
+                if isinstance(it, dict) and it.get("key") in ("ssh-keys", "sshKeys"):
+                    for line in str(it.get("value") or "").splitlines():
+                        u, _, k = line.partition(":")
+                        if k.strip().startswith(("ssh-", "ecdsa-")):
+                            keys.append(k.strip()); user = user or u.strip()
+            mt = str(r.get("machineType") or "").rsplit("/", 1)[-1]
+            out.append({"cloud": "gcp", "id": "gce-" + n, "ref": n, "name": n,
+                        "desired": "stop" if st in ("TERMINATED", "STOPPED", "STOPPING", "SUSPENDED", "SUSPENDING") else "run",
+                        "user": user or "gcpuser", "mem_mb": _vm_mem(mt), "keys": keys,
+                        "instance_type": mt, "zone": str(r.get("zone") or "").rsplit("/", 1)[-1]})
+    except Exception:
+        pass
+    return out
+
+
 def _vms_list(backends: Backends) -> dict:
     items = []
     colls = getattr(backends.resources, "collections", {}) or {}
@@ -626,6 +685,12 @@ def _vms_list(backends: Backends) -> dict:
                               "desired": "stop" if st in ("TERMINATED", "STOPPED", "STOPPING", "SUSPENDED", "SUSPENDING") else "run",
                               "user": user or "gcpuser", "mem_mb": _vm_mem(mt), "keys": keys,
                               "instance_type": mt, "zone": str(r.get("zone") or "").rsplit("/", 1)[-1]})
+    # The v4 consoles + the native SDK/CLI wire keep EC2 and Compute Engine instances in the shared core stores
+    # (core/nano_registry vpc_net / gcp_compute_vm), not in the legacy console collections above.
+    seen = {it["id"] for it in items}
+    for it in _wire_vms():
+        if it["id"] not in seen:
+            items.append(it); seen.add(it["id"])
     arm = getattr(backends, "_azure_arm", None)
     if arm is None:
         try:
@@ -669,6 +734,19 @@ def _vms_annotate(backends: Backends, params: dict) -> dict:
                 for name, rec in coll.items():
                     if str(rec.get("name") or name).rsplit("/", 1)[-1] == ref:
                         rec.update(ann); return {"ok": True}
+    try:   # wire-created instances (v4 consoles / SDK / CLI)
+        from core import nano_registry, vpc_core
+        reg = nano_registry.get()
+        if cloud == "aws":
+            rec = (vpc_core._model(reg["vpc_net"]).get("instances") or {}).get(ref)
+            if rec is not None:
+                rec.update(ann); return {"ok": True}
+        if cloud == "gcp":
+            for key, rec in (getattr(reg.get("gcp_compute_vm"), "instances", {}) or {}).items():
+                if str(rec.get("name") or key).rsplit("/", 1)[-1] == ref:
+                    rec.update(ann); return {"ok": True}
+    except Exception:
+        pass
     return {"ok": False, "code": "NotFound"}
 
 

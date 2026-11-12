@@ -80,14 +80,22 @@ SERVICE_CATEGORY = {
     "servicebus":      "queue",
     "cosmos":          "nosql",
     "eventgrid":       "eventing",
+    # Managed Kubernetes (v4) -- Pro / Max / Enterprise ONLY. Never part of Free, the API-only
+    # tiers (nano / micro / lite) or ALL_CATEGORIES below; see KUBERNETES_TIERS.
+    "aks":             "kubernetes",     # Azure Kubernetes Service (+ Flux, Backup for AKS)
+    "gke":             "kubernetes",     # Google Kubernetes Engine (+ kubectl data plane, Backup for GKE)
+    "eks":             "kubernetes",     # Amazon EKS (no console/core yet -- the key is mapped so the gate is ready)
 }
+
+KUBERNETES_CATEGORY = "kubernetes"
+KUBERNETES_TIERS = ("pro", "max", "enterprise")
 
 # Categories the FREE tier unlocks (everything else → locked behind paid tiers).
 FREE_UNLOCKED_CATEGORIES = {
     "compute", "serverless", "object_storage", "relational_db",
     "api_gateway", "iam", "network", "secrets", "kms", "queue",
 }
-FREE_LOCKED_CATEGORIES = {"nosql", "eventing"}
+FREE_LOCKED_CATEGORIES = {"nosql", "eventing", KUBERNETES_CATEGORY}
 
 # v2.2.0 — the conformance pack = every service category. The "API-only" tiers
 # (Nano, Lite) unlock the full pack but LOCK real-VM compute (EC2/VMs); the
@@ -283,7 +291,7 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "primary_cloud_required":      False,
         "providers":                   ["aws", "gcp", "azure"],
         "service_categories_unlocked": sorted(CONFORMANCE_NO_COMPUTE),
-        "service_categories_locked":   ["compute"],
+        "service_categories_locked":   ["compute", KUBERNETES_CATEGORY],
         "per_space_quantities":        _nano_quantities(),
         "max_vm_size_tier":            "small",
         "max_db_size_tier":            "small",
@@ -329,8 +337,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "max_spaces":                  3,
         "primary_cloud_required":      False,
         "providers":                   ["aws", "gcp", "azure"],
-        "service_categories_unlocked": "ALL",
-        "service_categories_locked":   [],
+        "service_categories_unlocked": sorted(ALL_CATEGORIES),   # NOT "ALL": Kubernetes stays locked on Micro
+        "service_categories_locked":   [KUBERNETES_CATEGORY],
         "per_space_quantities":        _micro_quantities(),
         "max_vm_size_tier":            "small",
         "max_db_size_tier":            "small",
@@ -378,7 +386,7 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "primary_cloud_required":      False,
         "providers":                   ["aws", "gcp", "azure"],
         "service_categories_unlocked": sorted(CONFORMANCE_NO_COMPUTE),
-        "service_categories_locked":   ["compute"],
+        "service_categories_locked":   ["compute", KUBERNETES_CATEGORY],
         "per_space_quantities":        _lite_quantities(),
         "max_vm_size_tier":            "small",
         "max_db_size_tier":            "medium",
@@ -659,6 +667,16 @@ def check_service(tier: str, service_key: str,
             "upgrade_to": "pro" if tier_norm == "free" else "max",
         }
 
+    # Managed Kubernetes: Pro / Max / Enterprise only -- checked BEFORE the "ALL" shortcut and
+    # independent of the per-tier category lists, so no legacy tier can leak it.
+    if SERVICE_CATEGORY.get(service_key) == KUBERNETES_CATEGORY and tier_norm not in KUBERNETES_TIERS:
+        return {
+            "ok": False, "code": "tier_service_locked",
+            "reason": f"{service_key} (managed Kubernetes) requires the Pro, Max or Enterprise tier; the active tier is {tier_norm.capitalize()}",
+            "upgrade_to": "pro", "service": service_key, "category": KUBERNETES_CATEGORY,
+            "required_tiers": list(KUBERNETES_TIERS),
+        }
+
     # Service category gate.
     unlocked = p.get("service_categories_unlocked", [])
     if unlocked == "ALL":
@@ -797,3 +815,60 @@ def _next_tier(tier: str) -> str:
         return order[min(i + 1, len(order) - 1)]
     except ValueError:
         return "pro"
+
+
+# ---------------------------------------------------------------------------
+# v4 mesh-era gating (V4-MESH-DESIGN-DISCUSSION.md sections 2 + 11).
+#   Free = browser-only, all 3 clouds visible but strategic features disabled.
+#   Pro  = ONE cloud (primary_cloud) in full, browser or mesh.
+#   Max  = all 3 clouds in full.
+# Capability-registry entries carry optional `tier` (free|pro|max) and
+# `mesh` (bool); unset = free. Source of truth for the values:
+# core/capabilities/_tiers.json (see scripts/gen_tier_pills.py).
+# ---------------------------------------------------------------------------
+_TIER_RANK = {"free": 0, "nano": 0, "micro": 0, "lite": 0, "pro": 1, "max": 2, "enterprise": 2}
+ENTRY_TIERS = ("free", "pro", "max")
+# Clouds a tier gets in FULL (Pro = the one chosen as primary_cloud).
+FULL_CLOUDS = {"free": 0, "pro": 1, "max": 3, "enterprise": 3}
+
+
+def validate_entry_gating(fid: str, entry: dict[str, Any]) -> list[str]:
+    """Registry-schema check for the optional `tier` / `mesh` fields."""
+    errs = []
+    if "tier" in entry and entry["tier"] not in ENTRY_TIERS:
+        errs.append(f"{fid}: tier must be one of {ENTRY_TIERS}, got {entry['tier']!r}")
+    if "mesh" in entry and not isinstance(entry["mesh"], bool):
+        errs.append(f"{fid}: mesh must be a bool, got {entry['mesh']!r}")
+    return errs
+
+
+def pill_for(entry: dict[str, Any] | None) -> str | None:
+    """Console pill for a capability entry: 'Mesh' | 'Pro' | 'Max' | None.
+    Mesh wins (it is the upsell for Free; mesh licences are Pro/Max anyway)."""
+    if not entry:
+        return None
+    if entry.get("mesh") is True:
+        return "Mesh"
+    return {"pro": "Pro", "max": "Max"}.get(entry.get("tier") or "free")
+
+
+def feature_allowed(tier: str | None, cloud: str | None, service: str | None = None, *,
+                    entry: dict[str, Any] | None = None, primary_cloud: str | None = None,
+                    mesh_available: bool = False) -> bool:
+    """May this account use the capability on `cloud`?
+
+    `service` is informational (cloud/service-level gating stays in check_service);
+    the per-feature gate comes from `entry` (a registry entry). No entry or an
+    ungated entry => allowed (Free completes the core loop). Pro: gated features
+    only on `primary_cloud` (skipped when primary_cloud is None). Mesh
+    features need `mesh_available` (Pro/Max licence + reachable mesh)."""
+    t = normalize_tier(tier)
+    rank = _TIER_RANK[t]
+    need = (entry or {}).get("tier") or "free"
+    if need not in ENTRY_TIERS or rank < _TIER_RANK[need]:
+        return False
+    if (entry or {}).get("mesh") is True and not (mesh_available and rank >= 1):
+        return False
+    if need != "free" and t == "pro" and cloud and primary_cloud and cloud != primary_cloud:
+        return False
+    return True

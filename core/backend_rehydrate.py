@@ -216,6 +216,14 @@ def rehydrate_pubsub_topics(state: dict) -> dict[str, int]:
             .topics        — dict of topic_id → {name, project, ...}
             .subscriptions — dict of sub_id → {name, project, topic, ...}
     """
+    try:   # v4 C0g: the shared core serves Pub/Sub from the (durable) state store itself —
+        # the emulator is no longer the authority, so there is nothing to re-declare there.
+        from core import wire_ingress as _wi
+        if _wi.is_unified("gcp_pubsub"):
+            return {"topics_declared": 0, "subs_declared": 0, "failed": 0, "skipped": 0,
+                    "engine": "core (durable state; no emulator rehydration needed)"}
+    except Exception:
+        pass
     declared_topics = declared_subs = failed = skipped = 0
     topics_to_declare: list[tuple[str, str]] = []
     subs_to_declare:   list[tuple[str, str, str, dict[str, Any]]] = []

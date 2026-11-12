@@ -1,0 +1,2069 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "ecs",
+  "console_path": "/ecs/v2/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Favorites and recents",
+      "page_id": "favorites-and-recents"
+    },
+    {
+      "label": "Express Mode",
+      "page_id": "express-mode"
+    },
+    {
+      "label": "Clusters",
+      "page_id": "clusters"
+    },
+    {
+      "label": "Gateways",
+      "page_id": "gateways"
+    },
+    {
+      "label": "Namespaces",
+      "page_id": "namespaces"
+    },
+    {
+      "label": "Task definitions",
+      "page_id": "task-definitions"
+    },
+    {
+      "label": "Daemon task definitions",
+      "page_id": "daemon-task-definitions"
+    },
+    {
+      "label": "Account settings",
+      "page_id": "account-settings"
+    },
+    {
+      "label": "AWS Resource Explorer",
+      "external": true
+    },
+    {
+      "label": "AWS Batch",
+      "external": true
+    },
+    {
+      "label": "Amazon ECR",
+      "external": true
+    },
+    {
+      "label": "Repositories",
+      "external": true
+    },
+    {
+      "label": "Online learning workshop",
+      "external": true
+    },
+    {
+      "label": "Documentation",
+      "external": true
+    },
+    {
+      "label": "Discover products",
+      "external": true
+    },
+    {
+      "label": "Subscriptions",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Amazon Elastic Container Service",
+      "route": "/ecs/v2/home",
+      "breadcrumbs": [
+        "Containers"
+      ],
+      "captures": [
+        "A-ecs/001-L1-landing",
+        "A-ecs/002-L2-amazon-elastic-container-service"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Also /ecs/v2/getStarted.",
+      "sections": [
+        {
+          "title": "Deploy your containerized applications",
+          "actions": [
+            "Get started"
+          ]
+        },
+        {
+          "title": "How it works"
+        },
+        {
+          "title": "Benefits and features"
+        },
+        {
+          "title": "Use cases"
+        },
+        {
+          "title": "Pricing (US)"
+        },
+        {
+          "title": "More resources"
+        }
+      ]
+    },
+    {
+      "id": "favorites-and-recents",
+      "kind": "list",
+      "title": "Favorites",
+      "route": "/ecs/v2/favorites-recents",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Favorites and recents",
+        "Favorites"
+      ],
+      "captures": [
+        "A-ecs/003-L2-favorites-and-recents",
+        "A-ecs/003-L2-favorites-and-recents--tab-02-recently-visited",
+        "A-ecs/012-L3-favorites",
+        "A-ecs/013-L3-recently-visited"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Favorites",
+        "Recently visited"
+      ],
+      "tab_panels": [
+        {
+          "label": "Favorites",
+          "sections": [
+            {
+              "title": "Favorites",
+              "table": {
+                "resource_label": "Favorites",
+                "counter": true,
+                "columns": [],
+                "filters": [
+                  "Filter resource type"
+                ],
+                "empty_state": "No favorites yet",
+                "pagination": true,
+                "confidence": "medium"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Recently visited",
+          "sections": [
+            {
+              "title": "Recently visited",
+              "table": {
+                "resource_label": "Recently visited",
+                "counter": true,
+                "columns": [],
+                "filters": [
+                  "Filter resource type"
+                ],
+                "empty_state": "No recently visited resources",
+                "pagination": true,
+                "confidence": "medium"
+              }
+            }
+          ]
+        }
+      ],
+      "notes": "Columns not visible while empty. Filter default 'All resource types'."
+    },
+    {
+      "id": "express-mode",
+      "kind": "create",
+      "title": "Express Mode",
+      "route": "/ecs/v2/express-mode",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Express Mode"
+      ],
+      "captures": [
+        "A-ecs/004-L2-express-mode"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Let's set up your app",
+          "fields": [
+            {
+              "label": "Image URI",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Browse ECR images"
+              ]
+            },
+            {
+              "label": "Private registry - optional",
+              "type": "checkbox",
+              "help": "Provide credentials to pull images from a private registry outside Amazon ECR."
+            },
+            {
+              "label": "CPU architecture - optional",
+              "type": "select",
+              "default": "x86_64",
+              "options": [
+                "x86_64",
+                "ARM64"
+              ]
+            },
+            {
+              "label": "Task execution role",
+              "type": "select",
+              "default": "Create new role",
+              "help": "A default role ecsTaskExecutionRole will be created automatically."
+            },
+            {
+              "label": "Infrastructure role",
+              "type": "select",
+              "default": "Create new role"
+            }
+          ]
+        },
+        {
+          "title": "Additional configurations - optional",
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "clusters",
+      "kind": "list",
+      "title": "Clusters",
+      "route": "/ecs/v2/clusters",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Clusters"
+      ],
+      "captures": [
+        "A-ecs/005-L2-clusters"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Helper under filter: 'By default, we only load up to 1,000 clusters at a time.'",
+      "table": {
+        "resource_label": "Clusters",
+        "counter": true,
+        "selection": "none",
+        "header_actions": [
+          "Refresh",
+          "Create cluster"
+        ],
+        "filter_placeholder": "Search clusters",
+        "columns": [
+          "Cluster",
+          "Services",
+          "Tasks",
+          "Container instances",
+          "CloudWatch monitoring",
+          "Capacity provider strategy"
+        ],
+        "empty_state": "No clusters",
+        "empty_state_action": "Create cluster",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "cluster-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ecs/v2/clusters/{resource-name}/services",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Clusters",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not crawled (no clusters). Tabs/sections from the current console.",
+      "header_actions": [
+        "Update cluster",
+        "Delete cluster"
+      ],
+      "sections": [
+        {
+          "title": "Cluster overview",
+          "fields": [
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "CloudWatch monitoring",
+              "type": "readonly"
+            },
+            {
+              "label": "Registered container instances",
+              "type": "readonly"
+            },
+            {
+              "label": "Services",
+              "type": "readonly",
+              "help": "Draining / Active"
+            },
+            {
+              "label": "Tasks",
+              "type": "readonly",
+              "help": "Pending / Running"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Services",
+        "Tasks",
+        "Infrastructure",
+        "Metrics",
+        "Scheduled tasks",
+        "Configuration",
+        "Event history",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Services",
+          "sections": [
+            {
+              "title": "Services",
+              "table": {
+                "resource_label": "Services",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Manage tags",
+                  "Update",
+                  "Delete service",
+                  "Create"
+                ],
+                "filter_placeholder": "Filter services by value",
+                "filters": [
+                  "Filter launch type",
+                  "Filter service type"
+                ],
+                "columns": [
+                  "Service name",
+                  "Status",
+                  "ARN",
+                  "Service type",
+                  "Deployments and tasks",
+                  "Last deployment",
+                  "Task definition",
+                  "Launch type",
+                  "Revision",
+                  "Created at"
+                ],
+                "empty_state": "No services",
+                "empty_state_action": "Create",
+                "pagination": true,
+                "preferences": true
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tasks",
+          "sections": [
+            {
+              "title": "Tasks",
+              "table": {
+                "resource_label": "Tasks",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Stop",
+                  "Run new task"
+                ],
+                "filter_placeholder": "Filter tasks by property or value",
+                "filters": [
+                  "Filter desired status",
+                  "Filter launch type"
+                ],
+                "columns": [
+                  "Task",
+                  "Last status",
+                  "Desired status",
+                  "Task definition",
+                  "Health status",
+                  "Created at",
+                  "Started by",
+                  "Group",
+                  "Launch type",
+                  "CPU",
+                  "Memory"
+                ],
+                "empty_state": "No tasks",
+                "pagination": true,
+                "preferences": true
+              }
+            }
+          ]
+        },
+        {
+          "label": "Infrastructure",
+          "sections": [
+            {
+              "title": "Capacity providers",
+              "table": {
+                "resource_label": "Capacity providers",
+                "counter": true,
+                "columns": [
+                  "Capacity provider",
+                  "Type",
+                  "Current size",
+                  "Desired size",
+                  "Managed scaling",
+                  "Managed termination protection"
+                ]
+              }
+            },
+            {
+              "title": "Container instances",
+              "table": {
+                "resource_label": "Container instances",
+                "counter": true,
+                "columns": [
+                  "Container instance",
+                  "EC2 instance",
+                  "Status",
+                  "Running tasks count",
+                  "CPU available",
+                  "Memory available",
+                  "Agent version"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Metrics",
+          "sections": [
+            {
+              "title": "Cluster metrics",
+              "fields": [
+                {
+                  "label": "CPU utilization",
+                  "type": "other"
+                },
+                {
+                  "label": "Memory utilization",
+                  "type": "other"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Scheduled tasks",
+          "sections": [
+            {
+              "title": "Scheduled tasks",
+              "table": {
+                "resource_label": "Scheduled tasks",
+                "counter": true,
+                "header_actions": [
+                  "Delete",
+                  "Edit",
+                  "Create"
+                ],
+                "columns": [
+                  "Schedule name",
+                  "Schedule state",
+                  "Target task definition"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Configuration",
+          "sections": [
+            {
+              "title": "Configuration",
+              "fields": [
+                {
+                  "label": "Default namespace",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Encryption",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Execute command configuration",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Event history",
+          "sections": [
+            {
+              "title": "Event history"
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "actions": [
+                "Manage tags"
+              ],
+              "table": {
+                "resource_label": "Tags",
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "empty_state": "No tags"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-cluster",
+      "kind": "create",
+      "title": "Create cluster",
+      "route": "/ecs/v2/create-cluster",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Clusters",
+        "Create cluster"
+      ],
+      "captures": [
+        "A-ecs/014-L3-create-cluster"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "header_actions": [
+        "Cancel",
+        "View CloudFormation template",
+        "Create"
+      ],
+      "sections": [
+        {
+          "title": "Cluster configuration",
+          "fields": [
+            {
+              "label": "Cluster name",
+              "type": "text",
+              "required": true,
+              "constraints": "1-255 chars: a-z, A-Z, 0-9, hyphens (-), and underscores (_)"
+            },
+            {
+              "label": "Gateways - new, optional",
+              "type": "select",
+              "placeholder": "Choose gateways",
+              "help": "You can choose up to 5 more gateways."
+            },
+            {
+              "label": "Service Connect defaults - optional",
+              "type": "other"
+            }
+          ]
+        },
+        {
+          "title": "Infrastructure - advanced",
+          "fields": [
+            {
+              "label": "Select a method of obtaining compute capacity",
+              "type": "radio",
+              "default": "Fargate only",
+              "options": [
+                "Fargate only",
+                "Fargate and Managed Instances",
+                "Fargate and Self-managed instances"
+              ]
+            }
+          ],
+          "expandable": true
+        },
+        {
+          "title": "Monitoring - optional",
+          "expandable": true
+        },
+        {
+          "title": "Encryption - optional",
+          "expandable": true
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "help": "You can add 50 more tags."
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "service-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ecs/v2/clusters/{cluster}/services/{resource-name}/health",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Clusters",
+        "{cluster}",
+        "Services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Update service",
+        "Delete service"
+      ],
+      "sections": [
+        {
+          "title": "Service overview",
+          "fields": [
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Tasks",
+              "type": "readonly"
+            },
+            {
+              "label": "Task definition: revision",
+              "type": "readonly"
+            },
+            {
+              "label": "Service type",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Health and metrics",
+        "Tasks",
+        "Logs",
+        "Deployments",
+        "Events",
+        "Configuration and networking",
+        "Service auto scaling",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Tasks",
+          "sections": [
+            {
+              "title": "Tasks",
+              "table": {
+                "resource_label": "Tasks",
+                "counter": true,
+                "header_actions": [
+                  "Stop",
+                  "Run new task"
+                ],
+                "columns": [
+                  "Task",
+                  "Last status",
+                  "Desired status",
+                  "Task definition",
+                  "Health status",
+                  "Created at",
+                  "Launch type"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Events",
+          "sections": [
+            {
+              "title": "Events",
+              "table": {
+                "resource_label": "Events",
+                "counter": true,
+                "columns": [
+                  "Event ID",
+                  "Started at",
+                  "Message"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deployments",
+          "sections": [
+            {
+              "title": "Deployments",
+              "table": {
+                "resource_label": "Deployments",
+                "columns": [
+                  "Deployment ID",
+                  "Status",
+                  "Target service revision",
+                  "Started at"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Configuration and networking",
+          "sections": [
+            {
+              "title": "Service configuration"
+            },
+            {
+              "title": "Network configuration",
+              "fields": [
+                {
+                  "label": "VPC",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Subnets",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Security groups",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Auto-assign public IP",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-service",
+      "kind": "create",
+      "title": "Create service",
+      "route": "/ecs/v2/clusters/{cluster}/create-service",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Clusters",
+        "{cluster}",
+        "Create service"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Service details",
+          "fields": [
+            {
+              "label": "Task definition family",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Task definition revision",
+              "type": "select"
+            },
+            {
+              "label": "Service name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Environment",
+          "fields": [
+            {
+              "label": "Existing cluster",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Compute options",
+              "type": "radio",
+              "default": "Capacity provider strategy",
+              "options": [
+                "Capacity provider strategy",
+                "Launch type"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Deployment configuration",
+          "fields": [
+            {
+              "label": "Scheduling strategy",
+              "type": "radio",
+              "default": "Replica",
+              "options": [
+                "Replica",
+                "Daemon"
+              ]
+            },
+            {
+              "label": "Desired tasks",
+              "type": "number",
+              "default": 1
+            },
+            {
+              "label": "Deployment options",
+              "type": "other"
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "fields": [
+            {
+              "label": "VPC",
+              "type": "select"
+            },
+            {
+              "label": "Subnets",
+              "type": "select"
+            },
+            {
+              "label": "Security group",
+              "type": "radio",
+              "options": [
+                "Use an existing security group",
+                "Create a new security group"
+              ]
+            },
+            {
+              "label": "Public IP",
+              "type": "toggle",
+              "default": true
+            }
+          ],
+          "expandable": true
+        },
+        {
+          "title": "Service Connect - optional",
+          "expandable": true
+        },
+        {
+          "title": "Service discovery - optional",
+          "expandable": true
+        },
+        {
+          "title": "Load balancing - optional",
+          "expandable": true
+        },
+        {
+          "title": "VPC Lattice - optional",
+          "expandable": true
+        },
+        {
+          "title": "Service auto scaling - optional",
+          "expandable": true
+        },
+        {
+          "title": "Volume - optional",
+          "expandable": true
+        },
+        {
+          "title": "Tags - optional",
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "run-task",
+      "kind": "create",
+      "title": "Run task",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Clusters",
+        "{cluster}",
+        "Run task"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Environment",
+          "fields": [
+            {
+              "label": "Existing cluster",
+              "type": "select"
+            },
+            {
+              "label": "Compute options",
+              "type": "radio",
+              "options": [
+                "Capacity provider strategy",
+                "Launch type"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Deployment configuration",
+          "fields": [
+            {
+              "label": "Task definition family",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Revision",
+              "type": "select"
+            },
+            {
+              "label": "Desired tasks",
+              "type": "number",
+              "default": 1
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "expandable": true
+        },
+        {
+          "title": "Container overrides",
+          "expandable": true
+        },
+        {
+          "title": "Tags",
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "gateways",
+      "kind": "list",
+      "title": "Gateways",
+      "route": "/ecs/v2/gateways",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Gateways"
+      ],
+      "captures": [
+        "A-ecs/006-L2-gateways"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Gateways",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Update",
+          "Delete",
+          "Create"
+        ],
+        "filters": [
+          "Filter gateway status"
+        ],
+        "columns": [
+          "Gateway name",
+          "Status",
+          "Type",
+          "Created at"
+        ],
+        "empty_state": "No gateways",
+        "empty_state_action": "Create gateway",
+        "pagination": true,
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "create-gateway",
+      "kind": "create",
+      "title": "Create gateway",
+      "route": "/ecs/v2/create-gateway",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Gateways",
+        "Create gateway"
+      ],
+      "captures": [
+        "A-ecs/016-L3-create"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Gateway configuration",
+          "fields": [
+            {
+              "label": "Gateway name",
+              "type": "text",
+              "required": true,
+              "constraints": "Up to 255 letters, numbers, hyphens, and underscores"
+            },
+            {
+              "label": "Clusters - optional",
+              "type": "select",
+              "placeholder": "Choose clusters"
+            },
+            {
+              "label": "Infrastructure role",
+              "type": "select",
+              "required": true,
+              "placeholder": "Choose infrastructure role",
+              "actions": [
+                "Create role"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Additional settings",
+          "expandable": true
+        },
+        {
+          "title": "Load balancing",
+          "fields": [
+            {
+              "label": "Scheme",
+              "type": "radio",
+              "default": "Internet-facing",
+              "options": [
+                "Internet-facing",
+                "Internal"
+              ]
+            },
+            {
+              "label": "IP address type",
+              "type": "radio",
+              "default": "IPv4",
+              "options": [
+                "IPv4",
+                "Dualstack",
+                "Dualstack without public IPv4"
+              ]
+            },
+            {
+              "label": "Turn on access logs",
+              "type": "toggle",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "fields": [
+            {
+              "label": "VPC",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Subnets",
+              "type": "select",
+              "required": true,
+              "placeholder": "Choose subnets"
+            },
+            {
+              "label": "Security group - optional",
+              "type": "select",
+              "placeholder": "Choose a security group"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags"
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "namespaces",
+      "kind": "list",
+      "title": "Namespaces",
+      "route": "/ecs/v2/namespaces",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Namespaces"
+      ],
+      "captures": [
+        "A-ecs/007-L2-namespaces"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Namespaces",
+        "counter": true,
+        "selection": "none",
+        "columns": [
+          "Namespace ID",
+          "Namespace",
+          "Created at",
+          "Resource owner"
+        ],
+        "empty_state": "No namespaces",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "task-definitions",
+      "kind": "list",
+      "title": "Task definitions",
+      "route": "/ecs/v2/task-definitions",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Task definitions"
+      ],
+      "captures": [
+        "A-ecs/008-L2-task-definitions"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Task definitions",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Deploy",
+          "Create new revision",
+          "Create new task definition"
+        ],
+        "filter_placeholder": "Filter task definitions",
+        "filters": [
+          "Filter status"
+        ],
+        "columns": [
+          "Task definition",
+          "Status of last revision"
+        ],
+        "empty_state": "No task definitions",
+        "empty_state_action": "Create new task definition",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high"
+      },
+      "notes": "Filter status default 'Active'. 'Create new task definition' is a split button (with JSON option)."
+    },
+    {
+      "id": "task-definition-family",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ecs/v2/task-definitions/{resource-name}",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Task definitions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Revisions",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Deploy",
+          "Actions",
+          "Create new revision"
+        ],
+        "actions": [
+          "Deregister",
+          "Delete"
+        ],
+        "columns": [
+          "Task definition: revision",
+          "Status"
+        ],
+        "pagination": true
+      }
+    },
+    {
+      "id": "task-definition-revision",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ecs/v2/task-definitions/{resource-name}/{revision}/containers",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Task definitions",
+        "{resource-name}",
+        "Revision"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Deploy",
+        "Actions",
+        "Create new revision"
+      ],
+      "sections": [
+        {
+          "title": "Overview",
+          "fields": [
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "App environment",
+              "type": "readonly"
+            },
+            {
+              "label": "Task role",
+              "type": "readonly"
+            },
+            {
+              "label": "Task execution role",
+              "type": "readonly"
+            },
+            {
+              "label": "Operating system/Architecture",
+              "type": "readonly"
+            },
+            {
+              "label": "Network mode",
+              "type": "readonly"
+            },
+            {
+              "label": "Task size",
+              "type": "readonly",
+              "help": "CPU / Memory"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Containers",
+        "JSON",
+        "Storage",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Containers",
+          "sections": [
+            {
+              "title": "Containers",
+              "table": {
+                "resource_label": "Containers",
+                "columns": [
+                  "Container name",
+                  "Image",
+                  "Private registry",
+                  "Essential",
+                  "CPU",
+                  "Memory hard/soft limit",
+                  "GPU"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "JSON",
+          "sections": [
+            {
+              "title": "JSON",
+              "actions": [
+                "Copy to clipboard",
+                "Download JSON"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Storage",
+          "sections": [
+            {
+              "title": "Ephemeral storage"
+            },
+            {
+              "title": "Volumes"
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "resource_label": "Tags",
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-task-definition",
+      "kind": "create",
+      "title": "Create new task definition",
+      "route": "/ecs/v2/create-task-definition",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Task definitions",
+        "Create new task definition"
+      ],
+      "captures": [
+        "A-ecs/018-L3-create-new-task-definition"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Task definition configuration",
+          "fields": [
+            {
+              "label": "Task definition family",
+              "type": "text",
+              "required": true,
+              "constraints": "Up to 255 letters (uppercase and lowercase), numbers, hyphens, and underscores"
+            }
+          ]
+        },
+        {
+          "title": "Infrastructure requirements",
+          "fields": [
+            {
+              "label": "Launch type",
+              "type": "checkbox",
+              "default": "AWS Fargate",
+              "options": [
+                "AWS Fargate",
+                "Managed Instances",
+                "Amazon EC2 instances"
+              ]
+            },
+            {
+              "label": "Operating system/Architecture",
+              "type": "select",
+              "default": "Linux/X86_64",
+              "options": [
+                "Linux/X86_64",
+                "Linux/ARM64"
+              ]
+            },
+            {
+              "label": "Network mode",
+              "type": "select",
+              "default": "awsvpc",
+              "options": [
+                "awsvpc"
+              ],
+              "help": "Only awsvpc for Fargate."
+            },
+            {
+              "label": "CPU",
+              "type": "select",
+              "default": "1 vCPU",
+              "options": [
+                ".25 vCPU",
+                ".5 vCPU",
+                "1 vCPU",
+                "2 vCPU",
+                "4 vCPU",
+                "8 vCPU",
+                "16 vCPU"
+              ]
+            },
+            {
+              "label": "Memory",
+              "type": "select",
+              "default": "3 GB"
+            },
+            {
+              "label": "Task role",
+              "type": "select",
+              "default": "-",
+              "actions": [
+                "Create new role"
+              ]
+            },
+            {
+              "label": "Task execution role",
+              "type": "select",
+              "default": "Create default role",
+              "actions": [
+                "Create new role"
+              ]
+            },
+            {
+              "label": "Task placement - optional",
+              "type": "other"
+            },
+            {
+              "label": "GPU sharing - optional",
+              "type": "other"
+            },
+            {
+              "label": "Fault injection - optional",
+              "type": "other"
+            }
+          ]
+        },
+        {
+          "title": "Container - 1",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true,
+              "constraints": "Up to 255 letters, numbers, hyphens, and underscores"
+            },
+            {
+              "label": "Essential container",
+              "type": "select",
+              "default": "Yes",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Image URI",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Browse ECR images"
+              ]
+            },
+            {
+              "label": "Private registry authentication",
+              "type": "toggle",
+              "default": false,
+              "help": "Store credentials in Secrets Manager, and then use the credentials to reference images in private registries."
+            },
+            {
+              "label": "Port mappings",
+              "type": "table",
+              "columns": [
+                "Container port",
+                "Protocol",
+                "Port name",
+                "App protocol"
+              ],
+              "actions": [
+                "Add port mapping",
+                "Remove"
+              ],
+              "help": "Defaults: Protocol TCP, App protocol HTTP"
+            },
+            {
+              "label": "Read only root file system",
+              "type": "toggle",
+              "default": false
+            },
+            {
+              "label": "Resource allocation limits - conditional",
+              "type": "other",
+              "children": [
+                {
+                  "label": "CPU",
+                  "type": "number",
+                  "help": "in vCPU"
+                },
+                {
+                  "label": "Memory hard limit",
+                  "type": "number",
+                  "help": "in GB"
+                },
+                {
+                  "label": "Memory soft limit",
+                  "type": "number",
+                  "help": "in GB"
+                },
+                {
+                  "label": "GPU",
+                  "type": "number"
+                }
+              ]
+            },
+            {
+              "label": "Environment variables - optional",
+              "type": "table",
+              "columns": [
+                "Key",
+                "Value type",
+                "Value"
+              ],
+              "actions": [
+                "Add environment variable",
+                "Bulk edit",
+                "Add environment file"
+              ]
+            },
+            {
+              "label": "Logging - optional",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Use log collection",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Destination",
+                  "type": "select",
+                  "default": "Amazon CloudWatch"
+                }
+              ]
+            },
+            {
+              "label": "Restart policy - optional",
+              "type": "other"
+            },
+            {
+              "label": "HealthCheck - optional",
+              "type": "other"
+            },
+            {
+              "label": "Startup dependency ordering - optional",
+              "type": "other"
+            },
+            {
+              "label": "Container timeouts - optional",
+              "type": "other"
+            },
+            {
+              "label": "Container network settings - optional",
+              "type": "other"
+            },
+            {
+              "label": "Docker configuration - optional",
+              "type": "other"
+            },
+            {
+              "label": "Resource limits (Ulimits) - optional",
+              "type": "other"
+            },
+            {
+              "label": "Docker labels - optional",
+              "type": "other"
+            }
+          ],
+          "actions": [
+            "Remove"
+          ]
+        },
+        {
+          "title": "Add container",
+          "fields": [
+            {
+              "label": "Add container",
+              "type": "button",
+              "help": "You can add up to 9 more containers."
+            }
+          ],
+          "actions": [
+            "Add container"
+          ]
+        },
+        {
+          "title": "Storage - optional",
+          "fields": [
+            {
+              "label": "Amount",
+              "type": "number",
+              "help": "Ephemeral storage, 21-200 GiB (default 20 GiB)"
+            },
+            {
+              "label": "Volumes",
+              "type": "button",
+              "actions": [
+                "Add volume"
+              ]
+            },
+            {
+              "label": "Volumes from",
+              "type": "button",
+              "actions": [
+                "Add volume from"
+              ]
+            }
+          ],
+          "expandable": true
+        },
+        {
+          "title": "Monitoring - optional",
+          "expandable": true
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags"
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "daemon-task-definitions",
+      "kind": "list",
+      "title": "Daemon task definitions",
+      "route": "/ecs/v2/daemon-task-definitions",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Daemon task definitions"
+      ],
+      "captures": [
+        "A-ecs/009-L2-daemon-task-definitions"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Daemon task definitions",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Deploy",
+          "Create new revision",
+          "Create new daemon task definition"
+        ],
+        "filters": [
+          "Filter status"
+        ],
+        "columns": [
+          "Family",
+          "Last revision",
+          "Last revision status",
+          "Registered at",
+          "Delete requested at"
+        ],
+        "empty_state": "No daemon task definitions",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high"
+      },
+      "notes": "Filter status default 'All'."
+    },
+    {
+      "id": "create-daemon-task-definition",
+      "kind": "create",
+      "title": "Create daemon task definition",
+      "route": "/ecs/v2/create-daemon-task-definition",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Daemon task definitions",
+        "Create daemon task definition"
+      ],
+      "captures": [
+        "A-ecs/019-L3-create-new-daemon-task-definition"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Daemon task definition configuration",
+          "fields": [
+            {
+              "label": "Daemon task definition family",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Task role",
+              "type": "select",
+              "placeholder": "Choose the task role",
+              "actions": [
+                "Create new role"
+              ]
+            },
+            {
+              "label": "Task execution role",
+              "type": "select",
+              "placeholder": "Choose the task execution role",
+              "actions": [
+                "Create new role"
+              ]
+            },
+            {
+              "label": "CPU - optional",
+              "type": "number",
+              "constraints": "The valid values are .125 vCPU - 192 vCPU."
+            },
+            {
+              "label": "Memory",
+              "type": "number",
+              "default": ".5 GB"
+            }
+          ]
+        },
+        {
+          "title": "Container - 1",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Essential container",
+              "type": "select",
+              "default": "Yes",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Image URI",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Browse ECR images"
+              ]
+            },
+            {
+              "label": "Private registry authentication",
+              "type": "toggle",
+              "default": false
+            },
+            {
+              "label": "Resource allocation limits - conditional",
+              "type": "other"
+            },
+            {
+              "label": "Environment variables - optional",
+              "type": "table",
+              "columns": [
+                "Key",
+                "Value type",
+                "Value"
+              ],
+              "actions": [
+                "Add environment variable",
+                "Bulk edit",
+                "Add environment file"
+              ]
+            },
+            {
+              "label": "Use log collection",
+              "type": "checkbox"
+            },
+            {
+              "label": "Health check - recommended, optional",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Health check command",
+                  "type": "text"
+                },
+                {
+                  "label": "Interval",
+                  "type": "number",
+                  "help": "seconds"
+                },
+                {
+                  "label": "Timeout",
+                  "type": "number",
+                  "help": "seconds"
+                },
+                {
+                  "label": "Start period",
+                  "type": "number",
+                  "help": "seconds"
+                },
+                {
+                  "label": "Retries",
+                  "type": "number"
+                }
+              ]
+            },
+            {
+              "label": "Restart policy - optional",
+              "type": "other"
+            },
+            {
+              "label": "Startup dependency ordering - optional",
+              "type": "other"
+            },
+            {
+              "label": "Container timeouts - optional",
+              "type": "other"
+            }
+          ],
+          "actions": [
+            "Remove"
+          ]
+        },
+        {
+          "title": "Namespace sharing"
+        },
+        {
+          "title": "Volumes - optional",
+          "expandable": true
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags"
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "account-settings",
+      "kind": "settings",
+      "title": "Account settings",
+      "route": "/ecs/v2/account-settings",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Account settings"
+      ],
+      "captures": [
+        "A-ecs/010-L2-account-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Update"
+      ],
+      "sections": [
+        {
+          "title": "Account",
+          "fields": [
+            {
+              "label": "Setting scope",
+              "type": "readonly",
+              "default": "View for account defaults"
+            }
+          ]
+        },
+        {
+          "title": "AWSVPC Trunking",
+          "fields": [
+            {
+              "label": "AWSVPC Trunking",
+              "type": "readonly",
+              "default": "Turned off"
+            }
+          ]
+        },
+        {
+          "title": "CloudWatch Container Insights observability",
+          "fields": [
+            {
+              "label": "CloudWatch Container Insights",
+              "type": "readonly",
+              "default": "Turned off"
+            }
+          ]
+        },
+        {
+          "title": "Amazon ECS Runtime Monitoring",
+          "fields": [
+            {
+              "label": "Amazon ECS runtime monitoring",
+              "type": "readonly",
+              "default": "Turned off"
+            }
+          ]
+        },
+        {
+          "title": "Resource Tagging Authorization",
+          "fields": [
+            {
+              "label": "Resource Tagging Authorization",
+              "type": "readonly",
+              "default": "Turned on"
+            }
+          ]
+        },
+        {
+          "title": "Default log driver mode",
+          "fields": [
+            {
+              "label": "Default log driver mode",
+              "type": "readonly",
+              "default": "Non-blocking"
+            }
+          ]
+        },
+        {
+          "title": "Fargate task retirement",
+          "fields": [
+            {
+              "label": "Fargate task retirement wait period",
+              "type": "readonly",
+              "default": "7 days"
+            },
+            {
+              "label": "Fargate event windows",
+              "type": "readonly",
+              "default": "Turned off"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "update-account-settings",
+      "kind": "settings",
+      "title": "Update account settings",
+      "route": "/ecs/v2/account-settings/account-settings-edit",
+      "breadcrumbs": [
+        "Amazon Elastic Container Service",
+        "Account settings",
+        "Update account settings"
+      ],
+      "captures": [
+        "A-ecs/020-L3-update"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Save changes",
+      "header_actions": [
+        "Cancel",
+        "Revert to the account default",
+        "Save changes"
+      ],
+      "sections": [
+        {
+          "title": "Account",
+          "fields": [
+            {
+              "label": "Setting scope",
+              "type": "readonly",
+              "default": "View for account defaults"
+            }
+          ]
+        },
+        {
+          "title": "AWSVPC Trunking",
+          "fields": [
+            {
+              "label": "AWSVPC Trunking",
+              "type": "toggle",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "CloudWatch Container Insights observability",
+          "fields": [
+            {
+              "label": "Select the level of observability you want to achieve with Container Insights",
+              "type": "radio",
+              "default": "Turned off",
+              "options": [
+                "Container Insights with enhanced observability",
+                "Container Insights",
+                "Turned off"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Amazon ECS Runtime Monitoring",
+          "fields": [
+            {
+              "label": "Amazon ECS runtime monitoring",
+              "type": "readonly",
+              "default": "Turned off"
+            }
+          ]
+        },
+        {
+          "title": "Resource Tagging Authorization",
+          "fields": [
+            {
+              "label": "Resource Tagging Authorization",
+              "type": "toggle",
+              "default": true
+            }
+          ]
+        },
+        {
+          "title": "Default log driver mode",
+          "fields": [
+            {
+              "label": "Default log driver mode",
+              "type": "radio",
+              "default": "Non-blocking",
+              "options": [
+                "Non-blocking",
+                "Blocking"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Fargate task retirement",
+          "fields": [
+            {
+              "label": "Task retirement wait period",
+              "type": "radio",
+              "default": "7 days",
+              "options": [
+                "Immediate",
+                "7 days",
+                "14 days"
+              ]
+            },
+            {
+              "label": "Turn on EC2 event windows for scheduling",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Account had no clusters/services/task definitions: cluster, service and task-definition detail pages plus Create service / Run task are reference. Collapsed optional sections in create forms were not expanded in the capture."
+}

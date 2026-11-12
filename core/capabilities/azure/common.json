@@ -1,0 +1,175 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Azure blades shared by every service (Export template, Activity log, RBAC extras, Resource health, Tags/Locks, Diagnostics). See aws/s3.json for the contract.",
+ "azure.common.export_template": {
+  "title": "Export template (ARM, Bicep, Terraform) on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The ARM template is built from the properties Vyomi stores for the resource (system/read-only properties such as provisioningState are dropped by a fixed list, not each resource provider's real schema), so it may omit or include properties real Azure would treat differently.",
+   "Bicep is a deterministic decompilation of that template (symbolic names, parameters, resource declarations); nested child resources are exported flat and no dependsOn is inferred.",
+   "Terraform output uses the generic azapi_resource form (Azure/azapi provider), not hand-mapped azurerm_* resources."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_templates_core.py"
+  ]
+ },
+ "azure.common.activity_log": {
+  "title": "Activity log (filters, edit columns, insights, export) on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Events are the ARM control-plane mutations Vyomi itself records (write/delete/action on resources); there is no real Azure platform emitting service-health, autoscale, alert or policy events.",
+   "Export Activity Logs manages the subscription's continuous export: a real subscription-scope Microsoft.Insights/diagnosticSettings whose Administrative events are delivered to a Log Analytics workspace (AzureDiagnostics) and/or storage account (insights-activity-logs); Event Hub destinations are not served, and only the Administrative category has an event source in Vyomi. Download JSON/CSV of the filtered rows is real too.",
+   "Insights shows counts computed from the loaded events, not the portal's Log Analytics-backed workbook; Pin current filters is a per-browser preference (no Microsoft.Portal/dashboards resource); Feedback is not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_activity_log_core.py",
+   "tests/conformance/test_azure_activity_log_export.py",
+   "tests/conformance/test_azure_sdk_defender_automation_export.py",
+   "tests/cli/azure-defender-automation-cli-smoke.sh"
+  ]
+ },
+ "azure.common.classic_administrators": {
+  "title": "Classic administrators (subscription co-administrators)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Read-only list, exactly like the real Microsoft.Authorization/classicAdministrators API (the legacy co-administrator model is retired): a modern subscription shows only its Account Administrator / Service Administrator, which in Vyomi is the single simulated signed-in user. Adding or removing classic administrators is not possible and is not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.resource_health": {
+  "title": "Resource health on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Health is derived from the resource's own stored state (failed provisioning, a stopped/deallocated VM or stopped AKS cluster); Vyomi runs no Azure platform, so there are never platform outages, planned maintenance or a health-history feed \u2014 the history section is always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_health_core.py"
+  ]
+ },
+ "azure.common.advisor": {
+  "title": "Advisor recommendations on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Recommendations come from a small fixed rule set over each resource's stored configuration (Key Vault soft delete / purge protection, storage secure transfer / public blob access / TLS, SQL TLS, NSG open SSH/RDP, App Service HTTPS only, ACR admin user) \u2014 all in the Security category. Cost, Reliability and Performance recommendations need real utilisation telemetry, which Vyomi does not have, so none are produced.",
+   "Postpone (7 days) and Dismiss are real Advisor suppressions persisted with the recommendation, but a postponed recommendation is never re-activated by the clock."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_health_core.py"
+  ]
+ },
+ "azure.common.diagnostic_settings": {
+   "title": "Diagnostic settings on every resource",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "Settings are validated like the real Microsoft.Insights/diagnosticSettings resource and DELIVER: a resource operation lands as a row in the chosen Log Analytics workspace (AzureDiagnostics, or the resource-specific table for logAnalyticsDestinationType=Dedicated; AzureMetrics for metrics; queryable with KQL) and as a JSON-lines blob in the chosen storage account (insights-logs-<category>/resourceId=.../PT1H.json), honouring that account's firewall (Deny without bypass=AzureServices fails the delivery). A delivery that cannot be made is counted as failed on the setting, never faked.",
+    "What emits: control-plane writes on Key Vault (AuditEvent), Service Bus (OperationalLogs) and Azure AI services (Audit); blob requests (StorageRead/StorageWrite/StorageDelete); Key Vault (AuditEvent), Service Bus (RuntimeAuditLogs), Azure OpenAI (RequestResponse) and Cosmos (DataPlaneRequests) data-plane calls; the one real metric ActivityOperations (AllMetrics); and Administrative Activity Log entries for a subscription-scoped setting. Resource types with no such source (e.g. a VNet's VMProtectionAlerts) produce no log, as in Azure.",
+    "Event Hub and partner-solution destinations are stored but nothing receives them (no Event Hubs service): they count as failed deliveries. Metrics other than ActivityOperations are not forwarded. Service Bus runtime audit entries are logged when the call is received (no result code)."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_monitor_core.py",
+    "tests/conformance/test_azure_arm_core.py",
+    "tests/conformance/test_azure_diag_pipeline.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
+  },
+ "azure.common.resource_visualizer": {
+  "title": "Resource visualizer (resource group graph)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The graph is drawn from the real ARM resource list of the resource group; an edge exists only where a stored property of one resource holds another resource's id. Layout is a fixed circle (no drag, zoom, or expand-by-type), and cross-resource-group relationships are not shown."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.grid_tools": {
+  "title": "Browse-grid Open query (Resource Graph) and Assign tags",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Open query runs a minimal Kusto subset (tables Resources and ResourceContainers; where with =~ / == / contains, project, limit, count) evaluated over Vyomi's ARM resource store \u2014 no joins, summarize, extend or order by. The console posts to the subscription-prefixed path; real Azure Resource Graph is tenant-level (Nano also answers that form).",
+   "Assign tags merges the entered tags onto every selected resource with real ARM PATCHes; it needs the list to hold ARM resources (a row id) and is disabled otherwise. Manage view is the grid's column chooser (a console preference), not a saved/shared portal view."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.support": {
+  "title": "Support requests (Microsoft.Support) on every blade, filed with Vyomi",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Requests are real Microsoft.Support/supportTickets (services, problem classifications, severity, contact details, communications, close) with validation and a Vyomi Support acknowledgement, and are stored in the simulator. Delivery to the Vyomi portal support queue is not wired yet: each ticket reports properties.vyomiDelivery = recorded-locally, and no human replies arrive here. Support plans, phone callbacks and Microsoft's own engineers do not exist."
+  ],
+  "api": [
+   "SupportTickets.Create",
+   "SupportTickets.Get",
+   "SupportTickets.List",
+   "SupportTickets.Update",
+   "Communications.Create",
+   "Communications.List",
+   "Services.List",
+   "ProblemClassifications.List",
+   "SupportTickets.CheckNameAvailability"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_support_core.py"
+  ]
+ },
+
+ "azure.common.resource_monitoring": {
+  "title": "Alerts, Metrics, Logs, Insights and Workbooks on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "REAL: Microsoft.Insights/metricAlerts scoped to the resource (stored and validated like Azure's; Evaluate now computes a rule against the real metric on demand), metric definitions + values, Log Analytics queries over the resource's own Activity log (AzureActivity), and Microsoft.Insights/workbooks linked to the resource.",
+   "The only platform metric is ActivityOperations (count of the resource's own Activity-log operations), plus real blob-store metrics for storage accounts. There is no CPU, request, latency or saturation telemetry, so those charts are never shown.",
+   "Alert rules are not evaluated on a schedule and never fire action groups or send notifications; resource-specific log tables (AzureDiagnostics, ContainerLog, ...) stay empty because no log-delivery pipeline exists."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_resource_monitoring.py"
+  ]
+ },
+ "azure.common.diagnose": {
+  "title": "Diagnose and solve problems (AKS, API Management, App Configuration, Cognitive Services, App Service)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Detectors (core/azure_diagnose_core.py) are computed from the resource's live record, its child resources and its own Activity log: provisioning/power state, capacity, version support, network exposure, authentication and recent failed operations. There is no platform telemetry behind a simulator (no real node health, gateway traffic or model latency), so no detector reads invented metrics, and there are no auto-run remediation actions or AI troubleshooter."
+  ],
+  "api": [
+   "{resource}/providers/Microsoft.Vyomi/diagnostics (Vyomi extension)"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ }
+}

@@ -1,0 +1,450 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "kubernetes",
+  "console_path": "/kubernetes/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "overview"
+    },
+    {
+      "label": "Clusters",
+      "page_id": "clusters"
+    },
+    {
+      "label": "Workloads",
+      "page_id": "workloads"
+    },
+    {
+      "label": "Applications",
+      "page_id": "applications"
+    },
+    {
+      "label": "Secrets & ConfigMaps",
+      "page_id": "secrets-configmaps"
+    },
+    {
+      "label": "Storage",
+      "page_id": "storage"
+    },
+    {
+      "label": "Object Browser",
+      "page_id": "object-browser"
+    },
+    {
+      "label": "Gateways, Services & Ingress",
+      "page_id": "gateways-services-ingress"
+    },
+    {
+      "label": "Backup for GKE",
+      "page_id": "backup-for-gke"
+    },
+    {
+      "label": "Config",
+      "page_id": "config"
+    },
+    {
+      "label": "Marketplace",
+      "external": true
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "clusters",
+      "kind": "list",
+      "title": "Kubernetes clusters",
+      "route": "/kubernetes/list/overview",
+      "captures": [
+        "A-kubernetes/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture shows the 'Enable Kubernetes Engine API' page.",
+      "header_actions": [
+        "Create",
+        "Deploy",
+        "Refresh"
+      ],
+      "tabs": [
+        "Overview",
+        "Observability",
+        "Cost optimization"
+      ],
+      "table": {
+        "selection": "multi",
+        "actions": [
+          "Edit",
+          "Connect",
+          "Delete"
+        ],
+        "filter_placeholder": "Enter property name or value",
+        "preferences": true,
+        "confidence": "medium",
+        "columns": [
+          "Status",
+          "Name",
+          "Location",
+          "Mode",
+          "Number of nodes",
+          "Total vCPUs",
+          "Total memory",
+          "Notifications",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "create-autopilot-cluster",
+      "kind": "create",
+      "title": "Create an Autopilot cluster",
+      "route": "/kubernetes/auto/add",
+      "captures": [
+        "C-forms/16-kubernetes-auto-add/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "notes": "Capture blocked by 'Enable billing'.",
+      "steps": [
+        {
+          "title": "Cluster basics",
+          "sections": [
+            {
+              "title": "Cluster basics",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true,
+                  "default": "autopilot-cluster-1"
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "us-central1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Fleet registration",
+          "sections": [
+            {
+              "title": "Fleet registration",
+              "fields": [
+                {
+                  "label": "Register to the fleet",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ],
+          "optional": true
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Networking",
+              "fields": [
+                {
+                  "label": "Network",
+                  "type": "select",
+                  "default": "default"
+                },
+                {
+                  "label": "Node subnet",
+                  "type": "select",
+                  "default": "default"
+                },
+                {
+                  "label": "Access using DNS",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Access using IPv4 addresses",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced settings",
+          "sections": [
+            {
+              "title": "Advanced settings",
+              "fields": [
+                {
+                  "label": "Release channel",
+                  "type": "radio",
+                  "default": "Regular channel",
+                  "options": [
+                    "Rapid channel",
+                    "Regular channel",
+                    "Stable channel",
+                    "Extended channel"
+                  ]
+                }
+              ]
+            }
+          ],
+          "optional": true
+        },
+        {
+          "title": "Review and create",
+          "sections": [
+            {
+              "title": "Review and create"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cluster-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/kubernetes/clusters/details/{location}/{resource-name}",
+      "breadcrumbs": [
+        "Kubernetes Engine",
+        "Clusters",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit",
+        "Deploy",
+        "Connect",
+        "Duplicate",
+        "Delete"
+      ],
+      "tabs": [
+        "Details",
+        "Nodes",
+        "Storage",
+        "Observability",
+        "Logs"
+      ],
+      "tab_panels": [
+        {
+          "label": "Details",
+          "sections": [
+            {
+              "title": "Cluster basics",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Location type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Region",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Release channel",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Version",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Total size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Endpoint",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Networking",
+              "fields": [
+                {
+                  "label": "Network",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Subnet",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Cluster pod IPv4 range",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Service IPv4 range",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Nodes",
+          "sections": [
+            {
+              "title": "Node pools",
+              "table": {
+                "header_actions": [
+                  "Add node pool"
+                ],
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Version",
+                  "Number of nodes",
+                  "Machine type",
+                  "Image type",
+                  "Autoscaling"
+                ]
+              }
+            },
+            {
+              "title": "Nodes",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Status",
+                  "CPU requested",
+                  "Memory requested",
+                  "Storage requested"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workloads",
+      "kind": "list",
+      "title": "Workloads",
+      "route": "/kubernetes/workload/overview",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Deploy",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Status",
+          "Type",
+          "Pods",
+          "Namespace",
+          "Cluster"
+        ]
+      }
+    },
+    {
+      "id": "gateways-services-ingress",
+      "kind": "list",
+      "title": "Gateways, Services & Ingress",
+      "route": "/kubernetes/discovery",
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Gateways",
+        "Services",
+        "Ingress"
+      ],
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Name",
+          "Status",
+          "Type",
+          "Endpoints",
+          "Pods",
+          "Namespace",
+          "Cluster"
+        ]
+      }
+    },
+    {
+      "id": "secrets-configmaps",
+      "kind": "list",
+      "title": "Secrets & ConfigMaps",
+      "route": "/kubernetes/config",
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Name",
+          "Type",
+          "Namespace",
+          "Cluster"
+        ]
+      }
+    },
+    {
+      "id": "overview",
+      "kind": "dashboard",
+      "title": "Overview",
+      "route": "/kubernetes/overview",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "applications",
+      "kind": "list",
+      "title": "Applications",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "storage",
+      "kind": "list",
+      "title": "Storage",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "object-browser",
+      "kind": "other",
+      "title": "Object Browser",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "backup-for-gke",
+      "kind": "other",
+      "title": "Backup for GKE",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "config",
+      "kind": "other",
+      "title": "Config",
+      "provenance": "reference",
+      "confidence": "medium"
+    }
+  ],
+  "gaps_note": "Landing shows 'Enable Kubernetes Engine API' and Autopilot create was billing-gated: all reference (current console)."
+}

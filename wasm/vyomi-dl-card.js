@@ -1,4 +1,4 @@
-/* Closable "Download Vyomi" card shown next to the bottom drawer (Nano consoles) and bottom-right in the
+/* Closable "Install Tunnel" card shown next to the bottom drawer (Nano consoles) and bottom-right in the
    enterprise admin shell. Black & white. Closing collapses it to a round download icon above the disclaimer icon; clicking the icon expands it again. */
 (function () {
   if (window.__vyDlCard) return; window.__vyDlCard = 1;
@@ -24,8 +24,8 @@
       '@media(max-width:700px){#vy-dl{display:none}}';
     document.head.appendChild(st);
     var d = document.createElement('div'); d.id = 'vy-dl'; d.setAttribute('role', 'complementary');
-    d.innerHTML = '<a class="dl" href="/downloads" target="_blank" rel="noopener">Download Pro / Max</a>' +
-      '<span class="rn">Offline Simulator</span>' +
+    d.innerHTML = '<a class="dl" href="/dashboard?next=/admin/downloads" target="_blank" rel="noopener">Install Tunnel</a>' +
+      '<span class="rn">vyomi-tunnel for Nano and the Mesh</span>' +
       '<button type="button" aria-label="Close">&times;</button>';
     document.body.appendChild(d);
     function mode(min) { d.classList.toggle('min', min); var i = document.getElementById('vy-dl-ic'); if (i) i.classList.toggle('open', !min);  try { sessionStorage.setItem(KEY, min ? '1' : '0'); } catch (_) {} if (!min) place(); }
@@ -36,7 +36,7 @@
     if (was || navigator.webdriver || (!seen && !/\/admin/.test(location.pathname))) d.classList.add('min');   // collapsed under UI tests
     // The download icon lives in the bottom drawer (right end, after the info icon); admin pages have no drawer,
     // so it goes into the header's right cluster there, else floats.
-    var ic = document.createElement('button'); ic.type = 'button'; ic.className = 'vy-exp vy-ic'; ic.id = 'vy-dl-ic'; ic.style.order = '3'; ic.title = 'Download Vyomi'; ic.setAttribute('aria-label', 'Download Vyomi');
+    var ic = document.createElement('button'); ic.type = 'button'; ic.className = 'vy-exp vy-ic'; ic.id = 'vy-dl-ic'; ic.style.order = '3'; ic.title = 'Install Tunnel'; ic.setAttribute('aria-label', 'Install Tunnel');
     ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
     ic.onclick = tog;
     document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('.vy-ic:not(#vy-dl-ic)') && !d.classList.contains('min')) mode(true); }, true);

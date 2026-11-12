@@ -260,6 +260,7 @@ def appliance_mode_enabled() -> bool:
 def is_gcp_native_path(path: str) -> bool:
     return path.startswith((
         "/compute/v1/",
+        "/compute/beta/",     # v4 C0d: google-cloud-compute / gcloud beta surfaces
         "/storage/v1/",
         "/upload/storage/v1/",
         "/download/storage/v1/",
@@ -268,6 +269,7 @@ def is_gcp_native_path(path: str) -> bool:
         "/firestore/v1/",
         "/v1/projects",       # incl. Cloud Resource Manager GET /v1/projects (no slash)
         "/v3/projects",       # Cloud Resource Manager v3 + Cloud Monitoring v3
+        "/v1beta1/projects/",  # v4 C0d: Firestore v1beta1 (same core as /v1)
         "/v1/operations/",
         "/api/gcp/s3/",
         "/api/gcp/iam/",
@@ -291,6 +293,10 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
         "/api/gcp/artifactregistry/",   # Artifact Registry console CRUD
+        # v4 C0: the GCS console facade must resolve the SAME (gcp) space-scoped
+        # gcp_storage_state as the native GCS JSON API it mirrors — as an "aws"
+        # request it silently read/wrote a different space's copy.
+        "/api/console/gcs/",
     ))
 
 
@@ -299,6 +305,21 @@ def is_azure_native_path(path: str) -> bool:
     These are served by the generic ARM dispatcher and must bypass the AWS
     action/capability gating (they are not S3/EC2 calls)."""
     return path in ("/subscriptions", "/tenants") or path.startswith(("/subscriptions/", "/api/azure/", "/azure-data/"))
+
+
+_HOST_OK = re.compile(r"^[A-Za-z0-9.\-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?$")
+
+
+def request_host(headers, fallback: str = "") -> str:
+    """The host a client reaches the simulator at, for the URLs it advertises (endpoints, selfLinks).
+
+    Behind a forwarder (the user's `vyomi-tunnel` reaches the Mesh simulator as `simulator:9000` inside the Codespace's Docker
+    network, but the user's tools use the laptop-side address) the forwarder states the real address in X-Forwarded-Host. Only a
+    plain host[:port] is accepted, so a header can never inject anything else into a URL. This is metadata only, never authorization."""
+    xf = str(headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    if xf and _HOST_OK.match(xf):
+        return xf
+    return headers.get("host") or fallback
 
 
 # ── State initialization ───────────────────────────────────────────────────
@@ -347,7 +368,7 @@ def _default_state() -> dict:
         "deployments": {},
         "iam": {"users": {}, "groups": {}, "roles": {}, "policies": {}, "attachments": [], "identity_providers": {}, "account_settings": {"password_policy": {"minimum_length": 8, "require_symbols": True, "require_numbers": True, "require_uppercase": True, "require_lowercase": True}}},
         "ec2": {"instances": {}},
-        "vpc": {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}},
+        "vpc": {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}, "internet_gateways": {}},
         "apigateway": {"apis": {}, "logs": []},
         "lambda": {"functions": {}, "events": [], "invocations": []},
         "sqs": {"queues": {}, "events": []},
@@ -997,7 +1018,9 @@ sns_state = _SpaceScopedDictProxy("sns", lambda: {"topics": {}, "extra": {}})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
 kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "policies": {}, "seq": {"n": 0}})
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
-elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
+elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {},
+                                                      "tags": {}, "trust_stores": {}, "trust_store_revocations": {}})
+asg_state = _SpaceScopedDictProxy("asg", lambda: {"groups": {}, "policies": {}, "scheduled_actions": {}, "lifecycle_hooks": {}, "instance_refreshes": []})
 
 runtime_state = STATE.setdefault(
     "runtime",
@@ -1142,6 +1165,13 @@ _tier_cache: dict = {"tier": "", "verified_at": 0.0, "ttl": 60.0}
 
 def active_tier() -> str:
     """Resolve active tier. In appliance mode, re-verifies cached JWT periodically."""
+    try:                                   # headless mesh: tier comes from the signed session token (no licence JWT there)
+        from core import mesh_session as _bs
+        _bt = _bs.effective_tier()
+        if _bt:
+            return _bt
+    except Exception:
+        pass
     # Fast path: use cache if fresh
     now = time.time()
     if _tier_cache["tier"] and (now - _tier_cache["verified_at"]) < _tier_cache["ttl"]:
@@ -1333,6 +1363,13 @@ def resolve_provider_service(request) -> tuple[str, str]:
     """
     path = request.url.path
     target = request.headers.get("x-amz-target", "") or ""
+
+    # Managed Kubernetes (AKS / GKE / EKS, every plane) -> the "kubernetes" tier category
+    # (core/k8s_tier_gate.py owns the path table; core/tier_policy.py the policy).
+    from core import k8s_tier_gate as _k8s
+    _kc = _k8s.classify(path, request.headers)
+    if _kc:
+        return _kc, _k8s.SERVICE_KEY[_kc]
 
     # GCP REST paths
     if path.startswith("/compute/v1/"):

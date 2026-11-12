@@ -1,0 +1,248 @@
+{
+ "$doc": "Vyomi capability registry — CloudFormation. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "aws.cloudformation.stack.crud": {
+  "title": "Stacks (create, describe, list, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["CreateStack", "DescribeStacks", "ListStacks", "UpdateStack", "DeleteStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.resource-provisioning": {
+  "title": "Template resources provisioned through the real S3 / DynamoDB / SNS / SQS / IAM / CloudWatch Logs engines",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only AWS::S3::Bucket, AWS::DynamoDB::Table, AWS::SNS::Topic, AWS::SQS::Queue, AWS::IAM::Role, AWS::Logs::LogGroup and the no-infrastructure AWS::CloudFormation::WaitCondition[Handle] are provisioned.",
+   "A template with any other resource type fails CreateStack/UpdateStack honestly (rolled back, never a silent success) — the same way a real account without the matching service permissions would fail."
+  ],
+  "api": ["CreateStack", "UpdateStack", "DeleteStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.events": {
+  "title": "Stack events",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["DescribeStackEvents"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.resources": {
+  "title": "Stack resources",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["DescribeStackResources", "DescribeStackResource", "ListStackResources"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.outputs-exports": {
+  "title": "Outputs and cross-stack exports (global export-name uniqueness enforced)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["ListExports"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.template": {
+  "title": "Template body, JSON and a YAML subset (short-form !Ref/!GetAtt/!Sub/!Join/!If/…, long-form Fn:: mappings), intrinsic function resolution",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The YAML parser covers block mappings/sequences and single-line short-form tags; multi-line short-form tag arguments are not supported (use the JSON or long-form Fn:: syntax instead)."
+  ],
+  "api": ["GetTemplate", "ValidateTemplate"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.changesets": {
+  "title": "Change sets (create, describe with Add/Remove/Modify diff, execute, delete, list)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["CreateChangeSet", "DescribeChangeSet", "ExecuteChangeSet", "DeleteChangeSet", "ListChangeSets"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.drift": {
+  "title": "Drift detection",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Beyond existence (a resource deleted independently shows as DELETED), PROPERTY-level drift is enforced for DynamoDB (BillingMode, ProvisionedThroughput), SNS (DisplayName, FifoTopic), SQS (VisibilityTimeout, MessageRetentionPeriod, FifoQueue, ContentBasedDeduplication), IAM roles (AssumeRolePolicyDocument, Description, Path) and Logs log groups (RetentionInDays): each property is re-read from the owning service's own store and diffed against the value CloudFormation last applied, reported as MODIFIED with concrete PropertyDifferences.",
+   "S3 buckets have no provisioner-managed mutable property in this simulation (Vyomi's S3 bucket provisioning doesn't apply VersioningConfiguration or other template properties), so they remain existence-only drift."
+  ],
+  "api": ["DetectStackDrift", "DescribeStackDriftDetectionStatus", "DescribeStackResourceDrifts"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.rollback-protection": {
+  "title": "Rollback on failure, ContinueUpdateRollback, termination protection",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["ContinueUpdateRollback", "UpdateTerminationProtection"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stacksets": {
+  "title": "StackSets (self-managed + service-managed with AWS Organizations trusted access, stack instances, operations)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Trusted access is real Organizations service access and SERVICE_MANAGED stack sets resolve OUs to member accounts, but Vyomi is one account: a stack instance is recorded (CURRENT, with the stack id AWS would assign) and no stack is created in the target account or Region. Drift detection, UpdateStackSet / UpdateStackInstances, override parameters and automatic deployment on account moves are not modeled."
+  ],
+  "api": ["CreateStackSet", "DescribeStackSet", "ListStackSets", "DeleteStackSet", "ActivateOrganizationsAccess", "DeactivateOrganizationsAccess", "DescribeOrganizationsAccess", "CreateStackInstances", "DeleteStackInstances", "ListStackInstances", "DescribeStackInstance", "ListStackSetOperations", "DescribeStackSetOperation"],
+  "tests": ["tests/conformance/test_cloudformation_core.py", "tests/conformance/test_cloudformation_stacksets_orgs.py"]
+ },
+ "aws.cloudformation.stack-refactors": {
+  "title": "Stack refactors",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A refactor moves a resource's runtime state (ref, physical id, properties) between two EXISTING stacks — it does not create new stacks from StackDefinitions, the way the real ListStackRefactorActions / template-diff flow does."
+  ],
+  "api": ["CreateStackRefactor", "DescribeStackRefactor", "ExecuteStackRefactor", "ListStackRefactors"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.registry.activated-extensions": {
+  "title": "Activated extensions (the resource types this CloudFormation engine actually supports)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["ListTypes", "DescribeType"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.registry.public-extensions-publisher": {
+  "title": "Public extensions registry: catalog + filters, activation, modules (real expansion), type configuration, publisher registration",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The public catalog is the AWS resource types the engine provisions plus extensions published by Vyomi's own SaaS-partner simulators (publisher vyomi.cloud); the real third-party marketplace is not reachable. Activated modules expand into real resources and activated hooks use the hook engine, but a third-party RESOURCE type has no handler (a stack using one fails). Type configuration is stored and returned; only hooks read it. Publisher verification is simulated (VERIFIED when a ConnectionArn is given); PublishType publishes registered hooks only."
+  ],
+  "api": ["ListTypes", "DescribeType", "ListTypeVersions", "ActivateType", "DeactivateType", "SetTypeConfiguration", "BatchDescribeTypeConfigurations", "RegisterPublisher", "DescribePublisher", "PublishType"],
+  "tests": ["tests/conformance/test_cloudformation_registry.py"]
+ },
+ "aws.cloudformation.hooks": {
+  "title": "Hooks (register, configure, invoke on stack operations, invocation history)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A hook's policy is a single built-in check — required tag keys that must be present on every stack it targets — not arbitrary custom hook handler code (which would run a third-party Lambda or script in a real account).",
+   "ListHookResults returns every invocation in the account when no TargetId is given; real AWS scopes results to one stack or change set at a time."
+  ],
+  "api": ["RegisterType", "DescribeTypeRegistration", "SetTypeConfiguration", "DeregisterType", "ListTypes", "DescribeType", "ListHookResults"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.iac-generator": {
+  "title": "IaC generator (scan an account's existing resources into a template)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "StartResourceScan really scans the live S3/DynamoDB/SNS/SQS/IAM/Logs stores — the same six resource types CreateStack/UpdateStack provision — and CreateGeneratedTemplate builds a real template from each selected resource's live properties (re-read through the owning service's own store, the same way drift detection does), so GetGeneratedTemplate's output imports cleanly through CreateStack.",
+   "Real AWS scans the whole account through Resource Explorer across every resource type; Vyomi's scan only covers the six resource types the CloudFormation simulation provisions."
+  ],
+  "api": ["StartResourceScan", "DescribeResourceScan", "ListResourceScans", "ListResourceScanResources",
+          "CreateGeneratedTemplate", "DescribeGeneratedTemplate", "GetGeneratedTemplate",
+          "ListGeneratedTemplates", "DeleteGeneratedTemplate"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.template-studio": {
+  "title": "Template studio editor (YAML/JSON, Validate)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The template text editor, Validate and the visual Canvas are real: the canvas edits the same JSON template (resources, DependsOn/Ref edges, properties) and Create stack provisions it. The canvas covers the resource types the engine provisions (S3 bucket, DynamoDB table, SQS queue, SNS topic, IAM role, Logs log group; other types in a pasted template are shown but not in the palette). It reads/writes JSON templates only (no YAML round trip), and does not model Parameters/Outputs/Conditions graphically."
+  ],
+  "api": ["ValidateTemplate", "CreateStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py", "tests/conformance/test_visual_canvas.py"]
+ },
+ "aws.cloudformation.spotlight": {
+  "title": "CloudFormation Spotlight (Vyomi's curated sample-template gallery with filters, sort, editor's choice, bookmarks)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "AWS's Spotlight is an editorial content feed (an API-less web service); Vyomi does not reproduce it. The page is a gallery of five Vyomi-authored sample templates (S3, DynamoDB, SNS/SQS, SQS DLQ, SSM) whose filters (tag, sort by newest/name, editor's choice only, bookmarks only) really filter the list and whose Create stack button runs a real CreateStack. 'Editor's choice' is Vyomi's own flag; bookmarks are kept in this browser only (localStorage), not in the account."
+  ],
+  "api": ["CreateStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.policy": {
+  "title": "Stack policy enforced on UpdateStack (Update:Modify/Replace/Delete, per-resource, StackPolicyDuringUpdateBody)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Decisions use the template diff (raw resource definitions + changed parameters): a changed property is treated as Update:Modify and a type change as Update:Replace — CloudFormation's per-property replacement-vs-modify knowledge is not modeled. Principal is not evaluated (always \"*\"); Condition supports ResourceType only. A denied update fails asynchronously and ends UPDATE_ROLLBACK_COMPLETE with nothing changed."
+  ],
+  "tests": [
+   "tests/conformance/test_cfn_sweep_core.py"
+  ]
+ },
+ "aws.cloudformation.stack.rollback-triggers": {
+  "title": "Rollback configuration: CloudWatch alarm triggers roll the stack back to the previous template",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Alarm state is evaluated once, right after the operation completes (Vyomi has no background timer), so MonitoringTimeInMinutes is stored and returned but there is no monitoring window afterwards. The rollback is real: the previous template and parameters are re-applied through the resource provisioners. Only metric/composite alarms in this account are valid triggers."
+  ],
+  "tests": [
+   "tests/conformance/test_cfn_sweep_core.py"
+  ]
+ },
+ "aws.cloudformation.stack.notifications": {
+  "title": "Stack notification ARNs: every stack/resource event is published to the SNS topics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Messages use CloudFormation's real notification body (StackId=, ResourceStatus=, ...) with SNS fan-out to subscribers; topics must exist. Delivery is synchronous in the API call."
+  ],
+  "tests": [
+   "tests/conformance/test_cfn_sweep_core.py"
+  ]
+ },
+ "aws.cloudformation.git-sync": {
+  "title": "Git sync (CodeConnections CFN_STACK_SYNC)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real: connections, repository links and CFN_STACK_SYNC configurations (CodeConnections JSON API incl. GetResourceSyncStatus) over core/aws_codeconn_core.py. A push to the linked branch reads the deployment file (template-file-path/parameters/tags), then CREATES or UPDATES the stack through the real CloudFormation core; an identical template is recorded as no changes, TriggerResourceUpdateOn=FILE_CHANGE skips pushes that touch neither the deployment file nor the template, and failures carry the real reason.",
+   "Repositories owned by 'vyomi' live inside Vyomi (push with the VyomiPush operation or a real git push to Gitea on the offline appliance). Other GitHub repositories are fetched with the user's own PAT (VyomiSetGitHubToken) on the offline appliance only - GitHub does not call back into Vyomi, so sync on demand (VyomiSync). Nano cannot reach GitHub. Connections are AVAILABLE immediately (no OAuth handshake), other providers (GitLab, Bitbucket, Azure DevOps) cannot be fetched, the RoleArn is validated for shape but not assumed, and CloudFormation provisions only the resource types listed under resource-provisioning."
+  ],
+  "api": ["CreateConnection", "CreateRepositoryLink", "CreateSyncConfiguration", "GetResourceSyncStatus"],
+  "tests": ["tests/conformance/test_aws_cfn_gitsync.py"]
+ }
+}

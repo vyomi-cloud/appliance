@@ -1,0 +1,31 @@
+{
+ "cloud": "gcp",
+ "service": "networking",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/gcp/services/networking/CreateFirewallRule.jsx:140",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Specified service account targets\" note=\"Target by tag instead; service-account-scoped targeting isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/networking/CreateRoute.jsx:90",
+   "component": "NotSimulated",
+   "props": "compact feature={nextHop} note=\"Vyomi models next hops as the default internet gateway or a raw IP address; VM instances, VPN tunnels and load balancer forwarding rules aren't resources here.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/networking/VpcNetworks.jsx:123",
+   "component": "NotSimulated",
+   "props": "feature=\"Project-wide flow log management\" note=\"Flow logs are configured per subnet (Create subnet / subnet details). A centralized log-router view across all subnets isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/networking/index.jsx:34",
+   "component": "NotSimulatedContainer",
+   "props": "title={title} feature={`VPC ${title}`}"
+  }
+ ],
+ "continue_from": "v4/ui-gcp-networking-41263898111"
+}

@@ -438,6 +438,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .vy-co{display:inline-flex;align-items:center;flex:none;text-decoration:none}.vy-co img{height:22px;width:auto;display:block}.vy-co-sep{width:1px;height:26px;background:#dadce0;flex:none;margin:0 -2px}
 </style>
   <script type="module" src="./nano-boot.js?v=4"></script>
+  <script src="./mesh-link.js"></script>
   <script src="./nano-disclaimer.js"></script>
   <script src="./nano-back.js"></script>
   <script src="./nano-connect.js"></script>
@@ -1186,7 +1187,7 @@ function buildConnectCard(){
   var card = el("div",{class:"card",style:"margin-bottom:0;display:flex;flex-direction:column"});
   const head = el("div",{class:"h"}, icon("terminal"), "Connect your SDK or CLI");
   card.append(head);
-  card.append(el("div",{class:"b"}, vyConnectSwitch({slot: head, accent:"var(--blue)", build:(ep)=>vyConnectTabs({cloud:"gcp", ep, project: PROJECT, nano:true})})));
+  card.append(el("div",{class:"b"}, vyConnectSwitch({slot: head, accent:"var(--blue)", theme:"gcp", build:(ep)=>vyConnectTabs({cloud:"gcp", ep, project: PROJECT, nano:true})})));
   return card;
 }
 

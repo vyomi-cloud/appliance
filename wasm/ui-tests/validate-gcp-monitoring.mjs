@@ -17,7 +17,8 @@ const check = (ok, what, detail = "") => {
 const { server, base } = await startServer();
 const browser = await chromium.launch();
 const ctx = await browser.newContext();
-await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); } catch (_) {} });
+await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); localStorage.setItem("vyomi_ci_tier", "max"); } catch (_) {} });
+// max tier: the console lists every service incl. GKE, which is Pro/Max-only (core/k8s_tier_gate.py)
 const page = await ctx.newPage();
 const bad = [];
 let createStatus = null, newId = "";

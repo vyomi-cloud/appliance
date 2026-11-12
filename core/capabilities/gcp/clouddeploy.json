@@ -1,0 +1,20 @@
+{
+ "$doc": "Vyomi capability registry — Cloud Deploy (clouddeploy.googleapis.com v1). See eventarc.json for the contract. Core: core/gcp_clouddeploy_core.py.",
+ "gcp.clouddeploy.pipelines_targets": {
+  "title": "Delivery pipelines + targets (serial pipelines, standard and canary strategies, gke and run targets, requireApproval)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Validated like the real API (exactly one runtime per target, unique stages, canary percentages, targetsPresentCondition for missing targets, force-delete of pipelines with releases). multiTarget, custom/Anthos targets, predeploy/postdeploy hooks, customCanaryDeployment, automations, deploy policies and custom target types are refused or not modelled. LROs complete inline."
+  ],
+  "tests": ["tests/conformance/test_gcp_clouddeploy_core.py"]
+ },
+ "gcp.clouddeploy.releases_rollouts": {
+  "title": "Releases + rollouts state machine (render, approve, advance canary phases, retry/ignore/cancel, rollbackTarget, job runs) deploying to the simulator's Cloud Run and GKE",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The deploy job really deploys the release's buildArtifacts image: it updates (or creates) the Cloud Run service (canary phases split traffic between the new and previous revision) or replaces the Deployment in the GKE cluster's data plane (canary phases run a <name>-canary Deployment). The service / Deployment name comes from deployParameters (service, deployment, namespace, container; default = pipeline id).",
+   "Skaffold is not run: manifests are not rendered from skaffold.yaml and verify jobs do not execute the verify container (they succeed unless the deployParameter vyomi-verify=fail). One rollout per target is not serialized (no PENDING queue). On Nano the same logic runs against Nano's Cloud Run / GKE state."
+  ],
+  "tests": ["tests/conformance/test_gcp_clouddeploy_core.py"]
+ }
+}

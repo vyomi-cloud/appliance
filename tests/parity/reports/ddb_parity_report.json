@@ -1,0 +1,1760 @@
+{
+ "cases": [
+  {
+   "area": "table",
+   "name": "create_describe_hash",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "table",
+   "name": "create_describe_hash_range_provisioned",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "table",
+   "name": "create_gsi_lsi_describe",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "table",
+   "name": "create_duplicate_table",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceInUseException",
+       "message": "Table already exists: par_t1"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Table already exists: par_t1\" oracle=\"Cannot create preexisting table\""
+     ],
+     "index": 1,
+     "op": "CreateTable",
+     "oracle": {
+      "body": {
+       "__type": "ResourceInUseException",
+       "message": "Cannot create preexisting table"
+      },
+      "status": 400
+     },
+     "request": {
+      "AttributeDefinitions": [
+       {
+        "AttributeName": "pk",
+        "AttributeType": "S"
+       }
+      ],
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       }
+      ],
+      "TableName": "par_t1"
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 2,
+   "verdict": "alias"
+  },
+  {
+   "area": "table",
+   "name": "describe_missing_table",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Requested resource not found: Table: par_nope not found"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Requested resource not found: Table: par_nope not found\" oracle=\"Cannot do operations on a non-existent table\""
+     ],
+     "index": 0,
+     "op": "DescribeTable",
+     "oracle": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Cannot do operations on a non-existent table"
+      },
+      "status": 400
+     },
+     "request": {
+      "TableName": "par_nope"
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 1,
+   "verdict": "alias"
+  },
+  {
+   "area": "validation",
+   "name": "create_attrdef_mismatch",
+   "steps": [],
+   "steps_total": 1,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "create_provisioned_without_throughput",
+   "steps": [],
+   "steps_total": 1,
+   "verdict": "exact"
+  },
+  {
+   "area": "table",
+   "name": "list_tables",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "table",
+   "name": "delete_table_then_describe",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Requested resource not found: Table: par_t1 not found"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Requested resource not found: Table: par_t1 not found\" oracle=\"Cannot do operations on a non-existent table\""
+     ],
+     "index": 2,
+     "op": "DescribeTable",
+     "oracle": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Cannot do operations on a non-existent table"
+      },
+      "status": 400
+     },
+     "request": {
+      "TableName": "par_t1"
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 3,
+   "verdict": "alias"
+  },
+  {
+   "area": "table",
+   "name": "update_table_billing",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "ttl",
+   "name": "ttl_update_describe",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "ttl",
+   "name": "ttl_expired_item_still_readable",
+   "steps": [
+    {
+     "core": {
+      "body": {},
+      "status": 200
+     },
+     "diff": [
+      "$.body.Item: missing in core (oracle={\"exp\": {\"N\": \"1000\"}, \"pk\": {\"S\": \"a\"}})"
+     ],
+     "index": 3,
+     "op": "GetItem",
+     "oracle": {
+      "body": {
+       "Item": {
+        "exp": {
+         "N": "1000"
+        },
+        "pk": {
+         "S": "a"
+        }
+       }
+      },
+      "status": 200
+     },
+     "request": {
+      "Key": {
+       "pk": {
+        "S": "a"
+       }
+      },
+      "TableName": "par_t1"
+     },
+     "verdict": "mismatch"
+    }
+   ],
+   "steps_total": 4,
+   "verdict": "mismatch"
+  },
+  {
+   "area": "table",
+   "name": "tags_roundtrip",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "Tags": [
+        {
+         "Key": "env",
+         "Value": "dev"
+        }
+       ]
+      },
+      "status": 200
+     },
+     "diff": [
+      "$.body.Tags: extra in core (core=[{\"Key\": \"env\", \"Value\": \"dev\"}])",
+      "$.body.__type: missing in core (oracle=\"UnknownOperationException\")",
+      "$.body.message: missing in core (oracle=\"Tagging is not currently supported in DynamoDB Local.\")",
+      "$.status: core=200 oracle=400"
+     ],
+     "index": 1,
+     "op": "ListTagsOfResource",
+     "oracle": {
+      "body": {
+       "__type": "UnknownOperationException",
+       "message": "Tagging is not currently supported in DynamoDB Local."
+      },
+      "status": 400
+     },
+     "request": {
+      "ResourceArn": "arn:aws:dynamodb:us-east-1:000000000000:table/par_t1"
+     },
+     "verdict": "oracle-gap"
+    }
+   ],
+   "steps_total": 2,
+   "verdict": "oracle-gap"
+  },
+  {
+   "area": "types",
+   "name": "put_get_all_types",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "types",
+   "name": "list_of_strings_is_not_a_set",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "numbers",
+   "name": "number_precision_38_digits",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "numbers",
+   "name": "number_too_many_digits",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "numbers",
+   "name": "add_point1_point2",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "numbers",
+   "name": "set_plus_big_ints",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "invalid_number",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "empty_string_key",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "missing_key",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "wrong_key_type",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "empty_set",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "duplicate_in_set",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "crud",
+   "name": "get_missing_item",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "expr",
+   "name": "get_with_projection",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "get_key_extra_attr",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "put_return_all_old",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "put_return_all_new_invalid",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "put_condition_not_exists_fails",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "put_condition_return_old_on_fail",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_comparators",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_or_not_parens",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "condition_unused_value",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "condition_undefined_value",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "condition_syntax_error",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_type_mismatch_lt",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "delete_return_all_old",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "delete_condition_fails",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_set_remove_add_delete",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_if_not_exists_list_append",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_add_string_set_to_missing",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_delete_all_from_set",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_add_to_list_invalid",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_creates_item",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_key_attribute",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "update_overlapping_paths",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_set_missing_operand",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_list_index_out_of_range_set",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_nested_missing_parent",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "update_return_updated_old",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "update_return_updated_new",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "update_return_all_old",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "update_return_none_default",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "update_condition_fail",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_attribute_updates_legacy",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "update_unused_name",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_eq_order",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_begins_with",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_between",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_backward_limit_paging",
+   "steps": [],
+   "steps_total": 10,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_limit_exact_last_page",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_select_count",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_filter",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_filter_on_key_invalid",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_missing_pk",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_non_key_in_kce",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_pk_inequality",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_projection",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_sk_lt_ge",
+   "steps": [],
+   "steps_total": 10,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_numeric_sort_key_order",
+   "steps": [],
+   "steps_total": 8,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_numeric_between",
+   "steps": [],
+   "steps_total": 8,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_binary_sort_key_order",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_string_sort_utf8_order",
+   "steps": [],
+   "steps_total": 10,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "gsi_query_all_projection",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "gsi_keys_only_projection",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "lsi_include_projection",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "gsi_scan_sparse",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "gsi_paging_lek_shape",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "gsi_wrong_key_type_write",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_unknown_index",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "scan",
+   "name": "scan_all",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "scan",
+   "name": "scan_paged_union",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "scan",
+   "name": "scan_filter_count",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "scan_limit_zero_invalid",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "scan",
+   "name": "scan_segments",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "limits",
+   "name": "item_size_400kb_ok",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "limits",
+   "name": "item_size_over_400kb",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "batch",
+   "name": "batch_write_get",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "batch",
+   "name": "batch_write_duplicate_keys",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "batch",
+   "name": "batch_write_missing_table",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Requested resource not found: Table: par_nope not found"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Requested resource not found: Table: par_nope not found\" oracle=\"Cannot do operations on a non-existent table\""
+     ],
+     "index": 2,
+     "op": "BatchWriteItem",
+     "oracle": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Cannot do operations on a non-existent table"
+      },
+      "status": 400
+     },
+     "request": {
+      "RequestItems": {
+       "par_nope": [
+        {
+         "PutRequest": {
+          "Item": {
+           "pk": {
+            "S": "a"
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 3,
+   "verdict": "alias"
+  },
+  {
+   "area": "batch",
+   "name": "batch_get_missing_table",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Requested resource not found: Table: par_nope not found"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Requested resource not found: Table: par_nope not found\" oracle=\"Cannot do operations on a non-existent table\""
+     ],
+     "index": 2,
+     "op": "BatchGetItem",
+     "oracle": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Cannot do operations on a non-existent table"
+      },
+      "status": 400
+     },
+     "request": {
+      "RequestItems": {
+       "par_nope": {
+        "Keys": [
+         {
+          "pk": {
+           "S": "a"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 3,
+   "verdict": "alias"
+  },
+  {
+   "area": "batch",
+   "name": "batch_write_too_many",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "batch",
+   "name": "batch_write_bad_item_atomic",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "transact",
+   "name": "transact_write_ok",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "transact",
+   "name": "transact_write_cancel_reasons",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "transact",
+   "name": "transact_write_same_item_twice",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "transact",
+   "name": "transact_write_missing_table",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Requested resource not found: Table: par_nope not found"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Requested resource not found: Table: par_nope not found\" oracle=\"Cannot do operations on a non-existent table\""
+     ],
+     "index": 3,
+     "op": "TransactWriteItems",
+     "oracle": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Cannot do operations on a non-existent table"
+      },
+      "status": 400
+     },
+     "request": {
+      "TransactItems": [
+       {
+        "Put": {
+         "Item": {
+          "pk": {
+           "S": "a"
+          }
+         },
+         "TableName": "par_nope"
+        }
+       }
+      ]
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 4,
+   "verdict": "alias"
+  },
+  {
+   "area": "transact",
+   "name": "transact_get",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "transact",
+   "name": "transact_get_ok",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "reserved_word_in_expression",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "reserved_word_via_name_ok",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "legacy",
+   "name": "legacy_expected_and_key_conditions",
+   "steps": [],
+   "steps_total": 10,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_set_multiple_list_indexes_remove",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "update",
+   "name": "update_set_rhs_uses_old_values",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "table",
+   "name": "list_tables_paging",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_kce_type_mismatch",
+   "steps": [],
+   "steps_total": 8,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_begins_with_on_number_sk",
+   "steps": [],
+   "steps_total": 8,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "query_between_reversed",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "query",
+   "name": "query_count_with_limit",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "query_gsi_consistent_read",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "gsi_paging_resume",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "scan",
+   "name": "scan_filter_limit_counts",
+   "steps": [],
+   "steps_total": 9,
+   "verdict": "exact"
+  },
+  {
+   "area": "scan",
+   "name": "scan_segments_union",
+   "steps": [],
+   "steps_total": 10,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "get_key_wrong_type",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ValidationException",
+       "message": "The provided key element does not match the schema"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"The provided key element does not match the schema\" oracle=\"One or more parameter values were invalid: Type mismatch for key\""
+     ],
+     "index": 1,
+     "op": "GetItem",
+     "oracle": {
+      "body": {
+       "__type": "ValidationException",
+       "message": "One or more parameter values were invalid: Type mismatch for key"
+      },
+      "status": 400
+     },
+     "request": {
+      "Key": {
+       "pk": {
+        "N": "1"
+       }
+      },
+      "TableName": "par_t1"
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 2,
+   "verdict": "alias"
+  },
+  {
+   "area": "validation",
+   "name": "get_unused_name",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "values_without_expression",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "null_false_invalid",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "update_empty_expression",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "update_unknown_function",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "update_string_plus",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "update_two_set_clauses",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "returnvalues",
+   "name": "update_updated_new_nested",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "update_rvoccf_all_old",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_set_equality_unordered",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_size_of_number",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_contains_on_number",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "conditions",
+   "name": "condition_nested_map_and_list",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "expr",
+   "name": "projection_nested_list_of_maps",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "batch",
+   "name": "batch_get_too_many",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "batch",
+   "name": "batch_get_duplicate_keys",
+   "steps": [],
+   "steps_total": 3,
+   "verdict": "exact"
+  },
+  {
+   "area": "index",
+   "name": "update_table_add_gsi_then_query",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "Count": 1,
+       "Items": [
+        {
+         "pk": {
+          "S": "k3"
+         },
+         "v": {
+          "N": "3"
+         }
+        }
+       ],
+       "ScannedCount": 1
+      },
+      "status": 200
+     },
+     "diff": [
+      "$.body.Count: extra in core (core=1)",
+      "$.body.Items: extra in core (core=[{\"pk\": {\"S\": \"k3\"}, \"v\": {\"N\": \"3\"}}])",
+      "$.body.ScannedCount: extra in core (core=1)",
+      "$.body.__type: missing in core (oracle=\"InternalFailure\")",
+      "$.body.message: missing in core (oracle=\"The request processing has failed because of an unknown error, exception or failure.\")",
+      "$.status: core=200 oracle=500"
+     ],
+     "index": 9,
+     "op": "Query",
+     "oracle": {
+      "body": {
+       "__type": "InternalFailure",
+       "message": "The request processing has failed because of an unknown error, exception or failure."
+      },
+      "status": 500
+     },
+     "request": {
+      "ExpressionAttributeValues": {
+       ":v": {
+        "N": "3"
+       }
+      },
+      "IndexName": "byV",
+      "KeyConditionExpression": "v = :v",
+      "TableName": "par_t1"
+     },
+     "verdict": "oracle-gap"
+    }
+   ],
+   "steps_total": 10,
+   "verdict": "oracle-gap"
+  },
+  {
+   "area": "validation",
+   "name": "create_table_bool_key_invalid",
+   "steps": [],
+   "steps_total": 1,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "create_table_missing_attrdef",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ValidationException",
+       "message": "One or more parameter values were invalid: Some index key attributes are not defined in AttributeDefinitions. Keys: [pk], AttributeDefinitions: [other]"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"One or more parameter values were invalid: Some index key attributes are not defined in AttributeDefinitions. Keys: [pk], AttributeDefinitions: [other]\" oracle=\"Hash Key not specified in Attribute Definitions.  Type unknown.\""
+     ],
+     "index": 0,
+     "op": "CreateTable",
+     "oracle": {
+      "body": {
+       "__type": "ValidationException",
+       "message": "Hash Key not specified in Attribute Definitions.  Type unknown."
+      },
+      "status": 400
+     },
+     "request": {
+      "AttributeDefinitions": [
+       {
+        "AttributeName": "other",
+        "AttributeType": "S"
+       }
+      ],
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       }
+      ],
+      "TableName": "par_t1"
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 1,
+   "verdict": "alias"
+  },
+  {
+   "area": "validation",
+   "name": "put_number_set_canonical_dupes",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "empty_attribute_name",
+   "steps": [],
+   "steps_total": 2,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_select_where_pk",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_select_params_projection",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_insert_then_get",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_insert_duplicate",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "DuplicateItemException",
+       "message": "Duplicate primary key exists in table"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.__type: core=\"DuplicateItemException\" oracle=\"DuplicateItem\""
+     ],
+     "index": 3,
+     "op": "ExecuteStatement",
+     "oracle": {
+      "body": {
+       "__type": "DuplicateItem",
+       "message": "Duplicate primary key exists in table"
+      },
+      "status": 400
+     },
+     "request": {
+      "Statement": "INSERT INTO \"par_t2\" VALUE {'pk': 'a', 'sk': '1'}"
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 4,
+   "verdict": "alias"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_update",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_delete",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_select_in_begins_with",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_update_missing_item",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_delete_missing_item",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_update_without_full_key",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_param_count_mismatch",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_missing_table",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Requested resource not found: Table: par_nope not found"
+      },
+      "status": 400
+     },
+     "diff": [
+      "$.body.message: core=\"Requested resource not found: Table: par_nope not found\" oracle=\"Cannot do operations on a non-existent table\""
+     ],
+     "index": 0,
+     "op": "ExecuteStatement",
+     "oracle": {
+      "body": {
+       "__type": "ResourceNotFoundException",
+       "message": "Cannot do operations on a non-existent table"
+      },
+      "status": 400
+     },
+     "request": {
+      "Statement": "SELECT * FROM \"par_nope\""
+     },
+     "verdict": "alias"
+    }
+   ],
+   "steps_total": 1,
+   "verdict": "alias"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_update_remove_and_condition",
+   "steps": [],
+   "steps_total": 6,
+   "verdict": "exact"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_insert_types",
+   "steps": [],
+   "steps_total": 5,
+   "verdict": "exact"
+  },
+  {
+   "area": "validation",
+   "name": "create_table_short_name",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "TableDescription": {
+        "AttributeDefinitions": [
+         {
+          "AttributeName": "pk",
+          "AttributeType": "S"
+         }
+        ],
+        "BillingModeSummary": {
+         "BillingMode": "PAY_PER_REQUEST"
+        },
+        "KeySchema": [
+         {
+          "AttributeName": "pk",
+          "KeyType": "HASH"
+         }
+        ],
+        "ProvisionedThroughput": {
+         "ReadCapacityUnits": 0,
+         "WriteCapacityUnits": 0
+        },
+        "TableArn": "arn:aws:dynamodb:REGION:ACCOUNT:table/ab",
+        "TableName": "ab",
+        "TableStatus": "ACTIVE"
+       }
+      },
+      "status": 200
+     },
+     "diff": [
+      "$.body.TableDescription: extra in core (core={\"TableName\": \"ab\", \"TableArn\": \"arn:aws:dynamodb:REGION:ACCOUNT:table/ab\", \"TableStatus\": \"ACTIVE\", \"KeySchema\": [{\"AttributeName\": \"pk\", \"KeyType\": \"HASH\"}], )",
+      "$.body.__type: missing in core (oracle=\"ValidationException\")",
+      "$.body.message: missing in core (oracle=\"Invalid table/index name.  Table/index names must be between 3 and 255 characters long, and may contain only the characters a-z, A-Z, 0-9, '_', '-', and '.'\")",
+      "$.status: core=200 oracle=400"
+     ],
+     "index": 0,
+     "op": "CreateTable",
+     "oracle": {
+      "body": {
+       "__type": "ValidationException",
+       "message": "Invalid table/index name.  Table/index names must be between 3 and 255 characters long, and may contain only the characters a-z, A-Z, 0-9, '_', '-', and '.'"
+      },
+      "status": 400
+     },
+     "request": {
+      "AttributeDefinitions": [
+       {
+        "AttributeName": "pk",
+        "AttributeType": "S"
+       }
+      ],
+      "BillingMode": "PAY_PER_REQUEST",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       }
+      ],
+      "TableName": "ab"
+     },
+     "verdict": "mismatch"
+    }
+   ],
+   "steps_total": 1,
+   "verdict": "mismatch"
+  },
+  {
+   "area": "validation",
+   "name": "create_table_implicit_provisioned",
+   "steps": [
+    {
+     "core": {
+      "body": {
+       "TableDescription": {
+        "AttributeDefinitions": [
+         {
+          "AttributeName": "pk",
+          "AttributeType": "S"
+         }
+        ],
+        "BillingModeSummary": {
+         "BillingMode": "PAY_PER_REQUEST"
+        },
+        "KeySchema": [
+         {
+          "AttributeName": "pk",
+          "KeyType": "HASH"
+         }
+        ],
+        "ProvisionedThroughput": {
+         "ReadCapacityUnits": 0,
+         "WriteCapacityUnits": 0
+        },
+        "TableArn": "arn:aws:dynamodb:REGION:ACCOUNT:table/par_t1",
+        "TableName": "par_t1",
+        "TableStatus": "ACTIVE"
+       }
+      },
+      "status": 200
+     },
+     "diff": [
+      "$.body.TableDescription: extra in core (core={\"TableName\": \"par_t1\", \"TableArn\": \"arn:aws:dynamodb:REGION:ACCOUNT:table/par_t1\", \"TableStatus\": \"ACTIVE\", \"KeySchema\": [{\"AttributeName\": \"pk\", \"KeyType\": \"H)",
+      "$.body.__type: missing in core (oracle=\"ValidationException\")",
+      "$.body.message: missing in core (oracle=\"No provisioned throughput specified for the table\")",
+      "$.status: core=200 oracle=400"
+     ],
+     "index": 0,
+     "op": "CreateTable",
+     "oracle": {
+      "body": {
+       "__type": "ValidationException",
+       "message": "No provisioned throughput specified for the table"
+      },
+      "status": 400
+     },
+     "request": {
+      "AttributeDefinitions": [
+       {
+        "AttributeName": "pk",
+        "AttributeType": "S"
+       }
+      ],
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       }
+      ],
+      "TableName": "par_t1"
+     },
+     "verdict": "mismatch"
+    }
+   ],
+   "steps_total": 1,
+   "verdict": "mismatch"
+  },
+  {
+   "area": "partiql",
+   "name": "partiql_select_filter_nonkey",
+   "steps": [],
+   "steps_total": 4,
+   "verdict": "exact"
+  }
+ ],
+ "meta": {
+  "generated": "2026-10-30T09:37:16Z",
+  "oracle": "amazon/dynamodb-local @ http://127.0.0.1:8123"
+ },
+ "property": {
+  "failures": [],
+  "length": 30,
+  "seeds": 400,
+  "sequence_parity_pct": 100.0,
+  "sequences_matching": 400,
+  "step_parity_pct": 100.0,
+  "steps_exact": 12800,
+  "steps_total": 12800
+ },
+ "summary": {
+  "by_area": {
+   "batch": {
+    "cases": 8,
+    "match": 8
+   },
+   "conditions": {
+    "cases": 12,
+    "match": 12
+   },
+   "crud": {
+    "cases": 1,
+    "match": 1
+   },
+   "expr": {
+    "cases": 2,
+    "match": 2
+   },
+   "index": {
+    "cases": 9,
+    "match": 8
+   },
+   "legacy": {
+    "cases": 1,
+    "match": 1
+   },
+   "limits": {
+    "cases": 2,
+    "match": 2
+   },
+   "numbers": {
+    "cases": 4,
+    "match": 4
+   },
+   "partiql": {
+    "cases": 15,
+    "match": 15
+   },
+   "query": {
+    "cases": 14,
+    "match": 14
+   },
+   "returnvalues": {
+    "cases": 8,
+    "match": 8
+   },
+   "scan": {
+    "cases": 6,
+    "match": 6
+   },
+   "table": {
+    "cases": 10,
+    "match": 9
+   },
+   "transact": {
+    "cases": 6,
+    "match": 6
+   },
+   "ttl": {
+    "cases": 2,
+    "match": 1
+   },
+   "types": {
+    "cases": 2,
+    "match": 2
+   },
+   "update": {
+    "cases": 14,
+    "match": 14
+   },
+   "validation": {
+    "cases": 38,
+    "match": 36
+   }
+  },
+  "cases": {
+   "alias": 10,
+   "exact": 139,
+   "message": 0,
+   "mismatch": 3,
+   "oracle-gap": 2,
+   "parity_pct": 98.0,
+   "scored": 152,
+   "semantic_parity_pct": 98.0,
+   "total": 154
+  },
+  "steps": {
+   "alias": 10,
+   "exact": 648,
+   "message": 0,
+   "mismatch": 3,
+   "oracle-gap": 2,
+   "parity_pct": 99.5,
+   "scored": 661,
+   "semantic_parity_pct": 99.5,
+   "total": 663
+  }
+ }
+}

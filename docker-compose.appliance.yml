@@ -208,6 +208,7 @@ services:
     build: .
     ports:
       - "9000:9000"
+      # Azure Service Bus AMQP 1.0 (native azure-servicebus / @azure/service-bus SDKs): plain + AMQP-over-WebSocket, and TLS
       - "5672:5672"
       - "5671:5671"
     extra_hosts:
@@ -217,6 +218,7 @@ services:
     # backends lazily. The heavy backends live under the `backends` profile and
     # stream in as Wave 2 (background) — see core/appliance_readiness + launcher.
     environment:
+      VYOMI_HOST_MEM_MB: ${VYOMI_HOST_MEM_MB:-}   # mesh 70% cap is of the HOST, not the Docker VM
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
       CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010

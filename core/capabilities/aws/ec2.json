@@ -1,0 +1,836 @@
+{
+ "$doc": "Vyomi capability registry — EC2. See s3.json for the contract.",
+ "ec2.instances.lifecycle": {
+  "title": "Instances (launch, start, stop, reboot, terminate)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.details": {
+  "title": "Instance details, tags, security groups, block devices",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.monitoring": {
+  "title": "Detailed monitoring flag",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Detailed monitoring selects a 1-minute instead of 5-minute sampling period. StatusCheckFailed* is published from the instance's real status-check state. On the offline appliance the Docker container behind each running instance is sampled (docker exec reading /proc/net/dev and the cgroup cpu.stat / io.stat counters; a daemon every 30 s, plus POST /api/aws/ec2/metrics/collect) and the interval deltas are published to CloudWatch as the real AWS/EC2 series CPUUtilization (CPU time / (wall time x vCPUs)), NetworkIn/Out, NetworkPacketsIn/Out and EBSRead/WriteBytes and Ops, so alarms and dashboards work on them. On Nano there is no measurable instance runtime, so these series stay empty (graphs draw No data points) rather than showing invented numbers. NOT produced: CPUCreditUsage / CPUCreditBalance, DiskRead/Write (instance store) metrics, per-ENI network breakdown, and Nitro-only metrics such as EBSIOBalance%."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py",
+   "tests/conformance/test_ec2_offline_monitoring.py",
+   "tests/conformance/test_ec2_metrics_core.py",
+   "tests/conformance/test_ec2_connect_offline.py"
+  ]
+ },
+ "ec2.instances.status-checks": {
+  "title": "System and instance status checks",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "DescribeInstanceStatus derives a real ok/not-applicable result from the instance's actual lifecycle state, but a running instance passes immediately — AWS's few-minute 'initializing' window before checks turn green isn't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.alarms-metrics": {
+  "title": "CloudWatch alarms and instance metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: a CloudWatch alarm on this instance's StatusCheckFailed / StatusCheckFailed_Instance / StatusCheckFailed_System really evaluates against the instance's own status-check state (DescribeInstanceStatus), through the same alarm engine the CloudWatch console uses.",
+   "CPU utilization, network, and CPU-credit metrics aren't collected, so alarms can't be created on them."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py",
+   "tests/conformance/test_ec2_offline_monitoring.py",
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "ec2.instances.connect": {
+  "title": "Connect (SSH / EC2 Instance Connect)",
+  "level": {
+   "nano": "limited",
+   "offline": "full"
+  },
+  "limitations": [
+   "Offline an instance is a real Docker container running sshd, so Connect is real and was verified with live logins: the SSH client tab shows the working ssh command (published host port, routable bridge IP or Codespaces jump host) and each Connect re-authorizes the shared key pair inside the running guest (containers launched before the key existed no longer fail publickey). EC2 Instance Connect is real: SendSSHPublicKey / SendSerialConsoleSSHPublicKey (native AWSEC2InstanceConnectService wire and the console tab) validate the OpenSSH key, instance state, OS user and AvailabilityZone with the real error codes and append the key to the OS user's authorized_keys for 60 seconds (established sessions survive the expiry). Session Manager StartSession/ResumeSession/TerminateSession/DescribeSessions work against running instances and the console session is a command-at-a-time shell (no pty; interactive programs such as vim/top need the SSH client). Honest limits: the SessionManager data-channel websocket (ssmmessages) is not served, so `aws ssm start-session` stops after StartSession, use the console session or ssh; the instance uses the appliance's shared key pair rather than the key pair chosen at launch; no RDP for Windows AMIs. On Nano (in-browser VMs turned on) the instance is a real Linux VM inside the browser tab (v86, 32-bit x86 Alpine, not the AMI) and Connect shows its boot state, an xterm.js shell on the VM serial console (root, no tunnel needed) and an ssh command that works only through the local vyomi-tunnel (>= 1.1.0) while the tab is open. Nano limits: 32-bit x86 only; the VM's RAM is its disk (Stop saves it, Terminate discards it); a background tab runs the VM several times slower; no general internet egress (only plain-HTTP URLs that allow CORS), so git clone / apk / pip from the internet do not work; the 21 MB image and 2 MB engine load on first launch only. With in-browser VMs off, Connect offers a Turn on in-browser VMs button. Nano has no Docker sshd: EC2 Instance Connect and the exec-based terminal tabs are offline-only (the SendSSHPublicKey core loads in Nano and validates, but there is no guest to deliver to). Session Manager works against a running in-browser VM (see ssm.session-manager)."
+  ],
+  "api": [
+   "(Vyomi) GET /api/aws/ec2/instances/{id}/connect-info",
+   "(Vyomi) GET /api/aws/ec2/instances/{id}/private-key.pem",
+   "(Vyomi) POST /api/ec2/instances/{id}/console/exec",
+   "(Vyomi) POST /api/aws/ec2/instances/{id}/instance-connect",
+   "AWSEC2InstanceConnectService.SendSSHPublicKey",
+   "AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey",
+   "AmazonSSM.StartSession",
+   "AmazonSSM.DescribeSessions",
+   "(Vyomi) POST /api/ssm/sessions/{id}/exec"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_connect_offline.py",
+   "tests/conformance/test_ssh_access.py"
+  ]
+ },
+ "ec2.instance-types": {
+  "title": "Instance type catalog (DescribeInstanceTypes)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.launch-templates": {
+  "title": "Launch templates",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.amis": {
+  "title": "AMIs (CreateImage from an instance, describe, deregister, copy, launch permissions)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.ami-catalog.quickstart": {
+  "title": "AMI catalog — Quickstart AMIs",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A fixed curated set of distros (Amazon Linux, Ubuntu, Debian, RHEL, SUSE, Windows), not AWS's live quickstart catalog."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.ami-catalog.marketplace-community": {
+  "title": "AMI catalog — AWS Marketplace AMIs / Community AMIs",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The AWS Marketplace AMIs tab lists Vyomi's own AMI products (hardened Ubuntu, Nginx, PostgreSQL, Docker host, Windows IIS), not AWS Marketplace listings. Subscribing (license acceptance required) registers a real AMI in this account's EC2 model (owner aws-marketplace, a marketplace product code, visible in DescribeImages and launchable via RunInstances); ending the subscription is refused while an instance still runs the AMI and deregisters the AMI otherwise. The Community AMIs tab lists public images owned by other accounts, seeded on first use. NOT modelled: real image contents or software behind the AMIs (they boot the same base instance image as any other AMI), pricing/metering, private offers and the Marketplace seller flow."
+  ],
+  "api": [
+   "ListEntities",
+   "DescribeEntity",
+   "DescribeImages",
+   "RunInstances"
+  ],
+  "tests": [
+   "tests/conformance/test_marketplace_core.py"
+  ]
+ },
+ "ec2.volumes": {
+  "title": "EBS volumes (create, attach, detach, modify, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.snapshots": {
+  "tier": "pro",
+  "title": "EBS snapshots (create, copy, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A snapshot completes instantly (100%) instead of over minutes; incremental snapshot sizing isn't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.lifecycle-manager": {
+  "title": "Amazon Data Lifecycle Manager (automated snapshot/AMI policies)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An ENABLED policy really creates (and prunes past RetainRule.Count) snapshots/AMIs for every EBS volume / EC2 instance matching its TargetTags, through the same CreateSnapshot/CreateImage path the console's manual actions use.",
+   "Only the Interval/IntervalUnit=HOURS cadence is modeled (no Times-of-day schedule windows), and policies are evaluated lazily on read rather than by a live background clock, so a policy's first run can happen on the next page load instead of at the exact scheduled minute."
+  ],
+  "tests": [
+   "tests/conformance/test_dlm_core.py"
+  ]
+ },
+ "ec2.security-groups": {
+  "title": "Security groups (create, authorize/revoke rules, delete, default-SG protection)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.security-groups.sharing": {
+  "title": "Security group VPC associations",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "AssociateSecurityGroupVpc / DisassociateSecurityGroupVpc / DescribeSecurityGroupVpcAssociations are real: a security group from one VPC must be associated with another VPC before an instance there can use it, and RunInstances really enforces that (InvalidParameterValue if it isn't)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.security-groups.ram-sharing": {
+  "title": "Security group sharing (AWS Resource Access Manager)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The Sharing tab drives the real RAM object model: CreateResourceShare / AssociateResourceShare / DisassociateResourceShare over the security group's ARN with the resource-share state machine, and principals are validated like the service (12-digit account, organization ARN, OU ARN or IAM role/user ARN) and cross-checked against the account's AWS Organizations: an organization or OU that does not exist is refused, member accounts are internal, a share created with allowExternalPrincipals=false refuses accounts outside the organization. The owner-side consequence is enforced: a security group with an active share cannot be deleted until it is unshared. Vyomi simulates one account, so the invited account's own view of the shared group (DescribeSecurityGroups from that account, using it in its own VPC) cannot be observed, and no invitation / acceptance flow runs (associations go straight to ASSOCIATED)."
+  ],
+  "api": [
+   "CreateResourceShare",
+   "AssociateResourceShare",
+   "DisassociateResourceShare",
+   "GetResourceShareAssociations",
+   "ListPrincipals",
+   "ListResources"
+  ],
+  "tests": [
+   "tests/conformance/test_ram_core.py",
+   "tests/conformance/test_ram_principals.py"
+  ]
+ },
+ "ec2.security-groups.related-resources": {
+  "title": "Related resources",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The map is derived live from the services Vyomi models (EC2 instances, network interfaces, other security groups' rules, Elastic Load Balancing). References from services that do not store security group IDs - for example RDS DB instances, Lambda VPC configs, ElastiCache - are not listed."
+  ],
+  "tests": [
+   "tests/conformance/test_awsb_sweep_core.py"
+  ]
+ },
+ "ec2.elastic-ips": {
+  "title": "Elastic IPs (allocate, associate, disassociate, release)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Allocated addresses are synthetic (not real internet-routable IPs)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.placement-groups": {
+  "title": "Placement groups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Partition groups assign and round-robin a real partition number, and spread groups enforce AWS's 7-running-instances-per-Availability-Zone cap, but there are no real racks or hosts underneath — cluster placement has no network-latency effect and a spread group's instances aren't actually host-isolated."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.key-pairs": {
+  "title": "Key pairs (create, import, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateKeyPair returns a private-key-shaped document and a fingerprint derived from it, but it is not real RSA/ED25519 key material — it cannot be used to open a real SSH session (see ec2.instances.connect)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.network-interfaces": {
+  "title": "Elastic network interfaces (create, attach, detach, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.settings.ebs-encryption-default": {
+  "title": "Default EBS encryption + default KMS key",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "New volumes and launched instances' root volumes honor this account setting."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.settings.allowed-amis": {
+  "title": "Allowed AMIs",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Image provider criteria (amazon / self / aws-marketplace) are matched against each AMI's real owner; RunInstances is really rejected (UnauthorizedImage) once enabled with criteria that don't match the chosen AMI."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.settings.serial-console": {
+  "title": "EC2 Serial Console",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The account-wide access toggle round-trips for real; there's no real serial console to actually connect to (see ec2.instances.connect)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.settings.credit-specification": {
+  "title": "Default credit specification",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A T-family default (standard/unlimited) really applies to new instances of that family that don't specify CreditSpecification explicitly."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.settings.zones": {
+  "title": "Zones",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A real read of DescribeAvailabilityZones. Local Zone / Wavelength Zone opt-in groups are real (ModifyAvailabilityZoneGroup; opted-in zones appear and accept launches/reservations/hosts), but a Local Zone has no distinct latency, services or capacity behind it."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py",
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.settings.other": {
+  "title": "Managed resources, Auto Scaling quotas",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Managed resources is derived live from the resources' own tags/attributes: Auto Scaling group instances, Spot instances, ELB network interfaces and snapshots created by AMI creation or Data Lifecycle Manager. It does not cover resources other AWS services keep outside EC2.",
+   "Auto Scaling shows the real DescribeAccountLimits quotas (500 groups, 200 launch configurations) with live usage; Vyomi has no account-level Auto Scaling defaults to change, so none are shown."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.load-balancers": {
+  "title": "Load balancers (create, delete, listeners, rules, security groups)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.load-balancers.attributes": {
+  "title": "Load balancer attributes",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deletion protection is really enforced — DeleteLoadBalancer is rejected while it's on.",
+   "idle timeout, HTTP/2, desync mitigation, WAF fail-open and cross-zone balancing are stored and returned exactly as set, but there's no real data plane behind them to change behaviour."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.target-groups": {
+  "title": "Target groups (create, delete, register/deregister targets, health checks)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Target health is deterministic (healthy once the target group is attached to a listener, otherwise unused) rather than derived from a real health-check probe over the network."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.target-groups.attributes": {
+  "title": "Target group attributes",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Attribute values are validated (ranges/enums) and the deregistration delay is ENFORCED: a deregistered target of an in-use group stays 'draining' (Target.DeregistrationInProgress) for the configured seconds before it disappears. Stickiness, slow start and the load-balancing algorithm are stored and returned but there is no request data plane behind the load balancer to change traffic distribution."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.load-balancing.monitoring": {
+  "title": "CloudWatch metrics for load balancers and target groups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "HealthyHostCount and UnHealthyHostCount under AWS/ApplicationELB and AWS/NetworkELB are real — published every time DescribeTargetHealth is evaluated, derived from each target's real EC2 instance state (see ec2.target-groups).",
+   "RequestCount, TargetResponseTime and the rest of the ELB CloudWatch metrics aren't published — Vyomi's ELBv2 engine has no real L7 traffic data plane, so there's no traffic to measure."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.trust-stores": {
+  "title": "Trust stores (mutual TLS)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateTrustStore really reads the referenced CA bundle from Vyomi's own S3 (nothing leaves the simulator) and validates it's a well-formed PEM bundle; NumberOfCaCertificates is a real count of the parsed bundle. Revocations, associations with HTTPS listeners and MutualAuthentication.Mode all round-trip for real.",
+   "No real TLS handshake is ever performed (ec2.load-balancers has no L7 data plane), so a trust store never actually accepts or rejects a client certificate — mutual TLS enforcement itself isn't simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.auto-scaling": {
+  "title": "Auto Scaling groups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Groups, launch-template resolution, SimpleScaling/StepScaling/TargetTrackingScaling policies, scheduled actions (5-field Recurrence cron, evaluated lazily), lifecycle hooks (a real Pending:Wait / Terminating:Wait hold) and instance refresh are all real, reconciled against real EC2 instances (core/vpc_core.py) through the same RunInstances/TerminateInstances path the console uses.",
+   "Vyomi's alarm → policy trigger carries no breach magnitude: StepScaling always applies its first (smallest-breach) step, and TargetTrackingScaling nudges by one instance toward the target instead of continuously tracking a live metric value.",
+   "Instance refresh executes every replacement immediately (Vyomi has no background scheduler to spread a rollout over time), so there's never a window where CancelInstanceRefresh has anything in progress to cancel.",
+   "Warm pools and mixed-instances policies aren't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_autoscaling_depth_core.py",
+   "tests/conformance/test_autoscaling_offline_route.py",
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "ec2.purchasing-options": {
+  "title": "Purchasing options and capacity planning (page family)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Spot requests, Reserved Instances, Capacity Reservations and Dedicated Hosts are real (see their own entries). Savings Plans and Capacity Manager are limited-real (see their entries); UltraServers and Capacity Blocks are Dev Simplified (see their entry).",
+   "There is no billing; prices are illustrative."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.events": {
+  "title": "Scheduled events (DescribeInstanceStatus events, ModifyInstanceEventStartTime)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: events appear in DescribeInstanceStatus.Events, can be rescheduled (future, before the deadline), and a due instance-stop / instance-retirement event really stops the instance (evaluated lazily on read); reboot/maintenance events complete without effect.",
+   "AWS raises maintenance events from hardware health itself; Vyomi has no hardware, so events exist only when scheduled through the console's 'Schedule test event' (a simulator-only action). Event windows and event notifications are not modeled.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.health-rollup": {
+  "title": "Account-wide instance health rollup",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Computed live from DescribeInstanceStatus across all instances. A running instance always passes its checks and nothing ever becomes impaired or initializing (see ec2.instances.status-checks), so only the passing / events counters move.",
+   "The offline appliance's DescribeInstanceStatus comes from its Docker runtime, so scheduled-event counts there stay 0."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.volumes.fault-tolerance": {
+  "title": "EBS snapshot-coverage (fault tolerance) widget",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Computed live from the account's real volumes and snapshots (recent = a snapshot started within 7 days). AWS's widget also factors in Data Lifecycle Manager coverage and Multi-AZ replication, which Vyomi doesn't model."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.iam-instance-profiles": {
+  "title": "IAM instance profiles (Create IAM profile)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real IAM: CreateInstanceProfile / GetInstanceProfile / ListInstanceProfiles / AddRoleToInstanceProfile / RemoveRoleFromInstanceProfile / DeleteInstanceProfile, with AWS's one-role-per-profile and delete-conflict rules; a role that sits in a profile can't be deleted.",
+   "RunInstances records the profile on the instance, but Vyomi does not vend the role's credentials through the instance metadata service."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.compare-sg-rules": {
+  "title": "Compare security group rules",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.instance-type-finder": {
+  "title": "Instance type finder",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Filters the live DescribeInstanceTypes catalog by workload family, architecture, vCPU and memory. Vyomi's catalog is a curated subset of AWS's instance types, and the finder does not rank by price or performance."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.recycle-bin": {
+  "title": "Recycle Bin (retention rules, retained snapshots and AMIs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: the native rbin API (CreateRule/ListRules/GetRule/UpdateRule/DeleteRule/LockRule/UnlockRule/tags). Deleting an EBS snapshot or deregistering an AMI that matches a rule (Region-level or tag-level; the longest retention wins) moves it to the bin; ListSnapshotsInRecycleBin / ListImagesInRecycleBin / Restore* recover it; retention expiry purges it (evaluated lazily); locked rules can't be changed or deleted until unlocked and the 7-30 day delay passes.",
+   "Only EBS snapshots and AMIs are supported (not EBS volumes), and a restored AMI does not re-create its sourced snapshots' retention separately."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.spot": {
+  "title": "Spot requests, Spot price history",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: RequestSpotInstances / DescribeSpotInstanceRequests / CancelSpotInstanceRequests and RunInstances with InstanceMarketOptions launch real instances (instanceLifecycle=spot); a bid below the current price stays open (price-too-low) and is fulfilled when the price drops; a persistent request relaunches after the instance ends; ValidUntil expires.",
+   "Spot prices are a deterministic hourly function of the type and zone (30-65% of an illustrative on-demand rate), not a real market; Vyomi never interrupts a Spot instance for capacity. Spot Fleet / EC2 Fleet are not modeled.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.reserved-instances": {
+  "title": "Reserved Instances (offerings, purchase, describe)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: DescribeReservedInstancesOfferings (standard/convertible, 1/3-year, all payment options), PurchaseReservedInstancesOffering with count and limit-price checks, DescribeReservedInstances with active/retired by term.",
+   "There is no billing: prices are illustrative multiples of Vyomi's on-demand rate and a reservation has no discount effect. Modify/exchange/Marketplace resale are not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.capacity-reservations": {
+  "tier": "pro",
+  "title": "Capacity Reservations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: Create/Describe/Modify/CancelCapacityReservation; available capacity is total minus the running instances using it; RunInstances targeting a reservation is rejected (InsufficientInstanceCapacity) when it is full, cancelled or mismatched, and open reservations are consumed by matching launches; limited reservations expire.",
+   "No physical capacity backs a reservation; only Linux/UNIX, RHEL, SUSE and Windows platforms and default tenancy are modeled; reservation groups and sharing are not.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.dedicated-hosts": {
+  "title": "Dedicated Hosts",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: AllocateHosts / DescribeHosts / ModifyHosts / ReleaseHosts; RunInstances with host tenancy is placed on the named host (or an auto-placement host) subject to a per-host vCPU budget and instance-type/family match, a host that still has instances can't be released.",
+   "A host is an illustrative 96-vCPU budget, not real sockets/cores; host reservations, license configurations and host resource groups are not modeled.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.savings-plans": {
+  "title": "Savings Plans",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real Savings Plans API (service savingsplans): DescribeSavingsPlansOfferings (Compute / EC2 Instance, 1 or 3 year, all payment options, filters), CreateSavingsPlan (hourly commitment, upfront-payment check, clientToken idempotency, a future purchaseTime queues the plan), DescribeSavingsPlans, DeleteQueuedSavingsPlan, ReturnSavingsPlan (only within 7 days and the same calendar month), DescribeSavingsPlanRates, Tag/Untag/ListTagsForResource. The plan's effect is computed against the EC2 instances that really run: the console's coverage and utilization allocate each active plan's hourly commitment to the on-demand usage it applies to (highest discount first) and report coverage, utilization, unused commitment and net savings.",
+   "There is no billing: nothing is charged or invoiced, list prices are Vyomi's illustrative on-demand rates and the discounts are fixed per plan type and term, not the real price list. Database and SageMaker plans are not offered, only EC2 usage is covered, coverage and utilization are a snapshot of the current hourly run-rate (not a billing-period history, and not exposed through Cost Explorer's GetSavingsPlans* APIs), and the offline appliance couples plans to the instances in the shared EC2 model like Reserved Instances do."
+  ],
+  "api": [
+   "DescribeSavingsPlansOfferings",
+   "CreateSavingsPlan",
+   "DescribeSavingsPlans",
+   "DeleteQueuedSavingsPlan",
+   "ReturnSavingsPlan",
+   "DescribeSavingsPlanRates",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource"
+  ],
+  "tests": [
+   "tests/conformance/test_savingsplans.py"
+  ]
+ },
+ "ec2.migration.application-migration-service": {
+  "title": "Migrate a server (AWS Application Migration Service)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real on both substrates: the mgn rest-json API (replication configuration templates, source servers, per-server replication and launch configuration, StartTest / StartCutover / ChangeServerLifeCycleState / FinalizeCutover / TerminateTargetInstances / MarkAsArchived / DisconnectFromService / DeleteSourceServer, jobs and job logs) with AWS's lifecycle state machine and ConflictException / ValidationException errors, and cross-resource checks of subnets, security groups and instance types against the EC2 model. Test and cutover launch a REAL EC2 instance (right-sized, STARTED or STOPPED, tagged with the MGN source server) from an image registered out of the source server's synthetic replicated disks; TerminateTargetInstances really terminates it.",
+   "Replication is records only: no agent runs on a source machine (servers are registered with the Vyomi-only RegisterSourceServer action, the stand-in for installing the agent) and no disk data is copied, so dataReplicationState advances with elapsed time, not transferred bytes, and the launched instance boots the synthetic image, not the source OS. Post-launch actions, applications/waves and conversion servers are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_mgn_core.py"
+  ]
+ },
+ "ec2.purchasing.ultraservers": {
+  "title": "UltraServers",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Not in scope: UltraServers and accelerator (GPU/Trainium) capacity are physical hardware in AWS data centres. Vyomi offers Capacity Blocks and Capacity Reservations for the instance types its Docker-backed pool runs."
+  ]
+ },
+ "ec2.purchasing.capacity-manager": {
+  "tier": "pro",
+  "title": "Capacity Manager",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A console view derived from the simulator's own EC2 inventory: running / stopped instances and vCPUs by instance type and Availability Zone, Spot requests, active Reserved Instances matched against running instances of the same type (unused reservations), Capacity Reservations and Savings Plans coverage. The numbers are real aggregates of what is running in this environment.",
+   "Vyomi does not mirror the Capacity Manager APIs (data exports, metric queries, cross-account / Organizations aggregation): the view is single-account, current-state only, with no historical metric series, no forecasting and no data export to S3."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_savingsplans.py"
+  ]
+ },
+ "ec2.volumes.monitoring": {
+  "title": "EBS volume CloudWatch metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "On the offline appliance an instance's root volume receives the real block I/O measured inside the instance's container (cgroup io.stat deltas) as the AWS/EBS series VolumeReadBytes, VolumeWriteBytes, VolumeReadOps, VolumeWriteOps and VolumeConsumedReadWriteOps (read ops + write ops). Attribution is to the root volume only: with several volumes attached the other volumes get no datapoints. On Nano there is no measurable runtime and the graphs show No data points. NOT produced: VolumeIdleTime, VolumeQueueLength, VolumeTotalReadTime / VolumeTotalWriteTime, VolumeThroughputPercentage and BurstBalance."
+  ],
+  "api": [
+   "GetMetricData",
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_metrics_core.py",
+   "tests/conformance/test_ec2_connect_offline.py"
+  ]
+ },
+ "ec2.dashboard.service-health": {
+  "title": "Service health (dashboard)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "DescribeAvailabilityZones",
+   "DescribeInstanceStatus"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_cost_table.py"
+  ]
+ },
+ "ec2.dashboard.cost": {
+  "title": "EC2 cost (dashboard)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An estimate, not a bill: the widget prices this environment's current inventory (running instances by type, EBS volumes by type and size, snapshots at full volume size as an upper bound, public IPv4 addresses, NAT gateways' hourly charge) at us-east-1 on-demand list prices taken from core/cost_model.py, shows what the same resources would cost on AWS since launch and per month, and what Vyomi charged ($0.00; the difference is presented as the saving). NOT included: data transfer, NAT/IO request charges, Savings Plans / reservations / Spot discounts, free tier, taxes, time spent stopped (running instances are priced from their launch time), and prices for instance types missing from the table fall back to a default rate. There is no Cost Explorer API behind it."
+  ],
+  "api": [
+   "DescribeInstances",
+   "DescribeVolumes",
+   "DescribeSnapshots",
+   "DescribeAddresses",
+   "DescribeNatGateways"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_cost_table.py"
+  ]
+ },
+ "ec2.image-builder": {
+  "title": "EC2 Image Builder — components (YAML documents), image recipes, infrastructure/distribution configurations, pipelines and image builds producing an AMI",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Builds run for real only on the offline appliance when Docker/BuildKit is available: the recipe's ExecuteBash/UpdateOS/CreateFile steps are compiled into a Dockerfile and built from a base image already on the host (parent image names map to ubuntu/amazonlinux/debian images); a failing step fails the build with its real log. The result is an AMI record whose source is the built container image - it is not a bootable machine image.",
+   "On Nano (no container runtime in the browser) and on an appliance without Docker every build ends FAILED with 'No container builder on this substrate' - never a fake AVAILABLE. Components, recipes, infrastructure/distribution configurations and pipelines are fully stored and validated on both substrates.",
+   "Only ExecuteBash, UpdateOS, Reboot (a no-op in a container) and CreateFile execute; any other action (S3Download, WebDownload, ExecuteBinary, PowerShell/Windows actions...) fails the build naming the action. AWS-managed components are a small built-in set (update-linux, reboot-linux, simple-boot-test-linux).",
+   "Builds run synchronously inside CreateImage / StartImagePipelineExecution. Pipeline schedules are validated and stored but never fire on their own; no build instance is launched in EC2, so the infrastructure configuration (instance profile, subnet, security groups) is validated but not used; no CloudWatch log group is written (the build log is read through the Vyomi-only VyomiGetImageBuildLog action and shown in the console)."
+  ],
+  "api": [
+   "CreateComponent",
+   "ListComponents",
+   "GetComponent",
+   "DeleteComponent",
+   "CreateImageRecipe",
+   "ListImageRecipes",
+   "GetImageRecipe",
+   "DeleteImageRecipe",
+   "CreateInfrastructureConfiguration",
+   "ListInfrastructureConfigurations",
+   "GetInfrastructureConfiguration",
+   "UpdateInfrastructureConfiguration",
+   "DeleteInfrastructureConfiguration",
+   "CreateDistributionConfiguration",
+   "ListDistributionConfigurations",
+   "GetDistributionConfiguration",
+   "UpdateDistributionConfiguration",
+   "DeleteDistributionConfiguration",
+   "CreateImagePipeline",
+   "ListImagePipelines",
+   "GetImagePipeline",
+   "UpdateImagePipeline",
+   "DeleteImagePipeline",
+   "StartImagePipelineExecution",
+   "CreateImage",
+   "GetImage",
+   "ListImages",
+   "ListImageBuildVersions",
+   "DeleteImage",
+   "CancelImageCreation",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource"
+  ],
+  "tests": [
+   "tests/conformance/test_imagebuilder_core.py"
+  ]
+ },
+ "ec2.purchasing.capacity-blocks": {
+  "title": "Capacity Blocks",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: a Capacity Block books instances for a time window against the host's instance pool (sized from physical RAM, VYOMI_CAPACITY_POOL_MB); a booking that does not fit the memory already booked over the same window is refused (InsufficientCapacity). Each block creates a real Capacity Reservation that RunInstances consumes: scheduled until the start, active during the window, expired at the end; launches into it are counted and refused when it is full, not started or expired, and terminating instances frees capacity. On the offline appliance the launches are the Docker-backed instances.",
+   "Dev Simplified: any instance type Vyomi can launch can be booked (AWS limits Capacity Blocks to ML accelerator types); offerings are generated (three zones, illustrative prices) and nothing is billed; instances are not auto-terminated when a block ends; a block can be released before it starts (AWS cannot cancel one)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ultraservers_core.py"
+  ]
+ }
+}

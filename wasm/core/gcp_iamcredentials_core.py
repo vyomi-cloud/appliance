@@ -34,6 +34,7 @@ import re
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote
 
 # ── emulator signing key (RSA-2048, public, not a secret) ────────────────────
 _N = int(
@@ -367,7 +368,7 @@ def dispatch(store, method, path, query=None, headers=None, body=b"", resolver=N
     verb = ""
     if ":" in p:
         p, verb = p.rsplit(":", 1)
-    segs = [s for s in p.split("/") if s]
+    segs = [unquote(s) for s in p.split("/") if s]
     if len(segs) != 4 or segs[0] != "projects" or segs[2] != "serviceAccounts" or verb not in _VERBS:
         return _err(404, "NOT_FOUND", "Method not found: %s" % path)
     if method != "POST":

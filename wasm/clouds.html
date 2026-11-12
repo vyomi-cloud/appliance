@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
   <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
+  <script>if(/[?&]pick=1/.test(location.search))document.documentElement.classList.add("vy-pickview");</script>
   <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
+  <script src="mesh-link.js"></script>
+  <script src="nano-connect.js"></script>
+  <script src="nano-docs.js?v=icons2"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -731,99 +735,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     }
     .btn-create-space .material-icons { font-size: 17px; vertical-align: -4px; margin-right: 4px; }
 
-    /* ── v2.3.0 left collapsible nav pane — sits below the top logo bar ──── */
     #app-body { display: flex; align-items: stretch; position: relative; }
-    #app-sidebar {
-      flex: none; width: 216px; z-index: 40;
-      background: #0f121c; border-right: 1px solid #20263a; color: #c7cbe0; display: flex; flex-direction: column;
-      padding: 14px 10px; gap: 4px; overflow: visible; transition: width .2s ease;
-      min-height: calc(100vh - 104px);          /* fill the viewport below the top bar */
-    }
-    body.side-collapsed #app-sidebar { width: 68px; padding-left: 6px; padding-right: 6px; }
-    /* Collapse toggle — chevron button ON the separator (matches the enterprise console). */
-    .side-collapse {
-      position: absolute; top: 16px; left: calc(216px - 13px); z-index: 60;
-      width: 26px; height: 26px; border-radius: 50%; padding: 0; margin: 0;
-      background: #121524; border: 1px solid #2b3350; color: #a7b0c4; cursor: pointer;
-      display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0,0,0,.5);
-      transition: left .2s ease, color .12s, border-color .12s;
-    }
-    .side-collapse:hover { color: #fff; border-color: #6366f1; background: #161a2b; }
-    .side-collapse .material-icons { font-size: 18px; transition: transform .16s; }
-    /* Collapsed: a hamburger to open the menu; expanded: menu_open to collapse it. */
-    .side-collapse .ic-collapsed, body.side-collapsed .side-collapse .ic-expanded { display: none; }
-    body.side-collapsed .side-collapse .ic-collapsed { display: inline; }
-    .side-brand { height: 22px; margin: 2px 6px 12px; opacity: .95; }
-    body.side-collapsed .side-brand { display: none; }
-    .side-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; overflow: hidden; }
-    .side-item {
-      display: flex; align-items: center; gap: 11px; padding: 8px 12px; border-radius: 8px;
-      background: none; border: 0; color: #a7b0c4; cursor: pointer; text-decoration: none;
-      font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; width: 100%;
-    }
-    .side-item:hover { background: #121524; color: #e8ecf5; }
-    .side-item.active { background: rgba(99,102,241,.14); color: #fff; }
-    /* Icons identical to the enterprise console: thin-stroke line icons, no chip. */
-    .side-item .side-ic { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: #6b7488; }
-    .side-item:hover .side-ic { color: #e8ecf5; }
-    .side-item.active .side-ic { color: #818cf8; }
-    .side-item .side-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    /* Portal user menu (bottom-left, opens upward) — identical to the enterprise console. */
-    #app-sidebar .side-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid #20263a; }
-    .side-user-menu { position: relative; }
-    .side-user { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 9px; background: #121524; border: 1px solid #20263a; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
-    .side-user:hover { border-color: #6366f1; }
-    .side-user .av { width: 30px; height: 30px; border-radius: 50%; flex: none; overflow: hidden; background: #161a2b; display: grid; place-items: center; color: #e8ecf5; font-weight: 700; font-size: 12px; }
-    .side-user .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .side-user .who { min-width: 0; flex: 1; }
-    .side-user .who b { display: block; font-size: 12.5px; color: #e8ecf5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .side-user .who span { display: block; font-size: 11px; color: #6b7488; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .side-user .chev { width: 15px; height: 15px; flex: none; color: #6b7488; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .16s; }
-    .side-user-menu.open .chev { transform: rotate(180deg); }
-    .side-user-dd { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); background: #0f121c; border: 1px solid #2b3350; border-radius: 10px; box-shadow: 0 20px 45px -25px rgba(0,0,0,.8); padding: 6px; display: none; z-index: 1000; }
-    .side-user-menu.open .side-user-dd { display: block; }
-    .side-user-dd a, .side-user-dd button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 11px; border-radius: 7px; font-size: 13px; color: #a7b0c4; background: none; border: 0; cursor: pointer; font-weight: 500; font-family: inherit; text-decoration: none; }
-    .side-user-dd a:hover, .side-user-dd button:hover { background: #121524; color: #e8ecf5; }
-    .side-user-dd .signout { color: #fca5a5; }
-    .side-user-dd svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-    body.side-collapsed .side-user .who, body.side-collapsed .side-user .chev { display: none; }
-    body.side-collapsed .side-user { width: 56px; height: 56px; padding: 0; margin: 0 auto; justify-content: center; background: transparent; border-color: transparent; }
-    body.side-collapsed .side-user:hover { background: #121524; border-color: #6366f1; }
-    body.side-collapsed .side-user-dd { left: 8px; right: auto; width: 208px; }
-    /* Login/activation moved to the bottom-left avatar menu → hide the right-side pill. */
-    #tb-activate-slot { display: none !important; }
-    #tb-user { display: none !important; }  /* redundant right-side account — moved to bottom-left */
-    body.side-collapsed .side-label { display: none; }
-    /* Collapsed rail: each item becomes a centred square so the active/hover
-       shade has EQUAL padding around the 40px icon chip on every side. */
-    body.side-collapsed .side-item { width: 42px; height: 34px; padding: 8px 12px; justify-content: center; margin: 0 auto; }   /* same padding + row pitch as expanded */
-    body.side-collapsed .side-collapse { left: calc(68px - 13px); }
     #app-main { flex: 1; min-width: 0; }
-    /* Menu toggle: a hamburger when collapsed. Small screens: no icon rail — the menu is a
-       drawer opened by the hamburger, over a dimmed page (tap outside / Esc / pick closes). */
-    @media (min-width: 769px) {
-      #app-sidebar { position: sticky; top: 0; align-self: flex-start; min-height: 0; height: var(--side-h, calc(100vh - 104px)); }
-      #app-sidebar .side-nav { overflow-y: auto; }
-    }
-    #side-burger, #side-scrim { display: none; }
-    @media (max-width: 768px) {
-      #app-sidebar {
-        position: fixed; top: var(--side-top, 0px); bottom: 0; left: 0; z-index: 210; width: 248px; padding: 14px 10px;   /* starts below the logo bar (JS sets --side-top) */
-        min-height: 0; overflow-y: auto; transform: translateX(-105%); transition: transform .22s ease;
-        box-shadow: 0 0 44px rgba(0,0,0,.6);
-      }
-      body.side-open #app-sidebar { transform: none; }
-      .side-collapse { display: none !important; }
-      #side-burger {
-        display: flex; flex: none; width: 40px; height: 40px;   /* in the logo bar, left of the logo */
-        align-items: center; justify-content: center; border-radius: 10px; cursor: pointer;
-        border: 1px solid rgba(255,255,255,0.14); background: #1f2937; color: #e4e4e7;
-      }
-      #side-burger .material-icons { font-size: 22px; }
-      .top-bar { padding-left: 12px; gap: 12px; }
-      .top-bar .tb-brand { margin-right: auto; }
-      body.side-open #side-scrim { display: block; position: fixed; top: var(--side-top, 0px); right: 0; bottom: 0; left: 0; z-index: 209; background: rgba(2,4,14,0.55); }
-    }
     /* ── SDK & CLI usage view — native design, matches Knowledge Center ──── */
     #view-usage .usage-ep {
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
@@ -903,9 +816,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-usage .u-tunnel-card.u-tun { border-color: #2563eb; animation: u-tun 1.6s ease-out infinite; }
     /* notification dot: install-the-tunnel nudge on the SDK & CLI usage drawer item and the tunnel card */
     #view-usage .u-tunnel-card { position: relative; }
-    #view-usage .u-tunnel-card.u-tun::after, .side-item.vy-tun .side-ic::after { content: ""; position: absolute; top: -5px; right: -5px; width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 2px #fff; }
-    .side-item.vy-tun .side-ic { position: relative; }
-    .side-item.vy-tun .side-ic::after { top: -3px; right: -3px; width: 9px; height: 9px; }
+    #view-usage .u-tunnel-card.u-tun::after { content: ""; position: absolute; top: -5px; right: -5px; width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 2px #fff; }
     #view-usage .u-panel > .sc-desc { margin: 12px 0 16px; font-size: 13px; color: #a1a1aa; }
     #view-usage .u-card { background: #1f2937; border-radius: 14px; padding: 16px 18px 18px; min-width: 0; display: flex; flex-direction: column; }
     #view-usage .u-card .u-head { margin-bottom: 4px; }
@@ -1124,6 +1035,74 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .api-op .s { font-size: 11px; color: #8b8ba7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
     #view-api .api-caret { margin-left: auto; flex: none; color: #8b8ba7; font-size: 20px; transition: transform .15s ease; }
     #view-api .api-op-wrap.open .api-caret { transform: rotate(180deg); color: #cdd8e6; }
+
+    /* Redoc-style API reference: nav | description + parameters | dark samples pane */
+    #view-api .rd { position: relative; display: block; gap: 0; border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden; background: #fff; color: #18181b; text-align: left; }
+    #view-api .rd-nav { border-right: 1px solid #e4e7ec; background: #fafafa; max-height: calc(100vh - 210px); overflow: auto; padding: 8px 0; position: absolute; left: 0; top: 0; width: 250px; z-index: 20; transition: width .15s ease, box-shadow .15s; box-sizing: border-box; }
+    #view-api .rd-cat { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; padding: 12px 16px 4px; }
+    #view-api .rd-svc { display: flex; width: 100%; justify-content: space-between; gap: 8px; align-items: center; background: none; border: 0; text-align: left; padding: 7px 16px; font: 600 13px inherit; font-family: inherit; color: #18181b; cursor: pointer; }
+    #view-api .rd-svc em { font-style: normal; font-size: 11px; color: #667085; }
+    #view-api .rd-svc:hover { background: #f0f0f2; } #view-api .rd-svc.on { background: #000; color: #fff; } #view-api .rd-svc.on em { color: #d4d4d8; }
+    #view-api .rd-ops a { display: flex; gap: 8px; align-items: center; padding: 4px 16px 4px 22px; font-size: 12px; color: #344054; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #view-api .rd-ops a:hover { background: #eee; } #view-api .rd-ops .rd-api-l { font-weight: 700; color: #18181b; padding-left: 16px; margin-top: 4px; }
+    #view-api .rd-ops i.api-m { min-width: 36px; font-size: 8.5px; padding: 2px 4px; font-style: normal; }
+    #view-api .rd-main { min-width: 0; max-height: calc(100vh - 210px); overflow: auto; margin-left: 56px; }   /* the side menu overlays the content when open; it never pushes it */
+    #view-api .rd-intro, #view-api .rd-title, #view-api .rd-api { padding: 18px 28px 0; margin: 0; }
+    #view-api .rd-intro h2 { margin: 0 0 4px; font-size: 20px; } #view-api .rd-intro p { margin: 0 0 8px; color: #667085; font-size: 13px; }
+    #view-api .rd-title { font-size: 26px; font-weight: 800; letter-spacing: -.01em; } #view-api .rd-api { font-size: 17px; margin-top: 22px; padding-bottom: 8px; border-bottom: 1px solid #e4e7ec; } #view-api .rd-api small { font-size: 11.5px; color: #667085; font-weight: 500; margin-left: 8px; }
+    #view-api .rd-op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid #eef0f3; scroll-margin-top: 0; }
+    #view-api .rd-l { padding: 22px 28px; min-width: 0; } #view-api .rd-r { background: #0e1322; color: #cdd8e6; padding: 22px 24px; min-width: 0; }
+    #view-api .rd-h { margin: 0 0 8px; font-size: 16px; font-family: ui-monospace, Menlo, monospace; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; word-break: break-all; }
+    #view-api .rd-d { color: #475467; font-size: 13.5px; line-height: 1.55; margin: 0 0 10px; }
+    #view-api .rd-k { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; margin: 14px 0 6px; } #view-api .rd-r .rd-k { color: #8b95aa; }
+    #view-api .rd-l table.am-t { width: 100%; border-collapse: collapse; font-size: 12.5px; } #view-api .rd-l .am-t td, #view-api .rd-l .am-t th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef0f3; color: #344054; } #view-api .rd-l .am-t th { color: #667085; font-size: 11px; }
+    #view-api .rd-l .am-req { color: #b42318; font-size: 10.5px; margin-left: 4px; }
+    #view-api .rd-wire { display: flex; gap: 8px; align-items: center; background: #05071a; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 8px 10px; overflow: auto; } #view-api .rd-wire code { font-size: 12px; white-space: pre; color: #e4e4e7; background: none; }
+    #view-api .rd-r pre.api-pre { background: #05071a; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; padding: 10px 12px; overflow: auto; margin: 4px 0 8px; max-height: 300px; } #view-api .rd-r pre.api-pre code { font-size: 11.5px; line-height: 1.5; color: #cdd8e6; background: none; white-space: pre; }
+    #view-api .rd-r .nd-tab { color: #a1a1aa; border-color: rgba(255,255,255,.18); } #view-api .rd-r .nd-tab.on { background: #fff !important; color: #000 !important; border-color: #fff !important; } #view-api .rd-r .nd-cp { color: #a1a1aa; border-color: rgba(255,255,255,.18); }
+    #view-api .rd .nd-unw { margin: 10px 28px; font-size: 12.5px; color: #475467; }
+    #view-api .rd-cat { display: flex; width: 100%; justify-content: space-between; align-items: center; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: left; }
+    #view-api .rd-cat:hover { color: #18181b; }
+    #view-api .rd-chev { width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .15s; margin-top: -3px; }
+    #view-api .rd-grp.shut .rd-chev { transform: rotate(-45deg); margin-top: 0; } #view-api .rd-grp.shut .rd-grp-b { display: none; }
+    #view-api .rd-main { position: relative; }
+    /* The dark samples column (right half of each operation row) runs the FULL height of the pane, so a service with few operations never ends in a white block under it. */
+    #view-api .rd-main { background: linear-gradient(to right, #fff 50%, #0e1322 50%); }
+    #view-api .rd-intro, #view-api .rd-body > :not(.rd-op) { max-width: 50%; box-sizing: border-box; padding-right: 24px; }   /* headings stay on the white half */
+    @media (max-width: 900px) { #view-api .rd-main { background: #fff; } #view-api .rd-intro, #view-api .rd-body > :not(.rd-op) { max-width: none; } }
+    #view-api .rd-tog { display: block; margin: 4px 0 4px 13px; flex: none; width: 30px; height: 30px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; cursor: pointer; background-image: linear-gradient(#475467,#475467), linear-gradient(#475467,#475467), linear-gradient(#475467,#475467); background-repeat: no-repeat; background-size: 14px 2px; background-position: center 9px, center 14px, center 19px; }
+    #view-api .rd-tog:hover { background-color: #f2f4f7; }
+    #view-api .rd-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-right: 9px; }
+    #view-api .rd-cat > span { flex: 1; }
+    /* collapsed: a slim rail of group icons only */
+    #view-api .rd.rd-hide .rd-nav { width: 56px; } #view-api .rd:not(.rd-hide) .rd-nav { box-shadow: 6px 0 24px rgba(16,24,40,.18); }
+    #view-api .rd.rd-hide .rd-cat { justify-content: center; padding: 12px 0; } #view-api .rd.rd-hide .rd-cat > span, #view-api .rd.rd-hide .rd-chev, #view-api .rd.rd-hide .rd-grp-b { display: none; }
+    #view-api .rd.rd-hide .rd-ic { margin: 0; width: 20px; height: 20px; } #view-api .rd.rd-hide .rd-cat:hover { background: #eee; }
+    #view-api .rd-more { padding: 12px 28px; margin: 0; font-size: 12.5px; color: #667085; }
+
+    /* API reference: cloud tabs live in a header bar; the doc fills the full height, no search box */
+    #view-api > .container { max-width: none; padding: 0; }
+    #view-api .tabs-wrap { display: flex; align-items: center; justify-content: flex-start; margin: 0; padding: 10px 20px; border-bottom: 1px solid #e4e7ec; background: #fff; }
+    #view-api .tabs-wrap .usage-tabs { margin: 0; }
+    html.vy-embed #view-api .tabs-wrap { display: none; }
+    #view-api .rd { border: 0; border-radius: 0; }
+    #view-api .rd-nav, #view-api .rd-main { max-height: none; height: calc(100vh - 118px); }
+    html.vy-embed #view-api .rd-nav, html.vy-embed #view-api .rd-main { height: 100vh; }
+    @media (max-width: 900px) { #view-api .rd-op { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { #view-api .rd-nav, #view-api .rd.rd-hide .rd-nav { position: static; width: auto; max-height: 220px; border-right: 0; border-bottom: 1px solid #e4e7ec; box-shadow: none; } #view-api .rd-main { max-height: none; margin-left: 0; } }
+    /* generated API reference + per-service SDK/CLI cards (nano-docs.js) */
+    .nd-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 6px; }
+    .nd-tab { border: 1px solid rgba(255,255,255,0.14); background: none; color: #a1a1aa; border-radius: 999px; padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+    .nd-tab.on { background: rgba(77,140,243,.2); color: #fff; border-color: rgba(96,165,250,.6); }
+    .nd-cp { margin-left: auto; border: 1px solid rgba(255,255,255,0.14); background: none; color: #a1a1aa; border-radius: 7px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+    .nd-cp:hover { color: #fff; }
+    .nd-svc > .api-op { padding: 12px 14px; }
+    .nd-svc > .api-detail.nd-body { padding: 8px 14px 14px; }
+    .nd-svc .api-grid { margin-top: 6px; }
+    .nd-unw { margin: 8px 0 4px; color: #8b8ba7; font-size: 12px; } .nd-unw summary { cursor: pointer; } .nd-unw p { line-height: 1.7; word-break: break-word; }
+    .nd-code { max-height: 300px; }
+    html.vy-embed .nd-tab.on { background: #000 !important; color: #fff !important; border-color: #000 !important; }
+    html.vy-embed .nd-tab, html.vy-embed .nd-cp { color: #475467; border-color: #d4d4d8; }
     #view-api .api-empty { color: #8b8ba7; text-align: center; padding: 34px; }
     .api-m { font-size: 10px; font-weight: 800; letter-spacing: .4px; padding: 4px 7px; border-radius: 6px; flex: none; min-width: 50px; text-align: center; }
     .api-m.get { background: rgba(77,140,243,.16); color: #7cc4ff; }
@@ -1275,9 +1254,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 
     /* Embedded in a console's drawer modal (?embed=1): just the view, no app chrome. */
-    html.vy-embed #app-topbar, html.vy-embed #app-sidebar, html.vy-embed .side-collapse, html.vy-embed #side-scrim,
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
+    html.vy-embed .mk-tabs { display: none !important; }
+    html.vy-embed #mkt-card > .sc-head { display: none !important; }
+    html.vy-embed #mkt-card { padding-top: 22px !important; }
     html.vy-embed:not(.vy-acct) #activate-modal, html.vy-embed:not(.vy-acct) .am-overlay { display: none !important; }
     /* ?embed=1&acct=1: the drawer's "Activate appliance" dialog - only the real activation dialog, nothing else. */
     html.vy-acct #app-main { visibility: hidden !important; }
@@ -1325,6 +1306,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #app-main #spaces-card { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; margin-bottom: 30px !important; }
     html.vy-embed #app-main #spaces-card > .sc-head { border-bottom: 1px solid #e4e4e7 !important; margin-left: -24px !important; margin-right: -24px !important; padding-left: 24px !important; padding-right: 24px !important; width: auto; }
     html.vy-embed #app-main #spaces-card > .sc-head > .sc-title { border-bottom: 2px solid #000 !important; }
+    /* Spaces picker (pick=1): full width, standard black & white theme (inherits vy-embed). */
+    html.vy-embed.vy-pickview #view-spaces .container { max-width: none !important; margin: 0 !important; padding-left: 28px !important; padding-right: 28px !important; }   /* full width */
     html.vy-embed #app-main #spaces-card .space-card { background: #fff !important; border: 1px solid #d4d4d8 !important; border-radius: 14px !important; box-shadow: none !important; }
     html.vy-embed #app-main #spaces-card .space-card.active, html.vy-embed #app-main #spaces-card .space-card:hover { border-color: #000 !important; }
     html.vy-embed #app-main #spaces-card .space-card { filter: grayscale(1); }
@@ -1358,28 +1341,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #app-main { background: #fff !important; border: 0 !important; border-radius: 14px; margin: 16px; box-sizing: border-box; }
     body:has(#nano-foot) #app-main { margin-bottom: 50px; }
 
-    /* top bar + logo */
-    #app-topbar, #app-topbar .top-bar { background: #fff !important; border-bottom: 1px solid #e4e7ec !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-
-    /* side menu */
-    #app-sidebar { background: #fff !important; border-right: 1px solid #e4e7ec !important; color: #344054 !important; }
-    #app-sidebar .side-item { color: #475467 !important; }
-    #app-sidebar .side-item:hover { background: #f2f4f7 !important; color: #101828 !important; }
-    #app-sidebar .side-item.active { background: #eef4ff !important; color: #1d4ed8 !important; }
-    #app-sidebar .side-item .side-ic, #app-sidebar .side-item .material-icons { color: #667085 !important; }
-    #app-sidebar .side-item.active .side-ic, #app-sidebar .side-item.active .material-icons { color: #2563eb !important; }
-    #app-sidebar .side-foot { border-top-color: #e4e7ec !important; }
-    .side-collapse { background: #fff !important; border-color: #d0d5dd !important; color: #475467 !important; box-shadow: 0 1px 3px rgba(16,24,40,.12) !important; }
-    .side-collapse:hover { color: #101828 !important; border-color: #2563eb !important; }
-    .side-user { background: #f9fafb !important; border-color: #e4e7ec !important; }
-    .side-user .who b { color: #101828 !important; } .side-user .who span, .side-user .chev { color: #667085 !important; }
-    .side-user .av { background: #eef4ff !important; color: #1d4ed8 !important; }
-    .side-user-dd { background: #fff !important; border-color: #e4e7ec !important; box-shadow: 0 12px 32px -8px rgba(16,24,40,.25) !important; }
-    .side-user-dd a, .side-user-dd button { color: #344054 !important; }
-    .side-user-dd a:hover, .side-user-dd button:hover { background: #f2f4f7 !important; color: #101828 !important; }
-    .side-user-dd .signout { color: #d92d20 !important; }
-    #side-burger { background: #fff !important; border-color: #d0d5dd !important; color: #344054 !important; }
-    body.side-open #side-scrim { background: rgba(16,24,40,.30) !important; }
 
     /* text */
     h1, h2, h3, h4, h5, h6, .sc-title h2, .kct h3, header.hero h1,
@@ -1492,7 +1453,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     svg[aria-label="AWS"] path[fill="#fff"] { fill: #232f3e !important; }
 
     /* API view: the AWS / Google Cloud / Azure switch as a segmented pill */
-    #view-api .tabs-wrap { text-align: center; margin-bottom: 18px; }
+    #view-api .tabs-wrap { text-align: left; }
     #view-api .usage-tabs { display: inline-flex; gap: 4px; border: 1px solid #d0d5dd !important; border-radius: 999px; padding: 4px; background: #fff !important; }
     #view-api .usage-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; padding: 7px 15px;
       border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; color: #475467; cursor: pointer; }
@@ -1566,148 +1527,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     })();
   })();
   </script>
-  <div id="app-topbar">
-  <!-- v2.0.8: persistent appliance readiness / diagnostics strip. While the
-       backends are cold-starting it shows weighted pull progress; once every
-       service is up it STAYS visible as a green "Appliance is Ready" bar with a
-       Details panel listing each backend + live status. Shared, self-mounting
-       module (also used on the launch page) — see static/readiness-strip.js. -->
-  <div id="vyomi-readiness-mount"></div>
 
-  <!-- v2.0.6 (#420): in-app update banner. Hidden until the JS at the
-       bottom of this file polls /api/runtime/update-check and detects
-       a newer release tag on GitHub. -->
-  <div id="update-banner" style="display:none; background:#1f2937; color:#fff; padding:10px 16px; text-align:center; font-size:13.5px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-    <span style="font-weight:600">Vyomi <span id="update-banner-latest">2.0.x</span> is available.</span>
-    <span style="opacity:.85; margin-left:8px;">You're on <span id="update-banner-current">2.0.x</span>.</span>
-    <a id="update-banner-notes" href="#" target="_blank" rel="noopener noreferrer" style="color:#a5b4fc; text-decoration:underline; margin-left:14px;">What's new ↗</a>
-    <a href="#" onclick="alert('Run \\`vyomi upgrade\\` in your terminal to pull the latest image.'); return false;" style="color:#fff; background:#374151; padding:4px 10px; border-radius:4px; margin-left:14px; text-decoration:none;">How to update</a>
-    <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
-  </div>
-  <nav class="top-bar">
-    <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
-    <a class="tb-brand" href="./" aria-label="vyomi"><img src="assets/brand/vyomi-logo.png" alt="vyomi"></a>
-    <div class="tb-actions">
-        <div class="hero-actions">
-          <button class="hero-btn hero-btn-activate" type="button" onclick="openActivateModal()">
-            <span class="material-icons">verified</span>Activate appliance
-          </button>
-          <div class="tb-community" id="tb-community">
-            <button class="hero-btn hero-btn-github" type="button" onclick="toggleCommunityMenu(event)">
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-              <span>GitHub community</span>
-              <span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
-            </button>
-            <div class="tb-community-menu" role="menu">
-              <div class="tbc-title">Join the Vyomi community</div>
-              <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
-              <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
-                <span class="tbc-row-ic">⭐</span><span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
-                <span class="tbc-row-meta" id="tbc-star-count"><span class="tbc-spin"></span>loading</span>
-              </a>
-              <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
-                <span class="tbc-row-ic">👀</span><span class="tbc-row-lbl">Watch releases</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
-              </a>
-              <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
-                <span class="tbc-row-ic">💬</span><span class="tbc-row-lbl">Discussions</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
-              </a>
-              <div class="tbc-sep"></div>
-              <div class="tbc-foot">
-                <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
-                <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
-                <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      <style>
-        #tb-user-trigger:hover { background: rgba(255,255,255,.06); }
-        #tb-user-out:hover { background: rgba(124,92,246,.16); color:#fff; }
-      </style>
-      <div id="tb-user" style="display:none; position:relative; align-items:center; margin-left:12px;">
-        <button id="tb-user-trigger" type="button" aria-haspopup="true" title="Account" style="display:inline-flex;align-items:center;background:none;border:0;cursor:pointer;padding:2px;border-radius:50%;">
-          <span id="tb-user-avatar" style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;font-weight:700;font-size:13px;">?</span>
-        </button>
-        <div id="tb-user-menu" role="menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);min-width:210px;background:#0c1030;border:1px solid rgba(124,92,246,.3);border-radius:10px;box-shadow:0 20px 40px -10px rgba(0,0,0,.6);padding:6px;z-index:9999;">
-          <div id="tb-user-menu-email" style="padding:8px 12px 10px;color:#94a3b8;font-size:11px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;word-break:break-all;"></div>
-          <button id="tb-user-out" type="button" role="menuitem" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;color:#e4e4e7;border-radius:6px;padding:9px 12px;font-size:13px;cursor:pointer;">
-            <span class="material-icons" style="font-size:17px;">logout</span> Sign out
-          </button>
-        </div>
-      </div>
-    </div>
-  </nav>
-  <script>
-  /* Logged-in user chip next to "Back to launch". Uses XHR (not fetch) so the
-     Nano fetch-shim + service worker don't rewrite it into /nano/… — /api/auth/*
-     is outside the SW scope, so this reaches the portal directly. */
-  (function(){
-    function show(email){
-      var box = document.getElementById('tb-user'); if (!box) return;
-      document.getElementById('tb-user-avatar').textContent = (email || '?').charAt(0).toUpperCase();
-      var me = document.getElementById('tb-user-menu-email'); if (me) me.textContent = email || '';
-      box.style.display = 'inline-flex';
-    }
-    try {
-      var x = new XMLHttpRequest();
-      x.open('GET', '/api/auth/me', true); x.withCredentials = true;
-      x.onload = function(){
-        try { var d = JSON.parse(x.responseText); if (d && d.authenticated) show(d.email); } catch (e) {}
-      };
-      x.send();
-    } catch (e) {}
-    // Dropdown toggle
-    var trigger = document.getElementById('tb-user-trigger');
-    var menu = document.getElementById('tb-user-menu');
-    if (trigger && menu) {
-      trigger.addEventListener('click', function(e){
-        e.stopPropagation();
-        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
-      });
-      menu.addEventListener('click', function(e){ e.stopPropagation(); });
-      document.addEventListener('click', function(){ menu.style.display = 'none'; });
-    }
-    // Sign out (inside the menu)
-    var out = document.getElementById('tb-user-out');
-    if (out) out.addEventListener('click', function(){
-      try {
-        var l = new XMLHttpRequest();
-        l.open('POST', '/api/auth/logout', true); l.withCredentials = true;
-        l.onloadend = function(){ location.href = '/nano/'; };
-        l.send();
-      } catch (e) { location.href = '/nano/'; }
-    });
-  })();
-  </script>
-  </div><!-- /app-topbar -->
-
+  <!-- readiness-strip.js renders its banner into this mount; it stays hidden (the script also feeds the Health service-status card). -->
+  <div id="vyomi-readiness-mount" hidden style="display:none !important"></div>
   <div id="app-body">
-  <!-- v2.3.0: collapsible left nav pane — sits below the top logo bar. -->
-  <aside id="app-sidebar">
-    <nav class="side-nav">
-      <button class="side-item active" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Spaces — your active spaces (home)"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span><span class="side-label">Spaces</span></button>
-      <button class="side-item" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Health — appliance at a glance"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg></span><span class="side-label">Health</span></button>
-      <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="side-label">Knowledge Center</span></button>
-      <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span><span class="side-label">SDK &amp; CLI usage</span></button>
-      <button class="side-item" type="button" data-view="api" onclick="showAppView('api')" title="API reference — interactive Swagger for every REST endpoint"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span><span class="side-label">API (Swagger)</span></button>
-    </nav>
-    <div class="side-foot">
-      <div class="side-user-menu" id="nanoUsrMenu">
-        <div class="side-user-dd" id="nanoUsrDd">
-          <button class="signout" onclick="nanoLogout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
-        </div>
-        <button class="side-user" id="nanoUsrBtn" aria-label="Account menu">
-          <div class="av" id="nanoAv">?</div>
-          <div class="who"><b id="nanoName">Account</b><span id="nanoRole">Personal account</span></div>
-          <svg class="chev" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
-        </button>
-      </div>
-    </div>
-  </aside>
-  <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand">
-    <span class="material-icons ic-expanded">menu_open</span><span class="material-icons ic-collapsed">menu</span>
-  </button>
-  <div id="side-scrim" onclick="closeSideDrawer()"></div>
   <div id="app-main">
 
   <div id="view-workspace" hidden>
@@ -1810,6 +1633,208 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   </div>
   </div><!-- /view-workspace (Dashboard) -->
 
+<script>
+    // ══ Marketplace: the onboarded simulator platforms. ONE registry — add a 4th simulator here (offline gets
+    //    the same list, with live licence state, from /api/marketplace/simulators). ═════════════════════════
+    const VY_SIMULATORS = [
+      { id: 'aws',   name: 'AWS',          free_tier: true, price: 21, services: ["EC2", "Lambda", "S3", "RDS", "DynamoDB", "SQS", "SNS", "API Gateway", "API Gateway V2", "EventBridge", "Step Functions", "Kinesis", "VPC", "Elastic Load Balancing", "IAM", "Secrets Manager", "KMS", "CloudWatch Logs", "Systems Manager", "CloudWatch"] },
+      { id: 'gcp',   name: 'Google Cloud', free_tier: true, price: 21, services: ["Compute Engine", "Cloud Functions", "Kubernetes Engine", "Cloud Storage", "Artifact Registry", "Cloud SQL", "Firestore", "Memorystore for Redis", "VPC Network", "Pub/Sub", "API Gateway", "Eventarc", "Cloud Scheduler", "Secret Manager", "Cloud KMS", "IAM & Admin", "IAM Service Account Credentials", "Cloud Monitoring"] },
+      { id: 'azure', name: 'Azure',        free_tier: true, price: 21, services: ["Virtual Machines", "Storage accounts", "SQL servers", "Service Bus", "Cosmos DB", "Function apps", "API Management", "Virtual networks", "Network Security Group", "Event Grid topics", "Key vaults", "Container Apps", "App Configuration", "DNS zones", "Monitor alerts", "Log Analytics", "Azure AI services", "Entra ID / RBAC"] },
+    ];
+    // Prices = the portal pricing page (Pro $19 / month, Max $29 / month; USD, billed in INR at checkout).
+    const VY_PLANS = { pro: { price: 19, total: 42, min: 3, scope: 'One cloud of your choice, switchable every 30 days' }, max: { price: 29, total: 51, min: 3, scope: 'All clouds, unlimited' } };   // bought on the portal pricing page
+    const VY_AI = {"aws": {"product": "Amazon Bedrock", "includes": ["Model invoke and Converse, with streaming", "Foundation-model catalogue (Claude, Titan, Nova, Llama, Mistral formats)", "Agents", "Knowledge Bases: ingest from S3, Retrieve, RetrieveAndGenerate", "AgentCore runtimes and gateway (MCP)"]}, "gcp": {"product": "Google Vertex AI", "includes": ["Gemini generateContent, with streaming", "Token counting", "Embeddings (embedContent)", "Predict endpoints"]}, "azure": {"product": "Azure OpenAI", "includes": ["Chat completions and completions", "Embeddings", "Model deployments under Cognitive Services accounts", "AI Search: vector and hybrid search, integrated vectorization"]}};
+    // Local dev: Nano is served by the portal itself, so Pay/Buy must stay on it (never jump to prod).
+    const VY_PORTAL = (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && location.pathname.indexOf('/nano/') === 0) ? location.origin : 'https://vyomi.cloud';
+    const VY_NANO = /\.html$/.test(location.pathname);       // Nano serves clouds.html; the offline appliance serves /clouds
+    const VY_EMBED = document.documentElement.classList.contains('vy-embed');
+    let _vySandbox = false;                                  // enterprise / Codespaces: spaces are pre-provisioned, no Marketplace
+    fetch('/api/runtime/profile', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => {
+      _vySandbox = !!(j && (j.sandbox || j.restricted));
+      if (_vySandbox) { const v = document.getElementById('view-marketplace'); if (v) v.remove(); if (window.loadSpaces) loadSpaces(); }
+    }).catch(() => {});
+</script>
+<style id="vy-mkt-css">
+  /* ── Marketplace view + space tier banner (black & white) ── */
+  #mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-top: 4px; }
+  .mk-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 0; box-shadow: 0 0 0 1px #e4e4e7; border-radius: 12px; color: #18181b; transition: border-color .12s; }
+  .mk-card:hover, .mk-card:focus-within { box-shadow: 0 0 0 1px #a1a1aa, 0 2px 10px rgba(0,0,0,.05); }
+  .mk-card.off { opacity: .92; }
+  .mk-main { display: flex; flex-direction: column; gap: 14px; width: 100%; padding: 16px 16px 10px; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 10px 10px 0 0; }
+  .mk-main:focus-visible { outline: 2px solid #000; outline-offset: -3px; }
+  .mk-main:disabled { cursor: not-allowed; }
+  .mk-head { display: flex; align-items: center; gap: 12px; padding-right: 40px; }
+  .mk-logo { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: 1px solid #f0f0f2; border-radius: 10px; background: #fafafa; }
+  .mk-logo svg { width: 28px; height: 22px; filter: grayscale(1); }
+  .mk-logo.aws svg path[fill="#fff"] { fill: #232f3e; }
+  .mk-name { font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: #000; line-height: 1.2; }
+  .mk-sub { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 500; color: #71717a; }
+  .mk-free { display: flex; align-items: center; gap: 8px; padding: 0; border-radius: 8px; font-size: 13px; line-height: 1.35; }
+  .mk-free b { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -.005em; }
+  .mk-free small { display: block; font-size: 12px; color: #71717a; opacity: 1; }
+  .mk-free svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-free.yes { color: #18181b; }
+  .mk-free.no { color: #52525b; }
+  .mk-cta { font-size: 12.5px; font-weight: 600; color: #3f3f46; display: inline-flex; align-items: center; gap: 6px; }
+  .mk-cta svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 16px 14px; border-top: 0; }
+  .mk-offer { flex: 1 1 120px; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fff; color: #27272a; font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; line-height: 1.25; }
+  .mk-offer small { font-size: 11.5px; font-weight: 400; color: #71717a; opacity: 1; }
+  .mk-offer:hover, .mk-offer:focus-visible { border-color: #000; outline: none; }
+  .mk-offer:hover small, .mk-offer:focus-visible small { color: #3f3f46; }
+  .mk-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: #000; color: #fff; border: 1px solid #000; }
+  .mk-pill svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-pill.ghost { background: #fff; color: #000; }
+  .mk-note { font-size: 12px; color: #71717a; }
+  /* diagonal corner ribbon = the tier you currently get */
+  .mk-ribbon { position: absolute; top: 0; right: 0; width: 72px; height: 72px; overflow: hidden; pointer-events: none; z-index: 2; border-radius: 0 12px 0 0; }
+  .mk-ribbon span { position: absolute; top: 11px; right: -28px; width: 96px; padding: 2px 0; text-align: center; transform: rotate(45deg); font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; background: #000; color: #fff; }
+  .mk-ribbon.free span { background: #f4f4f5; color: #52525b; }
+  .mk-empty { padding: 28px 0; color: #71717a; font-size: 14px; }
+  /* Spaces: tier banner along the bottom of each space card */
+  .sp-tier { display: flex; align-items: center; gap: 8px; margin: 12px -16px -14px; padding: 8px 16px; border-top: 1px solid #e4e4e7; font-size: 12px; font-weight: 700; letter-spacing: .02em; background: #fff; color: #000; border-radius: 0 0 8px 8px; }
+  .sp-tier.t-paid { background: #000; color: #fff; border-top-color: #000; }
+  .sp-tier.t-trial { background: #000; color: #fff; border-top-color: #000; }
+  .sp-tier .st-act { margin-left: auto; padding: 3px 10px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; text-decoration: none; }
+  .sp-tier .st-act:hover { background: #000; color: #fff; border-color: #000; }
+  .sp-tier.t-paid .st-act:hover, .sp-tier.t-trial .st-act:hover { background: #fff; color: #000; border-color: #fff; }
+  .empty-spaces .es-btn { display: inline-flex; margin-top: 12px; padding: 8px 18px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  html.vy-embed .space-logo svg { filter: grayscale(1); }
+  html.vy-embed #app-main .space-card { overflow: hidden; }
+  html.vy-embed #app-main #mkt-card .sc-desc { margin-bottom: 16px; }
+  .mk-tabs { display: flex; gap: 28px; }
+  .mk-tab { margin: 0 0 -1px; padding: 0 2px 10px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 17px; font-weight: 700; color: #71717a; cursor: pointer; }
+  .mk-tab { display: inline-flex; align-items: center; gap: 8px; }
+  .mk-tab .material-icons { font-size: 20px; }
+  .mk-tab:hover { color: #18181b; }
+  .mk-tab.on { color: #000; border-bottom-color: #000; }
+  .mk-sec { margin: 22px 24px 10px; font-size: 14px; font-weight: 700; color: #18181b; }
+  .mk-sec span { margin-left: 8px; font-size: 12.5px; font-weight: 500; color: #71717a; }
+  .mk-plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 8px 24px 24px; }
+  .mk-plans.one { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+  .mk-plan { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
+  .mk-plan.cur { border-color: #000; }
+  .mk-plan-h { display: flex; align-items: center; justify-content: space-between; }
+  .mk-plan-h b { font-size: 18px; color: #000; }
+  .mk-plan-p { font-size: 30px; font-weight: 700; letter-spacing: -.02em; color: #000; }
+  .mk-plan-p small { font-size: 14px; font-weight: 500; color: #71717a; }
+  .mk-plan-m, .mk-plan-n, .mk-plan-d, .mk-plan-own { font-size: 12.5px; color: #71717a; }
+  .mk-plan-own { margin: 0 24px 20px; }
+  .mk-plan ul { list-style: none; margin: 4px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: #3f3f46; }
+  .mk-plan li { display: flex; align-items: center; gap: 8px; }
+  .mk-plan li svg { flex: none; width: 15px; height: 15px; fill: none; stroke: #000; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-plan-btn { display: block; margin-top: auto; padding: 9px 14px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; text-align: center; font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  .mk-plan-btn:hover { background: #27272a; }
+  html.vy-embed .mk-plan a.mk-plan-btn, html.vy-embed .mk-plan a.mk-plan-btn:visited { color: #fff !important; text-decoration: none; }
+  #mkt-packs { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 4px 24px 24px; }
+  #mkt-packs .mk-card { height: 100%; }
+  .mk-buy-b.off { padding: 8px 14px; border-radius: 8px; background: #f4f4f5; color: #71717a; font-size: 12.5px; font-weight: 600; }
+  #mkt-ai { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 4px 24px 24px; }
+  .mk-ai-card-unused { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #ececef; border-radius: 12px; background: #fff; }
+  .mk-ai-card.all { background-color: #eef0eb; background-image: linear-gradient(rgba(0,0,0,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.035) 1px, transparent 1px); background-size: 32px 32px; }
+  .mk-ai-t b { display: block; font-size: 15px; color: #000; }
+  .mk-ai-t span { font-size: 12.5px; color: #71717a; }
+  .mk-ai-card .mk-offer { flex: none; width: 100%; }
+  html.vy-embed #app-main #mkt-card .mk-ai-head { margin: 8px 0 0; padding: 20px 24px 0; border-bottom: 1px solid #e4e4e7; }
+  html.vy-embed #app-main #mkt-card .mk-ai-desc { margin: 14px 24px 12px; }
+  .mk-logo.multi { width: auto; padding: 0 8px; gap: 4px; }
+  .mk-logo.multi svg { width: 18px; height: 16px; }
+  .mk-inc { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: #3f3f46; }
+  .mk-inc-h { font-size: 12px; font-weight: 700; color: #18181b; }
+  .mk-inc-l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .mk-inc-l li { position: relative; padding-left: 12px; line-height: 1.35; }
+  .mk-inc-l li::before { content: ""; position: absolute; left: 0; top: .55em; width: 4px; height: 4px; border-radius: 50%; background: #a1a1aa; }
+  .mk-inc-l.chips { flex-direction: row; flex-wrap: wrap; gap: 4px 6px; }
+  .mk-inc-l.chips li { padding: 2px 8px; border: 1px solid #ececef; border-radius: 999px; background: #fafafa; font-size: 11.5px; }
+  .mk-inc-l.chips li::before { display: none; }
+  #mkt-grid .mk-card, #mkt-ai .mk-card, #mkt-plan .mk-card { height: 100%; }
+  .mk-card .mk-main { flex: 1 1 auto; }
+  .mk-card .mk-foot { margin-top: auto; }
+  .mk-inc-l li.mk-more { color: #71717a; font-weight: 600; }
+  .mk-inc-l.chips li.mk-more { border-style: dashed; background: #fff; }
+  .mk-inc-l:not(.chips) li.mk-more::before { display: none; }
+  /* both tab sections: no grey field, only the tiles */
+  html.vy-embed body:has(#view-marketplace:not([hidden])), html.vy-embed body:has(#view-marketplace:not([hidden])) #app-main,
+  html.vy-embed #view-marketplace, html.vy-embed #view-marketplace > .container, html.vy-embed #app-main #mkt-card,
+  html.vy-embed #app-main #mkt-card > .sc-head, #mkt-p-cur, #mkt-p-plan, #mkt-p-payg { background: #fff !important; }
+  html.vy-embed #app-main #mkt-card { border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
+  /* ---- clean card body ---- */
+  .mk-card .mk-main { gap: 14px; padding: 16px 18px 6px; }
+  .mk-card .mk-head { margin: -16px -18px 0; padding: 16px 52px 16px 18px; }
+  .mk-card .mk-free { padding: 0; font-size: 12.5px; color: #52525b; }
+  .mk-card .mk-free svg { width: 14px; height: 14px; color: #16a34a; }
+  .mk-card .mk-free b { display: inline; font-size: 12.5px; font-weight: 600; color: #18181b; }
+  .mk-card .mk-free small { display: inline; margin-left: 4px; font-size: 12.5px; color: #71717a; }
+  .mk-card .mk-free.no svg { color: #a1a1aa; }
+  .mk-inc { gap: 8px; padding-top: 14px; border-top: 1px solid #f0f0f2; }
+  .mk-inc-h { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #71717a; }
+  .mk-inc-l, .mk-inc-l.chips { flex-direction: column; flex-wrap: nowrap; gap: 7px; }
+  .mk-inc-l li, .mk-inc-l.chips li { display: flex; align-items: flex-start; gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 13px; color: #27272a; line-height: 1.35; }
+  .mk-inc-l li::before, .mk-inc-l.chips li::before { display: none; }
+  .mk-inc-l li b { font-weight: 700; margin-right: 2px; }
+  .mk-inc-l li svg { flex: none; width: 14px; height: 14px; margin-top: 2px; fill: none; stroke: #16a34a; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .mk-inc-l li.mk-more, .mk-inc-l.chips li.mk-more { padding-left: 22px; border: 0; background: none; color: #71717a; font-weight: 600; }
+  .mk-card .mk-cta { padding-top: 2px; color: #000; font-weight: 600; }
+  .mk-card .mk-foot { padding: 12px 18px 16px; gap: 10px; border-top: 1px solid #f0f0f2; margin-top: 8px; }
+  .mk-pick { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 12.5px; color: #52525b; margin-bottom: 8px; }
+  .mk-pick select { flex: 1; border: 1px solid #d4d4d8; border-radius: 8px; padding: 6px 8px; font: inherit; background: #fff; color: #000; }
+  .mk-buy { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+  .mk-buy-p { display: flex; flex-direction: column; font-size: 12.5px; color: #52525b; line-height: 1.25; }
+  .mk-buy-p b { font-size: 20px; letter-spacing: -.02em; color: #000; display: inline; }
+  .mk-buy-p small { font-size: 11.5px; color: #71717a; margin-top: 1px; }
+  html.vy-embed .mk-card a.mk-buy-b { flex: none; padding: 8px 22px; border-radius: 8px; background: #000; color: #fff !important; font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  html.vy-embed .mk-card a.mk-buy-b:hover { background: #27272a; }
+  /* card header = landing-page grid field */
+  .mk-head { margin: -16px -16px 0; padding: 16px 52px 16px 16px; background: #f4f4f5; border-bottom: 0; }
+  .mk-card[data-sim$="aws"] .mk-head { background: #fff4e3; }
+  .mk-card[data-sim$="gcp"] .mk-head { background: #e8f0fe; }
+  .mk-card[data-sim$="azure"] .mk-head { background: #e3f1fb; }
+  .mk-card[data-sim="plan-free"] .mk-head { background: #f4f4f5; }
+  /* Subscription plans: the three cloud tints (AWS · Google Cloud · Azure) side by side instead of grey */
+  .mk-card[data-sim="plan-pro"] .mk-head, .mk-card[data-sim="plan-max"] .mk-head, .mk-card[data-sim^="pack-"] .mk-head { background: #eef0f4; }
+  .mk-head .mk-name { color: #000; }
+  .mk-head .mk-sub { color: #52525b; }
+  .mk-head .mk-logo { border-color: rgba(0,0,0,.06); background: #fff; }
+  .mk-card .mk-ribbon span, .mk-card .mk-ribbon.free span, .mk-card .mk-ribbon.pro span { background: #18181b; color: #fff; border: 0; padding: 2px 0; }
+  .mk-main { gap: 12px; }
+  /* ---- card polish: depth, lift, pill badge, softer checks, confident price + CTA ---- */
+  .mk-card { border-radius: 16px; box-shadow: 0 0 0 1px #e4e4e7, 0 1px 2px rgba(0,0,0,.04), 0 10px 28px -16px rgba(0,0,0,.18); transition: transform .18s ease, box-shadow .18s ease; }
+  .mk-card:hover, .mk-card:focus-within { transform: translateY(-4px); box-shadow: 0 0 0 1px #d4d4d8, 0 2px 4px rgba(0,0,0,.05), 0 22px 40px -18px rgba(0,0,0,.28); }
+  .mk-card .mk-main { padding: 0 20px 6px; gap: 16px; }
+  .mk-card .mk-head { margin: 0 -20px; padding: 24px 20px 22px; gap: 14px; position: relative; }
+  .mk-card .mk-head::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 140% at 100% 0%, rgba(255,255,255,.65), rgba(255,255,255,0) 60%); }
+  .mk-card .mk-head > * { position: relative; z-index: 1; }
+  .mk-card .mk-logo { width: 54px; height: 54px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 14px -6px rgba(0,0,0,.22); }
+  .mk-card .mk-logo svg { width: 32px; height: 26px; filter: none; }
+  .mk-card .mk-name { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+  .mk-card .mk-sub { font-size: 13px; }
+  .mk-card .mk-ribbon { top: 14px; right: 14px; width: auto; height: auto; overflow: visible; border-radius: 0; z-index: 3; }
+  .mk-card .mk-ribbon span, .mk-card .mk-ribbon.free span, .mk-card .mk-ribbon.pro span { position: static; display: inline-block; width: auto; transform: none; padding: 4px 10px; border-radius: 999px; background: #000; color: #fff; font-size: 10px; letter-spacing: .1em; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .mk-card .mk-head { padding-right: 76px; }
+  .mk-card .mk-free { padding: 10px 12px; margin-top: 2px; border-radius: 10px; background: #f6fbf7; border: 1px solid #e1f2e5; }
+  .mk-card .mk-free.no { background: #fafafa; border-color: #f0f0f2; }
+  .mk-inc { padding-top: 16px; }
+  .mk-inc-l li svg { box-sizing: content-box; width: 10px; height: 10px; padding: 3px; margin-top: 0; border-radius: 50%; background: #dcfce7; stroke: #15803d; }
+  .mk-card .mk-cta { padding: 6px 0 2px; }
+  .mk-card .mk-foot { padding: 16px 20px 20px; background: linear-gradient(180deg, #fff, #fafafa); border-top: 1px solid #f0f0f2; }
+  .mk-buy-p b { font-size: 28px; font-weight: 800; letter-spacing: -.03em; }
+  html.vy-embed .mk-card a.mk-buy-b { padding: 11px 26px; border-radius: 999px; font-size: 14px; font-weight: 700; box-shadow: 0 6px 14px -6px rgba(0,0,0,.5); transition: transform .15s, box-shadow .15s, background .15s; }
+  html.vy-embed .mk-card a.mk-buy-b::after { content: "\2192"; margin-left: 8px; display: inline-block; transition: transform .15s; }
+  html.vy-embed .mk-card a.mk-buy-b:hover { transform: translateY(-1px); box-shadow: 0 10px 18px -8px rgba(0,0,0,.55); }
+  html.vy-embed .mk-card a.mk-buy-b:hover::after { transform: translateX(3px); }
+  .mk-plans { gap: 20px; }
+  .mk-card[data-sim="plan-pro"] .mk-head::after, .mk-card[data-sim="plan-max"] .mk-head::after, .mk-card[data-sim^="pack-"] .mk-head::after { display: none; }
+  .mk-card[data-sim="plan-pro"] .mk-head, .mk-card[data-sim="plan-max"] .mk-head, .mk-card[data-sim^="pack-"] .mk-head { background: #eef0f4; }
+  /* no outer panel; section tab baseline runs edge to edge */
+  html.vy-embed #app-main #mkt-card { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+  html.vy-embed #view-marketplace > .container { padding-left: 0; padding-right: 0; padding-top: 0; max-width: none; }
+  html.vy-embed #app-main #mkt-card > .sc-head { margin: 0; padding: 20px 24px 0; border-bottom: 1px solid #e4e4e7; align-items: flex-end; }
+  html.vy-embed #app-main #mkt-card .sc-title { display: inline-block; padding: 0 2px 10px; margin-bottom: -1px; border-bottom: 2px solid #000; }
+  html.vy-embed #app-main #mkt-card .sc-title .material-icons { color: #000 !important; }
+  html.vy-embed #app-main #mkt-card .sc-desc, html.vy-embed #app-main #mkt-card #mkt-grid { margin-left: 24px; margin-right: 24px; }
+  html.vy-embed #app-main #mkt-card .sc-desc { margin-top: 14px; }
+</style>
+
   <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
   <div id="view-spaces">
   <div class="container">
@@ -1874,9 +1899,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           </label>
           <!-- the per-cloud counts (read by the save chip); shown through the options above -->
           <span id="prov-filter" hidden><span id="pf-count-all">0</span><span id="pf-count-aws">0</span><span id="pf-count-gcp">0</span><span id="pf-count-azure">0</span></span>
-          <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
-          <span class="material-icons">add</span>Create Space
-        </button>
         </div>
       </div>
       <!-- Description + actions, right above the space cards -->
@@ -1889,6 +1911,27 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
   </div>
   </div><!-- /view-spaces -->
+
+  <!-- ── Marketplace view — the onboarded simulator platforms (rendered from VY_SIMULATORS / the API) ── -->
+  <div id="view-marketplace" hidden>
+  <div class="container">
+    <div class="surface-card" id="mkt-card">
+      <div class="sc-head"><div class="mk-tabs" role="tablist">
+        <button type="button" class="mk-tab on" role="tab" id="mkt-t-cur" data-tab="cur" aria-selected="true"><span class="material-icons">verified</span>Your current plan</button>
+        <button type="button" class="mk-tab" role="tab" id="mkt-t-plan" data-tab="plan" aria-selected="false"><span class="material-icons">workspace_premium</span>Subscription Plan</button>
+        <button type="button" class="mk-tab" role="tab" id="mkt-t-payg" data-tab="payg" aria-selected="false"><span class="material-icons">shopping_bag</span>Pay as you go</button>
+      </div></div>
+      <div id="mkt-p-cur" role="tabpanel" aria-labelledby="mkt-t-cur"><div id="mkt-cur"></div></div>
+      <div id="mkt-p-plan" role="tabpanel" aria-labelledby="mkt-t-plan" hidden><div id="mkt-plan"></div></div>
+      <div id="mkt-p-payg" role="tabpanel" aria-labelledby="mkt-t-payg" hidden>
+        <div id="mkt-grid" role="list" aria-live="polite"><div class="mk-empty">Loading simulators…</div></div>
+        <!-- AI stack hidden for now: no AI services in this build. -->
+        <!-- Dev & DevOps packs hidden for now: pack entitlements are not enforced yet. -->
+      </div>
+    </div>
+  </div>
+  </div><!-- /view-marketplace -->
+
 
     <!-- ── Overlays (outside the views, so they work from any tab) ────── -->
     <!-- ── Connect external apps — floating pill + collapsible pop-up (moved out
@@ -1933,6 +1976,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           <span class="material-icons">power</span>
           <span>Start the <strong>relay tunnel</strong> (bar at the bottom &rarr; <em>Start tunnel</em>) to get your endpoint URL.</span>
         </div>
+        <div id="cx-models" style="margin:10px 0 12px"></div>
         <div id="cx-on" style="display:none">
           <div class="cx-urlrow">
             <span class="cx-urllabel">Endpoint</span>
@@ -1953,6 +1997,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <script>
     (function () {
       function initConnect() {
+        try { var mh = document.getElementById('cx-models'); if (mh && window.vyModelsPanel) mh.appendChild(window.vyModelsPanel({dark:true})); } catch (e) {}
         var dock = document.getElementById('connect-dock'); if (!dock) return;
         var isNano = !!document.getElementById('nano-foot');
         // Nano: the trigger lives in the tunnel bar's "More" pop-up menu
@@ -2017,63 +2062,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <div class="cl-actions">
           <button class="cl-cancel" type="button" onclick="closeClModal()">Stay here</button>
           <a class="cl-upgrade" href="/pricing">Upgrade plan &rarr;</a>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Create Space modal ──────────────────────────────────────── -->
-    <div class="modal-backdrop" id="create-space-modal" onclick="onModalBackdropClick(event)">
-      <div class="modal" role="dialog" aria-labelledby="csm-title">
-        <h3 id="csm-title">Create a new space</h3>
-        <p class="modal-sub">A space is a single-cloud project with its own services, IAM, and state.</p>
-
-        <div class="field">
-          <label for="csm-name">Space name</label>
-          <input id="csm-name" type="text" placeholder="e.g. dev-orders, prod-analytics" autocomplete="off">
-        </div>
-
-        <div class="field">
-          <label>Cloud</label>
-          <div class="provider-picker">
-            <label>
-              <input type="radio" name="csm-provider" value="aws" checked>
-              <svg class="provider-glyph" viewBox="0 0 24 24">
-                <path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" fill="#ff9900"/>
-                <path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/>
-              </svg>
-              <span>AWS</span>
-            </label>
-            <label>
-              <input type="radio" name="csm-provider" value="gcp">
-              <svg class="provider-glyph" viewBox="0 0 24 24">
-                <circle cx="12" cy="7" r="2.4" fill="#fbbc04"/>
-                <circle cx="17" cy="12" r="2.4" fill="#34a853"/>
-                <circle cx="12" cy="17" r="2.4" fill="#ea4335"/>
-                <circle cx="7"  cy="12" r="2.4" fill="#4285f4"/>
-              </svg>
-              <span>GCP</span>
-            </label>
-            <label>
-              <input type="radio" name="csm-provider" value="azure">
-              <svg class="provider-glyph" viewBox="0 0 24 24">
-                <path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/>
-                <path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#0078d4"/>
-              </svg>
-              <span>Azure</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="csm-region">Region (optional)</label>
-          <input id="csm-region" type="text" placeholder="defaults: us-east-1 / us-central1 / eastus" autocomplete="off">
-        </div>
-
-        <div class="modal-error" id="csm-error"></div>
-
-        <div class="modal-actions">
-          <button class="btn-secondary" type="button" onclick="closeCreateSpaceModal()">Cancel</button>
-          <button class="btn-primary" type="button" id="csm-submit" onclick="submitCreateSpace()">Create &amp; open console</button>
         </div>
       </div>
     </div>
@@ -2224,7 +2212,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <button class="usage-tab" type="button" data-c="azure"><span class="material-icons">cloud_circle</span>Azure</button>
       </div>
     </div>
-    <input id="api-search" class="api-search" type="text" placeholder="Filter endpoints — path, method or summary…" autocomplete="off">
     <div id="api-body"></div>
     </div>
   </div>
@@ -2551,7 +2538,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
     function initUsage(){
       var view = document.getElementById('view-usage'); if(!view) return;
-      var isNano = !!document.getElementById('nano-foot');   // relay footer = Nano bundle
+      var isNano = !!document.getElementById('nano-foot') || /^\/nano\//.test(location.pathname);   // relay footer or /nano/ path = Nano bundle
       var live = false;
       function derived(){
         var o = location.origin;
@@ -2721,6 +2708,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
             + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'
             + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div></section>';
           wireTunnel();
+          if (window.NanoDocs){ var nd = document.createElement('div'); nd.id = 'nd-usage-host'; ((grid.querySelector('.u-cloud-tabs') || {}).closest ? grid.querySelector('.u-cloud-tabs').closest('.u-panel') : grid).appendChild(nd); NanoDocs.renderUsage(nd, cloudPick, endpoint); }   // inside the AWS | GCP | Azure box, under the selected cloud
           grid.querySelectorAll('.u-cloud-tab').forEach(function(t){
             t.onclick = function(){
               cloudPick = t.dataset.cloud;
@@ -2755,7 +2743,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if(epc) epc.onclick = function(){ if(navigator.clipboard) navigator.clipboard.writeText(endpoint).then(function(){ epc.textContent='Copied'; setTimeout(function(){ epc.textContent='Copy'; },1200); }); };
       if(isNano){ try{ var chn = new BroadcastChannel('nano-relay');
         chn.onmessage = function(ev){ var m = ev.data || {};
-          if(m.type==='status' && m.state==='connected' && m.external){ endpoint = m.external; live = true; try{ localStorage.setItem('nano_relay_external', endpoint); }catch(_){} render(); } };
+          if(m.type==='status' && m.state==='connected' && m.external){
+            var changed = (endpoint !== m.external) || !live;   // the relay repeats "connected" every few seconds: redrawing on each one reset tabs + scroll
+            endpoint = m.external; live = true; try{ localStorage.setItem('nano_relay_external', endpoint); }catch(_){}
+            if(changed) render();
+          } };
       }catch(_){} }
       render();
     }
@@ -2770,17 +2762,15 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     const SPACE_LOGOS = {"aws": "<svg viewBox=\"0 0 304 182\" role=\"img\" aria-label=\"AWS\"><path fill=\"#fff\" d=\"M86.4 66.4c0 3.7.4 6.7 1.1 8.9.8 2.2 1.8 4.6 3.2 7.2.5.8.7 1.6.7 2.3 0 1-.6 2-1.9 3l-6.3 4.2c-.9.6-1.8.9-2.6.9-1 0-2-.5-3-1.4-1.4-1.5-2.6-3.1-3.6-4.7-1-1.7-2-3.6-3.1-5.9-7.8 9.2-17.6 13.8-29.4 13.8-8.4 0-15.1-2.4-20-7.2-4.9-4.8-7.4-11.2-7.4-19.2 0-8.5 3-15.4 9.1-20.6 6.1-5.2 14.2-7.8 24.5-7.8 3.4 0 6.9.3 10.6.8 3.7.5 7.5 1.3 11.5 2.2v-7.3c0-7.6-1.6-12.9-4.7-16-3.2-3.1-8.6-4.6-16.3-4.6-3.5 0-7.1.4-10.8 1.3-3.7.9-7.3 2-10.8 3.4-1.6.7-2.8 1.1-3.5 1.3-.7.2-1.2.3-1.6.3-1.4 0-2.1-1-2.1-3.1v-4.9c0-1.6.2-2.8.7-3.5.5-.7 1.4-1.4 2.8-2.1 3.5-1.8 7.7-3.3 12.6-4.5 4.9-1.3 10.1-1.9 15.6-1.9 11.9 0 20.6 2.7 26.2 8.1 5.5 5.4 8.3 13.6 8.3 24.6v32.4zM45.8 81.6c3.3 0 6.7-.6 10.3-1.8 3.6-1.2 6.8-3.4 9.5-6.4 1.6-1.9 2.8-4 3.4-6.4.6-2.4 1-5.3 1-8.7v-4.2c-2.9-.7-6-1.3-9.2-1.7-3.2-.4-6.3-.6-9.4-.6-6.7 0-11.6 1.3-14.9 4-3.3 2.7-4.9 6.5-4.9 11.5 0 4.7 1.2 8.2 3.7 10.6 2.4 2.5 5.9 3.7 10.5 3.7zm80.3 10.8c-1.8 0-3-.3-3.8-1-.8-.6-1.5-2-2.1-3.9L96.7 10.2c-.6-2-.9-3.3-.9-4 0-1.6.8-2.5 2.4-2.5h9.8c1.9 0 3.2.3 3.9 1 .8.6 1.4 2 2 3.9l16.8 66.2 15.6-66.2c.5-2 1.1-3.3 1.9-3.9.8-.6 2.2-1 4-1h8c1.9 0 3.2.3 4 1 .8.6 1.5 2 1.9 3.9l15.8 67 17.3-67c.6-2 1.3-3.3 2-3.9.8-.6 2.1-1 3.9-1h9.3c1.6 0 2.5.8 2.5 2.5 0 .5-.1 1-.2 1.6-.1.6-.3 1.4-.7 2.5l-24.1 77.3c-.6 2-1.3 3.3-2.1 3.9-.8.6-2.1 1-3.8 1h-8.6c-1.9 0-3.2-.3-4-1-.8-.7-1.5-2-1.9-4L156 23l-15.4 64.4c-.5 2-1.1 3.3-1.9 4-.8.7-2.2 1-4 1h-8.6zm128.5 2.7c-5.2 0-10.4-.6-15.4-1.8-5-1.2-8.9-2.5-11.5-4-1.6-.9-2.7-1.9-3.1-2.8-.4-.9-.6-1.9-.6-2.8v-5.1c0-2.1.8-3.1 2.3-3.1.6 0 1.2.1 1.8.3.6.2 1.5.6 2.5 1 3.4 1.5 7.1 2.7 11 3.5 4 .8 7.9 1.2 11.9 1.2 6.3 0 11.2-1.1 14.6-3.3 3.4-2.2 5.2-5.4 5.2-9.5 0-2.8-.9-5.1-2.7-7-1.8-1.9-5.2-3.6-10.1-5.2L246 52c-7.3-2.3-12.7-5.7-16-10.2-3.3-4.4-5-9.3-5-14.5 0-4.2.9-7.9 2.7-11.1 1.8-3.2 4.2-6 7.2-8.2 3-2.3 6.4-4 10.4-5.2 4-1.2 8.2-1.7 12.6-1.7 2.2 0 4.5.1 6.7.4 2.3.3 4.4.7 6.5 1.1 2 .5 3.9 1 5.7 1.6 1.8.6 3.2 1.2 4.2 1.8 1.4.8 2.4 1.6 3 2.5.6.8.9 1.9.9 3.3v4.7c0 2.1-.8 3.2-2.3 3.2-.8 0-2.1-.4-3.8-1.2-5.7-2.6-12.1-3.9-19.2-3.9-5.7 0-10.2.9-13.3 2.8-3.1 1.9-4.7 4.8-4.7 8.9 0 2.8 1 5.2 3 7.1 2 1.9 5.7 3.8 11 5.5l14.2 4.5c7.2 2.3 12.4 5.5 15.5 9.6 3.1 4.1 4.6 8.8 4.6 14 0 4.3-.9 8.2-2.6 11.6-1.8 3.4-4.2 6.4-7.3 8.8-3.1 2.5-6.8 4.3-11.1 5.6-4.5 1.4-9.2 2.1-14.3 2.1z\"/><path fill=\"#ff9900\" d=\"M273.5 143.7c-32.9 24.3-80.7 37.2-121.8 37.2-57.6 0-109.5-21.3-148.7-56.7-3.1-2.8-.3-6.6 3.4-4.4 42.4 24.6 94.7 39.5 148.8 39.5 36.5 0 76.6-7.6 113.5-23.2 5.5-2.5 10.2 3.6 4.8 7.6z\"/><path fill=\"#ff9900\" d=\"M287.2 128.1c-4.2-5.4-27.8-2.6-38.5-1.3-3.2.4-3.7-2.4-.8-4.5 18.8-13.2 49.7-9.4 53.3-5 3.6 4.5-1 35.4-18.6 50.2-2.7 2.3-5.3 1.1-4.1-1.9 4-9.9 12.9-32.2 8.7-37.5z\"/></svg>", "gcp": "<svg viewBox=\"0 0 32 28\" role=\"img\" aria-label=\"Google Cloud\"><path fill=\"#ea4335\" d=\"M21.85,7.41l1,0,2.85-2.85.14-1.21A12.81,12.81,0,0,0,5,9.6a1.55,1.55,0,0,1,1-.06l5.7-.94s.29-.48.44-.45a7.11,7.11,0,0,1,9.73-.74Z\"/><path fill=\"#4285f4\" d=\"M29.76,9.6a12.84,12.84,0,0,0-3.87-6.24l-4,4A7.11,7.11,0,0,1,24.5,13v.71a3.56,3.56,0,1,1,0,7.12H17.38l-.71.72v4.27l.71.71H24.5A9.26,9.26,0,0,0,29.76,9.6Z\"/><path fill=\"#34a853\" d=\"M10.25,26.49h7.12v-5.7H10.25a3.54,3.54,0,0,1-1.47-.32l-1,.31L4.91,23.63l-.25,1A9.21,9.21,0,0,0,10.25,26.49Z\"/><path fill=\"#fbbc05\" d=\"M10.25,8A9.26,9.26,0,0,0,4.66,24.6l4.13-4.13a3.56,3.56,0,1,1,4.71-4.71l4.13-4.13A9.25,9.25,0,0,0,10.25,8Z\"/></svg>", "azure": "<svg viewBox=\"0 0 96 96\" role=\"img\" aria-label=\"Microsoft Azure\"><defs><linearGradient id=\"sp-az-g0\" x1=\"-1032.172\" x2=\"-1059.213\" y1=\"145.312\" y2=\"65.426\" gradientTransform=\"matrix(1 0 0 -1 1075 158)\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"#114a8b\"/><stop offset=\"1\" stop-color=\"#0669bc\"/></linearGradient><linearGradient id=\"sp-az-g1\" x1=\"-1023.725\" x2=\"-1029.98\" y1=\"108.083\" y2=\"105.968\" gradientTransform=\"matrix(1 0 0 -1 1075 158)\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-opacity=\".3\"/><stop offset=\".071\" stop-opacity=\".2\"/><stop offset=\".321\" stop-opacity=\".1\"/><stop offset=\".623\" stop-opacity=\".05\"/><stop offset=\"1\" stop-opacity=\"0\"/></linearGradient><linearGradient id=\"sp-az-g2\" x1=\"-1027.165\" x2=\"-997.482\" y1=\"147.642\" y2=\"68.561\" gradientTransform=\"matrix(1 0 0 -1 1075 158)\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"#3ccbf4\"/><stop offset=\"1\" stop-color=\"#2892df\"/></linearGradient></defs><path fill=\"url(#sp-az-g0)\" d=\"M33.338 6.544h26.038l-27.03 80.087a4.152 4.152 0 0 1-3.933 2.824H8.149a4.145 4.145 0 0 1-3.928-5.47L29.404 9.368a4.152 4.152 0 0 1 3.934-2.825z\"/><path fill=\"#0078d4\" d=\"M71.175 60.261h-41.29a1.911 1.911 0 0 0-1.305 3.309l26.532 24.764a4.171 4.171 0 0 0 2.846 1.121h23.38z\"/><path fill=\"url(#sp-az-g1)\" d=\"M33.338 6.544a4.118 4.118 0 0 0-3.943 2.879L4.252 83.917a4.14 4.14 0 0 0 3.908 5.538h20.787a4.443 4.443 0 0 0 3.41-2.9l5.014-14.777 17.91 16.705a4.237 4.237 0 0 0 2.666.972H81.24L71.024 60.261l-29.781.007L59.47 6.544z\"/><path fill=\"url(#sp-az-g2)\" d=\"M66.595 9.364a4.145 4.145 0 0 0-3.928-2.82H33.648a4.146 4.146 0 0 1 3.928 2.82l25.184 74.62a4.146 4.146 0 0 1-3.928 5.472h29.02a4.146 4.146 0 0 0 3.927-5.472z\"/></svg>"};
 
     // ── v2.3.0 left nav: view switch (Workspace / Knowledge Center) + collapse ──
-    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc', usage: 'view-usage', api: 'view-api' };
+    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', marketplace: 'view-marketplace', kc: 'view-kc', usage: 'view-usage', api: 'view-api' };
     function showAppView(view) {
       if (!APP_VIEWS[view]) view = 'spaces';
+      if (view === 'marketplace' && window.loadMarketplace) loadMarketplace();
       if (view === 'api' && window.__apiShow) window.__apiShow();   // lazy-load the spec on first open
       Object.keys(APP_VIEWS).forEach(function (k) {
         var el = document.getElementById(APP_VIEWS[k]);
         if (el) el.hidden = (k !== view);
       });
-      var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
-      for (var i = 0; i < items.length; i++)
-        items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
       if (!document.documentElement.classList.contains('vy-embed')) try { sessionStorage.setItem('vyomi.appview', view); } catch (_) {}
       // Keep the URL on the current view, so a refresh lands right back here (the
       // boot code below restores the hash first). replaceState adds no history entries.
@@ -2790,66 +2780,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) showAppView(hv);
     });
-    var _sideMQ = window.matchMedia('(max-width: 768px)');
-    // The drawer (and its backdrop) start right below the sticky logo bar, so neither covers the other.
-    function _placeSideDrawer() {
-      var tb = document.querySelector('#app-topbar .top-bar') || document.getElementById('app-topbar');
-      var top = tb ? Math.max(0, Math.round(tb.getBoundingClientRect().bottom)) : 0;
-      document.body.style.setProperty('--side-top', top + 'px');
-    }
-    window.addEventListener('scroll', function () { if (document.body.classList.contains('side-open')) _placeSideDrawer(); }, { passive: true });
-    window.addEventListener('resize', function () { if (document.body.classList.contains('side-open')) _placeSideDrawer(); });
-    // Desktop: the menu is sticky and exactly as tall as the visible window below the logo
-    // bar, so its account menu / Sign out stays on screen in every view, however long.
-    function _sizeSideMenu() {
-      var ab = document.getElementById('app-body');
-      // The menu's area reaches at least the bottom of the window, so the menu never
-      // stops short of it (no strip of page showing under it on short pages).
-      if (ab) ab.style.minHeight = Math.max(0, Math.round(window.innerHeight - (ab.getBoundingClientRect().top + window.scrollY))) + 'px';
-      var r = ab ? ab.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-      var h = Math.min(window.innerHeight, r.bottom) - Math.max(0, r.top);
-      document.body.style.setProperty('--side-h', Math.round(Math.max(240, h)) + 'px');
-    }
-    window.addEventListener('scroll', _sizeSideMenu, { passive: true });
-    window.addEventListener('resize', _sizeSideMenu);
-    document.addEventListener('DOMContentLoaded', function () {
-      _sizeSideMenu();
-      var ab = document.getElementById('app-body');   // view switches change its height without a scroll
-      if (window.ResizeObserver) {                      // …and banners above it move it without one
-        var ro = new ResizeObserver(_sizeSideMenu);
-        [ab, document.getElementById('app-topbar'), document.body].forEach(function (n) { if (n) ro.observe(n); });
-      }
-    });
-    function closeSideDrawer() {
-      document.body.classList.remove('side-open');
-      var bb = document.getElementById('side-burger'); if (bb) bb.setAttribute('aria-expanded', 'false');
-    }
-    function toggleSidebar() {
-      if (_sideMQ.matches) {   // small screen: open / close the drawer (nothing saved)
-        _placeSideDrawer();
-        var o = document.body.classList.toggle('side-open');
-        var bb = document.getElementById('side-burger'); if (bb) bb.setAttribute('aria-expanded', String(o));
-        return;
-      }
-      var c = document.body.classList.toggle('side-collapsed');
-      try { localStorage.setItem('vyomi.sidecollapsed', c ? '1' : '0'); } catch (_) {}
-    }
-    // Small screens use the drawer (no icon rail); the desktop collapse preference comes back on widening.
-    function _applySideMode() {
-      closeSideDrawer();
-      if (_sideMQ.matches) { document.body.classList.remove('side-collapsed'); return; }
-      var c = true; try { c = localStorage.getItem('vyomi.sidecollapsed') === '1'; } catch (_) {}
-      document.body.classList.toggle('side-collapsed', c);
-    }
-    if (_sideMQ.addEventListener) _sideMQ.addEventListener('change', _applySideMode); else _sideMQ.addListener(_applySideMode);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSideDrawer(); });
     (function () {
-      var sb = document.getElementById('app-sidebar');
-      if (sb) sb.addEventListener('click', function (e) { if (_sideMQ.matches && e.target.closest('.side-item')) closeSideDrawer(); });
-      if (_sideMQ.matches) _applySideMode();
-    })();
-    (function () {
-      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
       // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
@@ -2990,7 +2921,19 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           };
         });
       }
+      function apiEndpoint(){
+        var nano = !!document.getElementById('nano-foot') || /^\/nano\//.test(location.pathname), o = location.origin;   // footer is injected late: also trust the /nano/ path
+        if(!nano) return o;
+        var ls = function(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } }; var ext = ls('nano_relay_external'); if(ext) return ext;
+        return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(o) ? 'http://127.0.0.1:8090' : 'https://relay.vyomi.cloud/' + encodeURIComponent((function(){ try{ return localStorage.getItem('nano_session'); }catch(_){ return null; } })() || 'nano');
+      }
       function loadSpec(cloud){
+        if (window.NanoDocs){   // generated reference (wasm/docs) — works offline in Nano, no /openapi-*.json needed
+          curCloud = cloud;
+          document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
+          NanoDocs.renderRedoc(document.getElementById('api-body'), cloud, filter, apiEndpoint());
+          return;
+        }
         curCloud = cloud;
         document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
         var body = document.getElementById('api-body');
@@ -3014,8 +2957,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         xhr.send();
       }
       var search = document.getElementById('api-search');
-      if (search) search.addEventListener('input', function(){ filter = search.value.trim(); render(); });
+      if (search) search.addEventListener('input', function(){ filter = search.value.trim(); if (window.NanoDocs){ clearTimeout(search._t); search._t = setTimeout(function(){ loadSpec(curCloud); }, 200); return; } render(); });
       document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.addEventListener('click', function(){ filter = ''; if (search) search.value = ''; loadSpec(t.dataset.c); }); });
+      window.__apiCloud = function(c){ filter = ''; loadSpec(c); };
       window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec('aws'); } };
       // Booted straight into the API view (e.g. a console link → clouds.html#api)?
       // showAppView ran before this IIFE defined __apiShow, so load the spec now.
@@ -3024,7 +2968,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     })();
 
     // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
-    const PROVIDER_PATHS = { aws: 'aws-console.html', gcp: 'gcp-console.html', azure: 'azure-console.html' };
+    // v4 is the Nano console. Absolute (resolved against THIS page's base) so it also works from the embedded drawer iframe.
+    const PROVIDER_PATHS = Object.fromEntries(['aws', 'gcp', 'azure'].map(c => [c, new URL('v4/' + c + '/', document.baseURI).pathname]));
     document.querySelectorAll('.cloud-card').forEach(card => {
       for (const key of Object.keys(PROVIDER_PATHS)) {
         if (card.classList.contains(key)) {
@@ -3063,7 +3008,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (prov && visible.length === 0 && grid.querySelectorAll('.space-card').length > 0) {
         const div = document.createElement('div');
         div.className = 'filter-empty';
-        div.textContent = `No ${prov.toUpperCase()} spaces yet — click + Create Space to make one.`;
+        div.textContent = `No ${prov.toUpperCase()} spaces yet — add one from the Marketplace.`;
         grid.appendChild(div);
       }
     }
@@ -3297,6 +3242,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (meta) { const dot = meta.querySelector('.dot'); if (dot && dot.nextSibling) dot.nextSibling.textContent = n + ' resource' + (n === 1 ? '' : 's'); }
       });
     }
+    window.addEventListener('vyomi-mesh-state', () => { if (window.loadSpaces) loadSpaces(); });
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
       if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }  // no leaked timers on re-render
@@ -3304,7 +3250,32 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         const r = await fetch('/api/spaces');
         const d = await r.json();
         const spaces = d.spaces || [];
+        window._vySpaces = {}; spaces.forEach(s => { window._vySpaces[s.space_id] = s; });
         const active = d.active_space_id;
+        // Single-cloud plan (Pro): the other clouds are locked, so the space picker
+        // adds nothing - go straight to that cloud's console. Once per tab session,
+        // never when embedded, and "?all=1" keeps the picker reachable.
+        try {
+          const embedded = document.documentElement.classList.contains('vy-embed');
+          const seen = sessionStorage.getItem('vy-auto-console');
+          if (!embedded && !seen && !/[?&]all=1\b/.test(location.search)) {
+            const pol = await ensureTierPolicy();
+            const ap = pol && (pol.active_policy || pol.policy || pol);
+            const provs = ap && ap.providers;
+            let only = '';
+            if (provs === 'primary_cloud_only') only = ((pol.primary_cloud || ap.primary_cloud || '') + '').toLowerCase();
+            else if (Array.isArray(provs) && provs.length === 1) only = String(provs[0]).toLowerCase();
+            if (only && PROVIDER_PATHS[only]) {
+              const mine = spaces.filter(s => (s.provider || 'aws').toLowerCase() === only);
+              const pick = mine.find(s => s.space_id === active) || mine[0];
+              if (pick) {
+                sessionStorage.setItem('vy-auto-console', '1');
+                await switchAndOpen(pick.space_id, only);
+                return;
+              }
+            }
+          }
+        } catch (_) { /* fall through to the normal picker */ }
         // Update pill counts (per provider + total)
         const counts = { aws: 0, gcp: 0, azure: 0, total: spaces.length };
         spaces.forEach(s => {
@@ -3327,7 +3298,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         _lastSpaceCount = counts.total;
         refreshSaveLic().then(function(){ maybeSaveModal(counts.total); });   // sign-in-to-save prompt
         if (spaces.length === 0) {
-          grid.innerHTML = `<div class="empty-spaces">No spaces yet — pick a cloud below to create your first one.</div>`;
+          grid.innerHTML = `<div class="empty-spaces">No spaces yet.${ _vySandbox ? ' Your administrator provisions the spaces for this environment.' : '<br>Add a simulator from the Marketplace to create your first one.<br><button type="button" class="es-btn" onclick="openMarketplaceView()">Browse the Marketplace</button>' }</div>`;
           // Empty state spans full width so it doesn't render as a tiny card
           grid.style.gridTemplateColumns = '1fr';
           return;
@@ -3383,6 +3354,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
               </div>
               <div class="space-meta">
                 ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
+                ${ window.VyomiMesh && (VyomiMesh.list().length || s.home) ? VyomiMesh.badgeHtml(s) : '' }
               </div>
               <div class="space-savings" title="What you'd pay ${ provider.toUpperCase() } for this space's live resources — saved by running in your browser ($0)">
                 <div class="space-savings-top">
@@ -3403,10 +3375,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                           data-tip="Force shutdown — stop runtimes now" aria-label="Force shutdown"><span class="material-icons">power_settings_new</span></button>
                 </span>
               </div>` : '' }
+              ${ _tierBannerHtml(s) }
             </a>
           `;
         }).join('');
         _startTtlTimer();
+        if (_vyJustAdded) { const jc = grid.querySelector('[data-space-id="' + _vyJustAdded + '"]'); if (jc) { jc.scrollIntoView({ block: 'nearest' }); jc.style.outline = '2px solid #000'; setTimeout(() => { jc.style.outline = ''; }, 1800); } _vyJustAdded = null; }
       } catch (e) {
         grid.innerHTML = `<div class="empty-spaces">Couldn't load spaces: ${ e.message }</div>`;
         grid.style.gridTemplateColumns = '1fr';
@@ -3427,6 +3401,15 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       return _tierPolicy;
     }
 
+    // Pro = ONE cloud: the portal account record (VyomiMesh) is authoritative when present; else the licence policy below.
+    async function _cloudGate(provider, policy) {
+      const B = window.VyomiMesh;
+      if (B && B.loadAccount && !B.account()) { try { await B.loadAccount(); } catch (_) {} }
+      if (B && B.cloudAllowed && !B.cloudAllowed(provider)) return false;
+      if (!_canAccessProvider(provider, policy)) return false;
+      if (B && B.pinCloud && !(await B.pinCloud(provider))) return false;    // first use of a cloud on Pro chooses it
+      return true;
+    }
     function _canAccessProvider(provider, policy) {
       if (!policy) return true;  // unknown policy → fail open
       const ap = policy.active_policy || policy.policy || policy;
@@ -3443,12 +3426,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     function openClModal(provider, policy) {
       const tier   = (policy && policy.active_tier) || 'free';
       const ap     = (policy && policy.active_policy) || {};
-      const primary= (policy && policy.primary_cloud) || ap.primary_cloud || '—';
+      const primary= ((window.VyomiMesh && VyomiMesh.planCloud && VyomiMesh.planCloud()) || (policy && policy.primary_cloud) || ap.primary_cloud || '—');
       const label  = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
       document.getElementById('cl-modal-sub').textContent =
         `Your ${tier.charAt(0).toUpperCase()+tier.slice(1)} plan doesn't include ${label[provider]||provider}.`;
       let ctx = `<div>Active plan: <strong>${tier.charAt(0).toUpperCase()+tier.slice(1)}</strong></div>`;
-      if (ap.providers === 'primary_cloud_only' && primary) {
+      if ((ap.providers === 'primary_cloud_only' || (window.VyomiMesh && VyomiMesh.planCloud && VyomiMesh.planCloud())) && primary && primary !== '—') {
         ctx += `<div style="margin-top:4px">Primary cloud: <strong>${label[primary]||primary}</strong></div>`;
       }
       ctx += `<div style="margin-top:8px">Upgrade to <strong>Max</strong> for all 3 clouds simultaneously.</div>`;
@@ -3487,94 +3470,212 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       // the server's 302 send them to a different /console/<x>?denied=…
       // URL.
       const policy = await ensureTierPolicy();
-      if (!_canAccessProvider(provider, policy)) {
+      if (!(await _cloudGate(provider, policy))) {
         openClModal(provider, policy);
         return;
       }
       try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', spaceId); } catch (_) {}
+      try { const sp = (window._vySpaces || {})[spaceId]; if (sp && window.VyomiMesh) VyomiMesh.setActive(sp); } catch (_) {}
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
       (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
     }
 
-    // ── Create Space modal ──────────────────────────────────────────
-    function openCreateSpaceModal() {
-      const el = document.getElementById('create-space-modal');
-      if (!el) return;
-      // Reset state
-      document.getElementById('csm-name').value = '';
-      document.getElementById('csm-region').value = '';
-      document.getElementById('csm-error').classList.remove('show');
-      document.getElementById('csm-submit').disabled = false;
-      document.getElementById('csm-submit').textContent = 'Create & open console';
-      el.classList.add('open');
-      setTimeout(() => document.getElementById('csm-name').focus(), 50);
-    }
-    function closeCreateSpaceModal() {
-      document.getElementById('create-space-modal').classList.remove('open');
-    }
-    function onModalBackdropClick(ev) {
-      // Close only when clicking the dim backdrop, not the modal itself.
-      if (ev.target.id === 'create-space-modal') closeCreateSpaceModal();
-    }
-    document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') closeCreateSpaceModal();
-    });
-
-    async function submitCreateSpace() {
-      const name = document.getElementById('csm-name').value.trim();
-      const provider = document.querySelector('input[name="csm-provider"]:checked')?.value || 'aws';
-      const region = document.getElementById('csm-region').value.trim();
-      const errEl = document.getElementById('csm-error');
-      const btn = document.getElementById('csm-submit');
-      errEl.classList.remove('show');
-
-      if (!name) {
-        errEl.textContent = 'Space name is required.';
-        errEl.classList.add('show');
-        return;
+    const _CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function _pricingUrl(base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/pricing'; }
+    function _buyUrl(id, base) { return (base || VY_PORTAL).replace(/\/$/, '') + '/checkout?product=simulator&simulator=' + id + '&period=monthly'; }
+    async function _mktCards() {
+      if (!VY_NANO) {
+        try { const r = await fetch('/api/marketplace/simulators', { cache: 'no-store' }); if (r.ok) { const d = await r.json(); return { cards: d.simulators, licence: d.licence, ai: d.ai_stack, packs: d.packs }; } } catch (_) {}
       }
-      // Lowercase a-z 0-9 - only — keeps S3 / GCS bucket names happy when
-      // services derive resource names from the space.
-      if (!/^[a-z][a-z0-9-]{1,62}$/.test(name)) {
-        errEl.textContent = 'Use 2–63 chars, lowercase letters/digits/dashes, must start with a letter.';
-        errEl.classList.add('show');
-        return;
+      let sp = []; try { sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || []; } catch (_) {}
+      const addedIds = sp.map(x => String(x.provider || x.provider_id).toLowerCase());
+      return { packs: { price_usd: 9, per: '/ month', owned: [] }, ai: _aiLocal(addedIds), licence: { tier: 'free', detail: 'Free plan', plans: VY_PLANS, pricing_url: _pricingUrl() }, cards: VY_SIMULATORS.map(sim => {
+        const s = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === sim.id)[0];
+        return { id: sim.id, name: sim.name, free_tier: sim.free_tier, added: !!s, space_id: s && s.space_id, tier: (s && s.tier) || 'free', price_usd: sim.price,
+                 licensed: false, enabled_tier: '', trial_ended: false, can_add: true, offers: [{ kind: 'simulator', price_usd: sim.price, per: '/ month', url: _buyUrl(sim.id) }] };
+      }) };
+    }
+    // Dev / DevOps packs: $9 / month each, all clouds; services are drawn only from the 56 in the Full Cloud stack.
+    const VY_PACKS = [{"id": "serverless", "icon": "bolt", "name": "Serverless apps", "sub": "Functions, APIs and events", "by": {"AWS": ["Lambda", "API Gateway", "API Gateway V2", "Step Functions", "EventBridge", "SQS", "SNS"], "Google Cloud": ["Cloud Functions", "API Gateway", "Pub/Sub", "Eventarc", "Cloud Scheduler"], "Azure": ["Function apps", "API Management", "Event Grid topics", "Service Bus"]}}, {"id": "containers", "icon": "widgets", "name": "Containers & compute", "sub": "Run workloads like production", "by": {"AWS": ["EC2", "Elastic Load Balancing", "VPC"], "Google Cloud": ["Compute Engine", "Kubernetes Engine", "Artifact Registry"], "Azure": ["Virtual Machines", "Container Apps", "Virtual networks"]}}, {"id": "data", "icon": "storage", "name": "Data & storage", "sub": "Databases, caches and streams", "by": {"AWS": ["S3", "RDS", "DynamoDB", "Kinesis"], "Google Cloud": ["Cloud Storage", "Cloud SQL", "Firestore", "Memorystore for Redis"], "Azure": ["Storage accounts", "SQL servers", "Cosmos DB"]}}, {"id": "network", "icon": "lan", "name": "Networking", "sub": "Networks, load balancing and DNS", "by": {"AWS": ["VPC", "Elastic Load Balancing"], "Google Cloud": ["VPC Network"], "Azure": ["Virtual networks", "Network Security Group", "DNS zones"]}}, {"id": "security", "icon": "verified_user", "name": "Security & identity", "sub": "Identity, secrets and keys", "by": {"AWS": ["IAM", "Secrets Manager", "KMS"], "Google Cloud": ["IAM & Admin", "IAM Service Account Credentials", "Secret Manager", "Cloud KMS"], "Azure": ["Key vaults", "Entra ID / RBAC", "Network Security Group"]}}, {"id": "ops", "icon": "analytics", "name": "Observability & ops", "sub": "Logs, metrics and configuration", "by": {"AWS": ["CloudWatch", "CloudWatch Logs", "Systems Manager"], "Google Cloud": ["Cloud Monitoring"], "Azure": ["Monitor alerts", "Log Analytics", "App Configuration"]}}];
+    function _packSale(p, pk) {
+      const price = (pk && pk.price_usd) || 9, per = (pk && pk.per) || '/ month', owned = ((pk && pk.owned) || []).indexOf(p.id) >= 0;
+      const rows = Object.keys(p.by).map(c => { const L = p.by[c], v = L.slice(0, 2).join(', '), m = L.length - 2;
+        return '<b>' + _esc(c === 'Google Cloud' ? 'GCP' : c) + '</b> ' + _esc(v) + (m > 0 ? ' +' + m + ' more' : ''); });
+      const n = Object.keys(p.by).reduce((a, c) => a + p.by[c].length, 0);
+      const base = (((pk && pk.portal) || VY_PORTAL) + '').replace(/\/$/, '');
+      const status = owned
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>Pack enabled</b><small>Active on your licence</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>All clouds</b><small>One price for AWS, GCP and Azure</small></span></div>';
+      const foot = owned ? '<span class="mk-pill">' + _CHECK + 'Enabled</span>'
+        : _buyBtn(base + '/checkout?product=pack&pack=' + p.id + '&period=monthly', 'Buy', price, per, 'Buy the ' + p.name + ' pack, $' + price + ' ' + per);
+      return _packCard({ id: 'pack-' + p.id, logo: 'pack-' + p.icon, title: p.name, sub: p.sub, ribbon: 'Pack', ribbonCls: owned ? 'pro' : 'free', status: status,
+        included: '<div class="mk-inc"><div class="mk-inc-h">' + n + ' services included</div><ul class="mk-inc-l">' +
+          '<li>' + _CHECK + 'SDK, CLI & API for all ' + n + ' services</li>' + rows.map(r => '<li>' + _CHECK + r + '</li>').join('') + '</ul></div>', foot: foot });
+    }
+    function _aiLocal(added) {
+      const u = id => (VY_PORTAL.replace(/\/$/, '')) + '/checkout?product=ai_stack&scope=' + id + '&period=monthly';
+      return VY_SIMULATORS.map(s => ({ id: s.id, name: s.name, enabled: false, price_usd: 12, per: '/ month', product: VY_AI[s.id].product, includes: VY_AI[s.id].includes,
+                                        requires_simulator: added.indexOf(s.id) < 0, url: u(s.id) }));
+    }
+    // One card design for both Pay-as-you-go sections: grid header (logo, name, ribbon) / status row / what's included / actions.
+    function _pcIncluded(head, items, wide) {
+      const vis = items.slice(0, 5), more = items.length - vis.length;
+      return '<div class="mk-inc"><div class="mk-inc-h">' + _esc(head) + '</div><ul class="mk-inc-l">' + vis.map(x => '<li>' + _CHECK + _esc(x) + '</li>').join('') +
+        (more > 0 ? '<li class="mk-more">+' + more + ' more</li>' : '') + '</ul></div>';
+    }
+    function _pcLogo(id) {
+      if (id.indexOf('pack-') === 0) return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">' + id.slice(5) + '</span></span>';
+      if (id === 'plan-pro' || id === 'plan-free') return '<span class="mk-logo"><span class="material-icons" style="font-size:26px;color:#18181b">cloud</span></span>';
+      if (id === 'plan-max') id = 'all';
+      if (id !== 'all') return '<span class="mk-logo ' + id + '">' + (SPACE_LOGOS[id] || '').replace(/sp-az-g/g, 'mk-az-g' + id) + '</span>';
+      return '<span class="mk-logo multi">' + ['aws', 'gcp', 'azure'].map(k => (SPACE_LOGOS[k] || '').replace(/sp-az-g/g, 'mk-az-g-all')).join('') + '</span>';
+    }
+    function _packCard(o) {
+      return '<div class="mk-card' + (o.off ? ' off' : '') + '" role="listitem" data-sim="' + _esc(o.id) + '">' +
+        '<div class="mk-ribbon ' + (o.ribbonCls || 'free') + '" aria-hidden="true"><span>' + _esc(o.ribbon) + '</span></div>' +
+        '<' + (o.addId ? 'button type="button" data-add="' + _esc(o.addId) + '"' + (o.disabled ? ' disabled' : '') : 'div') + ' class="mk-main"' + (o.aria ? ' aria-label="' + _esc(o.aria) + '"' : '') + '>' +
+        '<span class="mk-head">' + _pcLogo(o.logo) + '<span><span class="mk-name">' + _esc(o.title) + '</span><span class="mk-sub">' + _esc(o.sub) + '</span></span></span>' +
+        o.status + o.included + (o.cta || '') + '</' + (o.addId ? 'button' : 'div') + '>' +
+        '<div class="mk-foot">' + o.foot + '</div></div>';
+    }
+    function _buyBtn(url, label, price, per, aria, btn, note) {
+      return '<div class="mk-buy"><span class="mk-buy-p"><span><b>$' + price + '</b> ' + _esc(per) + '</span><small>' + _esc(note || 'Cancel any month') + '</small></span>' +
+        '<a class="mk-buy-b" href="' + _esc(url) + '" target="_blank" rel="noopener noreferrer" aria-label="' + _esc(aria) + '">' + _esc(btn || 'Buy') + '</a></div>';
+    }
+    function _aiHtml(c) {
+      const all = c.id === 'all', inc = (c.includes && c.includes.length) ? c.includes : (VY_AI[c.id] ? VY_AI[c.id].includes : []);
+      const status = c.enabled
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>AI enabled</b><small>' + (c.via === 'all' && !all ? 'Included with your all-clouds AI stack' : 'Active on your licence') + '</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>Add-on</b><small>' + (all ? 'Needs at least one simulator in Spaces' : 'Needs the ' + _esc(c.name) + ' simulator in Spaces') + '</small></span></div>';
+      let foot = '';
+      if (c.enabled) foot = '<span class="mk-pill">' + _CHECK + 'AI enabled</span>';
+      else if (c.requires_simulator) foot = '<span class="mk-note">Add ' + (all ? 'a simulator' : _esc(c.name)) + ' to Spaces first</span>';
+      else foot = _buyBtn(c.url, 'Buy ' + (all ? 'AI stack · all clouds' : c.product || 'AI stack'), c.price_usd, c.per, 'Buy AI stack for ' + c.name + ', $' + c.price_usd + ' ' + c.per);
+      return _packCard({ id: 'ai-' + c.id, logo: c.id, title: all ? 'All clouds' : (c.product || c.name), sub: all ? 'AI stack · AWS + Google Cloud + Azure' : c.name + ' · AI stack',
+        ribbon: 'AI', ribbonCls: c.enabled ? 'pro' : 'free', status: status, included: _pcIncluded('What’s included', ['SDK, CLI & API for these AI services only'].concat(inc), false), foot: foot });
+    }
+    function _planCard(k, P, cur, l) {
+      const p = P[k] || VY_PLANS[k], price = p.price_usd || p.price, mn = p.min_months || p.min;
+      const total = (VY_PLANS[k] && VY_PLANS[k].total) || (price * mn);      // 3-month bundle price (Pro $42 / Max $51), not 3 x monthly
+      const name = k === 'max' ? 'Max' : 'Pro', base = ((l && l.pricing_url) || _pricingUrl()).replace(/\/pricing$/, '');
+      const inc = k === 'max' ? ['All 3 clouds, unlimited', 'SDK, CLI & API on every cloud', 'Full access to every simulator service'] : ['1 cloud of your choice', 'Switch cloud every 30 days', 'SDK, CLI & API on that cloud', 'Full access to that cloud’s services'];
+      const status = cur
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>' + (k === 'pro' && l && l.detail ? _esc(l.detail) : 'Active on your licence') + '</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>Charged for ' + mn + ' months upfront</b><small>$' + total + ' for ' + mn + ' months · about $' + (Math.round(total / mn * 100) / 100) + ' / month</small></span></div>';
+      let foot;
+      if (!cur) {
+        // Pro is one cloud: pick it here so Pay goes STRAIGHT to the payment page (no bounce through /pricing).
+        const pick = k === 'pro'
+          ? '<label class="mk-pick"><span>Cloud</span><select aria-label="Cloud for Pro" onchange="var a=this.closest(\'.mk-card\').querySelector(\'.mk-buy-b\');a.href=a.href.replace(/primary_cloud=[a-z]+/,\'primary_cloud=\'+this.value)"><option value="aws">AWS</option><option value="gcp">Google Cloud</option><option value="azure">Azure</option></select></label>'
+          : '';
+        foot = pick + _buyBtn(base + '/checkout?tier=' + k + '&period=monthly' + (k === 'pro' ? '&primary_cloud=aws' : ''), 'Pay', total, '/ ' + mn + ' months', 'Pay for ' + name + ', $' + total + ' for ' + mn + ' months', 'Pay', '$' + total + ' for ' + mn + ' months · min. term');
       }
-
-      btn.disabled = true;
-      btn.textContent = 'Creating…';
+      else if (k === 'pro') { const mx = P.max || VY_PLANS.max; foot = _buyBtn(base + '/dashboard', 'Upgrade', mx.price_usd || mx.price, '/ month', 'Upgrade to Max', 'Upgrade', 'Pro → Max is pro-rated'); }
+      else foot = '<span class="mk-note">You have everything this plan includes.</span>';
+      return _packCard({ id: 'plan-' + k, logo: 'plan-' + k, title: name, sub: k === 'max' ? 'All clouds' : 'One cloud', ribbon: cur ? 'Yours' : name, ribbonCls: cur ? 'pro' : 'free',
+        status: status, included: _pcIncluded('What’s included', inc, false), foot: foot });
+    }
+    function _freeCard() {
+      const inc = ['All 3 clouds visible', 'Core services with limited quotas', 'SDK, CLI & API on free services', 'Runs in your browser or offline'];
+      return _packCard({ id: 'plan-free', logo: 'plan-free', title: 'Free', sub: 'Get started', ribbon: 'Yours', ribbonCls: 'pro',
+        status: '<div class="mk-free yes">' + _CHECK + '<span><b>Your plan</b><small>Free, no payment needed</small></span></div>',
+        included: _pcIncluded('What’s included', inc, false), foot: '<span class="mk-note">Upgrade any time under Subscription Plan.</span>' });
+    }
+    function _mktCurHtml(l) {
+      const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS;
+      const own = (l && l.owned && l.owned.length) ? '<p class="mk-plan-own">Plus ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately (see Pay as you go).</p>' : '';
+      return '<p class="sc-desc">Your current plan.</p><div class="mk-plans one">' + (t === 'free' ? _freeCard() : _planCard(t, P, true, l)) + '</div>' + own;
+    }
+    function _mktPlanHtml(l) {
+      const t = (l && l.tier) || 'free', P = (l && l.plans) || VY_PLANS;
+      const own = (l && l.owned && l.owned.length) ? '<p class="mk-plan-own">Plus ' + l.owned.length + ' simulator' + (l.owned.length > 1 ? 's' : '') + ' bought separately (see Pay as you go).</p>' : '';
+      if (t === 'free') return '<p class="sc-desc">You are on the <b>Free</b> plan. Choose a plan for full access, or buy individual simulators under Pay as you go.</p>' +
+        '<div class="mk-plans">' + _planCard('pro', P, false, l) + _planCard('max', P, false, l) + '</div>' + own;
+      return '<p class="sc-desc">Your current plan.</p><div class="mk-plans one">' + _planCard(t, P, true, l) + '</div>' + own;
+    }
+    function _mktCardHtml(c) {
+      const tier = c.tier || 'free', T = tier.charAt(0).toUpperCase() + tier.slice(1);
+      const free = c.free_tier
+        ? '<div class="mk-free yes">' + _CHECK + '<span><b>Free forever</b><small>' + (VY_NANO ? 'Free · in-browser, no expiry' : 'Use the Free tier as long as you like') + '</small></span></div>'
+        : '<div class="mk-free no">' + _CHECK + '<span><b>No free tier — trial only</b><small>14-day trial, then a licence is required</small></span></div>';
+      const cta = c.trial_ended ? '<span class="mk-cta mk-note">A licence is needed to add it again</span>'
+        : '<span class="mk-cta">' + (c.added ? 'Open in Spaces' : 'Add to Spaces') + '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>';
+      let foot = '';
+      if (c.enabled_tier) {
+        const E = c.owned ? 'Owned' : c.enabled_tier.charAt(0).toUpperCase() + c.enabled_tier.slice(1) + ' enabled';
+        foot += '<span class="mk-pill">' + _CHECK + E + '</span>' + (c.licensed_by ? '<span class="mk-note">Licensed by ' + _esc(c.licensed_by) + '</span>' : '');
+      } else if (VY_NANO) foot += '<span class="mk-pill ghost">Free · in-browser</span>';
+      if (c.trial_ended) foot += '<span class="mk-pill ghost">Trial ended</span>';
+      (c.offers || []).forEach(o => { foot += _buyBtn(o.url, 'Buy ' + c.name, o.price_usd, o.per, 'Buy ' + c.name + ' for $' + o.price_usd + ' ' + o.per); });
+      const svc = (c.services && c.services.length) ? c.services : ((VY_SIMULATORS.filter(x => x.id === c.id)[0] || {}).services || []);
+      return _packCard({ id: c.id, logo: c.id, title: c.name, sub: (c.added ? 'In Spaces' : ''), ribbon: (tier === 'free' ? 'Full' : T), ribbonCls: tier, off: c.trial_ended,
+        addId: c.id, disabled: c.can_add === false, aria: (c.added ? 'Open ' : 'Add ') + c.name + ' ' + (c.added ? 'in' : 'to') + ' Spaces, ' + T + ' tier',
+        status: free, included: _pcIncluded('All ' + svc.length + ' services', ['SDK, CLI & API for all ' + svc.length + ' services'].concat(svc), true), cta: cta, foot: foot });
+    }
+    async function loadMarketplace() {
+      const g = document.getElementById('mkt-grid'); if (!g) return;
+      const mc = await _mktCards(), cards = mc.cards;
+      const pk = document.getElementById('mkt-packs'); if (pk) pk.innerHTML = VY_PACKS.map(p => _packSale(p, mc.packs)).join('');
+      const ai = document.getElementById('mkt-ai'); if (ai) ai.innerHTML = (mc.ai || []).map(_aiHtml).join('');
+      const st = document.getElementById('mkt-plan'); if (st) st.innerHTML = _mktPlanHtml(mc.licence);
+      const cu = document.getElementById('mkt-cur'); if (cu) cu.innerHTML = _mktCurHtml(mc.licence);
+      window.vyMktTab = function (k) {
+        document.querySelectorAll('.mk-tab').forEach(x => { const on = x.dataset.tab === k; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+        ['cur', 'plan', 'payg'].forEach(p => { const el = document.getElementById('mkt-p-' + p); if (el) el.hidden = p !== k; }); };
+      document.querySelectorAll('.mk-tab').forEach(b => { if (!b._w) { b._w = 1; b.addEventListener('click', () => window.vyMktTab(b.dataset.tab)); } });
+      g.innerHTML = cards.length ? cards.map(_mktCardHtml).join('') : '<div class="mk-empty">No simulators are available yet.</div>';
+      g.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addSimulator(b.getAttribute('data-add'), b)));
+    }
+    async function addSimulator(id, btn) {
+      if (btn) btn.disabled = true;
+      let spaceId = null;
       try {
-        const payload = { provider: provider, name: name };
-        if (region) payload.region = region;
-        const r = await fetch('/api/spaces', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!r.ok) {
-          let detail = await r.text();
-          try { detail = JSON.parse(detail); detail = detail.detail?.reason || detail.detail || detail.message || JSON.stringify(detail); } catch (_) {}
-          throw new Error(detail || `HTTP ${r.status}`);
+        if (!VY_NANO) {
+          const r = await fetch('/api/marketplace/simulators/' + id + '/add', { method: 'POST' });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) { alert((d.detail && d.detail.reason) || 'Could not add this simulator.'); if (btn) btn.disabled = false; loadMarketplace(); return; }
+          spaceId = d.space_id;
+        } else {
+          const sp = (await (await fetch('/api/spaces', { cache: 'no-store' })).json()).spaces || [];
+          const have = sp.filter(x => String(x.provider || x.provider_id).toLowerCase() === id)[0];
+          if (have) spaceId = have.space_id;
+          else {
+            const sim = VY_SIMULATORS.filter(x => x.id === id)[0];
+            const r = await fetch('/api/spaces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: id, name: (sim && sim.name || id).toLowerCase().replace(/[^a-z0-9]+/g, '-') }) });
+            spaceId = ((await r.json()).space || {}).space_id;
+          }
         }
-        const d = await r.json();
-        const newId = d?.space?.space_id;
-        if (newId) {
-          // Switch active context to the new space, then jump to console.
-          try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', newId); } catch (_) {}
-          try { await fetch(`/api/spaces/${newId}/switch`, { method: 'POST' }); } catch (_) {}
-          (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
-          return;
-        }
-        // Fallback: reload page so it shows the new card.
-        window.location.reload();
-      } catch (e) {
-        errEl.textContent = String(e.message || e);
-        errEl.classList.add('show');
-        btn.disabled = false;
-        btn.textContent = 'Create & open console';
-      }
+      } catch (e) { if (btn) btn.disabled = false; return; }
+      if (spaceId) { try { await fetch('/api/spaces/' + spaceId + '/switch', { method: 'POST' }); } catch (_) {} }
+      _vyJustAdded = spaceId;
+      if (VY_EMBED && !_PICK && window.parent !== window) window.parent.postMessage({ vy: 'open-spaces' }, '*');   // the drawer closes the Marketplace and shows Spaces
+      else showAppView('spaces');
+      loadSpaces();
+    }
+    let _vyJustAdded = null;
+    function openMarketplaceView() {
+      if (_vySandbox) return;
+      if (VY_EMBED && !_PICK && window.parent !== window) window.parent.postMessage({ vy: 'open-marketplace' }, '*'); else showAppView('marketplace');
+    }
+    // Spaces banner: tier + (Spaces-only) trial countdown, with "Try Pro" / "Upgrade".
+    function _tierBannerHtml(s) {
+      const tier = s.tier || 'free', src = s.tier_source || 'free', tr = s.trial || {};
+      const T = tier.toUpperCase();
+      const up = '<button type="button" class="st-act" onclick="event.preventDefault();event.stopPropagation();window.open(\'' + _pricingUrl() + '\', \'_blank\', \'noopener\')">Upgrade</button>';
+      let cls = '', label = 'Free', act = '';
+      if (src === 'trial' && tr.state === 'active') { cls = ' t-trial'; label = T + ' trial · ' + tr.days_left + ' day' + (tr.days_left === 1 ? '' : 's') + ' left'; act = up; }
+      else if (src === 'license') { cls = ' t-paid'; label = T; }
+      else if (tr.state === 'ended') { label = 'Free · trial ended'; act = up; }
+      else if (!VY_NANO) act = '<button type="button" class="st-act" onclick="startSpaceTrial(\'' + s.space_id + '\', event)">Try Pro</button>';
+      return '<div class="sp-tier' + cls + '" title="Tier you currently get on this simulator">' + _esc(label) + act + '</div>';
+    }
+    async function startSpaceTrial(id, ev) {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      try { await fetch('/api/spaces/' + id + '/trial/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier: 'pro' }) }); } catch (_) {}
+      loadSpaces();
     }
 
     // ── Live host stats (CPU / Memory / Disk) ───────────────────────
@@ -4145,8 +4246,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
  #nano-logs.open{display:flex}
  /* The tunnel bar + its logs start at the side menu's edge, so the menu's account / Sign out stays visible. */
  #nano-foot,#nano-logs{left:216px;transition:left .2s ease}
- body.side-collapsed #nano-foot,body.side-collapsed #nano-logs{left:68px}
- @media (max-width:768px){#nano-foot,#nano-logs,body.side-collapsed #nano-foot,body.side-collapsed #nano-logs{left:0} #app-sidebar{bottom:34px}}
+  @media (max-width:768px){#nano-foot,#nano-logs{left:0}}
  #nano-logs .h{padding:5px 14px;font:11px system-ui,-apple-system,sans-serif;color:#8b8ba7;background:#0a0c24;border-bottom:1px solid #1a1f44}
  #nano-logs pre{flex:1;margin:0;padding:10px 14px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:#cdd8e6;white-space:pre-wrap}
  #nano-logs pre .ok{color:#34d399}#nano-logs pre .err{color:#f87171}#nano-logs pre .dim{color:#71717a}
@@ -4417,14 +4517,6 @@ function nanoLogout(){
 </script>
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
 <script src="./nano-tunnel-tabs.js" defer></script>
-<script>
-/* Nano: dot on the SDK & CLI usage drawer item until the local vyomi-tunnel has been seen running */
-(function(){ var it=document.querySelector('.side-item[data-view="usage"]'); if(!it) return;
-  function seen(){ try{ return localStorage.getItem('vyomi.tunnel.seen')==='1'; }catch(_){ return false; } }
-  function probe(){ if(seen()){ it.classList.remove('vy-tun'); return; } it.classList.add('vy-tun');
-    fetch('http://127.0.0.1:8090/health',{mode:'no-cors',cache:'no-store'}).then(function(){ try{ localStorage.setItem('vyomi.tunnel.seen','1'); }catch(_){} it.classList.remove('vy-tun'); }).catch(function(){}); }
-  probe(); setInterval(probe,6000); })();
-</script>
 <script src="./nano-back.js"></script>
 </body>
 </html>

@@ -1,0 +1,59 @@
+{
+ "cloud": "aws",
+ "service": "cloudwatch",
+ "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
+ "depth_targets": [
+  {
+   "id": "aws.cloudwatch.alarms.actions.compute",
+   "title": "Auto Scaling alarm action",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Auto Scaling alarm actions are not offered \u2014 Vyomi has no Auto Scaling group to act on. EC2 alarm actions are real \u2014 see aws.cloudwatch.alarms.actions.ec2."
+  },
+  {
+   "id": "aws.cloudwatch.dashboards.automatic",
+   "title": "Automatic dashboards",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Per-service automatic dashboards are an AWS-curated view over service metrics; Vyomi does not generate them.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+  },
+  {
+   "id": "aws.cloudwatch.metrics.multi-source-query",
+   "title": "Multi source query, cross-account Options and Source selection",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Vyomi simulates a single account/region, so cross-account/cross-region metric source selection has nothing to select.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+  },
+  {
+   "id": "aws.cloudwatch.logs.data-sources",
+   "title": "Log management Data sources tab",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Vended log sources (data source onboarding across accounts/services) are not modeled.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+  },
+  {
+   "id": "aws.cloudwatch.logs.anomaly-detection",
+   "title": "Log group anomaly detection",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+  }
+ ]
+}

@@ -1,0 +1,60 @@
+{
+ "cloud": "aws",
+ "service": "rds",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/aws/services/rds/CreateDatabase.jsx:297",
+   "component": "NotSimulated",
+   "props": "feature=\"RDS Proxy at create time\" note=\"Create the proxy separately from Databases \u2192 Proxies.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/CreateDatabase.jsx:334",
+   "component": "NotSimulated",
+   "props": "feature=\"IAM role association\" note=\"IAM roles for RDS features (S3 import/export) aren't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/CreateDatabase.jsx:355",
+   "component": "NotSimulated",
+   "props": "feature=\"Database Insights metrics\" note=\"Vyomi does not emit RDS CloudWatch metrics; this setting is stored but has nothing to chart.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/DatabaseDetail.jsx:63",
+   "component": "NotSimulated",
+   "props": "feature=\"CPUUtilization, FreeStorageSpace, FreeableMemory\" note=\"Vyomi has no virtualized compute, disk or memory allocation behind a DB instance to measure, so these are shown as unavailable rather than invented. DatabaseConnections, ReadIOPS and WriteIOPS above are real \u2014 pushed to CloudWatch as t"
+  },
+  {
+   "where": "consoles/src/aws/services/rds/DatabaseDetail.jsx:421",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"CloudWatch alarms\" feature=\"RDS CloudWatch alarms\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/DatabaseDetail.jsx:476",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Data migrations\" feature=\"AWS DMS data migrations\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:52",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Capacity reservations\" feature=\"RDS capacity reservations\" note=\"Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:59",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Create capacity reservation\" feature=\"RDS capacity reservations\" note=\"Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:89",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Create zero-ETL integration\" feature=\"RDS zero-ETL integrations\" note=\"A zero-ETL integration requires a real cross-service pipeline into Redshift that Vyomi does not run.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:213",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Restore from S3\" feature=\"Restoring a MySQL backup from Amazon S3\" note=\"This path imports a MySQL backup file from an S3 bucket outside Vyomi; it isn't modeled.\""
+  }
+ ]
+}

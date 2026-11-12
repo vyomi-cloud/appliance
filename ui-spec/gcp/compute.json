@@ -1,0 +1,1571 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "compute",
+  "console_path": "/compute/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "overview"
+    },
+    {
+      "label": "Security risk overview",
+      "page_id": "security-risk-overview"
+    },
+    {
+      "label": "Compute Advisor",
+      "page_id": "compute-advisor"
+    },
+    {
+      "label": "Virtual machines",
+      "children": [
+        {
+          "label": "VM instances",
+          "page_id": "vm-instances"
+        },
+        {
+          "label": "Instance templates",
+          "page_id": "instance-templates"
+        },
+        {
+          "label": "Sole-tenant nodes",
+          "page_id": "sole-tenant-nodes"
+        },
+        {
+          "label": "Machine images",
+          "page_id": "machine-images"
+        },
+        {
+          "label": "TPUs",
+          "page_id": "tpus"
+        },
+        {
+          "label": "Committed use discounts",
+          "page_id": "committed-use-discounts"
+        },
+        {
+          "label": "Reservations",
+          "page_id": "reservations"
+        },
+        {
+          "label": "Capacity advisor",
+          "page_id": "capacity-advisor"
+        },
+        {
+          "label": "Migrate to Virtual Machines",
+          "page_id": "migrate-to-virtual-machines"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Storage",
+      "children": [
+        {
+          "label": "Disks",
+          "page_id": "disks"
+        },
+        {
+          "label": "Storage Pools",
+          "page_id": "storage-pools"
+        },
+        {
+          "label": "Snapshots",
+          "page_id": "snapshots"
+        },
+        {
+          "label": "Images",
+          "page_id": "images"
+        },
+        {
+          "label": "Async Replication",
+          "page_id": "async-replication"
+        },
+        {
+          "label": "Consistency Groups",
+          "page_id": "consistency-groups"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Instance groups",
+      "children": [
+        {
+          "label": "Instance groups",
+          "page_id": "instance-groups"
+        },
+        {
+          "label": "Health checks",
+          "page_id": "health-checks"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "VM Extension Manager",
+      "children": [
+        {
+          "label": "VM extension policies",
+          "page_id": "vm-extension-policies"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "VM Manager",
+      "children": [
+        {
+          "label": "Patch",
+          "page_id": "patch"
+        },
+        {
+          "label": "OS policies",
+          "page_id": "os-policies"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Bare Metal Solution",
+      "children": [
+        {
+          "label": "Servers",
+          "page_id": "bms-servers"
+        },
+        {
+          "label": "Networks",
+          "page_id": "bms-networks"
+        },
+        {
+          "label": "VRFs",
+          "page_id": "bms-vrfs"
+        },
+        {
+          "label": "Volumes",
+          "page_id": "bms-volumes"
+        },
+        {
+          "label": "NFS Shares",
+          "page_id": "bms-nfs-shares"
+        },
+        {
+          "label": "Procurements",
+          "page_id": "bms-procurements"
+        },
+        {
+          "label": "Maintenance Events",
+          "page_id": "bms-maintenance-events"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Settings",
+      "children": [
+        {
+          "label": "Rollouts",
+          "page_id": "rollouts"
+        },
+        {
+          "label": "Metadata",
+          "page_id": "metadata"
+        },
+        {
+          "label": "Zones",
+          "page_id": "zones"
+        },
+        {
+          "label": "Network endpoint groups",
+          "page_id": "network-endpoint-groups"
+        },
+        {
+          "label": "Preview Features",
+          "page_id": "preview-features"
+        },
+        {
+          "label": "Operations",
+          "page_id": "operations"
+        },
+        {
+          "label": "Settings",
+          "page_id": "settings"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Marketplace",
+      "external": true
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "overview",
+      "kind": "dashboard",
+      "title": "Overview",
+      "route": "/compute/overview",
+      "captures": [
+        "A-compute/003-L2-overview",
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create instance",
+        "View instances",
+        "Refresh"
+      ],
+      "sections": [
+        {
+          "title": "Google Cloud incidents"
+        },
+        {
+          "title": "Resource footprint",
+          "fields": [
+            {
+              "label": "Total VMs",
+              "type": "readonly"
+            },
+            {
+              "label": "Instance Groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Disks",
+              "type": "readonly"
+            },
+            {
+              "label": "Snapshots",
+              "type": "readonly"
+            },
+            {
+              "label": "Images",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-instances",
+      "kind": "list",
+      "title": "VM instances",
+      "route": "/compute/instances",
+      "captures": [
+        "A-compute/006-L2-vm-instances"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture shows the 'Enable Compute Engine API' gate; table from current console.",
+      "header_actions": [
+        "Create instance",
+        "Import VM",
+        "Refresh"
+      ],
+      "tabs": [
+        "Instances",
+        "Observability",
+        "Instance schedules"
+      ],
+      "table": {
+        "selection": "multi",
+        "header_actions": [
+          "Start / Resume",
+          "Stop",
+          "Suspend",
+          "Reset",
+          "Delete"
+        ],
+        "actions": [
+          "Start / Resume",
+          "Stop",
+          "Suspend",
+          "Reset",
+          "Delete",
+          "View logs",
+          "View monitoring"
+        ],
+        "filter_placeholder": "Enter property name or value",
+        "pagination": true,
+        "preferences": true,
+        "provenance": "reference",
+        "confidence": "medium",
+        "columns": [
+          "Status",
+          "Name",
+          "Zone",
+          "Recommendations",
+          "In use by",
+          "Internal IP",
+          "External IP",
+          "Connect"
+        ]
+      }
+    },
+    {
+      "id": "create-instance",
+      "kind": "create",
+      "title": "Create an instance",
+      "route": "/compute/instancesAdd",
+      "captures": [
+        "C-forms/02-compute-instancesadd/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture blocked by 'Enable billing'. Left-hand step menu; Monthly estimate panel on the right.",
+      "submit": "Create",
+      "steps": [
+        {
+          "title": "Machine configuration",
+          "sections": [
+            {
+              "title": "Machine configuration",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true,
+                  "default": "instance-{date}-{time}"
+                },
+                {
+                  "label": "Labels",
+                  "type": "tags",
+                  "actions": [
+                    "Add labels"
+                  ]
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "us-central1 (Iowa)"
+                },
+                {
+                  "label": "Zone",
+                  "type": "select",
+                  "default": "Any"
+                },
+                {
+                  "label": "Machine family",
+                  "type": "radio",
+                  "default": "General purpose",
+                  "options": [
+                    "General purpose",
+                    "Compute optimized",
+                    "Memory optimized",
+                    "Storage optimized",
+                    "GPUs"
+                  ]
+                },
+                {
+                  "label": "Series",
+                  "type": "table",
+                  "columns": [
+                    "Series",
+                    "Description",
+                    "vCPUs",
+                    "Memory",
+                    "CPU Platform"
+                  ],
+                  "default": "E2"
+                },
+                {
+                  "label": "Machine type",
+                  "type": "select",
+                  "default": "e2-medium (2 vCPU, 1 core, 4 GB memory)",
+                  "options": [
+                    "Preset",
+                    "Custom"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "OS and storage",
+          "sections": [
+            {
+              "title": "Operating system and storage",
+              "fields": [
+                {
+                  "label": "Boot disk",
+                  "type": "readonly",
+                  "actions": [
+                    "Change"
+                  ],
+                  "children": [
+                    {
+                      "label": "Operating system",
+                      "type": "select",
+                      "default": "Debian"
+                    },
+                    {
+                      "label": "Version",
+                      "type": "select",
+                      "default": "Debian GNU/Linux 12 (bookworm)"
+                    },
+                    {
+                      "label": "Boot disk type",
+                      "type": "select",
+                      "default": "Balanced persistent disk"
+                    },
+                    {
+                      "label": "Size (GB)",
+                      "type": "number",
+                      "default": 10
+                    }
+                  ]
+                },
+                {
+                  "label": "Additional storage and VM backups",
+                  "type": "table",
+                  "actions": [
+                    "Add new disk",
+                    "Attach existing disk"
+                  ],
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Data protection",
+          "sections": [
+            {
+              "title": "Data protection",
+              "fields": [
+                {
+                  "label": "Back up your data",
+                  "type": "radio",
+                  "options": [
+                    "No backups",
+                    "Snapshots",
+                    "Backup plans"
+                  ],
+                  "confidence": "low"
+                }
+              ],
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Networking",
+              "fields": [
+                {
+                  "label": "Firewall",
+                  "type": "checkbox",
+                  "children": [
+                    {
+                      "label": "Allow HTTP traffic",
+                      "type": "checkbox"
+                    },
+                    {
+                      "label": "Allow HTTPS traffic",
+                      "type": "checkbox"
+                    },
+                    {
+                      "label": "Allow Load Balancer Health Checks",
+                      "type": "checkbox"
+                    }
+                  ]
+                },
+                {
+                  "label": "Network tags",
+                  "type": "tags"
+                },
+                {
+                  "label": "Hostname",
+                  "type": "text"
+                },
+                {
+                  "label": "IP forwarding",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Network interfaces",
+                  "type": "table",
+                  "columns": [
+                    "Network",
+                    "Subnetwork",
+                    "IP stack type",
+                    "Primary internal IPv4 address",
+                    "External IPv4 address"
+                  ],
+                  "actions": [
+                    "Add a network interface"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Observability",
+          "sections": [
+            {
+              "title": "Observability - Ops Agent",
+              "fields": [
+                {
+                  "label": "Install Ops Agent for Monitoring and Logging",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ],
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Security",
+          "sections": [
+            {
+              "title": "Security",
+              "fields": [
+                {
+                  "label": "Shielded VM",
+                  "type": "checkbox",
+                  "children": [
+                    {
+                      "label": "Turn on Secure Boot",
+                      "type": "checkbox",
+                      "default": false
+                    },
+                    {
+                      "label": "Turn on vTPM",
+                      "type": "checkbox",
+                      "default": true
+                    },
+                    {
+                      "label": "Turn on Integrity Monitoring",
+                      "type": "checkbox",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "label": "Service account",
+                  "type": "select",
+                  "default": "Compute Engine default service account"
+                },
+                {
+                  "label": "Access scopes",
+                  "type": "radio",
+                  "default": "Allow default access",
+                  "options": [
+                    "Allow default access",
+                    "Allow full access to all Cloud APIs",
+                    "Set access for each API"
+                  ]
+                },
+                {
+                  "label": "Manage access",
+                  "type": "checkbox",
+                  "children": [
+                    {
+                      "label": "Add manually generated SSH keys",
+                      "type": "checkbox"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "sections": [
+            {
+              "title": "Advanced",
+              "fields": [
+                {
+                  "label": "Provisioning model",
+                  "type": "select",
+                  "default": "Standard",
+                  "options": [
+                    "Standard",
+                    "Spot"
+                  ]
+                },
+                {
+                  "label": "Enable deletion protection",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Metadata",
+                  "type": "table",
+                  "columns": [
+                    "Key",
+                    "Value"
+                  ],
+                  "actions": [
+                    "Add item"
+                  ]
+                },
+                {
+                  "label": "Startup script",
+                  "type": "textarea",
+                  "help": "Automation"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "instance-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/compute/instancesDetail/zones/{zone}/instances/{resource-name}",
+      "breadcrumbs": [
+        "Compute Engine",
+        "VM instances",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "SSH",
+        "Edit",
+        "Reset",
+        "Create machine image",
+        "Create similar",
+        "Stop",
+        "Suspend",
+        "Delete"
+      ],
+      "tabs": [
+        "Details",
+        "Observability",
+        "OS info",
+        "Screenshot"
+      ],
+      "tab_panels": [
+        {
+          "label": "Details",
+          "sections": [
+            {
+              "title": "Basic information",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Instance ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Description",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Creation time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Zone",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Instance template",
+                  "type": "readonly"
+                },
+                {
+                  "label": "In use by",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Labels",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Tags",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Deletion protection",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Machine configuration",
+              "fields": [
+                {
+                  "label": "Machine type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "CPU platform",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Architecture",
+                  "type": "readonly"
+                },
+                {
+                  "label": "vCPUs to core ratio",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Display device",
+                  "type": "readonly"
+                },
+                {
+                  "label": "GPUs",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Networking",
+              "fields": [
+                {
+                  "label": "Network tags",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Network interfaces",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Network",
+                    "Subnetwork",
+                    "Primary internal IP address",
+                    "Alias IP ranges",
+                    "External IP address",
+                    "Network Tier",
+                    "IP forwarding"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Storage",
+              "fields": [
+                {
+                  "label": "Boot disk",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Image",
+                    "Interface type",
+                    "Size (GB)",
+                    "Device name",
+                    "Type",
+                    "Encryption",
+                    "Mode",
+                    "When deleting instance"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Security and access",
+              "fields": [
+                {
+                  "label": "Shielded VM",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SSH Keys",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Service account",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Cloud API access scopes",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Management",
+              "fields": [
+                {
+                  "label": "Metadata",
+                  "type": "readonly"
+                },
+                {
+                  "label": "VM provisioning model",
+                  "type": "readonly"
+                },
+                {
+                  "label": "On host maintenance",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Automatic restart",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "health-checks",
+      "kind": "list",
+      "title": "Health checks",
+      "route": "/compute/healthChecks",
+      "captures": [
+        "A-compute/022-L2-health-checks"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create health check",
+        "Refresh",
+        "Delete",
+        "Learn"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Name",
+          "Scope",
+          "Region",
+          "Host",
+          "Path",
+          "Protocol",
+          "Port",
+          "In use by"
+        ]
+      }
+    },
+    {
+      "id": "instance-templates",
+      "kind": "list",
+      "title": "Instance templates",
+      "route": "/compute/instanceTemplates/list",
+      "captures": [
+        "A-compute/007-L2-instance-templates"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create instance template",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Enter property name or value",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Location",
+          "Machine type",
+          "Image",
+          "Disk type",
+          "In use by",
+          "Creation time"
+        ]
+      }
+    },
+    {
+      "id": "disks",
+      "kind": "list",
+      "title": "Disks",
+      "route": "/compute/disks",
+      "captures": [
+        "A-compute/015-L2-disks"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create disk",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Enter property name or value",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium",
+        "columns": [
+          "Status",
+          "Name",
+          "Type",
+          "Size",
+          "Architecture",
+          "Zone",
+          "In use by",
+          "Snapshot schedule",
+          "Encryption"
+        ]
+      }
+    },
+    {
+      "id": "create-disk",
+      "kind": "create",
+      "title": "Create a disk",
+      "route": "/compute/disksAdd",
+      "captures": [
+        "C-forms/04-compute-disksadd/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Disk details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Location",
+              "type": "radio",
+              "default": "Single zone",
+              "options": [
+                "Single zone",
+                "Regional"
+              ]
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "default": "us-central1 (Iowa)"
+            },
+            {
+              "label": "Zone",
+              "type": "select",
+              "default": "us-central1-a"
+            }
+          ]
+        },
+        {
+          "title": "Source",
+          "fields": [
+            {
+              "label": "Disk source type",
+              "type": "select",
+              "default": "Blank disk",
+              "options": [
+                "Blank disk",
+                "Image",
+                "Snapshot",
+                "Instant snapshot",
+                "Disk"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Disk settings",
+          "fields": [
+            {
+              "label": "Disk type",
+              "type": "select",
+              "default": "Balanced persistent disk",
+              "options": [
+                "Balanced persistent disk",
+                "Extreme persistent disk",
+                "SSD persistent disk",
+                "Standard persistent disk",
+                "Hyperdisk Balanced",
+                "Hyperdisk Throughput",
+                "Hyperdisk Extreme"
+              ]
+            },
+            {
+              "label": "Size",
+              "type": "number",
+              "default": 10,
+              "help": "GB"
+            }
+          ]
+        },
+        {
+          "title": "Snapshot schedule",
+          "fields": [
+            {
+              "label": "Enable snapshot schedule",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Encryption",
+          "fields": [
+            {
+              "label": "Encryption",
+              "type": "radio",
+              "default": "Google-managed encryption key",
+              "options": [
+                "Google-managed encryption key",
+                "Cloud KMS key",
+                "Customer-supplied encryption key (CSEK)"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Labels",
+          "fields": [
+            {
+              "label": "Labels",
+              "type": "tags",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "snapshots",
+      "kind": "list",
+      "title": "Snapshots",
+      "route": "/compute/snapshots",
+      "captures": [
+        "A-compute/017-L2-snapshots"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create snapshot",
+        "Create snapshot schedule",
+        "Refresh",
+        "Delete"
+      ],
+      "tabs": [
+        "Snapshots",
+        "Snapshot schedules",
+        "Instant snapshots"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Enter property name or value",
+        "confidence": "medium",
+        "columns": [
+          "Status",
+          "Name",
+          "Location",
+          "Snapshot size",
+          "Creation time",
+          "Source disk",
+          "Snapshot type"
+        ]
+      }
+    },
+    {
+      "id": "images",
+      "kind": "list",
+      "title": "Images",
+      "route": "/compute/images",
+      "captures": [
+        "A-compute/018-L2-images"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create image",
+        "Refresh",
+        "Delete"
+      ],
+      "tabs": [
+        "Images",
+        "Image import history",
+        "Image export history"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Enter property name or value",
+        "confidence": "medium",
+        "columns": [
+          "Status",
+          "Name",
+          "Location",
+          "Archive size",
+          "Disk size",
+          "Created by",
+          "Family",
+          "Creation time"
+        ]
+      }
+    },
+    {
+      "id": "machine-images",
+      "kind": "list",
+      "title": "Machine images",
+      "route": "/compute/machineImages",
+      "captures": [
+        "A-compute/009-L2-machine-images"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create machine image",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "confidence": "low",
+        "columns": [
+          "Name",
+          "Location",
+          "Source instance",
+          "Creation time",
+          "Total storage size"
+        ]
+      }
+    },
+    {
+      "id": "instance-groups",
+      "kind": "list",
+      "title": "Instance groups",
+      "route": "/compute/instanceGroups/list",
+      "captures": [
+        "A-compute/021-L2-instance-groups"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create instance group",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Enter property name or value",
+        "confidence": "medium",
+        "columns": [
+          "Status",
+          "Name",
+          "Instances",
+          "Template",
+          "Group type",
+          "Creation time",
+          "Location",
+          "Autoscaling",
+          "In use by"
+        ]
+      }
+    },
+    {
+      "id": "metadata",
+      "kind": "settings",
+      "title": "Metadata",
+      "route": "/compute/metadata",
+      "captures": [
+        "A-compute/034-L2-metadata"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture shows 'Failed to load.'",
+      "header_actions": [
+        "Edit",
+        "Refresh"
+      ],
+      "tabs": [
+        "Metadata",
+        "SSH keys"
+      ],
+      "table": {
+        "confidence": "medium",
+        "columns": [
+          "Key",
+          "Value"
+        ]
+      }
+    },
+    {
+      "id": "zones",
+      "kind": "list",
+      "title": "Zones",
+      "route": "/compute/zones",
+      "captures": [
+        "A-compute/035-L2-zones"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Name",
+          "Region",
+          "Status",
+          "Available CPU platforms"
+        ]
+      }
+    },
+    {
+      "id": "operations",
+      "kind": "list",
+      "title": "Operations",
+      "route": "/compute/operations",
+      "captures": [
+        "A-compute/038-L2-operations"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Name",
+          "Target",
+          "Status",
+          "Start time",
+          "End time",
+          "User"
+        ]
+      }
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/compute/settings",
+      "captures": [
+        "A-compute/039-L2-settings"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "sections": [
+        {
+          "title": "Default location",
+          "fields": [
+            {
+              "label": "Region",
+              "type": "select"
+            },
+            {
+              "label": "Zone",
+              "type": "select"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-risk-overview",
+      "kind": "other",
+      "title": "Security risk overview",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/security"
+    },
+    {
+      "id": "compute-advisor",
+      "kind": "other",
+      "title": "Compute Advisor",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/advisor"
+    },
+    {
+      "id": "sole-tenant-nodes",
+      "kind": "other",
+      "title": "Sole-tenant nodes",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/soleTenancy"
+    },
+    {
+      "id": "tpus",
+      "kind": "other",
+      "title": "TPUs",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/tpus"
+    },
+    {
+      "id": "committed-use-discounts",
+      "kind": "other",
+      "title": "Committed use discounts",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/commitments"
+    },
+    {
+      "id": "reservations",
+      "kind": "other",
+      "title": "Reservations",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/reservations"
+    },
+    {
+      "id": "capacity-advisor",
+      "kind": "other",
+      "title": "Capacity advisor",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/capacityAdvisor"
+    },
+    {
+      "id": "migrate-to-virtual-machines",
+      "kind": "other",
+      "title": "Migrate to Virtual Machines",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/mfce"
+    },
+    {
+      "id": "storage-pools",
+      "kind": "other",
+      "title": "Storage Pools",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/storagePools"
+    },
+    {
+      "id": "async-replication",
+      "kind": "other",
+      "title": "Async Replication",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/asynchronousReplication"
+    },
+    {
+      "id": "consistency-groups",
+      "kind": "other",
+      "title": "Consistency Groups",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/consistencyGroups"
+    },
+    {
+      "id": "vm-extension-policies",
+      "kind": "other",
+      "title": "VM extension policies",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/extensionManager"
+    },
+    {
+      "id": "patch",
+      "kind": "other",
+      "title": "Patch",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/patch"
+    },
+    {
+      "id": "os-policies",
+      "kind": "other",
+      "title": "OS policies",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/config"
+    },
+    {
+      "id": "bms-servers",
+      "kind": "other",
+      "title": "Servers",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/servers"
+    },
+    {
+      "id": "bms-networks",
+      "kind": "other",
+      "title": "Networks",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/networks"
+    },
+    {
+      "id": "bms-vrfs",
+      "kind": "other",
+      "title": "VRFs",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/vrfs"
+    },
+    {
+      "id": "bms-volumes",
+      "kind": "other",
+      "title": "Volumes",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/volumes"
+    },
+    {
+      "id": "bms-nfs-shares",
+      "kind": "other",
+      "title": "NFS Shares",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/nfsShares"
+    },
+    {
+      "id": "bms-procurements",
+      "kind": "other",
+      "title": "Procurements",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/procurements"
+    },
+    {
+      "id": "bms-maintenance-events",
+      "kind": "other",
+      "title": "Maintenance Events",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/bareMetalSolution/maintenanceEvents"
+    },
+    {
+      "id": "rollouts",
+      "kind": "other",
+      "title": "Rollouts",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/rollouts"
+    },
+    {
+      "id": "network-endpoint-groups",
+      "kind": "other",
+      "title": "Network endpoint groups",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/networkendpointgroups/list"
+    },
+    {
+      "id": "preview-features",
+      "kind": "other",
+      "title": "Preview Features",
+      "captures": [
+        "A-compute/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of scope for Vyomi; nav label captured.",
+      "route": "/compute/previewFeatures"
+    }
+  ],
+  "gaps_note": "Nav, Overview and Health checks are from capture; VM instances/templates/disks/snapshots/images/groups/zones were behind the 'Enable Compute Engine API'/billing gate, so their tables and the create-instance/create-disk forms are reference."
+}

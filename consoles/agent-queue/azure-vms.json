@@ -1,0 +1,85 @@
+{
+ "cloud": "azure",
+ "service": "vms",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/vms/VirtualMachines.jsx:63",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Switch to classic, Reservations, Open query (Azure Resource Graph), Assign tags, Start, Restart, Stop, Services and Maintenance from this list's command bar \u2014 open a virtual machine to start, restart or stop it\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:146",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | ${LABEL[panel] || panel}`} feature={LABEL[panel] || panel} note={NOT_SIMULATED_REASON[panel]}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:252",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap === \"JSON View\" ? \"Viewing the raw ARM JSON for this resource\" : gap || \"\"} note={gap === \"Hibernate\" || gap === \"Capture\" ? capability(\"azure.vms.power\")?.limitations?.join(\" \") : undefined}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:377",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:378",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:383",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity role-assignment resolution for this resource\" note={`The virtual machine's resource id is ${a.id}.`}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:498",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:564",
+   "component": "NotSimulated",
+   "props": "feature={gap || \"\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:692",
+   "component": "NotSimulated",
+   "props": "feature=\"Picking an existing standalone managed disk to attach\" note=\"This lens does not build a standalone Disks console to pick an existing disk from \u2014 data disks are created and attached in one step instead.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:771",
+   "component": "NotSimulated",
+   "props": "feature=\"User-assigned managed identities\" note=\"This lens does not model standalone Microsoft.ManagedIdentity/userAssignedIdentities resources to attach.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:841",
+   "component": "NotSimulated",
+   "props": "feature=\"Azure Bastion\" note=\"This lens does not model a Bastion resource.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:845",
+   "component": "NotSimulated",
+   "props": "feature=\"Opening a real SSH session\" note={cap?.limitations?.join(\" \")}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:973",
+   "component": "NotSimulated",
+   "props": "feature=\"Application security groups\" note=\"This lens does not model Microsoft.Network/applicationSecurityGroups.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:974",
+   "component": "NotSimulated",
+   "props": "feature=\"Load balancing\" note=\"This lens does not model Microsoft.Network/loadBalancers.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:1602",
+   "component": "NotSimulated",
+   "props": "feature=\"Metrics charts (metric definitions and time-series values)\" note=\"The scope/resource picker above is real; there is no metric time-series store anywhere in Vyomi to chart from.\""
+  }
+ ]
+}

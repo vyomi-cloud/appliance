@@ -33,6 +33,8 @@ Usage:
   vyomi env         Generate or verify .env files from app profile
   vyomi db          Database operations (dump, restore, refresh)
   vyomi redis       Redis operations (flush)
+  vyomi mesh status [--json]   Mesh (headless Pro/Max) health, tier, trial, 70% cap usage
+  vyomi mesh pair              Print a pairing code to attach the Nano UI at vyomi.cloud
   vyomi doctor      Print diagnostics
   vyomi mcp         MCP server (stdio) for AI agents: claude mcp add vyomi -- vyomi mcp
   vyomi help        This help
@@ -46,7 +48,7 @@ Environment (VYOMI_* preferred; CLOUD_LEARN_* still honored):
   VYOMI_SUBSTRATE         docker | multipass
   VYOMI_APPLIANCE_NAME    Multipass VM name (default: cloudlearn-appliance)
   VYOMI_APPLIANCE_CPUS/MEMORY/DISK   VM sizing overrides
-  VYOMI_NO_OPEN=1         Don't auto-open the browser
+  VYOMI_NO_OPEN=1         (no effect: appliance is headless)
 `)
 }
 

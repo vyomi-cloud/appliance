@@ -524,6 +524,9 @@ def check_azure(endpoint: str) -> None:
     pt = b"azure-keyvault-conformance"
     pt_b64url = _b64.urlsafe_b64encode(pt).decode().rstrip("=")
     vault_name = f"conf-kv-{uuid.uuid4().hex[:6]}"
+    call("PUT", f"/subscriptions/{sub}/resourcegroups/{rg}?api-version=2021-04-01", {"location": "eastus"})
+    call("PUT", f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{vault_name}?api-version=2023-07-01",
+         {"location": "eastus", "properties": {"sku": {"family": "A", "name": "standard"}, "tenantId": "00000000-0000-0000-0000-000000000000"}})   # data plane needs an existing vault
     st, resp = call("POST", f"/azure-data/keyvault/{vault_name}/keys/conf-key/encrypt",
                     {"alg": "RSA-OAEP-256", "value": pt_b64url})
     ct = resp.get("value", "")

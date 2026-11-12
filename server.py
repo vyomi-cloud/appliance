@@ -158,6 +158,15 @@ app = FastAPI(title="CloudLearn Cloud Simulator", version="2.0.0", docs_url=None
 # client error, not a crash: an unhandled JSONDecodeError surfaced as a 500 and
 # closed the keep-alive connection, so the client's NEXT request failed with
 # "Remote end closed connection" (console-actions ssm.create -> ssm.list).
+from core.native_errors import NativeHTTPError as _NativeHTTPError  # noqa: E402
+
+
+@app.exception_handler(_NativeHTTPError)
+async def _native_http_error(request, exc: _NativeHTTPError):
+    """Return a native cloud error body verbatim (no FastAPI {"detail": …} wrapper)."""
+    return JSONResponse(status_code=exc.status_code, content=exc.body, headers=exc.headers)
+
+
 @app.exception_handler(json.JSONDecodeError)
 async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
     return JSONResponse({"detail": f"Request body is not valid JSON: {exc.msg}",
@@ -165,6 +174,48 @@ async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
 
 # ── Backend route registration (EARLY) ───────────────────────────────
 _aws_xamz_dispatchers: dict = {}
+# v4 offline durability — the cores' shared_store() singletons (API Gateway V2, SSM, Step
+# Functions, Cloud Scheduler, Memorystore, GKE, IAM Credentials, Cloud Monitoring) become
+# space slots of the persisted state BEFORE any route captures them (core/appliance_stores.py).
+try:
+    from core import appliance_stores as _aps_durable
+    _aps_durable.install_core_slot_stores()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[durability] core slot stores not installed: {_e}")
+# v4 C0e — ONE engine + ONE messaging store for SQS / SNS / EventBridge / Scheduler: the
+# classic console REST (/api/sqs/*, /api/eventbridge/rules*, /api/aws/extras/eventbridge/*)
+# and the Scheduler REST are registered FIRST so they win over the nats / provider / extras
+# routes; opted-out services mount nothing here (the pre-v4 handlers stay).
+try:
+    from routes import aws_messaging_unified as _amu_unified
+    _amu_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] SQS/SNS/EventBridge core mount skipped: {_e}")
+# v4 C0f — ONE engine: AWS Lambda (native REST + classic console REST, real runtime for
+# Invoke) and the Azure Key Vault / Container Registry data planes on the shared cores.
+# Registered BEFORE vault_routes (pre-v4 /azure-data/keyvault/*) and the provider routes.
+try:
+    from routes import aws_lambda_unified as _lam_unified
+    _lam_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Lambda core mount skipped: {_e}")
+try:
+    from routes import azure_dataplane_unified as _azdp_unified
+    _azdp_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Key Vault / ACR / Service Bus core mount skipped: {_e}")
+try:
+    from routes import azure_servicebus_amqp as _azsb_amqp   # Service Bus AMQP 1.0 listener (:5672 / :5671, ws path /$servicebus/websocket)
+    _azsb_amqp.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[servicebus-amqp] listener not mounted: {_e}")
+# v4.0.0 — the shared gateway + event-bus backends (GCP API Gateway/API Keys/Eventarc, /gcpgw + *.gateway.dev data plane, Azure APIM data
+# plane) on the real appliance: same router Nano uses (routes/gateway_eventbus_unified.py). Before nats_routes' legacy Eventarc stubs and the provider routes so these paths win.
+try:
+    from routes import gateway_eventbus_unified as _gw_eb_unified
+    _gw_eb_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] gateway/event-bus core mount skipped: {_e}")
 try:
     from core import vault_routes as _vault_routes
     _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
@@ -187,6 +238,35 @@ try:
 except Exception:
     pass
 
+# v4 C0d — ONE engine: Firestore + Compute Engine (native wire and the classic console
+# aliases) on the shared cores. Registered BEFORE the provider routes so these paths win;
+# opted-out services (VYOMI_UNIFIED_INGRESS_SERVICES / VYOMI_LEGACY_WIRE) mount nothing.
+try:
+    from routes import gcp_firestore_compute_unified as _gfc_unified
+    _gfc_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Firestore/Compute core mount skipped: {_e}")
+# v4 C0g — ONE engine: GCP Pub/Sub (native /v1/projects/{p}/topics|subscriptions|snapshots|
+# schemas… and the classic /api/gcp/pubsub/*, /api/gcp/sqs/queues* aliases) on the shared core.
+try:
+    from routes import gcp_pubsub_unified as _gps_unified
+    _gps_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Pub/Sub core mount skipped: {_e}")
+# v4 C0i — ONE engine: GCP IAM (service accounts + keys, project :get/:set/:testIamPermissions and
+# the classic /api/gcp/iam aliases) on the shared core, like custom roles / Asset Inventory already.
+try:
+    from routes import gcp_iam_unified as _giam_unified
+    _giam_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] GCP IAM core mount skipped: {_e}")
+# v4 C0h — ONE engine: Microsoft Graph (Entra ID directory, /v1.0 + /beta) on the shared core.
+try:
+    from routes import azure_graph_unified as _graph_unified
+    _graph_unified.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[wire_ingress] Microsoft Graph core mount skipped: {_e}")
+
 # ── Provider route registration ──────────────────────────────────────
 register_aws_ec2_routes(app, None)
 register_gcp_compute_routes(app, None)
@@ -198,19 +278,35 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
-from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
-from routes import gcp_resourcemanager, app_env
+from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability
+from routes import gcp_resourcemanager
+from routes import issue_reporting, app_env
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
-            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
-            gcp_resourcemanager, app_env]:
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability,
+            gcp_resourcemanager, issue_reporting, app_env]:
     mod.register(app)
+
+# Mesh pack (headless Pro/Max appliance): /mesh/* status + pairing routes.
+from core import mesh as _mesh
+_mesh.register(app)
+# Mesh shell routes registered here (before the wire catch-all); the resolver is defined further down.
+from core import mesh_shell as _mesh_shell
+_mesh_shell.register(app, lambda cloud, ref: _shell_container(cloud, ref))
+from core import feedback as _feedback
+_feedback.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
 from core.middleware import register_middleware
 register_middleware(app)
+
+# ── Automatic issue reporting (platform feature) ──────────────────────
+# Observe-only: a 5xx / unhandled exception is scrubbed and reported to the portal
+# (user's GitHub account if they consented, Vyomi bot otherwise). Headless: Pro/Max/Enterprise only.
+from core.issue_report_runtime import IssueReportMiddleware
+app.add_middleware(IssueReportMiddleware)
 
 # ── Header alias middleware (Phase 7 — vyomi rebrand) ─────────────────
 # Bridges X-CloudLearn-* ↔ X-Vyomi-* on both request and response so the
@@ -228,15 +324,20 @@ app.add_middleware(HeaderAliasMiddleware)
 from core.glassbox import GlassBoxCaptureMiddleware
 app.add_middleware(GlassBoxCaptureMiddleware)
 
+# ── Sandbox access gate (Codespace console privacy) ────────────────────
+# OUTERMOST layer: inert unless CODESPACE_NAME is set; gates only requests on the
+# forwarded public host (HTTP + WebSocket + preflight). See core/sandbox_access.py.
+from core import sandbox_access as _sandbox_access
+_sandbox_access.register(app)
+
 # ── Azure state injection ────────────────────────────────────────────
 init_azure_state()
 
-# ── Static files mount ───────────────────────────────────────────────
+# ── Static files: headless appliance (4.0.0) serves NO console UI. Only the
+# bundled Swagger UI assets (used by /docs) are mounted. Nano is the only UI.
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-os.makedirs(STATIC_DIR, exist_ok=True)
-_UI_HTML = os.path.join(STATIC_DIR, "index.html")
-_PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
-app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
+if os.path.isdir(os.path.join(STATIC_DIR, "swagger")):
+    app.mount("/assets/swagger", StaticFiles(directory=os.path.join(STATIC_DIR, "swagger")), name="swagger-assets")
 
 # S3 routes are registered at the BOTTOM of this file (see end-of-file
 # block) so the catch-all @app.post("/{bucket}/{key:path}") doesn't
@@ -1441,7 +1542,7 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
     method = request.method.upper()
     query = dict(request.query_params)
 
-    if path in {"/healthz", "/docs", "/redoc", "/openapi.json"} or path.startswith(("/ui", "/product", "/assets/", "/static/", "/favicon.ico", "/console", "/docs/", "/api/tenants", "/api/instances", "/api/runtime")):
+    if path in {"/healthz", "/docs", "/redoc", "/openapi.json"} or path.startswith(("/ui", "/product", "/assets/", "/static/", "/favicon.ico", "/console", "/mesh", "/docs/", "/api/tenants", "/api/instances", "/api/runtime")):
         return None
     if path.startswith("/api/catalog") or path.startswith("/api/packs") or path.startswith("/api/license") or path.startswith("/api/runtime/bundles") or path.startswith("/api/deployments") or path.startswith("/api/actions"):
         return None
@@ -2455,6 +2556,14 @@ def _cloudsim_add_runtime_instance(runtime_instances: dict, resource_id: str, pr
     }
 
 
+def _core_records(store, space: dict | None, field: str) -> dict:
+    """One collection of a shared core's store as kept in `space` (core/appliance_stores
+    _CoreSlotStore: the data lives per space; a plain store is global)."""
+    if hasattr(store, "records_in"):
+        return store.records_in(space).get(field) or {}
+    return getattr(store, field, None) or {}
+
+
 def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[str, int], dict[str, dict]]:
     if not isinstance(space, dict):
         return [], {}, {}
@@ -2551,48 +2660,71 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
-    _iam_src = _cloudsim_service_state(space, "iam")
-    if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
-        _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
+    try:   # IAM — v4 C0g: the shared core's space state (console + SDK/CLI share it)
+        from core import wire_ingress as _wi_iam
+        _iam_unified = _wi_iam.is_unified("iam")
+    except Exception:
+        _iam_unified = False
+    if _iam_unified:
+        _iam_src = _cloudsim_service_state(space, "iam_core")
+    else:
+        _iam_src = _cloudsim_service_state(space, "iam")
+        if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
+            _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
     for _iam_kind, _iam_coll in (("user", "users"), ("group", "groups"), ("role", "roles")):
         for _iam_id, _iam_rec in _iam_src.get(_iam_coll, {}).items():
             if isinstance(_iam_rec, dict):
                 add("aws", "iam", _iam_kind, str(_iam_id), _iam_rec)
 
-    try:   # Secrets Manager + KMS — the Vault-backed stores the console and SDK/CLI share
-        from core import vault_routes as _vr
-        for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
-            add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
-        for _key_id, _key in list(_vr._kms_keys.items()):
-            if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+    try:   # Secrets Manager + KMS — v4 C0c: the shared cores' space state (console + SDK/CLI share it)
+        from core import wire_ingress as _wi_g
+        from routes import aws_secrets_kms_unified as _ask_g
+        _aws_core_inv = _ask_g.inventory(space)
+        if _wi_g.is_unified("secretsmanager"):
+            for _sec_name in _aws_core_inv[("secretsmanager", "secret")]:
+                add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        if _wi_g.is_unified("kms"):
+            for _key_id in _aws_core_inv[("kms", "key")]:
                 add("aws", "kms", "key", _key_id, {"name": _key_id})
+    except Exception:
+        pass
+    try:   # … or, opted out, the pre-v4 Vault-backed stores
+        from core import vault_routes as _vr
+        from core import wire_ingress as _wi_g
+        if not _wi_g.is_unified("secretsmanager"):
+            for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
+                add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        if not _wi_g.is_unified("kms"):
+            for _key_id, _key in list(_vr._kms_keys.items()):
+                if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+                    add("aws", "kms", "key", _key_id, {"name": _key_id})
     except Exception:
         pass
 
     try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
         from core.apigatewayv2_core import shared_store as _apigwv2_store
-        for api_id, api in _apigwv2_store().apis.items():
+        for api_id, api in _core_records(_apigwv2_store(), space, "apis").items():
             add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
     except Exception:
         pass
 
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
-        for _n in _ssm_store().parameters:
+        for _n in _core_records(_ssm_store(), space, "parameters"):
             add("aws", "ssm", "parameter", _n, {"name": _n})
     except Exception:
         pass
 
     try:   # Step Functions — the shared wire/console store (console + SDK/CLI created state machines)
         from core.stepfunctions_core import shared_store as _sfn_store
-        for sm_name, sm in _sfn_store().machines.items():
+        for sm_name, sm in _core_records(_sfn_store(), space, "machines").items():
             add("aws", "stepfunctions", "state_machine", sm_name, {"name": sm_name, "created": sm["creationDate"]})
     except Exception:
         pass
 
     try:   # Cloud Scheduler — the shared wire/console store (console + SDK/CLI created jobs)
         from core.gcp_cloudscheduler_core import shared_store as _gcs_sched_store
-        for _jn, _job in _gcs_sched_store().jobs.items():
+        for _jn, _job in _core_records(_gcs_sched_store(), space, "jobs").items():
             add("gcp", "cloudscheduler", "job", _jn.rsplit("/", 1)[-1],
                 {"name": _jn.rsplit("/", 1)[-1], "created": _job.get("userUpdateTime", "")})
     except Exception:
@@ -2600,7 +2732,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
         from core.gcp_redis_core import shared_store as _redis_store
-        for _rn, _ri in _redis_store().instances.items():
+        for _rn, _ri in _core_records(_redis_store(), space, "instances").items():
             add("gcp", "redis", "instance", _rn.rsplit("/", 1)[-1],
                 {"name": _rn.rsplit("/", 1)[-1], "created": _ri.get("createTime", "")})
     except Exception:
@@ -2608,7 +2740,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
         from core.gcp_container_core import shared_store as _gke_store
-        for _cn, _cl in _gke_store().clusters.items():
+        for _cn, _cl in _core_records(_gke_store(), space, "clusters").items():
             add("gcp", "container", "cluster", _cn.rsplit("/", 1)[-1],
                 {"name": _cn.rsplit("/", 1)[-1], "created": _cl.get("createTime", "")})
     except Exception:
@@ -2616,7 +2748,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # IAM Credentials — the shared wire/console issue log (never the secrets)
         from core.gcp_iamcredentials_core import shared_store as _iamc_store
-        for _cid, _cr in _iamc_store().issued.items():
+        for _cid, _cr in _core_records(_iamc_store(), space, "issued").items():
             add("gcp", "iamcredentials", "credential", _cid,
                 {"name": _cid, "created": _cr.get("issueTime", "")})
     except Exception:
@@ -2624,7 +2756,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Cloud Monitoring — alert policies from the shared wire/console store
         from core.gcp_monitoring_core import shared_store as _mon_store
-        for _pn, _pol in _mon_store().alert_policies.items():
+        for _pn, _pol in _core_records(_mon_store(), space, "alert_policies").items():
             add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
                 {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
     except Exception:
@@ -2700,7 +2832,19 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(repo, dict):
             add("gcp", "artifactregistry", "repository", repo_name, repo)
 
-    gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
+    # v4 C0d: Firestore databases + VPC resources served by the shared cores live in the
+    # space's gcp_gcp_firestore_engine / gcp_gcp_compute_vpc slots.
+    try:
+        from routes import gcp_firestore_compute_unified as _gfc_inv
+        _gfc_core_inv = _gfc_inv.inventory(space)
+    except Exception:
+        _gfc_core_inv = {}
+    for (_svc, _kind), _items in _gfc_core_inv.items():
+        if _svc in ("firestore", "vpc"):
+            for _entry, _created in _items.items():
+                add("gcp", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry.rsplit("/", 1)[-1], "created": _created})
+
+    gcp_firestore = {} if ("firestore", "database") in _gfc_core_inv else _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
         if isinstance(db, dict):
             add("gcp", "firestore", "database", db_id, db)
@@ -2714,7 +2858,9 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     # service_states), so list them under the space's project.
     try:
         from core import gcp_pubsub_emulator as _ps_emu
-        if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
+        from core import wire_ingress as _wi_ps
+        # v4 C0g: unified, the core's records ARE gcp_pubsub (counted above); the emulator is not read
+        if str(space.get("provider") or "") == "gcp" and _ps_emu.available() and not _wi_ps.is_unified("gcp_pubsub"):
             from core import gcp_project as _gp
             for _pp in (_gp.ensure_identity(space)[0],):
                 for _t in _ps_emu.list_topics(_pp):
@@ -2748,7 +2894,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(gw, dict):
             add("gcp", "apigateway", "gateway", gw_id, gw)
 
-    gcp_vpc = _cloudsim_service_state(space, "gcp_vpc")
+    gcp_vpc = {} if ("vpc", "network") in _gfc_core_inv else _cloudsim_service_state(space, "gcp_vpc")
     for network_id, network in gcp_vpc.get("networks", {}).items():
         if isinstance(network, dict):
             add("gcp", "vpc", "network", network_id, network)
@@ -2764,7 +2910,12 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     gcp_iam = _cloudsim_service_state(space, "gcp_iam")
     for account_id, account in gcp_iam.get("service_accounts", {}).items():
-        if isinstance(account, dict):
+        if not isinstance(account, dict):
+            continue
+        if account and all(isinstance(v, dict) and "email" in v for v in account.values()):
+            for nested_id, nested in account.items():   # {project: {id: record}}
+                add("gcp", "iam", "service_account", nested_id, nested)
+        elif account:   # a flat record (terraform import)
             add("gcp", "iam", "service_account", account_id, account)
     for policy_id, policy in gcp_iam.get("policies", {}).items():
         if isinstance(policy, dict):
@@ -2773,9 +2924,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     # Rail extras (generic create backend): billable AWS/GCP resources that live
     # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].
     # (service, kind) pairs priced in core/cost_model.SERVICE_MONTHLY.
+    try:
+        from core import wire_ingress as _wi_eb
+        _eb_unified = _wi_eb.is_unified("events")
+    except Exception:
+        _eb_unified = False
     for provider, extras_key, scan in (
-        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"),
-                               ("eventbridge", "rules"), ("eventbridge", "event-buses"))),
+        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"))
+         + (() if _eb_unified else (("eventbridge", "rules"), ("eventbridge", "event-buses")))),
         ("gcp", "gcp_extras", (("secretmanager", "secrets"), ("kms", "keys"),
                                ("eventarc", "triggers"))),
     ):
@@ -2789,27 +2945,70 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
                 if isinstance(item, dict):
                     add(provider, svc, kind.rstrip("s"), str(item_id), item)
 
-    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (console + SDK
-    # create them in Vault with a name index, not in service_states).
+    # v4 C0e: EventBridge rules / custom buses and Scheduler schedules served by the
+    # shared cores live in the space's service_states (eventbridge / scheduler).
+    try:
+        from routes import aws_messaging_unified as _amu_inv
+        from core import wire_ingress as _wi_eb2
+        for (_svc, _kind), _items in _amu_inv.inventory(space).items():
+            if not _wi_eb2.is_unified("events" if _svc == "eventbridge" else _svc):
+                continue
+            for _entry, _created in _items.items():
+                add("aws", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry.split("|")[-1].rsplit("/", 1)[-1], "created": _created})
+    except Exception:
+        pass
+
+    # v4 C0b: GCP Secret Manager secrets / Cloud KMS keys served by the shared cores
+    # live in the space's service_states (gcp_gcp_secretmanager / gcp_gcp_kms).
+    try:
+        from routes import gcp_secrets_kms_unified as _gsk
+        for (_svc, _kind), _items in _gsk.inventory(space).items():
+            for _entry, _created in _items.items():
+                _name = _entry.rsplit("/", 1)[-1]
+                add("gcp", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (pre-v4 handlers, or
+    # opted out of the unified engine: Vault with a name index, not service_states).
     try:
         from core import vault_routes as _vr
+        from core import wire_ingress as _wi_inv
         _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
         if _sid:
             for _svc, _kind, _vkind in (("secretmanager", "secret", "secrets"), ("kms", "key", "kms")):
+                if _wi_inv.is_unified("gcp_secrets" if _vkind == "secrets" else "gcp_kms"):
+                    continue
                 for _entry, _created in _vr.gcp_vault_index(_sid, _vkind).items():
                     _name = _entry.partition("/")[2] or _entry
                     add("gcp", _svc, _kind, f"vault:{_vkind}:{_entry}", {"name": _name, "created": _created})
     except Exception:
         pass
 
-    # Vault-backed AWS Secrets Manager secrets / KMS keys (console + SDK write
-    # to Vault and _kms_keys, not to service_states["aws_extras"]).
+    # v4 C0c: AWS Secrets Manager secrets / customer managed KMS keys served by the
+    # shared cores live in the space's service_states (secretsmanager / kms).
+    try:
+        from routes import aws_secrets_kms_unified as _ask
+        from core import wire_ingress as _wi_inv
+        for (_svc, _kind), _items in _ask.inventory(space).items():
+            if not _wi_inv.is_unified(_svc):
+                continue
+            for _entry, _created in _items.items():
+                add("aws", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed AWS Secrets Manager secrets / KMS keys (pre-v4 handlers, or opted
+    # out of the unified engine: Vault + _kms_keys, not service_states).
     try:
         from core import vault_routes as _vr
+        from core import wire_ingress as _wi_inv
         _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
-        if _sid:
+        if _sid and not (_wi_inv.is_unified("secretsmanager") and _wi_inv.is_unified("kms")):
             _aws_v = _vr.aws_vault_resources(_sid)
             for _svc, _kind, _bucket in (("secretsmanager", "secret", "secrets"), ("kms", "key", "keys")):
+                if _wi_inv.is_unified(_svc):
+                    continue
                 for _name, _created in _aws_v[_bucket].items():
                     add("aws", _svc, _kind, f"vault:{_bucket}:{_name}", {"name": _name, "created": _created})
     except Exception:
@@ -3547,7 +3746,23 @@ def _lambda_default_code(function_name: str = "my-function") -> str:
     ).strip() + "\n"
 
 
+def _lambda_unified():
+    """routes/aws_lambda_unified while "lambda" is on the shared engine (v4 C0f), else None."""
+    try:
+        from core import wire_ingress as _wi_l
+        if _wi_l.is_unified("lambda"):
+            from routes import aws_lambda_unified as _lu
+            return _lu
+    except Exception:
+        pass
+    return None
+
+
 def _lambda_find_function(function_name: str) -> dict | None:
+    _lu = _lambda_unified()
+    if _lu is not None:
+        _fn = _lu._find(function_name)
+        return _lu.legacy_view(_fn) if _fn else None
     key = _lambda_function_key(function_name)
     if not key:
         return None
@@ -3581,6 +3796,9 @@ def _lambda_set_function(function: dict) -> dict:
 
 
 def _lambda_list_functions() -> list[dict]:
+    _lu = _lambda_unified()
+    if _lu is not None:
+        return [_lu.legacy_view(f) for f in _lu._fns().values()]
     functions = list(_lambda_state().setdefault("functions", {}).values())
     functions.sort(key=lambda item: (item.get("created", ""), item.get("function_name", "")))
     return functions
@@ -4080,6 +4298,10 @@ def _lambda_record_invocation(function: dict, invocation_type: str, event_payloa
 
 
 def _lambda_invoke_function(function_name: str, event_payload: Any, invocation_type: str = "RequestResponse", source: str = "", source_principal: str = "", source_arn: str = "", source_account: str = "") -> dict:
+    _lu = _lambda_unified()
+    if _lu is not None:   # v4 C0f: the shared engine + the real runtime
+        return _lu.invoke(function_name, event_payload, invocation_type=invocation_type, source=source,
+                          source_principal=source_principal, source_arn=source_arn, source_account=source_account)
     function = _lambda_find_function(function_name)
     if not function:
         raise HTTPException(404, detail="ResourceNotFoundException")
@@ -4380,6 +4602,17 @@ def _sqs_redrive_queue_name(queue: dict) -> str:
 
 
 def _sqs_enqueue_message(queue: dict, body: str, attributes: dict | None = None, message_attributes: dict | None = None, group_id: str = "", dedup_id: str = "", source: str = "") -> dict:
+    from core import wire_ingress as _wi_sqs
+    if _wi_sqs.is_unified("sqs"):
+        # v4 C0e: the queue records are the shared SQS core's (S3 notifications, SNS, …
+        # enqueue through the core so the message is receivable over every wire).
+        from core import sqs_core as _sqs_core
+        _st = _wi_sqs.appliance_router().msg
+        _st.adopt()
+        _q = _st.get_queue(queue.get("queue_name", "")) or queue
+        body = body if isinstance(body, str) else json.dumps(body, default=str)
+        return _sqs_core.enqueue(_st, _q, body, message_attributes or None,
+                                 message_group_id=group_id or None, message_dedup_id=dedup_id or None)
     queue = _sqs_normalize_queue(queue)
     _sqs_sweep_queue(queue)
     body = body if isinstance(body, str) else json.dumps(body, default=str)
@@ -4465,6 +4698,10 @@ def _sqs_queue_from_name_or_url(name_or_url: str) -> dict | None:
     if ":queue/" in name_or_url:
         candidate = name_or_url.rsplit(":", 1)[-1]
         return _sqs_find_queue(candidate)
+    if name_or_url.startswith("arn:aws:sqs:"):
+        # the real queue ARN form (arn:aws:sqs:<region>:<account>:<name>) — what S3
+        # notifications / SNS subscriptions carry; pre-v4 only resolved ":queue/<name>"
+        return _sqs_find_queue(name_or_url.rsplit(":", 1)[-1])
     return _sqs_find_queue(name_or_url)
 
 
@@ -5010,6 +5247,40 @@ def _active_tier() -> str:
     return stored
 
 
+def _k8s_tier_provider():
+    """Active (tier, primary_cloud) for the managed-Kubernetes gate (core/k8s_tier_gate.py), or None when
+    tier enforcement is off (CLOUDLEARN_TIER_ENFORCE=0 -- the same dev/test escape hatch as every tier limit)."""
+    if os.environ.get("CLOUDLEARN_TIER_ENFORCE", "1").strip() in ("0", "false", ""):
+        return None
+    try:
+        primary = str((_tenant_dict(_active_tenant_id()) or {}).get("primary_cloud") or "")
+    except Exception:
+        primary = ""
+    tier = _active_tier()
+    try:
+        from core import mesh_session as _bs
+        if _bs.role_is_mesh() and (_bs.effective_tier() or tier) == "pro":
+            # Headless mesh: the signed session token is the tier source, and SessionMiddleware already refuses every cloud but the
+            # Pro session's one (token primary_cloud, or the first cloud used). The tenant here has no primary_cloud, so do not
+            # let the gate's "primary cloud unset" rule lock a legitimate Pro mesh out of its own cloud's Kubernetes.
+            return ("max", "")
+        if _bs.role_is_mesh() and _bs.effective_tier():
+            tier = _bs.effective_tier()
+    except Exception:
+        pass
+    return (tier, primary)
+
+
+from core import k8s_tier_gate as _k8s_tier_gate  # noqa: E402
+_k8s_tier_gate.set_provider(_k8s_tier_provider)
+
+try:    # real k3s behind AKS/GKE clusters (offline appliance / mesh only; no-op unless VYOMI_K8S_BACKEND=k3s)
+    from core import k3s_runtime as _k3s_runtime
+    _k3s_runtime.install_if_enabled()
+except Exception as _k3s_err:   # a missing docker CLI must never stop the appliance from booting
+    print("[k8s] k3s backend not installed:", _k3s_err)
+
+
 # Ordered level vocabulary for non-boolean feature flags. Each entry maps a
 # feature name to the policy's level values in ascending order (so `basic` is
 # weakest, `full_plus_import` strongest). Used by `_enforce_tier_feature(...,
@@ -5319,7 +5590,7 @@ def _ec2_instance_xml(instance: dict) -> ET.Element:
     _ec2_sub(placement, "groupName", "")
     _ec2_sub(placement, "tenancy", "default")
     monitoring = _ec2_sub(item, "monitoring")
-    _ec2_sub(monitoring, "state", "disabled")
+    _ec2_sub(monitoring, "state", "enabled" if instance.get("monitoring") else "disabled")
     _ec2_sub(item, "subnetId", instance.get("subnet_id", ""))
     _ec2_sub(item, "vpcId", instance.get("vpc_id", ""))
     _ec2_sub(item, "privateIpAddress", instance.get("private_ip", ""))
@@ -7593,7 +7864,7 @@ def _reboot_lxd_instance(instance: dict) -> dict:
     ref = instance.get("container_id") or instance.get("container_name")
     if not ref:
         raise HTTPException(409, detail="InstanceContainerMissing")
-    if not _await_reboot_ready(instance, lambda: _lxd_status(ref) == "running"):
+    if _lxd_status(ref) != "running":
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     _lxd_run_checked(["restart", ref], timeout=180)
@@ -7643,6 +7914,27 @@ def _docker_compute():
 
 def _docker_available() -> bool:
     return _runtime_available("docker")
+
+
+# ── netsim: enforced VPC networking for Docker-backed instances (core/netsim) ──
+# OFF unless VYOMI_NETSIM_ENFORCE=1|auto (see core/netsim/README.md). Every call is
+# best-effort and swallowed: networking enforcement must never break a launch.
+def _netsim_kick(reason: str) -> None:
+    try:
+        from core.netsim import wiring as _nsw
+        _nsw.schedule_apply(reason)
+    except Exception:
+        pass
+
+
+def _netsim_attach(instance: dict) -> dict | None:
+    if str(instance.get("state") or "") in ("terminated", "shutting-down"):
+        return None
+    try:
+        from core.netsim import wiring as _nsw
+        return _nsw.docker_attach(instance)
+    except Exception:
+        return None
 
 
 # ── instance SSH reachability (port-publish + routable-IP) ────────────────────
@@ -7802,6 +8094,15 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     info = _docker_compute().ssh_info(inst)
     user = info.get("user") or "ubuntu"
     key_path = _docker_ssh_key_path()
+    # Self-heal: containers launched before the shared key existed/rotated only carry the key baked at their
+    # creation (VYOMI_SSH_PUBKEY env), so `ssh -i <shared key>` failed publickey. Idempotently re-authorize the
+    # current shared pubkey in the running guest whenever Connect info is requested.
+    try:
+        if inst.ssh_pubkey and str(instance.get("state") or "") == "running":
+            from core import ssh_access_core as _sa_heal
+            _docker_compute().exec(inst, ["sh", "-c", _sa_heal.authorize_command(user, inst.ssh_pubkey)])
+    except Exception:
+        pass
     container_ip = info.get("container_ip") or instance.get("private_ip") or ""
     published_port = info.get("published_port") or instance.get("ssh_host_port")
     opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -7877,7 +8178,7 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     key_url = {
         "aws":   f"/api/aws/ec2/instances/{iid}/private-key.pem",
         "gcp":   f"/api/gcp/compute/instances/{iid}/private-key.pem",
-        "azure": f"/api/azure/vm/{instance.get('name') or iid}/private-key.pem",
+        "azure": f"/api/azure/vm/{iid}/private-key.pem",
     }.get(provider) or f"/api/{provider}/instances/{iid}/private-key.pem"
 
     return {
@@ -7953,6 +8254,117 @@ def _docker_private_key_pem(instance: dict) -> bytes | None:
         return None
 
 
+def _mesh_cloud_of(instance: dict) -> str:
+    c = str(instance.get("cloud") or instance.get("provider") or "").lower()
+    if c.startswith("gcp") or c.startswith("google"):
+        return "gcp"
+    if c.startswith("az"):
+        return "azure"
+    if c.startswith("aws"):
+        return "aws"
+    iid = str(instance.get("instance_id") or "")
+    if iid.startswith("gce") or instance.get("machine_type") or instance.get("machineType"):
+        return "gcp"
+    if iid.startswith("az-"):
+        return "azure"
+    return "aws"
+
+
+def _catalog_memory_mb(instance_type: str, cloud: str) -> int:
+    """The instance TYPE's real memory (catalog ram_mb), 0 if unknown."""
+    try:
+        from core import runtime_sizer as _sizer
+        shape = _sizer.shape_for_instance(str(instance_type or ""), cloud)
+        return int((shape or {}).get("ram_mb") or 0)
+    except Exception:
+        return 0
+
+
+def _docker_instance_memory_mb(instance: dict) -> int:
+    """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the mesh cap).
+    Explicit memory wins; in mesh mode the instance TYPE's real memory (catalog) is used and counted, else 1024."""
+    try:
+        explicit = int(instance.get("memory_mb") or instance.get("memory") or 0)
+    except (TypeError, ValueError):
+        explicit = 0
+    if explicit > 0:
+        return explicit
+    try:
+        from core import mesh as _b
+        if _b.mesh_mode():
+            itype = (instance.get("instance_type") or instance.get("machine_type") or instance.get("machineType")
+                     or instance.get("vm_size") or "")
+            cat = _catalog_memory_mb(itype, _mesh_cloud_of(instance))
+            if cat > 0:
+                return cat
+    except Exception:
+        pass
+    return 1024
+
+
+def _mesh_capacity_precheck(cloud: str, instance_type: str = "", count: int = 1, zone: str = "-") -> None:
+    """Mesh admission (named precheck for history): ATOMICALLY RESERVES `count` slots sized by the instance type's
+    real memory, or raises core.mesh.MeshCapacityError before any record exists. The slots are bound to the real
+    instance ids by _mesh_claim() in the create core (same request context) and expire after a short TTL if the
+    create never completes. No-op outside mesh mode."""
+    from core import mesh as _mesh
+    mem = _docker_instance_memory_mb({"instance_type": instance_type, "cloud": cloud})
+    slots = _mesh.reserve_slots("compute", max(1, int(count or 1)), mem, cloud=cloud, zone=zone)
+    if slots:
+        lst = _mesh.REQUEST_SLOTS.get()
+        if lst is None:                    # not under the ASGI request scope (direct call): TTL expiry cleans up
+            lst = []
+            _mesh.REQUEST_SLOTS.set(lst)
+        lst.extend(slots)
+
+
+def _mesh_claim(instance: dict, cloud: str = "", zone: str = "-") -> None:
+    """Create-core hook: bind the request's admission slot (or, on paths with no pre-check - REST, console - make a fresh
+    atomic reservation) to this instance id. Raises HTTPException with the cloud's native capacity error."""
+    from core import mesh as _mesh
+    if not _mesh.mesh_mode():
+        return
+    cloud = cloud or _mesh_cloud_of(instance)
+    mem = _docker_instance_memory_mb(instance)
+    slots = _mesh.REQUEST_SLOTS.get()
+    try:
+        if slots:
+            _mesh.rebind("compute", slots.pop(0), str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
+        else:
+            _mesh.allocate("compute", str(instance["instance_id"]), mem, cloud=cloud, zone=zone)
+    except Exception as exc:
+        if exc.__class__.__name__ == "MeshCapacityError":
+            raise HTTPException(status_code=exc.status, detail=f"{exc.code}: {exc.message}")
+        raise
+
+
+def _mesh_resize_azure_vm(record: dict, vm_size: str) -> None:
+    """Mesh: an Azure VM size change re-reserves under the new memory (atomic); raises MeshCapacityError.
+    A VM currently holding a reservation is resized in place; one that isn't running only gets a fit check."""
+    from core import mesh as _mesh
+    if not _mesh.mesh_mode():
+        return
+    props = record.get("properties") if isinstance(record.get("properties"), dict) else {}
+    rt = props.get("runtime") if isinstance(props.get("runtime"), dict) else {}
+    iid = str(rt.get("instanceId") or "")
+    mem = _docker_instance_memory_mb({"instance_type": vm_size, "cloud": "azure"})
+    zone = str(record.get("location") or "-")
+    with _mesh._LEDGER_LOCK:
+        held = iid in _mesh._LEDGER["compute"]
+    if iid and held:
+        _mesh.allocate("compute", iid, mem, cloud="azure", zone=zone)
+    else:
+        _mesh.can_allocate("compute", mem, cloud="azure", zone=zone)
+
+
+def _mesh_gcp_error_body(exc) -> dict:
+    return {"error": {"code": exc.status, "message": exc.message,
+                      "errors": [{"message": exc.message, "domain": "global", "reason": "zoneResourcePoolExhausted"}],
+                      "status": "UNAVAILABLE",
+                      "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                                   "reason": exc.code, "domain": "compute.googleapis.com"}]}}
+
+
 def _docker_instance_obj(instance: dict):
     """Build a core.compute.Instance from the server instance dict."""
     from core.compute import Instance, ensure_instance_ssh_key
@@ -7960,8 +8372,10 @@ def _docker_instance_obj(instance: dict):
         pubkey, _ = ensure_instance_ssh_key()
     except Exception:
         pubkey = None
+    from core.compute.backend import mesh_toolchain_image
     image = (
-        str(instance.get("docker_image") or "").strip()
+        mesh_toolchain_image(instance)   # mesh role + toolchain=all only; None otherwise
+        or str(instance.get("docker_image") or "").strip()
         or os.environ.get("VYOMI_INSTANCE_IMAGE")
         or "vyomi/instance:ubuntu-24.04"
     )
@@ -7969,15 +8383,15 @@ def _docker_instance_obj(instance: dict):
         cpus = float(instance.get("vcpus") or instance.get("cpus") or 1) or 1.0
     except (TypeError, ValueError):
         cpus = 1.0
-    try:
-        mem = int(instance.get("memory_mb") or instance.get("memory") or 1024) or 1024
-    except (TypeError, ValueError):
-        mem = 1024
+    mem = _docker_instance_memory_mb(instance)
     _ssh_port = instance.get("ssh_host_port")
     try:
         _ssh_port = int(_ssh_port) if str(_ssh_port or "").strip().isdigit() else None
     except (TypeError, ValueError):
         _ssh_port = None
+    _ns = _netsim_attach(instance)   # enforced VPC: the subnet's own bridge + the model IP
+    if _ns:
+        instance["netsim_network"], instance["netsim_interface"] = _ns["network"], _ns["interface"]
     return Instance(
         instance_id=str(instance["instance_id"]),
         image=image,
@@ -7986,7 +8400,8 @@ def _docker_instance_obj(instance: dict):
         ssh_pubkey=pubkey,
         # routable-IP: attach to the VPC bridge (Linux) so the container gets a
         # host-routable IP; else honour an explicit operator network.
-        network=(_ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        network=((_ns or {}).get("network") or _ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        ip_address=(_ns or {}).get("ip"),
         # port-publish: map this host port -> container :22 (set at first start).
         ssh_port=(_ssh_port if _port_publish_enabled() else None),
     )
@@ -8039,11 +8454,24 @@ def _start_docker_instance(instance: dict) -> dict:
     if _port_publish_enabled() and not str(instance.get("ssh_host_port") or "").strip().isdigit():
         instance["ssh_host_port"] = _allocate_host_port()
     inst = _docker_instance_obj(instance)
+    # Mesh: instances count against the 70% host cap (compute share). Over it, the cloud's REAL capacity error
+    # (InsufficientInstanceCapacity / ZONE_RESOURCE_POOL_EXHAUSTED / AllocationFailed). No-op outside mesh mode.
+    try:
+        _mesh_claim(instance, _mesh_cloud_of(instance), str(instance.get("zone") or instance.get("availability_zone") or "-"))
+    except HTTPException:
+        raise
+    except Exception:
+        pass
     # create() is idempotent: reuses an existing container/volume, else
     # `docker run`s it (and (re)starts a stopped one).
     try:
         _docker_compute().create(inst)
     except Exception as exc:
+        try:    # failed launch holds no RAM
+            from core import mesh as _mesh
+            _mesh.release("compute", str(instance.get("instance_id")))
+        except Exception:
+            pass
         raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
     instance["container_name"] = inst.container_name
     instance["container_id"] = inst.container_name
@@ -8058,6 +8486,7 @@ def _start_docker_instance(instance: dict) -> dict:
         instance["private_ip"] = ip
         instance["runtime_internal_ip"] = ip
     _update_docker_ssh_metadata(instance)
+    _netsim_kick(f"start {instance.get('instance_id')}")
     return instance
 
 
@@ -8068,6 +8497,11 @@ def _stop_docker_instance(instance: dict) -> dict:
         _docker_compute().stop(_docker_instance_obj(instance))
     except Exception as exc:
         raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
+    try:   # a stopped instance holds no RAM: give its share of the mesh cap back
+        from core import mesh as _mesh
+        _mesh.release("compute", str(instance.get("instance_id")))
+    except Exception:
+        pass
     instance["state"] = "stopped"
     instance["stopped_at"] = _now()
     instance["container_status"] = "exited"
@@ -8079,7 +8513,7 @@ def _reboot_docker_instance(instance: dict) -> dict:
     if not _docker_available():
         raise HTTPException(status_code=503, detail="DockerUnavailable")
     inst = _docker_instance_obj(instance)
-    if not _await_reboot_ready(instance, lambda: _docker_compute().status(inst) == "running"):
+    if _docker_compute().status(inst) != "running":
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     try:
@@ -8095,6 +8529,11 @@ def _reboot_docker_instance(instance: dict) -> dict:
 
 def _terminate_docker_instance(instance: dict) -> dict:
     try:
+        from core import mesh as _mesh
+        _mesh.release("compute", str(instance.get("instance_id")))
+    except Exception:
+        pass
+    try:
         _docker_compute().terminate(_docker_instance_obj(instance))
     except Exception:
         pass
@@ -8103,6 +8542,7 @@ def _terminate_docker_instance(instance: dict) -> dict:
     instance["container_status"] = "removed"
     instance["pid"] = None
     _post_terminate_cleanup(instance)
+    _netsim_kick(f"terminate {instance.get('instance_id')}")
     return instance
 
 
@@ -8417,7 +8857,7 @@ def _reboot_multipass_instance(instance: dict) -> dict:
     ref = instance.get("container_id") or instance.get("container_name")
     if not ref:
         raise HTTPException(409, detail="InstanceContainerMissing")
-    if not _await_reboot_ready(instance, lambda: _multipass_status(ref) == "running"):
+    if _multipass_status(ref) != "running":
         raise HTTPException(409, detail="InstanceNotRunning")
     instance["state"] = "rebooting"
     _multipass_run_checked(["restart", ref], timeout=180)
@@ -11812,6 +12252,69 @@ def _restore_license_from_backup() -> bool:
         return False
 
 
+@app.on_event("shutdown")
+def _flush_state_at_shutdown():
+    """Write any coalesced (debounced) state save that hasn't run yet."""
+    try:
+        from core.middleware import flush_pending_state
+        flush_pending_state()
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+def _install_k3s_backend():
+    """VYOMI_K8S_BACKEND=k3s -> real Kubernetes (k3s containers) behind AKS/GKE/EKS clusters: wires core/k3s_runtime into the cores and starts the
+    LoadBalancer controller. Never fatal: without Docker the clusters keep the simulated control plane."""
+    import logging
+    try:
+        from core import k3s_runtime as _k3s
+        rt = _k3s.install_if_enabled()
+        if rt is not None and not rt.available():
+            logging.getLogger("vyomi.k3s").warning("VYOMI_K8S_BACKEND=k3s but the docker daemon is not reachable; clusters will fail to provision")
+    except Exception:
+        logging.getLogger("vyomi.k3s").exception("k3s backend install failed")
+
+
+# Cluster workload-identity issuer (core/k3s_identity.py): each k3s API server signs service-account tokens with
+# iss=<base>/oidc/<cloud>/<cluster hash>; discovery + JWKS (the cluster's real public keys) are served here, cloud-neutral.
+@app.get("/oidc/{cloud}/{chash}/.well-known/openid-configuration")
+def _oidc_discovery(cloud: str, chash: str):
+    from core import k3s_runtime as _k3s
+    try:
+        return JSONResponse(_k3s.runtime().oidc_discovery(cloud, chash))
+    except Exception as e:
+        return JSONResponse({"error": "unknown_cluster", "message": str(e)[:200]}, status_code=404)
+
+
+@app.get("/oidc/{cloud}/{chash}/keys")
+def _oidc_keys(cloud: str, chash: str):
+    from core import k3s_runtime as _k3s
+    try:
+        return JSONResponse(_k3s.runtime().oidc_jwks(cloud, chash))
+    except Exception as e:
+        return JSONResponse({"error": "unknown_cluster", "message": str(e)[:200]}, status_code=404)
+
+
+@app.on_event("startup")
+def _schedule_seam_loop():
+    """Shared schedule runner (core/schedule_core): AWS Backup plans, Azure Backup policies, DLM, Cloud SQL backup windows and
+    ECR lifecycle run on their schedules in a daemon thread. Opt out with VYOMI_NO_SCHEDULER=1."""
+    if os.environ.get("VYOMI_NO_SCHEDULER") == "1":
+        return
+
+    def _loop():
+        import time as _t
+        from core import schedule_core as _sc, wire_ingress as _wi
+        while True:
+            _t.sleep(30)
+            try:
+                _sc.tick(_wi.appliance_router())
+            except Exception:
+                pass
+    threading.Thread(target=_loop, name="schedule-seam", daemon=True).start()
+
+
 @app.on_event("startup")
 def _restore_license_at_boot():
     """v2.0.6: re-apply the cached JWT from /data/license-backup.jwt if
@@ -11909,6 +12412,70 @@ def _warm_backends_in_background():
         except Exception:
             pass
     _threading.Thread(target=_run, daemon=True, name="cloudlearn-backend-warmup").start()
+
+
+# ── EC2 instance / EBS volume CloudWatch metrics (AWS-05): real counters read from the instance's Docker container ──
+_EC2_METRICS_PREV: dict[str, dict] = {}
+
+
+def _ec2_collect_metrics_once(now: float | None = None, force: bool = False) -> list[str]:
+    """One sampling pass: for every running Docker-backed EC2 instance read the container's cumulative /proc/net/dev + cgroup cpu/io
+    counters (`docker exec`) and publish the interval deltas to CloudWatch (AWS/EC2 + the root volume's AWS/EBS series) through
+    core/ec2_metrics_core. Basic monitoring samples every 5 minutes, detailed monitoring every minute. Returns instance ids sampled."""
+    import time as _time
+    from core import ec2_metrics_core as _em
+    now = now if now is not None else _time.time()
+    sampled: list[str] = []
+    for iid in _ec2_instance_ids():
+        inst = ec2_state.get("instances", {}).get(iid)
+        if not isinstance(inst, dict) or str(inst.get("state") or "") != "running" or not _docker_backed(inst):
+            continue
+        prev = _EC2_METRICS_PREV.setdefault(iid, {})
+        period = 60.0 if (inst.get("monitoring") or inst.get("detailed_monitoring")) else 300.0
+        if not force and prev.get("ts") is not None and now - prev["ts"] < period - 1:
+            continue
+        try:
+            cp = _docker_compute().exec(_docker_instance_obj(inst), _em.READ_COUNTERS_CMD)
+            counters = _em.parse_counters((cp.stdout or b"").decode("utf-8", "replace"))
+            if counters is None:
+                continue
+            try:
+                vcpus = int(float(inst.get("vcpus") or inst.get("cpus") or 1)) or 1
+            except (TypeError, ValueError):
+                vcpus = 1
+            _em.publish(aws_cloudwatch.get_store(), iid, counters, prev, now, vcpus=vcpus, volume_id=f"vol-{iid.replace('i-', '')}")
+            sampled.append(iid)
+        except Exception:
+            continue
+    for gone in [k for k in _EC2_METRICS_PREV if k not in ec2_state.get("instances", {})]:
+        _EC2_METRICS_PREV.pop(gone, None)
+    return sampled
+
+
+@app.on_event("startup")
+def _start_ec2_metrics_sampler():
+    """Daemon loop that feeds CloudWatch with the EC2 instance / EBS volume metrics every 30s (each instance honours its own 1/5 min period)."""
+    import os as _os
+    import threading as _threading
+    import time as _time
+    if _os.environ.get("VYOMI_EC2_METRICS", "").strip().lower() in ("off", "0", "false", "disabled"):
+        return
+
+    def _loop():
+        while True:
+            _time.sleep(30)
+            try:
+                if _docker_available():
+                    _ec2_collect_metrics_once()
+            except Exception:
+                pass
+    _threading.Thread(target=_loop, daemon=True, name="vyomi-ec2-metrics").start()
+
+
+@app.post("/api/aws/ec2/metrics/collect", include_in_schema=False)
+def api_ec2_metrics_collect():
+    """Force one sampling pass now (console Refresh / tests); returns the instances sampled."""
+    return {"sampled": _ec2_collect_metrics_once(force=True)}
 
 
 @app.on_event("startup")
@@ -12466,12 +13033,15 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     _disk_preflight(getattr(req, "storage_gb", None))
     instance_id = _id("i")
     pack = _activate_pack("cloudlearn.ec2.basic")
-    if req.vpc_id and req.vpc_id not in vpc_state["vpcs"]:
+    # VPC objects live in two stores offline: the pre-v4 vpc_state (REST console) and the
+    # shared EC2/VPC core slot (the EC2 Query API / v4 console) — accept either.
+    _core_m = _Ec2CoreSpaceStore()._vpc_model or {}
+    if req.vpc_id and req.vpc_id not in vpc_state["vpcs"] and req.vpc_id not in _core_m.get("vpcs", {}):
         raise HTTPException(404, detail="NoSuchVpc")
-    if req.subnet_id and req.subnet_id not in vpc_state["subnets"]:
+    if req.subnet_id and req.subnet_id not in vpc_state["subnets"] and req.subnet_id not in _core_m.get("subnets", {}):
         raise HTTPException(404, detail="NoSuchSubnet")
     for sg in req.security_group_ids:
-        if sg not in vpc_state["security_groups"]:
+        if sg not in vpc_state["security_groups"] and sg not in _core_m.get("sgs", {}):
             raise HTTPException(404, detail=f"NoSuchSecurityGroup:{sg}")
     profile = _ami_profile(req.ami)
     requested_backend = (req.runtime_backend or "").strip().lower()
@@ -12554,11 +13124,26 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         # Real EC2 auto-assigns a public IPv4 to launches into the default VPC/subnet.
         instance["public_ip"] = _public_ip()
         instance["public_dns"] = _ec2_public_dns_name(instance)
+    if req.subnet_id and req.subnet_id in _core_m.get("subnets", {}):
+        # a core-VPC subnet: the address comes from the subnet's CIDR like EC2 (.4+, reserved and
+        # in-use excluded — including the other offline instances in that subnet)
+        try:
+            from core import vpc_core as _vpc_core
+            _taken = {i.get("private_ip") for i in ec2_state["instances"].values()
+                      if isinstance(i, dict) and i.get("subnet_id") == req.subnet_id and i.get("state") != "terminated"}
+            _probe = {**_core_m, "instances": {**_core_m.get("instances", {}),
+                                               **{f"x{n}": {"subnet_id": req.subnet_id, "private_ip": ip, "state": "running"}
+                                                  for n, ip in enumerate(_taken)}}}
+            instance["private_ip"] = _vpc_core._allocate_private_ip(_probe, req.subnet_id)
+        except Exception:
+            pass
+    _mesh_claim(instance, "aws", str(instance.get("availability_zone") or instance.get("zone") or "-"))
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
         _queue_runtime_start(instance_id)
     _record_usage("ec2.create_instance", instance)
+    _netsim_kick(f"ec2 launch {instance_id}")
     return instance
 
 
@@ -12634,6 +13219,47 @@ def _stop_runtime_process(instance: dict) -> None:
         _stop_lxd_instance(instance)
         return
     raise HTTPException(status_code=503, detail="RuntimeUnavailable")
+
+
+def _ec2_terminate_runtime(instance: dict) -> None:
+    backend = str(instance.get("runtime_backend") or "").strip().lower()
+    if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
+        _terminate_simulated_instance(instance)
+    elif backend == "docker":
+        _terminate_docker_instance(instance)
+    elif backend == "multipass":
+        _terminate_multipass_instance(instance)
+    elif backend == "lxd":
+        _terminate_lxd_instance(instance)
+    else:
+        _terminate_simulated_instance(instance)
+
+
+def ec2_runtime_alarm_action(instance_id: str, action: str) -> bool | None:
+    """A CloudWatch EC2 alarm action (aws.cloudwatch.alarms.actions.ec2) on an instance the offline
+    EC2 runtime owns (ec2_state — RunInstances / the launch wizard): the SAME stop / terminate /
+    reboot path StopInstances / TerminateInstances / RebootInstances take. None when the instance
+    isn't a runtime instance (core/vpc_core's own model then handles it)."""
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        return None
+    try:
+        if action == "stop":
+            if instance.get("disable_api_stop"):
+                return False
+            _stop_runtime_process(instance)
+        elif action == "terminate":
+            if instance.get("disable_api_termination"):
+                return False
+            _ec2_terminate_runtime(instance)
+        elif action == "reboot":
+            _reboot_runtime_process(instance)
+        else:
+            return False
+    except HTTPException:
+        return False
+    _persist_state()
+    return True
 
 
 def _await_reboot_ready(instance: dict, is_running, timeout: float = 45.0) -> bool:
@@ -13093,8 +13719,33 @@ def _ec2_query_cancel_capacity_reservation_fleets(params: dict[str, Any]) -> Res
     return _ec2_success_response("CancelCapacityReservationFleetsResponse", build)
 
 
+_EC2_STATUS_METRICS = ("StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System")
+
+
+def _ec2_push_status_metric(instance: dict) -> None:
+    """Real CloudWatch datapoints derived from the instance's own lifecycle state (see
+    ec2.instances.monitoring / ec2.instances.alarms-metrics capabilities): a running instance
+    always passes, so each point is 0. 'Detailed monitoring' only changes how often a poll is
+    allowed to record a fresh point (1 vs 5 minutes, AWS's basic/detailed granularity) — there's
+    no background ticker, so a point lands only when DescribeInstanceStatus is actually called."""
+    if instance.get("state") != "running":
+        return
+    period = 60.0 if instance.get("monitoring") else 300.0
+    now = time.time()
+    if now - (instance.get("_cw_metric_ts") or 0.0) < period:
+        return
+    instance["_cw_metric_ts"] = now
+    from core import cloudwatch_core as _cw
+    store = aws_cloudwatch.get_store()
+    dims = [{"Name": "InstanceId", "Value": instance["instance_id"]}]
+    for name in _EC2_STATUS_METRICS:
+        _cw.ingest_internal_metric(store, "AWS/EC2", name, dims, 0.0, unit="Count", ts=now)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
+    for instance in instances:
+        _ec2_push_status_metric(instance)
 
     def build(root: ET.Element) -> None:
         status_set = _ec2_sub(root, "instanceStatusSet")
@@ -13262,6 +13913,27 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     count = max(min_count, max_count)
     image_id = str(params.get("ImageId", "ami-amzn2023"))
     instance_type = str(params.get("InstanceType", "t3.micro"))
+    # Capacity Reservation / Capacity Block targeting (core/ec2_ultraservers_core.admit_launch): the launch really consumes the
+    # reservation, counted against the Docker-backed instances already launched into it; refused with AWS's native errors.
+    _cr_target = str(params.get("CapacityReservationSpecification.CapacityReservationTarget.CapacityReservationId") or "")
+    if _cr_target:
+        from core import ec2_ultraservers_core as _cb
+        _core_model = _Ec2CoreSpaceStore()._vpc_model
+        if _core_model is None:
+            return _ec2_error_response("InvalidCapacityReservationId.NotFound", f"The capacity reservation ID '{_cr_target}' does not exist", 400)
+        _used = sum(1 for _i in ec2_state["instances"].values()
+                    if _i.get("capacity_reservation_id") == _cr_target and _i.get("state") in ("pending", "running"))
+        try:
+            _cb.admit_launch(_core_model, _cr_target, instance_type,
+                             str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "")) or ""), count, _used)
+        except _cb._Err as _cexc:
+            return _ec2_error_response(_cexc.code, _cexc.message, _cexc.status)
+    try:   # mesh: the real EC2 capacity error, synchronously, before any record exists
+        _mesh_capacity_precheck("aws", instance_type, count, str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "-"))))
+    except Exception as _bexc:
+        if _bexc.__class__.__name__ != "MeshCapacityError":
+            raise
+        return _ec2_error_response(_bexc.code, _bexc.message, _bexc.status)
     key_name = str(params.get("KeyName", ""))
     subnet_id = str(params.get("SubnetId", params.get("Placement.SubnetId", "")))
     az = str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "us-east-1a")))
@@ -13293,6 +13965,12 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         # consistent with the GCP query path, which already queues the start.
         # The start is async (non-blocking), so the SDK response isn't delayed.
         instance = api_ec2_create_instance(req, auto_start=True)
+        instance["monitoring"] = str(params.get("Monitoring.Enabled", "")).lower() == "true"
+        if _cr_target:
+            instance["capacity_reservation_id"] = _cr_target
+            _live = ec2_state["instances"].get(instance.get("instance_id"))
+            if isinstance(_live, dict):
+                _live["capacity_reservation_id"] = _cr_target
         launched.append(instance)
 
     def build(root: ET.Element) -> None:
@@ -13854,6 +14532,7 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         "console_prompt": _cmd_prompt({"runtime_backend": runtime_backend, "container_name": f"cloudlearn-{instance_id}", "container_id": ""}),
         "network_interfaces": network_interfaces_payload,
     }
+    _mesh_claim(instance, "gcp", f"projects/{project}/zones/{zone}")
     return instance
 
 
@@ -14033,6 +14712,62 @@ def _ec2_query_state_change_response(root_name: str, changes: list[tuple[dict, s
     return _ec2_success_response(root_name, build)
 
 
+_EC2_CORE_INSTANCE_ACTIONS = ("DescribeInstances", "DescribeInstanceStatus", "StartInstances", "StopInstances",
+                              "RebootInstances", "TerminateInstances", "MonitorInstances", "UnmonitorInstances")
+
+
+def _ec2_core_dispatch(params: dict) -> Response:
+    """One EC2 Query action on the shared EC2/VPC core (core/vpc_core.py) over the space slot."""
+    from core import vpc_core as _vpc_core
+    action = str(params.get("Action", "")).strip()
+    vpc_store = _Ec2CoreSpaceStore()
+    vpc_store.cw_store = aws_cloudwatch.get_store()
+    vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]
+    r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+        _persist_state()
+    return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
+
+
+def _ec2_core_instance_bridge(action: str, params: dict) -> Response | None:
+    """Instances the shared EC2 core launched (Auto Scaling groups — core/autoscaling_core via
+    core/vpc_core.launch_for_autoscaling) live in the vpc_core model, not in this handler's
+    runtime-backed ec2_state. Requests naming ONLY such instances go to the core; an unfiltered
+    DescribeInstances lists both, so a scaled group's instances show in the EC2 console."""
+    if action not in _EC2_CORE_INSTANCE_ACTIONS:
+        return None
+    try:
+        model = _Ec2CoreSpaceStore()._vpc_model or {}
+    except Exception:
+        return None
+    core_instances = model.get("instances") or {}
+    if not core_instances:
+        return None
+    ids = _ec2_parse_instance_ids(params)
+    if ids:
+        if all(i in core_instances and i not in ec2_state["instances"] for i in ids):
+            return _ec2_core_dispatch(params)
+        return None
+    if action != "DescribeInstances":
+        return None
+    legacy = _ec2_query_describe_instances(params)
+    core = _ec2_core_dispatch(params)
+    try:
+        lb = legacy.body.decode("utf-8")
+        cb = core.body.decode("utf-8") if isinstance(core.body, (bytes, bytearray)) else str(core.body)
+        m = re.search(r"<reservationSet>(.*)</reservationSet>", cb, re.S)
+        items = m.group(1).strip() if m else ""
+        if not items:
+            return legacy
+        if "<reservationSet />" in lb or "<reservationSet/>" in lb:
+            lb = re.sub(r"<reservationSet\s*/>", f"<reservationSet>{items}</reservationSet>", lb, count=1)
+        else:
+            lb = lb.replace("</reservationSet>", items + "</reservationSet>", 1)
+        return Response(content=lb, status_code=legacy.status_code, media_type=legacy.media_type)
+    except Exception:
+        return legacy
+
+
 async def api_ec2_query(request: Request):
     params = await _ec2_query_params(request)
     action = str(params.get("Action", "")).strip()
@@ -14044,6 +14779,10 @@ async def api_ec2_query(request: Request):
 
     if str(params.get("DryRun", "")).lower() == "true":
         return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
+
+    bridged = _ec2_core_instance_bridge(action, params)
+    if bridged is not None:
+        return bridged
 
     try:
         if action == "DescribeInstances":
@@ -14065,12 +14804,16 @@ async def api_ec2_query(request: Request):
         if action == "DescribeInstanceTypes":
             return _ec2_query_describe_instance_types(params)
         if action == "DescribeSecurityGroups":
+            if _vpc_engine_is_core():
+                return api_vpc_core_query(params)
             return _ec2_query_describe_security_groups(params)
         if action == "DescribeVolumes":
             return _ec2_query_describe_volumes(params)
         if action == "DescribeRegions":
             return _ec2_query_describe_regions(params)
         if action == "DescribeAvailabilityZones":
+            if _vpc_engine_is_core():   # zones + Local/Wavelength Zone opt-in groups live in core/ec2_ops_core (same as Nano)
+                return api_vpc_core_query(params)
             return _ec2_query_describe_availability_zones(params)
         if action == "RunInstances":
             return _ec2_query_run_instances(params)
@@ -14116,25 +14859,146 @@ async def api_ec2_query(request: Request):
                 if not instance:
                     raise HTTPException(404, detail=f"InvalidInstanceID.NotFound: {instance_id}")
                 previous = instance.get("state", "running")
-                backend = str(instance.get("runtime_backend") or "").strip().lower()
-                if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
-                    _terminate_simulated_instance(instance)
-                elif backend == "docker":
-                    _terminate_docker_instance(instance)
-                elif backend == "multipass":
-                    _terminate_multipass_instance(instance)
-                elif backend == "lxd":
-                    _terminate_lxd_instance(instance)
-                else:
-                    _terminate_simulated_instance(instance)
+                _ec2_terminate_runtime(instance)
                 changes.append((instance, previous, "shutting-down"))
             return _ec2_query_state_change_response("TerminateInstancesResponse", changes)
+        if action in ("MonitorInstances", "UnmonitorInstances"):
+            enabled = action == "MonitorInstances"
+            touched: list[dict] = []
+            for instance_id in _ec2_parse_instance_ids(params):
+                instance = ec2_state["instances"].get(instance_id)
+                if not instance:
+                    raise HTTPException(404, detail=f"InvalidInstanceID.NotFound: {instance_id}")
+                instance["monitoring"] = enabled
+                touched.append(instance)
+
+            def build(root: ET.Element) -> None:
+                items = _ec2_sub(root, "instancesSet")
+                for instance in touched:
+                    item = _ec2_sub(items, "item")
+                    _ec2_sub(item, "instanceId", instance["instance_id"])
+                    monitoring = _ec2_sub(item, "monitoring")
+                    _ec2_sub(monitoring, "state", "enabled" if enabled else "disabled")
+            return _ec2_success_response(f"{action}Response", build)
     except HTTPException as exc:
         code = str(exc.detail).split(":", 1)[0]
         message = str(exc.detail)
         return _ec2_error_response(code, message, exc.status_code)
 
+    # Actions this legacy handler doesn't implement (key pairs, launch templates, ENIs, EBS
+    # extras, …) are served by the shared EC2/VPC core Nano uses (core/vpc_core.py), with its
+    # model in the active space's persisted slot — so e.g. CreateKeyPair works offline too.
+    from core import vpc_core as _vpc_core
+    if action in _vpc_core._OPS:
+        vpc_store = _Ec2CoreSpaceStore()
+        vpc_store.cw_store = aws_cloudwatch.get_store()
+        vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
+        r = _vpc_core.dispatch(vpc_store, dict(params))
+        if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+            _persist_state()
+            if "NetworkInsights" not in action:
+                _netsim_kick(f"ec2 {action}")
+        return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
     return _ec2_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
+
+
+def _vpc_engine_is_core() -> bool:
+    """v4 netsim: the EC2/VPC wire's VPC objects are served by the ONE shared engine
+    (core/vpc_core.py — what Nano runs and core/netsim evaluates/enforces). The pre-v4 handlers
+    behind VYOMI_VPC_ENGINE=legacy remain as an escape hatch."""
+    return (os.environ.get("VYOMI_VPC_ENGINE") or "core").strip().lower() != "legacy"
+
+
+def _vpc_mirror_from_core() -> None:
+    """Bridge for pre-v4 READERS of vpc_state (REST views, RDS/ELB subnet pickers, launch
+    validation): mirror the core's VPCs / subnets / security groups in the legacy shape, tagged
+    `_engine: vpc_core`; the core stays authoritative (mirrors are rebuilt on every core write)."""
+    m = _Ec2CoreSpaceStore()._vpc_model or {}
+    for coll in ("vpcs", "subnets", "security_groups"):
+        for k in [k for k, v in vpc_state[coll].items() if isinstance(v, dict) and v.get("_engine") == "vpc_core"]:
+            del vpc_state[coll][k]
+    for vid, v in (m.get("vpcs") or {}).items():
+        if vid in vpc_state["vpcs"]:
+            continue
+        vpc_state["vpcs"][vid] = {"vpc_id": vid, "name": (v.get("tags") or {}).get("Name", vid), "cidr_block": v.get("cidr", ""),
+                                  "tenancy": v.get("tenancy", "default"), "tags": [], "state": "available",
+                                  "created": v.get("created", ""), "internet_gateway_id": v.get("igw") or "",
+                                  "default_security_group_id": next((g["id"] for g in (m.get("sgs") or {}).values()
+                                                                     if g.get("vpc_id") == vid and g.get("is_default")), ""),
+                                  "main_route_table_id": next((r["id"] for r in (m.get("route_tables") or {}).values()
+                                                               if r.get("vpc_id") == vid and r.get("main")), ""),
+                                  "_engine": "vpc_core"}
+    for sid, sn in (m.get("subnets") or {}).items():
+        if sid in vpc_state["subnets"]:
+            continue
+        vpc_state["subnets"][sid] = {"subnet_id": sid, "vpc_id": sn.get("vpc_id", ""), "cidr_block": sn.get("cidr", ""),
+                                     "availability_zone": sn.get("az", ""), "name": (sn.get("tags") or {}).get("Name", sid),
+                                     "route_table_id": sn.get("route_table") or "", "tags": [], "created": "",
+                                     "_engine": "vpc_core"}
+    for gid, g in (m.get("sgs") or {}).items():
+        if gid in vpc_state["security_groups"]:
+            continue
+        vpc_state["security_groups"][gid] = {"security_group_id": gid, "vpc_id": g.get("vpc_id", ""),
+                                             "group_name": g.get("name", ""), "description": g.get("description", ""),
+                                             "ingress": [], "egress": [], "is_default": bool(g.get("is_default")),
+                                             "tags": [], "created": "", "_engine": "vpc_core"}
+
+
+def api_vpc_core_query(params: dict) -> Response:
+    """EC2 Query VPC actions → core/vpc_core (same engine as Nano), legacy readers kept in sync."""
+    from core import vpc_core as _vpc_core
+    action = str(params.get("Action", "")).strip()
+    vpc_store = _Ec2CoreSpaceStore()
+    vpc_store.cw_store = aws_cloudwatch.get_store()
+    vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
+    r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+        try:
+            _vpc_mirror_from_core()
+        except Exception:
+            pass
+        _persist_state()
+        _netsim_kick(f"ec2 {action}")
+    return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
+
+
+class _Ec2CoreSpaceStore:
+    """vpc_core keeps its whole model in `store._vpc_model`; point it at the active space's
+    service_states["ec2_vpc_core"] slot, which persists with the appliance state."""
+
+    @staticmethod
+    def _slot_owner() -> dict:
+        spaces = PLATFORM.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
+        sid = spaces.get("active_space_id", "") or "default"
+        return spaces.setdefault("spaces", {}).setdefault(sid, {}).setdefault("service_states", {})
+
+    @property
+    def _vpc_model(self):
+        owner = self._slot_owner()
+        model = owner.get("ec2_vpc_core")
+        if _vpc_engine_is_core() and not (isinstance(model, dict) and model.get("_adopted_legacy")):
+            # upgrade path: the space's pre-v4 VPC objects move into the one engine, once, IDs kept
+            try:
+                from core import vpc_core as _vpc_core
+                legacy = owner.get("vpc")
+                if not isinstance(legacy, dict):
+                    legacy = {k: vpc_state.get(k, {}) for k in ("vpcs", "subnets", "security_groups",
+                                                                "route_tables", "internet_gateways")}
+                model = _vpc_core.adopt_legacy_slot(owner, legacy)
+                if isinstance(model, dict) and model.get("_adopted_counts"):
+                    for coll in ("vpcs", "subnets", "security_groups", "route_tables", "internet_gateways"):
+                        for rec in (legacy.get(coll) or {}).values():
+                            if isinstance(rec, dict) and rec.get("_engine") != "vpc_core":
+                                rec.setdefault("_adopted_into", "vpc_core")
+                    # persisted with the next state write; until then a restart simply re-adopts
+                    # (idempotent — same IDs, nothing duplicated)
+            except Exception as exc:
+                print(f"[vyomi] legacy VPC adoption skipped: {exc}")
+        return model
+
+    @_vpc_model.setter
+    def _vpc_model(self, model):
+        self._slot_owner()["ec2_vpc_core"] = model
 
 
 def api_gcp_compute_list_instances(project: str, zone: str):
@@ -14168,6 +15032,12 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
     )
     _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
     _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
+    try:
+        _mesh_capacity_precheck("gcp", str(getattr(req, "machineType", "") or ""), 1, f"projects/{project}/zones/{zone}")
+    except Exception as _bexc:
+        if _bexc.__class__.__name__ != "MeshCapacityError":
+            raise
+        return JSONResponse(status_code=_bexc.status, content=_mesh_gcp_error_body(_bexc))
     instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
     instance["runtime_bundle_id"] = _cloudsim_runtime_bundle("gcp_compute").get("id", "")
     instance["runtime_bundle_name"] = _cloudsim_runtime_bundle("gcp_compute").get("name", "")
@@ -14849,6 +15719,7 @@ def _gcp_storage_policy_view(bucket: str, policy: dict[str, Any] | None = None) 
 
 
 def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
+    from core import gcp_cloudsql_core as _csql
     name = str(payload.get("name") or payload.get("instance") or payload.get("instanceId") or "sql-instance")
     region = _gcp_location_name(payload.get("region") or payload.get("location") or "us-central1")
     now = _now()
@@ -14881,7 +15752,12 @@ def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
         "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
         "settings": settings,
         "ipAddresses": payload.get("ipAddresses") or [{"type": "PRIMARY", "ipAddress": _public_ip()}],
-        "serverCaCert": {"cert": "", "commonName": name, "createTime": now, "expirationTime": ""},
+        # gcp.sql.connections-security: a real (deterministic, Pyodide-safe — see
+        # core/gcp_cloudsql_core.py:_ca_cert) server CA cert, generated once at creation
+        # so it stays stable across gets, the same as the Nano core.
+        "serverCaCert": _csql._ca_cert(project, name),
+        "sslCerts": {},
+        "queryLog": [],
         "createTime": now,
         "updateTime": now,
     }
@@ -15345,6 +16221,19 @@ def _gcp_iam_set_policy(project: str, payload: dict[str, Any]) -> dict:
         "etag": str(payload.get("etag") or ""),
         "bindings": payload.get("bindings", []) if isinstance(payload.get("bindings"), list) else [],
     }
+    # Data Access audit log config (auditConfigs) — round-tripped verbatim, same
+    # shape as core/gcp_iam_core._set_iam_policy, so the Audit logs page's toggles
+    # survive on the offline substrate too (they used to be dropped here).
+    if isinstance(payload.get("auditConfigs"), list):
+        policy["auditConfigs"] = [
+            {"service": a.get("service", ""),
+             "auditLogConfigs": [dict(c) for c in a.get("auditLogConfigs", []) if isinstance(c, dict)]}
+            for a in payload["auditConfigs"] if isinstance(a, dict)
+        ]
+    else:
+        prev = gcp_iam_state.get("policies", {}).get(project) or {}
+        if prev.get("auditConfigs"):
+            policy["auditConfigs"] = prev["auditConfigs"]
     gcp_iam_state.setdefault("policies", {})[project] = policy
     return policy
 
@@ -17219,8 +18108,24 @@ def _gcp_storage_object_view(project: str, bucket: str, name: str, obj: dict) ->
 
 
 def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
+    from core import gcp_cloudsql_core as _csql
     name = str(instance.get("name") or "")
     region = str(instance.get("region") or "us-central1")
+    settings = instance.get("settings")
+    if not isinstance(settings, dict):
+        settings = {"tier": "db-f1-micro", "activationPolicy": "ALWAYS", "dataDiskType": "PD_SSD",
+                    "dataDiskSizeGb": "10", "availabilityType": "ZONAL", "pricingPlan": "PER_USE"}
+    ip_config = settings.get("ipConfiguration")
+    if not isinstance(ip_config, dict):
+        ip_config = {}
+    ip_config.setdefault("ipv4Enabled", True)
+    ip_config.setdefault("privateNetwork", "")
+    # gcp.sql.connections-security: sslMode drives requireSsl (legacy bool) the same
+    # way core/gcp_cloudsql_core.py derives it on Nano — one setting, two field names.
+    ssl_mode = ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    ip_config["sslMode"] = ssl_mode
+    ip_config["requireSsl"] = ssl_mode != "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
+    settings["ipConfiguration"] = ip_config
     return {
         "kind": "sql#instance",
         "id": str(instance.get("id") or _gcp_compute_numeric_id(f"{project}:{name}")),
@@ -17237,21 +18142,9 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         "selfLink": f"{_gcp_sql_root()}/projects/{project}/instances/{name}",
         "databaseInstalledVersion": instance.get("databaseInstalledVersion", ""),
         "maintenanceVersion": instance.get("maintenanceVersion", ""),
-        "settings": instance.get("settings", {
-            "tier": "db-f1-micro",
-            "activationPolicy": "ALWAYS",
-            "dataDiskType": "PD_SSD",
-            "dataDiskSizeGb": "10",
-            "availabilityType": "ZONAL",
-            "pricingPlan": "PER_USE",
-            "ipConfiguration": {
-                "ipv4Enabled": True,
-                "privateNetwork": "",
-                "requireSsl": False,
-            },
-        }),
+        "settings": settings,
         "ipAddresses": instance.get("ipAddresses", [{"type": "PRIMARY", "ipAddress": instance.get("ipAddress", _public_ip())}]),
-        "serverCaCert": instance.get("serverCaCert", {"cert": "", "commonName": name, "createTime": _now(), "expirationTime": ""}),
+        "serverCaCert": instance.get("serverCaCert") or _csql._ca_cert(project, name),
         "createTime": instance.get("createTime", _now()),
         "updateTime": instance.get("updateTime", _now()),
         # Real connection endpoint for the backing OSS engine (None when the
@@ -17261,6 +18154,10 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         # Codespace sandbox: laptop-side tunnel + client command through the jump.
         "connect_help": _db_connect_help(instance.get("_backend"),
                                          instance.get("databaseVersion", "postgres")),
+        # read replicas (core/gcp_cloudsql_core — the Replicas tab filters on masterInstanceName)
+        **{k: instance[k] for k in ("masterInstanceName", "replicaNames", "replicaConfiguration",
+                                    "failoverReplica", "diskEncryptionConfiguration")
+           if instance.get(k)},
     }
 
 
@@ -17473,11 +18370,14 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
 
 def _gcp_iam_policy_view(project: str) -> dict:
     policy = gcp_iam_state.setdefault("policies", {}).setdefault(project, {"bindings": [], "etag": "", "version": 1})
-    return {
+    out = {
         "version": policy.get("version", 1),
         "etag": policy.get("etag", ""),
         "bindings": policy.get("bindings", []),
     }
+    if policy.get("auditConfigs"):
+        out["auditConfigs"] = policy["auditConfigs"]
+    return out
 
 
 def api_vpc_list_vpcs():
@@ -17668,7 +18568,7 @@ def api_vpc_list_internet_gateways():
 def api_vpc_create_internet_gateway(req: InternetGatewayRequest):
     igw_id = _id("igw")
     igw = {"internet_gateway_id": igw_id, "name": req.name or igw_id, "attached_vpc_id": "", "created": _now(), "tags": req.tags or []}
-    vpc_state["internet_gateways"][igw_id] = igw
+    vpc_state.setdefault("internet_gateways", {})[igw_id] = igw   # pre-v4 states lack the key
     _record_usage("vpc.create_internet_gateway", igw)
     return igw
 
@@ -22027,6 +22927,8 @@ def _aws_query_target_service(request: Request) -> str:
     # Systems Manager uses AmazonSSM.* targets.
     if target.startswith("AmazonSSM."):
         return "ssm"
+    if target.startswith("AWSEC2InstanceConnectService."):
+        return "ec2-instance-connect"
     return ""
 
 
@@ -22238,6 +23140,9 @@ async def aws_query_root(request: Request) -> Response:
     if service == "sqs":
         return await api_sqs_query(request)
     if service == "rds":
+        from core import wire_ingress as _wi_rds
+        if _wi_rds.is_unified("rds"):   # v4 C0h — the shared RDS core (see routes/aws_s3.py)
+            return await _wi_rds.serve_rds(request)
         return await api_rds_query(request)
     if service == "dynamodb":
         return await api_dynamodb_aws(request)
@@ -22245,6 +23150,12 @@ async def aws_query_root(request: Request) -> Response:
         return await api_iam_query(request)
     if service == "sts":
         return await api_sts_query(request)
+    if service == "ec2-instance-connect":
+        try:
+            _ic_payload = json.loads(await request.body() or b"{}")
+        except Exception:
+            _ic_payload = {}
+        return ec2_instance_connect_wire(request.headers.get("x-amz-target", ""), _ic_payload)
     if service == "ssm":
         # Systems Manager: in-process engine (core/ssm_core.py) shared with the console REST.
         from core import ssm_core as _ssm_core
@@ -22293,7 +23204,7 @@ async def aws_query_root(request: Request) -> Response:
 # ── S3 REST API — root level ─────────────────────────────────────────────────
 
 async def s3_list_buckets(request: Request) -> Response:
-    """GET / → ListBuckets (S3 wire) OR serve pricing.html (browser).
+    """GET / → ListBuckets (S3 wire) OR a headless notice (browser).
 
     / is now the canonical launch page — pricing/features/SDKs all live
     on a single page that opens to browsers at the root URL. The old
@@ -22305,8 +23216,13 @@ async def s3_list_buckets(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     user_agent = request.headers.get("user-agent", "")
     if "text/html" in accept or "Mozilla" in user_agent:
-        with open(_PRICING_HTML, "rb") as f:
-            return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
+        return JSONResponse({
+            "service": "vyomi-appliance",
+            "mode": "headless",
+            "message": "The Vyomi appliance is headless (API/SDK/CLI only). The UI is Nano: https://vyomi.cloud/nano",
+            "api_docs": "/docs",
+            "health": "/healthz",
+        }, headers={"Cache-Control": "no-store, max-age=0"})
 
     now = _now()
     xml_parts = [
@@ -23638,25 +24554,6 @@ def _find_instance_across_spaces(provider: str, instance_id: str) -> tuple[Optio
     return None, None
 
 
-def _flatten_azure_vm(inst: dict, instance_id: str) -> dict:
-    """Flatten an Azure VM ARM record to the flat instance dict the docker/LXD
-    connect paths expect (runtime fields live under properties.runtime)."""
-    _rt = (inst.get("properties") or {}).get("runtime") or {}
-    _cn = str(_rt.get("containerName") or "")
-    _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
-    if _rt.get("backend") == "docker" and _cn:
-        _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
-    return {
-        **inst,
-        "ssh_host_port": _rt.get("sshHostPort"),
-        "instance_id": _iid,
-        "container_name": _cn,
-        "container_id": _rt.get("containerId") or _cn,
-        "ami": "",
-        "state": _rt.get("state") or _rt.get("containerStatus") or "",
-    }
-
-
 def _connect_info_response(provider: str, instance_id: str) -> dict:
     inst, _ = _find_instance_across_spaces(provider, instance_id)
     if not inst:
@@ -23667,7 +24564,20 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
     # Flatten so Azure reaches the same lazy SSH-provisioning path (key inject +
     # lxc proxy) as AWS/GCP instead of 409/503-ing with no SSH command.
     if provider == "azure":
-        inst = _flatten_azure_vm(inst, instance_id)
+        _rt = (inst.get("properties") or {}).get("runtime") or {}
+        _cn = str(_rt.get("containerName") or "")
+        _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
+        if _rt.get("backend") == "docker" and _cn:
+            _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
+        inst = {
+            **inst,
+            "ssh_host_port": _rt.get("sshHostPort"),
+            "instance_id": _iid,
+            "container_name": _cn,
+            "container_id": _rt.get("containerId") or _cn,
+            "ami": "",
+            "state": _rt.get("state") or _rt.get("containerStatus") or "",
+        }
     state_running = inst.get("state") or inst.get("powerState") or ""
     if isinstance(state_running, dict):
         state_running = state_running.get("Name") or ""
@@ -23701,8 +24611,6 @@ def _private_key_pem_response(provider: str, instance_id: str) -> Response:
     pem = _vmc.read_private_key(instance_id)
     if not pem:
         inst, _ = _find_instance_across_spaces(provider, instance_id)
-        if inst and provider == "azure":
-            inst = _flatten_azure_vm(inst, instance_id)
         if inst and _docker_backed(inst):
             pem = _docker_private_key_pem(inst)
     if not pem:
@@ -23967,6 +24875,234 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[eventing] delivery hooks skipped: {_e}")
 
+# ── SSH / shell access (decision family 1): EC2 Instance Connect, SSM Session Manager, GCE ssh-keys + OS info,
+#    Azure serial console + Bastion. Engine: core/ssh_access_core.py (shared with Nano). Reach-in is `docker exec`
+#    into the instance container, whose sshd takes the pushed key, so `ssh -i key user@host -p port` really logs in.
+from core import ssh_access_core as _sa  # noqa: E402
+
+
+def _ssh_flat(provider: str, iid: str) -> Optional[dict]:
+    if provider == "aws":
+        inst = (ec2_state.get("instances") or {}).get(iid)
+        if not isinstance(inst, dict):
+            inst, _ = _find_instance_across_spaces("aws", iid)
+        return inst if isinstance(inst, dict) else None
+    if provider == "gcp":
+        inst = (gcp_compute_state.get("instances") or {}).get(iid)
+        if not isinstance(inst, dict):
+            inst, _ = _find_instance_across_spaces("gcp", iid)
+        return inst if isinstance(inst, dict) else None
+    rec, _ = _find_instance_across_spaces("azure", iid)
+    if isinstance(rec, dict):
+        flat = _azure_vm_flat_instance(rec)
+        _azure_vm_sync(flat, rec)
+        return flat
+    return None
+
+
+def _ssh_run(provider: str):
+    """run(instance_id, sh) -> (rc, stdout) through the compute backend, or (1, '') if there is no guest to reach."""
+    def run(iid: str, sh: str):
+        inst = _ssh_flat(provider, iid)
+        if not inst or not _docker_backed(inst):
+            return 1, ""
+        try:
+            cp = _docker_compute().exec(_docker_instance_obj(inst), ["sh", "-c", sh])
+            return cp.returncode, (cp.stdout or b"").decode(errors="replace")
+        except Exception:
+            return 1, ""
+    return run
+
+
+def _ssh_ec2_instances() -> dict:
+    out = {}
+    for iid, i in (ec2_state.get("instances") or {}).items():
+        if isinstance(i, dict) and _docker_backed(i):
+            pl = i.get("placement") if isinstance(i.get("placement"), dict) else {}
+            out[iid] = {"state": i.get("state"), "az": i.get("availability_zone") or pl.get("availability_zone") or "",
+                        "ip": i.get("private_ip") or i.get("private_ip_address") or "", "name": i.get("name") or iid}
+    return out
+
+
+try:
+    from core import ssm_core as _ssm_core_mod
+    _ssm_core_mod.INSTANCE_PROVIDER = _ssh_ec2_instances
+except Exception:
+    pass
+
+
+def _ssh_err(e: "_sa.SshAccessError"):
+    return JSONResponse({"__type": e.code, "message": e.message}, status_code=e.status)
+
+
+def ec2_instance_connect_wire(target: str, payload: dict):
+    """AWSEC2InstanceConnectService.SendSSHPublicKey / SendSerialConsoleSSHPublicKey (awsJson1.1)."""
+    op = target.rsplit(".", 1)[-1]
+    if op not in ("SendSSHPublicKey", "SendSerialConsoleSSHPublicKey"):
+        return JSONResponse({"__type": "UnknownOperationException", "message": f"{op} is not implemented."}, status_code=400)
+    try:
+        body = _sa.send_ssh_public_key(_sa.shared_store(), payload or {}, _ssh_ec2_instances(), _ssh_run("aws"), serial=op.startswith("SendSerial"))
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+    return JSONResponse(body, media_type="application/x-amz-json-1.1")
+
+
+@app.post("/api/aws/ec2/instances/{instance_id}/instance-connect", include_in_schema=False)
+async def api_ec2_instance_connect(instance_id: str, request: Request):
+    """Console EC2 Instance Connect: push the user's public key for 60 s, return the ssh command."""
+    p = await request.json()
+    body = {"InstanceId": instance_id, "InstanceOSUser": p.get("os_user") or "ubuntu", "SSHPublicKey": p.get("public_key") or ""}
+    if p.get("availability_zone"):
+        body["AvailabilityZone"] = p["availability_zone"]
+    r = ec2_instance_connect_wire("AWSEC2InstanceConnectService.SendSSHPublicKey", body)
+    if r.status_code != 200:
+        return r
+    info = _connect_info_response("aws", instance_id)
+    ssh = (info.get("ssh") if isinstance(info, dict) else None) or {}
+    pushed = _sa.shared_store().pushed_keys[-1]
+    return {"ok": True, "success": True, "delivered": pushed["delivered"], "expires_in_seconds": _sa.KEY_TTL_SECONDS,
+            "os_user": body["InstanceOSUser"], "ssh_command": ssh.get("command", ""),
+            "note": "The key is valid for 60 seconds for new connections; an established session is unaffected."}
+
+
+@app.post("/api/ssm/sessions", include_in_schema=False)
+async def api_ssm_start_session(request: Request):
+    p = await request.json()
+    try:
+        s = _sa.start_session(_sa.shared_store(), {"Target": p.get("target"), "DocumentName": p.get("document")}, _ssh_ec2_instances())
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+    return {"ok": True, **s}
+
+
+@app.get("/api/ssm/sessions", include_in_schema=False)
+def api_ssm_list_sessions(state: str = "Active"):
+    return _sa.describe_sessions(_sa.shared_store(), {"State": state})
+
+
+@app.post("/api/ssm/sessions/{session_id}/exec", include_in_schema=False)
+async def api_ssm_session_exec(session_id: str, request: Request):
+    """Command-at-a-time Session Manager shell (no pty). Runs in the target instance container."""
+    s = _sa.shared_store().sessions.get(session_id)
+    if not s or s["Status"] != "Connected":
+        raise HTTPException(404, detail="SessionNotFound")
+    p = await request.json()
+    inst = _ssh_flat("aws", s["Target"])
+    if not inst or inst.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    result = _console_execute(inst, str(p.get("command") or ""))
+    return {"session_id": session_id, **result}
+
+
+@app.post("/api/ssm/sessions/{session_id}/terminate", include_in_schema=False)
+def api_ssm_terminate_session(session_id: str):
+    try:
+        return {"ok": True, **_sa.terminate_session(_sa.shared_store(), {"SessionId": session_id})}
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+
+
+@app.post("/api/gcp/compute/instances/{instance_id}/ssh-keys", include_in_schema=False)
+async def api_gce_ssh_keys(instance_id: str, request: Request):
+    """Set the instance's `ssh-keys` metadata (gcloud compute instances add-metadata / OS Login key); the guest agent
+    equivalent authorizes each USERNAME:KEY line inside the container so `gcloud compute ssh` really logs in."""
+    inst = _ssh_flat("gcp", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if inst.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    p = await request.json()
+    value = str(p.get("ssh_keys") or "")
+    try:
+        res = _sa.apply_gce_ssh_keys(_sa.shared_store(), instance_id, value, _ssh_run("gcp"))
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+    md = inst.setdefault("metadata", {})
+    if isinstance(md, dict):
+        md["ssh-keys"] = value
+    _persist_state()
+    return {"ok": True, **res, "metadata_key": "ssh-keys"}
+
+
+@app.get("/api/gcp/compute/instances/{instance_id}/os-info", include_in_schema=False)
+def api_gce_os_info(instance_id: str):
+    inst = _ssh_flat("gcp", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if inst.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    rc, out = _ssh_run("gcp")(instance_id, _sa.OS_INFO_CMD)
+    if rc != 0:
+        raise HTTPException(502, detail="GuestUnreachable")
+    return {"ok": True, "instance": instance_id, **_sa.parse_os_info(out), "source": "guest (docker exec)"}
+
+
+@app.get("/api/azure/vm/{instance_id}/serial-console", include_in_schema=False)
+def api_azure_vm_serial_console(instance_id: str):
+    """Serial console: the guest's kernel/boot log (dmesg) + a login shell via the exec endpoint."""
+    inst = _ssh_flat("azure", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if str(inst.get("state") or "").lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    rc, out = _ssh_run("azure")(inst["instance_id"], "dmesg 2>/dev/null | tail -n 200 || true; echo; echo '--- sshd ---'; ps -eo pid,comm,args | grep -E 'sshd|systemd|tini' | grep -v grep")
+    return {"ok": True, "instance": instance_id, "log": out if rc == 0 else "", "exec": f"/api/console/azurevm/instances/{inst['instance_id']}/exec",
+            "note": "Serial console is a docker-exec shell on the guest (line-at-a-time), not a UART."}
+
+
+@app.post("/api/azure/vm/{instance_id}/bastion/connect", include_in_schema=False)
+async def api_azure_bastion_connect(instance_id: str, request: Request):
+    """Bastion Connect: browser SSH session record + the ssh command. Auth type password/key accepted; the shell runs via exec."""
+    inst = _ssh_flat("azure", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if str(inst.get("state") or "").lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    p = await request.json()
+    sid = "bastion-" + uuid.uuid4().hex[:12]
+    _sa.shared_store().sessions[sid] = {"SessionId": sid, "Target": instance_id, "Status": "Connected", "DocumentName": "AzureBastion",
+                                        "Owner": p.get("username") or "azureuser", "StartDate": time.time(), "Details": "", "OutputUrl": {}, "MaxSessionDuration": "60"}
+    info = _connect_info_response("azure", instance_id)
+    return {"ok": True, "session_id": sid, "exec": f"/api/console/azurevm/instances/{inst['instance_id']}/exec",
+            "ssh_command": ((info.get("ssh") if isinstance(info, dict) else None) or {}).get("command", "")}
+
+
+def _azure_guest_run(instance_id: str, command: str, timeout_hint: str = ""):
+    """Azure VM guest views (Inventory / Update Manager / Performance diagnostics): run a read/maintenance script in the VM's container."""
+    inst = _ssh_flat("azure", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if str(inst.get("state") or "").lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    rc, out = _ssh_run("azure")(inst["instance_id"], command)
+    if rc is None or (rc != 0 and not out):
+        raise HTTPException(502, detail="GuestUnreachable")
+    return out
+
+
+@app.get("/api/azure/vm/{instance_id}/guest/inventory", include_in_schema=False)
+def api_azure_vm_guest_inventory(instance_id: str):
+    return {"ok": True, "source": "guest (docker exec)", **_sa.parse_inventory(_azure_guest_run(instance_id, _sa.INVENTORY_CMD))}
+
+
+@app.get("/api/azure/vm/{instance_id}/guest/performance", include_in_schema=False)
+def api_azure_vm_guest_performance(instance_id: str):
+    return {"ok": True, "source": "guest (docker exec)", "sampledAt": time.time(), **_sa.parse_perf(_azure_guest_run(instance_id, _sa.PERF_CMD))}
+
+
+@app.get("/api/azure/vm/{instance_id}/guest/updates", include_in_schema=False)
+def api_azure_vm_guest_updates(instance_id: str):
+    return {"ok": True, "source": "guest (docker exec)", **_sa.parse_updates(_azure_guest_run(instance_id, _sa.updates_command(False, False)))}
+
+
+@app.post("/api/azure/vm/{instance_id}/guest/updates", include_in_schema=False)
+async def api_azure_vm_guest_updates_run(instance_id: str, request: Request):
+    """Update Manager: {"refresh": bool, "install": bool} -> refreshes the package index and/or installs every pending update in the guest."""
+    p = await request.json()
+    out = _azure_guest_run(instance_id, _sa.updates_command(bool(p.get("refresh")), bool(p.get("install"))))
+    return {"ok": True, "source": "guest (docker exec)", **_sa.parse_updates(out)}
+
+
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by
 # the ONE aws_wire_router on real backends (MinIO/Postgres/Vault/NATS) — the
@@ -24174,12 +25310,67 @@ if not _UNIFIED_INGRESS:
         _mount_new_services(app)
     except Exception as _e:   # never let this break appliance boot
         print(f"[wire_ingress] net-new service mount skipped: {_e}")
+    # v4 C0 — ONE engine: native S3 / DynamoDB / GCS wire is served by the shared
+    # conformance cores over the appliance's own (space-scoped, persisted) state —
+    # see core/wire_ingress.py + core/appliance_stores.py. Per-service opt-out:
+    # VYOMI_UNIFIED_INGRESS_SERVICES (default "s3,dynamodb,gcs"; "none" = legacy).
+    from core import wire_ingress as _wire_ingress
+    print(f"[wire_ingress] unified engine for: {sorted(_wire_ingress.unified_services()) or 'none (legacy handlers)'}")
+    if _wire_ingress.is_unified("gcs"):
+        _wire_ingress.mount_gcs(app)   # after the provider routes (folders/transfers win), before the S3 catch-all
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)
-    # serves S3 + any native cloud wire no explicit route claims.
-    from core.wire_ingress import mount as _mount_unified_ingress
-    _mount_unified_ingress(app)
+    # serves S3 + any native cloud wire no explicit route claims. S3 / GCS / DynamoDB
+    # use the appliance-state stores (C0) so the console REST shares their state.
+    from core import wire_ingress as _wire_ingress
+    if _wire_ingress.is_unified("gcs"):
+        _wire_ingress.mount_gcs(app)
+    _wire_ingress.mount(app, _wire_ingress.build_backed_router(overrides={
+        k: v for k, v in _wire_ingress.appliance_stores().items()
+        if _wire_ingress.STORE_SERVICE[k] in _wire_ingress.unified_services()}))
+
+# v4 C0 upgrade path: tables/items a pre-v4 appliance kept in DynamoDB Local are copied
+# ONCE into the core's state (core/ddb_local_migration.py; opt out with
+# VYOMI_DDB_MIGRATE_FROM_LOCAL=0). Never blocks or breaks boot.
+@app.on_event("startup")
+def _migrate_dynamodb_local_once():
+    try:
+        from core import ddb_local_migration as _ddb_mig
+        _ddb_mig.start_at_boot()
+    except Exception as _e:
+        print(f"[ddb-migrate] skipped: {_e}")
+
+
+# Mesh shell: PTY into a Docker VM (vyomi-i-* on vyomi-net) for the Nano console's "Open shell" (core/mesh_shell.py).
+def _shell_container(cloud: str, ref: str):
+    """Resolve an instance id / VM name from THIS appliance's records to its Docker container name (never trust a client-sent name)."""
+    inst, _ = _find_instance_across_spaces(cloud, ref)
+    if not inst:
+        return None
+    if cloud == "azure":
+        _rt = (inst.get("properties") or {}).get("runtime") or {}
+        if not isinstance(_rt, dict) or _rt.get("backend") != "docker":
+            return None
+        return str(_rt.get("containerName") or "") or None
+    if not _docker_backed(inst):
+        return None
+    return str(inst.get("container_name") or inst.get("container_id") or "") or None
+
+
+# Mesh pack: headless guard (404 JSON for UI paths when mesh mode is on). Added before the
+# /_wire rewrite so the rewrite stays outermost and `/_wire/ui` is blocked as `/ui`.
+app.add_middleware(_mesh.HeadlessMiddleware)
+# Mesh ROLE (VYOMI_ROLE=mesh): nothing is served without a valid signed session token; Pro = one cloud; refuses all after session_end.
+from core import mesh_session as _mesh_session
+app.add_middleware(_mesh_session.SessionMiddleware)
+
+# v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
+try:
+    from routes import wire_prefix as _wire_prefix
+    _wire_prefix.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[wire_prefix] /_wire routes skipped: {_e}")
 
 # ── AMQP 1.0 listener for Azure Service Bus emulation (Phase B) ─────
 try:

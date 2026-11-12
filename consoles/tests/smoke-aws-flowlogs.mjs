@@ -1,0 +1,35 @@
+/* VPC flow logs: S3 + CloudWatch destinations in the create dialog and a flow records viewer.  BASE=http://127.0.0.1:9084 node consoles/tests/smoke-aws-flowlogs.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9084";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`, WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
+const results = [];
+const check = (n, ok, d = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 140) : ""}`); };
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1400 } });
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+await page.goto(UI + "#/vpc");
+const auth = "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0";
+const xml = await page.evaluate(async ([u, a]) => (await fetch(`${u}/`, { method: "POST", headers: { authorization: a, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ Action: "CreateVpc", Version: "2016-11-15", CidrBlock: "10.77.0.0/16" }).toString() })).text(), [WIRE, auth]);
+const VPC = xml.match(/<vpcId>(vpc-[0-9a-f]+)/)?.[1];
+check("vpc created", !!VPC);
+await page.goto(UI + `#/vpc/vpcs/${VPC}`);
+await page.getByRole("tab", { name: "Flow logs" }).click();
+await page.getByRole("button", { name: "Create flow log" }).first().click();
+const dlg = page.getByRole("dialog");
+await dlg.getByText("Send to an Amazon S3 bucket").click();
+await dlg.getByRole("textbox", { name: "S3 bucket ARN" }).waitFor();
+check("S3 destination offered", true);
+await dlg.getByText("Send to CloudWatch Logs").click();
+await dlg.getByRole("button", { name: "Create flow log" }).click();
+await page.getByText(/fl-[0-9a-f]+/).first().waitFor({ timeout: 10000 });
+check("CloudWatch flow log created", true);
+await page.getByRole("row", { name: /fl-/ }).first().getByRole("checkbox").check();
+await page.getByRole("button", { name: "View flow records" }).click();
+await page.getByText("No flow records delivered yet").waitFor({ timeout: 10000 });
+check("records viewer opens with honest empty state", true);
+check("no page errors", errors.length === 0, errors.join("|"));
+await browser.close();
+process.exit(results.every(Boolean) ? 0 : 1);

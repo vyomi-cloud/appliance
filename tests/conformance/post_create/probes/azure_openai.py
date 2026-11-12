@@ -33,9 +33,9 @@ A = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.CognitiveServ
 try:
     s, acc = call("PUT", A + "?api-version=2024-10-01", {"location": "eastus", "kind": "OpenAI", "sku": {"name": "S0"}, "properties": {"customSubDomainName": ACC}})
     check(s in (200, 201), "create OpenAI account", acc)
-    s, d = call("PUT", A + "/deployments/gpt4o?api-version=2024-10-01", {"sku": {"name": "Standard", "capacity": 1}, "properties": {"model": {"format": "OpenAI", "name": "gpt-4o", "version": "2024-11-20"}}})
-    check(s in (200, 201), "gpt-4o deployment accepted (was DeploymentModelNotSupported)", d)
-    call("PUT", A + "/deployments/emb?api-version=2024-10-01", {"sku": {"name": "Standard", "capacity": 1}, "properties": {"model": {"format": "OpenAI", "name": "text-embedding-3-small", "version": "1"}}})
+    s, d = call("PUT", A + "/deployments/gpt4o?api-version=2024-10-01", {"sku": {"name": "Standard", "capacity": 1}, "properties": {"model": {"format": "OpenAI", "name": "qwen2.5-7b", "version": "1"}}})
+    check(s in (200, 201), "qwen2.5-7b deployment accepted (pool model)", d)
+    call("PUT", A + "/deployments/emb?api-version=2024-10-01", {"sku": {"name": "Standard", "capacity": 1}, "properties": {"model": {"format": "OpenAI", "name": "nomic-embed-text", "version": "1"}}})
     s, keys = call("POST", A + "/listKeys?api-version=2024-10-01", {})
     s, acc = call("GET", A + "?api-version=2024-10-01")
     ep = acc["properties"]["endpoint"].rstrip("/")

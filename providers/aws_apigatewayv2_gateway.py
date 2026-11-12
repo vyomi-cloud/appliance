@@ -17,10 +17,10 @@ import urllib.request
 
 from core import apigatewayv2_core as core
 from core import apigatewayv2_gateway as gw
+from core import gateway_common as gc
 
 ADMIN = os.environ.get("VYOMI_GATEWAY_ADMIN", "http://vyomi-gateway:2019")
 HANDLER = os.environ.get("VYOMI_GATEWAY_HANDLER", "simulator:9000")
-_JWKS: dict = {}
 
 
 def push_config(store, admin=None, timeout: float = 5.0) -> bool:
@@ -55,47 +55,9 @@ class _Sync:
         push_config(store)
 
 
-def _http_fetch(method, url, headers, body, timeout):
-    req = urllib.request.Request(url, data=body or None, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, dict(r.headers), r.read()
-    except urllib.error.HTTPError as e:
-        return e.code, dict(e.headers), e.read()
-
-
-def _jwks(issuer: str):
-    hit = _JWKS.get(issuer)
-    if hit and hit[0] > time.time():
-        return hit[1]
-    base = issuer.rstrip("/")
-    with urllib.request.urlopen(base + "/.well-known/openid-configuration", timeout=5) as r:
-        uri = json.load(r)["jwks_uri"]
-    with urllib.request.urlopen(uri, timeout=5) as r:
-        keys = json.load(r)["keys"]
-    _JWKS[issuer] = (time.time() + 300, keys)
-    return keys
-
-
-def _verify_sig(token, header, cfg) -> bool:
-    """RS256 against the issuer's JWKS (OIDC discovery). Anything else, or an unreachable
-    issuer, fails closed — a JWT authorizer must never admit a token it couldn't verify."""
-    try:
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import padding, rsa
-
-        if header.get("alg") != "RS256":
-            return False
-        h, p, sig = token.split(".")
-        key = next((k for k in _jwks(cfg["issuer"]) if k.get("kid") == header.get("kid") and k.get("kty") == "RSA"), None)
-        if key is None:
-            return False
-        n, e = (int.from_bytes(gw._b64u(key[x]), "big") for x in ("n", "e"))
-        rsa.RSAPublicNumbers(e, n).public_key().verify(
-            gw._b64u(sig), f"{h}.{p}".encode(), padding.PKCS1v15(), hashes.SHA256())
-        return True
-    except Exception:
-        return False
+_http_fetch = gc.default_http_fetch()
+# RS256 over the issuer's JWKS; with no `cryptography` installed it must still FAIL CLOSED (a None verifier would skip the check).
+_verify_sig = gc.make_rs256_verifier() or (lambda token, header, cfg: False)
 
 
 def register(app, lambda_invoke):
@@ -122,7 +84,11 @@ def register(app, lambda_invoke):
         store = core.shared_store()
         api = store.apis.get(api_id)
         if not api:
-            return Response(content=b'{"message":"Not Found"}', status_code=404, media_type="application/json")
+            # not an HTTP (v2) API: a REST (v1) API's invoke URL /apigw/{id}/{stage}/... is served by the wire router (core/apigateway_gateway)
+            from core import wire_ingress as _wi
+            _r = _wi.new_services_router() or _wi.appliance_router()
+            out = await _r.ahandle(request.method, request.url.path, dict(request.query_params), dict(request.headers), await request.body())
+            return Response(content=out["body"], status_code=out["status"], headers=dict(out["headers"] or {}))
         first = path.split("/", 1)[0]
         if first and first != "$default" and first in (api.get("stages") or {}):
             stage, path = first, path[len(first):].lstrip("/")

@@ -28,6 +28,12 @@ for prof in aws gcp azure; do
     cp -v "$SRC/.devcontainer/$prof/devcontainer.json" "$DEST/.devcontainer/$prof/"
   fi
 done
+# Mesh pack (headless, 2-core): .devcontainer/mesh/{devcontainer.json,boot-mesh.sh,docker-compose.mesh.yml}
+if [ -d "$SRC/.devcontainer/mesh" ]; then
+  mkdir -p "$DEST/.devcontainer/mesh"
+  cp -v "$SRC/.devcontainer/mesh/"* "$DEST/.devcontainer/mesh/"
+  chmod +x "$DEST/.devcontainer/mesh/boot-mesh.sh"
+fi
 cp -v "$SRC/README.md"                                 "$DEST/"
 chmod +x "$DEST/.devcontainer/boot.sh"
 

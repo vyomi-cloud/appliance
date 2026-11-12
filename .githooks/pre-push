@@ -1,0 +1,47 @@
+#!/bin/sh
+# v4 branch rules, layer 6 (docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md). Enable once per clone: scripts/v4-install-hooks.sh
+#  - TOPIC branches (v4/<topic>, portal/<topic>, anything else): never blocked. A stale base only prints a warning, so work is never lost.
+#  - main / master and tags: refused (owner's go only).
+#  - the trunk and release branches: refused unless VYOMI_INTEGRATOR=1, and then the fast checks run.
+zero=0000000000000000000000000000000000000000
+fail=0
+while read local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue                      # deleting a remote ref: not our concern here
+  branch=${remote_ref#refs/heads/}
+  case "$remote_ref" in
+    refs/tags/archive/*) continue ;;
+    refs/tags/*) echo "pre-push: tags are pushed by the owner only ($remote_ref)"; fail=1; continue ;;
+  esac
+  case "$branch" in
+    main|master)
+      echo "pre-push: $branch is pushed on the owner's go only"; fail=1 ;;
+    v4-on-main|release/v4.0.0|v4-nano-portal)
+      if [ "$VYOMI_INTEGRATOR" != "1" ]; then
+        echo "pre-push: $branch is pushed by the integrator only. If that is you: VYOMI_INTEGRATOR=1 git push ..."; fail=1; continue
+      fi
+      if [ "$remote_sha" != "$zero" ] && ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+        echo "pre-push: $branch would not fast-forward (the remote moved). Fetch and re-integrate; never force-push."; fail=1; continue
+      fi
+      root=$(git rev-parse --show-toplevel)
+      if [ -f "$root/wasm/relay/test-mesh-ssh.mjs" ] && command -v node >/dev/null 2>&1 && [ -n "$WS_PKG" ]; then
+        for t in test-mesh-link test-mesh-shell test-mesh-session-derived test-mesh-ssh; do
+          [ -f "$root/wasm/relay/$t.mjs" ] || continue
+          (cd "$root/wasm/relay" && RELAY_PORT=${RELAY_PORT:-8791} node "$t.mjs" >/dev/null 2>&1) || { echo "pre-push: relay test $t failed"; fail=1; }
+        done
+      else
+        echo "pre-push: relay tests skipped (set WS_PKG=<path to the ws package> to run them before a trunk push)"
+      fi
+      ;;
+    *)
+      # topic branch: warn when the base is stale or the branch document is missing; never block
+      topic=${branch#*/}
+      if ! git ls-tree -r --name-only "$local_sha" 2>/dev/null | grep -Eq "(^|/)branches/$topic\.md$"; then
+        echo "pre-push: note - $branch has no branch document (docs/architecture/v4.0/branches/$topic.md or docs/branches/$topic.md); add it (rule 11: architecture, design decisions, open issues)"
+      fi
+      if git rev-parse --verify -q origin/v4-on-main >/dev/null 2>&1 && ! git merge-base --is-ancestor origin/v4-on-main "$local_sha" 2>/dev/null; then
+        behind=$(git rev-list --count "$local_sha"..origin/v4-on-main 2>/dev/null)
+        echo "pre-push: note - $branch is $behind commit(s) behind origin/v4-on-main (pushed anyway; rebase or port before it goes to the trunk)"
+      fi ;;
+  esac
+done
+exit $fail

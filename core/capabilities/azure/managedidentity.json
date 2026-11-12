@@ -1,0 +1,12 @@
+{
+ "$doc": "Vyomi capability registry — Azure managed identities (Microsoft.ManagedIdentity/userAssignedIdentities and their attachment to other resources). See aws/s3.json for the contract.",
+ "azure.managedidentity.userassigned": {
+  "title": "User assigned managed identities (Microsoft.ManagedIdentity/userAssignedIdentities)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "User-assigned identities are real ARM resources (create/get/list/delete) with a minted principalId/clientId/tenantId. Attaching one to any resource (identity.type UserAssigned / SystemAssigned,UserAssigned with identity.userAssignedIdentities) is validated (an unknown identity is rejected 400 ResourceNotFound) and the referenced identity's principalId/clientId are resolved into the resource's identity block; the principalId is a valid subject for role assignments.",
+   "Vyomi has no token endpoint for a user-assigned identity (no IMDS / federated credential exchange), deleting an identity does not detach it from the resources that reference it, and identity-based authentication to the target services (e.g. a user-assigned identity reaching Key Vault or Storage) is not enforced."
+  ],
+  "tests": ["tests/conformance/test_azure_identity_core.py"]
+ }
+}

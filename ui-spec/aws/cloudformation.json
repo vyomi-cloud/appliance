@@ -1,0 +1,1232 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "cloudformation",
+  "console_path": "/cloudformation/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Stacks",
+      "page_id": "stacks"
+    },
+    {
+      "label": "Stack refactors",
+      "page_id": "stack-refactors"
+    },
+    {
+      "label": "StackSets",
+      "page_id": "stacksets"
+    },
+    {
+      "label": "Exports",
+      "page_id": "exports"
+    },
+    {
+      "label": "IaC generator",
+      "page_id": "iac-generator"
+    },
+    {
+      "label": "Template studio",
+      "page_id": "template-studio"
+    },
+    {
+      "label": "Hooks overview",
+      "page_id": "hooks-overview"
+    },
+    {
+      "label": "Invocation summary",
+      "page_id": "invocation-summary"
+    },
+    {
+      "label": "Hooks",
+      "page_id": "hooks"
+    },
+    {
+      "label": "Registry",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Public extensions",
+          "page_id": "public-extensions"
+        },
+        {
+          "label": "Activated extensions",
+          "page_id": "activated-extensions"
+        },
+        {
+          "label": "Publisher",
+          "page_id": "publisher"
+        }
+      ]
+    },
+    {
+      "label": "Spotlight",
+      "page_id": "spotlight"
+    }
+  ],
+  "pages": [
+    {
+      "id": "getting-started",
+      "kind": "other",
+      "title": "AWS CloudFormation",
+      "route": "/cloudformation/home#/getting-started",
+      "captures": [
+        "A-cloudformation/002-L2-cloudformation"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create stack"
+      ],
+      "sections": [
+        {
+          "title": "Create a CloudFormation stack",
+          "actions": [
+            "Create stack"
+          ]
+        },
+        {
+          "title": "How it works"
+        },
+        {
+          "title": "Benefits and features",
+          "actions": [
+            "View Hooks overview",
+            "Build your template with template studio",
+            "View IaC generator",
+            "View stacks",
+            "View stack sets",
+            "View registry"
+          ]
+        },
+        {
+          "title": "Getting started"
+        },
+        {
+          "title": "More resources"
+        }
+      ]
+    },
+    {
+      "id": "stacks",
+      "kind": "list",
+      "title": "Stacks",
+      "route": "/cloudformation/home#/stacks",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Stacks"
+      ],
+      "captures": [
+        "A-cloudformation/001-L1-landing",
+        "A-cloudformation/005-L2-stacks"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Stacks",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Delete stack",
+          "Update stack",
+          "Stack actions",
+          "Create stack"
+        ],
+        "filter_placeholder": "Search by stack name",
+        "filters": [
+          "Filter status",
+          "View nested"
+        ],
+        "empty_state": "No stacks to display",
+        "empty_state_action": "Create stack",
+        "pagination": true,
+        "preferences": true,
+        "actions": [
+          "View drift results",
+          "Detect drift",
+          "Edit termination protection",
+          "Import resources into stack",
+          "Create change set for current stack",
+          "Continue update rollback"
+        ],
+        "columns": [
+          "Stack name",
+          "Status",
+          "Created time",
+          "Description"
+        ]
+      },
+      "notes": "Filter status default 'Active'; 'View nested' on. Create stack: With new / existing resources."
+    },
+    {
+      "id": "stack-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudformation/home#/stacks/stackinfo?stackId={id}",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Stacks",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Delete",
+        "Update stack",
+        "Stack actions",
+        "Create stack"
+      ],
+      "tabs": [
+        "Stack info",
+        "Events",
+        "Resources",
+        "Outputs",
+        "Parameters",
+        "Template",
+        "Change sets",
+        "Git sync"
+      ],
+      "tab_panels": [
+        {
+          "label": "Stack info",
+          "sections": [
+            {
+              "title": "Overview",
+              "fields": [
+                {
+                  "label": "Stack ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Description",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Detailed status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Status reason",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Root stack",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Parent stack",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Created time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Deleted time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Updated time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Drift status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Last drift check time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Termination protection",
+                  "type": "readonly"
+                },
+                {
+                  "label": "IAM role",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              }
+            },
+            {
+              "title": "Stack policy"
+            },
+            {
+              "title": "Rollback configuration"
+            },
+            {
+              "title": "Notification options"
+            }
+          ]
+        },
+        {
+          "label": "Events",
+          "sections": [
+            {
+              "title": "Events",
+              "table": {
+                "counter": true,
+                "header_actions": [
+                  "Refresh",
+                  "Detect root cause"
+                ],
+                "filter_placeholder": "Search events",
+                "pagination": true,
+                "columns": [
+                  "Timestamp",
+                  "Logical ID",
+                  "Status",
+                  "Detailed status",
+                  "Status reason"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Resources",
+          "sections": [
+            {
+              "title": "Resources",
+              "table": {
+                "counter": true,
+                "header_actions": [
+                  "Refresh"
+                ],
+                "filter_placeholder": "Search resources",
+                "pagination": true,
+                "columns": [
+                  "Logical ID",
+                  "Physical ID",
+                  "Type",
+                  "Status",
+                  "Module"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Outputs",
+          "sections": [
+            {
+              "title": "Outputs",
+              "table": {
+                "counter": true,
+                "filter_placeholder": "Search outputs",
+                "columns": [
+                  "Key",
+                  "Value",
+                  "Description",
+                  "Export name"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Parameters",
+          "sections": [
+            {
+              "title": "Parameters",
+              "table": {
+                "counter": true,
+                "filter_placeholder": "Search parameters",
+                "columns": [
+                  "Key",
+                  "Value",
+                  "Resolved value"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Template",
+          "sections": [
+            {
+              "title": "Template",
+              "actions": [
+                "Copy",
+                "View in Application Composer"
+              ],
+              "fields": [
+                {
+                  "label": "View processed template",
+                  "type": "toggle",
+                  "default": false
+                },
+                {
+                  "label": "Template",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Change sets",
+          "sections": [
+            {
+              "title": "Change sets",
+              "table": {
+                "counter": true,
+                "header_actions": [
+                  "Delete",
+                  "Create change set"
+                ],
+                "selection": "single",
+                "columns": [
+                  "Change set name",
+                  "Created time",
+                  "Status",
+                  "Execution status",
+                  "Description"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "notes": "Not crawled (no stacks in account)."
+    },
+    {
+      "id": "create-stack",
+      "kind": "create",
+      "title": "Create stack",
+      "route": "/cloudformation/home#/stacks/create",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Stacks",
+        "Create stack"
+      ],
+      "captures": [
+        "C-cloudformation/01-create/step-1",
+        "C-cloudformation/01-create/step-1-expanded",
+        "C-cloudformation/01-create/step-2",
+        "C-cloudformation/01-create/step-3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "steps": [
+        {
+          "title": "Create stack",
+          "sections": [
+            {
+              "title": "Prerequisite - Prepare template",
+              "fields": [
+                {
+                  "label": "Prepare template",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Choose an existing template",
+                  "options": [
+                    "Choose an existing template",
+                    "Build with template studio"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Specify template",
+              "actions": [
+                "Open in template studio"
+              ],
+              "fields": [
+                {
+                  "label": "Template source",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Amazon S3 URL",
+                  "options": [
+                    "Amazon S3 URL",
+                    "Upload a template file",
+                    "Sync from Git"
+                  ]
+                },
+                {
+                  "label": "Amazon S3 URL",
+                  "type": "text",
+                  "required": true,
+                  "placeholder": "Enter template URL.",
+                  "visible_when": "Template source = Amazon S3 URL"
+                },
+                {
+                  "label": "Upload a template file",
+                  "type": "file",
+                  "visible_when": "Template source = Upload a template file",
+                  "provenance": "reference",
+                  "help": "JSON or YAML formatted file"
+                },
+                {
+                  "label": "Amazon S3 template URL",
+                  "type": "readonly",
+                  "default": "S3 URL: Will be generated when URL is provided"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Specify stack details",
+          "sections": [
+            {
+              "title": "Provide a stack name",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Stack name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": "Up to 128 chars: letters (A-Z, a-z), numbers (0-9), dashes (-)"
+                }
+              ]
+            },
+            {
+              "title": "Parameters",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Parameters",
+                  "type": "other",
+                  "help": "One input per template parameter"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure stack options",
+          "sections": [
+            {
+              "title": "Tags",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "help": "Key / Value pairs; up to 50 tags",
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Permissions - optional",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "IAM role - optional",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Stack failure options",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Behavior on provisioning failure",
+                  "type": "radio",
+                  "default": "Roll back all stack resources",
+                  "options": [
+                    "Roll back all stack resources",
+                    "Preserve successfully provisioned resources"
+                  ]
+                },
+                {
+                  "label": "Delete newly created resources during a rollback",
+                  "type": "radio",
+                  "default": "Use deletion policy",
+                  "options": [
+                    "Use deletion policy",
+                    "Delete all newly created resources"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Capabilities",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "I acknowledge that AWS CloudFormation might create IAM resources.",
+                  "type": "checkbox"
+                }
+              ]
+            },
+            {
+              "title": "Advanced options",
+              "expandable": true,
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Stack policy",
+                  "type": "other"
+                },
+                {
+                  "label": "Rollback configuration",
+                  "type": "other"
+                },
+                {
+                  "label": "Notification options",
+                  "type": "other"
+                },
+                {
+                  "label": "Termination protection",
+                  "type": "radio",
+                  "options": [
+                    "Deactivated",
+                    "Activated"
+                  ],
+                  "default": "Deactivated"
+                },
+                {
+                  "label": "Timeout",
+                  "type": "number"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review and create",
+          "sections": [
+            {
+              "title": "Review",
+              "provenance": "reference"
+            }
+          ]
+        }
+      ],
+      "submit": "Submit",
+      "notes": "Crawler could not advance past step 1 (no template given); steps 2-4 are reference."
+    },
+    {
+      "id": "stack-refactors",
+      "kind": "list",
+      "title": "Stack refactors",
+      "route": "/cloudformation/home#/stack-refactors",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Stack refactors"
+      ],
+      "captures": [
+        "A-cloudformation/006-L2-stack-refactors"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Stack refactors",
+        "counter": true,
+        "header_actions": [
+          "Start stack refactor"
+        ],
+        "empty_state": "No stack refactors for this account and Region.",
+        "pagination": true,
+        "preferences": true,
+        "columns": [
+          "Stack refactor Id",
+          "Status",
+          "Execution status",
+          "Description",
+          "Status reason",
+          "Execution status reason"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Getting started with stack refactor"
+        }
+      ]
+    },
+    {
+      "id": "stacksets",
+      "kind": "list",
+      "title": "StackSets",
+      "route": "/cloudformation/home#/stacksets",
+      "breadcrumbs": [
+        "CloudFormation",
+        "StackSets"
+      ],
+      "captures": [
+        "A-cloudformation/007-L2-stacksets"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "StackSets",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Actions",
+          "Create stack set"
+        ],
+        "filters": [
+          "Filter status"
+        ],
+        "empty_state": "No stack sets to display",
+        "pagination": true,
+        "preferences": true,
+        "columns": [
+          "Stack set name",
+          "Stack set ID",
+          "Permission model",
+          "Stack set description",
+          "Drift status",
+          "Last drift check time"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Trusted access",
+          "actions": [
+            "Enable trusted access"
+          ]
+        }
+      ],
+      "notes": "Out of Vyomi scope beyond listing."
+    },
+    {
+      "id": "exports",
+      "kind": "list",
+      "title": "Exports",
+      "route": "/cloudformation/home#/exports",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Exports"
+      ],
+      "captures": [
+        "A-cloudformation/008-L2-exports"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Exports",
+        "counter": true,
+        "filter_placeholder": "Filter by export name",
+        "empty_state": "No exported values",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "low",
+        "columns": [
+          "Export name",
+          "Export value",
+          "Stack name",
+          "Stack ID"
+        ]
+      }
+    },
+    {
+      "id": "iac-generator",
+      "kind": "other",
+      "title": "IaC generator",
+      "route": "/cloudformation/home#/iac-generator",
+      "breadcrumbs": [
+        "CloudFormation",
+        "IaC generator"
+      ],
+      "captures": [
+        "A-cloudformation/009-L2-iac-generator",
+        "A-cloudformation/009-L2-iac-generator--tab-02-templates"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Scan summary",
+        "Templates"
+      ],
+      "tab_panels": [
+        {
+          "label": "Scan summary",
+          "sections": [
+            {
+              "title": "Scans",
+              "actions": [
+                "Start a new scan"
+              ],
+              "fields": [
+                {
+                  "label": "Last completed scan",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Days until expiry",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Last attempted scan",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Resources scanned",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Scan status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Selected scan ID (active)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Scan type",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Scanned resources breakdown"
+            }
+          ]
+        },
+        {
+          "label": "Templates",
+          "sections": [
+            {
+              "title": "Templates",
+              "table": {
+                "counter": true,
+                "selection": "single",
+                "header_actions": [
+                  "Actions",
+                  "Delete",
+                  "Create template"
+                ],
+                "empty_state": "No templates",
+                "pagination": true,
+                "columns": [
+                  "Template name",
+                  "Template status",
+                  "Creation time",
+                  "Updated time",
+                  "Resources"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "title": "How it works",
+          "actions": [
+            "Start a new scan",
+            "Create template",
+            "View templates"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "template-studio",
+      "kind": "other",
+      "title": "Template studio",
+      "route": "/cloudformation/home#/template-studio",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Template studio"
+      ],
+      "captures": [
+        "A-cloudformation/010-L2-template-studio"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Validate",
+        "Save and continue"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "actions": [
+            "Actions"
+          ],
+          "fields": [
+            {
+              "label": "View",
+              "type": "radio",
+              "default": "Both",
+              "options": [
+                "Template",
+                "Canvas",
+                "Both"
+              ]
+            },
+            {
+              "label": "Format",
+              "type": "select",
+              "default": "YAML",
+              "options": [
+                "YAML",
+                "JSON"
+              ]
+            },
+            {
+              "label": "Template editor",
+              "type": "textarea",
+              "default": "AWSTemplateFormatVersion: \"2010-09-09\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hooks-overview",
+      "kind": "other",
+      "title": "Hooks overview",
+      "route": "/cloudformation/home#/hooks/overview",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Hooks overview"
+      ],
+      "captures": [
+        "A-cloudformation/011-L2-hooks-overview"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Get started"
+        },
+        {
+          "title": "Use cases"
+        },
+        {
+          "title": "Benefits and features"
+        }
+      ]
+    },
+    {
+      "id": "invocation-summary",
+      "kind": "list",
+      "title": "Invocation summary",
+      "route": "/cloudformation/home#/hooks/invocations",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Invocation summary"
+      ],
+      "captures": [
+        "A-cloudformation/012-L2-invocation-summary"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Invocation summary",
+        "counter": true,
+        "header_actions": [
+          "Create a Hook"
+        ],
+        "empty_state": "No Hook invocations in this Region",
+        "empty_state_action": "Create a Hook",
+        "columns": [
+          "Invocation ID",
+          "Target",
+          "Mode",
+          "Invocation time",
+          "Result message"
+        ]
+      }
+    },
+    {
+      "id": "hooks",
+      "kind": "list",
+      "title": "Hooks",
+      "route": "/cloudformation/home#/hooks/list",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Hooks"
+      ],
+      "captures": [
+        "A-cloudformation/013-L2-hooks"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Hooks",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Delete",
+          "Create a Hook"
+        ],
+        "empty_state": "No hooks",
+        "empty_state_action": "Create a Hook",
+        "pagination": true,
+        "columns": [
+          "Name",
+          "Type",
+          "Mode",
+          "Targets",
+          "Hook status",
+          "Last updated",
+          "Description"
+        ]
+      },
+      "sections": [
+        {
+          "title": "How it works"
+        }
+      ]
+    },
+    {
+      "id": "public-extensions",
+      "kind": "list",
+      "title": "Registry: Public extensions",
+      "route": "/cloudformation/home#/registry/public-extensions",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Registry: Public extensions"
+      ],
+      "captures": [
+        "A-cloudformation/014-L2-public-extensions"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Extensions",
+        "header_actions": [
+          "Activate"
+        ],
+        "pagination": true,
+        "confidence": "medium",
+        "columns": [
+          "Type name",
+          "Publisher",
+          "Description",
+          "Last updated"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Filter",
+          "fields": [
+            {
+              "label": "Extension type",
+              "type": "radio",
+              "default": "Resource types",
+              "options": [
+                "Resource types",
+                "Modules",
+                "Hooks"
+              ]
+            },
+            {
+              "label": "Publisher",
+              "type": "radio",
+              "default": "AWS",
+              "options": [
+                "AWS",
+                "Third party"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": "Extensions render as cards: 'RESOURCE TYPE | PUBLIC', type name, 'Published by AWS', description, last updated."
+    },
+    {
+      "id": "extension-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudformation/home#/registry/public-extensions/resource-type/{resource-name}",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Registry: Public extensions",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-cloudformation/020-L3-aws-acmpca-certificate",
+        "A-cloudformation/020-L3-aws-acmpca-certificate--tab-02-configuration",
+        "A-cloudformation/024-L3-aws-controltower-hook"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "tabs": [
+        "Schema",
+        "Configuration"
+      ],
+      "tab_panels": [
+        {
+          "label": "Schema",
+          "sections": [
+            {
+              "title": "Schema",
+              "fields": [
+                {
+                  "label": "Schema",
+                  "type": "readonly",
+                  "help": "Line-numbered JSON schema"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Configuration",
+          "sections": [
+            {
+              "title": "Configuration"
+            }
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "title": "Overview",
+          "fields": [
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Publisher",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Release date",
+              "type": "readonly"
+            },
+            {
+              "label": "Visibility",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "notes": "Hook types add a 'Target resource types' tab before Schema."
+    },
+    {
+      "id": "activated-extensions",
+      "kind": "list",
+      "title": "Registry: Activated extensions",
+      "route": "/cloudformation/home#/registry/activated-extensions",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Registry: Activated extensions"
+      ],
+      "captures": [
+        "A-cloudformation/015-L2-activated-extensions",
+        "A-cloudformation/015-L2-activated-extensions--tab-02-modules",
+        "A-cloudformation/015-L2-activated-extensions--tab-03-hooks"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Resource types",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Actions"
+        ],
+        "filters": [
+          "Filter extension type"
+        ],
+        "pagination": true,
+        "columns": [
+          "Resource types",
+          "Default version",
+          "Description"
+        ]
+      },
+      "tabs": [
+        "Resource types",
+        "Modules",
+        "Hooks"
+      ]
+    },
+    {
+      "id": "publisher",
+      "kind": "other",
+      "title": "Registry: Publisher",
+      "route": "/cloudformation/home#/registry/publisher",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Registry: Publisher"
+      ],
+      "captures": [
+        "A-cloudformation/016-L2-publisher"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Publisher registration",
+          "actions": [
+            "Register publisher"
+          ],
+          "fields": [
+            {
+              "label": "Status",
+              "type": "readonly",
+              "default": "This account is not registered as a publisher."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spotlight",
+      "kind": "other",
+      "title": "CloudFormation Spotlight",
+      "route": "/cloudformation/home#/spotlight",
+      "breadcrumbs": [
+        "CloudFormation",
+        "Spotlight"
+      ],
+      "captures": [
+        "A-cloudformation/017-L2-spotlight"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Filters",
+          "fields": [
+            {
+              "label": "Filter by",
+              "type": "select",
+              "default": "All tags"
+            },
+            {
+              "label": "Sort by",
+              "type": "select",
+              "default": "Sort by newest"
+            },
+            {
+              "label": "Show editor's choice only",
+              "type": "toggle"
+            },
+            {
+              "label": "Show bookmarks only",
+              "type": "toggle"
+            }
+          ]
+        }
+      ],
+      "notes": "Article cards with Bookmark / Learn more. Out of Vyomi scope."
+    }
+  ],
+  "gaps_note": "Stack detail and Create stack steps 2-4 are provenance=reference (no stacks in account; crawler cannot pass step 1 without a template). Stack actions dropdown items are reference. Exports page header text was not in the capture (filter placeholder is reference). Hooks/Registry/Spotlight are declared for nav completeness."
+}

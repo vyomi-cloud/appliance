@@ -17,7 +17,7 @@ const check = (ok, what, detail = "") => {
 const { server, base } = await startServer();
 const browser = await chromium.launch();
 const ctx = await browser.newContext();
-await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); } catch (_) {} });
+await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); localStorage.setItem("vyomi_ci_tier", "max"); } catch (_) {} });
 const page = await ctx.newPage();
 const bad = [];
 let createStatus = null, newId = "";

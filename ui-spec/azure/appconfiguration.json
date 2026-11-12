@@ -1,0 +1,543 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "appconfiguration",
+  "console_path": "#browse/Microsoft.AppConfiguration%2FconfigurationStores",
+  "status": "draft",
+  "captured_at": "2026-11-01",
+  "nav": [
+    { "label": "Overview", "page_id": "configuration-store-overview" },
+    { "label": "Activity log", "page_id": "configuration-store-activity-log" },
+    { "label": "Access control (IAM)", "page_id": "configuration-store-access-control-iam" },
+    { "label": "Tags", "page_id": "configuration-store-tags" },
+    { "label": "Diagnose and solve problems", "page_id": "configuration-store-diagnose-and-solve-problems" },
+    {
+      "label": "Operations",
+      "expandable": true,
+      "children": [
+        { "label": "Configuration explorer", "page_id": "configuration-explorer" },
+        { "label": "Feature manager", "page_id": "feature-manager" },
+        { "label": "Import/export", "page_id": "configuration-store-import-export" },
+        { "label": "Events", "page_id": "configuration-store-events" }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        { "label": "Access settings", "page_id": "configuration-store-access-settings" },
+        { "label": "Geo-replication", "page_id": "configuration-store-geo-replication" },
+        { "label": "Networking", "page_id": "configuration-store-networking" },
+        { "label": "Encryption", "page_id": "configuration-store-encryption" },
+        { "label": "Identity", "page_id": "configuration-store-identity" },
+        { "label": "Properties", "page_id": "configuration-store-properties" },
+        { "label": "Locks", "page_id": "configuration-store-locks" }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        { "label": "Alerts", "page_id": "configuration-store-alerts" },
+        { "label": "Metrics", "page_id": "configuration-store-metrics" },
+        { "label": "Diagnostic settings", "page_id": "configuration-store-diagnostic-settings" },
+        { "label": "Logs", "page_id": "configuration-store-logs" }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        { "label": "Tasks", "page_id": "configuration-store-tasks" },
+        { "label": "Export template", "page_id": "configuration-store-export-template" }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        { "label": "Resource health", "page_id": "configuration-store-resource-health" },
+        { "label": "Support + Troubleshooting", "page_id": "configuration-store-support-troubleshooting" }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "configuration-stores",
+      "kind": "list",
+      "title": "Configuration stores",
+      "route": "#browse/Microsoft.AppConfiguration%2FconfigurationStores",
+      "breadcrumbs": ["Home"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": ["Name", "Type", "Resource group", "Location", "Subscription"],
+        "selection": "multi",
+        "header_actions": ["Create", "Manage deleted configuration stores", "Manage view", "Refresh", "Export to CSV", "Open query", "Assign tags", "Delete"],
+        "filter_placeholder": "Filter for any field...",
+        "filters": ["Subscription equals all", "Resource group equals all", "Location equals all", "Add filter"],
+        "empty_state": "No configuration stores to display",
+        "empty_state_action": "Create",
+        "pagination": true
+      }
+    },
+    {
+      "id": "create-configuration-store",
+      "kind": "create",
+      "title": "Create a configuration store",
+      "route": "#create/Microsoft.AppConfiguration",
+      "breadcrumbs": ["Home", "Configuration stores", "Create a configuration store"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                { "label": "Subscription", "type": "select", "required": true },
+                { "label": "Resource group", "type": "select", "required": true, "actions": ["Create new"] }
+              ]
+            },
+            {
+              "title": "Instance details",
+              "fields": [
+                { "label": "Resource name", "type": "text", "required": true, "constraints": "5-50 chars; letters, numbers, hyphens; globally unique" },
+                { "label": "Region", "type": "select", "required": true, "default": "(US) East US" },
+                { "label": "Pricing tier", "type": "select", "default": "Free", "options": ["Free", "Standard"] }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network connectivity",
+              "fields": [
+                { "label": "Enable public access", "type": "checkbox", "default": true }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                { "label": "Tags", "type": "table", "columns": ["Name", "Value", "Resource"], "help": "Name/value pairs to categorize resources and view consolidated billing" }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            { "title": "Basics" },
+            { "title": "Networking" },
+            { "title": "Tags" }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "configuration-store-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Delete", "Refresh"],
+      "sections": [
+        {
+          "title": "Essentials",
+          "fields": [
+            { "label": "Resource group", "type": "readonly" },
+            { "label": "Location", "type": "readonly" },
+            { "label": "Subscription", "type": "readonly" },
+            { "label": "Subscription ID", "type": "readonly" },
+            { "label": "Endpoint", "type": "readonly" },
+            { "label": "Pricing tier", "type": "readonly" },
+            { "label": "Tags", "type": "readonly" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "configuration-store-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log, filtered to this resource",
+      "table": {
+        "columns": ["Operation name", "Status", "Time", "Time stamp", "Subscription", "Event initiated by"],
+        "header_actions": ["Edit columns", "Refresh", "Export Activity Logs", "Download as CSV", "Feedback", "Pin current filters", "Reset filters"],
+        "filters": ["Timespan"],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "configuration-store-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": ["Check access", "Role assignments", "Roles", "Deny assignments", "Classic administrators"],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            { "title": "My access", "fields": [{ "label": "View my access", "type": "button" }] },
+            { "title": "Check access", "fields": [{ "label": "Check access", "type": "button" }] }
+          ]
+        },
+        { "label": "Role assignments", "sections": [{ "title": "Role assignments", "table": { "columns": ["Name", "Type", "Role", "Scope", "Condition"], "selection": "multi" } }] },
+        { "label": "Roles", "sections": [{ "title": "Roles", "table": { "columns": ["Name", "Description", "Type", "Category", "Details"] } }] },
+        { "label": "Deny assignments", "sections": [{ "title": "Deny assignments", "table": { "columns": ["Name", "Description", "Principal", "Scope"] } }] },
+        { "label": "Classic administrators" }
+      ]
+    },
+    {
+      "id": "configuration-store-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": ["Apply", "Discard changes", "Delete all"],
+      "sections": [
+        { "title": "Tags", "fields": [{ "label": "Tags", "type": "table", "columns": ["Name", "Value"], "actions": ["Delete"] }] }
+      ]
+    },
+    {
+      "id": "configuration-store-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-explorer",
+      "kind": "list",
+      "title": "{resource-name} | Configuration explorer",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": ["Key", "Value", "Label", "Content type"],
+        "selection": "single",
+        "header_actions": ["Create", "Delete", "Refresh", "Export", "Import"],
+        "filter_placeholder": "Search by key or value",
+        "filters": ["Label equals all"],
+        "empty_state": "No keys found for the selected label."
+      }
+    },
+    {
+      "id": "create-key-value",
+      "kind": "create",
+      "title": "Create key-value",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name} | Configuration explorer", "Create key-value"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Create key-value",
+          "fields": [
+            { "label": "Key", "type": "text", "required": true },
+            { "label": "Value", "type": "textarea" },
+            { "label": "Content type", "type": "text" },
+            { "label": "Label", "type": "text" }
+          ]
+        }
+      ],
+      "submit": "Apply"
+    },
+    {
+      "id": "key-value-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": ["Home", "Configuration stores", "{store-name} | Configuration explorer", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Save", "Discard changes", "Delete", "Lock"],
+      "sections": [
+        {
+          "title": "Edit key-value",
+          "fields": [
+            { "label": "Key", "type": "readonly" },
+            { "label": "Label", "type": "readonly" },
+            { "label": "Content type", "type": "text" },
+            { "label": "Value", "type": "textarea" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feature-manager",
+      "kind": "list",
+      "title": "{resource-name} | Feature manager",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": ["Name", "Enabled", "Label", "Description"],
+        "selection": "single",
+        "header_actions": ["Add", "Delete", "Refresh", "Enable", "Disable"],
+        "filter_placeholder": "Search by name",
+        "empty_state": "No feature flags found."
+      }
+    },
+    {
+      "id": "create-feature-flag",
+      "kind": "create",
+      "title": "Add feature flag",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name} | Feature manager", "Add feature flag"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Add feature flag",
+          "fields": [
+            { "label": "Enable feature flag", "type": "checkbox", "default": false },
+            { "label": "Name", "type": "text", "required": true },
+            { "label": "Label", "type": "text" },
+            { "label": "Description", "type": "textarea" }
+          ]
+        }
+      ],
+      "submit": "Apply"
+    },
+    {
+      "id": "configuration-store-import-export",
+      "kind": "other",
+      "title": "{resource-name} | Import/export",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-events",
+      "kind": "other",
+      "title": "{resource-name} | Events",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-access-settings",
+      "kind": "settings",
+      "title": "{resource-name} | Access settings",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        { "title": "Authentication mode", "fields": [{ "label": "Enable access key authentication", "type": "checkbox" }] }
+      ],
+      "tabs": ["Read-write keys", "Read-only keys"],
+      "tab_panels": [
+        {
+          "label": "Read-write keys",
+          "sections": [
+            { "title": "Primary key", "actions": ["Regenerate Primary Key"], "fields": [{ "label": "Connection string", "type": "readonly" }, { "label": "Key ID", "type": "readonly" }, { "label": "Secret Value", "type": "readonly" }] },
+            { "title": "Secondary key", "actions": ["Regenerate Secondary Key"], "fields": [{ "label": "Connection string", "type": "readonly" }, { "label": "Key ID", "type": "readonly" }, { "label": "Secret Value", "type": "readonly" }] }
+          ]
+        },
+        {
+          "label": "Read-only keys",
+          "sections": [
+            { "title": "Primary read-only key", "actions": ["Regenerate Primary Key"], "fields": [{ "label": "Connection string", "type": "readonly" }, { "label": "Key ID", "type": "readonly" }, { "label": "Secret Value", "type": "readonly" }] },
+            { "title": "Secondary read-only key", "actions": ["Regenerate Secondary Key"], "fields": [{ "label": "Connection string", "type": "readonly" }, { "label": "Key ID", "type": "readonly" }, { "label": "Secret Value", "type": "readonly" }] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "configuration-store-geo-replication",
+      "kind": "list",
+      "title": "{resource-name} | Geo-replication",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": ["Name", "Location", "Endpoint", "Provisioning state"],
+        "header_actions": ["Create", "Delete", "Refresh"],
+        "empty_state": "No replicas have been added."
+      }
+    },
+    {
+      "id": "create-replica",
+      "kind": "create",
+      "title": "Add replica",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name} | Geo-replication", "Add replica"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        { "title": "Add replica", "fields": [{ "label": "Name", "type": "text", "required": true }, { "label": "Location", "type": "select", "required": true }] }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "configuration-store-networking",
+      "kind": "settings",
+      "title": "{resource-name} | Networking",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Apply", "Discard changes", "Refresh"],
+      "sections": [
+        { "title": "Firewalls and virtual networks", "fields": [{ "label": "Allow access from", "type": "radio", "options": ["Allow public access from all networks", "Disable public access"] }] }
+      ]
+    },
+    {
+      "id": "configuration-store-encryption",
+      "kind": "other",
+      "title": "{resource-name} | Encryption",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-identity",
+      "kind": "other",
+      "title": "{resource-name} | Identity",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-properties",
+      "kind": "settings",
+      "title": "{resource-name} | Properties",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Properties",
+          "fields": [
+            { "label": "Name", "type": "readonly" },
+            { "label": "Resource ID", "type": "readonly" },
+            { "label": "Pricing tier", "type": "readonly" },
+            { "label": "Location", "type": "readonly" },
+            { "label": "Endpoint", "type": "readonly" },
+            { "label": "Subscription ID", "type": "readonly" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "configuration-store-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": ["Lock name", "Lock type", "Scope", "Notes"],
+        "header_actions": ["Add", "Refresh"],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            { "label": "Lock name", "type": "text", "required": true },
+            { "label": "Lock type", "type": "select", "required": true, "options": ["Read-only", "Delete"] },
+            { "label": "Notes", "type": "textarea" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "configuration-store-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Download"],
+      "tabs": ["ARM Template", "Bicep", "Terraform"],
+      "sections": [
+        { "title": "Template", "fields": [{ "label": "Include parameters", "type": "checkbox", "default": true }] }
+      ]
+    },
+    {
+      "id": "configuration-store-resource-health",
+      "kind": "other",
+      "title": "{resource-name} | Resource health",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    },
+    {
+      "id": "configuration-store-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": ["Home", "Configuration stores", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Resource menu item; title only"
+    }
+  ],
+  "gaps_note": "No native-console captures were available for this run (private captures repo not checked out); this spec is authored from product knowledge of the real App Configuration console (provenance=reference throughout) and the existing core/azure_appconfiguration_core.py / core/azure_subblades.py _APPCONFIG_SUB menu, re-verify against a real capture when one becomes available."
+}

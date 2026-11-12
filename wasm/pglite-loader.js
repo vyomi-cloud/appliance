@@ -52,7 +52,8 @@ export async function installPGlite(url = PGLITE_URL) {
 const SSL_REQUEST = 80877103;
 const _bridges = new Map();   // dbId -> {ws, port, waiters, closed, timer}
 function _relayWsBase() {
-  return (globalThis.__nano_local_ws_base || "ws://127.0.0.1:8090").replace(/\/$/, "");
+  let ext = ""; try { ext = (globalThis.localStorage && localStorage.getItem("nano_local_ext")) || ""; } catch (_) {}   // same setting db-bridge.js uses
+  return (globalThis.__nano_local_ws_base || (ext ? ext.replace(/^http/, "ws") : "ws://127.0.0.1:8090")).replace(/\/$/, "");
 }
 function startBridge(dbId, db) {
   if (typeof WebSocket === "undefined" || _bridges.has(dbId)) return;

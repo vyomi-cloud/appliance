@@ -24,6 +24,8 @@ import time
 from urllib.parse import parse_qsl, urlencode
 
 from core import apigatewayv2_core as v2
+from core import gateway_common as gc
+from core.gateway_common import Throttle, jwt_validate  # noqa: F401  (re-exported: shared cross-cloud primitives)
 
 MAX_PAYLOAD = 10 * 1024 * 1024
 GATEWAY_HOST_SUFFIX = "execute-api.localhost"
@@ -88,41 +90,11 @@ def _resp(status, obj=None, headers=None, body=None):
     return v2.ApiGwV2Response(status=status, body=body, headers=dict(headers or {}))
 
 
-def _hget(headers, name, default=None):
-    n = name.lower()
-    for k, v in (headers or {}).items():
-        if k.lower() == n:
-            return v
-    return default
-
-
-def _b64u(s: str) -> bytes:
-    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+_hget = gc.hget
+_b64u = gc.b64u
 
 
 # ── throttling ───────────────────────────────────────────────────────────────
-class Throttle:
-    """Token bucket per (api, stage, route): `rate` tokens/s, capacity `burst`."""
-
-    def __init__(self, clock=time.monotonic):
-        self._b: dict = {}
-        self._clock = clock
-
-    def allow(self, key, rate, burst) -> bool:
-        if rate is None and burst is None:
-            return True
-        rate = float(rate if rate is not None else burst)
-        cap = float(burst if burst is not None else max(1.0, rate))
-        now = self._clock()
-        tokens, last = self._b.get(key, (cap, now))
-        tokens = min(cap, tokens + (now - last) * rate)
-        if tokens < 1.0:
-            self._b[key] = (tokens, now)
-            return False
-        self._b[key] = (tokens - 1.0, now)
-        return True
-
-
 _THROTTLE = Throttle()
 
 
@@ -177,36 +149,6 @@ def _identity_values(sources, headers, query):
         else:
             vals.append((query or {}).get(m.group(2)))
     return vals
-
-
-def jwt_validate(token, cfg, verify_sig=None, now=None):
-    """-> (claims | None, scopes). Checks structure, signature (if a verifier is injected),
-    exp/nbf, issuer, and audience / client_id."""
-    try:
-        h, p, _ = token.split(".")
-        header, claims = json.loads(_b64u(h)), json.loads(_b64u(p))
-    except Exception:
-        return None, []
-    now = now if now is not None else time.time()
-    if verify_sig is not None and not verify_sig(token, header, cfg):
-        return None, []
-    if "exp" in claims and now >= float(claims["exp"]):
-        return None, []
-    if "nbf" in claims and now < float(claims["nbf"]):
-        return None, []
-    if cfg.get("issuer") and claims.get("iss") != cfg["issuer"]:
-        return None, []
-    aud = cfg.get("audience") or []
-    if aud:
-        got = claims.get("aud")
-        got = got if isinstance(got, list) else [got] if got is not None else []
-        if claims.get("client_id") is not None:
-            got.append(claims["client_id"])
-        if not set(aud) & set(got):
-            return None, []
-    scopes = claims.get("scope", claims.get("scp", []))
-    scopes = scopes.split() if isinstance(scopes, str) else list(scopes or [])
-    return claims, scopes
 
 
 _AUTH_CACHE: dict = {}
@@ -390,7 +332,24 @@ def _lambda_result(res, version):
 # ── the handler ──────────────────────────────────────────────────────────────
 def handle(store, api_id, stage, method, path, headers=None, query=None, body=b"", *,
            invoker=None, http_fetch=None, verify_sig=None, source_ip="127.0.0.1", request_id=None):
-    """Serve one execute-api request against a deployed HTTP API."""
+    """Serve one execute-api request against a deployed HTTP API (synchronous: appliance / Mesh / tests)."""
+    gen = handle_steps(store, api_id, stage, method, path, headers, query, body, invoker=invoker, can_fetch=http_fetch is not None,
+                       verify_sig=verify_sig, source_ip=source_ip, request_id=request_id)
+    return gc.drive(gen, gc.sync_fetcher(http_fetch) if http_fetch is not None else (lambda f: None))
+
+
+async def ahandle(store, api_id, stage, method, path, headers=None, query=None, body=b"", *,
+                  invoker=None, async_fetch=None, verify_sig=None, source_ip="127.0.0.1", request_id=None):
+    """Nano: the same engine run, but the HTTP-integration hop is awaited (`async_fetch(gc.Fetch) -> (status, headers, bytes)`,
+    may raise gc.BackendUnavailable). Throttle / authorizers / Lambda run once, inside the run, before the hop."""
+    gen = handle_steps(store, api_id, stage, method, path, headers, query, body, invoker=invoker, can_fetch=async_fetch is not None,
+                       verify_sig=verify_sig, source_ip=source_ip, request_id=request_id)
+    return await gc.adrive(gen, async_fetch or (lambda f: None))
+
+
+def handle_steps(store, api_id, stage, method, path, headers=None, query=None, body=b"", *,
+                 invoker=None, can_fetch=True, verify_sig=None, source_ip="127.0.0.1", request_id=None):
+    """The engine as a resumable run: yields ONE `gc.Fetch` for an HTTP integration and resumes with (status, headers, body)."""
     api = store.apis.get(api_id)
     if not api or api["protocolType"] != "HTTP" or api.get("disableExecuteApiEndpoint"):
         return _resp(404, {"message": "Not Found"})
@@ -460,11 +419,13 @@ def handle(store, api_id, stage, method, path, headers=None, query=None, body=b"
             uri += ("&" if "?" in uri else "?") + urlencode(q2)
         m = integ.get("integrationMethod") or "ANY"
         m = method if m == "ANY" else m
-        if http_fetch is None:
+        if not can_fetch:
             return done(_resp(502, {"message": "Bad Gateway"}))
         try:
-            status, rh, rb = http_fetch(m, uri, {k: v for k, v in h2.items() if k.lower() not in ("host", "content-length")},
-                                        body or b"", (integ.get("timeoutInMillis") or 30000) / 1000)
+            status, rh, rb = yield gc.Fetch(m, uri, {k: v for k, v in h2.items() if k.lower() not in ("host", "content-length")},
+                                            body or b"", (integ.get("timeoutInMillis") or 30000) / 1000)
+        except gc.BackendUnavailable as e:
+            return done(_resp(502, {"message": "Bad Gateway"}, {"x-vyomi-backend-error": str(e)[:300]}))
         except Exception:
             return done(_resp(502, {"message": "Bad Gateway"}))
         rh = {k: v for k, v in (rh or {}).items() if k.lower() not in ("transfer-encoding", "connection", "content-length")}

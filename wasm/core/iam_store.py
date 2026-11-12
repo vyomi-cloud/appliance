@@ -28,6 +28,23 @@ State shapes (record shapes owned by iam_core):
     roles    : { role_name -> role }
     policies : { policy_arn -> managed-policy }
     access_keys : { access_key_id -> key }
+    saml_providers : { arn -> provider }
+    oidc_providers : { arn -> provider }
+    account_aliases : [alias, ...]        (IAM allows at most one in real AWS; we allow a small list)
+    password_policy : dict | None          (GetAccountPasswordPolicy shape, or None = IAM default)
+    credential_report : {"generated": iso8601, "content": csv-str} | None
+    org_policies : { policy_id -> SCP/RCP }   (Vyomi-only — see iam_core's CreateOrgPolicy)
+    access_requests : { request_id -> account-access request }  (Vyomi-only — see RequestAccountAccess)
+    virtual_mfa_devices : { serial_number(arn) -> virtual MFA device, assigned or not }
+    activity : [ {principal_arn, service, action, time}, ... ]  (native-wire activity log —
+        every request signed with an IAM USER's own access key, AKID-attributed by
+        aws_wire_router.py; the console's own operator credential doesn't appear here.
+        Backs GenerateServiceLastAccessedDetails, the Vyomi-only policy-from-activity
+        generator, and Access Analyzer's unused-access findings — see iam_core.record_activity)
+    trust_anchors : { arn -> IAM Roles Anywhere trust anchor }      (Vyomi-only)
+    rolesanywhere_profiles : { arn -> IAM Roles Anywhere profile }  (Vyomi-only)
+    analyzers : { analyzer_name -> Access Analyzer analyzer }       (Vyomi-only)
+    extras : { ssh_keys, service_creds, signing_certs, server_certs, events } — see iam_core._x
 """
 from __future__ import annotations
 
@@ -68,25 +85,98 @@ class NativeIamEvaluator(AuthzEngine):
         return fnmatch.fnmatchcase(value.lower(), pattern.lower())
 
     @staticmethod
+    def _expand(value: Any, context: dict) -> Any:
+        """Policy variables: ${aws:username}, ${aws:PrincipalTag/team}, … resolved from the request context."""
+        if isinstance(value, list):
+            return [NativeIamEvaluator._expand(v, context) for v in value]
+        if not isinstance(value, str) or "${" not in value:
+            return value
+        import re
+        return re.sub(r"\$\{([^}]+)\}", lambda m: str(context.get(m.group(1), m.group(0))), value)
+
+    @staticmethod
+    def _cmp_values(base: str, actual: str, wanted: list[str]) -> bool:
+        """True if `actual` satisfies the POSITIVE form of operator `base` against ANY wanted value."""
+        if base in ("stringequals", "arnequals"):
+            return actual in wanted
+        if base == "stringequalsignorecase":
+            return actual.lower() in [w.lower() for w in wanted]
+        if base in ("stringlike", "arnlike"):
+            return NativeIamEvaluator._value_matches(wanted, actual)
+        if base.startswith("numeric"):
+            try:
+                a = float(actual)
+                nums = [float(w) for w in wanted]
+            except ValueError:
+                return False
+            fn = {"numericequals": lambda n: a == n, "numericlessthan": lambda n: a < n, "numericlessthanequals": lambda n: a <= n,
+                  "numericgreaterthan": lambda n: a > n, "numericgreaterthanequals": lambda n: a >= n}.get(base)
+            return bool(fn) and any(fn(n) for n in nums)
+        if base.startswith("date"):
+            def ts(v):
+                v = str(v).strip()
+                try:
+                    return float(v)
+                except ValueError:
+                    from datetime import datetime, timezone
+                    d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                    return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).timestamp()
+            try:
+                a = ts(actual)
+                dates = [ts(w) for w in wanted]
+            except ValueError:
+                return False
+            fn = {"dateequals": lambda d: a == d, "datelessthan": lambda d: a < d, "datelessthanequals": lambda d: a <= d,
+                  "dategreaterthan": lambda d: a > d, "dategreaterthanequals": lambda d: a >= d}.get(base)
+            return bool(fn) and any(fn(d) for d in dates)
+        if base == "ipaddress":
+            import ipaddress
+            try:
+                ip = ipaddress.ip_address(actual)
+                return any(ip in ipaddress.ip_network(str(w), strict=False) for w in wanted)
+            except ValueError:
+                return False
+        if base == "bool":
+            return actual.lower() in [w.lower() for w in wanted]
+        if base == "binaryequals":
+            return actual in wanted
+        return False
+
+    _NEGATED = {"stringnotequals": "stringequals", "stringnotequalsignorecase": "stringequalsignorecase", "stringnotlike": "stringlike",
+                "arnnotequals": "arnequals", "arnnotlike": "arnlike", "numericnotequals": "numericequals",
+                "notipaddress": "ipaddress"}
+
+    @staticmethod
     def _condition_matches(condition: dict, context: dict[str, str]) -> bool:
         if not condition:
             return True
         for operator, operands in condition.items():
             if not isinstance(operands, dict):
                 return False
-            op = operator.lower()
+            op = operator
+            qualifier = ""
+            if ":" in op:
+                qualifier, op = op.split(":", 1)
+            op = op.lower()
+            if_exists = op.endswith("ifexists")
+            if if_exists:
+                op = op[: -len("ifexists")]
+            negated = op in NativeIamEvaluator._NEGATED
+            base = NativeIamEvaluator._NEGATED.get(op, op)
             for key, expected in operands.items():
-                actual = context.get(key, "")
-                if op in {"stringequals", "arnequals"}:
-                    if isinstance(expected, list):
-                        if actual not in [str(i) for i in expected]:
-                            return False
-                    elif actual != str(expected):
+                present = key in context and context[key] is not None
+                if op == "null":
+                    want_absent = str(expected[0] if isinstance(expected, list) else expected).lower() == "true"
+                    if (not present) != want_absent:
                         return False
-                elif op in {"stringlike", "arnlike"}:
-                    if not NativeIamEvaluator._value_matches(expected, actual):
-                        return False
-                else:
+                    continue
+                if not present:
+                    if if_exists or negated or qualifier.lower() == "forallvalues":
+                        continue       # IfExists / negated operators / ForAllValues are true for an absent key
+                    return False
+                wanted = NativeIamEvaluator._expand(expected if isinstance(expected, list) else [expected], context)
+                hit = NativeIamEvaluator._cmp_values(base, str(context[key]), [str(w) for w in wanted])
+                if hit == negated:
                     return False
         return True
 
@@ -148,6 +238,19 @@ class IamStore:
         self.roles: dict[str, dict[str, Any]] = {}
         self.policies: dict[str, dict[str, Any]] = {}      # keyed by ARN
         self.access_keys: dict[str, dict[str, Any]] = {}   # keyed by AccessKeyId
+        self.saml_providers: dict[str, dict[str, Any]] = {}     # keyed by ARN
+        self.oidc_providers: dict[str, dict[str, Any]] = {}     # keyed by ARN
+        self.account_aliases: list[str] = []
+        self.password_policy: dict[str, Any] | None = None
+        self.credential_report: dict[str, Any] | None = None
+        self.org_policies: dict[str, dict[str, Any]] = {}       # keyed by PolicyId (SCP/RCP, Vyomi-only)
+        self.access_requests: dict[str, dict[str, Any]] = {}    # keyed by RequestId (Vyomi-only)
+        self.virtual_mfa_devices: dict[str, dict[str, Any]] = {}   # keyed by SerialNumber (ARN)
+        self.activity: list[dict[str, Any]] = []                   # native-wire activity log (Vyomi-only)
+        self.trust_anchors: dict[str, dict[str, Any]] = {}         # keyed by ARN (Roles Anywhere, Vyomi-only)
+        self.rolesanywhere_profiles: dict[str, dict[str, Any]] = {}   # keyed by ARN (Roles Anywhere, Vyomi-only)
+        self.analyzers: dict[str, dict[str, Any]] = {}             # keyed by analyzer name (Access Analyzer, Vyomi-only)
+        self.extras: dict[str, Any] = {}   # ssh_keys/service_creds/signing_certs/server_certs/events (see iam_core._x)
         self.engine: AuthzEngine = engine or NativeIamEvaluator()
         self.account_id = account_id
 

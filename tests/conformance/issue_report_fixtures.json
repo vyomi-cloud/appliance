@@ -1,0 +1,19 @@
+{
+  "_comment": "Real-shaped failure payloads. Each 'message' contains the sensitive values in 'forbidden'; after scrubbing NONE of them may remain. Shared by the Python and JS scrubber tests.",
+  "cases": [
+    {"name": "email", "message": "Notification failed for owner jane.doe@example.com", "forbidden": ["jane.doe", "example.com"]},
+    {"name": "ipv4+port", "message": "connect ECONNREFUSED 10.20.30.40:5432 from 192.168.1.77", "forbidden": ["10.20.30.40", "192.168.1.77"]},
+    {"name": "ipv6", "message": "peer 2001:db8:85a3:0:0:8a2e:370:7334 reset", "forbidden": ["2001:db8", "8a2e"]},
+    {"name": "aws-account", "message": "User: arn:aws:iam::123456789012:user/alice-prod is not authorized; account 123456789012", "forbidden": ["123456789012", "alice-prod"]},
+    {"name": "aws-access-key", "message": "InvalidClientTokenId for AKIAIOSFODNN7EXAMPLE", "forbidden": ["AKIAIOSFODNN7EXAMPLE"]},
+    {"name": "secret-kv", "message": "bad request: aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY password=hunter2-Correct", "forbidden": ["wJalrXUtnFEMI", "hunter2"]},
+    {"name": "bearer+jwt", "message": "401 Authorization: Bearer abcDEF123456ghiJKL789 token eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1MSJ9.c2lnbmF0dXJl", "forbidden": ["abcDEF123456", "eyJhbGci", "eyJzdWIi"]},
+    {"name": "github-token", "message": "push failed with ghp_abcdefghijklmnopqrstuvwxyz0123456789", "forbidden": ["ghp_abcdefghijkl"]},
+    {"name": "gcp-project", "message": "Permission denied on projects/acme-payments-4471/buckets/customer-exports", "forbidden": ["acme-payments", "customer-exports"]},
+    {"name": "azure-ids", "message": "ResourceNotFound /subscriptions/0b1a2c3d-4e5f-6789-abcd-ef0123456789/resourceGroups/rg-billing/providers/Microsoft.Storage/storageAccounts/acmefinance01", "forbidden": ["0b1a2c3d", "rg-billing", "acmefinance01"]},
+    {"name": "quoted-resource", "message": "NoSuchBucket: The specified bucket 'q3-board-minutes' does not exist", "forbidden": ["q3-board-minutes"]},
+    {"name": "url-query", "message": "GET https://store.example.net/blob?sv=2022&sig=Zm9vYmFyU0lHTkFUVVJF&se=2030 failed", "forbidden": ["Zm9vYmFy", "sig="]},
+    {"name": "pem", "message": "bad key -----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAx7fake\n-----END RSA PRIVATE KEY-----", "forbidden": ["MIIEowIBAAKC", "x7fake"]},
+    {"name": "path", "message": "FileNotFoundError: /home/jdoe/projects/secret-app/main.py", "forbidden": ["jdoe", "secret-app"]}
+  ]
+}

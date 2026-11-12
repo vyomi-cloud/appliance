@@ -71,27 +71,17 @@ DEPLOY_SKUS = ("Standard", "GlobalStandard", "ProvisionedManaged", "GlobalProvis
                "GlobalBatch", "DeveloperTier")
 QUOTA_LIMIT = 1000          # thousands of tokens-per-minute per deployment sku (per account)
 
-# (format, name, version, max capacity, capabilities)
-MODELS = [
-    ("OpenAI", "gpt-4o", "2024-05-13", 450, ("chatCompletion", "assistants", "jsonObjectResponse")),
-    ("OpenAI", "gpt-4o", "2024-08-06", 450, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4o", "2024-11-20", 450, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4o-mini", "2024-07-18", 1000, ("chatCompletion", "assistants", "jsonObjectResponse")),
-    ("OpenAI", "gpt-4.1", "2025-04-14", 1000, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4.1-mini", "2025-04-14", 1000, ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")),
-    ("OpenAI", "gpt-4.1-nano", "2025-04-14", 1000, ("chatCompletion", "jsonObjectResponse")),
-    ("OpenAI", "gpt-4", "0613", 80, ("chatCompletion",)),
-    ("OpenAI", "gpt-4", "turbo-2024-04-09", 80, ("chatCompletion",)),
-    ("OpenAI", "gpt-35-turbo", "0125", 1000, ("chatCompletion",)),
-    ("OpenAI", "o1", "2024-12-17", 100, ("chatCompletion", "reasoning")),
-    ("OpenAI", "o3-mini", "2025-01-31", 1000, ("chatCompletion", "reasoning")),
-    ("OpenAI", "text-embedding-ada-002", "2", 1000, ("embeddings",)),
-    ("OpenAI", "text-embedding-3-small", "1", 1000, ("embeddings",)),
-    ("OpenAI", "text-embedding-3-large", "1", 1000, ("embeddings",)),
-    ("OpenAI", "dall-e-3", "3.0", 2, ("imageGenerations",)),
-    ("OpenAI", "whisper", "001", 3, ("audioTranscriptions",)),
-    ("OpenAI", "tts", "001", 3, ("audioSpeech",)),
-]
+try:
+    from core import ai_model_catalog as CAT
+except ImportError:  # Pyodide flat layout
+    import ai_model_catalog as CAT  # type: ignore
+
+# (format, name, version, max capacity, capabilities): the ten mesh-llm open models only (core/ai_model_catalog.py).
+# format = the model's real vendor. Legacy OpenAI names (gpt-4o, o1 ...) are not listed; _find_model still resolves them via
+# the hidden alias map so deployments created by existing SDK/IaC code keep working.
+_CHAT_CAPS = ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")
+MODELS = [(m["vendor"], m["id"], "1", 1000, ("embeddings",) if m["kind"] == "embed" else
+           (_CHAT_CAPS + ("reasoning",) if m["id"] == "deepseek-r1-8b" else _CHAT_CAPS)) for m in CAT.MODELS]
 MODEL_KINDS = ("OpenAI", "AIServices")
 
 TIERS = {                       # commitment tiers by kind (list pricing, USD)
@@ -402,7 +392,8 @@ def _account_view(rec):
     if rec["kind"] in MODEL_KINDS:
         out["properties"]["vyomiInference"] = {
             "simulated": True,
-            "note": "Vyomi runs no real model: chat/completions and embeddings return deterministic, clearly labelled simulated output.",
+            "note": "Vyomi runs a small local model behind the same seam as every cloud (core/llm_core): chat/completions (tools, "
+                    "json_object/json_schema, streaming) and embeddings are answered by it - or by a clear 503 when it is not running.",
             "armPath": f"{rec['id']}/openai/deployments/{{deployment}}/chat/completions"}
         if _BASE[0]:
             ep = f"{_BASE[0]}/azure-data/openai/{rec['name']}/"
@@ -432,60 +423,27 @@ def _tokens(text):
     return max(1, len(str(text).split()))
 
 
-SIM_TAG = "[SIMULATED by Vyomi - no real model ran]"
-
-
-def inference(rec, deployment, op, payload):
-    """Deterministic simulated Azure OpenAI data plane. Returns (status, body). op in chat|completions|embeddings."""
-    dep = (rec.get("_deployments") or {}).get(str(deployment).lower())
-    if dep is None:
-        return 404, {"error": {"code": "DeploymentNotFound", "message": "The API deployment for this resource does not exist. "
-                     "If you created the deployment within the last 5 minutes, please wait a moment and try again."}}
-    model = dep["properties"]["model"]["name"]
-    caps = dep["properties"].get("capabilities") or {}
-    need = {"chat": "chatCompletion", "completions": "chatCompletion", "embeddings": "embeddings"}[op]
-    if need not in caps:
-        return 400, {"error": {"code": "OperationNotSupported", "message": f"The {op} operation does not work with the specified model, {model}. "
-                     "Please choose different model and try again."}}
+def inference(rec, deployment, op, payload, state=None, query=None):
+    """Azure OpenAI data plane for ARM-proxy callers. One implementation: delegates to ``ai_models_core.azure_openai_dispatch``
+    (the same code /openai/... and /azure-data/openai/... serve), so a deployment answers identically on every route -
+    from the local model through core/llm_core, or 503 ServiceUnavailable when no model is running. Returns (status, body).
+    Streaming needs the account data-plane endpoint (an ARM response cannot stream)."""
+    try:
+        from core import ai_models_core as aim
+    except ImportError:  # Pyodide flat layout
+        import ai_models_core as aim  # type: ignore
     if not isinstance(payload, dict):
         payload = {}
-    h = hashlib.sha256((deployment + "|" + json.dumps(payload, sort_keys=True, default=str)).encode()).hexdigest()
-    created = int(datetime.now(timezone.utc).timestamp())
-    if op == "embeddings":
-        inp = payload.get("input")
-        items = inp if isinstance(inp, list) else [inp]
-        if inp is None or not items or any(not isinstance(x, str) for x in items):
-            return 400, {"error": {"code": "BadRequest", "message": "'input' is required and must be a string or an array of strings."}}
-        dims = int(payload.get("dimensions") or (3072 if "large" in model else 1536))
-        data = [{"object": "embedding", "index": i, "embedding": _embed_vec(x, dims)} for i, x in enumerate(items)]
-        n = sum(_tokens(x) for x in items)
-        return 200, {"object": "list", "data": data, "model": model, "usage": {"prompt_tokens": n, "total_tokens": n}}
-    if op == "chat":
-        msgs = payload.get("messages")
-        if not isinstance(msgs, list) or not msgs:
-            return 400, {"error": {"code": "BadRequest", "message": "'messages' is a required property."}}
-        last = next((m for m in reversed(msgs) if isinstance(m, dict) and m.get("role") == "user"), msgs[-1])
-        c = last.get("content") if isinstance(last, dict) else ""
-        prompt = c if isinstance(c, str) else " ".join(p.get("text", "") for p in (c or []) if isinstance(p, dict))
-        text = f"{SIM_TAG} You said: {prompt.strip()[:200]!s} (model={model}, ref={h[:8]})"
-        pt = sum(_tokens(m.get("content") if isinstance(m, dict) and isinstance(m.get("content"), str) else "") for m in msgs)
-        ct = _tokens(text)
-        return 200, {"id": "chatcmpl-" + h[:29], "object": "chat.completion", "created": created, "model": model,
-                     "system_fingerprint": "vyomi-simulated",
-                     "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
-                     "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}}
-    prompt = payload.get("prompt")
-    prompt = " ".join(prompt) if isinstance(prompt, list) else prompt
-    if not isinstance(prompt, str):
-        return 400, {"error": {"code": "BadRequest", "message": "'prompt' is a required property."}}
-    text = f"{SIM_TAG} {prompt.strip()[:200]} (ref={h[:8]})"
-    pt, ct = _tokens(prompt), _tokens(text)
-    return 200, {"id": "cmpl-" + h[:29], "object": "text_completion", "created": created, "model": model,
-                 "choices": [{"index": 0, "text": text, "finish_reason": "stop", "logprobs": None}],
-                 "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}}
+    if payload.get("stream"):
+        return 400, {"error": {"code": "BadRequest", "message": "stream=true is served by the account endpoint "
+                     "(<base>/azure-data/openai/<account>/openai/deployments/<d>/chat/completions), not the ARM proxy.", "param": "stream"}}
+    path = {"chat": "chat/completions", "completions": "completions", "embeddings": "embeddings"}[op]
+    out = aim.azure_openai_dispatch({rec.get("id", "acct"): rec}, "POST", f"/openai/deployments/{deployment}/{path}", query or {},
+                                    {"api-key": "arm"}, json.dumps(payload).encode(), net_state=state)
+    return out["status"], json.loads(out["body"])
 
 
-def _openai_ops(rec, rest, method, payload):
+def _openai_ops(rec, rest, method, payload, state=None, query=None):
     # rest: ["openai","deployments",dep,"chat","completions"] | [...,"completions"] | [...,"embeddings"]
     low = [x.lower() for x in rest]
     if method != "POST" or len(rest) < 4 or low[1] != "deployments" or rec["kind"] not in MODEL_KINDS:
@@ -494,19 +452,20 @@ def _openai_ops(rec, rest, method, payload):
     op = {"chat/completions": "chat", "completions": "completions", "embeddings": "embeddings"}.get(tail)
     if op is None:
         raise _E(404, "ResourceTypeNotSupported", f"Unsupported inference operation '{tail}'.")
-    st, body = inference(rec, rest[2], op, payload)
+    st, body = inference(rec, rest[2], op, payload, state, query)
     return _ok(body, st)
 
 
 # ── deployments / commitment plans / RAI policies ────────────────────────────
 def _find_model(fmt, name, version):
+    nm = str(name or "").lower()
     for m in MODELS:
-        if m[0].lower() == str(fmt or "").lower() and m[1].lower() == str(name or "").lower() and (not version or m[2] == version):
-            return m
-    # a known model name with a version we don't list (newer/older/"latest"): deployable, version echoed back
-    for m in MODELS:
-        if m[0].lower() == str(fmt or "").lower() and m[1].lower() == str(name or "").lower():
-            return (m[0], m[1], str(version), m[3], m[4])
+        if m[1].lower() == nm:      # a listed model; the format is the vendor (a stale "OpenAI" default is tolerated)
+            return m if (not version or m[2] == version) else (m[0], m[1], str(version), m[3], m[4])
+    cid = CAT.resolve("azure", name) if name and not isinstance(name, (dict, list)) else None
+    if cid:                         # hidden compat alias (gpt-4o, o1, ...): deployable, never listed; the model echoes the requested name
+        m = next(x for x in MODELS if x[1] == cid)
+        return (m[0], str(name), str(version or m[2]), m[3], m[4])
     return None
 
 
@@ -715,7 +674,7 @@ def _account_ops(state, rec, rest, method, payload, query):
             return _ok({"value": []})
         return _ok({"value": [_model_item(m, rec["kind"]) for m in MODELS]})
     if r0 == "openai":
-        return _openai_ops(rec, rest, method, payload)
+        return _openai_ops(rec, rest, method, payload, state, query)
     if r0 == "deployments":
         return _deployment_ops(rec, rest[1:], method, payload)
     if r0 == "commitmentplans":
@@ -734,7 +693,7 @@ def _account_ops(state, rec, rest, method, payload, query):
 
 
 def _model_item(m, kind="OpenAI"):
-    return {"kind": kind, "skuName": "S0", "isDefaultVersion": True, "maxCapacity": m[3],
+    return {"kind": kind, "skuName": "S0", "isDefaultVersion": True, "maxCapacity": m[3], "vyomiAvailability": CAT.availability(m[1]),
             "model": {"format": m[0], "name": m[1], "version": m[2], "lifecycleStatus": "GenerallyAvailable",
                       "capabilities": {c: "true" for c in m[4]},
                       "skus": [{"name": s, "usageName": f"OpenAI.{s}.{m[1]}", "capacity": {"maximum": m[3], "default": min(m[3], 30)}}

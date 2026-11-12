@@ -1,0 +1,168 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-report
+  namespace: finance
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          hostIPC: true
+          containers:
+          - name: report
+            image: finance/report:2.1
+            env:
+            - name: API_TOKEN
+              value: "eyJhbGciOiJIUzI1NiJ9.e30.abc"
+            - name: SECRET_FROM_REF
+              valueFrom:
+                secretKeyRef: {name: s, key: k}
+            resources:
+              limits: {cpu: "1", memory: 512Mi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: finance
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait
+        image: busybox:1.36
+        securityContext:
+          runAsUser: 0
+      containers:
+      - name: migrate
+        image: finance/migrate:1.0
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 2000
+          runAsGroup: 2000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: ["NET_RAW"], add: ["SYS_PTRACE"]}
+          seccompProfile: {type: RuntimeDefault}
+        resources:
+          limits: {cpu: 200m, memory: 64Mi}
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: legacy
+  namespace: finance
+  labels: {tier: legacy}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {tier: legacy}
+  template:
+    metadata:
+      labels: {tier: legacy}
+    spec:
+      serviceAccountName: legacy-sa
+      volumes:
+      - name: docker
+        hostPath: {path: /var/run/docker.sock}
+      - name: creds
+        hostPath: {path: /root/.aws}
+      containers:
+      - name: app
+        image: legacy:0.9
+        volumeMounts:
+        - {name: docker, mountPath: /var/run/docker.sock, readOnly: true}
+        - {name: creds, mountPath: /creds}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: legacy-sa
+  namespace: finance
+automountServiceAccountToken: false
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: legacy-lockdown
+  namespace: finance
+spec:
+  podSelector:
+    matchLabels: {tier: legacy}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coredns
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels: {k8s-app: kube-dns}
+  template:
+    metadata:
+      labels: {k8s-app: kube-dns}
+    spec:
+      containers:
+      - name: coredns
+        image: registry.k8s.io/coredns/coredns:v1.11.1
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities: {add: ["NET_BIND_SERVICE"]}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tuned
+  namespace: default
+spec:
+  securityContext:
+    seLinuxOptions: {level: "s0:c123,c456"}
+    sysctls:
+    - {name: net.core.somaxconn, value: "1024"}
+    fsGroup: 3000
+    supplementalGroups: [4000]
+  containers:
+  - name: app
+    image: app:1
+    securityContext:
+      privileged: false
+      procMount: Unmasked
+      windowsOptions: {hostProcess: true, runAsUserName: "ContainerUser"}
+    resources:
+      limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clean
+  namespace: finance
+data:
+  color: blue
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: logger
+  namespace: finance
+spec:
+  selector:
+    matchLabels: {app: logger}
+  template:
+    metadata:
+      labels: {app: logger}
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - name: fluent
+        image: fluent/fluent-bit:3.0
+        ports:
+        - {containerPort: 2020, hostPort: 2020}
+        securityContext:
+          capabilities: {add: ["SYS_ADMIN", "BPF"]}
+        resources:
+          limits: {cpu: 100m}

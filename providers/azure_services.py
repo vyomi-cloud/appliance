@@ -46,7 +46,8 @@ def _now() -> str:
 def _public_base(request: Request | None) -> str:
     if request is None:
         return "http://localhost:9000"
-    host = request.headers.get("host") or (request.url.netloc if request.url else "") or "localhost:9000"
+    from core.app_context import request_host
+    host = request_host(request.headers, (request.url.netloc if request.url else "") or "localhost:9000")
     scheme = request.headers.get("x-forwarded-proto") or (request.url.scheme if request.url else "http") or "http"
     return f"{scheme}://{host}"
 
@@ -309,6 +310,68 @@ RESOURCE_CATALOG: list[dict] = [
         "endpoints": {"properties.endpoint": "/azure-data/eventgrid/__NAME__/api/events"},
     },
     {
+        "key": "eventgrid_namespace", "label": "Event Grid namespaces", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "namespaces",
+        "api_version": "2023-12-15-preview", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Namespace name", "default": "egns-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded", "publicNetworkAccess": "Enabled",
+                                     "topicSpacesConfiguration": {"state": "Disabled"}}},
+    },
+    {
+        "key": "eventgrid_systemtopic", "label": "Event Grid system topics", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "systemTopics",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.topicType", "Topic type"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "System topic name", "default": "egst-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded", "topicType": "", "source": ""}},
+    },
+    {
+        "key": "eventgrid_domain", "label": "Event Grid domains", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "domains",
+        "api_version": "2024-06-01-preview", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.inputSchema", "Input schema"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Domain name", "default": "egdomain-cloudlearn"}],
+        "defaults": {"properties": {"inputSchema": "EventGridSchema", "publicNetworkAccess": "Enabled",
+                                     "provisioningState": "Succeeded"}},
+        "endpoints": {"properties.endpoint": "/azure-data/eventgrid/__NAME__/api/events"},
+    },
+    {
+        "key": "eventgrid_partnerconfiguration", "label": "Event Grid partner configurations", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "partnerConfigurations",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Partner configuration name", "default": "default"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded", "partnerAuthorization": {"defaultMaximumExpirationTimeInDays": 7}}},
+    },
+    {
+        "key": "eventgrid_partnertopic", "label": "Event Grid partner topics", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "partnerTopics",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.activationState", "Activation state"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Partner topic name", "default": "egpt-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded", "activationState": "ActivationRequested"}},
+    },
+    {
+        "key": "eventgrid_partnerregistration", "label": "Event Grid partner registrations", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "partnerRegistrations",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Partner registration name", "default": "egpr-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded"}},
+    },
+    {
+        "key": "eventgrid_partnernamespace", "label": "Event Grid partner namespaces", "icon": "hub",
+        "namespace": "Microsoft.EventGrid", "type": "partnerNamespaces",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Partner namespace name", "default": "egpn-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded", "publicNetworkAccess": "Enabled"}},
+    },
+    {
         "key": "keyvault", "label": "Key vaults", "icon": "vpn_key",
         "namespace": "Microsoft.KeyVault", "type": "vaults",
         "api_version": "2023-07-01", "scope": "rg",
@@ -530,6 +593,53 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "rediscache", "label": "Azure Cache for Redis", "icon": "memory",
+        "namespace": "Microsoft.Cache", "type": "redis",
+        "api_version": "2024-03-01", "scope": "rg",
+        "banner": "Azure Cache for Redis (Microsoft.Cache/redis). Control plane only: the cache instance, its SKU and access keys behave like Azure; there is no real Redis data-plane protocol server behind it.",
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing tier"],
+                    ["properties.hostName", "Host name"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "DNS name", "default": "cloudlearn-redis"},
+            {"name": "sku.name", "label": "SKU", "type": "select", "options": ["Basic", "Standard", "Premium"], "default": "Basic"},
+            {"name": "sku.family", "label": "SKU family", "type": "select", "options": ["C", "P"], "default": "C"},
+            {"name": "sku.capacity", "label": "SKU capacity", "default": "0"},
+        ],
+        "defaults": {
+            "sku": {"name": "Basic", "family": "C", "capacity": 0},
+            "properties": {
+                "provisioningState": "Succeeded", "redisVersion": "6.0", "enableNonSslPort": False,
+                "hostName": "__NAME__.redis.cache.windows.net", "sslPort": 6380, "port": 6379,
+                "publicNetworkAccess": "Enabled",
+            },
+        },
+    },
+    {
+        "key": "dataexplorer", "label": "Azure Data Explorer cluster", "icon": "hub",
+        "namespace": "Microsoft.Kusto", "type": "clusters",
+        "api_version": "2023-08-15", "scope": "rg",
+        "banner": "Azure Data Explorer clusters (Microsoft.Kusto/clusters). Control plane only: the cluster resource, its SKU and state behave like Azure; there is no real Kusto query engine behind it.",
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "SKU"], ["properties.state", "State"],
+                    ["properties.uri", "Query URI"]],
+        "create_fields": [
+            {"name": "name", "label": "Cluster name", "default": "cloudlearnkusto"},
+            {"name": "sku.name", "label": "SKU", "default": "Standard_D11_v2"},
+            {"name": "sku.tier", "label": "Tier", "type": "select", "options": ["Basic", "Standard"], "default": "Standard"},
+            {"name": "sku.capacity", "label": "Instance count", "default": "2"},
+        ],
+        "defaults": {
+            "sku": {"name": "Standard_D11_v2", "tier": "Standard", "capacity": 2},
+            "properties": {
+                "state": "Running", "provisioningState": "Succeeded",
+                "uri": "https://__NAME__.kusto.windows.net",
+                "dataIngestionUri": "https://ingest-__NAME__.kusto.windows.net",
+            },
+        },
+    },
+    {
         "key": "rbac", "label": "Entra ID / RBAC", "icon": "admin_panel_settings",
         "namespace": "Microsoft.Authorization", "type": "roleAssignments",
         "api_version": "2022-04-01", "scope": "rg",
@@ -658,6 +768,11 @@ def _view(rec: dict) -> dict:
     if isinstance(props, dict) and "administratorLoginPassword" in props:
         # Real Azure never returns the SQL admin password; it stays stored for the data plane.
         out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+        props = out["properties"]
+    osp = props.get("osProfile") if isinstance(props, dict) else None
+    if isinstance(osp, dict) and "adminPassword" in osp:
+        # Real ARM never echoes a VM's adminPassword (the Docker guest is still provisioned from the stored value).
+        out["properties"] = {**props, "osProfile": {k: v for k, v in osp.items() if k != "adminPassword"}}
     return out
 
 
@@ -731,6 +846,28 @@ def _is_lro_type(namespace: str, type_chain: list[str]) -> bool:
 
 
 async def handle_arm(request: Request, rest: str) -> JSONResponse:
+    """ARM entry: user-assigned managed identity validation/resolution wraps EVERY offline engine."""
+    method = request.method.upper()
+    ua = None
+    if method in ("PUT", "PATCH"):
+        try:
+            ua = ((await _safe_json(request)).get("identity") or {}).get("userAssignedIdentities")
+        except Exception:
+            ua = None
+        from core.azure_arm_core import missing_identity_ref
+        missing = missing_identity_ref(_state, ua)
+        if missing:
+            return _error(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+    resp = await _handle_arm_inner(request, rest)
+    if ua and resp.status_code < 300:
+        from core.azure_arm_core import resolve_identity_refs
+        rec = _state.get(("/subscriptions/" + rest.split("?")[0].strip("/")).lower())
+        if rec is not None:
+            resolve_identity_refs(rec, _state)
+    return resp
+
+
+async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     """Parse `/subscriptions/{rest}` and CRUD the in-memory ARM store."""
     base = _public_base(request)
     method = request.method.upper()
@@ -744,13 +881,42 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     sub = DEFAULT_SUBSCRIPTION
     rest_segs = segs[1:]
 
-    # GET /subscriptions/{sub}
-    if not rest_segs:
-        return JSONResponse(_arm.subscription_doc())
+    # GET /subscriptions/{sub}, Microsoft.Subscription/rename and subscription-scope tags
+    # (Microsoft.Resources/tags/default) and subscription-scope locks — the subscription blade —
+    # are the shared core ARM engine's, over the persisted per-subscription names/tags.
+    low0 = [s.lower() for s in rest_segs]
+    if (not rest_segs
+            or low0 == ["locations"]                   # subscription locations list
+            or low0 == ["resources"]                   # the subscription's generic resource list
+            or low0 == ["providers"]                   # resource providers: list / get / (un)register
+            or (len(low0) == 2 and low0[0] == "providers")
+            or (len(low0) == 3 and low0[0] == "providers" and low0[2] in ("register", "unregister"))
+            or (len(low0) >= 3 and low0[0] == "providers"
+                and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
+                     or (low0[1] == "microsoft.resources" and low0[2] == "tags")
+                     or low0[1] in ("microsoft.security", "microsoft.advisor", "microsoft.resourcehealth", "microsoft.resourcegraph", "microsoft.support")   # Support / Defender / Advisor / Resource health cores
+                     or (low0[1] == "microsoft.authorization"
+                         and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess", "classicadministrators"))))):
+        return await _handle_core_arm(request, method, rest, base)
 
-    if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
-        from core import azure_arm_ext_core as _ext_loc
-        return JSONResponse(_ext_loc.subscription_locations(sub))
+    # v4 C0f — resource groups themselves (collection / item with real tags + cascade
+    # delete), a group's generic `/resources` list and its own Microsoft.Authorization/locks
+    # are the shared core ARM engine's (what Nano serves); the offline stub here returned a
+    # tag-less group for any name and ignored PATCH. A group delete first deprovisions the
+    # real runtimes (VMs, databases) of the resources it cascades away.
+    low = [s.lower() for s in rest_segs]
+    if low[0] == "resourcegroups" and (
+            len(low) <= 2
+            or (len(low) == 3 and low[2] == "resources")
+            or (len(low) == 3 and low[2] in ("exporttemplate", "validatemoveresources", "moveresources"))
+            or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization"
+                and low[4] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))
+            or (len(low) >= 4 and low[2] == "providers" and low[3] in ("microsoft.security", "microsoft.resourcehealth"))):
+        if method == "DELETE" and len(low) == 2:
+            for rec in [r for r in list(_state.values())
+                        if isinstance(r, dict) and r.get("_sub") == sub and (r.get("_rg") or "").lower() == low[1]]:
+                _deprovision_on_delete(str(rec.get("_type") or ""), rec)
+        return await _handle_core_arm(request, method, rest, base)
 
     # Resource-group collection / item: /subscriptions/{sub}/resourcegroups[/{rg}]
     if rest_segs[0].lower() == "resourcegroups" and (len(rest_segs) == 1 or
@@ -830,6 +996,30 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             names.append(token)
     is_collection = (len(chain) % 2 == 1)  # ends on a type → LIST
 
+    # Microsoft.Authorization extension resources scoped to ANY resource
+    # (.../{type}/{name}/providers/Microsoft.Authorization/roleAssignments|roleDefinitions|
+    # checkAccess|locks): the shared core ARM engine's one RBAC/lock engine (a resource's Access
+    # control (IAM) blade lists the assignments at its own scope plus inherited ones).
+    lowc = [c.lower() for c in chain]
+    for i in range(1, len(lowc) - 1):
+        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.resourcehealth", "microsoft.eventgrid", "microsoft.quota") and i % 2 == 0:
+            return await _handle_core_arm(request, method, rest, base)
+    if namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "eventsubscriptions":   # RG / subscription scope
+        return await _handle_core_arm(request, method, rest, base)
+
+    # v4 AZ-08: Azure Files shares (storageAccounts/{sa}/fileServices/default/shares/...) live in the shared core
+    # engine (core/azure_files_core.py) over this same _state.
+    if namespace.lower() == "microsoft.storage":
+        from core import azure_files_core as _files_probe
+        if _files_probe.handles(namespace, chain):
+            return await _handle_core_arm(request, method, rest, base)
+
+    # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
+    # not a RESOURCE_CATALOG-stored resource — served by the shared core ARM engine, same as
+    # the Microsoft.ContainerRegistry/AKS "core knows it, this catalog doesn't" path below.
+    if namespace.lower() == "microsoft.compute" and chain and chain[-1].lower() == "vmsizes":
+        return await _handle_core_arm(request, method, rest, base)
+
     # Microsoft.AppConfiguration: a dedicated engine (core/azure_appconfiguration_core.py) owns the
     # store / key-value / replica semantics; the ARM store below is its resource map.
     if namespace.lower() == "microsoft.appconfiguration":
@@ -839,6 +1029,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         from core import azure_dns_core as _dns_probe
         if _dns_probe.handles(chain):
             return await _handle_dns(request, method, sub, rg, chain, names, base)
+
+    if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() in ("diagnosticsettings", "diagnosticsettingscategories"):
+        return await _handle_core_arm(request, method, rest, base)   # subscription-scope Activity log export (shared core engine)
 
     if namespace.lower() == "microsoft.insights":
         from core import azure_monitor_core as _mon_probe
@@ -850,14 +1043,50 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _oi_probe.handles(chain):
             return await _handle_operationalinsights(request, method, sub, rg, chain, names, base)
 
+    # Microsoft.EventGrid/topics/{t}/providers/Microsoft.EventGrid/eventSubscriptions/{name}:
+    # a real ARM extension resource (re-enters "providers" instead of alternating type/name,
+    # same shape as the Authorization/Security reentry above) — the shared core ARM engine's
+    # azure_eventgrid_core.py owns it, over this SAME offline _state, so event subscriptions
+    # round-trip offline too, not just on Nano/dev_server.
+    if namespace.lower() == "microsoft.eventgrid":
+        from core import azure_eventgrid_core as _eg_probe
+        if _eg_probe.handles(chain):
+            return await _handle_core_arm(request, method, rest, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
+    # Microsoft.CostManagement (cost query, alerts, exports) / Microsoft.Consumption
+    # (budgets): core/azure_cost_core.py owns both namespaces over this same _state —
+    # sub/RG scoped, no per-resource-group catalog entry (real Cost Management has none).
+    if namespace.lower() == "microsoft.costmanagement":
+        return await _handle_costmanagement(request, method, sub, rg, chain, base)
+    if namespace.lower() == "microsoft.consumption":
+        return await _handle_consumption(request, method, sub, rg, chain, base)
+    if namespace.lower() == "microsoft.billingbenefits":
+        return await _handle_billingbenefits(request, method, sub, chain, base)
+    if namespace.lower() == "microsoft.capacity":
+        return await _handle_capacity(request, method, sub, chain, base)
+
+    # Microsoft.Web (App Service: web apps + function apps by `kind`, App Service plans): a
+    # dedicated engine (core/azure_webapp_core.py) owns the semantics and writes the Activity
+    # log rows the Microsoft.Insights eventtypes feed reads back; the ARM store is its map.
+    if namespace.lower() == "microsoft.web":
+        return await _handle_webapp(request, method, sub, rg, chain, names, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
+    if top is None and _core_arm_handles(namespace, type_chain[1]):
+        # v4 C0f — ONE ARM engine: any resource type the shared core ARM engine
+        # (core/azure_arm_core.AzureArm, what Nano serves) knows but this offline catalog does
+        # not — Microsoft.ContainerRegistry, Microsoft.ContainerService (AKS), and every
+        # future v4 service added to core/azure_arm_data.CATALOG — is served by THAT engine
+        # over this same space-scoped `_state`, so offline never drifts behind Nano again.
+        return await _handle_core_arm(request, method, rest, base)
     if top is None:
-        return _error(404, "ResourceTypeNotSupported",
-                      f"Type '{namespace}/{type_chain[1]}' is not simulated. "
-                      f"Supported: {', '.join(sorted(c['namespace']+'/'+c['type'] for c in RESOURCE_CATALOG))}.")
+        # Not a catalog type: the core engine also serves paths that aren't resource types at all
+        # (Microsoft.Features, Microsoft.PolicyInsights, Microsoft.Billing, locations/*/usages, …),
+        # and answers with the native error when it doesn't know one either. One ARM engine.
+        return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.App (Container Apps): a dedicated engine (core/azure_app_core.py) owns the
     # environment/app/revision/job semantics; the ARM store below is its resource map.
@@ -870,15 +1099,31 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # Compute the parent resource's canonical id (drop the action segment)
         # so action handlers can locate the record they're operating on.
         parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
+        # Cosmos DB (keys, failoverPriorityChange), ACR credentials and deployment
+        # cancel/redeploy are the shared core engine's (what Nano serves); VM power actions
+        # stay here (they drive the real runtime).
+        if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources",
+                                     "microsoft.apimanagement") or (
+                type_chain[0].lower() == "microsoft.sql" and type_chain[-1].lower() in ("export", "import")) or (
+                type_chain[0].lower() == "microsoft.storage" and len(type_chain) == 3
+                and type_chain[1].lower() == "storageaccounts" and type_chain[-1].lower() in ("listkeys", "regeneratekey")):
+            # (Microsoft.Sql database export/import: the .bacpac goes to the appliance's OWN Blob store)
+            payload = await _safe_json(request)
+            out = core_arm()._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid,
+                                         payload, sub=sub, rg=rg)
+            return JSONResponse(status_code=out.get("status", 200), content=out.get("body"),
+                                headers=out.get("headers") or None)
         return _arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid)
 
     full_type = "/".join(type_chain)
     if is_collection:
         if method != "GET":
             return _error(405, "MethodNotAllowed", "Collection supports GET only.")
-        # A child collection lists only that parent's children.
-        parent = _canonical_id(sub, rg, type_chain[:-1], names) if names else None
-        return _list(sub, rg, full_type, parent)
+        # Nested child collections (service/{s}/apis, registries/{r}/webhooks, …) are scoped
+        # to their parent instance — the shared core engine's list (same parent_prefix rule).
+        parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
+        out = core_arm()._list(sub, rg, full_type, parent_prefix)
+        return JSONResponse(status_code=out["status"], content=out["body"])
 
     rid = _canonical_id(sub, rg, type_chain, names)
     key = rid.lower()
@@ -894,9 +1139,18 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if not rec:
             return _error(404, "ResourceNotFound", f"Resource '{rid}' not found.")
         _ext.after_upsert(_state, rec)
-        return JSONResponse(_view(rec))
+        _v = _view(rec)
+        if full_type.lower() == _ext.VM_T and "instanceview" in str(request.query_params.get("$expand") or "").lower():
+            from core import azure_compute_disks_vm as _vmd
+            _v = _vmd.with_instance_view(_v, rec, lambda r: _ext.instance_view(r, _vm_run_executor))
+        return JSONResponse(_v)
     if method in ("PUT", "PATCH"):
         payload = await _safe_json(request)
+        if full_type.lower() == "microsoft.compute/virtualmachines":
+            from core import azure_compute_disks_vm as _vmd
+            _pwbad = _vmd.validate_password(payload)
+            if _pwbad:
+                return JSONResponse(status_code=_pwbad["status"], content=_pwbad["body"])
         # Host-budget gate for Azure VMs (clamp 30%-50% of host CPU+RAM). Run
         # BEFORE _upsert so over-budget creates don't leave dangling metadata.
         # Only on new-create (key not in _state) so updates aren't double-billed.
@@ -949,12 +1203,64 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 raise
             except Exception:
                 pass
+        if (method == "PUT" and key not in _state
+                and full_type.lower() == "microsoft.compute/virtualmachines"):
+            try:   # mesh: AllocationFailed (409) before the VM record exists
+                import server as _s
+                _hw = ((payload.get("properties") or {}).get("hardwareProfile") or {}) if isinstance(payload.get("properties"), dict) else {}
+                _s._mesh_capacity_precheck("azure", str(_hw.get("vmSize") or "") if isinstance(_hw, dict) else "", 1,
+                                              str(payload.get("location") or "-"))
+            except Exception as _bexc:
+                if _bexc.__class__.__name__ != "MeshCapacityError":
+                    raise
+                return JSONResponse(status_code=_bexc.status, content={"error": {"code": _bexc.code, "message": _bexc.message}})
+        if (method in ("PUT", "PATCH") and key in _state
+                and full_type.lower() == "microsoft.compute/virtualmachines"):
+            try:   # mesh: a resize must fit the budget too (AllocationFailed 409); atomic, replaces this VM's own share
+                import server as _s
+                _hw = ((payload.get("properties") or {}).get("hardwareProfile") or {}) if isinstance(payload.get("properties"), dict) else {}
+                _size = str(_hw.get("vmSize") or "") if isinstance(_hw, dict) else ""
+                if _size:
+                    _s._mesh_resize_azure_vm(_state[key], _size)
+            except Exception as _bexc:
+                if _bexc.__class__.__name__ != "MeshCapacityError":
+                    raise
+                return JSONResponse(status_code=_bexc.status, content={"error": {"code": _bexc.code, "message": _bexc.message}})
+        from core import azure_arm_ext_core as _ext
         _bad = _ext.validate_write(_state, rid, full_type, payload)
         if _bad:
             return JSONResponse(status_code=_bad["status"], content=_bad["body"])
+        blocked = _core_lock_block(rid, full_type, for_delete=False)   # ReadOnly locks (same types as the core)
+        if blocked is not None:
+            return blocked
+        blocked = _core_create_block(sub, rg, full_type, key, payload)   # assigned policies + quotas
+        if blocked is not None:
+            return blocked
+        if full_type.lower() == "microsoft.storage/storageaccounts" and method in ("PUT", "PATCH"):
+            from core import azure_files_core as _fx
+            _fe = _fx.validate_account(_state.get(key), payload)
+            if _fe:
+                return JSONResponse(status_code=400, content=_fe)
+        _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if full_type.lower() == _ext.VM_T and key in _state:
             _ext.after_vm_upsert(_state, _state[key])
+            from core import azure_compute_disks_vm as _vmd
+            _vmd.ensure_vm_disks(_state, _state[key])   # OS/data disks are real Microsoft.Compute/disks resources
+        if _new_vault and key in _state:   # the creator gets data-plane access, as on the core engine + Nano
+            from core.azure_arm_core import grant_vault_creator
+            grant_vault_creator(_state, _state[key], rid, sub, rg)
+            import json as _json
+            _body = _json.loads(resp.body)
+            _body.setdefault("properties", {})["accessPolicies"] = _state[key]["properties"].get("accessPolicies", [])
+            resp = JSONResponse(status_code=resp.status_code, content=_body)
+        if full_type.lower() == "microsoft.storage/storageaccounts" and key in _state:   # route-specific endpoints (core parity)
+            from core import azure_storage_ext_core as _sx
+            _sx.apply_endpoints(_state[key])
+            import json as _json2
+            _b2 = _json2.loads(resp.body)
+            _b2.setdefault("properties", {})["primaryEndpoints"] = _state[key]["properties"].get("primaryEndpoints", {})
+            resp = JSONResponse(status_code=resp.status_code, content=_b2)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
         if lro:
@@ -968,14 +1274,22 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # resource_id makes per-resource activity filtering in the SPA possible.
         _record_usage(f"azure.{method.lower()}", {"type": full_type, "name": leaf_name, "resource_id": rid})
         _cloudsim_sync_arm_service(full_type, rid, leaf_name, str(payload.get("location") or DEFAULT_LOCATION), action="upsert")
+        _record_arm_activity(rid, f"{full_type}/write", sub)
         return resp
     if method == "DELETE":
+        blocked = _core_lock_block(rid, full_type, for_delete=True)    # CanNotDelete / ReadOnly locks
+        if blocked is not None:
+            return blocked
         rec = _state.pop(key, None)
         _ext.on_delete(_state, rec)
         _deprovision_on_delete(full_type, rec)
+        if rec is not None and full_type.lower() == _ext.VM_T:
+            from core import azure_compute_disks_vm as _vmd
+            _vmd.delete_vm_disks(_state, rec)
         if rec is not None:
             _record_usage("azure.delete", {"type": full_type, "name": leaf_name, "resource_id": rid})
             _cloudsim_sync_arm_service(full_type, rid, leaf_name, str((rec or {}).get("location") or DEFAULT_LOCATION), action="delete")
+            _record_arm_activity(rid, f"{full_type}/delete", sub)
         # Terminal success with NO async header: compatible with both sync
         # Delete clients (storage/functionapp expect 200/204) and BeginDelete
         # pollers (a header-less terminal status = immediately complete). The
@@ -1000,6 +1314,7 @@ async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: 
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.AppConfiguration/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1017,6 +1332,7 @@ async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, c
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Network/dnsZones", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.Network/dnsZones") + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1032,6 +1348,7 @@ async def _handle_monitor(request: Request, method: str, sub: str, rg: str | Non
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.Insights/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1040,6 +1357,9 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
     from core import azure_operationalinsights_core as _oi
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     q = dict(request.query_params)
+    for hk, hv in request.headers.items():      # simulated-client declaration (core/azure_netaccess.py) reaches the data plane
+        if hk.lower().startswith("x-vyomi-") and hk.lower() not in q:
+            q[hk.lower()] = hv
     if method == "POST" and len(chain) >= 3 and chain[2].lower() in ("api", "datacollectionrules"):
         try:                                  # data plane bodies are JSON arrays; Log-Type is a header
             payload = await request.json()
@@ -1048,7 +1368,13 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
         for hk, qk in (("log-type", "logType"), ("time-generated-field", "time-generated-field")):
             if request.headers.get(hk) and qk not in q:
                 q[qk] = request.headers[hk]
-    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base)
+    from core import azure_blob_core as _bm
+    try:
+        from core.appliance_stores import az_blob_store as _abs
+        _bs = _abs()
+    except Exception:
+        _bs = None
+    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base, blob_store=_bs, blob_mod=_bm)
     api_version = request.query_params.get("api-version") or _oi.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
@@ -1058,14 +1384,55 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.OperationalInsights/workspaces", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.OperationalInsights/workspaces") + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
+
+
+async def _handle_costmanagement(request: Request, method: str, sub: str, rg: str | None,
+                                 chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_costmanagement(_state, method, sub, rg, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+
+
+async def _handle_consumption(request: Request, method: str, sub: str, rg: str | None,
+                              chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_consumption(_state, method, sub, rg, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+
+
+async def _handle_billingbenefits(request: Request, method: str, sub: str,
+                                  chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_billingbenefits(_state, method, sub, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+
+
+async def _handle_capacity(request: Request, method: str, sub: str,
+                           chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_capacity(_state, method, sub, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
 
 
 async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
                                     names: list[str], base: str) -> JSONResponse:
     from core import azure_cognitiveservices_core as _cs
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
-    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    _cq = dict(request.query_params)
+    for hk, hv in request.headers.items():      # simulated-client declaration (core/azure_netaccess.py)
+        if hk.lower().startswith("x-vyomi-") and hk.lower() not in _cq:
+            _cq[hk.lower()] = hv
+    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, _cq, base=base)
     api_version = request.query_params.get("api-version") or _cs.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
@@ -1076,6 +1443,7 @@ async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg:
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.CognitiveServices/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.CognitiveServices/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1095,6 +1463,182 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.App/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
+    return resp
+
+
+def _core_arm_handles(namespace: str, top_type: str) -> bool:
+    """True when the shared core ARM engine's catalog knows `namespace/top_type`."""
+    try:
+        from core.azure_arm_data import CATALOG as _core_catalog
+    except Exception:
+        return False
+    key = (namespace.lower(), (top_type or "").lower())
+    return any((c["namespace"].lower(), c["type"].lower()) == key for c in _core_catalog)
+
+
+def _core_lock_block(rid: str, full_type: str, for_delete: bool):
+    """Microsoft.Authorization/locks enforcement for writes served by this offline catalog —
+    the core ARM engine's own rule (same resource types it enforces for, e.g. Event Grid topics,
+    Service Bus), so a lock behaves the same offline and on Nano. A 409 ScopeLocked response,
+    or None when the write may proceed."""
+    try:
+        out = core_arm()._lock_block(rid, full_type, for_delete)
+    except Exception:
+        return None
+    if not out:
+        return None
+    return JSONResponse(status_code=out.get("status", 409), content=out.get("body"))
+
+
+def _core_create_block(sub: str, rg, full_type: str, key: str, payload: dict):
+    """Assigned Azure Policy (allowed locations, …) and subscription quotas for writes served by
+    this offline catalog: the core ARM engine's own checks, so they behave the same as on Nano."""
+    try:
+        arm = core_arm()
+        out = arm._policy_block(sub, rg, full_type, payload, key.rsplit("/", 1)[-1], _state.get(key)) or arm._quota_block(sub, full_type, key, payload)
+    except Exception:
+        return None
+    if not out:
+        return None
+    return JSONResponse(status_code=out.get("status", 403), content=out.get("body"))
+
+
+def _record_arm_activity(rid: str, operation_name: str, sub: str) -> None:
+    """Activity-log row for a write served by this offline catalog — the same
+    Microsoft.Insights/eventtypes record the core ARM engine writes for its own types (the
+    Activity log blades and Log Analytics' AzureActivity table read these back)."""
+    try:
+        core_arm()._record_activity(rid, operation_name, sub)
+    except Exception:
+        pass
+
+
+def _eventgrid_webhook_post(url: str, body: bytes, headers: dict) -> int:
+    """POST an Event Grid delivery to a WebHook — loopback / private-network targets only (the appliance never reaches the internet)."""
+    import ipaddress, socket, urllib.request
+    from urllib.parse import urlsplit
+    host = urlsplit(url).hostname or ""
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(host))
+    except Exception:
+        return 0
+    if not (ip.is_loopback or ip.is_private):
+        return 0
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=3) as r:   # noqa: S310 - restricted above
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def core_arm():
+    """The shared core ARM engine bound to the offline ARM state (space-scoped proxy) and
+    the offline LRO operation store — so its writes are the same records every other offline
+    ARM consumer (resource-group lists, inventory, locks, activity log) reads."""
+    from core.azure_arm_core import AzureArm
+    arm = AzureArm()
+    try:                                  # CMK key lookups consult the Key Vault keys data-plane store
+        from core import azure_cfgext_core as _cfgext, appliance_stores as _aps
+        _cfgext.bind_key_store(_aps.az_kv_keys_store)
+        from core import azure_eventgrid_core as _eg
+        _eg.bind_destinations(_aps.az_queue_store, _eventgrid_webhook_post)   # StorageQueue + WebHook event delivery
+    except Exception:
+        pass
+    arm.state = _state
+    arm.operations = _operations
+    arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename
+    arm.sub_tags = _subscription_meta("tags")     # Microsoft.Resources/tags/default at subscription scope
+    arm.providers = _subscription_meta("providers")   # resource provider (un)registration
+    # Engine state that must outlive this per-request AzureArm — durable in the Azure space:
+    arm.feature_state = _subscription_meta("feature_state")                # Preview features
+    arm.deployment_credentials = _subscription_meta("deployment_credentials")   # Programmatic deployment
+    arm.billing_properties = _subscription_meta("billing_properties")      # Billing properties (account admin)
+    arm._vm_tokens = _subscription_meta("vm_tokens")                       # Run command IMDS tokens (validated on a later request)
+    try:   # APIM Key Vault named values (listValue) resolve against this space's Key Vault secrets
+        from core.appliance_stores import az_kv_secrets_store
+        arm.kv_secrets_store = az_kv_secrets_store()
+    except Exception:
+        pass
+    try:   # IMDS token issue -> Entra "Managed identity sign-ins" row in this space's Graph store
+        from core.appliance_stores import graph_store
+        arm.graph_store = graph_store()
+    except Exception:
+        pass
+    try:   # Azure SQL database export/import: the Azure SQL data plane (/azure-sql) + the Blob store
+        from core.appliance_stores import az_blob_store, net_new_core_stores
+        arm.sql_store = net_new_core_stores()["rds"]
+        arm.blob_store = az_blob_store()
+    except Exception:
+        pass
+    try:   # Event Grid event-subscription delivery to a Service Bus queue/topic destination
+        from core.appliance_stores import az_servicebus_store
+        arm.sb_store = az_servicebus_store()
+    except Exception:
+        pass
+    try:                                          # Defender for Cloud's Kubernetes posture: the real Kubescape
+        from providers import kubescape_runner    # CLI container, debounced in the background (never blocks)
+        kubescape_runner.install()
+    except Exception:
+        pass
+    try:                                          # shared CI seam: real BuildKit builds (+ opt-in Gitea) for Deployment Center etc.
+        from providers import ci_runner
+        ci_runner.install()
+    except Exception:
+        pass
+    return arm
+
+
+def _subscription_meta(key: str) -> dict:
+    """Per-subscription display names / tags, persisted in the Azure space (not in the ARM
+    resource map, whose values every consumer iterates as resources)."""
+    from core.appliance_stores import _proxy
+    return _proxy("azure_subscription_meta", lambda: {"names": {}, "tags": {}, "providers": {}, "feature_state": {},
+                                                       "deployment_credentials": {}, "billing_properties": {},
+                                                       "vm_tokens": {}}, key)._target()
+
+
+async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
+    arm = core_arm()
+    arm._base = base
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    out = arm.handle(method, "/subscriptions/" + rest, dict(request.query_params), payload)
+    status, body = out.get("status", 200), out.get("body")
+    resp = JSONResponse(status_code=status, content=body) if body is not None else Response(status_code=status)
+    for hk, hv in (out.get("headers") or {}).items():
+        resp.headers[hk] = str(hv)
+    segs = [s for s in rest.split("/") if s]
+    # top-level resource writes → usage + cloudsim inventory (as the catalog path does)
+    if status < 300 and method in ("PUT", "PATCH", "DELETE") and "providers" in [s.lower() for s in segs]:
+        i = [s.lower() for s in segs].index("providers")
+        after = segs[i + 1:]
+        if len(after) == 3 and after[0].lower() != "microsoft.security":   # Defender plans aren't inventory
+            full_type, leaf = f"{after[0]}/{after[1]}", after[2]
+            rid = "/subscriptions/" + "/".join(segs)
+            _record_usage(f"azure.{'delete' if method == 'DELETE' else method.lower()}",
+                          {"type": full_type, "name": leaf, "resource_id": rid})
+            loc = str((body or {}).get("location") or DEFAULT_LOCATION) if isinstance(body, dict) else DEFAULT_LOCATION
+            _cloudsim_sync_arm_service(full_type, rid, leaf, loc, action="delete" if method == "DELETE" else "upsert")
+    return resp
+
+
+async def _handle_webapp(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                         names: list[str], base: str) -> JSONResponse:
+    from core import azure_webapp_core as _web
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _web.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params))
+    api_version = request.query_params.get("api-version") or _web.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Web/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.Web/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1133,6 +1677,25 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
         rt = props.setdefault("runtime", {})
         container = rt.get("containerName")
         backend = rt.get("backend")
+        if container and backend == "docker":
+            # Docker-backed VM (Mesh / CloudLite+): drive the sibling container through the shared compute backend
+            # (core.azure_arm_core), the same path the ARM core uses. Previously this fell into the metadata-only
+            # branch, so powerOff/deallocate left the container running.
+            from core import azure_arm_core as _core
+            drove = _core._vm_drive_compute(rec, action)
+            new_status = {"start": "running", "restart": "running",
+                          "poweroff": "stopped", "deallocate": "deallocated"}[action]
+            rt["containerStatus"] = new_status
+            props["powerState"] = f"PowerState/{new_status}"
+            try:
+                import server as _srv
+                _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
+            except Exception:
+                pass
+            _record_usage(f"azure.vm.{action}", {"vm": resource_name, "container": container, "resource_id": parent_rid})
+            return JSONResponse({"status": "Succeeded", "action": action, "container": container,
+                                 "containerStatus": new_status,
+                                 "note": "runtime container updated" if drove else "unchanged (backend call failed)"})
         if not container or backend not in ("lxd", "multipass"):
             # Metadata-only VM (no host runtime). Update logical state so the
             # console still reflects the action; just no real container call.
@@ -1220,6 +1783,10 @@ def _vm_run_executor(vm: dict, script: str):
     rt = ((vm.get("properties") or {}).get("runtime") or {})
     if not isinstance(rt, dict) or not rt.get("containerName"):
         return None
+    if rt.get("backend") == "docker":
+        # Docker-backed VM: exec in the sibling container through the shared compute backend.
+        from core import azure_arm_core as _core
+        return _core._vm_guest_exec(vm, script)
     try:
         import server as _srv
         inst = _srv._azure_vm_flat_instance(vm)
@@ -1285,58 +1852,11 @@ def _enforce_azure_quantity_cap(_srv_mod_unused, full_type: str, method: str) ->
 
 def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
             payload: dict, base: str, patch: bool = False) -> JSONResponse:
-    existed = key in _state
-    # Only the top-level type carries rich defaults; nested children get a
-    # minimal shell so any nested resource still works.
-    is_top = full_type.lower() == (catalog["namespace"] + "/" + catalog["type"]).lower()
-    defaults = _expand_tokens(catalog.get("defaults", {}), name, base) if is_top else {"properties": {"provisioningState": "Succeeded"}}
-    endpoints = catalog.get("endpoints", {}) if is_top else {}
-
-    if patch and existed:
-        rec = _state[key]
-    else:
-        rec = {
-            "id": rid, "name": name, "type": full_type,
-            "location": payload.get("location") or DEFAULT_LOCATION,
-            "tags": {}, "properties": {},
-            "_type": full_type,
-            "_sub": rid.split("/")[2],
-            "_rg": _rg_from_id(rid),
-            "_created": _now(),
-        }
-        # seed defaults
-        for dk, dv in defaults.items():
-            rec[dk] = dv if not isinstance(dv, dict) else dict(dv)
-
-    # overlay client payload (location/tags/sku/kind/properties)
-    for fld in ("location", "kind"):
-        if payload.get(fld) is not None:
-            rec[fld] = payload[fld]
-    if isinstance(payload.get("tags"), dict):
-        rec["tags"] = _merge(rec.get("tags", {}), payload["tags"])
-    if isinstance(payload.get("sku"), dict):
-        rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
-    if isinstance(payload.get("properties"), dict):
-        rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
-    from core import azure_arm_ext_core as _ext
-    _ext.apply_identity(rec, payload)
-    _ext.mark_changed(rec)
-
-    rec.setdefault("properties", {})
-    rec["properties"].setdefault("provisioningState", "Succeeded")
-    _ext.after_upsert(_state, rec, payload)
-
-    # fill simulator-origin endpoints if not provided
-    for path_expr, suffix in endpoints.items():
-        if _get_path(rec, path_expr) in (None, ""):
-            _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
-
-    if is_top:     # always the simulator origin (a fake Azure hostname seeded by the core is unreachable)
-        for path_expr, val in (catalog.get("endpoints_force") or {}).items():
-            _set_path(rec, path_expr, _expand_tokens(val, name, base))
-
-    _state[key] = rec
-    return JSONResponse(status_code=200 if existed else 201, content=_view(rec))
+    """Generic catalog-resource create / update — the shared core ARM engine's
+    (AzureArm._upsert: defaults, payload overlay incl. identity, simulator-origin endpoints,
+    systemData) over this offline `_state`, so a record is shaped exactly as on Nano."""
+    out = core_arm()._upsert(rid, key, full_type, name, catalog, payload or {}, base, patch=patch)
+    return JSONResponse(status_code=out["status"], content=out["body"])
 
 
 def _rg_from_id(rid: str) -> str | None:

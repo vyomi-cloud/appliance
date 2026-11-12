@@ -15,12 +15,15 @@ def check(name, ok):
 
 
 def main():
-    lst = requests.get(f"{BASE}/api/ec2/instances", timeout=30).json()["instances"]
-    if not lst:
-        r = requests.post(f"{BASE}/api/ec2/instances?auto_start=false", json={"name": "detail-probe"}, timeout=60)
-        check("create instance", r.status_code < 300)
+    # Always create our own probe (the old "only if the list is empty" made the check count depend on what other
+    # suites left behind, and detail was read from whatever instance happened to be first).
+    r = requests.post(f"{BASE}/api/ec2/instances?auto_start=false", json={"name": "detail-probe"}, timeout=60)
+    check("create instance", r.status_code < 300)
+    created = r.json() if r.status_code < 300 else {}
+    iid = created.get("instance_id") or created.get("id")
+    if not iid:
         lst = requests.get(f"{BASE}/api/ec2/instances", timeout=30).json()["instances"]
-    iid = lst[0]["instance_id"]
+        iid = [i for i in lst if i.get("name") == "detail-probe" or i.get("Name") == "detail-probe"][-1]["instance_id"]
     r = requests.get(f"{BASE}/api/ec2/instances/{iid}", timeout=30)
     check("detail returns 200", r.status_code == 200)
     check("detail has matching instance_id", r.status_code == 200 and r.json().get("instance_id") == iid)

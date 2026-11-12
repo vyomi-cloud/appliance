@@ -364,6 +364,12 @@ def refresh_token(state: dict, *, backend_url: Optional[str] = None,
     state["license_last_refresh_attempted_at"] = state["license_last_refresh_at"]
     state["license_last_refresh_status"] = "ok"
     state["license_refresh_source"] = data.get("source")
+    # The portal account owns the issue-reporting choice; mirror it to the appliance.
+    try:
+        from . import issue_report_runtime as _irr
+        _irr.apply_account_mode(state, data.get("issue_reporting_mode"))
+    except Exception:
+        pass
     return claims
 
 
@@ -430,6 +436,8 @@ def claims_to_tier_payload(claims: dict) -> dict:
         # Portal reverse trial: sub_expires_at is the TRIAL end when trial=True.
         "trial": bool(claims.get("trial")),
         "trial_ended": bool(claims.get("trial_ended")),
+        # v4 mesh trial: end of the 14-day mesh trial (portal-signed claim).
+        "mesh_trial_expires": claims.get("mesh_trial_expires"),
         "issued_via": "license_remote_jwt",
     }
 
@@ -471,6 +479,92 @@ def days_until_sub_expiry(claims: dict, now_ts: Optional[float] = None) -> Optio
         return None
     delta = sub_exp_ts - (now_ts or time.time())
     return max(0, int(delta // 86400))
+
+
+# ── v4 mesh trial (V4-MESH-DESIGN-DISCUSSION.md section 9) ────────────
+# 14-day account-level trial, portal-signed claim `mesh_trial_expires`.
+# reminder from 7 days before expiry; locked once expiry passes (day 15); no
+# grace. A paid Pro/Max entitlement overrides. A record in the data dir keeps the
+# max wall time ever seen so rewinding the clock does not extend the trial.
+MESH_TRIAL_DAYS = 14
+MESH_REMINDER_DAYS = 7
+_CLOCK_FILE = "mesh_clock.json"
+
+
+def _parse_iso_ts(v) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        import calendar
+        iso = str(v).rstrip("Z").split("+")[0].split(".")[0]
+        return float(calendar.timegm(time.strptime(iso, "%Y-%m-%dT%H:%M:%S")))
+    except Exception:
+        return None
+
+
+def effective_now(now: Optional[float] = None, data_dir: Optional[str] = None) -> float:
+    """Wall time, never earlier than the latest time previously recorded in
+    `data_dir` (clock-rollback resistance). Persists the new high-water mark."""
+    now = time.time() if now is None else float(now)
+    d = Path(data_dir or os.environ.get("CLOUDLEARN_STATE_DIR", "/data"))
+    f = d / _CLOCK_FILE
+    last = 0.0
+    try:
+        last = float(json.loads(f.read_text()).get("last_seen", 0))
+    except Exception:
+        pass
+    eff = max(now, last)
+    if eff > last:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            tmp = f.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"last_seen": eff}))
+            os.replace(tmp, f)
+        except Exception:
+            pass
+    return eff
+
+
+def trial_status(now: Optional[float] = None, claims: Optional[dict] = None,
+                 data_dir: Optional[str] = None, paid: bool = False) -> dict:
+    """JSON-serialisable mesh trial state.
+
+    {state: trial|reminder|locked|paid|none, days_left, expires_at, reminder,
+     locked, export_blocked, effective_now, trial_days}
+    reminder: <=7 days left; locked: expiry passed (day 15+); paid: valid Pro/Max
+    entitlement (claims tier pro/max/enterprise without trial flag, or paid=True);
+    none: no trial claim. locked also sets export_blocked (flag only)."""
+    import math
+    claims = claims or {}
+    eff = effective_now(now, data_dir)
+    tier = str(claims.get("tier") or "").lower()
+    is_paid = bool(paid) or (tier in ("pro", "max", "enterprise", "student", "developer")
+                             and not claims.get("trial") and not claims.get("trial_ended"))
+    exp = _parse_iso_ts(claims.get("mesh_trial_expires"))
+    if exp is None and claims.get("trial"):          # the portal's existing 14-day reverse trial carries sub_expires_at + trial
+        exp = _parse_iso_ts(claims.get("sub_expires_at"))
+    base = {"effective_now": eff, "trial_days": MESH_TRIAL_DAYS, "expires_at": exp,
+            "days_left": None, "reminder": False, "locked": False, "export_blocked": False}
+    if is_paid:
+        return {**base, "state": "paid"}
+    if exp is None:
+        return {**base, "state": "none"}
+    remaining = exp - eff
+    if remaining <= 0:
+        return {**base, "state": "locked", "days_left": 0, "locked": True, "export_blocked": True}
+    days_left = math.ceil(remaining / 86400)
+    if days_left <= MESH_REMINDER_DAYS:
+        return {**base, "state": "reminder", "days_left": days_left, "reminder": True}
+    return {**base, "state": "trial", "days_left": days_left}
+
+
+def mesh_status_summary(state: Optional[dict] = None, now: Optional[float] = None,
+                           data_dir: Optional[str] = None) -> dict:
+    """For /mesh/status: trial_status for the licence claims in
+    state["license_claims"] (or {}). JSON-serialisable."""
+    return trial_status(now=now, claims=(state or {}).get("license_claims") or {}, data_dir=data_dir)
 
 
 def _exp_iso(claims: dict) -> str:

@@ -1,0 +1,70 @@
+{
+ "cloud": "azure",
+ "service": "apim",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/apim/CreateHttpApi.jsx:85",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Gateways\" feature=\"Restricting a new API to specific self-hosted gateways\" note=\"New APIs are always reachable on the managed gateway.\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/CreateApiManagementService.jsx:105",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Monitor + secure\" feature=\"Wiring a new service to Log Analytics, Application Insights or Defender for APIs\" note=\"These checkboxes provision separate monitoring/security resources in real Azure; Vyomi does not model that cross-resource wiring.\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/CreateApiManagementService.jsx:119",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`Deploying into a ${f.vnet.toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApiManagementServices.jsx:62",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Open query\" ? \"Azure Resource Graph queries\" : \"Bulk-assigning tags from the browse grid\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/Apis.jsx:78",
+   "component": "NotSimulated",
+   "props": "feature={`Creating an API from ${gap}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:201",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"API Management monitoring (capacity, requests, latency charts)\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:202",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capacity gauge\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:216",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : \"Restoring a soft-deleted API Management service\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:310",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:314",
+   "component": "NotSimulated",
+   "props": "feature={`${gap} evaluation`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:414",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:514",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `The ${gap} action`}"
+  }
+ ]
+}

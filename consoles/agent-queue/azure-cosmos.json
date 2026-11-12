@@ -1,0 +1,96 @@
+{
+ "cloud": "azure",
+ "service": "cosmos",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "must_build": [
+  "Every page in ui-spec/azure/cosmos.json (40 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Cost Management, Quick start, Notifications, Data Explorer, Settings, Containers, Integrations, Monitoring, Automation)",
+  "Backend: ARM databaseAccounts + Cosmos data plane (test_azure_cosmos_core.py): accounts, Data Explorer (databases, containers, items, query), keys",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/azure/cosmos.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.cosmos.<section>') \u2014 ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first \u2014 use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 2,
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "phase": "depth",
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:122",
+   "component": "NotSimulated",
+   "props": "feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:183",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Account monitoring (request units, storage and latency charts)\""
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:191",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Tutorials\""
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:221",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : \"Moving a resource to a different resource group/subscription\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:262",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `${gap} on the activity log`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:338",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:344",
+   "component": "NotSimulated",
+   "props": "feature={`${gap} evaluation`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:505",
+   "component": "NotSimulated",
+   "props": "feature={`${gap} between regions`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:729",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccountBlade.jsx:808",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`${tab === \"bicep\" ? \"Bicep\" : \"Terraform\"} template export`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/DataExplorer.jsx:157",
+   "component": "NotSimulated",
+   "props": "feature=\"Hierarchical (multi-level) partition keys\" note=\"Containers in Vyomi always use a single partition key path.\""
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CosmosAccounts.jsx:64",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Open query\" ? \"Querying across accounts with Azure Resource Graph\" : gap === \"Restore\" ? \"Restoring a deleted/backed-up account\" : \"Bulk tag assignment from the browse grid\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CreateCosmosAccount.jsx:61",
+   "component": "NotSimulatedContainer",
+   "props": "title={gap} feature={`${gap} support`} note=\"Only the NoSQL (Core) API has a Vyomi data plane; pick Azure Cosmos DB for NoSQL to continue.\""
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CreateCosmosAccount.jsx:194",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Network rules\" feature=\"Virtual network / private endpoint rules for Cosmos DB\""
+  },
+  {
+   "where": "consoles/src/azure/services/cosmos/CreateCosmosAccount.jsx:243",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Customer-managed keys (CMK) for Cosmos DB encryption\""
+  }
+ ]
+}

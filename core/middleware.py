@@ -17,7 +17,7 @@ import threading as _threading
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from core.app_context import (
     REQUEST_PROVIDER,
@@ -70,7 +70,8 @@ def _gcp_capture_public_base(request) -> None:
     if _GCP_PUBLIC_BASE_ENV:
         return
     try:
-        host = request.headers.get("host") or request.url.netloc
+        from core.app_context import request_host
+        host = request_host(request.headers, request.url.netloc)
         scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
         if not host:
             return
@@ -401,8 +402,21 @@ async def azure_blob_dispatch_middleware(request, call_next):
             request.scope["path"] = new_path
             request.scope["raw_path"] = new_path.encode("utf-8")
         elif (request.headers.get("x-ms-version") and not passthrough
-                and path not in ("/",)):
+                and (path not in ("/",) or (request.headers.get("x-vyomi-service") or "").lower() in ("queue", "table"))):
             new_path = "/azure-data/blob" + path
+            # The ROOT Storage Queue wire (the v4 console's / Nano's: `/{queue}`, `/{queue}/messages`,
+            # unauthenticated `/{account}?comp=list`) — told apart from blob exactly as Nano's router
+            # does — goes to the queue core over the Azure space's durable slot (routes/
+            # azure_queue_unified via core/wire_ingress), not into a blob container.
+            try:
+                from core.aws_wire_router import _azure_service, _lower_headers
+                _svc = _azure_service(path, _lower_headers(dict(request.headers)), dict(request.query_params))
+                if _svc == "az-queue":
+                    new_path = "/azure-data/queue-core" + path
+                elif _svc == "az-table":      # Table data plane + service properties/CORS (azure_table_core + azure_storage_svc_core)
+                    new_path = "/azure-data/tableroot" + path
+            except Exception:
+                pass
             request.scope["path"] = new_path
             request.scope["raw_path"] = new_path.encode("utf-8")
     except Exception:
@@ -672,11 +686,66 @@ async def _capability_middleware(request: Request, call_next):
         return _capability_denied_response(_srv, capability_path, exc)
     response = await call_next(request)
     if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
+        _schedule_persist()
+    return response
+
+
+# Coalesced state flush. Every POST/PUT/DELETE/PATCH used to serialize the WHOLE state
+# (JSON, megabytes once a user has built things) inline — and the AWS JSON protocol sends
+# reads as POSTs, so a console page firing N DescribeTable calls paid N full saves one after
+# another (120 tables ≈ 10 s: the "intermittent offline stall"). Now a mutating request marks
+# the state dirty and ONE flush runs after a short quiet window, on the event loop (never
+# concurrently with a handler). VYOMI_PERSIST_DEBOUNCE_MS=0 restores the per-request flush;
+# shutdown flushes anything pending (flush_pending_state).
+_PERSIST_PENDING = {"task": None}
+
+
+def _debounce_seconds() -> float:
+    import os
+    try:
+        return max(0.0, float(os.environ.get("VYOMI_PERSIST_DEBOUNCE_MS", "250")) / 1000.0)
+    except ValueError:
+        return 0.25
+
+
+def _schedule_persist() -> None:
+    import asyncio
+    delay = _debounce_seconds()
+    if delay <= 0:
         try:
             _persist_state()
         except Exception:
             pass
-    return response
+        return
+    if _PERSIST_PENDING["task"] is not None and not _PERSIST_PENDING["task"].done():
+        return                                   # a flush is already scheduled for this burst
+
+    async def _flush_later():
+        await asyncio.sleep(delay)
+        _PERSIST_PENDING["task"] = None
+        try:
+            _persist_state()
+        except Exception:
+            pass
+    try:
+        _PERSIST_PENDING["task"] = asyncio.get_running_loop().create_task(_flush_later())
+    except RuntimeError:                         # no running loop (sync caller): flush now
+        try:
+            _persist_state()
+        except Exception:
+            pass
+
+
+def flush_pending_state() -> None:
+    """Flush a scheduled-but-not-yet-run state save (shutdown)."""
+    task = _PERSIST_PENDING.get("task")
+    if task is not None and not task.done():
+        task.cancel()
+        _PERSIST_PENDING["task"] = None
+        try:
+            _persist_state()
+        except Exception:
+            pass
 
 
 async def _rate_limit_middleware(request: Request, call_next):
@@ -840,6 +909,16 @@ async def _tier_enforcement_middleware(request: Request, call_next):
                 pass  # fail-open on internal errors
 
     from core import tier_policy as _tp
+    # Pro = ONE cloud. A Pro licence with no cloud chosen yet (e.g. the reverse trial) is not locked out of everything:
+    # the first cloud it actually uses becomes its primary cloud, persisted on the tenant, and the others stay locked.
+    if (not primary_cloud and provider in ("aws", "gcp", "azure") and tenant
+            and _tp.policy_for(_tp.normalize_tier(tier)).get("providers") == "primary_cloud_only"):
+        tenant["primary_cloud"] = primary_cloud = provider
+        tenant.setdefault("primary_cloud_changed_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        try:
+            _persist_state()
+        except Exception:
+            pass
     result = _tp.check_service(tier, service_key,
                                primary_cloud=primary_cloud,
                                request_cloud=provider)
@@ -861,6 +940,16 @@ async def _tier_enforcement_middleware(request: Request, call_next):
             })
         except Exception:
             pass
+        if service_key in ("aks", "gke", "eks"):
+            # Managed Kubernetes: answer in the cloud's NATIVE error shape (ARM FeatureNotAvailableForTier /
+            # GCP PERMISSION_DENIED / EKS AccessDeniedException) so az / gcloud / SDKs surface a real error.
+            from core import k8s_tier_gate as _k8s
+            v = _k8s.verdict(tier, provider, primary_cloud)
+            if v is None:   # tier_policy and the gate disagree: stay closed with tier_policy's verdict
+                v = dict(result, active_tier=tier, required_tiers=["pro", "max", "enterprise"],
+                         upgrade_to=result.get("upgrade_to", "pro"))
+            nr = _k8s.denied_response(provider, v)
+            return Response(content=nr["body"], status_code=nr["status"], headers=nr["headers"])
         return JSONResponse(
             {"error": result},
             status_code=403,
@@ -931,7 +1020,7 @@ async def request_recorder_middleware(request, call_next):
     """Record every provider-scoped request (provider, service, path, status, latency) for the
     console Metrics tabs. Outermost layer so it times the whole stack; never alters the response."""
     path = request.url.path
-    if path.startswith(("/api/metrics", "/static/", "/assets/", "/console")) or path in ("/healthz", "/favicon.ico"):
+    if path.startswith(("/api/metrics", "/_obs/", "/static/", "/assets/", "/console")) or path in ("/healthz", "/favicon.ico"):
         return await call_next(request)
     t0 = time.time()
     status = 500
@@ -946,6 +1035,11 @@ async def request_recorder_middleware(request, call_next):
             if prov and svc:
                 _rm.record(prov, svc, request.method, path, status, (time.time() - t0) * 1000.0,
                            query=request.url.query or "", host=request.headers.get("host", ""))
+                from core import observability_core as _obsc
+                if not path.startswith(_obsc.BASE):
+                    _res, _op = _obsc.extract_resource(prov, svc, request.method, path, dict(request.headers))
+                    _obsc.record(_obsc.default_store(), prov, svc, _res, _op, status, (time.time() - t0) * 1000.0,
+                                 traceparent=request.headers.get("traceparent", ""))
         except Exception:
             pass
 
@@ -981,8 +1075,17 @@ def register_middleware(app) -> None:
                    "http://localhost:8080", "http://127.0.0.1:8080"]
     else:
         origins = ["*"]
+    class _AppCors(CORSMiddleware):
+        """The app-wide CORS layer must not answer a Storage Queue/Table preflight itself: those are governed by the storage
+        account's own service-properties CORS rules (core/azure_storage_svc_core, 403 CorsPreflightFailure on no match)."""
+
+        async def __call__(self, scope, receive, send):
+            if scope.get("type") == "http" and str(scope.get("path", "")).startswith(("/azure-data/queue-core", "/azure-data/tableroot")):
+                return await self.app(scope, receive, send)
+            return await super().__call__(scope, receive, send)
+
     app.add_middleware(
-        CORSMiddleware,
+        _AppCors,
         allow_origins=origins,
         allow_methods=["*"],
         allow_headers=["*"],

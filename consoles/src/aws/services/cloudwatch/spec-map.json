@@ -1,0 +1,62 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "landing": {
+    "route": "#/cloudwatch/home"
+  },
+  "dashboards": {
+    "route": "#/cloudwatch/dashboards",
+    "live": "live-dashboard"
+  },
+  "create-dashboard": {
+    "route": "#/cloudwatch/dashboards/create"
+  },
+  "dashboard-detail": {
+    "route": "#/cloudwatch/dashboards/{live}",
+    "live": "live-dashboard"
+  },
+  "alarms": {
+    "route": "#/cloudwatch/alarms",
+    "live": "live-alarm"
+  },
+  "create-alarm": {
+    "route": "#/cloudwatch/alarms/create",
+    "vars": {
+      "metric": "CPUUtilization"
+    }
+  },
+  "alarm-detail": {
+    "route": "#/cloudwatch/alarms/{live}",
+    "live": "live-alarm"
+  },
+  "log-management": {
+    "route": "#/cloudwatch/logs",
+    "live": "live-log-group"
+  },
+  "create-log-group": {
+    "route": "#/cloudwatch/logs/create"
+  },
+  "log-group-detail": {
+    "route": "#/cloudwatch/logs/{live}",
+    "live": "live-log-group"
+  },
+  "log-events": {
+    "route": "#/cloudwatch/logs/uic-log-group/streams/uic-stream",
+    "live": "live-log-event"
+  },
+  "create-log-stream": {
+    "route": "#/cloudwatch/logs/uic-log-group/streams/create"
+  },
+  "logs-insights": {
+    "route": "#/cloudwatch/logs-insights"
+  },
+  "live-tail": {
+    "route": "#/cloudwatch/live-tail"
+  },
+  "all-metrics": {
+    "route": "#/cloudwatch/metrics",
+    "live": "live-metric"
+  },
+  "settings": {
+    "route": "#/cloudwatch/settings"
+  }
+}

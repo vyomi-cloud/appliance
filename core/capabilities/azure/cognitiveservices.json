@@ -1,0 +1,121 @@
+{
+ "$doc": "Vyomi capability registry — Azure AI services / Cognitive Services. See azure/keyvaults.json for the contract.",
+ "azure.cognitiveservices.account.crud": {
+  "title": "Accounts (create, get, list, update, delete) over ARM — every kind in core/azure_cognitiveservices_core.py KINDS",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.account.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.keys": {
+  "title": "Keys and Endpoint (listKeys, regenerateKey)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Keys are deterministic simulator secrets, not material an inference call is checked against — any non-empty bearer value is accepted by the (non-simulated) data plane. regenerateKey changes the stored value and is honest about which of Key1/Key2 it rotated."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.deployments": {
+  "title": "Model deployments (create, get, list, delete) over ARM — Azure OpenAI and Azure AI services kinds",
+  "level": { "nano": "limited", "offline": "full" },
+  "limitations": [
+   "On Nano the ARM control plane (deployments, capacity, quota) is fully real, but the deployment's chat/completions and embeddings data plane answers only while a WebLLM model is loaded in the browser (needs WebGPU); otherwise it returns the native 503 ServiceUnavailable. The offline appliance serves it with llama.cpp.",
+   "Deployment, quota and rate-limit bookkeeping (capacity, Tokens-Per-Minute quota per model) is real, and the deployment's data plane (chat/completions, completions, embeddings) is served by core/ai_models_core over the shared local-LLM seam: every deployment is answered by the same small local model, so the model name is not honoured.",
+   "Deployments are only accepted on OpenAI and AIServices kind accounts, matching the real service; other kinds return the native InvalidParameter error, same as Azure."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py", "tests/conformance/test_local_llm_seam.py"]
+ },
+ "azure.cognitiveservices.playground": {
+  "title": "Chat playground (Azure OpenAI data plane)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Sends chat/completions to the deployment through the real Azure OpenAI wire; the answer comes from one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers it), so quality is toy-grade and no model running returns the native 503 ServiceUnavailable instead of an answer. Function calling, json_schema output and streaming (include_usage) work; no image/audio, 'On your data', content filters or fine-tuning."
+  ],
+  "tests": ["tests/conformance/test_local_llm_seam.py", "tests/conformance/test_ai_sdk_tools.py"]
+ },
+ "azure.cognitiveservices.quotas": {
+  "tier": "pro",
+  "title": "Quotas (usages: per-model Tokens-Per-Minute for OpenAI/AIServices, TotalCalls for every other kind)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.networking": {
+   "title": "Networking (public network access / firewall default action)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "publicNetworkAccess, networkAcls (defaultAction Deny, IP rules, virtual network rules whose subnet carries Microsoft.CognitiveServices) and approved private endpoints are enforced on the Azure OpenAI inference data plane (chat/completions, completions, embeddings - both /openai/deployments/... and the ARM-proxied route): a blocked caller gets 403, an allowed one passes.",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "Only the Azure OpenAI / AIServices inference plane exists as a data plane here; Speech, Vision, Language and Document Intelligence endpoints are not served, so there is nothing to enforce on them."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_cognitiveservices_core.py",
+    "tests/conformance/test_azure_netcfg_core.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
+  },
+ "azure.cognitiveservices.identity": {
+  "title": "System-assigned managed identity",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "System-assigned identity (principalId/tenantId) is real and persists across PATCH.",
+   "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources (create them in the Managed Identities service), an unknown reference is rejected with 400 ResourceNotFound, and the attached identity's principalId/clientId are resolved from that resource. The identity is not used to authorize anything: a managed identity only matters as the subject of a role assignment on Access control (IAM)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this account",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this Cognitive Services account only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a Cognitive Services account is stored and listed only: it does not block writes or deletes of the Cognitive Services account itself."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than the real signed-in principal. Severity/category filtering is not modelled (every recorded event is Informational/Administrative).",
+   "The Timespan picker IS enforced: its lower bound is a real OData `eventTimestamp ge` predicate (core/azure_arm_core.py _activity_log_query) — narrowing it really narrows the result, it isn't a cosmetic control."
+  ],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.soft_delete": {
+  "title": "Soft-delete, restore and purge (deletedAccounts)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "There is a fixed soft-delete retention window applied by the engine rather than a configurable per-account retention policy (Cognitive Services accounts have no 'purge protection' toggle in real Azure either, unlike Key vaults)."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Check access, Role assignments and Deny assignments are REAL and scoped to this Cognitive Services account's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
+  ],
+  "tests": ["tests/conformance/test_azure_rbac_core.py"]
+ },
+ "azure.cognitiveservices.tasks": {"title": "Tasks (Logic App-backed task templates)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."], "tests": ["tests/conformance/test_azure_tasks_core.py"]},
+  "azure.cognitiveservices.responses-assistants": {
+  "title": "Responses API + Assistants API (threads, runs) - Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Responses: create (string/item input, instructions, function tools, json_schema text.format, previous_response_id chaining, SSE streaming with the canonical event sequence), retrieve, delete; built-in tools (web_search, file_search, code_interpreter, computer, mcp) and reasoning are rejected. Assistants: assistants/threads/messages/runs with function tools and submit_tool_outputs; runs execute synchronously inside the create call (terminal status immediately), run steps are empty, code_interpreter/file_search/vector stores/attachments are rejected. State is process-local."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py"
+  ]
+ }
+}

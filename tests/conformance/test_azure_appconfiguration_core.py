@@ -123,6 +123,32 @@ cp(st, "PUT", ["configurationStores", "free-store"], {"location": "eastus", "sku
 cp(st, "DELETE", ["configurationStores", "free-store"])
 check("Free tier deletes immediately", cp(st, "GET", ["locations", "eastus", "deletedConfigurationStores"], rg=None)["body"]["value"] == [])
 
+# replicas (Geo-replication)
+cp(st, "PUT", ["configurationStores", "cfg-repl"], {"location": "eastus", "sku": {"name": "Standard"}})
+r = cp(st, "PUT", ["configurationStores", "cfg-repl", "replicas", "euro"], {"location": "westeurope"})
+check("replica create → 201 + LRO + endpoint", r["status"] == 201 and r["lro"]
+      and r["body"]["properties"]["endpoint"] == "https://cfg-repl-euro.westeurope.azconfig.io", r["body"])
+reps = cp(st, "GET", ["configurationStores", "cfg-repl", "replicas"])["body"]["value"]
+check("replica list shows it", len(reps) == 1 and reps[0]["name"] == "euro")
+check("replica get", cp(st, "GET", ["configurationStores", "cfg-repl", "replicas", "euro"])["body"]["location"] == "westeurope")
+check("replica delete", cp(st, "DELETE", ["configurationStores", "cfg-repl", "replicas", "euro"])["status"] == 200
+      and cp(st, "GET", ["configurationStores", "cfg-repl", "replicas"])["body"]["value"] == [])
+cp(st, "PUT", ["configurationStores", "cfg-repl-free"], {"location": "eastus", "sku": {"name": "Free"}})
+check("replicas require Standard/Premium", cp(st, "PUT", ["configurationStores", "cfg-repl-free", "replicas", "euro"], {"location": "westeurope"})["body"]["error"]["code"] == "ReplicaNotSupported")
+
+# publicNetworkAccess is ENFORCED on the data plane
+cp(st, "PUT", ["configurationStores", "cfg-net"], {"location": "eastus", "sku": {"name": "Standard"}})
+dp(st, "cfg-net", "PUT", "/kv/n1", body={"value": "v"})
+check("public access enabled: data plane works", dp(st, "cfg-net", "GET", "/kv/n1")["status"] == 200)
+cp(st, "PATCH", ["configurationStores", "cfg-net"], {"properties": {"publicNetworkAccess": "Disabled"}})
+r = dp(st, "cfg-net", "GET", "/kv/n1")
+check("publicNetworkAccess=Disabled -> data plane 403", r["status"] == 403, r)
+r = dp(st, "cfg-net", "PUT", "/kv/n2", body={"value": "x"})
+check("publicNetworkAccess=Disabled -> writes 403", r["status"] == 403, r)
+check("control plane still reachable while disabled", cp(st, "GET", ["configurationStores", "cfg-net"])["status"] == 200)
+cp(st, "PATCH", ["configurationStores", "cfg-net"], {"properties": {"publicNetworkAccess": "Enabled"}})
+check("re-enabled -> data plane works again", dp(st, "cfg-net", "GET", "/kv/n1")["status"] == 200)
+
 # through the Nano ARM dispatcher
 arm = AzureArm()
 rid = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg/providers/Microsoft.AppConfiguration/configurationStores/nano-cfg"

@@ -143,6 +143,26 @@ def run(store=None):
     _check("CBOR indefinite-length containers", k.cbor_loads(bytes.fromhex("bf61619f0102ffff")) == {"a": [1, 2]})
     k.dispatch(s, T + "DeleteStream", {"StreamName": "cb"})
 
+    # kinesis.stream.monitoring-metrics: real AWS/Kinesis datapoints from actual activity
+    from core import cloudwatch_core as cwc
+    cws = cwc.CloudWatchStore(); s.cw_store = cws
+    call("CreateStream", {"StreamName": "mtr", "ShardCount": 1})
+    call("PutRecord", {"StreamName": "mtr", "PartitionKey": "k", "Data": base64.b64encode(b"hello").decode()})
+    call("PutRecords", {"StreamName": "mtr", "Records": [{"PartitionKey": "a", "Data": base64.b64encode(b"xx").decode()}] * 3})
+    def _sum(metric, extra=()):
+        pts = cwc._series(cws, "AWS/Kinesis", metric, [{"Name": "StreamName", "Value": "mtr"}] + list(extra))
+        return sum(p[1] for p in pts["points"]) if pts else None
+    _check("IncomingRecords = 4 puts", _sum("IncomingRecords") == 4.0)
+    _check("IncomingBytes = 11", _sum("IncomingBytes") == 11.0)
+    _check("shard-level metric absent until enabled", _sum("IncomingBytes", [{"Name": "ShardId", "Value": "shardId-000000000000"}]) is None)
+    call("EnableEnhancedMonitoring", {"StreamName": "mtr", "ShardLevelMetrics": ["IncomingBytes"]})
+    call("PutRecord", {"StreamName": "mtr", "PartitionKey": "k", "Data": base64.b64encode(b"abc").decode()})
+    _check("shard-level metric after enable", _sum("IncomingBytes", [{"Name": "ShardId", "Value": "shardId-000000000000"}]) == 3.0)
+    it = call("GetShardIterator", {"StreamName": "mtr", "ShardId": "shardId-000000000000", "ShardIteratorType": "TRIM_HORIZON"}).body["ShardIterator"]
+    call("GetRecords", {"ShardIterator": it})
+    _check("GetRecords.Records = 5", _sum("GetRecords.Records") == 5.0)
+    call("DeleteStream", {"StreamName": "mtr"})
+
     # console facade
     cc = k.console_create(s, {"name": "ui-stream", "shard_count": 2, "retention_hours": 48})
     _check("console_create fills every grid column", all(cc.get(c) not in (None, "", "-") for c in ("name", "status", "capacity_mode", "open_shards", "retention", "encryption", "consumers", "created", "arn")))

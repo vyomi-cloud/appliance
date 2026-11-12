@@ -1,0 +1,19 @@
+{
+ "cloud": "gcp",
+ "service": "kms",
+ "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
+ "depth_targets": [
+  {
+   "id": "gcp.kms.autokey",
+   "title": "Autokey (automatic per-resource key ring/key provisioning)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Autokey provisions key rings and keys automatically when a resource is created, gated by an organization/folder policy and a dedicated key project. Vyomi doesn't model org policy or cross-project key provisioning, so there is nothing to wire this to."
+  }
+ ]
+}

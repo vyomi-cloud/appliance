@@ -1,0 +1,60 @@
+"""Vendor the Pyodide runtime Nano needs into wasm/vendor/pyodide/ so Nano loads it from its
+own origin instead of cdn.jsdelivr.net (a CDN stall leaves Nano stuck at "booting Pyodide").
+
+The loaders (nano-boot.js, relay/relay-shared-worker.js, relay/nano-endpoint.html) read
+wasm/pyodide-source.json: {"local": true} (written by this script) uses this folder, the tracked
+default {"local": false} uses the CDN, so no loader ever fires a request that is expected to 404. ~13 MB; git-ignored (the repo is
+public and must not carry the binaries) — run it in the build/deploy step that publishes the
+Nano bundle, or locally once.
+
+    python3 wasm/fetch_pyodide.py            (idempotent; re-downloads only missing files)
+"""
+import json
+import os
+import sys
+import urllib.request
+
+VERSION = "0.26.2"
+CDN = f"https://cdn.jsdelivr.net/pyodide/v{VERSION}/full/"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", "pyodide")
+CORE = ["pyodide.mjs", "pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]
+PACKAGES = ["sqlite3", "tzdata"]   # loadPackage() calls in nano-boot.js (tzdata: zoneinfo database for Cloud Scheduler / Monitoring time zones)
+
+
+def fetch(name: str) -> None:
+    dst = os.path.join(OUT, name)
+    if os.path.exists(dst) and os.path.getsize(dst) > 0:
+        return
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(CDN + name, timeout=60) as r, open(dst + ".part", "wb") as f:
+                f.write(r.read())
+            os.replace(dst + ".part", dst)
+            print(f"  {name}  {os.path.getsize(dst) // 1024} KB")
+            return
+        except Exception as e:  # the CDN stalls intermittently — retry
+            print(f"  {name}: retry {attempt + 1} ({e})", file=sys.stderr)
+    raise SystemExit(f"could not fetch {name}")
+
+
+def main() -> None:
+    os.makedirs(OUT, exist_ok=True)
+    for f in CORE:
+        fetch(f)
+    lock = json.load(open(os.path.join(OUT, "pyodide-lock.json")))["packages"]
+    todo, seen = list(PACKAGES), set()
+    while todo:
+        n = todo.pop()
+        if n in seen:
+            continue
+        seen.add(n)
+        fetch(lock[n]["file_name"])
+        todo += [d.lower() for d in lock[n].get("depends", [])]
+    # tell the loaders this bundle carries the runtime (wasm/pyodide-source.json is tracked, default false)
+    with open(os.path.join(os.path.dirname(OUT), "..", "pyodide-source.json"), "w") as f:
+        json.dump({"local": True}, f); f.write("\n")
+    print(f"Pyodide {VERSION} vendored → {OUT}  (pyodide-source.json -> local)")
+
+
+if __name__ == "__main__":
+    main()

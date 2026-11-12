@@ -10,8 +10,7 @@
   var cloud = (s && s.getAttribute('data-cloud')) || 'aws';
   var CL = (s && s.getAttribute('data-clouds')) || '/clouds';   // appliance page: '/clouds' offline, 'clouds.html' on Nano
   var NAMES = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Azure' };
-  // Drawer = the MAJOR capabilities only (ITEMS). Everything the product offers lives in CAPS and shows in the expand dialog;
-  // to add a capability, add a CAPS row (set major:true + an ITEMS entry only if it deserves a place in the drawer).
+  // Drawer = the major views (ITEMS). The expand button opens the Marketplace of onboarded simulators (see clouds.html VY_SIMULATORS).
   var ITEMS = [
     ['spaces', 'Spaces', 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'],
     ['workspace', 'Health', 'M3 3v18h18M7 12h3v6H7zM12 8h3v10h-3zM17 4h3v14h-3z'],
@@ -43,18 +42,22 @@
     '#vy-appbar .vy-notch a.vy-tun{position:relative;color:#fff;animation:vy-tun 1.6s ease-out infinite}' +
     '#vy-appbar .vy-notch a.vy-tun::after{content:"";position:absolute;top:1px;right:1px;width:10px;height:10px;border-radius:50%;background:#f59e0b;box-shadow:0 0 0 2px #0f121c}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
-    '#vy-modal{position:fixed;inset:0;z-index:200;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
+    '#vy-modal{position:fixed;inset:0;z-index:3000;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
     '#vy-modal.open{display:flex}' +
     '#vy-modal .box{width:min(1100px,94vw);height:min(760px,90vh);background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}' +
     '#vy-modal .hd{display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 18px;border-bottom:1px solid #e4e7ec;font:600 15px Inter,system-ui,sans-serif;color:#101828}' +
-    '#vy-modal .hd button{margin-left:auto;width:32px;height:32px;border:0;border-radius:50%;background:none;cursor:pointer;font-size:20px;color:#475467}' +
-    '#vy-modal .hd button:hover{background:#f2f4f7}' +
+    '#vy-modal .hd{position:relative}#vy-modal .hd>button{margin-left:auto;width:32px;height:32px;border:0;border-radius:50%;background:none;cursor:pointer;font-size:20px;color:#475467}' +
+    '#vy-modal .hd>button:hover{background:#f2f4f7}' +
+    '#vy-hd-tabs{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);gap:4px;padding:3px;border:1px solid #d0d5dd;border-radius:999px;background:#fff}' +
+    '#vy-modal.api #vy-hd-tabs{display:inline-flex}' +
+    '#vy-hd-tabs button{border:0;background:none;border-radius:999px;padding:4px 14px;font:600 12.5px Inter,system-ui,sans-serif;color:#475467;cursor:pointer}' +
+    '#vy-hd-tabs button.on{background:#000;color:#fff}' +
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
     '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
     '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
     '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
-    '#vy-acct-menu{position:fixed;z-index:250;min-width:250px;display:none;padding:6px;background:#fff;color:#101828;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.28);font-family:Inter,system-ui,sans-serif}' +
+    '#vy-acct-menu{position:fixed;z-index:3050;min-width:250px;display:none;padding:6px;background:#fff;color:#101828;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.28);font-family:Inter,system-ui,sans-serif}' +
     '#vy-acct-menu.open{display:block}' +
     '#vy-acct-menu .vy-who{display:flex;align-items:center;gap:10px;padding:8px 12px 10px;font-size:12px;color:#667085;word-break:break-all}' +
     '#vy-acct-menu .vy-av{width:40px;height:40px;flex:none;border-radius:50%;overflow:hidden;background:#4d8cf3;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:700 16px Inter,system-ui,sans-serif}' +
@@ -70,7 +73,7 @@
     '#vy-acct-menu a .vy-n{margin-left:auto;font-weight:600;font-size:12px;color:#475467}' +
     '#vy-acct-menu a[data-act=signout]{color:#b42318}#vy-acct-menu a[data-act=signout] svg{color:#b42318}' +
     /* ---- per-cloud look of the account menu + sign-out confirmation (follows each console's own account UX) ---- */
-    '#vy-so{position:fixed;inset:0;z-index:400;background:rgba(15,20,30,.55);display:none;align-items:center;justify-content:center}#vy-so.open{display:flex}' +
+    '#vy-so{position:fixed;inset:0;z-index:3100;background:rgba(15,20,30,.55);display:none;align-items:center;justify-content:center}#vy-so.open{display:flex}' +
     '#vy-so .dlg{width:min(440px,92vw);background:#fff;color:#16191f;box-shadow:0 12px 40px rgba(0,0,0,.35)}' +
     '#vy-so h4{margin:0;font-size:18px;font-weight:700}#vy-so p{margin:10px 0 0;font-size:14px;line-height:1.5;color:#414d5c}' +
     '#vy-so .row{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}#vy-so button{cursor:pointer;font:inherit;font-size:14px;font-weight:700}' +
@@ -99,46 +102,33 @@
     '#vy-acct-menu.vy-azure .vy-hr{display:none}#vy-acct-menu.vy-azure a[data-act=signout]{position:absolute;top:14px;right:14px;padding:4px 8px;color:#0078d4;font-size:13px}#vy-acct-menu.vy-azure a[data-act=signout]:hover{background:transparent;text-decoration:underline}#vy-acct-menu.vy-azure a[data-act=signout] svg{display:none}' +
     '#vy-so.vy-azure .dlg{border-radius:2px;padding:24px;font-family:"Segoe UI",system-ui,sans-serif;color:#323130}#vy-so.vy-azure h4{font-weight:600}#vy-so.vy-azure button{border-radius:2px;padding:6px 20px;font-weight:600}#vy-so.vy-azure .go{background:#0078d4;color:#fff;border:1px solid #0078d4}#vy-so.vy-azure .no{background:#fff;color:#323130;border:1px solid #8a8886}' +
     '#vy-appbar .vy-notch button.vy-exp{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-left:2px;padding:0;border:0;border-radius:8px;background:none;color:#b4b8cc;cursor:pointer}' +
+    '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){width:auto;gap:6px;padding:0 10px;font:400 12px Inter,system-ui,sans-serif;white-space:nowrap;box-shadow:0 0 0 1px rgba(255,255,255,.28),0 2px 8px rgba(0,0,0,.4)}#vy-appbar .vy-notch button.vy-exp .vy-exp-l{font:inherit}' +
     '#vy-appbar .vy-notch button.vy-exp:hover,#vy-appbar .vy-notch button.vy-exp[aria-expanded=true]{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){order:9}' +   /* expand = always the last icon; the info/download icons (order 2,3) sit before it */
+    /* collapse tab: a tiny chevron straddling the notch's top edge (absolute, so the drawer never grows wider); collapsed = just the tab */
+    '#vy-appbar .vy-notch button.vy-tog{position:absolute;left:50%;top:-9px;transform:translateX(-50%);z-index:2;width:30px;height:16px;padding:0;border:0;border-radius:8px 8px 0 0;background:#0f121c;color:#b4b8cc;cursor:pointer;display:flex;align-items:center;justify-content:center}' +
+    '#vy-appbar .vy-notch button.vy-tog:hover{color:#fff}#vy-appbar .vy-notch button.vy-tog svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}' +
+    '#vy-appbar.vy-min .vy-notch > *:not(.vy-tog){display:none !important}' +
+    '#vy-appbar.vy-min .vy-notch{height:16px;padding:0;gap:0}#vy-appbar.vy-min .vy-notch::before{display:none}#vy-appbar.vy-min::before{display:none}#vy-appbar.vy-min .vy-notch button.vy-tog{position:static;transform:none;top:auto}#vy-appbar.vy-min .vy-notch button.vy-tog svg{transform:rotate(180deg)}' +
     '#vy-appbar .vy-notch button.vy-exp svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     /* Expanded drawer = Vyomi Marketplace: standard black & white, landing-page grid field, thin borders, no shadows */
-    '#vy-cap{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}#vy-cap.open{display:flex}' +
+    '#vy-cap{position:fixed;inset:0;z-index:3010;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}#vy-cap.open{display:flex}' +
     '#vy-cap .cbox{width:min(1120px,96vw);height:min(720px,90vh);display:flex;flex-direction:column;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden}' +
     '#vy-cap .chd{display:flex;align-items:center;gap:16px;padding:12px 20px;background:#fff;border-bottom:1px solid #e4e4e7}' +
     '#vy-cap .cbrand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:-.01em;color:#000;white-space:nowrap}' +
-    '#vy-cap .csearch{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;background:#fff;border:1px solid #e4e4e7;border-radius:6px;color:#71717a}#vy-cap .csearch:focus-within{border-color:#000}' +
-    '#vy-cap .csearch svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}#vy-cap .csearch input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:13.5px;color:#18181b}' +
-    '#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
+    '#vy-cap .ctabs{margin-left:auto;display:flex;gap:0;align-items:center;padding:0;background:none;border:0}#vy-cap .ctab+.ctab{position:relative;margin-left:9px}#vy-cap .ctab+.ctab::before{content:"";position:absolute;left:-5px;top:50%;height:18px;width:1px;margin-top:-9px;background:#d4d4d8}#vy-cap .ctab{border:0;background:none;font-family:inherit;font-size:13px;font-weight:600;line-height:1;color:#52525b;padding:8px 16px;border-radius:8px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;transition:background .15s,color .15s}#vy-cap .ctab:hover{color:#000}#vy-cap .ctab.on{background:#000;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}#vy-cap .ctabs+.cx{margin-left:12px}#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
     '#vy-cap .cx svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
-    '#vy-cap .cbody{flex:1;min-height:0;display:flex}' +
-    '#vy-cap .cside{width:220px;flex:none;padding:16px 10px;background:#fff;border-right:1px solid #e4e4e7;overflow:auto}' +
-    '#vy-cap .cside h5{margin:0 10px 8px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#71717a}' +
-    '#vy-cap .ccat{display:flex;align-items:center;width:100%;padding:8px 10px;margin:0 0 2px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:13.5px;color:#3f3f46;text-align:left;cursor:pointer}#vy-cap .ccat:hover{background:#f4f4f5}' +
-    '#vy-cap .ccat.on{background:#000;color:#fff;font-weight:600}#vy-cap .ccat i{margin-left:auto;font-style:normal;font-size:12px;color:#71717a}#vy-cap .ccat.on i{color:#d4d4d8}' +
-    '#vy-cap .cmain{flex:1;min-width:0;overflow:auto;padding:24px 28px;background:#fff}' +
-    '#vy-cap .chero{margin-bottom:24px;padding:18px 22px;border:1px solid #e4e4e7;border-radius:8px;background:#fff}' +
-    '#vy-cap .chero h3{margin:0 0 4px;font-size:20px;font-weight:700;letter-spacing:-.01em;color:#000}#vy-cap .chero p{margin:0;font-size:13.5px;color:#52525b}' +
-    '#vy-cap .csec{margin:0 0 12px;font-size:15px;font-weight:700;color:#000}#vy-cap .csec small{font-weight:500;color:#71717a;margin-left:6px;font-size:13px}' +
-    '#vy-cap .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}' +
-    '#vy-cap .ctile{display:flex;flex-direction:column;padding:0;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid #e4e4e7;border-radius:8px;cursor:pointer;text-decoration:none;overflow:hidden}' +
-    '#vy-cap .ctile:hover,#vy-cap .ctile:focus-visible{border-color:#000;outline:none}' +
-    '#vy-cap .ctop{display:flex;align-items:center;gap:12px;padding:16px 16px 0}' +
-    '#vy-cap .cic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid #e4e4e7;border-radius:8px;color:#000;background:#fff}#vy-cap .cic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
-    '#vy-cap .ctl{display:block;font-size:14px;font-weight:600;color:#000;line-height:1.3}#vy-cap .cby{display:block;font-size:12px;color:#71717a}' +
-    '#vy-cap .cd{flex:1;padding:14px 16px 4px;font-size:13px;line-height:1.5;color:#52525b}' +
-    '#vy-cap .cft{display:flex;align-items:center;gap:8px;padding:10px 16px 14px}' +
-    '#vy-cap .loz{display:inline-block;padding:2px 8px;border:1px solid #d4d4d8;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em;color:#52525b;background:#fff}#vy-cap .loz.blue{background:#000;border-color:#000;color:#fff}' +
-    '#vy-cap .cgo{margin-left:auto;display:inline-flex;align-items:center;height:28px;padding:0 14px;border:1px solid #000;border-radius:6px;background:#000;color:#fff;font-size:12.5px;font-weight:600}#vy-cap .ctile:hover .cgo{background:#27272a}' +
-    '#vy-cap .cnone{padding:40px 0;text-align:center;color:#71717a;font-size:14px}' +
-    '#vy-cap .cmore{margin-top:24px;padding:14px 18px;border:1px dashed #a1a1aa;border-radius:8px;background:#fff;color:#52525b;font-size:13px}#vy-cap .cmore b{color:#000}' +
-    '@media(max-width:820px){#vy-cap .cside{display:none}#vy-cap .chd{gap:10px}#vy-cap .cbrand span{display:none}}' +
+    '#vy-cap .cbody{flex:1;min-height:0;display:flex;background:#fff}#vy-cap .cbody iframe{flex:1;border:0;width:100%;background:#fff}' +
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
     // The drawer is fixed over the bottom 44px: reserve that strip so nothing is hidden or unclickable under it
     // (a 1280x720 window put e.g. the APIM "Metrics" sub-tab right under the drawer).
-    var RES = { aws: '.page{min-height:calc(100vh - 40px - 36px - 44px) !important}',
+    var RES = { aws: '.page{min-height:calc(100vh - 40px - 36px - 44px) !important}' +
+                     // Cloudscape's side panels are sticky to the window bottom (z-index 830): they ran under the dock and hid its left end.
+                     // End them where the dock starts (44px dock, plus the 34px Nano relay footer when present).
+                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px - 44px) !important}' +
+                     'body:has(#nano-foot) [class*="awsui_navigation-container_"],body:has(#nano-foot) [class*="awsui_tools-container_"]{height:calc(100vh - 40px - 78px) !important}',
                 gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}',
                 azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:44px !important;height:auto !important}' };
     var st = document.createElement('style'); st.textContent = css + (RES[cloud] || ''); document.head.appendChild(st);
@@ -151,91 +141,55 @@
     document.body.appendChild(bar);
     var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
     if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
-    // ---- expand: every capability, black & white tiles (the drawer itself keeps only the major ones) ----
-    var ICO = { spaces: ITEMS[0][2], workspace: ITEMS[1][2], kc: ITEMS[2][2], usage: ITEMS[3][2], api: ITEMS[4][2],
-      disk: 'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5',
-      tunnel: 'M2 12h6M16 12h6M8 8v8M16 8v8M8 12h8', acct: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4.4 3.6-7 8-7s8 2.6 8 7',
-      star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
-      check: 'M9 12l2 2 4-4M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z',
-      grid: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', layers: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
-      tag: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01', doc: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6' };
-    var SITE = 'https://vyomi.cloud';
-    var CAPS = [
-      { t: 'Spaces', d: 'Create, switch and manage your simulated cloud spaces.', i: 'spaces', major: 1, v: 'spaces' },
-      { t: 'Health', d: 'Backend and service status at a glance.', i: 'workspace', major: 1, v: 'workspace' },
-      { t: 'Knowledge Center', d: 'Guides, how-tos and reference for every service.', i: 'kc', major: 1, v: 'kc' },
-      { t: 'SDK & CLI usage', d: 'Point the real CLIs and SDKs at this cloud, per service.', i: 'usage', major: 1, v: 'usage' },
-      { t: 'API reference', d: 'Endpoints and request shapes this simulator serves.', i: 'api', major: 1, v: 'api' },
-      { t: 'Disk usage', d: 'See and free the space your simulator is using.', i: 'disk', major: 1, fn: function () { var c = document.querySelector('#disk-widget-slot .disk-chip'); if (c) c.click(); }, when: function () { return !!document.getElementById('disk-widget-slot'); } },
-      { t: 'Relay tunnel', d: 'Start or stop the tunnel so your CLI and SDK reach this browser tab.', i: 'tunnel', fn: function () { var b = document.getElementById('nano-foot-toggle'); if (b) b.click(); }, when: function () { return !!document.getElementById('nano-foot-toggle'); } },
-      { t: 'Account', d: 'Sign in, activate the appliance, start your free trial.', i: 'acct', fn: function () { openView('acct', 'Activate this appliance', true); } },
-      { t: 'Conformance', d: 'Latest SDK and CLI conformance results.', i: 'check', href: SITE + '/docs/conformance' },
-      { t: 'Service coverage', d: 'Which services and operations are supported, per cloud.', i: 'grid', href: SITE + '/docs/coverage' },
-      { t: 'Architecture', d: 'How the real backends and the in-browser engines fit together.', i: 'layers', href: SITE + '/docs/architecture' },
-      { t: 'Plans & pricing', d: 'Free, Pro and team plans.', i: 'tag', href: SITE + '/pricing' },
-      { t: 'Terms', d: 'Fair use, and how the simulated consoles differ from the real ones.', i: 'doc', href: SITE + '/terms#simulated-consoles' },
-      { t: 'Star on GitHub', d: 'Follow releases and help the project grow.', i: 'star', href: 'https://github.com/vyomi-cloud/appliance' }
-    ];
+    // ---- expand: the Marketplace of onboarded simulators. The dialog hosts the Marketplace view of the Spaces page
+    //      (?embed=1#marketplace): cards are generated from its single simulator registry, never hard-coded here.
     var cap = document.createElement('div'); cap.id = 'vy-cap';
-    cap.innerHTML = '<div class="cbox" role="dialog" aria-modal="true" aria-labelledby="vy-cap-t"><div class="chd"><div class="cbrand" id="vy-cap-t"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg><span>Vyomi Marketplace</span></div>' +
-      '<label class="csearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="search" placeholder="Search capabilities" aria-label="Search capabilities"></label>' +
+    cap.innerHTML = '<div class="cbox" role="dialog" aria-modal="true" aria-labelledby="vy-cap-t"><div class="chd"><div class="cbrand" id="vy-cap-t"><img src="assets/brand/vyomi-logo.png" alt="vyomi" style="height:24px;width:auto;display:block"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600;color:#18181b;padding-left:10px;border-left:1px solid #d4d4d8"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>Marketplace</span></div>' +
+      '<div class="ctabs" role="tablist"><button type="button" class="ctab on" data-tab="cur" aria-selected="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.4 1.8 3-.2 1 2.8 2.4 1.8-.9 2.9.9 2.9-2.4 1.8-1 2.8-3-.2L12 21l-2.4-1.8-3 .2-1-2.8L3.2 14.8l.9-2.9-.9-2.9 2.4-1.8 1-2.8 3 .2z"/><path d="M8.5 12l2.4 2.4 4.6-4.8"/></svg>Your current plan</button><button type="button" class="ctab" data-tab="plan" aria-selected="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Subscription Plan</button><button type="button" class="ctab" data-tab="payg" aria-selected="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2"/></svg>Pay as you go</button></div>' +
       '<button type="button" class="cx" aria-label="Collapse" title="Collapse"><svg viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></button></div>' +
-      '<div class="cbody"><nav class="cside" aria-label="Categories"></nav><div class="cmain"></div></div></div>';
+      '<div class="cbody"><iframe title="Marketplace"></iframe></div></div>';
     document.body.appendChild(cap);
-    var CATS = ['Essentials', 'Learn & reference', 'Connect', 'Account & plans', 'Community'];
-    var CATCOL = { 'Essentials': '#0C66E4', 'Learn & reference': '#6554C0', 'Connect': '#00875A', 'Account & plans': '#C25100', 'Community': '#42526E' };
-    var catOf = { 'Spaces': 0, 'Health': 0, 'Disk usage': 0, 'Knowledge Center': 1, 'SDK & CLI usage': 1, 'API reference': 1, 'Architecture': 1, 'Service coverage': 1, 'Conformance': 1,
-                  'Relay tunnel': 2, 'Account': 3, 'Plans & pricing': 3, 'Terms': 3, 'Star on GitHub': 4 };
-    var curCat = 'All', query = '';
-    function visibleCaps() { return CAPS.filter(function (c) { return !c.when || c.when(); }); }
-    function paintCap() {
-      var all = visibleCaps(), side = cap.querySelector('.cside'), main = cap.querySelector('.cmain');
-      var cnt = {}; all.forEach(function (c) { var k = CATS[catOf[c.t]] || 'Essentials'; cnt[k] = (cnt[k] || 0) + 1; });
-      side.innerHTML = '<h5>Browse</h5>';
-      [['All', all.length]].concat(CATS.filter(function (k) { return cnt[k]; }).map(function (k) { return [k, cnt[k]]; })).forEach(function (r) {
-        var b = document.createElement('button'); b.type = 'button'; b.className = 'ccat' + (curCat === r[0] ? ' on' : ''); b.innerHTML = esc(r[0]) + '<i>' + r[1] + '</i>';
-        b.onclick = function () { curCat = r[0]; paintCap(); }; side.appendChild(b);
-      });
-      var q = query.trim().toLowerCase();
-      var list = all.filter(function (c) { var k = CATS[catOf[c.t]] || 'Essentials'; return (curCat === 'All' || k === curCat) && (!q || (c.t + ' ' + c.d + ' ' + k).toLowerCase().indexOf(q) >= 0); });
-      var h = '';
-      if (curCat === 'All' && !q) h += '<div class="chero"><div><h3>Everything Vyomi offers, in one place</h3><p>The drawer keeps the essentials. Browse the rest here, and watch this space for more.</p></div></div>';
-      h += '<h4 class="csec">' + (q ? 'Results' : esc(curCat === 'All' ? 'All capabilities' : curCat)) + '<small>' + list.length + '</small></h4>';
-      if (!list.length) h += '<div class="cnone">No capabilities match “' + esc(query) + '”.</div>';
-      h += '<div class="cgrid"></div>';
-      if (curCat === 'All' && !q) h += '<div class="cmore"><b>More coming.</b> New capabilities and integrations will land here first, and the best of them will be pinned to the drawer.</div>';
-      main.innerHTML = h;
-      var g = main.querySelector('.cgrid');
-      list.forEach(function (c) {
-        var k = CATS[catOf[c.t]] || 'Essentials';
-        var el = document.createElement(c.href ? 'a' : 'button'); el.className = 'ctile'; if (c.href) { el.href = c.href; el.target = '_blank'; el.rel = 'noopener noreferrer'; } else el.type = 'button';
-        el.innerHTML = '<span class="ctop"><span class="cic"><svg viewBox="0 0 24 24"><path d="' + ICO[c.i] + '"/></svg></span><span><span class="ctl">' + esc(c.t) + '</span><span class="cby">by Vyomi · ' + esc(k) + '</span></span></span>' +
-          '<span class="cd">' + esc(c.d) + '</span><span class="cft">' + (c.major ? '<span class="loz blue">In drawer</span>' : '<span class="loz">Built-in</span>') + '<span class="cgo">' + (c.href ? 'Open site' : (c.fn ? 'Launch' : 'Open')) + '</span></span>';
-        el.addEventListener('click', function () { closeCap(); if (c.href) return; if (c.v) openView(c.v, c.t, false); else if (c.fn) c.fn(); });
-        g.appendChild(el);
-      });
-    }
-    cap.querySelector('.csearch input').addEventListener('input', function (e) { query = e.target.value; paintCap(); });
-    var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'All capabilities'; expBtn.setAttribute('aria-label', 'All capabilities'); expBtn.setAttribute('aria-expanded', 'false');
-    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></g></svg>';
+    var capFr = cap.querySelector('iframe');
+    var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'Marketplace'; expBtn.setAttribute('aria-label', 'Marketplace'); expBtn.setAttribute('aria-expanded', 'false');
+    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.4"/></g></svg><span class="vy-exp-l">Marketplace</span>';
     bar.querySelector('.vy-notch').appendChild(expBtn);
-    function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); }
-    function openCap() { curCat = 'All'; query = ''; var inp = cap.querySelector('.csearch input'); inp.value = ''; paintCap(); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { inp.focus(); }, 30); }
+    // collapse / expand the drawer (remembered per browser)
+    var tog = document.createElement('button'); tog.type = 'button'; tog.className = 'vy-tog';
+    tog.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+    function setMin(m, keep) { bar.classList.toggle('vy-min', m); tog.title = m ? 'Expand drawer' : 'Collapse drawer'; tog.setAttribute('aria-label', tog.title); tog.setAttribute('aria-expanded', String(!m)); if (!keep) { try { localStorage.setItem('vyDrawerMin', m ? '1' : '0'); } catch (e) {} } }
+    var wasMin = false; try { wasMin = localStorage.getItem('vyDrawerMin') === '1'; } catch (e) {}
+    setMin(wasMin, true);
+    tog.addEventListener('click', function () { setMin(!bar.classList.contains('vy-min')); });
+    bar.querySelector('.vy-notch').appendChild(tog);
+    function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); capFr.removeAttribute('src'); }
+    function openCap() { capFr.src = CL + '?embed=1#marketplace'; cap.querySelectorAll('.ctab').forEach(function (x, i) { x.classList.toggle('on', i === 0); x.setAttribute('aria-selected', i === 0); }); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { expBtn.blur(); capFr.focus(); }, 60); }
     expBtn.addEventListener('click', function () { if (cap.classList.contains('open')) closeCap(); else openCap(); });
     cap.addEventListener('click', function (e) { if (e.target === cap) closeCap(); });
     cap.querySelector('.cx').addEventListener('click', closeCap);
+    cap.querySelectorAll('.ctab').forEach(function (b) { b.addEventListener('click', function () {
+      cap.querySelectorAll('.ctab').forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+      try { capFr.contentWindow.vyMktTab(b.dataset.tab); } catch (e) {} }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCap(); });
+    // Enterprise / Codespaces: spaces are pre-provisioned by the admin, so there is no Marketplace. The button is shown by
+    // default (a normal appliance never waits on this) and removed as soon as the runtime profile says sandbox / restricted.
+    fetch('/api/runtime/profile', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (j && (j.sandbox || j.restricted)) { closeCap(); expBtn.remove(); cap.remove(); window.__vySandbox = true; }
+    }).catch(function () {});
     var m = document.createElement('div'); m.id = 'vy-modal';
-    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
+    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
     var fr = m.querySelector('iframe');
     function close() { m.classList.remove('open'); fr.removeAttribute('src'); }
     m.addEventListener('click', function (e) { if (e.target === m) close(); });
-    m.querySelector('.hd button').addEventListener('click', close);
+    m.querySelector('.hd>button').addEventListener('click', close);
+    m.querySelectorAll('#vy-hd-tabs button').forEach(function (b) { b.addEventListener('click', function () {
+      m.querySelectorAll('#vy-hd-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      try { fr.contentWindow.__apiCloud(b.dataset.c); } catch (e) {} }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
     function openView(view, title, small) {
       m.querySelector('#vy-modal-t').textContent = title;
-      m.classList.toggle('sm', !!small);
+      m.classList.toggle('sm', !!small); m.classList.toggle('api', view === 'api');
+      m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
       fr.src = CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
       m.classList.add('open');
     }
@@ -251,7 +205,7 @@
       }
     } catch (_) {}
     // ---- account menu: a button in the console's main header (top-right) -> Activate appliance · GitHub ★ · Sign out
-    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '' };
+    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '', edition: '', role: '' };
     // Nano: pulse the SDK & CLI usage item until the local vyomi-tunnel has been seen running on this machine.
     if (NANO) {
       var tl = nav.querySelector('a[data-v="usage"]');
@@ -273,6 +227,9 @@
     var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vy-acct-btn'; btn.className = 'vy-' + cloud; btn.title = 'Vyomi account'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
     btn.innerHTML = PERSON;
     if (host) host.appendChild(btn);
+    // Edition label next to the avatar ("Enterprise" for enterprise sandboxes), filled from /api/sandbox/whoami in a gated Codespace.
+    var edp = document.createElement('span'); edp.id = 'vy-ed-pill'; edp.style.cssText = 'display:none;margin-left:8px;padding:2px 8px;border:1px solid currentColor;border-radius:999px;font:700 10.5px Inter,system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;align-self:center';
+    if (host) host.insertBefore(edp, btn);
     var menu = document.createElement('div'); menu.id = 'vy-acct-menu'; menu.className = 'vy-' + cloud; menu.setAttribute('role', 'menu');
     var who$ = document.createElement('div'); who$.className = 'vy-who';
     var act = document.createElement('a'); act.href = '#'; act.setAttribute('data-act', 'activate'); act.setAttribute('role', 'menuitem');
@@ -280,18 +237,72 @@
     gh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Star on GitHub</span><b class="vy-n"></b>';
     var so = document.createElement('a'); so.href = '#'; so.setAttribute('data-act', 'signout'); so.setAttribute('role', 'menuitem'); so.style.display = 'none';
     so.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Sign out</span>';
+    // vyomi-tunnel access key + secret (AWS-CLI style): created and downloaded on the portal, saved as ~/.vyomi/credentials
+    var tc = document.createElement('a'); tc.href = '/admin/credentials'; tc.setAttribute('data-act', 'tunnel-credentials'); tc.setAttribute('role', 'menuitem'); tc.style.display = 'none';
+    tc.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Access Key</span>';
     var hr = document.createElement('div'); hr.className = 'vy-hr';
-    [who$, act, gh, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
+    var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'mesh'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
+    function paintMesh() {
+      var B = window.VyomiMesh, x = B && B.session && B.session(); if (!x || !x.entitled) { bo.style.display = 'none'; return; }
+      var ss = x.session, live = !!x.active, label, tip = '';
+      if (!x.github || !x.github.connected) label = 'Mesh \u00b7 Connect GitHub';
+      else if (live) { var sec = ss.countdown_seconds | 0; label = (ss.state === 'running' ? 'Leave the Mesh \u00b7 ' + Math.floor(sec / 3600) + 'h ' + String(Math.floor(sec % 3600 / 60)).padStart(2, '0') + 'm left' : 'Mesh starting\u2026 (Stop)'); }
+      else label = 'Join the Mesh \u00b7 ' + (x.hours_remaining != null ? x.hours_remaining + ' h left' : '');
+      bo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>' + esc(label) + '</span>'; bo.style.display = '';
+    }
+    window.addEventListener('vyomi-mesh-session', paintMesh); setInterval(paintMesh, 15000);
+    [who$, act, bo, gh, tc, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
     function closeMenu() { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (menu.classList.contains('open')) { closeMenu(); return; }
       var r = btn.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
-      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); paintMesh();
     });
-    document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
+    // The v4 consoles render their own account chip (AWS "Account" button, GCP avatar, Azure .vy-account) after this script runs, so the
+    // header button above may never attach. Make those native chips open the same Vyomi account menu (with Sign out).
+    document.addEventListener('click', function (e) {
+      var chip = e.target.closest && e.target.closest('button[aria-label="Account"],[aria-label="Vyomi · local simulator"],button.vy-account');
+      if (!chip || btn.isConnected) return;
+      e.preventDefault(); e.stopPropagation();
+      if (menu.classList.contains('open')) { closeMenu(); return; }
+      paintMesh(); var r = chip.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+      menu.classList.add('open');
+    }, true);
+    document.addEventListener('click', function (e) { if (!menu.contains(e.target) && !(e.target.closest && e.target.closest('button[aria-label="Account"],[aria-label="Vyomi · local simulator"],button.vy-account'))) closeMenu(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    // Show the signed-in user (avatar / initial + name) on each console's own account chip, like old Nano's header avatar.
+    var skinBusy = false;
+    function avHtml(sz) {
+      var em = prof.email || who || '';
+      if (prof.avatar) return '<img src="' + esc(prof.avatar) + '" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">';
+      return esc((em || '?').charAt(0).toUpperCase());
+    }
+    function skin() {
+      if (skinBusy || !(authed || prof.email)) return; skinBusy = true;
+      try {
+        var em = prof.email || who || '', nm = prof.name || (em ? em.split('@')[0] : 'Account');
+        var circ = function (sz) { return 'display:inline-flex;align-items:center;justify-content:center;width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;overflow:hidden;background:#4d8cf3;color:#fff;font:700 ' + Math.round(sz * .5) + 'px/1 sans-serif;flex:none;vertical-align:middle'; };
+        var aws = document.querySelector('button[aria-label="Account"]');
+        if (aws) {
+          var tn = null; var w = document.createTreeWalker(aws, NodeFilter.SHOW_TEXT); while (w.nextNode()) { if (/\S/.test(w.currentNode.nodeValue) && !w.currentNode.parentElement.closest('[data-vy-av]')) { tn = w.currentNode; break; } }
+          if (tn && tn.nodeValue.trim() !== nm) tn.nodeValue = nm;
+          var ex = aws.querySelector('[data-vy-av]'); if (!ex) { ex = document.createElement('span'); ex.setAttribute('data-vy-av', '1'); ex.style.cssText = circ(24) + ';margin-right:8px'; aws.insertBefore(ex, aws.firstChild); }
+          if (ex.getAttribute('data-k') !== (prof.avatar || em)) { ex.innerHTML = avHtml(); ex.setAttribute('data-k', prof.avatar || em); }
+        }
+        var g = document.querySelector('[aria-label="Vyomi \u00b7 local simulator"]');
+        if (g && g.getAttribute('data-k') !== (prof.avatar || em)) { g.innerHTML = avHtml(); g.setAttribute('data-k', prof.avatar || em); g.title = em; g.style.overflow = 'hidden'; }
+        var az = document.querySelector('button.vy-account');
+        if (az) {
+          var ini = az.querySelector('.fui-Avatar__initials'); if (ini && ini.getAttribute('data-k') !== (prof.avatar || em)) { ini.innerHTML = avHtml(); ini.setAttribute('data-k', prof.avatar || em); }
+          az.querySelectorAll('*').forEach(function (n) { if (n.children.length === 0) { var t = n.textContent.trim(); if (/@simulator\.local$/i.test(t) && t !== em) n.textContent = em; else if (/^VYOMI SIMULATOR/i.test(t)) n.textContent = nm; } });
+        }
+      } catch (e) {}
+      skinBusy = false;
+    }
+    try { new MutationObserver(function () { clearTimeout(window.__vySkinT); window.__vySkinT = setTimeout(skin, 150); }).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
     function paintAcct() {
+      setTimeout(skin, 0);
       var t = st.trial, ic = '<svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z"/></svg>';
       if (t && t.active) { act.title = 'Free trial running — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>' + String(st.tier || 'pro').toUpperCase() + ' trial · Upgrade</span>'; }
       else if (t && t.ended) { act.title = 'Your free trial has ended — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>Trial ended · Upgrade</span>'; }
@@ -299,14 +310,19 @@
       else { act.title = 'Sign in to activate — starts your free 14-day Pro trial'; act.setAttribute('data-act', 'activate'); act.innerHTML = ic + '<span>Activate appliance</span>'; }
       var em = prof.email || who, nm = prof.name || (em ? em.split('@')[0] : ''), signed = authed || (!NANO && st.tier && st.tier !== 'free');
       var av = prof.avatar ? '<img src="' + esc(prof.avatar) + '" alt="" referrerpolicy="no-referrer">' : (em ? '<span class="vy-ini">' + esc(em.charAt(0).toUpperCase()) + '</span>' : PERSON);
+      var edl = prof.edition === 'enterprise' ? 'Enterprise' : (prof.edition === 'personal' ? 'Personal' : ''); edp.textContent = edl; edp.style.display = edl ? 'inline-block' : 'none';
       btn.innerHTML = av; btn.title = signed && em ? 'Vyomi account \u2014 ' + em : 'Vyomi account';
-      who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
+      who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + (edl ? '<small class="vy-via">' + esc(edl) + (prof.role ? ' \u00b7 ' + esc(prof.role.charAt(0).toUpperCase() + prof.role.slice(1)) : '') + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
       so.style.display = (authed || (!NANO && st.tier && st.tier !== 'free') || (!NANO && t && t.activated)) ? '' : 'none';
+      tc.style.display = NANO && authed ? '' : 'none';      // the keys live on the portal: shown in the Nano console once signed in
     }
     function refreshAcct() {
       fetch('/api/license/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
         st = { tier: d && d.active_tier, trial: d && d.trial }; who = (d && (d.issued_to || (d.license && (d.license.email || d.license.issued_to)))) || who; paintAcct();
       }).catch(function () { paintAcct(); });
+      if (!NANO) fetch('/api/sandbox/whoami', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.authenticated) { authed = true; prof.email = j.email || ''; who = prof.email || j.login || ''; prof.avatar = j.avatar || ''; prof.name = j.name || j.login || ''; prof.via = 'GitHub'; prof.edition = j.edition || ''; prof.role = j.role || ''; paintAcct(); }
+      }).catch(function () {});
       if (NANO) { try { var x = new XMLHttpRequest(); x.open('GET', '/api/auth/me', true); x.withCredentials = true;
         x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) { who = j.email; prof.email = j.email; } prof.avatar = j.avatar_url || ''; prof.name = j.name || j.github_login || ''; prof.via = j.provider || ((j.github_login || /githubusercontent|github\.com/.test(j.avatar_url || '')) ? 'GitHub' : ''); } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
     }
@@ -335,12 +351,29 @@
       var done = function () { if (NANO) location.href = '/dashboard'; else location.reload(); };
       try { var l = new XMLHttpRequest(); l.open('POST', '/api/auth/logout', true); l.withCredentials = true; l.onloadend = done; l.send(); } catch (e) { done(); }
     });
-    window.addEventListener('message', function (e) { if (e.data && e.data.vy === 'close-modal') { close(); refreshAcct(); } });
+    window.addEventListener('message', function (e) {
+      if (e.data && e.data.vy === 'close-modal') { close(); refreshAcct(); }
+      else if (e.data && e.data.vy === 'open-spaces') { closeCap(); openView('spaces', 'Spaces', false); }       // a simulator was added: show it in Spaces
+      else if (e.data && e.data.vy === 'open-marketplace' && !window.__vySandbox) { close(); openCap(); }      // Spaces' empty state -> Marketplace
+    });
     function onItem(e) {
       var l = e.target.closest('a'); if (!l) return; if (menu.contains(l)) closeMenu();
       var ac = l.getAttribute('data-act');
       if (ac === 'activate') { e.preventDefault(); openView('acct', 'Activate this appliance', true); return; }
       if (ac === 'upgrade') { e.preventDefault(); window.open((st.trial && st.trial.upgrade_url) || 'https://vyomi.cloud/pricing', '_blank', 'noopener'); return; }
+      if (ac === 'mesh') {
+        e.preventDefault(); var B = window.VyomiMesh, x = B && B.session && B.session(); if (!B || !x) return;
+        if (!x.github || !x.github.connected) { B.connectModal(false); return; }
+        var live = !!x.active, span = l.querySelector('span'); if (span) span.textContent = live ? 'Stopping\u2026' : 'Starting\u2026';
+        (live ? B.sessionStop() : B.sessionStart()).then(function (r) {
+          paintMesh();
+          if (r && r.cancelled) return;
+          var er = r && !r.ok && r.j; if (!er) return;
+          if (er.action === 'reconnect') { B.connectModal(true); }
+          else B.toast(er.message || er.error || 'Could not start the mesh.');
+        }, function () { paintMesh(); });
+        return;
+      }
       if (ac === 'signout') { e.preventDefault(); signOut(); return; }
       if (!l.getAttribute('data-v')) return;
       e.preventDefault();
@@ -353,5 +386,34 @@
       e.preventDefault(); e.stopPropagation(); openView('spaces', 'Spaces', false);
     }, true);
   }
+  // ---- Beta pill beside the vyomi logo in every console header (v4.0.0 is a full uplift). The headers are React-owned, so the
+  //      pill is a fixed-position overlay tracked to the logo's rect rather than a child node (survives re-renders).
+  function betaPill() {
+    var el = document.createElement('span'); el.id = 'vy-beta'; el.textContent = 'Beta'; el.title = 'Vyomi v4.0.0 beta';
+    el.style.cssText = 'position:fixed;z-index:5000;display:none;pointer-events:none;transform:translateX(-100%);font:600 8px/1 Inter,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase';   // plain text under the wordmark, right-aligned (the Google "beta" look)
+    document.body.appendChild(el);
+    function logo() {
+      var l = document.querySelector('a.vy-co img'); if (l) return l;
+      var im = document.querySelectorAll('img[src^="data:image/svg+xml"]');
+      for (var i = 0; i < im.length; i++) { var r = im[i].getBoundingClientRect(); if (r.width > 30 && r.top < 70 && r.left < 260 && r.bottom > 0) return im[i]; }
+      return null;
+    }
+    var raf = 0;
+    function place() {
+      raf = 0; var l = logo();
+      if (!l) { el.style.display = 'none'; return; }
+      var r = l.getBoundingClientRect(); el.style.display = 'block';
+      // v4 headers draw the wordmark and the cloud label ("| AWS") as one image: pin the pill to the wordmark's top-right corner.
+      var legacy = !!l.closest('a.vy-co'), cl = (document.querySelector('script[data-cloud][src*="vyomi-appbar"]') || {}).dataset || {};
+      var wm = legacy ? r.width : ({ aws: 88, gcp: 104, azure: 90 }[cl.cloud] || r.width);
+      el.style.color = cl.cloud === 'gcp' ? '#5f6368' : 'rgba(255,255,255,.85)';
+      el.style.left = Math.round(r.left + wm) + 'px'; el.style.top = Math.round(r.bottom - (legacy ? 3 : 5)) + 'px';
+    }
+    function sched() { if (!raf) raf = requestAnimationFrame(place); }
+    addEventListener('resize', sched); new MutationObserver(sched).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style'] });
+    place(); setTimeout(place, 1500);
+  }
+  function startBeta() { if (!document.getElementById('vy-beta')) betaPill(); }
+  if (document.body) startBeta(); else document.addEventListener('DOMContentLoaded', startBeta);
   if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
 })();

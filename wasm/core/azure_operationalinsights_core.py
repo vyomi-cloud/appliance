@@ -15,6 +15,12 @@ ARM REST of the ``operationalinsights`` resource provider (azure-rest-api-specs
     .../workspaces/{ws}/savedSearches/{id}                         CreateOrUpdate / Get / Delete / List
     .../workspaces/{ws}/tables/{table}                             CreateOrUpdate / Update / Get / Delete / ListByWorkspace
     .../workspaces/{ws}/dataSources/{name}                         CreateOrUpdate / Get / Delete / ListByWorkspace (?$filter=kind eq '…')
+    .../workspaces/{ws}/api/query                                   POST {query} — the SAME ARM pass-through the
+                                                                     Azure Portal's Logs blade uses when it has no
+                                                                     data-plane token (real path/shape, api-version
+                                                                     2017-10-01); see ``_run_query`` for the small
+                                                                     KQL subset understood (table name, where,
+                                                                     project, sort by/order by, take/limit, count).
 
 Workspaces live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
 lower-cased resource id; their child collections live INSIDE the workspace record under underscore keys
@@ -27,6 +33,13 @@ array, ``Log-Type`` header or ``logType`` query -> table ``<LogType>_CL``, field
 contains, !contains, startswith, endswith, has, in, and/or) ``| project | extend``-free ``| take/limit | count | order by/sort by |
 summarize count() by col | distinct``. Records live in the workspace record (``_rows``), so they follow the ARM state seams.
 Not modelled: the real KQL language beyond that subset, data export, linked services/storage insights,
+Query results are real for the built-in ``AzureActivity`` table (the SAME ``Microsoft.Insights/eventtypes`` rows
+the Activity log feed reads, filtered to this subscription) and always empty for every other table (Heartbeat,
+Perf, Syslog, Event, Usage, AzureDiagnostics, any custom ``_CL``/``_RST`` table) — there is no agent/telemetry
+ingestion pipeline to populate them, and no per-workspace Activity Log export gating (every workspace's
+AzureActivity table sees the whole subscription feed).
+Not modelled: the api.loganalytics.io data-plane host directly (``azure-monitor-query`` / ``LogsQueryClient``
+calls that host, not ARM, so they do not reach this module), data export, linked services/storage insights,
 clusters, purge and conditional headers (If-Match / If-None-Match).
 
 ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}`` (``body`` is a JSON-able object or ``None``).
@@ -65,10 +78,14 @@ BASE_TABLES = {
     "Perf": ["TimeGenerated", "Computer", "ObjectName", "CounterName", "CounterValue"],
     "Syslog": ["TimeGenerated", "Computer", "Facility", "SeverityLevel", "SyslogMessage"],
     "Event": ["TimeGenerated", "Computer", "EventLog", "EventID", "RenderedDescription"],
-    "AzureActivity": ["TimeGenerated", "OperationName", "Caller", "Level", "ResourceGroup"],
+    "AzureActivity": ["TimeGenerated", "OperationName", "Caller", "Level", "ResourceGroup", "ResourceId", "Category", "ActivityStatus", "SubscriptionId"],
     "Usage": ["TimeGenerated", "DataType", "Quantity", "IsBillable", "Solution"],
     "AzureDiagnostics": ["TimeGenerated", "ResourceId", "Category", "OperationName", "ResultType"],
 }
+BASE_TABLES_LOWER = {n.lower(): n for n in BASE_TABLES}
+# ARM table-schema column type → the KQL/Log Analytics Query API type name for the same value.
+_ARM_TO_KQL_TYPE = {"string": "string", "int": "int", "long": "long", "real": "real", "boolean": "bool",
+                    "datetime": "datetime", "guid": "guid", "dynamic": "dynamic"}
 MAX_SAVED = 500
 MAX_TABLES = 500
 _WS_NAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{2,61}[A-Za-z0-9])$")
@@ -288,7 +305,7 @@ def _usages(rec):
     reset = p["workspaceCapping"]["quotaNextResetTime"]
     n = len(rec["_tables"])
     return {"value": [
-        {"name": {"value": "DataAnalyzed", "localizedValue": "Data Analyzed"}, "unit": "Bytes", "currentValue": 0.0,
+        {"name": {"value": "DataAnalyzed", "localizedValue": "Data Analyzed"}, "unit": "Bytes", "currentValue": float(rec.get("_ingest", {}).get(_today(), 0)),
          "limit": 524288000.0 if p["sku"]["name"] == "Free" else (-1.0 if cap == -1 else cap * 1073741824.0),
          "nextResetTime": reset, "quotaPeriod": "P1D"},
         {"name": {"value": "TableCount", "localizedValue": "Tables"}, "unit": "Count", "currentValue": float(n),
@@ -302,7 +319,7 @@ def _pack_view(rec):
     return [{"name": p, "enabled": bool(rec["_packs"].get(p, False))} for p in PACKS]
 
 
-def _workspace_ops(rec, rest, method, payload):
+def _workspace_ops(state, sub, rec, rest, method, payload):
     op = rest[0].lower()
     if op in ("sharedkeys", "getsharedkeys"):
         if method != "POST":
@@ -330,7 +347,302 @@ def _workspace_ops(rec, rest, method, payload):
             else:
                 rec["_packs"][pack] = True
             return _ok(None, 200)
+    if op == "api" and len(rest) == 2 and rest[1].lower() == "query":
+        return _run_query(state, sub, rec, method, payload)
+    if op == "purge" and len(rest) == 1:
+        return _purge(rec, method, payload)
+    if op == "operations" and len(rest) == 2:
+        return _purge_status(rec, method, rest[1])
     return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+
+
+# ═══════════════════════════ linked storage accounts ═════════════════════════════
+# Microsoft.OperationalInsights/workspaces/{ws}/linkedStorageAccounts/{dataSourceType} -- the workspace's "Linked storage accounts" blade
+# (bring-your-own-storage). Real validation (data source type enum, storage accounts must exist and share the workspace's region); the link is
+# CONFIGURATION: ingestion/queries/alerts are not re-routed through the account (see the registry entry).
+LINKED_TYPES = ("CustomLogs", "AzureWatson", "Query", "Ingestion", "Alerts")
+MAX_LINKED_ACCOUNTS = 5
+
+
+def _linked_view(rec, kind, cur):
+    return {"id": _child_id(rec, "linkedStorageAccounts", kind), "name": kind, "type": f"{WS_TYPE}/linkedStorageAccounts",
+            "properties": {"dataSourceType": kind, "storageAccountIds": list(cur["ids"])}}
+
+
+def _linked_storage(state, rec, name, method, payload):
+    store = rec.setdefault("_linked", {})
+    if name is None:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_linked_view(rec, k, store[k.lower()]) for k in LINKED_TYPES if k.lower() in store]})
+    kind = next((k for k in LINKED_TYPES if k.lower() == name.lower()), None)
+    if kind is None:
+        raise _bad(f"The data source type '{name}' is invalid. Allowed: {', '.join(LINKED_TYPES)}.")
+    cur = store.get(kind.lower())
+    if method == "GET":
+        if cur is None:
+            raise _child_not_found("linked storage account", kind, rec["name"])
+        return _ok(_linked_view(rec, kind, cur))
+    if method == "DELETE":
+        store.pop(kind.lower(), None)
+        return _ok(None, 200 if cur is not None else 204)
+    if method not in ("PUT", "PATCH"):
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    p = payload.get("properties")
+    if not isinstance(p, dict):
+        raise _bad("The request body must contain 'properties'.")
+    if p.get("dataSourceType") is not None and str(p["dataSourceType"]).lower() != kind.lower():
+        raise _bad(f"properties.dataSourceType '{p['dataSourceType']}' does not match the resource name '{kind}'.")
+    ids = p.get("storageAccountIds")
+    if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids):
+        raise _bad("The property 'storageAccountIds' must be a non-empty array of storage account resource ids.")
+    if len(ids) > MAX_LINKED_ACCOUNTS:
+        raise _bad(f"At most {MAX_LINKED_ACCOUNTS} storage accounts can be linked per data source type.")
+    if len({i.lower() for i in ids}) != len(ids):
+        raise _bad("storageAccountIds contains duplicates.")
+    for i in ids:
+        sa = state.get(i.lower())
+        if sa is None or (sa.get("_type") or "").lower() != "microsoft.storage/storageaccounts":
+            raise _bad(f"The storage account '{i}' was not found.")
+        if str(sa.get("location") or "").lower() != str(rec.get("location") or "").lower():
+            raise _bad(f"The storage account '{i.rsplit('/', 1)[-1]}' is in {sa.get('location')} but the workspace is in {rec.get('location')}; "
+                       "a linked storage account must be in the workspace's region.")
+    store[kind.lower()] = {"ids": list(ids)}
+    return _ok(_linked_view(rec, kind, store[kind.lower()]), 200)
+
+
+# ═══════════════════════════ computer groups (classic) ═══════════════════════════
+# A computer group is a SAVED SEARCH (category "Computer Groups", functionAlias = the group name) whose query returns a Computer column; its
+# members are the distinct Computer values of that query, evaluated on read. A group is usable in KQL as `Computer in (GroupName)` (expanded in
+# run_kql). The /computerGroups resource is a Vyomi view over the savedSearches of the real API.
+CG_CATEGORY = "Computer Groups"
+_CG_TYPE = f"{WS_TYPE}/computerGroups"
+
+
+def _cg_computer_col(cols):
+    return next((c for c in cols if c.lower() in ("computer", "computer_s")), None) or next((c for c in cols if c.lower().startswith("computer")), None)
+
+
+def _cg_members(rec, query):
+    res = run_kql(rec, query)
+    t = res["tables"][0]
+    names = [c["name"] for c in t["columns"]]
+    col = _cg_computer_col(names)
+    if col is None:
+        raise _bad("A computer group query must return a Computer column (project Computer).")
+    i = names.index(col)
+    out = []
+    for r in t["rows"]:
+        v = r[i]
+        if v not in (None, "") and str(v) not in out:
+            out.append(str(v))
+    return out
+
+
+def _cg_view(rec, name, saved, members):
+    pr = saved["properties"]
+    return {"id": _child_id(rec, "computerGroups", name), "name": name, "type": _CG_TYPE,
+            "properties": {"displayName": pr.get("displayName") or name, "query": pr["query"], "groupType": "LogSearch", "functionAlias": pr.get("functionAlias") or name,
+                           "memberCount": len(members), "members": members, "savedSearchId": saved["id"]}}
+
+
+def _computer_groups(state, rec, rest, method, payload):
+    saved = rec["_saved"]
+    groups = {k: v for k, v in saved.items() if (v["properties"].get("category") or "").lower() == CG_CATEGORY.lower()}
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        out = []
+        for k, v in sorted(groups.items()):
+            try:
+                mem = _cg_members(rec, v["properties"]["query"])
+            except (KqlError, _E):
+                mem = []
+            out.append(_cg_view(rec, v["name"], v, mem))
+        return _ok({"value": out})
+    name = rest[0]
+    key = name.lower()
+    cur = groups.get(key)
+    if len(rest) == 2 and rest[1].lower() == "members":
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "GET required.")
+        if cur is None:
+            raise _child_not_found("computer group", name, rec["name"])
+        return _ok({"value": [{"computer": m} for m in _cg_members(rec, cur["properties"]["query"])]})
+    if len(rest) != 1:
+        return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/computerGroups/{'/'.join(rest)}' is not supported.")
+    if method == "GET":
+        if cur is None:
+            raise _child_not_found("computer group", name, rec["name"])
+        return _ok(_cg_view(rec, name, cur, _cg_members(rec, cur["properties"]["query"])))
+    if method == "DELETE":
+        if cur is not None:
+            saved.pop(key, None)
+        return _ok(None, 200 if cur is not None else 204)
+    if method not in ("PUT", "PATCH"):
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,59}", name):
+        raise _bad("A computer group name must be a valid identifier (letters, digits, underscore; max 60) because it is used as a KQL function alias.")
+    if cur is None and key in saved:
+        raise _E(409, "Conflict", f"A saved search named '{name}' already exists and is not a computer group.")
+    p = payload.get("properties")
+    if not isinstance(p, dict):
+        raise _bad("The request body must contain 'properties'.")
+    q = p.get("query", ((cur or {}).get("properties") or {}).get("query"))
+    if not isinstance(q, str) or not q.strip():
+        raise _bad("The property 'query' is required (a KQL query returning a Computer column).")
+    try:
+        mem = _cg_members(rec, q)
+    except KqlError as e:
+        raise _bad(f"The computer group query is not valid: {e}")
+    if cur is None and len(saved) >= MAX_SAVED:
+        raise _E(409, "Conflict", f"A workspace can hold at most {MAX_SAVED} saved searches.")
+    disp = p.get("displayName") or ((cur or {}).get("properties") or {}).get("displayName") or name
+    new = _saved_search(rec, name, {"properties": {"category": CG_CATEGORY, "displayName": disp, "query": q, "functionAlias": name, "version": 2}}, cur)
+    saved[key] = new
+    return _ok(_cg_view(rec, name, new, mem), 200)
+
+
+def _expand_groups(rec, query, depth=0):
+    """`Computer in (GroupName)` -> `Computer in ("a", "b")` for computer groups of this workspace."""
+    if depth > 3 or "(" not in query:
+        return query
+    groups = {(v["properties"].get("functionAlias") or v["name"]).lower(): v for v in rec.get("_saved", {}).values()
+              if (v["properties"].get("category") or "").lower() == CG_CATEGORY.lower()}
+    if not groups:
+        return query
+
+    def rep(m):
+        g = groups.get(m.group(2).lower())
+        if g is None:
+            return m.group(0)
+        try:
+            mem = _cg_members(rec, _expand_groups(rec, g["properties"]["query"], depth + 1))
+        except (KqlError, _E):
+            mem = []
+        return m.group(1) + "(" + ", ".join(json.dumps(x) for x in mem or [""]) + ")"
+    return re.sub(r"(\bin\s*)\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", rep, query, flags=re.I)
+
+
+# ═══════════════════════════ logs query (KQL subset) ═════════════════════════════
+# A small, real subset of KQL — enough to prove a genuine query engine runs over real data,
+# never enough to silently accept syntax it does not understand (unsupported ops/operators
+# raise the same ARM-shaped error every other validation failure in this module does).
+def _default_col_type(name):
+    return "datetime" if name == "TimeGenerated" else "string"
+
+
+def _table_schema(rec, table):
+    """[(column name, KQL type)] for `table` in this workspace, or None if unknown."""
+    low = table.lower()
+    if low in BASE_TABLES_LOWER:
+        return [(c, _default_col_type(c)) for c in BASE_TABLES[BASE_TABLES_LOWER[low]]]
+    t = rec["_tables"].get(low)
+    if t is not None:
+        return [(c["name"], _ARM_TO_KQL_TYPE.get(c.get("type", "string"), "string")) for c in t["properties"]["schema"]["columns"]]
+    return None
+
+
+def _activity_rows(state, sub):
+    """AzureActivity rows: the real Microsoft.Insights/eventtypes feed this subscription's
+    Activity log page reads, reshaped to [TimeGenerated, OperationName, Caller, Level,
+    ResourceGroup, ResourceId] (BASE_TABLES["AzureActivity"])."""
+    events = [r for r in state.values()
+              if str(r.get("_type", "")).lower() == "microsoft.insights/eventtypes" and r.get("_sub") == sub]
+    events.sort(key=lambda e: (e.get("eventTimestamp") or "", e.get("_seq", 0)), reverse=True)
+    rows = []
+    for e in events:
+        op = e.get("operationName")
+        op = op.get("value") if isinstance(op, dict) else op
+        st = e.get("status")
+        rows.append([e.get("eventTimestamp"), op, e.get("caller"), e.get("level"), e.get("resourceGroupName"), e.get("resourceId"),
+                     (e.get("category") or {}).get("value") if isinstance(e.get("category"), dict) else (e.get("category") or "Administrative"),
+                     st.get("value") if isinstance(st, dict) else st, e.get("subscriptionId") or sub])
+    return rows
+
+
+def activity_table(state, sub):
+    """AzureActivity as row dicts, the shape run_kql consumes."""
+    names = BASE_TABLES["AzureActivity"]
+    return [dict(zip(names, r)) for r in _activity_rows(state, sub)]
+
+
+def _col_index(schema, name):
+    for i, (n, _) in enumerate(schema):
+        if n.lower() == name.lower():
+            return i
+    raise _bad(f"The name '{name}' does not refer to any column, table, variable or function.")
+
+
+def _apply_op(seg, schema, rows):
+    seg = seg.strip()
+    low = seg.lower()
+    m = re.match(r"^where\s+(\w+)\s*(==|!=|contains|startswith)\s*(.+)$", seg, re.I)
+    if m:
+        col, op, val = m.group(1), m.group(2).lower(), m.group(3).strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "'\"":
+            val = val[1:-1]
+        idx = _col_index(schema, col)
+
+        def keep(r, _op=op, _val=val, _idx=idx):
+            cell = "" if r[_idx] is None else str(r[_idx])
+            if _op == "==":
+                return cell.lower() == _val.lower()
+            if _op == "!=":
+                return cell.lower() != _val.lower()
+            if _op == "contains":
+                return _val.lower() in cell.lower()
+            return cell.lower().startswith(_val.lower())   # startswith
+        return schema, [r for r in rows if keep(r)]
+    if low.startswith("project "):
+        names = [c.strip() for c in seg[len("project "):].split(",") if c.strip()]
+        if not names:
+            raise _bad("The 'project' operator needs at least one column name.")
+        idxs = [_col_index(schema, n) for n in names]
+        new_schema = [schema[i] for i in idxs]
+        return new_schema, [[r[i] for i in idxs] for r in rows]
+    m = re.match(r"^(?:sort by|order by)\s+(\w+)(?:\s+(asc|desc))?$", seg, re.I)
+    if m:
+        idx = _col_index(schema, m.group(1))
+        desc = (m.group(2) or "desc").lower() != "asc"
+        return schema, sorted(rows, key=lambda r: (r[idx] is None, r[idx]), reverse=desc)
+    m = re.match(r"^(?:take|limit)\s+(\d+)$", seg, re.I)
+    if m:
+        return schema, rows[: int(m.group(1))]
+    if low == "count":
+        return [("Count", "long")], [[len(rows)]]
+    raise _bad(f"Unsupported query operator: '{seg}'. Vyomi's KQL subset understands "
+               "where (==/!=/contains/startswith), project, sort by/order by, take/limit and count.")
+
+
+def _execute_kql(query, state, sub, rec):
+    parts = [p.strip() for p in query.split("|")]
+    table = parts[0] if parts else ""
+    if not table or not re.fullmatch(r"[A-Za-z_]\w{0,63}", table):
+        raise _bad("A query must start with a table name.")
+    schema = _table_schema(rec, table)
+    if schema is None:
+        raise _bad(f"'{table}' does not refer to any known table, tabular variable or function.")
+    rows = _activity_rows(state, sub) if table.lower() == "azureactivity" else []
+    for seg in parts[1:]:
+        if not seg:
+            raise _bad("A query cannot contain an empty pipe stage.")
+        schema, rows = _apply_op(seg, schema, rows)
+    return schema, rows
+
+
+def _run_query(state, sub, rec, method, payload):
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", "POST required.")
+    q = (payload or {}).get("query")
+    if not isinstance(q, str) or not q.strip():
+        return _err(400, "BadRequest", "The property 'query' is required.")
+    try:
+        schema, rows = _execute_kql(q, state, sub, rec)
+    except _E as e:
+        return _err(e.status, e.code, e.message)
+    return _ok({"tables": [{"name": "PrimaryResult",
+                            "columns": [{"name": n, "type": t} for n, t in schema], "rows": rows}]})
 
 
 # ═══════════════════════════ saved searches ══════════════════════════════════════
@@ -484,9 +796,16 @@ def _put_data_source(rec, store, name, cur, payload):
 
 
 # ═══════════════════════════ dispatch ════════════════════════════════════════════
-def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, base=""):
-    """Handle one ``Microsoft.OperationalInsights`` ARM request (``chain`` = tokens after the namespace)."""
+_CTX = {"blob_store": None, "blob_mod": None, "state": None}
+
+
+def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, base="", blob_store=None, blob_mod=None):
+    """Handle one ``Microsoft.OperationalInsights`` ARM request (``chain`` = tokens after the namespace).
+
+    ``blob_store``/``blob_mod`` (optional) are the host's Azure Blob store + core: data export rules write the
+    exported rows there as real blobs. Without them an export rule is stored but nothing can be written."""
     method = (method or "GET").upper()
+    _CTX.update(blob_store=blob_store, blob_mod=blob_mod, state=state)
     payload = {"_array": payload} if isinstance(payload, list) else (payload if isinstance(payload, dict) else {})
     try:
         return _dispatch(state, method, sub, rg, list(chain), payload, query or {})
@@ -514,12 +833,38 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
             raise _not_found(name, rg)
         head = rest[0].lower()
         if head in ("api", "query", "datacollectionrules"):
+            _lr = [x.lower() for x in rest]
+            try:
+                from core import azure_netaccess as _na
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_netaccess as _na  # type: ignore
+            # azure.loganalytics.workspace.networking: publicNetworkAccessForQuery / ForIngestion (+ a private endpoint
+            # path) enforced on the data plane against the declared caller (x-vyomi-* headers or same-named query params)
+            _d = _na.loganalytics_denied(state, rec, "query" if _lr in (["api", "query"], ["query"]) else "ingestion", None, query)
+            if _d:
+                return _err(403, "InsufficientAccessError", "The workspace's network configuration blocks this request: " + _d[2])
+            if _lr == ["api", "query"] and method != "POST" and not (query or {}).get("query"):
+                return _err(405, "MethodNotAllowed", "POST required.")
+            if _lr in (["api", "query"], ["query"]):
+                # AzureActivity is the real Microsoft.Insights/eventtypes feed (the Activity log): it lives in the
+                # ARM state map, so it is injected as a table for the single KQL engine (run_kql) to query.
+                return _data_plane(rec, rest, method, payload, query, extra={"AzureActivity": activity_table(state, sub)})
             return _data_plane(rec, rest, method, payload, query)
+        if head == "dataexports":
+            if len(rest) > 2:
+                return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+            return _data_exports(rec, rest[1] if len(rest) == 2 else None, method, payload)
+        if head == "linkedstorageaccounts":
+            if len(rest) > 2:
+                return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+            return _linked_storage(state, rec, rest[1] if len(rest) == 2 else None, method, payload)
+        if head == "computergroups":
+            return _computer_groups(state, rec, rest[1:], method, payload)
         if head in ("savedsearches", "tables", "datasources"):
             if len(rest) > 2:
                 return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
             return _collection(rec, rest[0], rest[1] if len(rest) == 2 else None, method, payload, query)
-        return _workspace_ops(rec, rest, method, payload)
+        return _workspace_ops(state, sub, rec, rest, method, payload)
     if method == "GET":
         if rec is None:
             raise _not_found(name, rg)
@@ -547,7 +892,7 @@ def _bad_arg(msg, code="BadArgumentError"):
     return _err(400, code, msg)
 
 
-def _data_plane(rec, rest, method, payload, query):
+def _data_plane(rec, rest, method, payload, query, extra=None):
     low = [x.lower() for x in rest]
     try:
         if low[:2] == ["api", "logs"] and method == "POST":
@@ -560,7 +905,7 @@ def _data_plane(rec, rest, method, payload, query):
                 q = query.get("query")
             if not isinstance(q, str) or not q.strip():
                 return _bad_arg("The request had some invalid properties: query is required.", "BadArgumentError")
-            return _ok(run_kql(rec, q))
+            return _ok(run_kql(rec, q, extra))
     except KqlError as e:
         return _bad_arg(str(e), "SemanticError" if e.semantic else "SyntaxError")
     return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
@@ -570,7 +915,33 @@ def _rows(rec):
     return rec.setdefault("_rows", {})
 
 
+def _today():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _daily_limit_bytes(rec):
+    p = rec["properties"]
+    if p["sku"]["name"] == "Free":
+        return 524288000
+    cap = p["workspaceCapping"]["dailyQuotaGb"]
+    return None if cap == -1 else int(cap * 1073741824)
+
+
 def _store(rec, table, rows):
+    # Real ingestion volume: bytes accepted today feed the Usage blade; once the daily cap is reached the
+    # service silently drops further data until the next reset (it does not error the sender).
+    size = len(json.dumps(rows, default=str).encode())
+    ing = rec.setdefault("_ingest", {})
+    lim = _daily_limit_bytes(rec)
+    if lim is not None and ing.get(_today(), 0) >= lim:
+        rec["_droppedBytes"] = rec.get("_droppedBytes", 0) + size
+        return
+    ing[_today()] = ing.get(_today(), 0) + size
+    for k in sorted(ing)[:-35]:
+        ing.pop(k, None)
+    by = rec.setdefault("_ingestByTable", {}).setdefault(_today(), {})
+    by[table] = by.get(table, 0) + size
+    _export_rows(rec, table, rows)
     tbl = _rows(rec).setdefault(table, [])
     tbl.extend(rows)
     if len(tbl) > MAX_ROWS:
@@ -618,6 +989,178 @@ def _ingest_dcr(rec, stream, payload):
         out.append(row)
     _store(rec, table, out)
     return {"status": 204, "headers": {}, "body": None, "lro": False, "rid": "", "verb": ""}
+
+
+# ═══════════════════════ data export rules (real blob writes) ════════════════════
+MAX_EXPORT_RULES = 10
+_EXPORT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{2,62}[A-Za-z0-9]$")
+_SA_ID = re.compile(r"^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.storage/storageaccounts/([a-z0-9]{3,24})$", re.I)
+
+
+def _export_view(rec, r):
+    out = {k: v for k, v in r.items() if not k.startswith("_")}
+    out["id"] = _child_id(rec, "dataExports", r["name"])
+    return out
+
+
+def _known_table(rec, t):
+    return t.lower() in BASE_TABLES_LOWER or t.lower() in rec["_tables"]
+
+
+def _data_exports(rec, name, method, payload):
+    store = rec.setdefault("_exports", {})
+    if name is None:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_export_view(rec, r) for r in sorted(store.values(), key=lambda r: r["name"].lower())]})
+    key, cur = name.lower(), store.get(name.lower())
+    if method == "GET":
+        if cur is None:
+            raise _child_not_found("data export", name, rec["name"])
+        return _ok(_export_view(rec, cur))
+    if method == "DELETE":
+        if cur is None:
+            raise _child_not_found("data export", name, rec["name"])
+        store.pop(key)
+        return _ok(None, 200)
+    if method != "PUT":
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if not _EXPORT_NAME.match(name):
+        raise _bad(f"The data export rule name '{name}' is invalid. It must be 4-63 characters: letters, digits and '-', starting and ending with a letter or digit.")
+    p = payload.get("properties")
+    if not isinstance(p, dict):
+        raise _bad("The request body must contain 'properties'.")
+    tables = p.get("tableNames")
+    if not isinstance(tables, list) or not tables or any(not isinstance(t, str) for t in tables):
+        raise _bad("The property 'tableNames' must be a non-empty list of table names.")
+    canon = []
+    for t in tables:
+        if not _known_table(rec, t):
+            raise _bad(f"Table '{t}' does not exist in the workspace '{rec['name']}' and cannot be exported.")
+        canon.append(BASE_TABLES_LOWER[t.lower()] if t.lower() in BASE_TABLES_LOWER else rec["_tables"][t.lower()]["name"])
+    dest = p.get("destination") or {}
+    rid = dest.get("resourceId") or p.get("resourceId")
+    if not isinstance(rid, str) or not rid:
+        raise _bad("The property 'destination.resourceId' is required.")
+    m = _SA_ID.match(rid)
+    if not m:
+        if "microsoft.eventhub" in rid.lower():
+            raise _bad("Event Hub export destinations are not supported by Vyomi; use a Storage account.")
+        raise _bad("The destination must be a Microsoft.Storage/storageAccounts resource id.")
+    state = _CTX.get("state") or {}
+    if rid.lower() not in state:
+        raise _E(400, "InvalidDestination", f"The destination storage account '{m.group(1)}' was not found.")
+    enable = bool(p.get("enable", True))
+    if cur is None and len(store) >= MAX_EXPORT_RULES:
+        raise _E(409, "Conflict", f"A workspace can hold at most {MAX_EXPORT_RULES} data export rules.")
+    if enable:
+        for other in store.values():
+            if other["name"].lower() != key and other["properties"].get("enable") and \
+                    {t.lower() for t in other["properties"]["tableNames"]} & {t.lower() for t in canon}:
+                raise _E(409, "Conflict", f"One or more tables are already exported by the enabled rule '{other['name']}'.")
+    now = _now()
+    props = {"dataExportId": (cur or {}).get("properties", {}).get("dataExportId") or str(uuid.uuid4()),
+             "tableNames": canon, "destination": {"resourceId": rid, "type": "StorageAccount", "metaData": {}},
+             "enable": enable, "createdDate": (cur or {}).get("properties", {}).get("createdDate") or now, "lastModifiedDate": now}
+    new = {"id": _child_id(rec, "dataExports", name), "name": name, "type": f"{WS_TYPE}/dataexports",
+           "etag": _etag(), "properties": props}
+    store[key] = new
+    return _ok(_export_view(rec, new), 200 if cur else 201)
+
+
+def _export_rows(rec, table, rows):
+    """Write freshly ingested rows to every enabled export rule's storage account, as the real service
+    does: container ``am-<table>``, blob ``WorkspaceResourceId=<id>/y=…/m=…/d=…/h=…/m=…/PT05M.json``
+    (one JSON record per line). Appends to the current 5-minute blob."""
+    bs, bm = _CTX.get("blob_store"), _CTX.get("blob_mod")
+    if bs is None or bm is None:
+        return
+    for rule in list((rec.get("_exports") or {}).values()):
+        pr = rule["properties"]
+        if not pr["enable"] or table.lower() not in {t.lower() for t in pr["tableNames"]}:
+            continue
+        try:
+            acct = _SA_ID.match(pr["destination"]["resourceId"]).group(1).lower()
+            cont = "am-" + table.lower().replace("_", "-")
+            ck = f"{acct}/{cont}"
+            if not bs.container_exists(ck):
+                bs.create_container(ck)
+            t = datetime.now(timezone.utc)
+            blob = (f"WorkspaceResourceId={rec['id'].lower()}/y={t:%Y}/m={t:%m}/d={t:%d}/h={t:%H}/m={t.minute // 5 * 5:02d}/PT05M.json")
+            old = b""
+            g = bm.dispatch(bs, "GET", f"/{cont}/{blob}", {}, {}, b"", account=acct)
+            if g.status == 200:
+                old = g.body if isinstance(g.body, bytes) else str(g.body).encode()
+            lines = "".join(json.dumps({**r, "Type": table, "_ResourceId": rec["id"]}, default=str) + "\n" for r in rows).encode()
+            r = bm.dispatch(bs, "PUT", f"/{cont}/{blob}", {}, {"x-ms-blob-type": "BlockBlob", "content-type": "application/json"}, old + lines, account=acct)
+            if r.status >= 300:
+                raise RuntimeError(r.status)
+            rule["_rows"] = rule.get("_rows", 0) + len(rows)
+        except Exception:
+            rule["_failures"] = rule.get("_failures", 0) + 1
+
+
+# ═══════════════════════ purge (really deletes rows) ═════════════════════════════
+_PURGE_OPS = ("==", ">", "<", ">=", "<=", "in", "between")
+
+
+def _purge(rec, method, payload):
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", "POST required.")
+    table = payload.get("table")
+    if not isinstance(table, str) or not table:
+        raise _bad_p("The 'table' property is required.")
+    schema = _table_schema(rec, table)
+    if schema is None:
+        raise _bad_p(f"Table '{table}' was not found in the workspace.")
+    filters = payload.get("filters")
+    if not isinstance(filters, list) or not filters:
+        raise _bad_p("At least one filter is required: a purge without filters is not allowed.")
+    cols = {c.lower(): c for c, _ in schema}
+    for f in filters:
+        if not isinstance(f, dict) or str(f.get("column", "")).lower() not in cols:
+            raise _bad_p(f"Filter column '{(f or {}).get('column')}' does not exist in table '{table}'.")
+        if f.get("operator") not in _PURGE_OPS:
+            raise _bad_p(f"Filter operator must be one of {', '.join(_PURGE_OPS)}.")
+        if "value" not in f and "values" not in f:
+            raise _bad_p("Each filter needs a 'value'.")
+
+    def match(row):
+        for f in filters:
+            col = cols[f["column"].lower()]
+            v, rhs, op = row.get(col), f.get("value", f.get("values")), f["operator"]
+            if op == "in":
+                if v not in (rhs if isinstance(rhs, list) else [rhs]):
+                    return False
+            elif op == "between":
+                if not isinstance(rhs, list) or len(rhs) != 2 or v is None or not (str(rhs[0]) <= str(v) <= str(rhs[1])):
+                    return False
+            elif v is None or not _cmp(v, op, rhs):
+                return False
+        return True
+
+    real = next((t for t in _rows(rec) if t.lower() == table.lower()), None)
+    before = _rows(rec).get(real, []) if real else []
+    keep = [r for r in before if not match(r)]
+    removed = len(before) - len(keep)
+    if real:
+        _rows(rec)[real] = keep
+    oid = "purge-" + uuid.uuid4().hex
+    rec.setdefault("_purges", {})[oid] = {"status": "completed", "table": table, "rowsPurged": removed, "completed": _now()}
+    return _ok({"operationId": oid}, 202, headers={"x-ms-status-location": f"{rec['id']}/operations/{oid}"})
+
+
+def _bad_p(msg):
+    return _E(400, "BadRequest", msg)
+
+
+def _purge_status(rec, method, oid):
+    if method != "GET":
+        return _err(405, "MethodNotAllowed", "GET required.")
+    op = (rec.get("_purges") or {}).get(oid)
+    if op is None:
+        raise _E(404, "NotFound", f"Purge operation '{oid}' was not found.")
+    return _ok({"status": op["status"]})
 
 
 class KqlError(Exception):
@@ -775,13 +1318,233 @@ def _resolve_col(cols, name):
     raise KqlError(f"Failed to resolve scalar expression named '{name}'", semantic=True)
 
 
-def run_kql(rec, query):
+# ───────── KQL scalar expressions (extend / summarize / top / where fallback) ─────────
+import ast as _ast
+import math as _math
+
+_DUR_RE = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m|h|d)$", re.I)
+
+
+def _dur_secs(tok):
+    m = _DUR_RE.match(str(tok).strip())
+    if not m:
+        raise KqlError(f"Unrecognised timespan '{tok}'")
+    return float(m.group(1)) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2).lower()]
+
+
+def _iso_dt(v):
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _iso_str(d):
+    return d.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _fn_bin(v, size):
+    size = _dur_secs(size) if isinstance(size, str) else float(size)
+    d = _iso_dt(v)
+    if d is not None and not isinstance(v, (int, float)):
+        t = d.timestamp()
+        return _iso_str(datetime.fromtimestamp(t - (t % size), timezone.utc))
+    return None if v is None else _math.floor(float(v) / size) * size
+
+
+def _fn_substring(s, start, n=None):
+    s = "" if s is None else str(s)
+    return s[start:] if n is None else s[start:start + n]
+
+
+_KQL_FUNCS = {
+    "strcat": lambda *a: "".join("" if x is None else str(x) for x in a),
+    "tolower": lambda s: None if s is None else str(s).lower(), "toupper": lambda s: None if s is None else str(s).upper(),
+    "tostring": lambda v: "" if v is None else str(v), "strlen": lambda s: len(str(s or "")),
+    "toint": lambda v: int(float(v)), "tolong": lambda v: int(float(v)), "todouble": lambda v: float(v), "toreal": lambda v: float(v),
+    "round": lambda v, n=0: round(float(v), int(n)), "floor": lambda v, n=1: _math.floor(float(v) / n) * n,
+    "abs": lambda v: abs(v), "sqrt": lambda v: _math.sqrt(v), "log": lambda v: _math.log(v), "pow": lambda a, b: a ** b,
+    "iff": lambda c, a, b: a if c else b, "iif": lambda c, a, b: a if c else b,
+    "isnull": lambda v: v is None, "isnotnull": lambda v: v is not None,
+    "isempty": lambda v: v is None or v == "", "isnotempty": lambda v: not (v is None or v == ""),
+    "coalesce": lambda *a: next((x for x in a if x is not None and x != ""), None),
+    "substring": _fn_substring, "bin": _fn_bin,
+    "ago": lambda d: _iso_str(datetime.now(timezone.utc) - timedelta(seconds=_dur_secs(d))),
+    "now": lambda: _iso_str(datetime.now(timezone.utc)),
+    "datetime_diff": lambda unit, a, b: (_iso_dt(a) - _iso_dt(b)).total_seconds() / {"second": 1, "minute": 60, "hour": 3600, "day": 86400}[str(unit)],
+    "startofday": lambda v: _iso_str(_iso_dt(v).replace(hour=0, minute=0, second=0, microsecond=0)),
+}
+
+
+def _compile_expr(text):
+    text = text.strip()
+    # `x contains 'a'` style needs rewriting to a call; do it structurally before python parsing
+    m = re.fullmatch(r"(.+?)\s+(!contains|contains|!startswith|startswith|!endswith|endswith|!has|has)\s+(.+)", text, re.S)
+    if m and " and " not in text and " or " not in text:
+        lhs, op, rhs = m.groups()
+        return ("op", _compile_expr(lhs), op, _compile_expr(rhs))
+    mm = re.fullmatch(r"(.+?)\s+in\s*\((.*)\)", text, re.S)
+    if mm and " and " not in text and " or " not in text:
+        return ("in", _compile_expr(mm.group(1)), [_compile_expr(x) for x in _split_top(mm.group(2), ",")])
+    src = text.replace("=~", " ==ci ").replace("!~", " !=ci ")
+    src = re.sub(r"\b(\d+(?:\.\d+)?(?:ms|s|m|h|d))\b", lambda x: repr(x.group(1)), src)
+    src = re.sub(r"\bnull\b", "None", src, flags=re.I)
+    src = re.sub(r"\btrue\b", "True", src, flags=re.I)
+    src = re.sub(r"\bfalse\b", "False", src, flags=re.I)
+    src = src.replace(" ==ci ", " == ").replace(" !=ci ", " != ")
+    src = re.sub(r"\b(and|or|not)\b", lambda x: x.group(1).lower(), src, flags=re.I)
+    try:
+        tree = _ast.parse(src, mode="eval")
+    except SyntaxError:
+        raise KqlError(f"Failed to parse expression '{text}'")
+    for node in _ast.walk(tree):
+        if not isinstance(node, (_ast.Expression, _ast.BinOp, _ast.UnaryOp, _ast.Constant, _ast.Name, _ast.Call, _ast.Compare,
+                                 _ast.BoolOp, _ast.IfExp, _ast.Load, _ast.operator, _ast.unaryop, _ast.cmpop, _ast.boolop)):
+            raise KqlError(f"Unsupported expression '{text}'")
+        if isinstance(node, _ast.Call) and not (isinstance(node.func, _ast.Name) and node.func.id.lower() in _KQL_FUNCS and not node.keywords):
+            raise KqlError(f"Unknown function in '{text}'", semantic=True)
+    return ("py", tree.body, text)
+
+
+def _eval_node(node, row, cols):
+    if isinstance(node, _ast.Constant):
+        return node.value
+    if isinstance(node, _ast.Name):
+        return row.get(_resolve_col(cols, node.id))
+    if isinstance(node, _ast.UnaryOp):
+        v = _eval_node(node.operand, row, cols)
+        return (not v) if isinstance(node.op, _ast.Not) else (None if v is None else (-v if isinstance(node.op, _ast.USub) else +v))
+    if isinstance(node, _ast.BinOp):
+        a, b = _eval_node(node.left, row, cols), _eval_node(node.right, row, cols)
+        if a is None or b is None:
+            return None
+        if isinstance(node.op, _ast.Add) and (isinstance(a, str) or isinstance(b, str)):
+            raise KqlError("Cannot add strings; use strcat()", semantic=True)
+        try:
+            return {_ast.Add: lambda: a + b, _ast.Sub: lambda: a - b, _ast.Mult: lambda: a * b,
+                    _ast.Div: lambda: (a // b if isinstance(a, int) and isinstance(b, int) and a % b == 0 else a / b),
+                    _ast.Mod: lambda: a % b}[type(node.op)]()
+        except ZeroDivisionError:
+            return None
+    if isinstance(node, _ast.BoolOp):
+        vals = (_eval_node(v, row, cols) for v in node.values)
+        return all(vals) if isinstance(node.op, _ast.And) else any(vals)
+    if isinstance(node, _ast.IfExp):
+        return _eval_node(node.body if _eval_node(node.test, row, cols) else node.orelse, row, cols)
+    if isinstance(node, _ast.Compare):
+        left = _eval_node(node.left, row, cols)
+        for op, comp in zip(node.ops, node.comparators):
+            right = _eval_node(comp, row, cols)
+            o = {_ast.Eq: "==", _ast.NotEq: "!=", _ast.Gt: ">", _ast.Lt: "<", _ast.GtE: ">=", _ast.LtE: "<="}.get(type(op))
+            if o is None or not _cmp(left, o, right):
+                return False
+            left = right
+        return True
+    if isinstance(node, _ast.Call):
+        return _KQL_FUNCS[node.func.id.lower()](*[_eval_node(a, row, cols) for a in node.args])
+    raise KqlError("Unsupported expression")
+
+
+def _eval(compiled, row, cols):
+    if compiled[0] == "py":
+        return _eval_node(compiled[1], row, cols)
+    if compiled[0] == "op":
+        return _cmp(_eval(compiled[1], row, cols), compiled[2], _eval(compiled[3], row, cols))
+    return any(_cmp(_eval(compiled[1], row, cols), "==", _eval(x, row, cols)) for x in compiled[2])
+
+
+def _expr_name(text):
+    m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)", text.strip(), re.S)
+    if m and not text.strip().startswith(m.group(1) + "=="):
+        return m.group(1), m.group(2)
+    return None, text
+
+
+_AGGS = ("count", "countif", "sum", "avg", "min", "max", "dcount", "sumif")
+
+
+def _summarize(arg, rows, cols):
+    by_txt = None
+    parts = re.split(r"\s+by\s+", arg, maxsplit=1, flags=re.I)
+    agg_txt = parts[0]
+    if len(parts) == 2:
+        by_txt = parts[1]
+    aggs = []
+    for a in _split_top(agg_txt, ","):
+        if not a:
+            continue
+        name, body = _expr_name(a)
+        m = re.fullmatch(r"([A-Za-z_]+)\((.*)\)", body.strip(), re.S)
+        if not m or m.group(1).lower() not in _AGGS:
+            raise KqlError(f"Unsupported summarize aggregate '{a}'. Supported: {', '.join(x + '()' for x in _AGGS)}.")
+        fn, inner = m.group(1).lower(), m.group(2).strip()
+        if fn in ("sum", "avg", "min", "max", "dcount", "countif", "sumif") and not inner:
+            raise KqlError(f"{fn}() needs an argument", semantic=True)
+        if not name:
+            name = "count_" if fn == "count" else f"{fn}_{re.sub(r'[^A-Za-z0-9_]', '', inner.split(',')[0]) or 'x'}"
+        sumif_cond = None
+        if fn == "sumif":
+            xs = _split_top(inner, ",")
+            inner, sumif_cond = xs[0], _compile_expr(xs[1])
+        aggs.append((name, fn, _compile_expr(inner) if inner else None, sumif_cond))
+    keys = []
+    if by_txt:
+        for k in _split_top(by_txt, ","):
+            name, body = _expr_name(k)
+            if not name:
+                bm = re.fullmatch(r"bin\(\s*([A-Za-z_]\w*)\s*,.*\)", body.strip(), re.I)
+                name = bm.group(1) if bm else body.strip()
+            keys.append((name, _compile_expr(body)))
+    if not aggs:
+        aggs = [("count_", "count", None, None)]
+    groups = {}
+    for r in rows:
+        kv = tuple(_eval(c, r, cols) for _, c in keys)
+        groups.setdefault(kv, []).append(r)
+    if not keys and not groups:
+        groups[()] = []
+    out = []
+    for kv, grp in groups.items():
+        row = {n: v for (n, _), v in zip(keys, kv)}
+        for name, fn, ex, cond in aggs:
+            if fn == "count":
+                row[name] = len(grp)
+                continue
+            if fn == "countif":
+                row[name] = sum(1 for r in grp if _eval(ex, r, cols))
+                continue
+            vals = [_eval(ex, r, cols) for r in grp if cond is None or _eval(cond, r, cols)]
+            vals = [v for v in vals if v is not None]
+            nums = [v for v in vals if isinstance(v, (int, float)) and not isinstance(v, bool)]
+            if fn in ("sum", "sumif"):
+                row[name] = sum(nums) if nums else 0
+            elif fn == "avg":
+                row[name] = (sum(nums) / len(nums)) if nums else None
+            elif fn == "min":
+                row[name] = min(vals) if vals else None
+            elif fn == "max":
+                row[name] = max(vals) if vals else None
+            elif fn == "dcount":
+                row[name] = len({str(v) for v in vals})
+        out.append(row)
+    return out, [n for n, _ in keys] + [a[0] for a in aggs]
+
+
+
+def run_kql(rec, query, extra=None):
+    query = _expand_groups(rec, query)
     stages = _split_top(query.strip().rstrip(";"), "|")
     head = stages[0]
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", head):
         raise KqlError(f"Query must start with a table name, got '{head}'")
-    store = _rows(rec)
+    store = dict(_rows(rec))
+    for k, v in (extra or {}).items():      # state-derived tables (AzureActivity) live outside the workspace record
+        store[k] = v
     tkey = next((k for k in list(store) + [t["name"] for t in rec.get("_tables", {}).values()] if k.lower() == head.lower()), None)
+    if tkey is None and head.lower() in BASE_TABLES_LOWER:
+        tkey = BASE_TABLES_LOWER[head.lower()]
     if tkey is None:
         raise KqlError(f"'{head}' : Failed to resolve table or column expression named '{head}'", semantic=True)
     rows = [dict(r) for r in store.get(tkey, [])]
@@ -792,18 +1555,25 @@ def run_kql(rec, query):
                 cols.append(c)
     if not cols:
         base = next((t for t in rec.get("_tables", {}).values() if t["name"].lower() == head.lower()), None)
-        cols = [c["name"] for c in ((base or {}).get("properties", {}).get("schema", {}).get("columns") or [])] or ["TimeGenerated"]
+        cols = [c["name"] for c in ((base or {}).get("properties", {}).get("schema", {}).get("columns") or [])] \
+            or BASE_TABLES.get(BASE_TABLES_LOWER.get(head.lower(), ""), None) or ["TimeGenerated"]
     for stage in stages[1:]:
         m = re.match(r"([A-Za-z]+)\b\s*(.*)$", stage, re.S)
         if not m:
             raise KqlError(f"Unsupported operator in '{stage}'")
         op, arg = m.group(1).lower(), m.group(2).strip()
         if op == "where":
-            groups = [[_parse_pred(a) for a in ands] for ands in _split_bool(arg)]
-            for g in groups:
-                for col, _, _ in g:
-                    _resolve_col(cols, col)
-            rows = [r for r in rows if any(all(_cmp(r.get(_resolve_col(cols, c)), o, v) for c, o, v in g) for g in groups)]
+            try:
+                groups = [[_parse_pred(a) for a in ands] for ands in _split_bool(arg)]
+                for g in groups:
+                    for col, _, _ in g:
+                        _resolve_col(cols, col)
+                rows = [r for r in rows if any(all(_cmp(r.get(_resolve_col(cols, c)), o, v) for c, o, v in g) for g in groups)]
+            except KqlError as pe:
+                if pe.semantic:
+                    raise
+                comp = _compile_expr(arg)      # general scalar expression (functions, arithmetic, parenthesised logic)
+                rows = [r for r in rows if _eval(comp, r, cols)]
         elif op == "project":
             names = [_resolve_col(cols, x) for x in _split_top(arg, ",")]
             rows = [{n: r.get(n) for n in names} for r in rows]
@@ -825,15 +1595,26 @@ def run_kql(rec, query):
             for col, desc in reversed(keys):
                 rows.sort(key=lambda r, c=col: (r.get(c) is None, r.get(c) if isinstance(r.get(c), (int, float)) else str(r.get(c))), reverse=desc)
         elif op == "summarize":
-            mm = re.fullmatch(r"count\(\)\s*(?:by\s+(.+))?", arg, re.I)
-            if not mm:
-                raise KqlError("Only 'summarize count() [by col, ...]' is supported")
-            by = [_resolve_col(cols, x) for x in _split_top(mm.group(1), ",")] if mm.group(1) else []
-            groups = {}
-            for r in rows:
-                groups.setdefault(tuple(r.get(b) for b in by), []).append(r)
-            rows = [dict(zip(by, k), count_=len(v)) for k, v in groups.items()] if by else [{"count_": len(rows)}]
-            cols = by + ["count_"]
+            rows, cols = _summarize(arg, rows, cols)
+        elif op == "extend":
+            for item in _split_top(arg, ","):
+                name, body = _expr_name(item)
+                if not name:
+                    raise KqlError(f"extend needs 'name = expression', got '{item}'")
+                comp = _compile_expr(body)
+                for r in rows:
+                    r[name] = _eval(comp, r, cols)
+                if name not in cols:
+                    cols = cols + [name]
+        elif op == "top":
+            mt = re.fullmatch(r"(\d+)\s+by\s+([A-Za-z_]\w*)(?:\s+(asc|desc))?", arg, re.I)
+            if not mt:
+                raise KqlError("Usage: top <N> by <column> [asc|desc]")
+            col = _resolve_col(cols, mt.group(2))
+            rows = sorted(rows, key=lambda r: (r.get(col) is None, r.get(col) if isinstance(r.get(col), (int, float)) else str(r.get(col))),
+                          reverse=(mt.group(3) or "desc").lower() == "desc")[: int(mt.group(1))]
+        elif op == "render":
+            pass          # chart hint only; results are unchanged
         elif op == "distinct":
             names = [_resolve_col(cols, x) for x in _split_top(arg, ",")]
             seen, out = set(), []
@@ -844,7 +1625,7 @@ def run_kql(rec, query):
                     out.append({n: r.get(n) for n in names})
             rows, cols = out, names
         else:
-            raise KqlError(f"Unsupported operator '{op}'. Supported: where, project, take, limit, count, order by, sort by, summarize count() by, distinct.")
+            raise KqlError(f"Unsupported operator '{op}'. Supported: where, project, extend, take, limit, count, order by, sort by, summarize, top, distinct, render.")
     types = {}
     for c in cols:
         types[c] = next((_coltype(r[c]) for r in rows if r.get(c) is not None), "datetime" if c == "TimeGenerated" else "string")

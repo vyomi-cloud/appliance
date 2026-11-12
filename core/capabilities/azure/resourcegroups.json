@@ -1,0 +1,139 @@
+{
+ "$doc": "Vyomi capability registry — Azure Resource groups. See aws/s3.json for the contract.",
+ "azure.resourcegroups.rg.crud": {
+  "title": "Resource groups (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.rg.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.resources_in_group": {
+  "title": "Resources (every resource type inside the group, at once)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to the resource group itself",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.deployments": {
+  "title": "Deployments (Microsoft.Resources/deployments) history",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every resource listed in properties.template.resources is actually created (a real PUT through the same ARM dispatcher, with [parameters('x')] / [variables('y')] resolved to literal values) — but there is no full template-language evaluation: no concat()/resourceId()/reference()/copy-loop support, and dependsOn is not topologically sorted (resources are provisioned in template order). Redeploy re-runs the stored template for real; Cancel honestly 409s, since every deployment here completes synchronously and is never still 'Running' by the time a Cancel call could reach it."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than a real signed-in principal."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.access_control_iam": {
+  "title": "Access control (IAM) — role assignments, roles and checkAccess",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments are real ARM resources scoped to the resource group they were created under (list + checkAccess only see assignments at or above that scope, same hierarchy inheritance and explicit-deny-wins semantics as the Entra RBAC engine), and the Roles tab + checkAccess cover the built-in Owner/Contributor/Reader/… roles plus any custom role definitions. But checkAccess is a standalone decision tool: no other ARM call in Vyomi consults it, so every other data-plane/control-plane operation still succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.cost_management": {
+  "title": "Cost analysis, budgets and cost alerts, scoped to this resource group",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_cost_core.py"
+  ]
+ },
+ "azure.resourcegroups.deploymentstacks": {
+  "title": "Deployment stacks (Microsoft.Resources/deploymentStacks)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A stack evaluates its ARM template through the same bounded template engine as a plain deployment and OWNS the resources it provisions: deleting the stack deletes them (or detaches them with unmanageAction.Resources=detach), and denySettings.mode denyDelete / denyWriteAndDelete really blocks a direct delete (and write) of a managed resource with 403 DenyAssignmentAuthorizationFailed.",
+   "Not modelled: resourceGroups/managementGroups unmanage actions (only resources), deny-settings excludedPrincipals/excludedActions/applyToChildScopes, subscription- and management-group-scope stacks, what-if / validate, and template specs. Template functions beyond the bounded evaluator fail the stack."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_deploymentstacks_core.py"
+  ]
+ },
+ "azure.resourcegroups.marketplace": {
+  "title": "Creating a new resource from the Marketplace (Vyomi Marketplace)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi publishes its own SaaS-simulator offers; subscribing creates a real Microsoft.SaaS/resources resource in this resource group. The third-party vendors' APIs are not emulated and nothing is billed."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_billing_ext_core.py"
+  ]
+ },
+ "azure.resourcegroups.tools": {
+  "title": "Resource group tools: Move resources (validate + move), Export template, Insights and force delete",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "validateMoveResources / moveResources really re-parent resources inside the one simulated subscription: they check the target group, name clashes, ARM locks, non-movable types and that referenced/referencing resources move together, then rewrite ids and embedded references and re-key state. Moving to another subscription is rejected (Vyomi models one subscription). Real Azure's per-provider move rules (e.g. region/SKU specifics) are approximated by the generic reference-closure check; the call completes synchronously with 204 instead of a 202 long-running operation.",
+   "Export template is generated from live state (azure.common export template).",
+   "Insights (preview) is computed from the group's real records (GET {rg}/providers/Microsoft.Vyomi/insights): inventory by type and location, tag coverage and untagged resources (the tag-governance view), VM power states, failed provisioning, locks, alert rules, resource health, Advisor recommendations and the group's Activity log (24h operations, failures, top operations). There are no platform metrics or cost in it, and it is Vyomi's own page, not the Azure Monitor Insights workbook.",
+   "Force delete is the real DELETE resourceGroups/{rg}?forceDeletionTypes=Microsoft.Compute/virtualMachines,Microsoft.Compute/virtualMachineScaleSets parameter (other types are a 400). Without it every running VM / scale set is first taken through a graceful deallocate (powerState PowerState/deallocated, a deallocate/action Activity log row) and then deleted; with it the resource is deleted directly with a 'Force delete' row and no deallocate step. No guest OS is shut down (there is no hypervisor) and the other resource types are removed all at once, not in dependency order; the DELETE completes synchronously with 200 instead of a 202 long-running operation.",
+   "Open query (Azure Resource Graph) and Manage view are separate products/portal chrome and stay not simulated; the Tasks tab (DevOps/automation tasks) is a different panel."
+  ],
+  "tests": ["tests/conformance/test_azure_rg_move_resources.py", "tests/conformance/test_azure_templates_core.py", "tests/conformance/test_azure_rgtools.py", "tests/conformance/test_azure_rgtools_sdk.py", "tests/cli/azure-rgtools-cli-smoke.sh"]
+ }
+}

@@ -1,0 +1,182 @@
+{
+ "$doc": "Vyomi capability registry — GCP Vertex AI (Gemini publisher models over the local-LLM seam). Proven by tests/conformance/test_capabilities.py.",
+ "gcp.vertex-ai.gemini": {
+  "title": "Gemini generateContent / countTokens / streamGenerateContent",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "One small local model answers every Gemini model id (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts, function calling (functionDeclarations, automatic function calling via google-genai) and responseSchema JSON output work; images/audio/video, grounding/Google Search, code execution, safety settings and tuning are rejected."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_sdk_tools.py",
+   "tests/conformance/test_local_llm_seam.py"
+  ],
+  "probe": {
+   "gcp_vertex": "gemini"
+  }
+ },
+ "gcp.vertex-ai.embeddings": {
+  "title": "Text embeddings (embedContent / predict)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Embeddings come from the local embedding model when the backend has one; otherwise from vyomi-hash-embed, a deterministic bag-of-words embedding that is stable and cosine-comparable but not semantic. Dimensions are 256, not the real models' 768/3072."
+  ],
+  "tests": [
+   "tests/conformance/test_local_llm_seam.py"
+  ],
+  "probe": {
+   "gcp_vertex": "embed"
+  }
+ },
+ "gcp.vertex-ai.model-garden": {
+  "title": "Model Garden (publisher model catalog: list, get, filter)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A small fixed catalog of Google, Meta, Mistral and partner models. Only Gemini and text-embedding models can be called (local-LLM seam); other models are catalog entries, and 'Deploy' registers a model + endpoint record without a serving container."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ],
+  "probe": {
+   "gcp_vertex": "resources"
+  }
+ },
+ "gcp.vertex-ai.endpoints": {
+  "title": "Endpoints (create, list, get, delete, deployModel, undeployModel, traffic split)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deployed models are recorded and shown with their traffic split, but no container serves them: custom-model :predict / :rawPredict answer 501 UNIMPLEMENTED. Autoscaling and private endpoints are config-only."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.models": {
+  "title": "Model Registry (upload, list, get, delete, link to endpoints)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Model records only: artifacts are not validated, versions/aliases and model evaluation are not simulated, models:copy and export answer 501."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.datasets": {
+  "title": "Datasets (create, list, get, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dataset records only: no data items, annotations, import or export are stored."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.jobs": {
+  "title": "Training pipelines, custom jobs, batch predictions, hyperparameter tuning, pipeline jobs, tuning jobs (create, list, get, cancel, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Jobs advance PENDING -> RUNNING -> SUCCEEDED on a clock (about 5 seconds) and never run user containers or produce logs/metrics. A succeeded training pipeline registers its modelToUpload in the Model Registry; batch jobs report an output directory but write no predictions."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.notebooks": {
+  "title": "Workbench instances (notebooks v2) and Colab Enterprise runtimes/templates (create, list, get, start, stop, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Control-plane records only: no JupyterLab server or VM is started and the proxy URI does not open a notebook."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.vector-search": {
+  "title": "Vector Search (indexes, index endpoints, deployIndex, upsert/removeDatapoints, findNeighbors)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Exact brute-force nearest neighbour over the stored datapoints (cosine, dot-product, L1, squared-L2); no ANN tuning, restricts/filters, sparse embeddings or batch index builds from GCS."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.feature-store": {
+  "title": "Feature Store (feature groups, features, online stores, feature views)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Registry records only: no BigQuery sync, feature serving or online lookups."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.experiments": {
+  "title": "Experiments and metadata (metadata store contexts/artifacts/executions, TensorBoard instances/experiments/runs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Records created through the API or console; no experiment tracking SDK run logging, time series or lineage graph."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.gemini-developer-api": {
+  "title": "Gemini Developer API (generativelanguage.googleapis.com, API key) - Dev Simplified alias",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Alias of the Vertex Gemini lane for google-genai / REST clients pointed at base_url with an API key: /v1beta|/v1 models list/get, generateContent, streamGenerateContent (alt=sse), countTokens, embedContent, batchEmbedContents. A missing key returns 403 PERMISSION_DENIED; the key itself is not validated. Same model, limits and rejected features as the Vertex Gemini lane; no Files API, caching, Live API, tuning or Imagen/Veo."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py"
+  ]
+ },
+ "gcp.vertex-ai.agent-engine": {
+  "title": "Agent Engine (reasoningEngines create/get/list/update/delete, :query, :streamQuery) - Vyomi agent spec, Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified: the control plane (aiplatform v1/v1beta1 reasoningEngines with LROs) is real, and :query / :streamQuery really run an agent - but not a pickled/packaged Python class. The agent is a Vyomi agent spec (JSON instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) carried in spec.vyomiAgentSpec (REST) or a spec.deploymentSpec.env entry VYOMI_AGENT_SPEC (typed google-cloud-aiplatform gapic clients, transport='rest'), executed as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano). Class methods query, stream_query/async_stream_query and session helpers (create/get/list/delete_session, multi-turn history) are served; :streamQuery events follow the ADK Event shape inside the REST JSON-array-of-HttpBody framing. vertexai.agent_engines.create(<python object>) (cloudpickle + GCS staging), packageSpec/containerSpec deployment, Memory Bank, Example Store and ADK/LangChain/LangGraph runtimes are not supported; an engine with no spec answers :query with FAILED_PRECONDITION, and no model running returns 503 UNAVAILABLE (never a canned answer). Toy-grade quality; webhook tools need network egress (not in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. gcloud has no reasoning-engines surface in the stable track - use the SDK or REST. State is in the persisted account bag."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py"
+  ]
+ }
+}

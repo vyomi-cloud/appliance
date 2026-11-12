@@ -1,0 +1,2405 @@
+{
+ "generated": "2026-11-04",
+ "scanner": "consoles/tests/gap-scan.mjs",
+ "baseCommit": "28c94126",
+ "classes": {
+  "A": "buildable lightweight on both substrates",
+  "B": "decided backend family (V4-GAP-BACKENDS-DECISIONS.md)",
+  "C": "honestly unbuildable / editorial",
+  "N": "not a gap (state-dependent / unverified text)"
+ },
+ "totals": {
+  "aws": {
+   "B": 11,
+   "all": 27,
+   "N": 3,
+   "C": 13
+  },
+  "gcp": {
+   "C": 4,
+   "all": 7,
+   "B": 3
+  },
+  "azure": {
+   "C": 8,
+   "all": 29,
+   "A": 5,
+   "B": 16
+  }
+ },
+ "perService": [
+  {
+   "cloud": "aws",
+   "service": "apigateway",
+   "B": 1,
+   "total": 1
+  },
+  {
+   "cloud": "aws",
+   "service": "cloudformation",
+   "B": 2,
+   "total": 2
+  },
+  {
+   "cloud": "aws",
+   "service": "cloudwatch",
+   "N": 1,
+   "total": 1
+  },
+  {
+   "cloud": "aws",
+   "service": "dynamodb",
+   "C": 1,
+   "B": 1,
+   "total": 2
+  },
+  {
+   "cloud": "aws",
+   "service": "ec2",
+   "C": 1,
+   "B": 2,
+   "total": 3
+  },
+  {
+   "cloud": "aws",
+   "service": "iam",
+   "C": 1,
+   "total": 1
+  },
+  {
+   "cloud": "aws",
+   "service": "lambda",
+   "B": 2,
+   "total": 2
+  },
+  {
+   "cloud": "aws",
+   "service": "rds",
+   "B": 2,
+   "C": 2,
+   "total": 4
+  },
+  {
+   "cloud": "aws",
+   "service": "s3",
+   "N": 2,
+   "total": 2
+  },
+  {
+   "cloud": "aws",
+   "service": "sns",
+   "C": 2,
+   "total": 2
+  },
+  {
+   "cloud": "aws",
+   "service": "vpc",
+   "C": 6,
+   "B": 1,
+   "total": 7
+  },
+  {
+   "cloud": "azure",
+   "service": "aks",
+   "C": 3,
+   "A": 1,
+   "B": 3,
+   "total": 7
+  },
+  {
+   "cloud": "azure",
+   "service": "apim",
+   "B": 2,
+   "A": 1,
+   "C": 1,
+   "total": 4
+  },
+  {
+   "cloud": "azure",
+   "service": "appconfiguration",
+   "C": 1,
+   "A": 1,
+   "B": 1,
+   "total": 3
+  },
+  {
+   "cloud": "azure",
+   "service": "appservices",
+   "A": 2,
+   "B": 9,
+   "C": 2,
+   "total": 13
+  },
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "C": 1,
+   "B": 1,
+   "total": 2
+  },
+  {
+   "cloud": "gcp",
+   "service": "compute",
+   "C": 4,
+   "B": 3,
+   "total": 7
+  }
+ ],
+ "registry": {
+  "aws/apigateway": {
+   "offline:full": 15,
+   "nano:full": 15,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1,
+   "offline:limited": 1,
+   "nano:limited": 1
+  },
+  "aws/cloudformation": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 12,
+   "nano:limited": 12,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "aws/cloudwatch": {
+   "offline:full": 10,
+   "nano:full": 10,
+   "offline:limited": 15,
+   "nano:limited": 15
+  },
+  "aws/cost-explorer": {
+   "offline:limited": 2,
+   "nano:limited": 2
+  },
+  "aws/dynamodb": {
+   "offline:limited": 21,
+   "nano:limited": 21,
+   "offline:full": 6,
+   "nano:full": 6,
+   "offline:not_simulated": 3,
+   "nano:not_simulated": 3
+  },
+  "aws/ec2": {
+   "offline:full": 23,
+   "nano:full": 22,
+   "offline:limited": 29,
+   "nano:limited": 29,
+   "nano:not_simulated": 2,
+   "offline:not_simulated": 1
+  },
+  "aws/eventbridge": {
+   "offline:full": 9,
+   "nano:full": 9,
+   "offline:limited": 14,
+   "nano:limited": 14
+  },
+  "aws/iam": {
+   "offline:full": 18,
+   "nano:full": 18,
+   "offline:limited": 22,
+   "nano:limited": 22,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "aws/kinesis": {
+   "offline:full": 9,
+   "nano:full": 9,
+   "offline:limited": 1,
+   "nano:limited": 1
+  },
+  "aws/kms": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 3,
+   "nano:limited": 3,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "aws/lambda": {
+   "offline:full": 10,
+   "nano:full": 10,
+   "offline:limited": 13,
+   "nano:limited": 13,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2
+  },
+  "aws/rds": {
+   "offline:full": 9,
+   "nano:full": 9,
+   "offline:limited": 20,
+   "nano:limited": 20,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "aws/s3": {
+   "offline:full": 11,
+   "nano:full": 11,
+   "offline:limited": 36,
+   "nano:limited": 36
+  },
+  "aws/secretsmanager": {
+   "offline:full": 4,
+   "nano:full": 4,
+   "offline:limited": 6,
+   "nano:limited": 6,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2
+  },
+  "aws/securityhub": {
+   "offline:limited": 2,
+   "nano:limited": 2,
+   "offline:full": 1,
+   "nano:full": 1
+  },
+  "aws/sns": {
+   "offline:full": 10,
+   "nano:full": 7,
+   "offline:limited": 11,
+   "nano:limited": 14,
+   "offline:not_simulated": 3,
+   "nano:not_simulated": 3
+  },
+  "aws/sqs": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 4,
+   "nano:limited": 4
+  },
+  "aws/ssm": {
+   "offline:full": 4,
+   "nano:full": 4,
+   "offline:limited": 4,
+   "nano:limited": 3,
+   "nano:not_simulated": 1
+  },
+  "aws/states": {
+   "offline:full": 5,
+   "nano:full": 5,
+   "offline:limited": 1,
+   "nano:limited": 1,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "aws/vpc": {
+   "offline:full": 13,
+   "nano:full": 13,
+   "offline:limited": 23,
+   "nano:limited": 23,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2
+  },
+  "azure/acr": {
+   "offline:full": 9,
+   "nano:full": 9,
+   "offline:limited": 18,
+   "nano:limited": 18
+  },
+  "azure/aks": {
+   "offline:full": 5,
+   "nano:full": 5,
+   "offline:limited": 9,
+   "nano:limited": 9,
+   "offline:config_only": 4,
+   "nano:config_only": 4
+  },
+  "azure/apim": {
+   "offline:full": 17,
+   "nano:full": 17,
+   "offline:limited": 12,
+   "nano:limited": 12,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "azure/appconfiguration": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 4,
+   "nano:limited": 4,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "azure/appservices": {
+   "offline:full": 11,
+   "nano:full": 11,
+   "offline:limited": 13,
+   "nano:limited": 13,
+   "offline:not_simulated": 3,
+   "nano:not_simulated": 3,
+   "offline:config_only": 3,
+   "nano:config_only": 3
+  },
+  "azure/cognitiveservices": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:config_only": 1,
+   "nano:config_only": 1,
+   "offline:limited": 3,
+   "nano:limited": 3
+  },
+  "azure/common": {
+   "offline:limited": 9,
+   "nano:limited": 9,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "azure/containerapps": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:not_simulated": 4,
+   "nano:not_simulated": 4,
+   "offline:limited": 5,
+   "nano:limited": 5
+  },
+  "azure/cosmos": {
+   "offline:full": 5,
+   "nano:full": 5,
+   "offline:limited": 10,
+   "nano:limited": 10,
+   "offline:config_only": 3,
+   "nano:config_only": 3
+  },
+  "azure/cost": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 5,
+   "nano:limited": 5,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "azure/defender": {
+   "offline:full": 3,
+   "nano:full": 3,
+   "offline:limited": 5,
+   "nano:limited": 5,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "azure/dns": {
+   "offline:full": 6,
+   "nano:full": 6,
+   "offline:limited": 2,
+   "nano:limited": 2,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2
+  },
+  "azure/entra": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 4,
+   "nano:limited": 4
+  },
+  "azure/eventgrid": {
+   "offline:full": 11,
+   "nano:full": 11,
+   "offline:not_simulated": 3,
+   "nano:not_simulated": 3,
+   "offline:limited": 9,
+   "nano:limited": 9
+  },
+  "azure/functionapp": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 24,
+   "nano:limited": 24,
+   "offline:not_simulated": 3,
+   "nano:not_simulated": 3,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "azure/keyvaults": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 8,
+   "nano:limited": 8
+  },
+  "azure/loganalytics": {
+   "offline:full": 10,
+   "nano:full": 10,
+   "offline:limited": 4,
+   "nano:limited": 4,
+   "offline:not_simulated": 3,
+   "nano:not_simulated": 3,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "azure/managedidentity": {
+   "offline:limited": 1,
+   "nano:limited": 1
+  },
+  "azure/monitor": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 20,
+   "nano:limited": 20,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2
+  },
+  "azure/nsgs": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 5,
+   "nano:limited": 5,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "azure/resourcegroups": {
+   "offline:full": 6,
+   "nano:full": 6,
+   "offline:limited": 4,
+   "nano:limited": 4
+  },
+  "azure/servicebus": {
+   "offline:full": 9,
+   "nano:full": 9,
+   "offline:limited": 9,
+   "nano:limited": 9,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2,
+   "offline:config_only": 2,
+   "nano:config_only": 2
+  },
+  "azure/sql": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 16,
+   "nano:limited": 16,
+   "offline:config_only": 4,
+   "nano:config_only": 4
+  },
+  "azure/storage": {
+   "offline:full": 10,
+   "nano:full": 10,
+   "offline:limited": 32,
+   "nano:limited": 32,
+   "offline:not_simulated": 6,
+   "nano:not_simulated": 6,
+   "offline:config_only": 3,
+   "nano:config_only": 3
+  },
+  "azure/subscriptions": {
+   "offline:limited": 20,
+   "nano:limited": 20,
+   "offline:full": 7,
+   "nano:full": 7
+  },
+  "azure/vms": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 21,
+   "nano:limited": 21
+  },
+  "azure/vnets": {
+   "offline:full": 10,
+   "nano:full": 10,
+   "offline:limited": 13,
+   "nano:limited": 13,
+   "offline:config_only": 2,
+   "nano:config_only": 2
+  },
+  "gcp/artifacts": {
+   "offline:full": 4,
+   "nano:full": 4,
+   "offline:limited": 4,
+   "nano:limited": 4,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "gcp/cloudscheduler": {
+   "offline:full": 2,
+   "nano:full": 2,
+   "offline:limited": 2,
+   "nano:limited": 2
+  },
+  "gcp/compute": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 20,
+   "nano:not_simulated": 9,
+   "nano:limited": 19,
+   "offline:not_simulated": 8
+  },
+  "gcp/firestore": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 7,
+   "nano:limited": 7
+  },
+  "gcp/functions": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 6,
+   "nano:limited": 6,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "gcp/iam-admin": {
+   "offline:full": 10,
+   "nano:full": 10,
+   "offline:limited": 22,
+   "nano:limited": 22,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "gcp/kms": {
+   "offline:full": 5,
+   "nano:full": 5,
+   "offline:limited": 3,
+   "nano:limited": 3,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  },
+  "gcp/kubernetes": {
+   "offline:full": 11,
+   "nano:full": 11,
+   "offline:limited": 7,
+   "nano:limited": 7
+  },
+  "gcp/logs": {
+   "offline:full": 5,
+   "nano:full": 5,
+   "offline:limited": 5,
+   "nano:limited": 5
+  },
+  "gcp/memorystore": {
+   "offline:full": 6,
+   "nano:full": 5,
+   "offline:limited": 3,
+   "nano:limited": 4
+  },
+  "gcp/monitoring": {
+   "offline:full": 4,
+   "nano:full": 4,
+   "offline:limited": 19,
+   "nano:limited": 19
+  },
+  "gcp/networking": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 10,
+   "nano:limited": 9,
+   "nano:not_simulated": 1
+  },
+  "gcp/pubsub": {
+   "offline:full": 8,
+   "nano:full": 8,
+   "offline:limited": 9,
+   "nano:limited": 9
+  },
+  "gcp/resource-manager": {
+   "offline:full": 4,
+   "nano:full": 4,
+   "offline:limited": 2,
+   "nano:limited": 2
+  },
+  "gcp/run": {
+   "offline:full": 7,
+   "nano:full": 7,
+   "offline:limited": 15,
+   "nano:limited": 15,
+   "offline:not_simulated": 2,
+   "nano:not_simulated": 2,
+   "offline:config_only": 1,
+   "nano:config_only": 1
+  },
+  "gcp/secret-manager": {
+   "offline:full": 6,
+   "nano:full": 6,
+   "offline:limited": 6,
+   "nano:limited": 6
+  },
+  "gcp/sql": {
+   "offline:full": 5,
+   "nano:full": 5,
+   "offline:limited": 9,
+   "nano:limited": 9
+  },
+  "gcp/storage": {
+   "offline:full": 6,
+   "nano:full": 6,
+   "offline:limited": 19,
+   "nano:limited": 19,
+   "offline:config_only": 1,
+   "nano:config_only": 1,
+   "offline:not_simulated": 1,
+   "nano:not_simulated": 1
+  }
+ },
+ "scan": {
+  "aws/offline": {
+   "pages": 684,
+   "unreachedPatterns": [
+    "/cloudformation/stacks/:name/update",
+    "/ec2/instances/:id",
+    "/ec2/instances/:id/create-image",
+    "/ec2/create-snapshot/:volumeId",
+    "/ec2/security-groups/:id/edit-outbound-rules",
+    "/eventbridge/archives/:name/edit",
+    "/eventbridge/pipes/:name",
+    "/vpc/vpcs/:id/edit-settings",
+    "/vpc/security-groups/:id/edit-inbound-rules",
+    "/vpc/security-groups/:id/edit-outbound-rules",
+    "/vpc/service-networks/:id",
+    "/vpc/lattice-services/:id",
+    "/vpc/lattice-target-groups/:id",
+    "/vpc/transit-gateway-route-tables/:id"
+   ],
+   "fixtureErrors": [
+    "ec2/live-instance: POST / -> 503 <Response><Errors><Error><Code>AMI 'Amazon Linux 2023' is not supported on darwin.</Code><Message>AMI 'Amazon Linux 2023",
+    "ec2/live-ami: POST / -> 503 <Response><Errors><Error><Code>AMI 'Amazon Linux 2023' is not supported on darwin.</Code><Message>AMI 'Amazon Linux 2023",
+    "rds/live-export-task: POST / -> 404 <?xml version=\"1.0\" encoding=\"UTF-8\"?><ErrorResponse xmlns=\"http://rds.amazonaws.com/doc/2014-10-31/\"><Error><Type>Sende",
+    "ec2/live-instance: POST / -> 503 <Response><Errors><Error><Code>AMI 'Amazon Linux 2023' is not supported on darwin.</Code><Message>AMI 'Amazon Linux 2023",
+    "ec2/live-ami: POST / -> 503 <Response><Errors><Error><Code>AMI 'Amazon Linux 2023' is not supported on darwin.</Code><Message>AMI 'Amazon Linux 2023",
+    "ec2/live-instance: POST / -> 503 <Response><Errors><Error><Code>AMI 'Amazon Linux 2023' is not supported on darwin.</Code><Message>AMI 'Amazon Linux 2023"
+   ]
+  },
+  "gcp/offline": {
+   "pages": 250,
+   "unreachedPatterns": [
+    "/security/kms/keyring/manage/:location/:name",
+    "/security/kms/key/manage/:location/:keyring/:name",
+    "/security/secret-manager/secret/:name",
+    "/security/secret-manager/regional/:location/:name"
+   ],
+   "fixtureErrors": [
+    "iam-admin/deny-policy: POST /v2/policies/cloudresourcemanager.googleapis.com%2Fprojects%2Fvyomi-project/denypolicies?policyId=gsrxkz4 -> 405 <?xml version=\"1.0\"",
+    "storage/live-batch-job: POST /storage/v1/batchOperations -> 405 <?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified",
+    "storage/live-dataset: POST /storage/v1/insightsDatasets -> 405 <?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified "
+   ]
+  },
+  "azure/offline": {
+   "pages": 1054,
+   "unreachedPatterns": [
+    "/sql/servers/:rg/:server"
+   ],
+   "fixtureErrors": []
+  }
+ },
+ "batches": [
+  {
+   "id": "AWS-01",
+   "cloud": "aws",
+   "title": "S3 buildable gaps: Metadata tables, Storage Lens metrics, S3 Vectors",
+   "why": "S3 first (user complaint)",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-02",
+   "cloud": "aws",
+   "title": "S3 decided-backend + editorial: file systems, FSx access points, Transfer acceleration, Marketplace, Get started",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-03",
+   "cloud": "aws",
+   "title": "EC2 dashboard + ops (zones, alarms, events, health rollup, EBS fault tolerance, IAM profile)",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-04",
+   "cloud": "aws",
+   "title": "EC2 tools + purchasing (compare SG, type finder, Recycle Bin, Auto Scaling settings, Spot/capacity)",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-05",
+   "cloud": "aws",
+   "title": "EC2 reach-in + telemetry: Connect (SSH) and instance/volume metrics",
+   "why": "decided families #1 and #3",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-06",
+   "cloud": "aws",
+   "title": "EC2 marketplace/builder/migration/RAM/cost",
+   "why": "",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "ec2-imagebuilder",
+     "cls": "B",
+     "family": "cicd-source",
+     "size": "L",
+     "deps": [
+      "buildkit"
+     ],
+     "label": "EC2 Image Builder pipelines",
+     "count": 1,
+     "items": [
+      {
+       "service": "ec2",
+       "title": "EC2 Image Builder",
+       "capabilityId": null,
+       "routes": [
+        "#/ec2/image-builder"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "theme": "ec2-migrate",
+     "cls": "B",
+     "family": "data-analytics",
+     "size": "L",
+     "deps": [],
+     "label": "Migrate a server (Application Migration Service)",
+     "count": 1,
+     "items": [
+      {
+       "service": "ec2",
+       "title": "Migrate a server",
+       "capabilityId": null,
+       "routes": [
+        "#/ec2/migrate-a-server"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 2
+  },
+  {
+   "id": "AWS-07",
+   "cloud": "aws",
+   "title": "CloudTrail core + IAM gaps (service access report, CloudFront key pairs, Role manager) + S3 data events",
+   "why": "IAM third; CloudTrail core unblocks S3 and IAM",
+   "classes": [
+    "C"
+   ],
+   "themes": [
+    {
+     "theme": "iam-role-mgr",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "IAM Role manager (no public API in AWS)",
+     "count": 1,
+     "items": [
+      {
+       "service": "iam",
+       "title": "Role manager",
+       "capabilityId": "iam.organizations.role-manager",
+       "routes": [
+        "#/iam/account-settings"
+       ],
+       "where": [
+        "modal:Upload server certificate",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "The IAM Role manager account setting has no public API and no Vyomi backing; it is not simulated."
+      }
+     ]
+    }
+   ],
+   "sections": 1
+  },
+  {
+   "id": "AWS-08",
+   "cloud": "aws",
+   "title": "EventBridge + CloudFormation + Secrets A items",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-09",
+   "cloud": "aws",
+   "title": "RDS + DynamoDB + Lambda + SNS + VPC A items",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-10",
+   "cloud": "aws",
+   "title": "Visual canvas component (CFN Template Studio, EventBridge builder, Lambda Composer)",
+   "why": "one shared UI component",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AWS-11",
+   "cloud": "aws",
+   "title": "AWS observability + security + billing family: RDS metrics, Security Hub, Cost Explorer",
+   "why": "families #3 #4 #9",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "rds-metrics",
+     "cls": "B",
+     "family": "observability",
+     "size": "M",
+     "deps": [
+      "docker-stats-to-cloudwatch"
+     ],
+     "label": "RDS instance metrics (CPU/memory/storage) + Database Insights",
+     "count": 1,
+     "items": [
+      {
+       "service": "rds",
+       "title": "Database Insights metrics",
+       "capabilityId": null,
+       "routes": [
+        "#/rds/create-database"
+       ],
+       "where": [
+        "expand:text=Create new",
+        "expand:text=Self managed",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Vyomi does not emit RDS CloudWatch metrics; this setting is stored but has nothing to chart."
+      }
+     ]
+    }
+   ],
+   "sections": 1
+  },
+  {
+   "id": "AWS-12",
+   "cloud": "aws",
+   "title": "AWS networking + CI/CD family: VPC Lattice, Network Firewall containers, CloudFormation Git sync, Lambda CI/CD",
+   "why": "families #5 #2",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "vpc-nfw-containers",
+     "cls": "B",
+     "family": "networking-dataplane",
+     "size": "M",
+     "deps": [
+      "netsim"
+     ],
+     "label": "Network Firewall container associations",
+     "count": 1,
+     "items": [
+      {
+       "service": "vpc",
+       "title": "Container associations",
+       "capabilityId": "aws.vpc.network-firewall-containers",
+       "routes": [
+        "#/vpc/container-associations"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Container associations attach Network Firewall to container platforms (EKS/ECS) through firewall endpoints on real node networking; Vyomi has no inline firewall data path for them."
+      }
+     ]
+    },
+    {
+     "theme": "cfn-gitsync",
+     "cls": "B",
+     "family": "cicd-source",
+     "size": "M",
+     "deps": [
+      "gitea"
+     ],
+     "label": "CloudFormation Git sync",
+     "count": 1,
+     "items": [
+      {
+       "service": "cloudformation",
+       "title": "Git sync",
+       "capabilityId": null,
+       "routes": [
+        "#/cloudformation/stacks/gs799tc-stack",
+        "#/cloudformation/stacks/gs8pzh8",
+        "#/cloudformation/stacks/gsjbtys-stack",
+        "#/cloudformation/stacks/gsloxuq"
+       ],
+       "where": [
+        "page",
+        "tab:Git sync"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Syncing a stack to a Git repository isn't modeled by Vyomi."
+      }
+     ]
+    },
+    {
+     "theme": "lambda-cicd",
+     "cls": "B",
+     "family": "cicd-source",
+     "size": "L",
+     "deps": [
+      "buildkit",
+      "gitea"
+     ],
+     "label": "Lambda CI/CD pipeline application",
+     "count": 1,
+     "items": [
+      {
+       "service": "lambda",
+       "title": "CI/CD pipeline application",
+       "capabilityId": "lambda.application.cicd-pipeline",
+       "routes": [
+        "#/lambda/create/application"
+       ],
+       "where": [
+        "page",
+        "tab:CI/CD pipeline application"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "A CI/CD pipeline application wires a CodePipeline/CodeBuild/CodeDeploy pipeline around a stack. Vyomi has no CI/CD pipeline core. Use the Serverless application tab."
+      }
+     ]
+    }
+   ],
+   "sections": 3
+  },
+  {
+   "id": "AWS-13",
+   "cloud": "aws",
+   "title": "AWS data / directory / marketplace / local-LLM family: DMS, zero-ETL, SNS SMS, StackSets orgs, CFN registry, partner sources, AgentCore",
+   "why": "families #6 #7 #8 #11",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "zero-etl",
+     "cls": "B",
+     "family": "data-analytics",
+     "size": "L",
+     "deps": [],
+     "label": "Zero-ETL integrations (DynamoDB/RDS to Redshift/lakehouse)",
+     "count": 2,
+     "items": [
+      {
+       "service": "dynamodb",
+       "title": "Integrations",
+       "capabilityId": "dynamodb.account.zero-etl",
+       "routes": [
+        "#/dynamodb/integrations"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Zero-ETL integrations replicate tables into Amazon Redshift / SageMaker lakehouse, services Vyomi does not implement."
+      },
+      {
+       "service": "rds",
+       "title": "Create zero-ETL integration",
+       "capabilityId": null,
+       "routes": [
+        "#/rds/create-zero-etl-integration"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "A zero-ETL integration requires a real cross-service pipeline into Redshift that Vyomi does not run."
+      }
+     ]
+    },
+    {
+     "theme": "cfn-registry",
+     "cls": "B",
+     "family": "marketplace-saas",
+     "size": "L",
+     "deps": [],
+     "label": "CloudFormation public extensions / publisher registry",
+     "count": 1,
+     "items": [
+      {
+       "service": "cloudformation",
+       "title": "Filters",
+       "capabilityId": null,
+       "routes": [
+        "#/cloudformation/spotlight"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Filter by: All tags. Sort by: Sort by newest. Show editor's choice only. Show bookmarks only."
+      }
+     ]
+    },
+    {
+     "theme": "lambda-agent",
+     "cls": "B",
+     "family": "local-llm",
+     "size": "L",
+     "deps": [
+      "local-llm"
+     ],
+     "label": "Lambda/AgentCore agent onboarding + AgentCore targets",
+     "count": 2,
+     "items": [
+      {
+       "service": "apigateway",
+       "title": "AgentCore targets",
+       "capabilityId": "apigateway.agentcore-targets",
+       "routes": [
+        "#/apigateway/agentcore-targets"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Bedrock AgentCore is a separate AWS product Vyomi does not implement at all; declared in the nav for completeness only."
+      },
+      {
+       "service": "lambda",
+       "title": "Set up your agent to build with Lambda",
+       "capabilityId": "lambda.dashboard.agent-onboarding",
+       "routes": [
+        "#/lambda",
+        "#/lambda/home"
+       ],
+       "where": [
+        "page",
+        "tab:Event Functions",
+        "tab:Web Functions"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "The onboarding card connects a hosted AI coding agent to Lambda. That needs the Bedrock/agent product family, which Vyomi does not implement."
+      }
+     ]
+    }
+   ],
+   "sections": 5
+  },
+  {
+   "id": "AWS-14",
+   "cloud": "aws",
+   "title": "AWS unbuildable / editorial / verify",
+   "why": "class C and N",
+   "classes": [
+    "C",
+    "N"
+   ],
+   "themes": [
+    {
+     "theme": "ec2-ultra",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "EC2 UltraServers (multi-host accelerator domains: hardware)",
+     "count": 1,
+     "items": [
+      {
+       "service": "ec2",
+       "title": "UltraServers",
+       "capabilityId": "ec2.purchasing.ultraservers",
+       "routes": [
+        "#/ec2/ultraservers"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "UltraServers are multi-host accelerator domains (for example 72-GPU GB200 NVL72 systems) bought as Capacity Blocks; Vyomi has no accelerator instance types, no Capacity Block market and no fabric to model, so there is nothing real to manage here. Use Capacity Reservations for reserved capacity of th"
+      }
+     ]
+    },
+    {
+     "theme": "ddb-reserved",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Reserved capacity purchase (billing/payment)",
+     "count": 1,
+     "items": [
+      {
+       "service": "dynamodb",
+       "title": "Reserved capacity",
+       "capabilityId": "dynamodb.account.reserved-capacity",
+       "routes": [
+        "#/dynamodb/reserved-capacity"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Reserved capacity is a billing purchase; Vyomi has no billing or payment backend."
+      }
+     ]
+    },
+    {
+     "theme": "rds-capres",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "RDS capacity reservations (capacity-market / billing construct)",
+     "count": 1,
+     "items": [
+      {
+       "service": "rds",
+       "title": "Create capacity reservation",
+       "capabilityId": null,
+       "routes": [
+        "#/rds/capacity-reservations",
+        "#/rds/create-capacity-reservation"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against."
+      }
+     ]
+    },
+    {
+     "theme": "sns-fixed",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "SNS settings that do not exist in the real API (max message size, TTL)",
+     "count": 2,
+     "items": [
+      {
+       "service": "sns",
+       "title": "Maximum message size",
+       "capabilityId": "sns.topic.max-message-size",
+       "routes": [
+        "#/sns/create-topic",
+        "#/sns/topics/gs7crds/edit",
+        "#/sns/topics/gsc7mce-topic/edit",
+        "#/sns/topics/gsfgkjk-topic/edit"
+       ],
+       "where": [
+        "expand:text=Access policy - optional",
+        "expand:text=Active tracing - optional",
+        "expand:text=Archive policy - new, optional",
+        "expand:text=Encryption - optional"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Amazon SNS does not let you configure a topic's maximum message size; it is fixed, so there is no setting to store."
+      },
+      {
+       "service": "sns",
+       "title": "Time to Live (TTL) - optional",
+       "capabilityId": "sns.publish.ttl",
+       "routes": [
+        "#/sns/topics/gs7crds/publish",
+        "#/sns/topics/gsc7mce-topic/publish",
+        "#/sns/topics/gsfgkjk-topic/publish",
+        "#/sns/topics/gstcbeq/publish"
+       ],
+       "where": [
+        "modal:Add another attribute",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "The native SNS Publish API has no message TTL parameter for topic deliveries (TTL exists only as a mobile-push message attribute)."
+      }
+     ]
+    },
+    {
+     "theme": "vpc-external",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Network Manager / external console link-outs",
+     "count": 2,
+     "items": [
+      {
+       "service": "vpc",
+       "title": "AWS Network Manager",
+       "capabilityId": null,
+       "routes": [
+        "#/vpc",
+        "#/vpc/",
+        "#/vpc/dashboard",
+        "#/vpc/home"
+       ],
+       "where": [
+        "modal:View complete service health details",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Network Manager is a separate, external AWS console."
+      },
+      {
+       "service": "vpc",
+       "title": "Integrations",
+       "capabilityId": "aws.vpc.integrations",
+       "routes": [
+        "#/vpc/vpcs/vpc-0bb695c3c5af",
+        "#/vpc/vpcs/vpc-46461bae909f",
+        "#/vpc/vpcs/vpc-760e363bc65f",
+        "#/vpc/vpcs/vpc-a708e525cc8f"
+       ],
+       "where": [
+        "page",
+        "tab:Integrations"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "These dashboard tiles link out to genuinely separate things Vyomi cannot stand in for: AWS Network Manager (its own control plane over Transit Gateways) and real third-party network/observability partners (e.g. Aviatrix, Kentik) advertised in the console \u2014 not a resource this core could model, real "
+      }
+     ]
+    },
+    {
+     "theme": "service-health",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Region-wide service health (AWS-side events)",
+     "count": 5,
+     "items": [
+      {
+       "service": "rds",
+       "title": "The page /rds/service-health",
+       "capabilityId": null,
+       "routes": [
+        "#/rds/service-health"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "vpc",
+       "title": "Linked AWS documentation",
+       "capabilityId": null,
+       "routes": [
+        "#/vpc",
+        "#/vpc/",
+        "#/vpc/dashboard",
+        "#/vpc/home"
+       ],
+       "where": [
+        "modal:View complete service health details",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "vpc",
+       "title": "Linked AWS forums",
+       "capabilityId": null,
+       "routes": [
+        "#/vpc",
+        "#/vpc/",
+        "#/vpc/dashboard",
+        "#/vpc/home"
+       ],
+       "where": [
+        "modal:View complete service health details",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "vpc",
+       "title": "Linked issue reporting",
+       "capabilityId": null,
+       "routes": [
+        "#/vpc",
+        "#/vpc/",
+        "#/vpc/dashboard",
+        "#/vpc/home"
+       ],
+       "where": [
+        "modal:View complete service health details",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "vpc",
+       "title": "Service health dashboard",
+       "capabilityId": null,
+       "routes": [
+        "#/vpc",
+        "#/vpc/",
+        "#/vpc/dashboard",
+        "#/vpc/home"
+       ],
+       "where": [
+        "modal:View complete service health details",
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "theme": "objlock-cond",
+     "cls": "N",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Object Lock panels (render only when the bucket has no lock; verified real on a locked bucket)",
+     "count": 2,
+     "items": [
+      {
+       "service": "s3",
+       "title": "Object Lock legal hold",
+       "capabilityId": null,
+       "routes": [
+        "#/s3/object/uic-bucket",
+        "#/s3/object/uic-trust-bundles"
+       ],
+       "where": [
+        "page",
+        "tab:Properties"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Object Lock is disabled for this bucket."
+      },
+      {
+       "service": "s3",
+       "title": "Object Lock retention",
+       "capabilityId": null,
+       "routes": [
+        "#/s3/object/uic-bucket",
+        "#/s3/object/uic-trust-bundles"
+       ],
+       "where": [
+        "page",
+        "tab:Properties"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Object Lock is disabled for this bucket."
+      }
+     ]
+    },
+    {
+     "theme": "unverified-text",
+     "cls": "N",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Transient 'Not simulated' text without the data attribute (state-dependent / mid-render); re-check",
+     "count": 1,
+     "items": [
+      {
+       "service": "cloudwatch",
+       "title": "#/cloudwatch/alarms/create",
+       "capabilityId": null,
+       "routes": [
+        "#/cloudwatch/alarms/create"
+       ],
+       "where": [
+        "tab:Configure actions"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 15
+  },
+  {
+   "id": "GCP-01",
+   "cloud": "gcp",
+   "title": "Compute A: recommender, schedules, backups/snapshots, NIC/NEG, sole-tenant/reservations",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "GCP-02",
+   "cloud": "gcp",
+   "title": "Run/Functions A: autoscaling, probes, volumes, SQL connections, BinAuthz/CMEK, Eventarc, image picker",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "GCP-03",
+   "cloud": "gcp",
+   "title": "Identity/data A: org-policy simulation, workload identity federation, Firestore rules, Logs correlate, Datastore, GCS config, SQL flags, KMS import",
+   "why": "",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "GCP-04",
+   "cloud": "gcp",
+   "title": "GCP SSH + observability + security family: GCE SSH, VM Manager, Ops Agent, trace/scopes, security risk, storage security insights",
+   "why": "families #1 #3 #4",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "gce-ssh",
+     "cls": "B",
+     "family": "ssh-shell",
+     "size": "L",
+     "deps": [
+      "tunnel-tcp-relay"
+     ],
+     "label": "GCE SSH / OS info / serial (real sshd in container)",
+     "count": 1,
+     "items": [
+      {
+       "service": "compute",
+       "title": "SSH",
+       "capabilityId": null,
+       "routes": [
+        "#/compute/instances"
+       ],
+       "where": [
+        "page",
+        "tab:Instances"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "No guest OS runs behind this instance."
+      }
+     ]
+    },
+    {
+     "theme": "gce-vm-manager",
+     "cls": "B",
+     "family": "ssh-shell",
+     "size": "L",
+     "deps": [
+      "gce-ssh"
+     ],
+     "label": "VM Manager: Patch, OS policies, VM extension policies (guest agent)",
+     "count": 1,
+     "items": [
+      {
+       "service": "compute",
+       "title": "VM Manager",
+       "capabilityId": null,
+       "routes": [
+        "#/compute/instances",
+        "#/compute/instances/us-central1-a/gsexghq"
+       ],
+       "where": [
+        "tab:Observability"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent, which Vyomi doesn't run."
+      }
+     ]
+    }
+   ],
+   "sections": 2
+  },
+  {
+   "id": "GCP-05",
+   "cloud": "gcp",
+   "title": "GCP networking + CI/CD family: VLAN/BYOIP/flow logs, Run networking, source deploy",
+   "why": "families #5 #2",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "GCP-06",
+   "cloud": "gcp",
+   "title": "GCP data / directory / marketplace family: VM import, Storage Insights, Asset Inventory queries, org/folders, Marketplace",
+   "why": "families #6 #7 #8",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "gce-import",
+     "cls": "B",
+     "family": "data-analytics",
+     "size": "L",
+     "deps": [],
+     "label": "Import VM / Migrate to VMs / image import-export history",
+     "count": 1,
+     "items": [
+      {
+       "service": "compute",
+       "title": "Migrate to Virtual Machines",
+       "capabilityId": "gcp.compute.migrate-to-vms",
+       "routes": [
+        "#/compute/migrate-to-vms"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Migrate to Virtual Machines replicates running VMware / AWS / Azure machines through a source connector appliance and delta-syncs their disks before cut-over; Vyomi has no source hypervisors to connect to and no replication engine. To bring a disk archive in, use Import VM (a .tar.gz in Cloud Storag"
+      }
+     ]
+    }
+   ],
+   "sections": 1
+  },
+  {
+   "id": "GCP-07",
+   "cloud": "gcp",
+   "title": "GCP unbuildable",
+   "why": "class C",
+   "classes": [
+    "C"
+   ],
+   "themes": [
+    {
+     "theme": "gce-incidents",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Google Cloud incidents / service health",
+     "count": 1,
+     "items": [
+      {
+       "service": "compute",
+       "title": "Google Cloud incidents",
+       "capabilityId": "gcp.compute.incidents",
+       "routes": [
+        "#/compute/overview"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "The feed reports outages on Google's real infrastructure; Vyomi is a local simulator with no Google status source, so there is nothing true to report."
+      }
+     ]
+    },
+    {
+     "theme": "gce-hw",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Hardware: TPUs, Bare Metal Solution, sole-tenant hardware",
+     "count": 1,
+     "items": [
+      {
+       "service": "compute",
+       "title": "TPUs",
+       "capabilityId": "gcp.compute.tpus",
+       "routes": [
+        "#/compute/tpus"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "TPUs are Google-proprietary accelerator hardware with no software equivalent that could run XLA workloads in the simulator."
+      }
+     ]
+    },
+    {
+     "theme": "gce-commit",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Committed use discounts (purchase)",
+     "count": 2,
+     "items": [
+      {
+       "service": "compute",
+       "title": "Capacity advisor",
+       "capabilityId": "gcp.compute.capacity-advisor",
+       "routes": [
+        "#/compute/capacity-advisor"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Forecasts are derived from Google's live fleet-wide capacity telemetry, which a simulator does not have; Vyomi can create resources in any zone without capacity limits."
+      },
+      {
+       "service": "compute",
+       "title": "Committed use discounts",
+       "capabilityId": "gcp.compute.committed-use-discounts",
+       "routes": [
+        "#/compute/committed-use-discounts"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "A commitment is a billing contract with Google (1 or 3 year term, charged to a billing account); Vyomi bills nothing real, so purchasing one would only create a record with no effect. The cost meter prices on-demand usage only."
+      }
+     ]
+    }
+   ],
+   "sections": 4
+  },
+  {
+   "id": "AZ-01",
+   "cloud": "azure",
+   "title": "Azure common blades A: export template, activity log, RBAC extras, grid tools, resource health/Advisor, diagnostic settings, visualizer",
+   "why": "cross-cutting kit components applied to every service",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AZ-02",
+   "cloud": "azure",
+   "title": "Azure identity/crypto/policy A: managed identity, CMK, Event Grid subscriptions, Azure Policy, RG ops",
+   "why": "",
+   "classes": [
+    "A"
+   ],
+   "themes": [
+    {
+     "theme": "az-managed-identity",
+     "cls": "A",
+     "family": null,
+     "size": "M",
+     "deps": [
+      "managed-identity-core"
+     ],
+     "label": "User-assigned + managed identity assignment on resources",
+     "count": 1,
+     "items": [
+      {
+       "service": "appconfiguration",
+       "title": "User assigned managed identities",
+       "capabilityId": null,
+       "routes": [
+        "#/appconfiguration/uic-rg/uicappconfig/identity"
+       ],
+       "where": [
+        "tab:User assigned"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 1
+  },
+  {
+   "id": "AZ-03",
+   "cloud": "azure",
+   "title": "Storage + SQL + Cosmos A",
+   "why": "",
+   "classes": [
+    "A"
+   ],
+   "themes": [
+    {
+     "theme": "az-backup-dr",
+     "cls": "A",
+     "family": null,
+     "size": "L",
+     "deps": [],
+     "label": "Backup / recovery / geo-replication / disaster recovery (local snapshots)",
+     "count": 1,
+     "items": [
+      {
+       "service": "aks",
+       "title": "Azure Backup for AKS",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/uicaks/backup"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 1
+  },
+  {
+   "id": "AZ-04",
+   "cloud": "azure",
+   "title": "Compute/containers A: VM ops, ACR import, AKS ops, App Service/Function App ops",
+   "why": "",
+   "classes": [
+    "A"
+   ],
+   "themes": [
+    {
+     "theme": "az-app-ops",
+     "cls": "A",
+     "family": null,
+     "size": "L",
+     "deps": [],
+     "label": "App Service/Function App operations: auth, certificates, autoscale, WebJobs, default docs, path mappings, health check, clone, slots config, bindings editor, invocations",
+     "count": 2,
+     "items": [
+      {
+       "service": "appservices",
+       "title": "Database",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/create"
+       ],
+       "where": [
+        "tab:Database"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Provisioning a linked database from the Web App wizard is not modelled; create one directly in the SQL/Cosmos DB lens instead."
+      },
+      {
+       "service": "appservices",
+       "title": "Secure unique default hostname on.",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices",
+        "#/appservices/create"
+       ],
+       "where": [
+        "action:Create",
+        "page",
+        "tab:Basics"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Vyomi always uses the exact name you choose; there is no name-collision suffix to secure."
+      }
+     ]
+    }
+   ],
+   "sections": 2
+  },
+  {
+   "id": "AZ-05",
+   "cloud": "azure",
+   "title": "Azure data-plane services A: APIM, App Configuration, Key Vault, Service Bus/Event Grid, DNS, VNet, Entra, other",
+   "why": "",
+   "classes": [
+    "A"
+   ],
+   "themes": [
+    {
+     "theme": "az-apim-ops",
+     "cls": "A",
+     "family": null,
+     "size": "M",
+     "deps": [],
+     "label": "API Management operations: gateways, soft-delete restore, capacity",
+     "count": 1,
+     "items": [
+      {
+       "service": "apim",
+       "title": "The capacity gauge",
+       "capabilityId": null,
+       "routes": [
+        "#/apim/uic-rg/gstnb9t"
+       ],
+       "where": [
+        "tab:Capacity"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 1
+  },
+  {
+   "id": "AZ-06",
+   "cloud": "azure",
+   "title": "Azure observability + security + support family: monitoring pipeline, Prometheus/Grafana/SCOM, Defender, support requests, Tasks",
+   "why": "families #3 #4 #10 #2",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "az-monitor-blades",
+     "cls": "B",
+     "family": "observability",
+     "size": "L",
+     "deps": [
+      "observability-stack"
+     ],
+     "label": "Per-resource Insights / Metrics / Alerts / Logs / Diagnostic settings / Workbooks / Log Analytics (monitoring pipeline)",
+     "count": 3,
+     "items": [
+      {
+       "service": "apim",
+       "title": "Monitor + secure",
+       "capabilityId": null,
+       "routes": [
+        "#/apim/create"
+       ],
+       "where": [
+        "tab:Monitor + secure"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "These checkboxes provision separate monitoring/security resources in real Azure; Vyomi does not model that cross-resource wiring."
+      },
+      {
+       "service": "appservices",
+       "title": "Application Insights",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/create"
+       ],
+       "where": [
+        "tab:Monitor + secure"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Creating/linking an Application Insights resource (and its Region) is not modelled."
+      },
+      {
+       "service": "appservices",
+       "title": "Events (preview)",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/events"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "theme": "az-tasks",
+     "cls": "B",
+     "family": "cicd-source",
+     "size": "L",
+     "deps": [
+      "buildkit"
+     ],
+     "label": "Tasks / Automation / Logic App tasks",
+     "count": 5,
+     "items": [
+      {
+       "service": "aks",
+       "title": "Tasks",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/uicaks/tasks"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "apim",
+       "title": "Tasks",
+       "capabilityId": null,
+       "routes": [
+        "#/apim/uic-rg/uicapim/tasks"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, and Support + Troubleshooting opens a real Azure support ticket against Microsoft \u2014 all infrast"
+      },
+      {
+       "service": "appconfiguration",
+       "title": "Tasks",
+       "capabilityId": null,
+       "routes": [
+        "#/appconfiguration/uic-rg/uicappconfig/tasks"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "Tasks",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/tasks"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "cognitiveservices",
+       "title": "Tasks",
+       "capabilityId": null,
+       "routes": [
+        "#/cognitiveservices/uic-rg/uiccogsvc/tasks"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 8
+  },
+  {
+   "id": "AZ-07",
+   "cloud": "azure",
+   "title": "Azure networking + SSH + CI/CD family: private endpoints/Firewall/Bastion/DDoS, NSG flow logs, App Service console/Kudu, VM guest ops, Deployment Center",
+   "why": "families #5 #1 #2",
+   "classes": [
+    "B"
+   ],
+   "themes": [
+    {
+     "theme": "az-console-kudu",
+     "cls": "B",
+     "family": "ssh-shell",
+     "size": "L",
+     "deps": [
+      "tunnel-tcp-relay"
+     ],
+     "label": "App Service console / SSH / Kudu / process explorer / log streaming",
+     "count": 6,
+     "items": [
+      {
+       "service": "appservices",
+       "title": "Advanced Tools",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/advancedtools"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "App Service Editor (Preview)",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/appeditor"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "Console",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/console"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "Extensions",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/extensions"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "Live log streaming",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/logstream"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Vyomi stores App Service log settings; there is no running workload to tail a live stream from."
+      },
+      {
+       "service": "appservices",
+       "title": "Process explorer",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/processexplorer"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "theme": "az-cicd",
+     "cls": "B",
+     "family": "cicd-source",
+     "size": "L",
+     "deps": [
+      "buildkit",
+      "gitea"
+     ],
+     "label": "Deployment Center / GitHub Actions / GitOps / automated deployments",
+     "count": 2,
+     "items": [
+      {
+       "service": "aks",
+       "title": "Automated deployments (GitHub Actions)",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/uicaks/automateddeployments"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "aks",
+       "title": "Flux GitOps configurations",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/uicaks/gitops"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 8
+  },
+  {
+   "id": "AZ-08",
+   "cloud": "azure",
+   "title": "Azure data / directory / marketplace / billing family: Resource Graph, migration, Files, AI Search, subscriptions, Marketplace, Cost Management",
+   "why": "families #6 #7 #8 #9",
+   "classes": [],
+   "themes": [],
+   "sections": 0
+  },
+  {
+   "id": "AZ-09",
+   "cloud": "azure",
+   "title": "Azure unbuildable / editorial",
+   "why": "class C and N",
+   "classes": [
+    "C"
+   ],
+   "themes": [
+    {
+     "theme": "az-diagnose",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Diagnose and solve problems (Azure fleet diagnostics)",
+     "count": 5,
+     "items": [
+      {
+       "service": "aks",
+       "title": "Diagnose and solve problems",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/uicaks/diagnose"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "apim",
+       "title": "Diagnose and solve problems",
+       "capabilityId": null,
+       "routes": [
+        "#/apim/uic-rg/uicapim/diagnose"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, and Support + Troubleshooting opens a real Azure support ticket against Microsoft \u2014 all infrast"
+      },
+      {
+       "service": "appconfiguration",
+       "title": "Diagnose and solve problems",
+       "capabilityId": null,
+       "routes": [
+        "#/appconfiguration/uic-rg/uicappconfig/diagnose"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "Diagnose and solve problems",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp/diagnose"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "cognitiveservices",
+       "title": "Diagnose and solve problems",
+       "capabilityId": null,
+       "routes": [
+        "#/cognitiveservices/uic-rg/uiccogsvc/diagnose"
+       ],
+       "where": [
+        "page"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "theme": "az-editorial",
+     "cls": "C",
+     "family": null,
+     "size": "S",
+     "deps": [],
+     "label": "Tutorials / capabilities overview / features overview / quick start / feedback / quotas docs",
+     "count": 3,
+     "items": [
+      {
+       "service": "aks",
+       "title": "The capabilities overview",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/gsrypa8"
+       ],
+       "where": [
+        "tab:Capabilities"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "aks",
+       "title": "Tutorials",
+       "capabilityId": null,
+       "routes": [
+        "#/aks/uic-rg/gsrypa8"
+       ],
+       "where": [
+        "action:Start",
+        "modal:Connect",
+        "tab:Tutorials"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      },
+      {
+       "service": "appservices",
+       "title": "The capabilities overview",
+       "capabilityId": null,
+       "routes": [
+        "#/appservices/uic-rg/uicapp"
+       ],
+       "where": [
+        "tab:Capabilities"
+       ],
+       "substrates": [
+        "offline"
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "sections": 8
+  }
+ ]
+}

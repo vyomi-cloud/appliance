@@ -157,6 +157,7 @@ func waitComposeBackendReady(timeout time.Duration) error {
 // invokeCompose is the INNER (inside-the-appliance) compose path — uses the
 // resolved ProjectName + RootDir + ComposeFile (mirrors Invoke-Compose).
 func (c *Config) invokeCompose(verb string, extra ...string) error {
+	exportHostMem()
 	if err := waitComposeBackendReady(180 * time.Second); err != nil {
 		return err
 	}
@@ -194,6 +195,7 @@ func (c *Config) resolveDockerComposeFile() (string, error) {
 // invokeDockerSubstrate serves the Free/Lite/Pro tiers straight on `docker compose`
 // (project `vyomi`), mirroring Invoke-DockerSubstrate exactly.
 func (c *Config) invokeDockerSubstrate(action string, dcArgs []string) error {
+	exportHostMem()
 	cf, err := c.resolveDockerComposeFile()
 	if err != nil {
 		return err

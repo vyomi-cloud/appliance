@@ -1,0 +1,1316 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "storage",
+  "console_path": "/storage/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "overview"
+    },
+    {
+      "label": "Buckets",
+      "page_id": "buckets"
+    },
+    {
+      "label": "Monitoring",
+      "page_id": "monitoring"
+    },
+    {
+      "label": "Settings",
+      "page_id": "settings"
+    },
+    {
+      "label": "Storage Intelligence",
+      "children": [
+        {
+          "label": "Advisor",
+          "page_id": "advisor"
+        },
+        {
+          "label": "Batch operations",
+          "page_id": "batch-operations"
+        },
+        {
+          "label": "Insights datasets",
+          "page_id": "insights-datasets"
+        },
+        {
+          "label": "Configuration",
+          "page_id": "storage-intelligence-configuration"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Smart Storage",
+      "children": [
+        {
+          "label": "Object enrichments",
+          "page_id": "object-enrichments"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Marketplace",
+      "external": true
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "buckets",
+      "kind": "list",
+      "title": "Buckets",
+      "route": "/storage/browser",
+      "breadcrumbs": [
+        "Cloud Storage",
+        "Buckets"
+      ],
+      "captures": [
+        "A-storage/004-L2-buckets"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Billing banner shown above the table in the capture; Overflow menu is the per-row kebab.",
+      "header_actions": [
+        "Create",
+        "Refresh",
+        "Go to path",
+        "Learn"
+      ],
+      "table": {
+        "resource_label": null,
+        "selection": "multi",
+        "header_actions": [
+          "Delete"
+        ],
+        "actions": [
+          "Edit access",
+          "Edit labels",
+          "Edit default storage class",
+          "Add lifecycle rule",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "Store and retrieve your data",
+        "empty_state_action": "Take quickstart",
+        "columns": [
+          "Name",
+          "Created",
+          "Location type",
+          "Location",
+          "Default storage class",
+          "Last modified",
+          "Public access",
+          "Access control",
+          "Protection",
+          "Hierarchical namespace",
+          "Bucket retention",
+          "Lifecycle rules",
+          "Tags",
+          "Encryption",
+          "Security insights"
+        ]
+      }
+    },
+    {
+      "id": "create-bucket",
+      "kind": "create",
+      "title": "Create a bucket",
+      "route": "/storage/create-bucket",
+      "breadcrumbs": [
+        "Cloud Storage",
+        "Buckets",
+        "Create a bucket"
+      ],
+      "captures": [
+        "C-forms/01-storage-create-bucket/step-1",
+        "A-storage/001-L1-landing",
+        "A-storage/033-L3-create"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture shows only 'Sign up for the free trial' (billing gate). Vertical stepper; each step has Continue.",
+      "submit": "Create",
+      "steps": [
+        {
+          "title": "Get started",
+          "sections": [
+            {
+              "title": "Name your bucket",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true,
+                  "help": "Pick a globally unique, permanent name",
+                  "constraints": "3-63 characters: lowercase letters, numbers, dashes, underscores, dots"
+                },
+                {
+                  "label": "Labels (optional)",
+                  "type": "tags",
+                  "actions": [
+                    "Add label"
+                  ]
+                },
+                {
+                  "label": "Tags (optional)",
+                  "type": "tags",
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Choose where to store your data",
+          "sections": [
+            {
+              "title": "Location type",
+              "fields": [
+                {
+                  "label": "Location type",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Multi-region",
+                  "options": [
+                    "Multi-region",
+                    "Dual-region",
+                    "Region"
+                  ]
+                },
+                {
+                  "label": "Location",
+                  "type": "select",
+                  "required": true,
+                  "default": "us (multiple regions in United States)",
+                  "help": "Multi-region: us, eu, asia; Region: e.g. us-central1 (Iowa)"
+                },
+                {
+                  "label": "Add turbo replication",
+                  "type": "checkbox",
+                  "default": false,
+                  "visible_when": "Location type = Dual-region",
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Choose how to store your data",
+          "sections": [
+            {
+              "title": "Set a default class",
+              "fields": [
+                {
+                  "label": "Storage class",
+                  "type": "radio",
+                  "default": "Set a default class",
+                  "options": [
+                    "Set a default class",
+                    "Autoclass"
+                  ]
+                },
+                {
+                  "label": "Default storage class",
+                  "type": "radio",
+                  "default": "Standard",
+                  "options": [
+                    "Standard",
+                    "Nearline",
+                    "Coldline",
+                    "Archive"
+                  ],
+                  "visible_when": "Set a default class"
+                }
+              ]
+            },
+            {
+              "title": "Optimize storage for data-intensive workloads",
+              "fields": [
+                {
+                  "label": "Enable hierarchical namespace on this bucket",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ],
+              "confidence": "medium"
+            }
+          ]
+        },
+        {
+          "title": "Choose how to control access to objects",
+          "sections": [
+            {
+              "title": "Prevent public access",
+              "fields": [
+                {
+                  "label": "Enforce public access prevention on this bucket",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "title": "Access control",
+              "fields": [
+                {
+                  "label": "Access control",
+                  "type": "radio",
+                  "default": "Uniform",
+                  "options": [
+                    "Uniform",
+                    "Fine-grained"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Choose how to protect object data",
+          "sections": [
+            {
+              "title": "Data protection",
+              "fields": [
+                {
+                  "label": "Soft delete policy (For data recovery)",
+                  "type": "checkbox",
+                  "default": true,
+                  "children": [
+                    {
+                      "label": "Retention duration",
+                      "type": "number",
+                      "default": 7
+                    },
+                    {
+                      "label": "Unit",
+                      "type": "select",
+                      "default": "days",
+                      "options": [
+                        "days"
+                      ],
+                      "confidence": "low"
+                    }
+                  ]
+                },
+                {
+                  "label": "Object versioning (For version control)",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Retention (For compliance)",
+                  "type": "checkbox",
+                  "default": false,
+                  "children": [
+                    {
+                      "label": "Set bucket retention policy",
+                      "type": "checkbox"
+                    },
+                    {
+                      "label": "Enable object retention",
+                      "type": "checkbox"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Data encryption",
+              "fields": [
+                {
+                  "label": "Data encryption",
+                  "type": "radio",
+                  "default": "Google-managed encryption key",
+                  "options": [
+                    "Google-managed encryption key",
+                    "Cloud KMS key"
+                  ]
+                }
+              ],
+              "confidence": "medium"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bucket-details",
+      "kind": "detail",
+      "title": "Bucket details",
+      "route": "/storage/browser/{resource-name}",
+      "breadcrumbs": [
+        "Cloud Storage",
+        "Buckets",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Bucket name (with copy icon) under the 'Bucket details' heading, then a summary row.",
+      "header_actions": [
+        "Refresh"
+      ],
+      "sections": [
+        {
+          "title": "{resource-name}",
+          "fields": [
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Storage class",
+              "type": "readonly"
+            },
+            {
+              "label": "Public access",
+              "type": "readonly"
+            },
+            {
+              "label": "Protection",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Objects",
+        "Configuration",
+        "Permissions",
+        "Protection",
+        "Lifecycle",
+        "Observability",
+        "Inventory reports",
+        "Operations"
+      ],
+      "tab_panels": [
+        {
+          "label": "Objects",
+          "sections": [
+            {
+              "title": "Objects",
+              "table": {
+                "selection": "multi",
+                "header_actions": [
+                  "Create folder",
+                  "Upload",
+                  "Transfer data",
+                  "Other services",
+                  "Download",
+                  "Delete"
+                ],
+                "actions": [
+                  "Upload files",
+                  "Upload folder"
+                ],
+                "filter_placeholder": "Filter by name prefix only",
+                "filters": [
+                  "Show: Live objects only",
+                  "Show: All objects"
+                ],
+                "pagination": true,
+                "preferences": true,
+                "empty_state": "No rows to display",
+                "confidence": "medium",
+                "columns": [
+                  "Name",
+                  "Size",
+                  "Type",
+                  "Created",
+                  "Storage class",
+                  "Last modified",
+                  "Public access",
+                  "Version history",
+                  "Encryption",
+                  "Retention expiration date",
+                  "Hold"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Configuration",
+          "sections": [
+            {
+              "title": "Overview",
+              "fields": [
+                {
+                  "label": "Created",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Updated",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Location type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Location",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Default storage class",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Hierarchical namespace",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Requester pays",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Labels",
+                  "type": "readonly"
+                },
+                {
+                  "label": "gsutil URI",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Cloud Console URL",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Edit default storage class",
+                "Edit labels"
+              ]
+            },
+            {
+              "title": "Data encryption",
+              "fields": [
+                {
+                  "label": "Encryption type",
+                  "type": "readonly"
+                }
+              ],
+              "confidence": "medium"
+            },
+            {
+              "title": "Cross-origin resource sharing (CORS)",
+              "fields": [
+                {
+                  "label": "CORS",
+                  "type": "readonly"
+                }
+              ],
+              "confidence": "low"
+            },
+            {
+              "title": "Static website configuration",
+              "fields": [
+                {
+                  "label": "Index (main) page suffix",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Error (404 not found) page",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Edit website configuration"
+              ],
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Public access",
+              "fields": [
+                {
+                  "label": "Public access",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Prevent public access",
+                "Remove public access prevention"
+              ]
+            },
+            {
+              "title": "Access control",
+              "fields": [
+                {
+                  "label": "Access control",
+                  "type": "readonly",
+                  "options": [
+                    "Uniform",
+                    "Fine-grained"
+                  ]
+                }
+              ],
+              "actions": [
+                "Switch to fine-grained",
+                "Switch to uniform"
+              ]
+            },
+            {
+              "title": "Permissions",
+              "table": {
+                "selection": "multi",
+                "header_actions": [
+                  "Grant access",
+                  "Remove access"
+                ],
+                "filters": [
+                  "View by principals",
+                  "View by roles"
+                ],
+                "filter_placeholder": "Enter property name or value",
+                "confidence": "medium",
+                "columns": [
+                  "Principal",
+                  "Name",
+                  "Role",
+                  "Inheritance"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Protection",
+          "sections": [
+            {
+              "title": "Soft delete policy (for data recovery)",
+              "fields": [
+                {
+                  "label": "Retention duration",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Edit"
+              ]
+            },
+            {
+              "title": "Object versioning (for version control)",
+              "fields": [
+                {
+                  "label": "Object versioning",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Edit"
+              ]
+            },
+            {
+              "title": "Bucket retention policy",
+              "fields": [
+                {
+                  "label": "Retention period",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Effective since",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Status",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Set retention policy",
+                "Edit retention policy",
+                "Lock",
+                "Delete"
+              ]
+            },
+            {
+              "title": "Object retention",
+              "fields": [
+                {
+                  "label": "Object retention",
+                  "type": "readonly"
+                }
+              ],
+              "confidence": "medium"
+            }
+          ]
+        },
+        {
+          "label": "Lifecycle",
+          "sections": [
+            {
+              "title": "Lifecycle rules",
+              "table": {
+                "selection": "multi",
+                "header_actions": [
+                  "Add a rule",
+                  "Delete all"
+                ],
+                "empty_state": "No rows to display",
+                "confidence": "medium",
+                "columns": [
+                  "Action",
+                  "Object condition"
+                ]
+              }
+            },
+            {
+              "title": "Add an object lifecycle rule",
+              "fields": [
+                {
+                  "label": "Select an action",
+                  "type": "radio",
+                  "required": true,
+                  "options": [
+                    "Set storage class to Nearline",
+                    "Set storage class to Coldline",
+                    "Set storage class to Archive",
+                    "Delete object",
+                    "Delete incomplete multipart upload"
+                  ]
+                },
+                {
+                  "label": "Select object conditions",
+                  "type": "checkbox",
+                  "children": [
+                    {
+                      "label": "Age",
+                      "type": "number"
+                    },
+                    {
+                      "label": "Created before",
+                      "type": "text"
+                    },
+                    {
+                      "label": "Storage class matches",
+                      "type": "select",
+                      "options": [
+                        "Standard",
+                        "Nearline",
+                        "Coldline",
+                        "Archive"
+                      ]
+                    },
+                    {
+                      "label": "Number of newer versions",
+                      "type": "number"
+                    },
+                    {
+                      "label": "Days since becoming noncurrent",
+                      "type": "number"
+                    },
+                    {
+                      "label": "Became noncurrent before",
+                      "type": "text"
+                    },
+                    {
+                      "label": "Days since custom time",
+                      "type": "number"
+                    },
+                    {
+                      "label": "Custom time before",
+                      "type": "text"
+                    },
+                    {
+                      "label": "Object name matches prefix",
+                      "type": "text"
+                    },
+                    {
+                      "label": "Object name matches suffix",
+                      "type": "text"
+                    }
+                  ]
+                }
+              ],
+              "confidence": "medium"
+            }
+          ]
+        },
+        {
+          "label": "Observability",
+          "sections": [
+            {
+              "title": "Monitoring",
+              "fields": [
+                {
+                  "label": "Time range",
+                  "type": "select",
+                  "confidence": "low"
+                }
+              ],
+              "confidence": "low"
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "label": "Inventory reports",
+          "sections": [
+            {
+              "title": "Inventory reports",
+              "table": {
+                "header_actions": [
+                  "Create report config"
+                ],
+                "confidence": "low",
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Destination",
+                  "Frequency"
+                ]
+              }
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "label": "Operations",
+          "sections": [
+            {
+              "title": "Long-running bucket operations",
+              "table": {
+                "confidence": "low",
+                "columns": [
+                  "Operation ID",
+                  "Type",
+                  "Status",
+                  "Created",
+                  "Updated"
+                ]
+              }
+            }
+          ],
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "object-details",
+      "kind": "detail",
+      "title": "Object details",
+      "route": "/storage/browser/_details/{resource-name}",
+      "breadcrumbs": [
+        "Cloud Storage",
+        "Buckets",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Edit metadata",
+        "Copy",
+        "Move",
+        "Delete"
+      ],
+      "tabs": [
+        "Live object",
+        "Version history"
+      ],
+      "tab_panels": [
+        {
+          "label": "Live object",
+          "sections": [
+            {
+              "title": "Overview",
+              "fields": [
+                {
+                  "label": "Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Created",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Last modified",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Storage class",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Custom time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Public URL",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Authenticated URL",
+                  "type": "readonly"
+                },
+                {
+                  "label": "gsutil URI",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Permissions",
+              "fields": [
+                {
+                  "label": "Public access",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Protection",
+              "fields": [
+                {
+                  "label": "Hold status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Version history",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Retention expiration time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Encryption type",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Metadata",
+              "fields": [
+                {
+                  "label": "Content-Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Cache-Control",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Content-Encoding",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Content-Disposition",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Custom metadata",
+                  "type": "table",
+                  "columns": [
+                    "Key",
+                    "Value"
+                  ]
+                }
+              ],
+              "actions": [
+                "Edit metadata"
+              ],
+              "confidence": "medium"
+            }
+          ]
+        },
+        {
+          "label": "Version history",
+          "sections": [
+            {
+              "title": "Versions",
+              "table": {
+                "confidence": "low",
+                "columns": [
+                  "Version",
+                  "Size",
+                  "Created",
+                  "Storage class",
+                  "Status"
+                ]
+              }
+            }
+          ],
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "overview",
+      "kind": "dashboard",
+      "title": "Overview",
+      "route": "/storage/overview",
+      "captures": [
+        "A-storage/003-L2-overview",
+        "A-storage/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Overview",
+        "Guides"
+      ],
+      "header_actions": [
+        "Create bucket",
+        "Go to a specific path",
+        "View buckets list"
+      ],
+      "sections": [
+        {
+          "title": "Project at a glance",
+          "fields": [
+            {
+              "label": "Total storage size",
+              "type": "readonly"
+            },
+            {
+              "label": "Total buckets with objects",
+              "type": "readonly"
+            },
+            {
+              "label": "Total objects",
+              "type": "readonly"
+            },
+            {
+              "label": "Average object size",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Go to advisor"
+          ]
+        },
+        {
+          "title": "Jump back in",
+          "fields": [
+            {
+              "label": "Pinned buckets",
+              "type": "readonly"
+            },
+            {
+              "label": "Recently visited",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Go to all buckets"
+          ]
+        },
+        {
+          "title": "Recent transfer activity",
+          "actions": [
+            "Create a transfer job"
+          ]
+        },
+        {
+          "title": "Features you may like"
+        }
+      ]
+    },
+    {
+      "id": "monitoring",
+      "kind": "dashboard",
+      "title": "Monitoring",
+      "route": "/storage/monitoring",
+      "captures": [
+        "A-storage/005-L2-monitoring",
+        "A-storage/005-L2-monitoring--tab-02-rapid-cache"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Learn"
+      ],
+      "tabs": [
+        "Overview",
+        "Rapid Cache"
+      ],
+      "sections": [
+        {
+          "title": "Charts",
+          "fields": [
+            {
+              "label": "Time range",
+              "type": "radio",
+              "default": "1 hour",
+              "options": [
+                "1 hour",
+                "6 hours",
+                "12 hours",
+                "1 day",
+                "2 days",
+                "4 days",
+                "7 days",
+                "14 days",
+                "30 days",
+                "6 weeks",
+                "Custom"
+              ]
+            },
+            {
+              "label": "Filter by: All locations",
+              "type": "select"
+            },
+            {
+              "label": "Server error rate",
+              "type": "readonly"
+            },
+            {
+              "label": "Client error rate",
+              "type": "readonly"
+            },
+            {
+              "label": "Top 5 buckets by read errors",
+              "type": "readonly"
+            },
+            {
+              "label": "Top 5 buckets by write errors",
+              "type": "readonly"
+            },
+            {
+              "label": "Total read/list/get request count",
+              "type": "readonly"
+            },
+            {
+              "label": "Total write request count",
+              "type": "readonly"
+            },
+            {
+              "label": "Data ingress rate over the network",
+              "type": "readonly"
+            },
+            {
+              "label": "Data egress rate over the network",
+              "type": "readonly"
+            },
+            {
+              "label": "Total storage by object state",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/storage/settings",
+      "captures": [
+        "A-storage/006-L2-settings",
+        "A-storage/006-L2-settings--tab-02-interoperability"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Project access",
+        "Interoperability",
+        "Soft delete"
+      ],
+      "tab_panels": [
+        {
+          "label": "Project access",
+          "sections": [
+            {
+              "title": "Public access prevention for the project",
+              "fields": [
+                {
+                  "label": "Public access prevention policy",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Identifying your project",
+              "fields": [
+                {
+                  "label": "x-goog-project-id",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Cloud Storage Service Account",
+              "fields": [
+                {
+                  "label": "Service account",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Cloud Storage IDs",
+              "fields": [
+                {
+                  "label": "You",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Owners",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Editor",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Team",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Interoperability",
+          "sections": [
+            {
+              "title": "Request endpoint",
+              "fields": [
+                {
+                  "label": "Storage URI",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Service account HMAC",
+              "actions": [
+                "Create a key for a service account"
+              ],
+              "table": {
+                "resource_label": "Access keys for service accounts",
+                "provenance": "reference",
+                "confidence": "medium",
+                "columns": [
+                  "Access key",
+                  "Secret",
+                  "Service account",
+                  "State"
+                ]
+              }
+            },
+            {
+              "title": "User account HMAC",
+              "fields": [
+                {
+                  "label": "Default project for interoperable access",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Create a key"
+              ],
+              "table": {
+                "resource_label": "Access keys for your user account",
+                "empty_state": "No rows to display",
+                "columns": [
+                  "Access key",
+                  "Secret"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Soft delete",
+          "sections": [
+            {
+              "title": "Soft delete",
+              "fields": [
+                {
+                  "label": "Default retention duration",
+                  "type": "readonly"
+                }
+              ],
+              "provenance": "reference",
+              "confidence": "low"
+            }
+          ],
+          "provenance": "reference",
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "advisor",
+      "kind": "other",
+      "title": "Advisor",
+      "captures": [
+        "A-storage/007-L2-advisor"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Body behind billing/API gate; nav label captured.",
+      "route": "/storage/advisor"
+    },
+    {
+      "id": "batch-operations",
+      "kind": "list",
+      "title": "Batch operations",
+      "captures": [
+        "A-storage/008-L2-batch-operations"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Body behind billing/API gate; nav label captured.",
+      "route": "/storage/batch-operations"
+    },
+    {
+      "id": "insights-datasets",
+      "kind": "list",
+      "title": "Insights datasets",
+      "captures": [
+        "A-storage/009-L2-insights-datasets"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Body behind billing/API gate; nav label captured.",
+      "route": "/storage/insights-datasets"
+    },
+    {
+      "id": "storage-intelligence-configuration",
+      "kind": "settings",
+      "title": "Configuration",
+      "captures": [
+        "A-storage/010-L2-configuration"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Body behind billing/API gate; nav label captured.",
+      "route": "/storage/intelligence-configuration"
+    },
+    {
+      "id": "object-enrichments",
+      "kind": "other",
+      "title": "Object enrichments",
+      "captures": [
+        "A-storage/011-L2-object-enrichments"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Body behind billing/API gate; nav label captured.",
+      "route": "/storage/object-enrichments"
+    }
+  ],
+  "gaps_note": "From capture: nav, Overview, Buckets list (15 columns), Monitoring, Settings (Project access/Interoperability). Billing-gated, so reference: create-bucket stepper, bucket details tabs, object details, Settings>Soft delete. object-enrichments is new vs spec-map.json."
+}

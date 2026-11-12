@@ -222,8 +222,10 @@ def vpc():
     acl = next(x for x in sec("nacls")["network_acls"] if not x["is_default"])["network_acl_id"]
     put("nacls", {"action": "add_entry", "network_acl_id": acl, "rule_number": 100, "protocol": "6", "from_port": 22, "cidr": "0.0.0.0/0", "rule_action": "deny"})
     put("nacls", {"action": "add_entry", "network_acl_id": acl, "rule_number": 100, "egress": True, "protocol": "-1", "cidr": "0.0.0.0/0"})
-    put("nacls", {"action": "associate", "network_acl_id": acl, "subnet_id": sid})
-    r = d("vpc", "Analyze", {"sourceIp": "10.9.1.10", "destIp": "10.9.1.20", "port": 22})
+    # NACLs filter traffic that crosses a subnet boundary (not same-subnet traffic): the destination is in a second subnet
+    sid2 = d("vpc", "CreateSubnet", {"vpcId": vid, "cidr": "10.9.2.0/24"})["id"]
+    put("nacls", {"action": "associate", "network_acl_id": acl, "subnet_id": sid2})
+    r = d("vpc", "Analyze", {"sourceIp": "10.9.1.10", "destIp": "10.9.2.20", "port": 22})
     check("Network ACLs: a console deny rule blocks SSH in the reachability analyzer", r["reachable"] is False and "NACL" in r["reason"], r)
     check("NAT gateways: private NAT in the subnet", put("nat_gateways", {"subnet_id": sid, "connectivity_type": "private"})["nat_gateways"][0]["private_ip"].startswith("10.9.1."))
     check("Endpoints: DynamoDB gateway endpoint", put("endpoints", {"service": "dynamodb"})["endpoints"][0]["endpoint_type"] == "Gateway")

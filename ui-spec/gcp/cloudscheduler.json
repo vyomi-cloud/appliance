@@ -1,0 +1,279 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "cloudscheduler",
+  "console_path": "/cloudscheduler",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Cloud Scheduler",
+      "page_id": "jobs"
+    }
+  ],
+  "pages": [
+    {
+      "id": "jobs",
+      "kind": "list",
+      "title": "Cloud Scheduler",
+      "route": "/cloudscheduler",
+      "captures": [
+        "A-cloudscheduler/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture shows the 'Enable Cloud Scheduler API' page.",
+      "header_actions": [
+        "Create job",
+        "Refresh"
+      ],
+      "tabs": [
+        "Scheduler jobs",
+        "Cron jobs"
+      ],
+      "table": {
+        "selection": "multi",
+        "header_actions": [
+          "Force run",
+          "Pause",
+          "Resume",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter jobs",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Region",
+          "State",
+          "Description",
+          "Frequency",
+          "Target",
+          "Last run",
+          "Last run result",
+          "Next run",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "create-job",
+      "kind": "create",
+      "title": "Create a job",
+      "route": "/cloudscheduler/jobs/new",
+      "captures": [
+        "C-forms/20-cloudscheduler-jobs-new/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "steps": [
+        {
+          "title": "Define the schedule",
+          "sections": [
+            {
+              "title": "Define the schedule",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true
+                },
+                {
+                  "label": "Description",
+                  "type": "text"
+                },
+                {
+                  "label": "Frequency",
+                  "type": "text",
+                  "required": true,
+                  "help": "unix-cron format, e.g. 0 * * * *"
+                },
+                {
+                  "label": "Timezone",
+                  "type": "select",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure the execution",
+          "sections": [
+            {
+              "title": "Configure the execution",
+              "fields": [
+                {
+                  "label": "Target type",
+                  "type": "select",
+                  "required": true,
+                  "default": "HTTP",
+                  "options": [
+                    "HTTP",
+                    "Pub/Sub",
+                    "App Engine HTTP",
+                    "Workflows via HTTP"
+                  ]
+                },
+                {
+                  "label": "URL",
+                  "type": "text",
+                  "required": true,
+                  "visible_when": "Target type = HTTP"
+                },
+                {
+                  "label": "HTTP method",
+                  "type": "select",
+                  "default": "POST",
+                  "options": [
+                    "POST",
+                    "GET",
+                    "PUT",
+                    "DELETE",
+                    "PATCH",
+                    "HEAD",
+                    "OPTIONS"
+                  ]
+                },
+                {
+                  "label": "HTTP headers",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value"
+                  ],
+                  "actions": [
+                    "Add a header"
+                  ]
+                },
+                {
+                  "label": "Body",
+                  "type": "textarea"
+                },
+                {
+                  "label": "Auth header",
+                  "type": "select",
+                  "default": "None",
+                  "options": [
+                    "None",
+                    "Add OAuth token",
+                    "Add OIDC token"
+                  ]
+                },
+                {
+                  "label": "Select a Cloud Pub/Sub topic",
+                  "type": "select",
+                  "visible_when": "Target type = Pub/Sub"
+                },
+                {
+                  "label": "Message body",
+                  "type": "textarea",
+                  "visible_when": "Target type = Pub/Sub"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure optional settings",
+          "sections": [
+            {
+              "title": "Retry config",
+              "fields": [
+                {
+                  "label": "Max retry attempts",
+                  "type": "number",
+                  "default": 0
+                },
+                {
+                  "label": "Max retry duration",
+                  "type": "text",
+                  "default": "0s"
+                },
+                {
+                  "label": "Min backoff duration",
+                  "type": "text",
+                  "default": "5s"
+                },
+                {
+                  "label": "Max backoff duration",
+                  "type": "text",
+                  "default": "1h"
+                },
+                {
+                  "label": "Max doublings",
+                  "type": "number",
+                  "default": 5
+                },
+                {
+                  "label": "Attempt deadline config",
+                  "type": "text",
+                  "default": "3m"
+                }
+              ]
+            }
+          ],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "id": "job-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "provenance": "reference",
+      "confidence": "low",
+      "header_actions": [
+        "Edit",
+        "Force run",
+        "Pause",
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Job details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "readonly"
+            },
+            {
+              "label": "Region",
+              "type": "readonly"
+            },
+            {
+              "label": "Frequency",
+              "type": "readonly"
+            },
+            {
+              "label": "Timezone",
+              "type": "readonly"
+            },
+            {
+              "label": "Target",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "Last run",
+              "type": "readonly"
+            },
+            {
+              "label": "Next run",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Landing and create-job captures show the 'Enable Cloud Scheduler API' page: all labels are reference (current console)."
+}

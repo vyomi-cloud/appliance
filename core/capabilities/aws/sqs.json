@@ -1,0 +1,146 @@
+{
+ "$doc": "Vyomi capability registry — SQS. One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "sqs.queue.crud": {
+  "title": "Queues (create, list, delete, standard + FIFO)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.queue.attributes": {
+  "title": "Queue configuration (visibility timeout, retention, delay, max size, wait time, encryption, access policy)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.queue.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.messages.send-receive": {
+  "title": "Send, receive, delete and purge messages",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_fifo_dlq_core.py"
+  ]
+ },
+ "sqs.queue.fifo": {
+  "title": "FIFO queues (message group ordering, content-based + explicit deduplication)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_fifo_dlq_core.py"
+  ]
+ },
+ "sqs.queue.dlq-redrive": {
+  "title": "Dead-letter queue redrive (automatic, after maxReceiveCount)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_fifo_dlq_core.py"
+  ]
+ },
+ "sqs.queue.redrive-allow-policy": {
+  "title": "Redrive allow policy",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.dlq.redrive-task": {
+  "title": "Dead-letter queue redrive tasks (StartMessageMoveTask)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A redrive task runs to completion immediately (moving every available message) instead of a real, rate-limited background task — Status is always COMPLETED, so there is no RUNNING task to track progress on or cancel with CancelMessageMoveTask, and MaxNumberOfMessagesPerSecond is accepted but has no effect."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_dlq_redrive_task_core.py"
+  ]
+ },
+ "sqs.sns-subscriptions": {
+  "title": "SNS subscriptions (subscribe/unsubscribe this queue to an SNS topic)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.lambda-triggers": {
+  "title": "Lambda triggers (event source mappings)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A message landing in the queue is invoked synchronously, one message per Lambda invocation, the instant SendMessage returns — not through a real batched, asynchronous poller. BatchSize / MaximumBatchingWindowInSeconds are stored but have no effect on batching. The message is deleted from the queue only if the invocation succeeds (LastProcessingResult reflects the real outcome); a function error leaves it for redelivery, same as real SQS."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_lambda_trigger_core.py"
+  ]
+ },
+ "sqs.eventbridge-pipes": {
+  "title": "EventBridge Pipes (queue as a pipe source)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A message is forwarded to the pipe's Target the instant SendMessage returns, not through a real background poller. Enrichment and InputTemplate/filtering on the pipe are stored but not applied — the raw message body is forwarded as-is. The message is removed from the source queue only once delivery to a real target (an existing queue/topic/function/state machine/stream) succeeds."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_eventbridge_pipe_core.py"
+  ]
+ },
+ "sqs.queue.metrics": {
+  "title": "Historical CloudWatch metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Published to CloudWatch (AWS/SQS, dimension QueueName) from real queue activity as it happens: NumberOfMessagesSent/Received/Deleted, SentMessageSize, NumberOfEmptyReceives (counters) and the Approximate*Visible/NotVisible/Delayed + AgeOfOldestMessage gauges recomputed from the queue's contents whenever they change. There is no 1-minute publish schedule, so a gauge only has points when the queue changed."
+  ],
+  "api": [
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_sweepa_core.py"
+  ]
+ }
+}

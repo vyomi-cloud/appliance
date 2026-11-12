@@ -241,3 +241,10 @@ ssh (laptop) ──TCP──▶ vyomi-tunnel :22000 ──WS /vm──▶ VM wor
 Control frames are JSON (`vm-listening`, `tcp-open`, `tcp-opened`, `tcp-close`, `ping`);
 data frames are binary `[u32 stream id][payload]`. The Cloudflare tunnel does not carry
 raw TCP, so SSH needs the local tunnel. Connect tabs show the exact command.
+
+## Codespace TTL keeper (`vyomi-tunnel keep`)
+
+Holds one ssh session to the Codespace host's sshd (reserved `codespace` target, architecture section 9b) and writes a line every
+~240 s (+-10 %), because GitHub's idle timer is reset by SSH traffic the client sends. Options: `--user vscode`, `--key <file>`,
+`--interval <seconds>`. Reconnects with back-off, gives up after 10 consecutive failed connects, stops at the token's `session_end`.
+Needs the 9b host-sshd target and an authorised key; not usable until 9b lands. Unit test: `node wasm/relay/test-keeper.mjs`.

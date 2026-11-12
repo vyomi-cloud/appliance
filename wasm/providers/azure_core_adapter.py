@@ -289,9 +289,9 @@ def resource_op(service, operation, name="", body=None):
         # Key Vault certificates: the shared certificates core (real self-signed X.509),
         # its state hung on the registered KV secrets store (public attr → persisted).
         try:
-            from core import azure_keyvault_certificates_core as _kvc
+            from core import azure_keyvault_x509_core as _kvc
         except ImportError:  # pragma: no cover - flat Pyodide layout
-            import azure_keyvault_certificates_core as _kvc  # type: ignore
+            import azure_keyvault_x509_core as _kvc  # type: ignore
         cs = _kvc.CertStore()
         cs.vaults = _STORES["kvsecrets"].__dict__.setdefault("kv_certs", {})
         vault = str(body.get("vault") or "")

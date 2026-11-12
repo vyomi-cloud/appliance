@@ -484,6 +484,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     nav#rail.collapsed .navitem span.lbl,nav#rail.collapsed .navhead{display:revert}
   }
 </style>
+  <script src="./mesh-link.js"></script>
   <script type="module" src="./nano-boot.js?v=4"></script>
   <script src="./nano-disclaimer.js"></script>
   <script src="./nano-back.js"></script>
@@ -1203,7 +1204,7 @@ function buildConnectCard(){
   var card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
   const head = el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI");
   card.append(head);
-  card.append(vyConnectSwitch({slot: head, accent:"#0078d4", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
+  card.append(vyConnectSwitch({slot: head, accent:"#0078d4", theme:"azure", build:(ep)=>vyConnectTabs({cloud:"azure", ep, sub: SUB, nano:true})}));
   return card;
 }
 

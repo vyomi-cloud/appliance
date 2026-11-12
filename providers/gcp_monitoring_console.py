@@ -68,6 +68,11 @@ def register(app, on_change=None):
     # ── native wire ───────────────────────────────────────────────────────
     async def native(request: Request):
         body = await request.body()
+        try:   # refresh request_count series from MEASURED gcp traffic before serving
+            from core import observability_core as _obsc
+            _obsc.publish_gcp(_obsc.default_store(), store(), _obsc.gcp_project_of(request.url.path))
+        except Exception:
+            pass
         before = set(store().alert_policies)
         r = core.dispatch(store(), request.method, request.url.path, dict(request.query_params),
                           dict(request.headers), body)
@@ -81,6 +86,10 @@ def register(app, on_change=None):
     # metricDescriptors ids carry slashes (custom.googleapis.com/a/b) → path converter
     for pat in ("/v3/projects/{project}/{collection}", "/v3/projects/{project}/{collection}/{rest:path}"):
         app.add_api_route(pat, native, methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+    # Dashboards and Snoozes are v1 APIs on the same engine (core routes them like Nano does).
+    for coll in ("dashboards", "snoozes"):
+        for pat in (f"/v1/projects/{{project}}/{coll}", f"/v1/projects/{{project}}/{coll}/{{rest:path}}"):
+            app.add_api_route(pat, native, methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
 
     # ── console REST ──────────────────────────────────────────────────────
     # The provider-alias middleware rewrites /api/gcp/<x> → /api/<x>, so the console's

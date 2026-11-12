@@ -45,6 +45,11 @@
   "category": "aws"
  },
  {
+  "name": "dax",
+  "label": "DaxStore",
+  "category": "aws"
+ },
+ {
   "name": "apigwv2",
   "label": "ApiGwV2Store",
   "category": "aws"
@@ -65,8 +70,23 @@
   "category": "aws"
  },
  {
+  "name": "asg",
+  "label": "AutoScalingStore",
+  "category": "aws"
+ },
+ {
+  "name": "dlm",
+  "label": "DlmStore",
+  "category": "aws"
+ },
+ {
   "name": "sfn",
   "label": "StepFunctionsStore",
+  "category": "aws"
+ },
+ {
+  "name": "cfn",
+  "label": "CloudFormationStore",
   "category": "aws"
  },
  {
@@ -97,6 +117,11 @@
  {
   "name": "gcp_mon",
   "label": "MonitoringStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_vertex",
+  "label": "VertexStore",
   "category": "gcp"
  },
  {
@@ -135,6 +160,46 @@
   "category": "gcp"
  },
  {
+  "name": "az_acr",
+  "label": "AcrRegistryStore",
+  "category": "azure"
+ },
+ {
+  "name": "sched",
+  "label": "SchedulerStore",
+  "category": "aws"
+ },
+ {
+  "name": "gcp_logging",
+  "label": "LoggingStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_rm",
+  "label": "ResourceManagerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_pam",
+  "label": "PamStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_compute_vm",
+  "label": "ComputeStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_compute",
+  "label": "ComputeStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_run",
+  "label": "RunStore",
+  "category": "gcp"
+ },
+ {
   "name": "az_blob",
   "label": "AzureBlobStore",
   "category": "azure"
@@ -155,13 +220,28 @@
   "category": "azure"
  },
  {
+  "name": "az_kvcerts",
+  "label": "InMemoryKvStore",
+  "category": "azure"
+ },
+ {
   "name": "az_queue",
   "label": "AzureQueueStore",
   "category": "azure"
  },
  {
+  "name": "az_table",
+  "label": "AzureTableStore",
+  "category": "azure"
+ },
+ {
   "name": "az_sb",
   "label": "InMemoryMessagingStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_graph",
+  "label": "GraphStore",
   "category": "azure"
  },
  {

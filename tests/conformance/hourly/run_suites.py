@@ -46,11 +46,19 @@ def scrub(text: str) -> str:
 
 
 def count(log: str) -> tuple[int, int]:
-    py = PYTEST_RE.findall(log)
+    # "error(s)" only counts on a pytest summary line (has "in 1.2s"); otherwise a check named
+    # "unsupported KQL -> 400 error" scored as 400 failures and zeroed a green Go suite.
+    py = []
+    for ln in log.splitlines():
+        timed = re.search(r"\bin \d+(?:\.\d+)?s\b", ln) is not None
+        py += [(n, k) for n, k in PYTEST_RE.findall(ln) if timed or k in ("passed", "failed")]
     if py:
         passed = sum(int(n) for n, k in py if k == "passed")
         failed = sum(int(n) for n, k in py if k != "passed")
-        return passed, failed
+        # A zero-total match is a "RESULT: PASS - ... (0 failed)" footer, not a pytest summary: fall through to the PASS/FAIL lines
+        # (returning 0/0 here scored every such suite "NO CHECKS RAN" = red although all its checks passed).
+        if passed + failed:
+            return passed, failed
     return len(PASS_RE.findall(log)), len(FAIL_RE.findall(log))
 
 

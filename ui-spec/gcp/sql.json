@@ -1,0 +1,804 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "sql",
+  "console_path": "/sql/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Get Started",
+      "page_id": "get-started"
+    },
+    {
+      "label": "Instances",
+      "page_id": "instances"
+    },
+    {
+      "label": "Backups",
+      "page_id": "backups"
+    },
+    {
+      "label": "{resource-name}",
+      "children": [
+        {
+          "label": "Overview",
+          "page_id": "instance-overview"
+        },
+        {
+          "label": "System insights",
+          "page_id": "system-insights"
+        },
+        {
+          "label": "Query insights",
+          "page_id": "query-insights"
+        },
+        {
+          "label": "Cloud SQL Studio",
+          "page_id": "cloud-sql-studio"
+        },
+        {
+          "label": "Connections",
+          "page_id": "connections"
+        },
+        {
+          "label": "Users",
+          "page_id": "users"
+        },
+        {
+          "label": "Databases",
+          "page_id": "databases"
+        },
+        {
+          "label": "Backups",
+          "page_id": "instance-backups"
+        },
+        {
+          "label": "Replicas",
+          "page_id": "replicas"
+        },
+        {
+          "label": "Operations",
+          "page_id": "operations"
+        }
+      ],
+      "expandable": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "get-started",
+      "kind": "dashboard",
+      "title": "Get Started",
+      "route": "/sql/get-started",
+      "captures": [
+        "A-sql/001-L1-landing",
+        "A-sql/003-L2-get-started"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Shown when the project has no instances (nav: Get Started, Backups).",
+      "sections": [
+        {
+          "title": "Experience Cloud SQL at no cost for 30 days",
+          "fields": [
+            {
+              "label": "Database Engine",
+              "type": "radio",
+              "default": "MySQL",
+              "options": [
+                "MySQL",
+                "PostgreSQL",
+                "SQL Server"
+              ]
+            },
+            {
+              "label": "Instance ID",
+              "type": "text",
+              "required": true,
+              "help": "Use lowercase letters, numbers, and hyphens. Start with a letter."
+            },
+            {
+              "label": "Password",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Generate"
+              ],
+              "help": "Set a password for the root user."
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "default": "us-east1 (South Carolina)"
+            }
+          ],
+          "actions": [
+            "Create free instance"
+          ]
+        },
+        {
+          "title": "Sandbox",
+          "actions": [
+            "Create Sandbox instance"
+          ]
+        },
+        {
+          "title": "Development",
+          "actions": [
+            "Create Development instance"
+          ]
+        },
+        {
+          "title": "Production",
+          "actions": [
+            "Create Production instance"
+          ]
+        },
+        {
+          "title": "Looking for other ways to get started?",
+          "actions": [
+            "Migrate database",
+            "Create custom instance"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "instances",
+      "kind": "list",
+      "title": "Instances",
+      "route": "/sql/instances",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create instance",
+        "Migrate data",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "multi",
+        "actions": [
+          "Restart",
+          "Stop",
+          "Start",
+          "Create clone",
+          "Create read replica",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter",
+        "preferences": true,
+        "empty_state_action": "Create instance",
+        "confidence": "medium",
+        "columns": [
+          "Instance ID",
+          "Cloud SQL edition",
+          "Type",
+          "Public IP address",
+          "Private IP address",
+          "Instance connection name",
+          "High availability",
+          "Location",
+          "Storage used",
+          "Labels",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "choose-engine",
+      "kind": "create",
+      "title": "Create an instance",
+      "route": "/sql/choose-instance-engine",
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Choose your database engine",
+          "fields": [
+            {
+              "label": "Engine",
+              "type": "button",
+              "options": [
+                "Choose MySQL",
+                "Choose PostgreSQL",
+                "Choose SQL Server"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-instance",
+      "kind": "create",
+      "title": "Create a PostgreSQL instance",
+      "route": "/sql/instances/create;engine=PostgreSQL",
+      "captures": [
+        "C-forms/05-sql-instances-create-engine-postgresql/step-1",
+        "C-forms/06-sql-instances-create-engine-mysql/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create instance",
+      "notes": "Capture blocked by 'Enable billing'. Same form for MySQL ('Create a MySQL instance') with MySQL versions.",
+      "sections": [
+        {
+          "title": "Choose a Cloud SQL edition",
+          "fields": [
+            {
+              "label": "Cloud SQL edition",
+              "type": "radio",
+              "default": "Enterprise Plus",
+              "options": [
+                "Enterprise Plus",
+                "Enterprise"
+              ]
+            },
+            {
+              "label": "Edition preset",
+              "type": "radio",
+              "default": "Production",
+              "options": [
+                "Production",
+                "Development",
+                "Sandbox"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Choose your database version",
+          "fields": [
+            {
+              "label": "Database version",
+              "type": "select",
+              "required": true,
+              "default": "PostgreSQL 17",
+              "options": [
+                "PostgreSQL 17",
+                "PostgreSQL 16",
+                "PostgreSQL 15",
+                "PostgreSQL 14",
+                "MySQL 8.4",
+                "MySQL 8.0",
+                "MySQL 5.7"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Instance info",
+          "fields": [
+            {
+              "label": "Instance ID",
+              "type": "text",
+              "required": true,
+              "constraints": "Lowercase letters, numbers, hyphens; start with a letter"
+            },
+            {
+              "label": "Password",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Generate"
+              ]
+            },
+            {
+              "label": "Password policy",
+              "type": "checkbox"
+            }
+          ]
+        },
+        {
+          "title": "Choose region and zonal availability",
+          "fields": [
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true,
+              "default": "us-central1 (Iowa)"
+            },
+            {
+              "label": "Zonal availability",
+              "type": "radio",
+              "default": "Multiple zones (Highly available)",
+              "options": [
+                "Single zone",
+                "Multiple zones (Highly available)"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Customize your instance",
+          "fields": [
+            {
+              "label": "Machine configuration",
+              "type": "radio",
+              "options": [
+                "Shared core",
+                "Dedicated core",
+                "Lightweight",
+                "Standard",
+                "High memory"
+              ]
+            },
+            {
+              "label": "Storage type",
+              "type": "radio",
+              "default": "SSD",
+              "options": [
+                "SSD",
+                "HDD"
+              ]
+            },
+            {
+              "label": "Storage capacity",
+              "type": "number",
+              "default": 10,
+              "help": "GB"
+            },
+            {
+              "label": "Enable automatic storage increases",
+              "type": "checkbox",
+              "default": true
+            },
+            {
+              "label": "Connections",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Private IP",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Public IP",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Authorized networks",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Network"
+                  ],
+                  "actions": [
+                    "Add a network"
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "Data protection",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Automate daily backups",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Enable point-in-time recovery",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Enable deletion protection",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "label": "Maintenance",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Preferred window",
+                  "type": "select",
+                  "default": "Any window"
+                }
+              ]
+            },
+            {
+              "label": "Flags",
+              "type": "table",
+              "columns": [
+                "Flag",
+                "Value"
+              ],
+              "actions": [
+                "Add a database flag"
+              ]
+            },
+            {
+              "label": "Query insights",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Labels",
+              "type": "tags",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "instance-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/sql/instances/{resource-name}/overview",
+      "breadcrumbs": [
+        "Cloud SQL",
+        "Instances",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit",
+        "Import",
+        "Export",
+        "Restart",
+        "Stop",
+        "Delete",
+        "Clone"
+      ],
+      "sections": [
+        {
+          "title": "Connect to this instance",
+          "fields": [
+            {
+              "label": "Public IP address",
+              "type": "readonly"
+            },
+            {
+              "label": "Private IP address",
+              "type": "readonly"
+            },
+            {
+              "label": "Connection name",
+              "type": "readonly"
+            },
+            {
+              "label": "Default TCP database port",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Configuration",
+          "fields": [
+            {
+              "label": "vCPUs",
+              "type": "readonly"
+            },
+            {
+              "label": "Memory",
+              "type": "readonly"
+            },
+            {
+              "label": "Data cache",
+              "type": "readonly"
+            },
+            {
+              "label": "Storage",
+              "type": "readonly"
+            },
+            {
+              "label": "Network throughput (MB/s)",
+              "type": "readonly"
+            },
+            {
+              "label": "Disk throughput (MB/s)",
+              "type": "readonly"
+            },
+            {
+              "label": "IOPS",
+              "type": "readonly"
+            },
+            {
+              "label": "Connections",
+              "type": "readonly"
+            },
+            {
+              "label": "Backup",
+              "type": "readonly"
+            },
+            {
+              "label": "Availability",
+              "type": "readonly"
+            },
+            {
+              "label": "Point-in-time recovery",
+              "type": "readonly"
+            },
+            {
+              "label": "Database version",
+              "type": "readonly"
+            },
+            {
+              "label": "Edition",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Operations and logs",
+          "table": {
+            "confidence": "low",
+            "columns": [
+              "Creation time",
+              "Completion time",
+              "Type",
+              "Status"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "users",
+      "kind": "list",
+      "title": "Users",
+      "route": "/sql/instances/{resource-name}/users",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Add user account"
+      ],
+      "table": {
+        "actions": [
+          "Change password",
+          "Delete"
+        ],
+        "columns": [
+          "User name",
+          "Host name",
+          "Authentication",
+          "Password status",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "add-user",
+      "kind": "create",
+      "title": "Add a user account to instance {resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Add",
+      "sections": [
+        {
+          "title": "User",
+          "fields": [
+            {
+              "label": "Authentication",
+              "type": "radio",
+              "default": "Built-in authentication",
+              "options": [
+                "Built-in authentication",
+                "Cloud IAM"
+              ]
+            },
+            {
+              "label": "User name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Password",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Host name",
+              "type": "radio",
+              "options": [
+                "Allow any host (%)",
+                "Restrict host by IP address or address range"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "databases",
+      "kind": "list",
+      "title": "Databases",
+      "route": "/sql/instances/{resource-name}/databases",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create database"
+      ],
+      "table": {
+        "actions": [
+          "Delete"
+        ],
+        "columns": [
+          "Name",
+          "Collation",
+          "Character set",
+          "Type",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "create-database",
+      "kind": "create",
+      "title": "Create a database",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Database",
+          "fields": [
+            {
+              "label": "Database name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Character set",
+              "type": "select",
+              "default": "UTF8"
+            },
+            {
+              "label": "Collation",
+              "type": "select",
+              "default": "Default collation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "instance-backups",
+      "kind": "list",
+      "title": "Backups",
+      "route": "/sql/instances/{resource-name}/backups",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create backup",
+        "Edit"
+      ],
+      "table": {
+        "actions": [
+          "Restore",
+          "Delete"
+        ],
+        "columns": [
+          "Created",
+          "Type",
+          "Description",
+          "Location",
+          "Status",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "connections",
+      "kind": "settings",
+      "title": "Connections",
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Summary",
+        "Networking",
+        "Security"
+      ],
+      "tab_panels": [
+        {
+          "label": "Networking",
+          "sections": [
+            {
+              "title": "Instance IP assignment",
+              "fields": [
+                {
+                  "label": "Private IP",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Public IP",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Authorized networks",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Network"
+                  ],
+                  "actions": [
+                    "Add a network"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replicas",
+      "kind": "list",
+      "title": "Replicas",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create read replica"
+      ],
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Instance ID",
+          "Type",
+          "Region",
+          "Replication lag",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": "operations",
+      "kind": "list",
+      "title": "Operations",
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Creation time",
+          "Completion time",
+          "Type",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": "backups",
+      "kind": "list",
+      "title": "Backups",
+      "captures": [
+        "A-sql/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/sql/backups"
+    },
+    {
+      "id": "system-insights",
+      "kind": "dashboard",
+      "title": "System insights",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "query-insights",
+      "kind": "dashboard",
+      "title": "Query insights",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "cloud-sql-studio",
+      "kind": "other",
+      "title": "Cloud SQL Studio",
+      "provenance": "reference",
+      "confidence": "medium"
+    }
+  ],
+  "gaps_note": "Get Started page + nav (Get Started, Backups) are from capture; create forms were billing-gated and no instance existed, so the rest is reference. Instance-level nav appears under the instance id once an instance is open."
+}

@@ -92,29 +92,9 @@ def sign_envelope(env: dict, version: str) -> dict:
     return env
 
 
-# ── retry timing ────────────────────────────────────────────────────────────────────────────
-def retry_delay(policy: dict, retry: int) -> float:
-    """Seconds to wait before retry number `retry` (1-based) under an SNS delivery policy:
-    no-delay retries, then min-delay retries, then the backoff curve, then max-delay retries."""
-    total = int(policy.get("numRetries", 3))
-    lo, hi = float(policy.get("minDelayTarget", 20)), float(policy.get("maxDelayTarget", 20))
-    n_none = int(policy.get("numNoDelayRetries", 0))
-    n_min = int(policy.get("numMinDelayRetries", 0))
-    n_max = int(policy.get("numMaxDelayRetries", 0))
-    if retry <= n_none:
-        return 0.0
-    if retry <= n_none + n_min:
-        return lo
-    if retry > total - n_max:
-        return hi
-    k = retry - n_none - n_min                         # 1-based position on the backoff curve
-    span = max(1, total - n_none - n_min - n_max)
-    fn = str(policy.get("backoffFunction", "linear")).lower()
-    if fn in ("exponential", "geometric"):
-        return min(hi, lo * (2 ** (k - 1)) if fn == "geometric" else lo * (2 ** k))
-    if fn == "arithmetic":
-        return min(hi, lo * k)
-    return lo + (hi - lo) * (k - 1) / max(1, span - 1) if span > 1 else lo   # linear
+# ── retry timing (shared with the Nano/dev_server synchronous simulation, so both
+# substrates honour the exact same healthyRetryPolicy schedule) ──────────────────────────────
+retry_delay = sns_core.retry_delay
 
 
 # ── one delivery attempt (blocking; runs in a worker thread) ────────────────────────────────
@@ -249,11 +229,17 @@ class Delivery:
             return                                   # unsubscribed meanwhile: drop
         policy = job.get("retry_policy") or {}
         retries = int(policy.get("numRetries", 3))
+        if job.get("ttl") is not None and self._age(job) > float(job["ttl"]):
+            self._log(job, "DeliveryFailure", f"message expired (TTL {job['ttl']}s) before delivery - dropped")
+            self._redrive(job, "TTL expired")
+            if msg is not None:
+                await msg.ack()
+            return
         try:
             note = await asyncio.get_running_loop().run_in_executor(None, self._attempt, job)
         except Exception as e:                        # noqa: BLE001 — any failure is a failed attempt
             err = str(e)[:300] or e.__class__.__name__
-            if attempt <= retries:
+            if attempt <= retries and not (job.get("ttl") is not None and self._age(job) + retry_delay(policy, attempt) > float(job["ttl"])):
                 delay = retry_delay(policy, attempt)
                 self._log(job, "DeliveryFailure", f"attempt {attempt} failed ({err}); retry {attempt} of {retries} in {delay:g}s")
                 if msg is not None:
@@ -272,6 +258,14 @@ class Delivery:
             await msg.ack()
 
     # helpers -----------------------------------------------------------------------------
+    @staticmethod
+    def _age(job: dict) -> float:
+        try:
+            t = _dt.datetime.fromisoformat(str(job.get("enqueued")).replace("Z", "+00:00"))
+            return max(0.0, (_dt.datetime.now(_dt.timezone.utc) - t).total_seconds())
+        except Exception:
+            return 0.0
+
     def _find(self, job: dict):
         for topic in list(self.store.topics.values()):
             sub = topic["subscriptions"].get(job["subscription_arn"])

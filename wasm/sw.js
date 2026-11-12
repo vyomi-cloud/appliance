@@ -28,20 +28,18 @@ const FIX = BASE + "/fixtures";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
-// ── Pyodide ready-gate ────────────────────────────────────────────────
+// ── Pyodide readiness ─────────────────────────────────────────────────
 // boot() in the console fires at parse and awaits its fetches, which can race
-// ahead of Pyodide loading. We hold /api/* dispatch until the page signals the
-// backend is up, so early calls just wait instead of failing.
-let _ready, readyPromise = new Promise((r) => (_ready = r));
+// ahead of Pyodide loading: early calls wait for a ready page (runInPage).
 // A page that reloads (or a second tab) boots its own Pyodide, so readiness is
 // per window client: dispatching to a client that hasn't signalled yet (or has
 // gone) would drop the message and surface as a 500 "backend timeout".
+// This set lives in the worker's memory, and the browser stops idle workers (and an
+// update replaces them) while pages keep running — so runInPage re-asks open pages
+// ("vyomi-ready-ping") instead of waiting for a boot-time signal that won't come again.
 const readyClients = new Set();
 self.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "pyodide-ready") {
-    if (e.source && e.source.id) readyClients.add(e.source.id);
-    _ready();
-  }
+  if (e.data && e.data.type === "pyodide-ready" && e.source && e.source.id) readyClients.add(e.source.id);
 });
 
 // ── Route table (built once from the dumped catalog) ──────────────────
@@ -149,8 +147,12 @@ async function nanoBackends() {
 }
 
 function json(obj, status, extraHeaders) {
-  return new Response(obj === null ? "" : JSON.stringify(obj),
-    { status: status || 200, headers: { "content-type": "application/json", ...(extraHeaders || {}) } });
+  // 101/204/205/304 must not carry a body — even "" — or the Response constructor throws
+  // (e.g. an ARM DELETE of an already-absent resource answering 204 became a 500).
+  const st = status || 200;
+  const noBody = [101, 204, 205, 304].includes(st);
+  return new Response(noBody ? null : (obj === null ? "" : JSON.stringify(obj)),
+    { status: st, headers: { "content-type": "application/json", ...(extraHeaders || {}) } });
 }
 
 // Decode a JWT's payload (no signature check — the token comes straight from the
@@ -162,6 +164,16 @@ function decodeJwt(token) {
     const p = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     return JSON.parse(decodeURIComponent(escape(atob(p))));
   } catch (_) { return null; }
+}
+// Portal account tier (Nano is served by the portal, same origin): a signed-in Pro/Max account with no activated licence still gets its plan.
+async function accountClaims() {
+  try {
+    const r = await fetch("/api/mesh/status", { credentials: "same-origin", cache: "no-store" });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j && (j.tier === "pro" || j.tier === "max")) return { tier: j.tier, primary_cloud: j.primary_cloud || "", sub: j.email || "" };
+  } catch (_) { /* offline / not signed in -> Free */ }
+  return null;
 }
 function licenseClaims(jwt) {
   const c = jwt ? decodeJwt(jwt) : null;
@@ -360,16 +372,19 @@ async function providerOf(clientId) {
 
 // Ask the page (where Pyodide lives) to run a dispatch tuple.
 async function runInPage(tuple) {
-  await readyPromise;
-  // Wait (bounded) for a live window whose Pyodide has signalled ready; after a
-  // reload the old client id is gone and the new page is still booting.
+  // Wait (bounded: a page that never gets ready is an error, not an endless spinner) for a
+  // live window whose Pyodide has signalled ready; after a reload the old client id is gone
+  // and the new page is still booting.
   let client = null;
   for (let i = 0; i < 240 && !client; i++) {
     const all = await self.clients.matchAll({ includeUncontrolled: true });
     const wins = all.filter((c) => c.type === "window");
     client = wins.find((c) => readyClients.has(c.id)) || null;
     if (!client && !wins.length && all[0]) client = all[0];
-    if (!client) await new Promise((r) => setTimeout(r, 250));
+    if (!client) {
+      if (i % 4 === 0) for (const w of wins) w.postMessage({ type: "vyomi-ready-ping" });
+      await new Promise((r) => setTimeout(r, 250));
+    }
   }
   if (!client) throw new Error("no client to run the in-browser backend");
   return await new Promise((resolve, reject) => {
@@ -429,7 +444,7 @@ async function route(method, path, body, query) {
   //     /api/azure/operations/{id}. The substrate-free AzureArm core serves both;
   //     its HTTP envelope (status + Azure-AsyncOperation/Location headers + body)
   //     is returned verbatim (see the __http handling in the fetch listener).
-  if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/api/azure/operations/")) {
+  if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/providers/Microsoft.ResourceGraph/") || path.startsWith("/api/azure/operations/")) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null, origin: self.location.origin + BASE }] };
   }
 
@@ -753,6 +768,16 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/azure\/vm\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
    || path.match(/^\/api\/console\/azurevm\/instances\/([^/]+)\/(exec)$/);
   if (m) return vmTuple("azure", dec(m[1]), m[2], method, body);
+  // Azure VM guest views (Inventory / Update Manager / Performance diagnostics): the appliance's scripts run in the VM.
+  m = path.match(/^\/api\/azure\/vm\/([^/]+)\/guest\/(inventory|performance|updates)$/);
+  if (m && (method === "GET" || (method === "POST" && m[2] === "updates"))) {
+    return { tuple: ["azure", "_vm", "Guest" + m[2][0].toUpperCase() + m[2].slice(1), { ref: dec(m[1]), body: method === "POST" ? (body || {}) : {} }] };
+  }
+  // AWS Systems Manager Session Manager console endpoints: sessions on running in-browser EC2 VMs.
+  if (path === "/api/ssm/sessions" && method === "POST") return { tuple: ["aws", "_vm", "SsmStart", { ref: "", body: body || {} }] };
+  if (path === "/api/ssm/sessions" && method === "GET") return { tuple: ["aws", "_vm", "SsmList", { ref: "", body: { state: (query && query.state) || "Active" } }] };
+  m = path.match(/^\/api\/ssm\/sessions\/([^/]+)\/(exec|terminate)$/);
+  if (m && method === "POST") return { tuple: ["aws", "_vm", m[2] === "exec" ? "SsmExec" : "SsmTerminate", { ref: dec(m[1]), body: body || {} }] };
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
   // EC2 instance detail tabs (core/aws_console_detail.py, same engine as offline).
   m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(details|network-interfaces|security|storage|user-data|iam-instance-profile|console-output)$/);
@@ -968,6 +993,18 @@ async function reqLogLoad() {
   if (_reqLoaded) return; _reqLoaded = true;
   try { const old = await metaGet("reqlog"); if (Array.isArray(old)) REQLOG.unshift(...old.slice(-REQLOG_MAX)); } catch (_) {}
 }
+// Automatic issue reporting (scrub + send only; the consent dialog lives on the page).
+try { importScripts("./issue-reporter.js"); } catch (_) {}
+function reportFailure(kind, path, method, status, message, code) {
+  try {
+    const parts = path.split("/").filter(Boolean);              // /api/<cloud>/<service>/...
+    const cloud = /^(aws|gcp|azure)$/.test(parts[1] || "") ? parts[1] : "unknown";
+    const service = cloud === "unknown" ? (parts[1] || "platform") : (parts[2] || "platform");
+    self.VyomiIssueReporter && self.VyomiIssueReporter.send({
+      kind, cloud, service, action: method + " " + service, status, code, message });
+  } catch (_) {}
+}
+
 function recordReq(method, path, query, status, ms) {
   if (path.startsWith("/api/metrics")) return;
   const c = classifyReq(path); if (!c) return;
@@ -999,8 +1036,64 @@ async function metricsSeries(q) {
            total_requests: points.reduce((a, p) => a + p.requests, 0), total_errors: points.reduce((a, p) => a + p.errors, 0) };
 }
 
+// ── v4 native-wire prefix: <BASE>/_wire/<native path> ─────────────────
+// The v4 consoles speak each cloud's NATIVE wire (S3 REST+XML, X-Amz-Target JSON,
+// Query+XML, GCP REST, Azure data plane) at /_wire/<native path>. We strip the
+// prefix and run the request through the page's AwsWireRouter (wire_adapter.py)
+// on the SAME shared registry the relay serves an SDK/CLI from, so console and
+// CLI see one state (persisted + cross-tab synced by the normal dispatch bridge).
+// Azure ARM (/subscriptions/*) is not in the router; it rides the existing ARM
+// tuple (same AzureArm store as the /subscriptions/* console path). Bodies cross
+// the bridge as base64 (binary-safe). Mirrors the appliance's routes/wire_prefix.py.
+function bufFromB64(b64) {
+  const bin = atob(b64 || "");
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function handleWire(request, url) {
+  const wirePath = url.pathname.slice((BASE + "/_wire").length) || "/";
+  if (wirePath === "/_wire" || wirePath.startsWith("/_wire/"))
+    return json({ error: { code: "WirePrefixRecursion", message: "Nested /_wire/ prefixes are not allowed." } }, 400);
+  const method = request.method.toUpperCase();
+  const query = Object.fromEntries(url.searchParams.entries());
+  const hasBody = !["GET", "HEAD"].includes(method);
+  const raw = hasBody ? await request.arrayBuffer() : new ArrayBuffer(0);
+  if (wirePath.startsWith("/subscriptions/")) {
+    let body = null;
+    if (raw.byteLength) { const t = new TextDecoder().decode(raw); try { body = JSON.parse(t); } catch (_) { body = { raw: t }; } }
+    const res = await runInPage(["azure", "_arm", method, { path: wirePath, query, body }]);
+    const h = (res && res.__http) || { status: 200, body: res };
+    return json(h.body === undefined ? null : h.body, h.status, h.headers);
+  }
+  const headers = {};
+  request.headers.forEach((v, k) => { headers[k] = v; });
+  const res = await runInPage(["_wire", "wire", method,
+    { method, path: wirePath, query, headers, body_b64: raw.byteLength ? b64FromBuf(raw) : "" }]);
+  if (!res || typeof res.status !== "number") return json({ ok: false, error: (res && res.error) || "bad /_wire response" }, 500);
+  const h = new Headers();
+  const nullBody = method === "HEAD" || [101, 204, 205, 304].includes(res.status);
+  // A bodied response gets its length from the body; a HEAD has none, so keep the engine's
+  // Content-Length (HeadObject / GetBlobProperties sizes would otherwise read as 0).
+  for (const [k, v] of Object.entries(res.headers || {}))
+    if (!/^(transfer-encoding|connection|set-cookie)$/i.test(k) && (method === "HEAD" || !/^content-length$/i.test(k))) { try { h.set(k, v); } catch (_) {} }
+  return new Response(nullBody ? null : bufFromB64(res.body_b64), { status: res.status, headers: h });
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  // v4 consoles' native-wire prefix (see handleWire above).
+  if (url.origin === self.location.origin && (url.pathname === BASE + "/_wire" || url.pathname.startsWith(BASE + "/_wire/"))) {
+    const _tw = Date.now();
+    event.respondWith((async () => {
+      let _res;
+      try { _res = await handleWire(event.request, url); }
+      catch (e) { _res = json({ ok: false, error: String(e) }, 500); }
+      try { recordReq(event.request.method, url.pathname.slice(BASE.length), url.search.slice(1), _res.status, Date.now() - _tw); } catch (_) {}
+      return _res;
+    })());
+    return;
+  }
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
   const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname === BASE + "/subscriptions" ||
@@ -1014,6 +1107,13 @@ self.addEventListener("fetch", (event) => {
     const _res = await (async () => {
     try {
       const method = event.request.method;
+      // Issue reporting talks to the PORTAL (session cookie), not the in-browser backend.
+      if (apiPath.startsWith("/api/issues/")) {
+        const init = { method, credentials: "include", headers: { "Content-Type": "application/json" } };
+        if (method !== "GET" && method !== "HEAD") init.body = await event.request.text();
+        try { return await fetch(url.origin + apiPath, init); }
+        catch (_) { return json({ ok: false, detail: "portal unreachable" }, 502); }
+      }
       if (apiPath === "/api/metrics/series" && method === "GET") return json(await metricsSeries(url.searchParams));
       // ── console-next SPA (slice 1) ──────────────────────────────────
       // The new SPA (served at BASE/console-next/) talks ONLY to /api/console/*.
@@ -1230,13 +1330,26 @@ self.addEventListener("fetch", (event) => {
       // proxies the REAL portal device-flow (same origin — Nano is served by the
       // control-plane portal). The license JWT the portal issues drives the tier.
       if (apiPath === "/api/runtime/tier" && method === "GET") {
-        const c = licenseClaims(await metaGet("license_jwt"));
-        return json({ active_tier: (c && c.tier) || "free",
+        const c = licenseClaims(await metaGet("license_jwt")) || await accountClaims();
+        const t = (c && c.tier) || "free";
+        // Managed Kubernetes (AKS/GKE/EKS) is Pro/Max/Enterprise only; Pro gets its primary cloud. Same rule as
+        // core/k8s_tier_gate.py, which enforces it inside the Python cores; no licence = Free = locked.
+        const _t = String(t).toLowerCase(), _pc = (c && c.primary_cloud) || "";
+        const _k8s = {};
+        for (const cl of ["azure", "gcp", "aws"]) {
+          const ok = ["max", "enterprise"].includes(_t) || (_t === "pro" && _pc === cl);
+          _k8s[cl] = { locked: !ok, required_tiers: _t === "pro" ? ["max", "enterprise"] : ["pro", "max", "enterprise"],
+                       reason: ok ? "" : "Managed Kubernetes requires the Pro, Max or Enterprise plan (Pro: primary cloud only)." };
+        }
+        // Pro = ONE cloud: same shape the appliance's /api/runtime/tier returns, so clouds.html / the cloud picker lock the other two.
+        return json({ active_tier: t,
                       all_tiers: ["free", "lite", "pro", "max"],
-                      primary_cloud: (c && c.primary_cloud) || "" });
+                      primary_cloud: (c && c.primary_cloud) || "",
+                      kubernetes_locked: _k8s,
+                      active_policy: { providers: t === "pro" && c && c.primary_cloud ? "primary_cloud_only" : "all" } });   // a Pro licence with no cloud yet is pinned on first use (mesh-link.js)
       }
       if (apiPath === "/api/license/status" && method === "GET") {
-        const c = licenseClaims(await metaGet("license_jwt"));
+        const c = licenseClaims(await metaGet("license_jwt")) || await accountClaims();
         if (!c) return json({ license: null, active: false, active_tier: "free" });
         return json({ license: c, active: true, active_tier: c.tier || "free",
                       tier: c.tier || "free", issued_to: c.sub || c.issued_to || "" });
@@ -1257,6 +1370,11 @@ self.addEventListener("fetch", (event) => {
       // production). Where this SW does see it (a bare local Nano server) there is no portal: say "not
       // signed in" rather than a 501 that every console's account menu would trip over.
       if (apiPath === "/api/auth/me" && method === "GET") return json({ authenticated: false });
+      // Same for the other portal-only GETs the consoles poll (Mesh state, account Mesh settings, runtime profile):
+      // with no portal there is nothing to say. An empty 200 is exactly what mesh-link.js / vyomi-appbar.js read as
+      // "the portal can't say" (account = null, no session, no sandbox flags); a 501 tripped every console's API check.
+      if (method === "GET" && (apiPath === "/api/mesh/status" || apiPath === "/api/runtime/profile"
+          || apiPath === "/api/account/mesh" || apiPath.indexOf("/api/account/mesh/") === 0)) return json({});
       if (apiPath === "/api/auth/logout" && method === "POST") {
         try { await metaPut("license_jwt", ""); } catch (_) {}
         return json({ ok: true });
@@ -1348,6 +1466,9 @@ self.addEventListener("fetch", (event) => {
         if (!["aws", "gcp", "azure"].includes(provider))
           return json({ ok: false, detail: { reason: "provider must be aws, gcp, or azure" } }, 400);
         const s = mkSpace(provider, (body.name || "").trim(), (body.region || "").trim());
+        // Mesh pack: the space's home is fixed at creation (absent = this browser).
+        if (body.home && body.home.type === "mesh" && body.home.mesh_id)
+          s.home = { type: "mesh", mesh_id: String(body.home.mesh_id), mesh_name: String(body.home.mesh_name || body.home.mesh_id) };
         try { await spacePut(s); await metaPut("active", s.space_id); }
         catch (e) { return json({ ok: false, detail: { reason: "could not persist space: " + e } }, 500); }
         nanoWsPush();   // fire-and-forget: keep the synced workspace current (no-op if signed out)
@@ -1396,8 +1517,13 @@ self.addEventListener("fetch", (event) => {
       }
       // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
       // so the adapter result is the response body verbatim.
+      if (res && res.__http && res.__http.status >= 500) {
+        const hb = res.__http.body || {};
+        reportFailure("http", apiPath, method, res.__http.status, hb.message || hb.detail || "", hb.code);
+      }
       return json(res, res && res.ok === false ? (res.http_status || 404) : 200);
     } catch (e) {
+      reportFailure("exception", apiPath, event.request.method, 500, String(e), "");
       return json({ ok: false, error: String(e) }, 500);
     }
     })();

@@ -13,29 +13,55 @@
 // tests / advanced use):
 //   relay → worker : {id, method, path, query, headers, body(base64)}
 //   worker → relay : {id, status, headers, body(base64)}
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
 import { installPGlite } from "../pglite-loader.js";
+import { createAmqpBridge } from "./amqp-bridge.js";            // Service Bus AMQP 1.0 streams tunnelled in by the relay
+import { installParquet } from "../parquet/parquet-loader.js";   // RDS exports: real Parquet (lazy)
 
-const PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+// Same-origin runtime first (wasm/fetch_pyodide.py vendors it at <bundle>/vendor/pyodide/),
+// the public CDN as fallback — a CDN stall would otherwise leave the relay unable to boot.
+const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+const PYODIDE_LOCAL = new URL("../vendor/pyodide/", import.meta.url).href;
+// pyodide-source.json (fetch_pyodide.py flips it to {"local": true}) says whether this bundle carries it.
+const pyodideIndex = () => fetch(new URL("../pyodide-source.json", import.meta.url).href, { cache: "no-store" })
+  .then((r) => r.json()).then((j) => (j && j.local ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
 // Cores live at ../core/ relative to THIS worker (works at web root AND /nano/).
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
-  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
-  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
-  "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
+  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
+  "llm_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "backup_vaults_core.py",
+  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
+  "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "lease.py", "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
-  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
-  "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
-  "gcp_compute_core.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "kinesis_core.py", "cloudwatch_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
-  "azure_sql_core.py", "azure_iam_core.py",
-  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py",
-  "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
+  "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "event_bus_engine.py", "gcp_eventarc_core.py", "gcp_apigateway_core.py", "gcp_apigateway_gateway.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py", "gcp_osconfig_core.py", "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",
+  "azure_netaccess.py", "azure_diag_pipeline.py", "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py",
+  "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "gateway_common.py", "apigateway_gateway.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
+  "vpc_lattice_dataplane.py",
+  "eventbridge_partner_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
+  "azure_cmk_core.py", "azure_sql_security_core.py", "azure_storage_svc_core.py", "azure_sql_ext_core.py", "azure_sql_mirror_core.py", "azure_sql_core.py", "azure_iam_core.py", "azure_acr_core.py", "azure_graph_ext_core.py", "azure_graph_core.py", "azure_cdn_edge_core.py",
+  "azure_app_core.py", "nano_vm_runtime_core.py", "azure_webapp_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
+  "azure_eventgrid_core.py", "azure_locks_core.py", "azure_templates_core.py", "azure_health_core.py", "azure_support_core.py", "azure_monitorproducts_core.py", "azure_devsimplified_core.py", "azure_alerts_core.py",
+  "k8s_yaml.py", "azure_aks_k8s_core.py", "kube_state_core.py", "azure_aks_ext_core.py", "azure_promql.py", "azure_webhost_core.py", "azure_autoscale_core.py", "kubescape_catalog.py", "kubescape_core.py", "azure_security_core.py",   // AKS objects + Defender for Cloud
+  "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_pcap_core.py", "azure_workbooks_core.py", "azure_rgtools_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webauth_core.py", "azure_aksmon_core.py", "azure_streamanalytics_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_apim_gateway_core.py", "azure_tasks_core.py", "aws_codeconn_core.py", "lambda_cicd_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py", "azure_kudu_core.py", "azure_diagnose_core.py", "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "azure_arm_ext_core.py", "azure_keyvault_x509_core.py", "azure_arm_core.py", "azure_lb_core.py", "azure_disks_core.py", "azure_compute_disks_vm.py", "azure_attackpath_core.py", "azure_nm_engine_core.py",   // Azure ARM control plane — nano_registry imports it
+  "azure_firewall_eval.py",
+  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",
+  "azure_cfgext_core.py",
+  "azure_backup_core.py",
+  "azure_sqlbackup_core.py",
+  "azure_dpbackup_core.py",
+  "ce_core.py",
+  "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",
+  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
+
+// core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
+// lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 const bc = new BroadcastChannel("nano-relay");
 // Defaults; the page (footer) may override any of these via the `start` message
@@ -78,6 +104,7 @@ setInterval(announce, 3000);
 let py = null, handle = null, booting = null, ws = null;
 let monitorTimer = null, localFails = 0, cloudFailStreak = 0;
 let scheduleStoresSave = () => {};   // real impl installed once Pyodide is up (store-sync in bootPyodide)
+let amqp = null;                    // AMQP-over-relay bridge (installed with Pyodide)
 let saveNow = async () => {};        // likewise: persist + notify now (awaited before each relayed response)
 let refreshStores = async () => {};  // likewise: re-read the shared snapshot (before each relayed request)
 
@@ -108,7 +135,9 @@ function externalFor(mode) {
 // the like would reject every time zone but UTC). py.loadPackage("tzdata") never settles
 // in this module worker, so unpack the wheel Pyodide's own lock file names, and never let
 // it hold up the tunnel (20 s cap; without it only non-UTC zones are affected).
+let PYODIDE_INDEX_URL = "";   // set by bootPyodide(); installTzdata() runs later in a different scope
 async function installTzdata() {
+  const PYODIDE_INDEX = PYODIDE_INDEX_URL;
   const job = (async () => {
     const lock = await (await fetch(PYODIDE_INDEX + "pyodide-lock.json")).json();
     const file = lock.packages && lock.packages.tzdata && lock.packages.tzdata.file_name;
@@ -123,14 +152,25 @@ async function bootPyodide() {
   if (booting) return booting;
   booting = (async () => {
     log("loading Pyodide…", "dim");
+    const PYODIDE_INDEX = PYODIDE_INDEX_URL = await pyodideIndex();
+    const { loadPyodide } = await import(PYODIDE_INDEX + "pyodide.mjs");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
     await installTzdata();
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
+  try { installParquet(new URL("../parquet/", import.meta.url).href); } catch (e) { /* exports then fail with a clear cause */ }
+    try {   // Kubescape (OPA-wasm) evaluator for Defender for Cloud's Kubernetes posture — optional
+      const { installKubescape } = await import(new URL("../kubescape/ks-eval.mjs", import.meta.url).href);
+      await installKubescape(new URL("../kubescape/", import.meta.url).href);
+    } catch (e) { log("Kubescape evaluator unavailable: " + e, "dim"); }
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
     for (const f of CORES)
       py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+    for (const f of CORE_PKGS) {
+      try { py.FS.mkdir("/core/" + f.split("/")[0]); } catch (e) { /* exists */ }
+      py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+    }
     py.runPython(`
 import sys, json, base64; sys.path.insert(0, "/")
 from core.aws_wire_router import AwsWireRouter
@@ -147,6 +187,11 @@ if _USE_PGLITE:
     _STORES["rds"] = PGliteSqlStore(ns="rds")             # RDS = real Postgres (shared seam)
     _STORES["gcp_sql"] = PGliteSqlStore(ns="gcp_sql")     # Cloud SQL = real Postgres too (MySQL instances keep their dialect fallback)
 _ROUTER = AwsWireRouter(stores=_STORES)
+from core.azure_servicebus_amqp import NanoBridge as _NanoBridge
+_NanoBridge.install(lambda: _ROUTER.az_sb)    # Service Bus AMQP 1.0 engine on the router's store; the relay bridges the bytes in
+from core import k8s_tier_gate as _k8sg
+_k8sg.arm_nano()          # managed Kubernetes = Pro/Max/Enterprise; fails closed (Free) until the licence tier is read below
+def _set_k8s_tier(tier, primary): _k8sg.set_tier(tier, primary)
 def _capture(): return json.dumps(_persist.capture_registry())
 def _restore(blob_json):
     try: _persist.restore_registry(json.loads(blob_json or "{}"))
@@ -167,6 +212,10 @@ async def _handle(req_json):
 import builtins; builtins._handle = _handle
 builtins._capture = _capture; builtins._restore = _restore
 `);
+    // API Gateway data plane: backend calls go out through the local tunnel / hosted relay (wasm/gw-bridge.js). Workers have no localStorage: use the page-provided config.
+    try { import(new URL("../gw-bridge.js", import.meta.url).href).then((m) => m.installGatewayBridge({ local: () => state.cfg.localExternal, hosted: () => state.cfg.cloudExternal, session: () => state.session })).catch((e) => log("gateway bridge skipped: " + e, "dim")); } catch (_) {}
+    // Host access to in-browser databases (psql / mysql / ORMs via vyomi-tunnel): see wasm/db-bridge.js.
+    try { import(new URL("../db-bridge.js", import.meta.url).href).then((m) => m.installDbBridge(py)).catch((e) => log("db bridge skipped: " + e, "dim")); } catch (_) {}
     // CPU: time spent running Python here (each CLI / SDK request), reported every 5 s with
     // the heap size — the Health view's Host utilization reads it (sw.js /api/host/cpu).
     let _busyMs = 0, _busySince = performance.now();
@@ -208,15 +257,32 @@ builtins._capture = _capture; builtins._restore = _restore
     // Publish only a change from the state last saved or restored here: a read must never write
     // back a snapshot older than the console's latest change (it would undo it). Same as nano-boot.js.
     let _lastStores = null;
+    let _saveGen = 0;   // a snapshot read before a save started is stale: applying it would "delete" just-saved keys (see nano-boot.js restoreShared)
+    const restoreShared = async () => { const g = _saveGen; const j = await idbGet(_SK); if (g === _saveGen) resStores(j); };
     const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); _lastStores = capStores(); } catch (_) {} };
-    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; _saveGen++; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     saveNow = () => saveStores(true);
-    // PGlite publishes a host port after the console created the database: save + broadcast so the console shows it.
+    amqp = createAmqpBridge({ py, send: (data) => { try { ws && ws.send(data); } catch (_) {} },
+                              onActivity: () => { state.lastActivity = Date.now(); }, onDirty: () => scheduleStoresSave() });
     globalThis.__nano_stores_dirty = () => { try { scheduleStoresSave(); } catch (_) {} };
-    refreshStores = async () => { if (_restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } catch (_) {} finally { _restoring = false; } };
-    if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
+    refreshStores = async () => { if (_restoring) return; _restoring = true; try { await restoreShared(); } catch (_) {} finally { _restoring = false; } };
+    if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { await restoreShared(); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
+    // Licence tier -> managed-Kubernetes gate. The SW keeps the portal-issued JWT in the same nano-spaces/meta store.
+    const _syncK8sTier = async () => {
+      let tier = "free", primary = "";
+      try {
+        const jwt = await idbGet("license_jwt");
+        const c = jwt ? JSON.parse(decodeURIComponent(escape(atob(jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))))) : null;
+        if (c && !(c.exp && c.exp * 1000 < Date.now())) { tier = c.tier || "free"; primary = c.primary_cloud || ""; }
+      } catch (_) { /* unreadable -> Free (locked) */ }
+      if (tier === "free") {      // same fallback as sw.js accountClaims(): a signed-in Pro/Max portal account without an activated licence
+        try { const r = await fetch("/api/mesh/status", { credentials: "same-origin", cache: "no-store" }); const j = r.ok ? await r.json() : null; if (j && (j.tier === "pro" || j.tier === "max")) { tier = j.tier; primary = j.primary_cloud || ""; } } catch (_) {}
+      }
+      try { py.runPython(`_set_k8s_tier(${JSON.stringify(String(tier))}, ${JSON.stringify(String(primary))})`); } catch (_) {}
+    };
+    await _syncK8sTier(); setInterval(_syncK8sTier, 30000);
     // Live engine status for Dashboard > Service status (same check as nano-boot.js).
     const writeEngines = async () => {
       try { await idbPut("engines:relay", { ts: Date.now(), stores: JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())")) }); }
@@ -236,7 +302,7 @@ function connect() {
   state.phase = "connecting"; announce();
   const url = wsUrlFor(state.mode);
   const sock = new WebSocket(url);
-  ws = sock;
+  sock.binaryType = "arraybuffer"; ws = sock;
   let opened = false;
   sock.onopen = () => {
     if (sock !== ws) { try { sock.close(1000, "stale"); } catch (_) {} return; }
@@ -275,8 +341,10 @@ function connect() {
   };
   sock.onerror = () => { if (sock === ws) log("ws error [" + state.mode + "]", "err"); };
   sock.onmessage = async (ev) => {
+    if (typeof ev.data !== "string") { try { amqp && amqp.binary(ev.data); } catch (e) { log("amqp: " + e, "err"); } return; }
     let req; try { req = JSON.parse(ev.data); } catch { return; }
     if (req.type === "ping") { sock.send(JSON.stringify({ type: "pong" })); return; }
+    if (req.type === "amqp-open" || req.type === "amqp-close") { try { amqp && amqp.text(req); } catch (e) { log("amqp: " + e, "err"); } return; }
     try {
       await refreshStores();   // serve the latest shared state: a save from a stale copy would undo other tabs' changes
       const resp = JSON.parse(await handle(JSON.stringify(req)));

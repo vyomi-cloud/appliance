@@ -43,6 +43,8 @@ func (c *Config) dispatchInner(cmd string, args []string) int {
 	}
 
 	switch cmd {
+	case "mesh":
+		return c.meshCmd(args)
 	case "up":
 		return fail(c.invokeCompose("up", append([]string{"--build", "--force-recreate"}, args...)...))
 	case "down":
@@ -89,12 +91,14 @@ func (c *Config) dispatchOuter(cmd string, args []string) int {
 		return c.dispatchRedis(args)
 	}
 
+	if cmd == "mesh" {
+		return c.meshCmd(args)
+	}
 	if lifecycle[cmd] && c.resolveSubstrate() == "docker" {
 		return fail(c.invokeDockerSubstrate(cmd, args))
 	}
 	return c.dispatchMultipass(cmd, args)
 }
-
 
 func (c *Config) dispatchRedis(args []string) int {
 	if len(args) == 0 {

@@ -78,6 +78,13 @@ before = len(st.issued)
 check("delegates chain recorded", call(st, "generateAccessToken", {"scope": ["a"], "delegates": [d]}, resolver=res)[0] == 200
       and list(st.issued.values())[-1]["delegates"] == ["other@demo.iam.gserviceaccount.com"] and len(st.issued) == before + 1)
 check("unknown delegate -> 403", call(st, "generateAccessToken", {"scope": ["a"], "delegates": ["projects/-/serviceAccounts/ghost@demo.iam.gserviceaccount.com"]}, resolver=res)[0] == 403)
+
+# A real SDK URL-escapes the service account email in the path (RFC 3986: "@" -> "%40",
+# as every google-cloud-iamcredentials client does) — the dispatcher must decode it before
+# matching the SA, not 400 on the still-escaped string.
+encoded_path = "/v1/projects/-/serviceAccounts/robot%40demo.iam.gserviceaccount.com"
+s, r = call(st, "generateAccessToken", {"scope": ["a"]}, path=encoded_path, resolver=res)
+check("URL-encoded service account email in the path is decoded, not rejected", s == 200, r)
 check("malformed delegate -> 400", call(st, "generateAccessToken", {"scope": ["a"], "delegates": ["nope"]})[0] == 400)
 
 # console

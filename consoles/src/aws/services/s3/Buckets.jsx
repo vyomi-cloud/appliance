@@ -1,0 +1,70 @@
+import { useState } from "react";
+import Button from "@cloudscape-design/components/button";
+import Link from "@cloudscape-design/components/link";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import Tabs from "@cloudscape-design/components/tabs";
+import ResourceTable from "../../kit/ResourceTable.jsx";
+import { fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { AccountSnapshot } from "./Sweep.jsx";
+import { ExternalAccessSummary } from "./InsightPages.jsx";
+import { DirectoryBuckets } from "./AccountPages.jsx";
+import { useAsync } from "../../../common/useAsync.js";
+import { useNotify } from "../../../common/notify.jsx";
+import { follow, href } from "../../../common/router.js";
+import * as api from "./api.js";
+
+export default function Buckets() {
+  const notify = useNotify();
+  const [sel, setSel] = useState([]);
+  const { data = [], loading, error, reload } = useAsync(async () => {
+    const bs = await api.listBuckets();
+    const regions = await Promise.all(bs.map((b) => api.bucketRegion(b.name)));
+    return bs.map((b, i) => ({ ...b, region: regions[i] }));
+  });
+
+  return (
+    <SpaceBetween size="l">
+      <Tabs
+        tabs={[
+          {
+            id: "general", label: "General purpose buckets",
+            content: (
+              <ResourceTable
+                variant="container"
+                resourceName="General purpose buckets"
+                info={<Link variant="info">Info</Link>}
+                description="Buckets are containers for data stored in S3."
+                items={data}
+                loading={loading}
+                error={error}
+                onRefresh={reload}
+                selectionType="single"
+                selectedItems={sel}
+                onSelectionChange={setSel}
+                filterPlaceholder="Find buckets by name"
+                columns={[
+                  { id: "name", header: "Name", isRowHeader: true, sortingField: "name", cell: (b) => <Link href={href("s3", "buckets", b.name)} onFollow={follow}>{b.name}</Link> },
+                  { id: "region", header: "AWS Region", sortingField: "region", cell: (b) => b.region || "-" },
+                  { id: "created", header: "Creation date", sortingField: "created", cell: (b) => fmtDate(b.created) },
+                ]}
+                actions={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button disabled={sel.length !== 1} onClick={async () => { try { await navigator.clipboard.writeText(`arn:aws:s3:::${sel[0].name}`); notify.success("ARN copied"); } catch { notify.info(`arn:aws:s3:::${sel[0].name}`, "ARN"); } }}>Copy ARN</Button>
+                    <Button disabled={sel.length !== 1} href={sel.length === 1 ? href("s3", "bucket", sel[0].name, "empty") : undefined} onFollow={follow}>Empty</Button>
+                    <Button disabled={sel.length !== 1} href={sel.length === 1 ? href("s3", "bucket", sel[0].name, "delete") : undefined} onFollow={follow}>Delete</Button>
+                    <Button variant="primary" href={href("s3", "create")} onFollow={follow}>Create bucket</Button>
+                  </SpaceBetween>
+                }
+                empty={{ title: "No buckets", subtitle: "You don't have any buckets.", action: <Button href={href("s3", "create")} onFollow={follow}>Create bucket</Button> }}
+              />
+            ),
+          },
+          { id: "directory", label: "Directory buckets", content: <DirectoryBuckets /> },
+        ]}
+      />
+      <AccountSnapshot buckets={data} loading={loading} />
+      <ExternalAccessSummary />
+    </SpaceBetween>
+  );
+}

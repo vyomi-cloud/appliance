@@ -81,15 +81,18 @@ const MODULES = [
   // its Pyodide adapter. console_next_manifest imports `from core import
   // console_conformance` (vendored under /core, see CORES), NO FastAPI.
   "console_next_manifest.py", "providers/console_next_adapter.py",
+  "providers/wire_adapter.py",   // v4 /_wire/* native-wire prefix → AwsWireRouter on the shared registry
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
-  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
-  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
-  "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
-  "lease.py", "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
-  "aws_console_detail.py",   // AWS resource-detail tab model (EC2 placement/ENI/volumes/attributes, IAM resource access)
+  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
+  "llm_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "backup_vaults_core.py",
+  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
+  "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
+  "aws_console_detail.py",   // main-side Nano cores (merged)
+  "lease.py", "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "autoscaling_core.py", "gcp_gke_dataplane_core.py", "dlm_core.py", "aws_eks_core.py", "aws_eks_auth.py", "ram_core.py", "dax_core.py",
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it
@@ -97,15 +100,38 @@ const CORES = [
   "azure_appconfiguration_core.py",   // Azure App Configuration engine — loaded before azure_arm_core which delegates to it
   "azure_keyvault_certificates_core.py",   // Azure Key Vault certificates (self-signed X.509) — imported by the Azure adapter
   "azure_arm_ext_core.py",   // Azure ARM locks / identity / health / NICs / run commands — loaded before azure_arm_core which delegates to it
+  "nano_vm_runtime_core.py",   // Container Apps replicas / guest views / SSM sessions on the in-browser VM (imports its engines lazily)
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
-  "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_cost_core.py",   // Azure Cost Management + Consumption engine — loaded before azure_arm_core which delegates to it
+  "azure_acr_core.py",   // Azure Container Registry engine (registries, repositories, webhooks) — loaded before azure_arm_core which delegates to it
+  "azure_webapp_core.py",   // Azure App Service engine (Microsoft.Web: web apps + function apps, plans) — loaded before azure_arm_core which delegates to it
+  "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
+  "azure_health_core.py",      // Resource health + Advisor (derived from the stored ARM resources)
+  "azure_templates_core.py",   // Export template engine (ARM→Bicep/Terraform) — lazily imported by azure_arm_core
+  "azure_support_core.py",  // Microsoft.Support support requests (imported by azure_arm_core)
+  "azure_alerts_core.py",  // Microsoft.AlertsManagement alert evaluation + processing rules (imported by azure_arm_core; needs monitor + operationalinsights first)
+  "azure_devsimplified_core.py",    // Dev Simplified Defender insights, Fabric mirror config, Trivy IaC scan hook (imported by azure_arm_core)
+  "azure_monitorproducts_core.py",  // Microsoft.Monitor accounts + Microsoft.Dashboard grafana (imported by azure_arm_core)
+  "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
+  "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
+  "azure_aks_k8s_core.py", "kube_state_core.py", "azure_aks_ext_core.py", "azure_promql.py", "azure_webhost_core.py", "azure_autoscale_core.py",   // AKS Kubernetes object store + kubectl (runCommand) — loaded before azure_arm_core
+  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",   // image vulnerability scan + security detection engines (azure_security_core imports them)
+  "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
+  "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
+  "azure_security_core.py", "azure_attackpath_core.py", "azure_security_automations_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
+  "azure_diag_pipeline.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_pcap_core.py", "azure_workbooks_core.py", "azure_rgtools_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webauth_core.py", "azure_aksmon_core.py", "azure_streamanalytics_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_apim_gateway_core.py", "azure_tasks_core.py", "aws_codeconn_core.py", "lambda_cicd_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py", "azure_kudu_core.py", "azure_diagnose_core.py", "azure_nm_engine_core.py", "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "azure_keyvault_x509_core.py", "azure_arm_core.py", "azure_lb_core.py", "azure_disks_core.py", "azure_compute_disks_vm.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_firewall_eval.py",
+  "azure_cfgext_core.py",
+  "azure_backup_core.py",
+  "azure_sqlbackup_core.py",
+  "azure_dpbackup_core.py",
+  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
-  "function_shims.py", "gcp_console_tabs.py", "instance_catalog.py", "nano_triggers.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
+  "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "gcp_eventarc_core.py", "gcp_apigateway_core.py", "gcp_apigateway_gateway.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py", "gcp_osconfig_core.py", "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
-  "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_queue_core.py",
+  "azure_netaccess.py", "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py",
   // Generic child/sub-resource store (SQL databases+firewall rules, SB queues) +
   // durable editable settings — azure_core_adapter imports it. Pure stdlib; its
   // state rides az_cosmos's public `nano_sub` attr so nano_persist persists it.
@@ -114,8 +140,13 @@ const CORES = [
   // lock-step with the relay + build_cores (usable now via the Nano relay;
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
-  "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "gcp_compute_core.py",   // main-side Nano cores (merged)
+  "azure_graph_ext_core.py", "azure_graph_core.py",
+  "azure_cdn_edge_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
+  "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
+  "gateway_common.py", "apigateway_gateway.py", "apigateway_core.py", "apigatewayv2_core.py", "event_bus_engine.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "azure_cmk_core.py", "azure_sql_security_core.py", "azure_storage_svc_core.py", "azure_sql_ext_core.py", "azure_sql_mirror_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
+  "vpc_lattice_dataplane.py",
+  "eventbridge_partner_core.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
@@ -125,7 +156,13 @@ const CORES = [
   // nano_events (per-resource cloudsim activity log) MUST precede nano_registry,
   // which imports `from core.nano_events import EventStore`.
   "nano_events.py", "nano_registry.py", "nano_persist.py",
+  // v4 /_wire/*: the relay's native-wire front door (+ its rds_data dep), imported lazily by wire_adapter.
+  "rds_data_core.py", "aws_wire_router.py",
 ];
+// core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
+// lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
+
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
 // these steps report the real work + timings to it, then close it when ready.
@@ -149,13 +186,35 @@ function banner(text, bad) {
 async function bootBackend() {
   banner("Nano: booting Pyodide (in-browser cloud backend)…");
   let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
-  const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
-  const py = await loadPyodide();
-  // Time-zone database: Pyodide's zoneinfo has no zone files without it (Cloud
-  // Scheduler, Monitoring and the like would reject every zone but UTC).
-  try { await py.loadPackage("tzdata"); } catch (_) {}
+  // Same-origin runtime first (wasm/fetch_pyodide.py vendors it) — a CDN stall would leave Nano
+  // stuck here; the public CDN stays as the fallback when the bundle doesn't carry it.
+  const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+  const PYODIDE_LOCAL = new URL(BASE + "/vendor/pyodide/", location.origin).href;
+  // pyodide-source.json (tracked; wasm/fetch_pyodide.py flips it to {"local": true}) says whether this
+  // bundle carries the runtime, so a bundle without it never fires a request that is expected to 404.
+  const pyodideBase = await fetch(BASE + "/pyodide-source.json", { cache: "no-store" })
+    .then((r) => r.json()).then((j) => (j && j.local ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+  const { loadPyodide } = await import(pyodideBase + "pyodide.mjs");
+  const py = await loadPyodide({ indexURL: pyodideBase });
+  try { await py.loadPackage("tzdata"); } catch (_) {}   // zoneinfo database (Cloud Scheduler / Monitoring time zones)
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
+  // sqlite3 is a separate Pyodide package (vendored by wasm/fetch_pyodide.py): the SQL data
+  // planes (Azure SQL query editor, RDS Data API) need it — the relay worker loads it too.
+  try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("[nano] sqlite3 load skipped:", e); }
+  // Kubernetes posture for Defender for Cloud: the regolibrary (Kubescape) Rego controls compiled to
+  // WebAssembly with OPA (wasm/kubescape/). kubescape_core calls globalThis.__vyomi_kubescape_eval
+  // synchronously; if this fails to load, Defender reports the scanner as unavailable (never fakes).
+  try {
+    const { installKubescape } = await import(BASE + "/kubescape/ks-eval.mjs");
+    await installKubescape(new URL(BASE + "/kubescape/", location.origin).href);
+  } catch (e) { console.warn("[nano] Kubescape evaluator unavailable:", e); }
+  // RDS StartExportTask writes real Parquet: vendored parquet-wasm + apache-arrow
+  // (wasm/parquet/), lazy-loaded on the first export (this only installs the bridge).
+  try {
+    const { installParquet } = await import(BASE + "/parquet/parquet-loader.js");
+    installParquet(new URL(BASE + "/parquet/", location.origin).href);
+  } catch (e) { console.warn("[nano] Parquet bridge unavailable (RDS exports will fail):", e); }
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
@@ -171,7 +230,20 @@ async function bootBackend() {
   py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
   for (const c of CORES)
     py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  for (const c of CORE_PKGS) {
+    try { py.FS.mkdir("/core/" + c.split("/")[0]); } catch (e) { /* exists */ }
+    py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  }
   st.ok();
+  // RDS + Cloud SQL Postgres run on REAL Postgres (PGlite) in the page too, so host apps (psql/psycopg/JDBC) reach them through the
+  // mesh/tunnel (pglite-loader publishes each database on a host port). MySQL-family instances keep the sqlite store behind the
+  // dialect translator (no MySQL WebAssembly build). Must run BEFORE the kernel step below: the first nano_registry.get() builds the
+  // RDS/Cloud SQL stores with the right engine, and every adapter caches them at import (a later swap left the console on a dead store).
+  try {
+    const pgOk = await Promise.race([import("./pglite-loader.js").then((m) => m.installPGlite()), new Promise((r) => setTimeout(() => r(false), 12000))]);
+    if (pgOk) py.runPython("import sys; sys.path.insert(0, '/')\nfrom core import nano_registry as _r\n_r.USE_PGLITE = True");
+    else console.warn("[nano] PGlite unavailable: RDS/Cloud SQL keep the sqlite engine");
+  } catch (e) { console.warn("[nano] PGlite skipped:", e); }
   st = K.step("kernel", "importing the engines and wiring the console router");
   py.runPython(`
 import sys; sys.path.insert(0, "/")
@@ -185,17 +257,129 @@ def _disp(payload_json):
     # objects survive — embedding JSON.stringify(params) as Python source would
     # turn true/false/null into NameErrors. (Same pattern as relay/nano-endpoint.)
     d = json.loads(payload_json)
+    from core import nano_vm_runtime_core as _nvr
+    try:
+        out = _disp0(d)
+    except _nvr.NeedVm:       # a hook needs the in-browser VM: the page runs the queued scripts and replays this request
+        return json.dumps({"__need_vm": True})
+    post = _nvr.take_post()   # fire-and-forget scripts (launch/stop a replica process), run by the page after the response
+    if post:
+        o = json.loads(out)
+        if isinstance(o, dict):
+            o["__vm_post"] = post
+            out = json.dumps(o)
+    return out
+def _disp0(d):
     prov = d["provider"]
     # console-next SPA (slice 1): the "_console" pseudo-provider is NOT a cloud in
     # the registry — it serves /api/console/* (capabilities now; facade data plane
     # is slice 2). Route it straight to the console_next adapter.
     if prov == "_console":
         return json.dumps(_CN.handle(d["op"], d.get("params") or {}))
+    if prov == "_wire":   # v4 consoles: native wire via the relay's AwsWireRouter (same stores)
+        from wasm.providers import wire_adapter as _W
+        return json.dumps(_W.handle(d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
-import builtins; builtins._disp = _disp
+async def _adisp(payload_json):
+    # The native wire on the ASYNC router path (AwsWireRouter.ahandle): RDS snapshots
+    # read the engine and StartExportTask awaits the browser's Parquet writer.
+    d = json.loads(payload_json)
+    if d["provider"] == "_wire":
+        from wasm.providers import wire_adapter as _W
+        return json.dumps(await _W.ahandle(d.get("params") or {}))
+    return _disp(payload_json)
+import builtins; builtins._disp = _disp; builtins._adisp = _adisp
+# In-browser VM runtime for Container Apps / Azure VM guest views / SSM sessions (core/nano_vm_runtime_core.py).
+try:
+    import js
+    from core import nano_vm_runtime_core as _nvr
+    def _nvr_host():
+        nv = getattr(js.globalThis, "NanoVM", None)
+        return json.loads(str(nv.hostVm())) if nv is not None else None
+    def _nvr_running(cloud):
+        nv = getattr(js.globalThis, "NanoVM", None)
+        return json.loads(str(nv.runningOf(cloud))) if nv is not None else []
+    _nvr.attach(_nvr_host, _nvr_running)
+    builtins._nvr = _nvr
+except Exception as _e:
+    print("[nano] VM runtime not attached:", _e)
+# Managed Kubernetes (AKS/GKE/EKS) is Pro/Max/Enterprise only (core/k8s_tier_gate.py). Armed BEFORE any request is
+# served and FAILING CLOSED (Free) until the licence tier arrives from the service worker below.
+from core import k8s_tier_gate as _k8sg
+_k8sg.arm_nano()
 `);
+  const syncK8sTier = async () => {
+    try {
+      // CI bypass (runners only; localhost): localStorage.vyomi_ci_tier, set by the Playwright init script.
+      const ci = (location.hostname === "localhost" || location.hostname === "127.0.0.1") ? localStorage.getItem("vyomi_ci_tier") : null;
+      if (ci) { py.runPython(`from core import k8s_tier_gate as _g; _g.set_tier(${JSON.stringify(ci)}, "")`); return; }
+      const t = await (await fetch(BASE + "/api/runtime/tier", { cache: "no-store" })).json();
+      py.runPython(`from core import k8s_tier_gate as _g; _g.set_tier(${JSON.stringify(String(t.active_tier || "free"))}, ${JSON.stringify(String(t.primary_cloud || ""))})`);
+    } catch (_) { /* unknown tier -> stays Free (locked) */ }
+  };
+  await syncK8sTier();
+  setInterval(syncK8sTier, 30000);
+  globalThis.vyomiSyncK8sTier = syncK8sTier;      // called after (de)activation so the gate follows the licence at once
   st.ok();
+  // ── Local-LLM bridge (WebLLM) ───────────────────────────────────────
+  // Bedrock / Vertex AI / Azure OpenAI answer from core/llm_core. On Nano the only possible model is one the BROWSER runs, so
+  // a page that has one registers it here: vyomiRegisterLLM({model, chat(reqJson) -> Promise<json string>}) or, when the browser
+  // has WebGPU, vyomiEnableWebLLM() loads @mlc-ai/web-llm and registers a small instruct model. With neither, llm_core reports
+  // no backend and every model call returns the honest ModelNotReady error (never a canned answer).
+  py.runPython(`
+import json, builtins
+async def _llm_bridge_chat(msgs, system, max_tokens, temperature, stop):
+    import js
+    eng = getattr(js.globalThis, "__vyomiLlm", None)
+    if eng is None:
+        raise RuntimeError("no in-browser model is registered")
+    r = await eng.chat(json.dumps({"messages": msgs, "max_tokens": max_tokens, "temperature": temperature, "stop": stop}))
+    return json.loads(str(r))
+def _llm_bridge_set(model):
+    from core import llm_core
+    llm_core.set_async_backend(_llm_bridge_chat if model else None, model=model or None)
+def _llm_bridge_status():
+    from core import llm_core
+    return json.dumps(llm_core.status(probe=False))
+builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_bridge_status
+`);
+  globalThis.vyomiRegisterLLM = (engine) => {
+    globalThis.__vyomiLlm = engine || null;
+    py.runPython(`_llm_bridge_set(${JSON.stringify(engine ? String(engine.model || "webllm") : "")})`);
+  };
+  globalThis.vyomiLlmStatus = () => JSON.parse(py.runPython("_llm_bridge_status()"));
+  // The four web LLMs the Nano catalogue lists (core/ai_model_catalog.py, web mode). id = catalogue id, mlc = WebLLM model_id.
+  globalThis.vyomiWebLLMModels = [
+    { id: "smollm2-360m", name: "SmolLM2 360M", mlc: "SmolLM2-360M-Instruct-q4f16_1-MLC", size: "~0.3 GB" },
+    { id: "qwen2.5-0.5b", name: "Qwen2.5 0.5B", mlc: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", size: "~0.4 GB" },
+    { id: "llama3.2-1b", name: "Llama 3.2 1B", mlc: "Llama-3.2-1B-Instruct-q4f16_1-MLC", size: "~0.7 GB" },
+    { id: "qwen2.5-1.5b", name: "Qwen2.5 1.5B", mlc: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", size: "~1 GB" },
+  ];
+  let __webllmEngine = null;
+  globalThis.vyomiEnableWebLLM = async (modelId, onProgress) => {
+    const known = globalThis.vyomiWebLLMModels.find((m) => m.id === modelId || m.mlc === modelId);
+    if (known) modelId = known.mlc;
+    if (!("gpu" in navigator)) throw new Error("WebGPU is not available in this browser, so WebLLM cannot run here.");
+    const webllm = globalThis.webllm || await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm");
+    const list = (webllm.prebuiltAppConfig && webllm.prebuiltAppConfig.model_list) || [];
+    const id = modelId || (list.find((m) => /SmolLM2-360M-Instruct/i.test(m.model_id)) || list.find((m) => /Qwen2\.5-0\.5B-Instruct/i.test(m.model_id)) || {}).model_id;
+    if (!id) throw new Error("No small WebLLM model is listed by this WebLLM build.");
+    if (__webllmEngine) { try { await __webllmEngine.unload(); } catch (_) {} __webllmEngine = null; }   // one model resident at a time
+    const engine = await webllm.CreateMLCEngine(id, { initProgressCallback: (p) => onProgress && onProgress(p) });
+    __webllmEngine = engine;
+    vyomiRegisterLLM({
+      model: (globalThis.vyomiWebLLMModels.find((m) => m.mlc === id) || {}).id || id,
+      chat: async (reqJson) => {
+        const q = JSON.parse(reqJson);
+        const r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false });
+        const c = r.choices[0];
+        return JSON.stringify({ text: c.message.content || "", input_tokens: r.usage && r.usage.prompt_tokens, output_tokens: r.usage && r.usage.completion_tokens, finish_reason: c.finish_reason === "length" ? "length" : "stop" });
+      },
+    });
+    return id;
+  };
+
   // ── Live engine status (Dashboard > Service status) ─────────────────
   // This runtime checks every registry store (built + state reads back) and
   // records the result; the SW's /api/runtime/readiness builds the cards from
@@ -222,6 +406,30 @@ import builtins; builtins._disp = _disp
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
+  // `_wire` (v4 native-wire consoles) runs on the async router so awaiting engines
+  // (PGlite snapshots, the Parquet writer for RDS exports) work from the console too.
+  const adispatch0 = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
+    : JSON.parse(await py.runPythonAsync(
+      `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
+  // VM-backed data planes (Container Apps replicas, job executions, SSM targets): the Python engine asks for scripts to run
+  // in the in-browser VM (it cannot await the VM mid-request), the page runs them and replays the SAME request; scripts the
+  // engine queued for after the response (launch / stop a replica process) run once it has answered.
+  const vmScripts = (list) => Promise.all((list || []).map((r) => window.NanoVM.runScript(r.vm, r.script, r.timeout_ms)));
+  const adispatch = async (prov, svc, op, params) => {
+    if (prov === "_wire" || !window.NanoVM || !window.NanoVM.enabled()) return adispatch0(prov, svc, op, params);
+    try { py.runPython("_nvr.begin()"); } catch (_) { return adispatch0(prov, svc, op, params); }   // runtime not attached
+    let out = null;
+    for (let i = 0; i < 16; i++) {
+      out = await adispatch0(prov, svc, op, params);
+      if (!out || !out.__need_vm) break;
+      const need = JSON.parse(py.runPython("import json as _j; _j.dumps(_nvr.take_need())"));
+      const res = await vmScripts(need);
+      need.forEach((r, k) => py.runPython(`_nvr.set_result(${JSON.stringify(r.key)}, ${JSON.stringify(JSON.stringify(res[k]))})`));
+    }
+    if (out && out.__need_vm) return { ok: false, error: "The in-browser VM did not answer in time." };
+    if (out && out.__vm_post) { const post = out.__vm_post; delete out.__vm_post; await vmScripts(post); }
+    return out;
+  };
 
   // ── Live resource census ──────────────────────────────────────────
   // The dashboard page has no Pyodide, so it can't see the resources THIS
@@ -273,31 +481,69 @@ import builtins; builtins._disp = _disp
       _lastStores = captureStores();
     } catch (_) {}
   }
+  // A restore reads the snapshot (async) and applies it later. If a save marked keys as synced in
+  // between, the stale blob would look like "someone deleted those keys" and drop a resource that
+  // was created a moment ago (an AKS cluster PUT → 200, then GET → 404 while the console polled).
+  // So a blob read before a save started is discarded.
+  let _saveGen = 0;
+  async function restoreShared() {
+    const g = _saveGen;
+    const blob = await nbMetaGet(STORE_KEY);
+    if (g === _saveGen) restoreStores(blob);
+  }
   async function writeStores(notify) {
     try {
       const j = captureStores(); if (!j || j === _lastStores) return;   // unchanged: nothing to publish
-      _lastStores = j;
+      _lastStores = j; _saveGen++;
       py.runPython("from core import nano_persist; nano_persist.mark_saved_registry()");
       await nbMetaPut(STORE_KEY, j);
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
     } catch (_) { /* best-effort */ }
   }
-  const scheduleStoresSave = () => {
-    if (_storeTimer) return;
-    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, 400);
+  // Reads batch their (no-op) saves on a 400 ms debounce; a WRITE saves on the next tick, so a
+  // reload / tab close right after creating something no longer drops it (the 400 ms window
+  // used to lose writes made just before a reload).
+  const scheduleStoresSave = (write) => {
+    if (_storeTimer && !write) return;
+    if (_storeTimer) clearTimeout(_storeTimer);
+    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, write ? 0 : 400);
   };
+  const isWrite = (tuple) => tuple[0] === "_wire"
+    ? !["GET", "HEAD", "OPTIONS"].includes(String(tuple[2]).toUpperCase())
+    : !/^(get|list|describe|head|query|search|read)/i.test(String(tuple[2] || ""));
   if (_bc) _bc.onmessage = async (e) => {
     if (!e.data || e.data.k !== STORE_KEY || _restoring) return;
     _restoring = true;
-    try { restoreStores(await nbMetaGet(STORE_KEY)); } finally { _restoring = false; }
+    try { await restoreShared(); } finally { _restoring = false; }
   };
   // Boot: rehydrate the persisted dataset into the shared registry BEFORE releasing
   // /api/* requests, so the console opens with its previous resources intact.
   st = K.step("store", "restoring your resources from IndexedDB");
   try { restoreStores(await nbMetaGet(STORE_KEY)); st.ok(); } catch (e) { st.ok("starting fresh"); }
 
+  // AWS Systems Manager Session Manager (console endpoints /api/ssm/sessions*): sessions live in the shared ssh_access store
+  // (Python); a session's commands run in the target EC2 instance's in-browser VM through the VM host's exec.
+  const ssmSession = async (op, params) => {
+    const body = params.body || {};
+    const hostErr = (status, detail) => ({ __http: { status, body: { detail }, headers: {} } });
+    const ssm = (o, b) => JSON.parse(py.runPython(`_nvr.ssm_op(${JSON.stringify(o)}, ${JSON.stringify(JSON.stringify(b))})`));
+    if (op === "SsmStart") {
+      const r = ssm("Start", body);
+      return r.ok ? r : { __http: { status: r.status || 400, body: { __type: r.code, message: r.message + (r.code === "TargetNotConnected"
+        ? " In Nano an instance is a managed node only while its in-browser VM is running (turn on in-browser VMs, then launch it)." : "") }, headers: {} } };
+    }
+    if (op === "SsmList") return ssm("List", body);
+    if (op === "SsmTerminate") { const r = ssm("Terminate", { session_id: params.ref }); return r.ok ? r : hostErr(r.status || 400, r.message || r.code); }
+    const t = ssm("Target", { session_id: params.ref });          // SsmExec
+    if (!t.ok) return hostErr(t.status || 404, t.detail || "SessionNotFound");
+    const r = await window.NanoVM.handle("aws", "Exec", { ref: t.target, body: { command: String(body.command || "") } });
+    return r && r.__http ? r : { session_id: params.ref, ...r };
+  };
+
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", async (ev) => {
+    // A restarted service worker has forgotten who is ready; this page still is.
+    if (ev.data && ev.data.type === "vyomi-ready-ping") { ev.source && ev.source.postMessage({ type: "pyodide-ready" }); return; }
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
     try {
@@ -310,26 +556,37 @@ import builtins; builtins._disp = _disp
       // snapshot's shallow dict-merge would otherwise REPLACE a parent record
       // (e.g. a Cloud SQL instance) and drop a sub-resource just added to it
       // (a database) before the debounced save landed.
+      // A pending debounced save means a READ-classified op (e.g. an S3 Access Grants GetDataAccess GET,
+      // which mints credentials) changed local state that the snapshot does not hold yet: flush it first,
+      // otherwise the restore below would overwrite it with the stale snapshot and lose it.
+      if (_storeTimer && !_restoring) { clearTimeout(_storeTimer); _storeTimer = null; await writeStores(true); }
       if (!_restoring) {
         _restoring = true;
-        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+        try { await restoreShared(); } catch (_) {} finally { _restoring = false; }
       }
       const [prov, svc, op, params] = ev.data.tuple;
       // In-browser VM compute (wasm/vm): connect-info / key / exec are answered by
       // the VM host; any other mutating op may have created/stopped/deleted an
       // instance, so the host reconciles its VMs against the stores right after.
       const out = svc === "_vm"
-        ? (window.NanoVM ? await window.NanoVM.handle(prov, op, params || {})
+        ? (window.NanoVM ? await (/^Ssm/.test(op) ? ssmSession(op, params || {}) : window.NanoVM.handle(prov, op, params || {}))
                          : { __http: { status: 409, body: { detail: { error: "NoRuntime", hint: "In-browser VM compute is not loaded in this view." } } } })
-        : dispatch(prov, svc, op, params || {});
+        : await adispatch(prov, svc, op, params || {});
       if (window.NanoVM && svc !== "_vm" && !/^(GET|HEAD|List|Get|Describe|Query|Scan)/.test(op)) window.NanoVM.kick();
       scheduleCensus();       // any op may have mutated state — refresh the footprint
-      // Persist + notify the other contexts BEFORE answering: when the console sees the
-      // response, the change is already in the shared snapshot, so a CLI call right after
-      // reads it (and a read changes nothing, so it publishes nothing — writeStores).
-      await writeStores(true);
+      // Persist + notify the other contexts BEFORE answering a write: when the console sees the
+      // response, the change is already in the shared snapshot, so a CLI call right after reads it.
+      if (isWrite(ev.data.tuple)) await writeStores(true); else scheduleStoresSave(false);
       port.postMessage(out);
     } catch (e) {
+      // Unhandled engine exception in the in-browser backend: report it (scrubbed) —
+      // the same failure class the appliance middleware reports as a 5xx.
+      try {
+        const t = (ev.data.tuple || []);
+        window.VyomiIssueReporter && window.VyomiIssueReporter.send({
+          kind: "exception", cloud: t[0], service: t[1], action: String(t[2] || "dispatch"),
+          status: 500, message: String(e && e.message || e), stack: String(e && e.stack || e) });
+      } catch (_) {}
       port.postMessage({ ok: false, error: String(e) });
     }
   });
@@ -341,11 +598,15 @@ import builtins; builtins._disp = _disp
     sc.src = BASE + "/vm/nano-vm-host.js"; sc.onload = res; sc.onerror = res;
     document.head.appendChild(sc);
   });
+  if (window.NanoVM) window.NanoVM.setPyHooks({
+    guestCommand: (kind, body) => String(py.runPython(`_nvr.guest_command(${JSON.stringify(kind)}, ${JSON.stringify(body)})`)),
+    guestParse: (kind, out) => String(py.runPython(`_nvr.guest_parse(${JSON.stringify(kind)}, ${JSON.stringify(out)})`)),
+  });
   if (window.NanoVM) window.NanoVM.init({
     listDesired: async () => {
       if (!_restoring && !_storeTimer) {
         _restoring = true;
-        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+        try { await restoreShared(); } catch (_) {} finally { _restoring = false; }
       }
       const r = dispatch("aws", "_vms", "List", {});
       return r && r.ok ? r.items : null;
@@ -361,6 +622,13 @@ import builtins; builtins._disp = _disp
   const reg = await navigator.serviceWorker.ready;
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
   K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
+  // Public readiness signal (tests, embedding pages): the in-browser backend now answers.
+  // Host access to in-browser databases: psql / mysql / ORMs reach RDS + Cloud SQL instances through `vyomi-tunnel` (db-bridge.js).
+  // API Gateway data plane: backend calls leave the tab through the local tunnel / hosted relay (core/gcp_apigateway_gateway.ahandle).
+  try { import("./gw-bridge.js").then((m) => m.installGatewayBridge()).catch((e) => console.warn("[nano] gateway bridge skipped:", e)); } catch (_) {}
+  try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
+  window.__vyomiNanoReady = true;
+  try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 

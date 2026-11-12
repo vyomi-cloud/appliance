@@ -1,0 +1,347 @@
+{
+  "azure.aks.backup": {
+    "tier": "pro",
+    "title": "Azure Backup for AKS",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "A backup vault, AKS backup policy and backup instance are real ARM resources validated like the RP (see azure.aks.backup in aks.json); no volume snapshot is taken from a running cluster."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_backup_core.py"
+    ]
+  },
+  "azure.aks.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_kudu_diagnose.py",
+      "tests/conformance/test_azure_tasks_core.py"
+    ]
+  },
+  "azure.apim.capacity": {
+    "title": "Capacity gauge",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The Capacity gauge is derived from the gateway's own recorded request rate over the last 60 s against a nominal requests-per-second per unit of the service tier (azure_apim_gateway_core); it is a simulator throughput model, not CPU or memory of a real gateway."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_apim_gateway_core.py"
+    ]
+  },
+  "azure.apim.create_monitoring": {
+    "title": "Wiring a new service to Log Analytics, Application Insights or Defender for APIs at create time",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The create wizard's Monitor + secure tab really creates the diagnostic setting (Log Analytics), the Application Insights logger and the Defender for APIs plan; the wiring is created together with the service request, not as one atomic deployment, so a failure part-way leaves the service created."
+    ],
+    "tests": [
+      "consoles/tests/smoke-azure-apim-monitor-secure.mjs"
+    ]
+  },
+  "azure.appconfiguration.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_kudu_diagnose.py",
+      "tests/conformance/test_azure_tasks_core.py"
+    ]
+  },
+  "azure.appservices.webapp.create_options": {
+    "title": "Create wizard: linked database and secure unique default hostname",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The Create Web App wizard provisions a linked Azure SQL or Cosmos DB database, writes the connection string, links Application Insights and honours 'secure unique default hostname' (azure.appservices.webapp.createdatabase); PostgreSQL, MySQL and Redis options are not offered."
+    ],
+    "tests": [
+      "consoles/tests/smoke-azure-kudu.mjs"
+    ]
+  },
+  "azure.cognitiveservices.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_kudu_diagnose.py",
+      "tests/conformance/test_azure_tasks_core.py"
+    ]
+  },
+  "azure.cosmos.tools": {
+    "title": "Diagnose and solve problems, Tasks, Support + Troubleshooting",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open.",
+      "Support + Troubleshooting opens the simulator's own support-request panel; nothing is sent to Microsoft."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
+    ]
+  },
+  "azure.cosmos.container_blades": {
+    "title": "Browse and Scale blades for a single container",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The Browse blade lists a container's items through the Cosmos data plane and the Scale blade charts request-unit consumption from the account's metrics and sets throughput; the standalone container-level Settings blade is a Data Explorer tab."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_core.py"
+    ]
+  },
+  "azure.entra.bitlocker_keys": {
+    "title": "BitLocker recovery-key escrow (informationProtection/bitlocker/recoveryKeys)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Escrow store only: keys are generated in the real recovery-password format and each read is audited, but no disk is encrypted and nothing is unlocked by a key. Escrow is triggered through a Vyomi-specific POST, because real escrow comes from the Windows OS client."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_graph_ext.py"
+    ]
+  },
+  "azure.entra.toolbar_actions": {
+    "title": "Entra grid toolbar actions",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Bulk operations run on the real Graph $batch endpoint and per-user MFA state is stored and enforced by the password grant; Export Data Settings, Columns, Preview features and Got feedback remain unmodelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_graph_ext.py"
+    ]
+  },
+  "azure.keyvaults.tools": {
+    "title": "Diagnose and solve problems, Tasks",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
+    ]
+  },
+  "azure.keyvaults.deleted_objects": {
+    "title": "Manage deleted keys and secrets (recover / purge)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Soft-deleted keys and secrets are kept (with deletedDate and a 90-day scheduledPurgeDate) and can be listed, read, recovered or purged over the native /deletedkeys and /deletedsecrets REST. The retention clock is informational: nothing is purged automatically when scheduledPurgeDate passes, and re-creating a deleted name overwrites it instead of returning 409. Deleted certificates are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py",
+      "tests/conformance/test_azure_keyvault_keys_core.py",
+      "tests/conformance/test_azure_keyvault_secrets_core.py"
+    ]
+  },
+  "azure.keyvaults.resource_access_flags": {
+    "title": "Enable access for VMs, ARM template deployment and disk encryption",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The Access configuration blade stores enabledForDeployment, enabledForDiskEncryption and enabledForTemplateDeployment on the vault through ARM and reads them back; no VM, template-deployment or disk-encryption flow consults them, so the flags are configuration only."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_keyvault_access_core.py"
+    ]
+  },
+  "azure.sql.integrations": {
+    "title": "Integrations (Mirror database in Fabric, Power BI; Stream Analytics, Power Apps, Power Automate)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Mirror database is REAL replication into a Parquet landing zone: a worker (core/azure_sql_mirror_core.py) reads the tables from the SQL engine and writes Parquet files into the simulator's Blob store, incrementally (unchanged tables skipped, changed tables rewritten with row insert/remove counts, dropped tables removed) and keeps the sync status beside the files. It needs a synchronous Parquet engine, so it runs on the offline appliance (pyarrow); on Nano it answers 501. Syncs run on request, not on a change feed. Not in scope: Microsoft Fabric itself (workspaces, OneLake, Delta logs, SQL analytics endpoint) and the Power BI service; the Power BI blade only shows the connection details for Power BI Desktop. Power Apps and Power Automate stay not simulated. Data Sync is real (azure.sql.data_sync)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_mirror.py",
+      "tests/conformance/test_azure_devsimplified.py"
+    ]
+  },
+  "azure.sql.database_watcher": {
+    "title": "Database watcher: live engine sampling",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Samples (size, per-table row counts, measured statement latency/failures) are taken from the real engine each time the console asks and kept in a bounded in-memory ring; there is no background collector, no Data Explorer/Kusto store, no KQL dashboards and no CPU/IO/wait metrics because the engine has no resource governor."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_watcher_sync.py"
+    ]
+  },
+  "azure.sql.tools": {
+    "title": "Diagnose and solve problems, Tasks, external SQL client",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter. Available on the database blade.",
+      "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open. Available on the database blade.",
+      "The external SQL client download pages are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
+    ]
+  },
+  "azure.sql.always_encrypted": {
+    "title": "Always Encrypted",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Column master key (a Key Vault key, validated) -> column encryption key (wrapped by Key Vault wrapKey) -> encrypted columns (Deterministic / Randomized). The server stores ciphertext only; the client-side driver is EMULATED in the simulator's query path (body columnEncryptionSetting: Enabled encrypts parameters bound to encrypted columns and decrypts results, unwrapping the CEK through Key Vault so a disabled CMK stops decryption). Without the setting plaintext writes are rejected and reads return ciphertext; LIKE / range / randomized-equality on an encrypted column are rejected.",
+      "No real ODBC/JDBC driver is involved (TDS cannot traverse the relay); secure enclaves are not modelled; the cipher is an HMAC-SHA256 stream construction, not AEAD_AES_256_CBC_HMAC_SHA_256. Enforced identically on the offline appliance: the /azure-sql data plane is routed through the same azure_sql_core engine as Nano (proved over the offline HTTP wire in tests/conformance/test_azure_offline_wiring.py)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_security_enforced.py",
+      "tests/conformance/test_azure_offline_wiring.py"
+    ]
+  },
+  "azure.storage.private_endpoints": {
+    "title": "Private endpoint connections",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The storage account's Networking > Private endpoint connections tab is real: Microsoft.Network/privateEndpoints targeting the account write a privateEndpointConnections child on it, approve/reject/delete flow back to the endpoint, and the create wizard can add an endpoint inline (azure.vnets.private_endpoints). No packet is routed: the endpoint does not change how the account's data plane is reached."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_netsvc_core.py"
+    ]
+  },
+  "azure.resourcegroups.tasks": {
+    "title": "Resource group Tasks",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Tasks are real: Logic App style workflows (core/azure_tasks_core.py) on a Recurrence trigger whose Http-to-ARM actions really run on the simulator's ARM (list resources or locks into the run output, stamp a tag), plus the 'Run a script in a container' template that executes your shell script in a throw-away Docker container (no network, 256 MB, read-only filesystem, image must already exist locally) and keeps the real exit code and logs (offline appliance only; Nano answers 501 for that template). Not in scope: Azure Automation runbooks and the Logic Apps connector catalogue (e-mail, Teams); expressions are not evaluated; Nano fires schedules only while the tab is open. Force delete and Resource group insights are real (azure.resourcegroups.tools)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_tasks_core.py",
+      "tests/conformance/test_azure_devsimplified.py"
+    ]
+  },
+  "azure.acr.support_troubleshooting": {
+    "title": "Container Registry support and troubleshooting pages",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter.",
+      "Registry Tasks (build tasks) are a separate real feature (azure.acr.tasks); the support request panel is the simulator's own."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_services_depth.py"
+    ]
+  },
+  "azure.cosmos.data_migration": {
+    "title": "Data Migration: real container-to-container and JSON-to-container copy",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Copies documents through the data-plane write path (system properties regenerated, change feed and cosmosDBTrigger functions see every row) with query filter, field rename/drop/set, conflict policy and dry run. It is not the Azure Database Migration Service: no external sources (MongoDB, SQL Server, CSV files from disk) and no live/continuous sync.",
+      "Throughput (RU/s) limits are not applied to the copy."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_migration.py"
+    ]
+  },
+  "azure.cosmos.add_function": {
+    "title": "Add Azure Function: creates a real cosmosDBTrigger function in a Function App",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The function runs through the Function App's sandboxed Python invoke path on each data-plane write; the template handler is fixed and other languages/runtimes are not executed."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_changefeed.py"
+    ]
+  },
+  "azure.cosmos.powerbi": {
+    "title": "Power BI integration (export endpoints)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "REAL export endpoints over the account's container data: an OData v4 feed (service document, $metadata, entity sets with $top/$skip) that Power BI Desktop's OData feed source can read, plus CSV, JSON and Parquet downloads per container (core/azure_cosmos_core.py). Parquet needs the offline appliance (pyarrow); Nano offers OData, CSV and JSON. Not in scope: the Power BI service itself, so there is no connector, publish or workspace."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cosmos_export.py"
+    ]
+  },
+  "azure.sql.data_sync": {
+    "title": "Sync to other databases: hub-to-member row sync",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Run on demand (no schedule), one direction per run, primary-key upsert with hub-wins or skip conflict handling and optional delete propagation, between databases of this simulator. Not SQL Data Sync agents: no sync groups on a schedule, no on-premises members, no schema change tracking triggers."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_sql_watcher_sync.py"
+    ]
+  }
+}

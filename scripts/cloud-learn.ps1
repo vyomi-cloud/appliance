@@ -603,7 +603,7 @@ Unregister-ScheduledTask -TaskName 'VyomiPortForward' -Confirm:`$false
   Write-ProgressLine '     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi9000,tcp,127.0.0.1,9000,,9000"'
   Write-ProgressLine '     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi9443,tcp,127.0.0.1,9443,,9443"'
   Write-ProgressLine ''
-  Write-ProgressLine '   Then open http://localhost:9000/'
+  Write-ProgressLine '   Then use the API at http://localhost:9000/ (headless; UI is Nano at https://vyomi.cloud/nano)'
   Write-ProgressLine '  ------------------------------------------------------------'
 }
 

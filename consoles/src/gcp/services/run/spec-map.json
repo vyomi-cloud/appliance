@@ -1,0 +1,12 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "services": { "route": "#/run/services", "fixtures": ["run-service"], "live": "live-service" },
+  "create-service": { "route": "#/run/create", "expand": ["text=Containers, Networking, Security", "text=Internal"] },
+  "service-details": { "route": "#/run/detail/us-central1/uic-run-service", "fixtures": ["run-service"], "vars": { "resource-name": "uic-run-service" }, "live": "live-service-detail" },
+  "jobs": { "route": "#/run/jobs", "live": "live-job" },
+  "create-job": { "route": "#/run/jobs/create", "expand": ["text=Containers, Volumes, Connections, Security"] },
+  "job-details": { "route": "#/run/jobs/details/us-central1/uic-run-job", "fixtures": ["run-job"], "vars": { "resource-name": "uic-run-job" }, "live": "live-job-detail" },
+  "overview": { "route": "#/run/overview" },
+  "worker-pools": { "route": "#/run/worker-pools", "live": "live-workerpool" },
+  "domain-mappings": { "route": "#/run/domains", "fixtures": ["run-service"], "live": "live-domain-mapping" }
+}

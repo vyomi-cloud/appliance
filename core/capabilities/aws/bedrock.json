@@ -1,0 +1,87 @@
+{
+ "$doc": "Vyomi capability registry — Amazon Bedrock (runtime playground, knowledge bases, agents, AgentCore). Proven by tests/conformance/test_capabilities.py.",
+ "bedrock.runtime": {
+  "title": "Bedrock Runtime playground (InvokeModel / Converse, streaming)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every model id is answered by one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Images/documents, prompt caching and reasoning content are rejected with a validation error rather than ignored.",
+   "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py",
+   "tests/conformance/test_ai_sdk_tools.py",
+   "tests/conformance/test_llm_async_bridge.py",
+   "tests/conformance/test_local_llm_seam.py"
+  ]
+ },
+ "bedrock.knowledge-bases": {
+  "title": "Knowledge bases (S3 data sources, ingestion, Retrieve, RetrieveAndGenerate)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Ingestion really reads the S3 data source, chunks (fixed size / none) and embeds with the local embedding seam; Retrieve is exact cosine kNN with metadata filters. Only text documents (.txt/.md/.csv/.json/.html/.xml/.log) are ingested - PDF/Office files are reported as failed. The vector store type named at creation is recorded but the index always lives in the account (no OpenSearch/Pinecone/etc). Without an embedding model on the backend, vyomi-hash-embed (a deterministic bag-of-words embedding) is used, so retrieval is lexical-ish, not semantic. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.agents": {
+  "title": "Agents (create, prepare, aliases, knowledge bases, InvokeAgent)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Agent versions/aliases snapshot the prepared agent; InvokeAgent prompts the local model with the instruction, session history and retrieved knowledge-base passages and returns citations. Action groups are stored but never invoked (a <1 GB model does not emit reliable tool calls); no orchestration trace, guardrails, memory or multi-agent collaboration. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.agentcore.gateway": {
+  "title": "AgentCore gateways and targets (MCP)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Gateways expose a real MCP JSON-RPC endpoint (initialize, tools/list, tools/call) at POST /gateways/{id}/mcp on the Vyomi wire, not at the *.gateway.bedrock-agentcore hostname. Lambda targets are really invoked. openApiSchema/smithyModel/mcpServer targets are registered but their tools are not callable; CUSTOM_JWT tokens are not validated (only presence of an Authorization header is checked); no semantic tool search or credential-provider (OAuth/API key) flows."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.agentcore.runtime": {
+  "mesh": true,
+  "title": "AgentCore runtime (hosted agents) - Vyomi agent spec, Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified: runtimes are control-plane records (CreateAgentRuntime/Get/List/Update/Delete, versions, runtime endpoints with DEFAULT, CREATING->READY) and InvokeAgentRuntime really runs an agent - but NOT your container. A runtime whose environmentVariables carry VYOMI_AGENT_SPEC (JSON: instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) is executed in-process as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano; payload {\"prompt\": ...}, runtimeSessionId keeps multi-turn history, Accept: text/event-stream streams steps). A container-only runtime returns RuntimeClientError (424); no model running -> 503 ServiceUnavailableException, never a canned answer. Quality is toy-grade; no container/ECR pull, A2A/MCP-protocol runtimes, InvokeAgentRuntimeCommand, Memory, Identity or Observability. Webhook tools need network egress (not available in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. State is in the persisted account bag."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py",
+   "tests/conformance/test_bedrock_agents_core.py"
+  ]
+ },
+ "bedrock.guardrails": {
+  "title": "Guardrails (CreateGuardrail, versions, ApplyGuardrail, Converse guardrailConfig) - Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified: deterministic simple filters, not Bedrock's classifiers. Word lists (custom + small PROFANITY list), denied topics (name/example phrase match), regex PII (EMAIL, PHONE, US SSN, card, IP, AWS key, URL) with BLOCK/ANONYMIZE, custom regexes, and keyword content filters (HATE, INSULTS, SEXUAL, VIOLENCE, MISCONDUCT, PROMPT_ATTACK). Contextual grounding, automated reasoning and image content are rejected. Converse checks the input and the output; ConverseStream and InvokeModel check input only (stream output is not re-checked). State is process-local."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_lanes.py"
+  ]
+ }
+}

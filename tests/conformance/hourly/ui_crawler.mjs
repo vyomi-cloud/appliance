@@ -433,7 +433,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
 
 async function crawlConsole(browser, base, con, needsSW) {
   const ctx = await browser.newContext();
-  if (TARGET === "nano") await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); } catch (_) {} });
+  if (TARGET === "nano") await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); localStorage.setItem("vyomi_ci_tier", "max"); } catch (_) {} });
   const page = await ctx.newPage();
   const net = [];          // failing responses since the last drain
   const errs = [];         // uncaught page errors since the last drain

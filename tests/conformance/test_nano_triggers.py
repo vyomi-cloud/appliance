@@ -45,11 +45,11 @@ def run():
     st, b, h = call("POST", "/gcf/p/us-central1/fnH", {"a": 1}, {"content-type": "application/json", "x-probe": "yes"})
     _check("POST /gcf: get_json + headers; return value is the HTTP response", st == 202 and json.loads(b) == {"echo": {"a": 1}, "x": "yes"}, (st, b))
 
-    call("POST", "/storage/v1/b", {"name": "b1"})
+    call("POST", "/storage/v1/b", {"name": "bkt1"})
     res.collections["gcp/acct/eventarc"] = {"t1": {"name": "t1", "eventFilters": [
-        {"attribute": "type", "value": "google.cloud.storage.object.v1.finalized"}, {"attribute": "bucket", "value": "b1"}],
+        {"attribute": "type", "value": "google.cloud.storage.object.v1.finalized"}, {"attribute": "bucket", "value": "bkt1"}],
         "destinationSpec": {"type": "cloud-function", "service": "fnE"}}}
-    call("POST", "/upload/storage/v1/b/b1/o", b"hello", {"content-type": "text/plain"}, {"uploadType": "media", "name": "dir/a.txt"})
+    call("POST", "/upload/storage/v1/b/bkt1/o", b"hello", {"content-type": "text/plain"}, {"uploadType": "media", "name": "dir/a.txt"})
     invs = res.collections["gcp/acct/functions"]["fnE"].get("invocations", [])
     _check("storage upload fires the Eventarc trigger at the in-browser function",
            len(invs) == 1 and json.loads(invs[0]["response"])["name"] == "dir/a.txt", invs)
@@ -57,11 +57,11 @@ def run():
     call("POST", "/upload/storage/v1/b/other/o", b"x", {"content-type": "text/plain"}, {"uploadType": "media", "name": "z.txt"})
     _check("another bucket does not fire it", len(res.collections["gcp/acct/functions"]["fnE"]["invocations"]) == 1)
 
-    call("PUT", "/v1/projects/nano-project/topics/tp", {})
+    call("PUT", "/v1/projects/nano-project/topics/tpc", {})
     res.collections["gcp/acct/eventarc"]["t2"] = {"name": "t2", "eventFilters": [
         {"attribute": "type", "value": "google.cloud.pubsub.topic.v1.messagePublished"}],
-        "transport": {"pubsub": {"topic": "projects/p/topics/tp"}}, "destinationSpec": {"service": "fnE"}}
-    call("POST", "/v1/projects/nano-project/topics/tp:publish", {"messages": [{"data": base64.b64encode(b"ping").decode(), "attributes": {"k": "v"}}]})
+        "transport": {"pubsub": {"topic": "projects/p/topics/tpc"}}, "destinationSpec": {"service": "fnE"}}
+    call("POST", "/v1/projects/nano-project/topics/tpc:publish", {"messages": [{"data": base64.b64encode(b"ping").decode(), "attributes": {"k": "v"}}]})
     invs = res.collections["gcp/acct/functions"]["fnE"]["invocations"]
     _check("Pub/Sub publish fires the messagePublished CloudEvent",
            len(invs) == 2 and json.loads(invs[1]["response"])["msg"]["attributes"] == {"k": "v"}, invs)

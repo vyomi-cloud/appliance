@@ -1,0 +1,48 @@
+{
+  "_doc": "ui-spec page id → v4 route (same contract as consoles/src/aws/services/*/spec-map.json). Fixtures/live hooks are consoles/src/azure/services/dns/fixtures.mjs. No honest_page entries — every gap is declared per-section via NotSimulatedContainer/CapabilityContainer instead.",
+  "dns-zones": {
+    "route": "#/dns",
+    "live": "live-zone"
+  },
+  "create-dns-zone": {
+    "route": "#/dns/create"
+  },
+  "dns-zone-overview": {
+    "route": "#/dns/uic-rg/{live}",
+    "live": "live-zone",
+    "expand": ["button:has-text(\"Record set\")"]
+  },
+  "dns-zone-activity-log": {
+    "route": "#/dns/uic-rg/{live}/activitylog",
+    "live": "live-activity"
+  },
+  "dns-zone-access-control-iam": {
+    "route": "#/dns/uic-rg/uic-dns-zone.com/iam",
+    "fixtures": ["az-dns-zone"],
+    "vars": { "resource-name": "uic-dns-zone.com" }
+  },
+  "dns-zone-tags": {
+    "route": "#/dns/uic-rg/uic-dns-zone.com/tags",
+    "fixtures": ["az-dns-zone"],
+    "vars": { "resource-name": "uic-dns-zone.com" }
+  },
+  "dns-zone-diagnose-and-solve-problems": {
+    "route": "#/dns/uic-rg/uic-dns-zone.com/diagnose",
+    "fixtures": ["az-dns-zone"],
+    "vars": { "resource-name": "uic-dns-zone.com" }
+  },
+  "dns-zone-virtual-network-links": {
+    "route": "#/dns/uic-rg/{live}/vnetlinks",
+    "live": "live-vnetlink"
+  },
+  "dns-zone-locks": {
+    "route": "#/dns/uic-rg/{live}/locks",
+    "live": "live-lock",
+    "expand": ["button:has-text(\"Add\")"]
+  },
+  "dns-zone-export-template": {
+    "route": "#/dns/uic-rg/uic-dns-zone.com/exporttemplate",
+    "fixtures": ["az-dns-zone"],
+    "vars": { "resource-name": "uic-dns-zone.com" }
+  }
+}

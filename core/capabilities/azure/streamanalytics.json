@@ -1,0 +1,17 @@
+{
+ "$doc": "Vyomi capability registry — Azure Stream Analytics (Microsoft.StreamAnalytics). See aws/s3.json for the contract.",
+ "azure.streamanalytics.jobs": {
+  "title": "Streaming jobs, inputs, outputs, transformation and start/stop over ARM",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Jobs, inputs, outputs and the transformation are real ARM resources with validation, and the query is parsed and checked against the job's inputs/outputs; the Created/Running/Stopped/Failed state machine is enforced. On start a small batch query runner executes SELECT/WHERE/GROUP BY/TumblingWindow over a Blob input and writes line-separated JSON to a Blob output. Event Hub / IoT Hub inputs and every non-Blob output (Cosmos DB, SQL, Power BI, ...) fail the start with a clear error: Vyomi has no such streaming data plane. Hopping/Sliding/Session windows, JOINs, UDFs and continuous processing of new events are not supported. There is no console page yet."
+  ],
+  "api": ["StreamingJobs CreateOrReplace/Get/List/Delete/Start/Stop", "Inputs CreateOrReplace/Get/Delete/Test", "Outputs CreateOrReplace/Get/Delete/Test", "Transformations CreateOrReplace/Get", "Subscriptions TestQuery"],
+  "tests": [
+   "tests/conformance/test_azure_streamanalytics_core.py"
+  ]
+ }
+}

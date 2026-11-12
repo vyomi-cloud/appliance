@@ -1,0 +1,166 @@
+"""Cloud Run Admin API v2 native wire on the offline appliance (backs the v4 Cloud Run and
+Cloud Functions consoles — the real console folds functions into Cloud Run).
+
+The engine is core/gcp_run_core.py (shared with Nano and the dev server). Its state lives in
+the active space's `service_states["gcp_run"]` slot, so services, revisions, jobs, executions,
+worker pools and domain mappings persist with the appliance state and follow space switches.
+These routes are put at the FRONT of the routing table: an older GET-only handler already
+matches `/v2/projects/.../services`, and Starlette uses the first path match.
+"""
+from __future__ import annotations
+
+from fastapi import FastAPI, Request, Response
+
+from core import app_context as ctx
+from core import gcp_run_core as run
+
+PLATFORM = ctx.PLATFORM
+_KEYS = ("services", "revisions", "jobs", "executions", "tasks", "operations", "policies",
+         "worker_pools", "domain_mappings", "triggers", "builds")
+
+
+def _slot() -> dict | None:
+    # The Cloud Run slot lives in the DEFAULT (aws-scoped) provider's active space, whichever request context asks:
+    # an Eventarc trigger create runs under the "gcp" provider and must still see the services the /v2 run routes made.
+    tok = ctx.REQUEST_PROVIDER.set("aws")
+    try:
+        return _slot_in_context()
+    finally:
+        ctx.REQUEST_PROVIDER.reset(tok)
+
+
+def _slot_in_context() -> dict | None:
+    spaces_state = PLATFORM.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
+    active_id = spaces_state.get("active_space_id", "")
+    if not active_id:
+        return None
+    space = spaces_state.setdefault("spaces", {}).setdefault(active_id, {})
+    slot = space.setdefault("service_states", {}).setdefault("gcp_run", {})
+    for k in _KEYS:
+        slot.setdefault(k, {})
+    slot.setdefault("seq", {"op": 0, "uid": 0})
+    return slot
+
+
+class SpaceRunStore(run.RunStore):
+    """RunStore whose state is the active space's persisted slot."""
+
+    def __init__(self) -> None:           # no super().__init__: the state attrs are properties
+        self._fallback = {k: {} for k in _KEYS} | {"seq": {"op": 0, "uid": 0}}
+
+    def _s(self) -> dict:
+        return _slot() or self._fallback
+
+
+for _k in _KEYS + ("seq",):
+    setattr(SpaceRunStore, _k, property(lambda self, k=_k: self._s()[k]))
+
+_STORE = SpaceRunStore()
+
+
+def _gcs():
+    """The GCS store the native storage wire serves (the unified ingress router's)."""
+    from core import wire_ingress
+    return wire_ingress.appliance_router().gcs
+
+
+def _refs(kind, *args):
+    """Cross-service existence for a revision template (KMS / GCS); None = can't tell. Runs under the
+    GCP request provider, because the run routes themselves sit on the default (aws-scoped) one."""
+    try:
+        tok = ctx.REQUEST_PROVIDER.set("gcp")
+        try:
+            if kind == "kms":
+                from core import appliance_stores as aps
+                from core import gcp_kms_core as kms
+                return kms.dispatch(aps.gcp_kms_store(), "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+            if kind == "bucket":
+                return bool(_gcs().bucket_exists(args[0]))
+        finally:
+            ctx.REQUEST_PROVIDER.reset(tok)
+    except Exception:
+        return None
+    return None
+
+
+_STORE.refs = _refs
+
+
+def store() -> SpaceRunStore:
+    """The offline appliance's one Cloud Run store — routes/gcp_pubsub_unified.py reaches in
+    here to deliver Eventarc-style trigger events on a real Pub/Sub publish."""
+    return _STORE
+
+
+def _log_fn(kind, project, location, rid, message, severity="INFO"):
+    """A real Cloud Run mutation (or Eventarc delivery) -> a real Cloud Logging entry (the
+    Observability tab's Logs section reads these back via entries:list)."""
+    from core import gcp_logging_core as lg
+    from routes import gcp_logging as lg_routes
+    restype = "cloud_run_revision" if kind == "service" else "cloud_run_job"
+    label_key = "service_name" if kind == "service" else "job_name"
+    entry = {
+        "logName": "projects/%s/logs/run.googleapis.com%%2F%s" % (project, "requests" if kind == "service" else "executions"),
+        "resource": {"type": restype, "labels": {"project_id": project, "location": location, label_key: rid}},
+        "severity": severity,
+        "textPayload": message,
+    }
+    try:
+        lg.write_entries(lg_routes.store(), None, {"entries": [entry]})
+    except Exception:
+        pass   # never fail the Cloud Run call over a logging hiccup
+
+
+def _topic_exists(topic_full):
+    from routes import gcp_pubsub_unified as ps
+    with ps._gcp():
+        return ps._store().get_topic(topic_full) is not None
+
+
+def _on_object_event(bucket, name, event, obj):
+    """A real GCS object finalize/delete -> Eventarc Cloud Storage triggers (see core/gcp_run_core)."""
+    run.deliver_storage_event(_STORE, bucket, name, event, obj, log_fn=_log_fn)
+    try:   # …and the Eventarc core's triggers (retry / dead-letter bus, httpEndpoint destinations) the v4 console and `gcloud eventarc` manage
+        from core import gcp_eventarc_core as ea
+        from core import wire_ingress as wi
+        ea.on_storage_event((wi.new_services_router() or wi.appliance_router()).gcp_mon, _STORE, bucket, name, event, obj, log_fn=_log_fn)
+    except Exception:
+        pass   # an Eventarc hiccup never fails the object write
+
+
+def register(app: FastAPI) -> None:
+    try:
+        _gcs().on_object_event = _on_object_event
+        _gcs().refs = _refs
+    except Exception:
+        pass
+    async def _wire(request: Request):
+        if "/operations/vtx-" in request.url.path:
+            # Workbench (Notebooks v2) long-running operations share /v2/projects/{p}/locations/{l}/operations/{id} with Cloud Run;
+            # the vtx- ids are Vertex's, so poll them there (gcloud workbench instances create/delete waits on this).
+            from core import gcp_vertex_core as _vx
+            r = _vx.dispatch(_vx.shared_store(), request.method, request.url.path, dict(request.query_params),
+                             dict(request.headers), await request.body())
+        else:
+            r = run.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
+                         dict(request.headers), await request.body(), log_fn=_log_fn, topic_exists=_topic_exists)
+        status, headers, body = (r.status, getattr(r, "headers", {}) or {}, r.body) if hasattr(r, "status") \
+            else (r["status"], r.get("headers") or {}, r.get("body", b""))
+        if request.method != "GET" and status < 300 and _slot() is not None:
+            ctx.persist_state()
+        if not isinstance(body, (bytes, bytearray)):
+            import json
+            body = json.dumps(body).encode()
+        return Response(content=body, status_code=status, headers=headers,
+                        media_type=getattr(r, "media_type", None) or "application/json")
+
+    before = len(app.router.routes)
+    methods = ["GET", "POST", "PATCH", "PUT", "DELETE"]
+    for kind in ("services", "jobs", "workerPools", "operations"):
+        app.add_route(f"/v2/projects/{{project}}/locations/{{loc}}/{kind}", _wire, methods=methods)
+        app.add_route(f"/v2/projects/{{project}}/locations/{{loc}}/{kind}/{{rest:path}}", _wire, methods=methods)
+    for prefix in ("/apis/serving.knative.dev/{rest:path}", "/apis/domains.cloudrun.com/{rest:path}"):
+        app.add_route(prefix, _wire, methods=methods)
+    ours = app.router.routes[before:]
+    del app.router.routes[before:]
+    app.router.routes[0:0] = ours           # ahead of the legacy GET-only handler

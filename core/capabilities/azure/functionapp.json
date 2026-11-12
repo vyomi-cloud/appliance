@@ -1,0 +1,443 @@
+{
+ "$doc": "Vyomi capability registry — Azure Function Apps (Microsoft.Web/sites, kind=functionapp). One entry per console feature/section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py.",
+ "azure.functionapp.site.crud": {
+  "title": "Function apps (create, list, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "Sites_CreateOrUpdate",
+   "Sites_Get",
+   "Sites_List",
+   "Sites_Delete",
+   "Sites_Start",
+   "Sites_Stop",
+   "Sites_Restart"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.function.crud": {
+  "title": "Functions (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "WebApps_ListFunctions",
+   "WebApps_CreateFunction",
+   "WebApps_GetFunction",
+   "WebApps_DeleteFunction"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.function.invoke": {
+  "mesh": true,
+  "title": "Function Test/Run (real sandboxed execution)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only the Python programming model (a `main(req)` entry point) runs.",
+   "The sandbox is restricted (no filesystem, network or process access, a curated stdlib subset) — the same technique as the Lambda console's Invoke."
+  ],
+  "api": [
+   "WebApps_ListFunctions"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.appsettings": {
+  "title": "App settings and connection strings (Environment variables)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "WebApps_ListApplicationSettings",
+   "WebApps_UpdateApplicationSettings",
+   "WebApps_ListConnectionStrings",
+   "WebApps_UpdateConnectionStrings"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.keys": {
+  "title": "App keys (host keys, system keys, function keys)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "WebApps_ListHostKeys",
+   "WebApps_CreateOrUpdateHostSecret",
+   "WebApps_DeleteHostSecret",
+   "WebApps_ListFunctionKeys",
+   "WebApps_CreateOrUpdateFunctionSecret"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.scale": {
+  "title": "Scale and concurrency (Flex Consumption)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A configured capacity of exactly zero (maximumInstanceCount x perInstanceConcurrency) is ENFORCED: every invoke is rejected (429 FunctionsTooBusy), the same way a real scaled-to-zero Flex Consumption app never has an instance available to run on.",
+   "Instance memory and any positive maximum instance count / per-instance concurrency are stored on the site and returned from the API exactly as configured, but never enforced against concurrent callers — Vyomi runs every invoke synchronously (nothing to run concurrently), so no invoke is ever rejected for exceeding a nonzero capacity."
+  ],
+  "api": [
+   "Sites_CreateOrUpdate",
+   "Sites_Get"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.locks": {
+  "title": "Resource locks",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM; this blade manages the locks scoped to this function app only (no scope switch). A lock on the app, or on its resource group or subscription, really blocks writes/deletes with 409 ScopeLocked (a CanNotDelete lock blocks deletes only)."
+  ],
+  "api": ["ManagementLocks_CreateOrUpdateAtResourceLevel", "ManagementLocks_ListAtResourceLevel", "ManagementLocks_DeleteAtResourceLevel"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.publishprofile": {
+  "title": "Download / reset publish profile",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The profile is a simulator-generated credential; it does not grant real deployment access and Vyomi has no Web Deploy / Kudu endpoint behind it."
+  ],
+  "api": [
+   "WebApps_ListPublishingProfileXmlWithSecrets"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.rbac": {
+  "title": "Access control (IAM) — role assignments and role definitions",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments and role definitions are the generic subscription-scoped Microsoft.Authorization store (shared with every other Azure resource), not filtered to assignments scoped exactly to this function app.",
+   "Deny assignments and classic administrators are always empty (Vyomi models neither)."
+  ],
+  "api": [
+   "RoleAssignments_ListForSubscription",
+   "RoleDefinitions_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.functionapp.activitylog": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.defender": {
+  "tier": "pro",
+  "title": "Microsoft Defender for Cloud (this function app's recommendations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
+  "api": ["Assessments_List (resource scope)"],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
+ "azure.functionapp.identity": {
+  "title": "Identity (system-assigned managed identity)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources, an unknown reference is rejected with 400 ResourceNotFound and the attached identity's principalId/clientId are resolved from that resource."
+  ],
+  "api": ["Sites_CreateOrUpdate (identity)", "Sites_Get"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.customdomains": {
+  "title": "Custom domains (hostNameBindings)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Adding a domain never verifies real DNS ownership (no TXT/CNAME lookup) — any hostname is accepted.",
+   "An SNI/IP SSL binding mints a deterministic, simulator-only certificate thumbprint (see Certificates); no real certificate is issued."
+  ],
+  "api": ["WebApps_CreateOrUpdateHostNameBinding", "WebApps_ListHostNameBindings", "WebApps_DeleteHostNameBinding"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.certificates": {
+  "title": "Certificates",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi has no Microsoft.Web/certificates resource or real PKI — a certificate only exists for a custom domain that has an SNI/IP SSL binding, and its thumbprint is a deterministic simulator value, not a real issued certificate."
+  ],
+  "api": ["WebApps_ListHostNameBindings"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.cors": {
+  "title": "CORS (Cross-Origin Resource Sharing)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only the Origin header is checked against the allowed-origins list; Vyomi does not simulate a real browser preflight (OPTIONS) round-trip or emit Access-Control-* response headers."
+  ],
+  "api": ["WebApps_UpdateConfiguration (siteConfig.cors)", "WebApps_InvokeFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.networking": {
+  "title": "Networking (public network access, VNet integration)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Disabling public network access IS enforced: every invoke is rejected (403) exactly as a real app with no private endpoint would reject public callers.",
+   "VNet integration and private endpoints are stored and returned from the API exactly as configured, but never enforced — Vyomi has no virtual network data plane to route traffic through."
+  ],
+  "api": ["Sites_CreateOrUpdate (publicNetworkAccess, vnetRouteAllEnabled)", "WebApps_InvokeFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.authentication": {
+  "title": "Authentication (Easy Auth)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "authsettingsV2 round-trips with real validation (Entra registration clientId/issuer, allowed audiences, excluded paths, secret setting must exist) and the function front door enforces unauthenticatedClientAction (302 to the Entra authorize URL, 401, 403, AllowAnonymous). A credential is the simulator bearer token or a JWT whose claims (exp, aud, tenant) validate; the JWT signature is not verified (Vyomi's Entra issues opaque tokens) and there is no interactive browser sign-in or Google/Facebook/Apple providers."
+  ],
+  "api": ["WebApps_UpdateAuthSettingsV2", "WebApps_InvokeFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py", "tests/conformance/test_azure_webauth_core.py"]
+ },
+ "azure.functionapp.diagnosticsettings": {
+  "title": "Diagnostic settings",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi stores and returns the destination/category configuration exactly as configured (a real ARM extension resource), but never actually delivers logs or metrics to the configured Log Analytics workspace / storage account / Event Hub — there is no telemetry pipeline behind it."
+  ],
+  "api": ["Microsoft.Insights/diagnosticSettings CreateOrUpdate/Get/List/Delete (resource scope)"],
+  "tests": ["tests/conformance/test_azure_monitor_core.py"]
+ },
+ "azure.functionapp.telemetry": {
+  "title": "Metrics, Logs, Log stream, Events (preview)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Every row is a REAL recorded invocation (timestamp, function, HTTP status, measured duration) appended by the sandboxed invoke path — never synthetic/random data.",
+   "Log stream and Events (preview) poll this same recorded list on a refresh, rather than a live push/websocket stream or a real Event Grid system topic.",
+   "No historical backfill: only invocations made since the simulation booted are recorded, capped at the most recent 200."
+  ],
+  "api": ["WebApps_InvokeFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.alerts": {
+  "title": "Alerts (metric alert rules)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Alert rules are the generic Microsoft.Insights/metricAlerts store (core/azure_monitor_core.py), scoped to this app via `properties.scopes`.",
+   "Vyomi stores rules but does not run a continuous metric-evaluation loop; the panel computes a current value on demand from the real recorded invocation log and compares it to the rule's threshold, rather than firing/resolving in real time."
+  ],
+  "api": ["Microsoft.Insights/metricAlerts CreateOrUpdate/Get/ListBySubscription/Delete"],
+  "tests": ["tests/conformance/test_azure_monitor_core.py"]
+ },
+ "azure.functionapp.healthcheck": {
+  "title": "Health check",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "\"Run health check now\" resolves the configured path to a function by name and runs it through the real invoke sandbox; it does not continuously probe the app or load-balance across instances the way real Azure's health check does."
+  ],
+  "api": ["WebApps_InvokeFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.advisor": {
+  "title": "Advisor recommendations",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A small, fixed rule set evaluated live against this app's real configuration and real recent invocation outcomes — not Azure Advisor's full recommendation catalogue."
+  ],
+  "api": ["WebApps_Get"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.diagnosedetectors": {
+  "title": "Diagnose and solve problems",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A small, fixed set of real health detectors (app state, recent failure rate, scale capacity, public network access) — not Azure's full detector catalogue or its guided troubleshooters."
+  ],
+  "api": ["WebApps_Get"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.resourcehealth": {
+  "title": "Resource health",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Availability is derived from the app's real `state` and lock status, not a historical uptime feed or platform-level health events."
+  ],
+  "api": ["WebApps_Get"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.resourcevisualizer": {
+  "title": "Resource visualizer",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Shows this app's real linked resource references (App Service plan, the storage account named in AzureWebJobsStorage, the Application Insights key) as a list, not an interactive dependency diagram."
+  ],
+  "api": ["WebApps_Get"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.appfiles": {
+  "title": "App files",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Read-only: shows the app's real stored function code and bindings (and a host.json synthesised from real runtime/scale settings) — there is no writable Kudu VFS or deployment zip behind it."
+  ],
+  "api": ["WebApps_ListFunctions", "WebApps_GetFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.applicationinsights": {
+  "title": "Application Insights",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A real Microsoft.Insights/components resource linked through the app's connection string; requests / failures / dependencies / events / traces are read from the OTLP-ingested trace + log store (and requests Vyomi measured for the app). No Kusto query engine, Live Metrics stream or Application Map."
+  ],
+  "api": ["WebApps_ListApplicationSettings", "WebApps_InvokeFunction"],
+  "tests": ["tests/conformance/test_azure_functionapp_core.py"]
+ },
+ "azure.functionapp.deploymentcenter": {
+  "title": "Deployment Center",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real ARM control plane plus real deployments through the shared CI seam (core/ci_core.py): sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML; scmType maintained), deployments + log, publishing credentials and basic-auth policies. Local Git (scmType LocalGit): a push (POST .../localgit, a Vyomi extension of the Kudu git receiver; with the Gitea git host (offline, VYOMI_CI_GITEA=1) a real git clone URL and real `git push`) commits to the app's repo, builds, and records a Success/Failed deployment with the build log. GitHub source: the branch tarball is fetched (public, or private with the user's own personal access token entered in the Deployment Center; stored server-side, never shown) and built on the offline appliance; on Nano there is no outbound HTTP so a GitHub sync is a Failed deployment saying so (Local Git works on Nano). Azure Repos / Bitbucket / generic git cannot be fetched (no HTTP git client) and are recorded Failed with that reason. The build produces a content-addressed package artifact (Dockerfile validated; container image builds use BuildKit on the offline appliance only); the App Service runtime does not hot-swap to the deployed package, the GitHub Actions workflow is generated and, when a personal access token is supplied (properties.vyomiAccessToken; offline appliance only - Nano cannot reach GitHub), committed to the connected repository through the GitHub Contents API (without a token it is generated but not committed; the pipeline itself runs on GitHub), and OAuth account authorization is not performed (PAT only)."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_webdeploy_core.py", "tests/conformance/test_ci_core.py"
+  ]
+ },
+ "azure.functionapp.extensions": {
+  "title": "Extensions (site extensions)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Site extensions install from the same bundled gallery as App Service (Windows function apps only; Linux returns 400 as in Azure): install/uninstall records state and a marker file, and the extension's own code is never downloaded or run."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py",
+   "consoles/tests/smoke-azure-functionapp-kudu.mjs"
+  ]
+ },
+ "azure.functionapp.apimanagement": {
+  "title": "API Management integration",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Linking an API Management instance (siteConfig.apiManagementConfig.id = the service or .../apis/{api}) IMPORTS the Function App's API into that gateway: an API with one GET and one POST operation per function whose backend is the app (resolved in-process), kept in step when functions are added or removed; unlinking removes it. Requests through the gateway (subscription key, policies, rate limits) are really forwarded to the function and its output returned. Web Apps import a wildcard API. OpenAPI/Swagger definition import is not performed."
+  ],
+  "api": [
+   "sites/config/web CreateOrUpdate"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_webhost_autoscale_apim.py",
+   "tests/conformance/test_azure_sdk_webhost_autoscale_apim_prom.py"
+  ]
+ },
+ "azure.functionapp.kudu": {
+  "title": "Advanced Tools (Kudu): environment, settings, deployments, tool links",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["Served as an ARM extension under sites/{site}/kudu/api, not as a separate https://{site}.scm.azurewebsites.net host, so the real Kudu dashboard UI and its Git/zip-deploy endpoints are not served there.", "Settings (SCM_*) are stored and read back; they do not change Kudu behaviour."],
+  "api": ["sites/kudu/api/environment", "sites/kudu/api/settings", "sites/kudu/api/deployments"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.console": {
+  "title": "Console (Kudu command console over the function app's files and app settings)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["No operating-system process sits behind the simulated function app, so programs cannot be executed; the interpreter covers file, environment and process-listing commands only (pwd cd ls cat echo head tail wc grep mkdir touch rm cp mv env ps tree find, pipes, > and >>). Writes are real edits to the app's file store; the sandboxed function code is not hot-reloaded."],
+  "api": ["sites/kudu/api/command"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.appeditor": {
+  "title": "App Service Editor (edit the function app's files)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["Edits the app's virtual file system (function sources, host.json, logs); edits persist but the sandboxed runtime does not hot-swap to them. No debugging or Git integration."],
+  "api": ["sites/kudu/api/vfs"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.processes": {
+  "title": "Process explorer (processes of the function host)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["The process table is MODELLED from the app's real state (host worker per instance, the Kudu process); CPU time is the sum of measured invocation durations. It is not an OS process table: no kill/dump/profile actions."],
+  "api": ["sites/kudu/api/processes"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.logstream": {
+  "title": "Log stream (live tail of the function app's logs)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["Tails real recorded lines (function invocations, deployments, lifecycle and console actions) by polling every 2 seconds; there is no always-on stdout because the app runs no persistent process."],
+  "api": ["sites/kudu/api/logstream"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.serviceconnector": {
+  "title": "Service Connector",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Creating a connection validates the target in this subscription and writes the real connection app settings (endpoint, plus a generated secret for secret auth); no network path, firewall rule or role assignment is created for the target."],
+  "api": ["Microsoft.ServiceLinker/linkers CreateOrUpdate/Get/List/Delete/Validate"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.functionapp.tasks": {
+  "title": "Tasks (Automation)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_tasks_core.py"
+  ]
+ },
+ "azure.functionapp.bindingseditor": {
+  "title": "Function Integration (bindings editor)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Bindings are stored as the function's function.json and returned by the API; the HTTP trigger and the Cosmos DB change-feed trigger (cosmosDBTrigger, run inline on each write) are executed; queue/blob/timer/service bus triggers never fire and output bindings write nothing."],
+  "api": ["sites/functions CreateOrUpdate (config.bindings)", "sites/functions Get"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.functionapp.invocations": {
+  "title": "Invocations (per-function invocation history)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Lists the real invoke attempts Vyomi ran for this function (status, measured duration, error); the history is capped at the last 200 invocations per app and there is no Application Insights trace or per-invocation log lines."],
+  "api": ["sites/invocationlogs"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ }
+}

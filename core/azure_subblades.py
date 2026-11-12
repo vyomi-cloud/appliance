@@ -169,7 +169,7 @@ _FUNCTIONAPP_SUB = [
         *_settings_props_locks(),
     ]},
     {"group": "Deployment", "items": [
-        {"key": "slots",        "label": "Deployment slots",  "icon": "swap_horiz",   "type": "slots"},
+        # no "Deployment slots": azure_webapp_core refuses slots on a function app (ResourceTypeNotSupported)
         {"key": "deployCenter", "label": "Deployment Center", "icon": "rocket_launch","type": "deployCenter"},
     ]},
     {"group": "Monitoring", "items": [
@@ -392,6 +392,17 @@ _RBAC_SUB = [
 ]
 
 
+# Generic blade for ARM resources without a bespoke one: the universal tabs (Tags included — every
+# ARM resource is taggable) plus Properties / Locks / JSON view.
+_GENERIC_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+        {"key": "json", "label": "JSON view", "icon": "code", "type": "json"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key`` so azure_services.py can attach.
 SUB_BLADES: dict[str, list] = {
     "vm":          _VM_SUB,
@@ -413,4 +424,13 @@ SUB_BLADES: dict[str, list] = {
     "rbac":        _RBAC_SUB,
     "nsg":         _NSG_SUB,
     "role_definition": _ROLEDEF_SUB,
+    "eventgrid_namespace": _GENERIC_SUB,
+    "eventgrid_systemtopic": _GENERIC_SUB,
+    "eventgrid_domain": _GENERIC_SUB,
+    "eventgrid_partnerconfiguration": _GENERIC_SUB,
+    "eventgrid_partnertopic": _GENERIC_SUB,
+    "eventgrid_partnerregistration": _GENERIC_SUB,
+    "eventgrid_partnernamespace": _GENERIC_SUB,
+    "rediscache": _GENERIC_SUB,
+    "dataexplorer": _GENERIC_SUB,
 }

@@ -1,0 +1,2422 @@
+{
+ "version": {
+  "kubescape": "v4.0.16",
+  "opa": "1.21.1",
+  "frameworks": [
+   "NSA",
+   "MITRE",
+   "cis-v1.12.0"
+  ],
+  "regolibrary": "artifacts downloaded by kubescape v4.0.16 (`kubescape download artifacts`)",
+  "artifactsSha256": "1dd9814e1c01a54edebfaaf2a54eef47393d89e5dacdee3a824a5d70d670093d"
+ },
+ "controls": {
+  "C-0002": {
+   "controlID": "C-0002",
+   "name": "Prevent containers from allowing command execution",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Attackers with relevant permissions can run malicious commands in the context of legitimate containers in the cluster using \u201ckubectl exec\u201d command. This control determines which subjects have permissions to use this command.",
+   "remediation": "It is recommended to prohibit \u201ckubectl exec\u201d command in production environments. It is also recommended not to use subjects with this permission for daily cluster operations.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0005": {
+   "controlID": "C-0005",
+   "name": "API server insecure port is enabled",
+   "severity": "Critical",
+   "baseScore": 9,
+   "description": "Kubernetes control plane API is running with non-secure port enabled which allows attackers to gain unprotected access to the cluster.",
+   "remediation": "Set the insecure-port flag of the API server to zero.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0007": {
+   "controlID": "C-0007",
+   "name": "Roles with delete capabilities",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Attackers may attempt to destroy data and resources in the cluster. This includes deleting deployments, configurations, storage, and compute resources. This control identifies all subjects that can delete resources.",
+   "remediation": "You should follow the least privilege principle and minimize the number of subjects that can delete resources.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0012": {
+   "controlID": "C-0012",
+   "name": "Applications credentials in configuration files",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Attackers who have access to configuration files can steal the stored secrets and use them. This control checks if ConfigMaps or pod specifications have sensitive information in their configuration.",
+   "remediation": "Use Kubernetes secrets or Key Management Systems to store credentials.",
+   "category": "Secrets",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0013": {
+   "controlID": "C-0013",
+   "name": "Non-root containers",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Potential attackers may gain access to a container and leverage its existing privileges to conduct an attack. Therefore, it is not recommended to deploy containers with root privileges unless it is absolutely necessary. This control identifies all the pods running as root or can escalate to root.",
+   "remediation": "If your application does not need root privileges, make sure to define runAsNonRoot as true or explicitly set the runAsUser using ID 1000 or higher under the PodSecurityContext or container securityContext. In addition, set an explicit value for runAsGroup using ID 1000 or higher.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0014": {
+   "controlID": "C-0014",
+   "name": "Access Kubernetes dashboard",
+   "severity": "Low",
+   "baseScore": 2,
+   "description": "Attackers who gain access to the dashboard service account or have its RBAC permissions can use its network access to retrieve information about resources in the cluster or change them. This control checks if a subject that is not dashboard service account is bound to dashboard role/clusterrole, or - if anyone that is not the dashboard pod is associated with dashboard service account.",
+   "remediation": "Make sure that the \u201cKubernetes Dashboard\u201d service account is only bound to the Kubernetes dashboard following the least privilege principle.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0015": {
+   "controlID": "C-0015",
+   "name": "List Kubernetes secrets",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Attackers who have permissions to access secrets can access sensitive information that might include credentials to various services. This control determines which user, group or service account can list/get secrets.",
+   "remediation": "Monitor and approve list of users, groups and service accounts that can access secrets. Use exception mechanism to prevent repetitive the notifications.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0016": {
+   "controlID": "C-0016",
+   "name": "Allow privilege escalation",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Attackers may gain access to a container and uplift its privilege to enable excessive capabilities.",
+   "remediation": "If your application does not need it, make sure the allowPrivilegeEscalation field of the securityContext is set to false.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0017": {
+   "controlID": "C-0017",
+   "name": "Immutable container filesystem",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Mutable container filesystem can be abused to inject malicious code or data into containers. Use immutable (read-only) filesystem to limit potential attacks.",
+   "remediation": "Set the filesystem of the container to read-only when possible (pod securityContext, readOnlyRootFilesystem: true). If containers application needs to write into the filesystem, it is recommended to mount secondary filesystems for specific directories where application require write access.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0020": {
+   "controlID": "C-0020",
+   "name": "Mount service principal",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "When a cluster is deployed in the cloud, in some cases attackers can leverage their access to a container in the cluster to gain cloud credentials. This control determines if any workload contains a volume with potential access to cloud credential.",
+   "remediation": "Refrain from using path mount to known cloud credentials folders or files .",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0021": {
+   "controlID": "C-0021",
+   "name": "Exposed sensitive interfaces",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Exposing a sensitive interface to the internet poses a security risk. It might enable attackers to run malicious code or deploy containers in the cluster. This control checks if known components (e.g. Kubeflow, Argo Workflows, AI/ML inference servers such as Ollama, vLLM, KServe and Triton, or MLOps interfaces such as MLflow, Ray and JupyterHub) are deployed and exposed services externally.",
+   "remediation": "Consider blocking external interfaces or protect them with appropriate security tools.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0026": {
+   "controlID": "C-0026",
+   "name": "Kubernetes CronJob",
+   "severity": "Low",
+   "baseScore": 1,
+   "description": "Attackers may use Kubernetes CronJob for scheduling execution of malicious code that would run as a pod in the cluster. This control lists all the CronJobs that exist in the cluster for the user to approve.",
+   "remediation": "Watch Kubernetes CronJobs and make sure they are legitimate.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0030": {
+   "controlID": "C-0030",
+   "name": "Ingress and Egress blocked",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Disable Ingress and Egress traffic on all pods wherever possible. It is recommended to define restrictive network policy on all new pods, and then enable sources/destinations that this pod must communicate with.",
+   "remediation": "Define a NetworkPolicy, CiliumNetworkPolicy, or CiliumClusterwideNetworkPolicy that restricts ingress and egress connections.",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0031": {
+   "controlID": "C-0031",
+   "name": "Delete Kubernetes events",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Attackers may delete Kubernetes events to avoid detection of their activity in the cluster. This control identifies all the subjects that can delete Kubernetes events.",
+   "remediation": "You should follow the least privilege principle. Minimize the number of subjects who can delete Kubernetes events. Avoid using these subjects in the daily operations.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0034": {
+   "controlID": "C-0034",
+   "name": "Automatic mapping of service account",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Potential attacker may gain access to a pod and steal its service account token. Therefore, it is recommended to disable automatic mapping of the service account tokens in service account configuration and enable it only for pods that need to use them.",
+   "remediation": "Disable automatic mounting of service account tokens to pods either at the service account level or at the individual pod level, by specifying the automountServiceAccountToken: false. Note that pod level takes precedence.",
+   "category": "Secrets",
+   "subCategory": "",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0035": {
+   "controlID": "C-0035",
+   "name": "Administrative Roles",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Attackers who have cluster admin permissions (can perform any action on any resource), can take advantage of their privileges for malicious activities. This control determines which subjects have cluster admin permissions.",
+   "remediation": "You should apply least privilege principle. Make sure cluster admin permissions are granted only when it is absolutely necessary. Don't use subjects with such high permissions for daily operations.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0036": {
+   "controlID": "C-0036",
+   "name": "Validate admission controller (validating)",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Attackers can use validating webhooks to intercept and discover all the resources in the cluster. This control lists all the validating webhook configurations that must be verified.",
+   "remediation": "Ensure all the webhooks are necessary. Use exception mechanism to prevent repititive notifications.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0037": {
+   "controlID": "C-0037",
+   "name": "CoreDNS poisoning",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "If attackers have permissions to modify the coredns ConfigMap they can change the behavior of the cluster\u2019s DNS, poison it, and override the network identity of other services. This control identifies all subjects allowed to update the 'coredns' configmap.",
+   "remediation": "You should follow the least privilege principle. Monitor and approve all the subjects allowed to modify the 'coredns' configmap. It is also recommended to remove this permission from the users/service accounts used in the daily operations.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0038": {
+   "controlID": "C-0038",
+   "name": "Host PID/IPC privileges",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Containers should be isolated from the host machine as much as possible. The hostPID and hostIPC fields in deployment yaml may allow cross-container influence and may expose the host itself to potentially malicious or destructive actions. This control identifies all pods using hostPID or hostIPC privileges.",
+   "remediation": "Remove hostPID and hostIPC from the yaml file(s) privileges unless they are absolutely necessary.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0039": {
+   "controlID": "C-0039",
+   "name": "Validate admission controller (mutating)",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Attackers may use mutating webhooks to intercept and modify all the resources in the cluster. This control lists all mutating webhook configurations that must be verified.",
+   "remediation": "Ensure all the webhooks are necessary. Use exception mechanism to prevent repititive notifications.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0041": {
+   "controlID": "C-0041",
+   "name": "HostNetwork access",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Potential attackers may gain access to a pod and inherit access to the entire host network. For example, in AWS case, they will have access to the entire VPC. This control identifies all the pods with host network access enabled.",
+   "remediation": "Only connect pods to host network when it is necessary. If not, set the hostNetwork field of the pod spec to false, or completely remove it (false is the default). Whitelist only those pods that must have access to host network by design.",
+   "category": "Workload",
+   "subCategory": "Network",
+   "frameworks": [
+    "NSA",
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0042": {
+   "controlID": "C-0042",
+   "name": "SSH server running inside container",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "An SSH server that is running inside a container may be used by attackers to get remote access to the container. This control checks if pods have an open SSH port (22/2222).",
+   "remediation": "Remove SSH from the container image or limit the access to the SSH server using network policies.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0044": {
+   "controlID": "C-0044",
+   "name": "Container hostPort",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Configuring hostPort requires a particular port number. If two objects specify the same HostPort, they could not be deployed to the same node. It may prevent the second object from starting, even if Kubernetes will try reschedule it on another node, provided there are available nodes with sufficient amount of resources. Also, if the number of replicas of such workload is higher than the number of nodes, the deployment will consistently fail.",
+   "remediation": "Avoid usage of hostPort unless it is absolutely necessary, in which case define appropriate exception. Use NodePort / ClusterIP instead.",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0045": {
+   "controlID": "C-0045",
+   "name": "Writable hostPath mount",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Mounting host directory to the container can be used by attackers to get access to the underlying host and gain persistence.",
+   "remediation": "Refrain from using the hostPath mount or use the exception mechanism to remove unnecessary notifications.",
+   "category": "Workload",
+   "subCategory": "Storage",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0046": {
+   "controlID": "C-0046",
+   "name": "Insecure capabilities",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Giving insecure or excessive capabilities to a container can increase the impact of the container compromise. This control identifies all the pods with dangerous capabilities (see documentation pages for details).",
+   "remediation": "Remove all insecure capabilities which are not necessary for the container.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0048": {
+   "controlID": "C-0048",
+   "name": "HostPath mount",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Mounting host directory to the container can be used by attackers to get access to the underlying host. This control identifies all the pods using hostPath mount.",
+   "remediation": "Remove hostPath mounts unless they are absolutely necessary and use exception mechanism to remove notifications.",
+   "category": "Workload",
+   "subCategory": "Storage",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0052": {
+   "controlID": "C-0052",
+   "name": "Instance Metadata API",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Attackers who gain access to a container, may query the metadata API service for getting information about the underlying node. This control checks if there is access from the nodes to cloud providers instance metadata services.",
+   "remediation": "Disable metadata services for pods in cloud provider settings.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0053": {
+   "controlID": "C-0053",
+   "name": "Access container service account",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Attackers who obtain access to a pod can use its SA token to communicate with KubeAPI server. All pods with SA token mounted (if such token has a Role or a ClusterRole binding) are considerred potentially dangerous.",
+   "remediation": "Verify that RBAC is enabled. Follow the least privilege principle and ensure that only necessary pods have SA token mounted into them.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0054": {
+   "controlID": "C-0054",
+   "name": "Cluster internal networking",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "If no network policy is defined, attackers who gain access to a container may use it to move laterally in the cluster. This control lists namespaces in which no network policy (NetworkPolicy, CiliumNetworkPolicy, or qualifying CiliumClusterwideNetworkPolicy) is defined.",
+   "remediation": "Define Kubernetes NetworkPolicy, CiliumNetworkPolicy, or CiliumClusterwideNetworkPolicy resources to protect cluster network.",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0055": {
+   "controlID": "C-0055",
+   "name": "Linux hardening",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Containers may be given more privileges than they actually need. This can increase the potential impact of a container compromise.",
+   "remediation": "You can use AppArmor, Seccomp, SELinux and Linux Capabilities mechanisms to restrict containers abilities to utilize unwanted privileges.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0057": {
+   "controlID": "C-0057",
+   "name": "Privileged container",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Potential attackers may gain access to privileged containers and inherit access to the host resources. Therefore, it is not recommended to deploy privileged containers unless it is absolutely necessary. This control identifies all the privileged Pods.",
+   "remediation": "Remove privileged capabilities by setting the securityContext.privileged to false. If you must deploy a Pod as privileged, add other restriction to it, such as network policy, Seccomp etc and still remove all unnecessary capabilities. Use the exception mechanism to remove unnecessary notifications.",
+   "category": "Workload",
+   "subCategory": "Node escape",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0058": {
+   "controlID": "C-0058",
+   "name": "CVE-2021-25741 - Using symlink for arbitrary host file system access.",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "A user may be able to create a container with subPath or subPathExpr volume mounts to access files & directories anywhere on the host filesystem. Following Kubernetes versions are affected: v1.22.0 - v1.22.1, v1.21.0 - v1.21.4, v1.20.0 - v1.20.10, version v1.19.14 and lower. This control checks the vulnerable versions and the actual usage of the subPath feature in all Pods in the cluster. If you want to learn more about the CVE, please refer to the CVE link: https://nvd.nist.gov/vuln/detail/CVE-2021-25741",
+   "remediation": "To mitigate this vulnerability without upgrading kubelet, you can disable the VolumeSubpath feature gate on kubelet and kube-apiserver, or remove any existing Pods using subPath or subPathExpr feature.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0059": {
+   "controlID": "C-0059",
+   "name": "CVE-2021-25742-nginx-ingress-snippet-annotation-vulnerability",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Security issue in ingress-nginx where a user that can create or update ingress objects can use the custom snippets feature to obtain all secrets in the cluster (see more at https://github.com/kubernetes/ingress-nginx/issues/7837)",
+   "remediation": "To mitigate this vulnerability: 1. Upgrade to a version that allows mitigation (>= v0.49.1 or >= v1.0.1), 2. Set allow-snippet-annotations to false in your ingress-nginx ConfigMap based on how you deploy ingress-nginx",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0066": {
+   "controlID": "C-0066",
+   "name": "Secret/etcd encryption enabled",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "All Kubernetes Secrets are stored primarily in etcd therefore it is important to encrypt it.",
+   "remediation": "Turn on the etcd encryption in your cluster, for more see the vendor documentation.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0067": {
+   "controlID": "C-0067",
+   "name": "Audit logs enabled",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Audit logging is an important security feature in Kubernetes, it enables the operator to track requests to the cluster. It is important to use it so the operator has a record of events happened in Kubernetes",
+   "remediation": "Turn on audit logging for your cluster. Look at the vendor guidelines for more details",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0068": {
+   "controlID": "C-0068",
+   "name": "PSP enabled",
+   "severity": "Low",
+   "baseScore": 1,
+   "description": "PSP enable fine-grained authorization of pod creation and it is important to enable it",
+   "remediation": "Turn Pod Security Policies on in your cluster, if you use other admission controllers to control the behavior that PSP controls, exclude this control from your scans",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0069": {
+   "controlID": "C-0069",
+   "name": "Disable anonymous access to Kubelet service",
+   "severity": "Critical",
+   "baseScore": 10,
+   "description": "By default, requests to the kubelet's HTTPS endpoint that are not rejected by other configured authentication methods are treated as anonymous requests, and given a username of system:anonymous and a group of system:unauthenticated.",
+   "remediation": "Start the kubelet with the --anonymous-auth=false flag.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0070": {
+   "controlID": "C-0070",
+   "name": "Enforce Kubelet client TLS authentication",
+   "severity": "Critical",
+   "baseScore": 9,
+   "description": "Kubelets are the node level orchestrator in Kubernetes control plane. They are publishing service port 10250 where they accept commands from API server. Operator must make sure that only API server is allowed to submit commands to Kubelet. This is done through client certificate verification, must configure Kubelet with client CA file to use for this purpose.",
+   "remediation": "Start the kubelet with the --client-ca-file flag, providing a CA bundle to verify client certificates with.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "NSA",
+    "MITRE"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0092": {
+   "controlID": "C-0092",
+   "name": "CIS-1.1.1 Ensure that the API server pod specification file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the API server pod specification file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/manifests/kube-apiserver.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0093": {
+   "controlID": "C-0093",
+   "name": "CIS-1.1.2 Ensure that the API server pod specification file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the API server pod specification file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/manifests/kube-apiserver.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0094": {
+   "controlID": "C-0094",
+   "name": "CIS-1.1.3 Ensure that the controller manager pod specification file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the controller manager pod specification file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/manifests/kube-controller-manager.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0095": {
+   "controlID": "C-0095",
+   "name": "CIS-1.1.4 Ensure that the controller manager pod specification file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the controller manager pod specification file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/manifests/kube-controller-manager.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0096": {
+   "controlID": "C-0096",
+   "name": "CIS-1.1.5 Ensure that the scheduler pod specification file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the scheduler pod specification file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/manifests/kube-scheduler.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0097": {
+   "controlID": "C-0097",
+   "name": "CIS-1.1.6 Ensure that the scheduler pod specification file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the scheduler pod specification file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/manifests/kube-scheduler.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0098": {
+   "controlID": "C-0098",
+   "name": "CIS-1.1.7 Ensure that the etcd pod specification file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `/etc/kubernetes/manifests/etcd.yaml` file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/manifests/etcd.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0099": {
+   "controlID": "C-0099",
+   "name": "CIS-1.1.8 Ensure that the etcd pod specification file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `/etc/kubernetes/manifests/etcd.yaml` file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/manifests/etcd.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0100": {
+   "controlID": "C-0100",
+   "name": "CIS-1.1.9 Ensure that the Container Network Interface file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the Container Network Interface files have permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 <path/to/cni/files>\n\n```",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0101": {
+   "controlID": "C-0101",
+   "name": "CIS-1.1.10 Ensure that the Container Network Interface file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the Container Network Interface files have ownership set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root <path/to/cni/files>\n\n```",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0102": {
+   "controlID": "C-0102",
+   "name": "CIS-1.1.11 Ensure that the etcd data directory permissions are set to 700 or more restrictive",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that the etcd data directory has permissions of `700` or more restrictive.",
+   "remediation": "On the etcd server node, get the etcd data directory, passed as an argument `--data-dir`, from the below command:\n\n \n```\nps -ef | grep etcd\n\n```\n Run the below command (based on the etcd data directory found above). For example,\n\n \n```\nchmod 700 /var/lib/etcd\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0103": {
+   "controlID": "C-0103",
+   "name": "CIS-1.1.12 Ensure that the etcd data directory ownership is set to etcd:etcd",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that the etcd data directory ownership is set to `etcd:etcd`.",
+   "remediation": "On the etcd server node, get the etcd data directory, passed as an argument `--data-dir`, from the below command:\n\n \n```\nps -ef | grep etcd\n\n```\n Run the below command (based on the etcd data directory found above). For example,\n\n \n```\nchown etcd:etcd /var/lib/etcd\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0104": {
+   "controlID": "C-0104",
+   "name": "CIS-1.1.13 Ensure that the default administrative credential file permissions are set to 600",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that the `admin.conf` file (and `super-admin.conf` file, where it exists) have permissions of `600`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/admin.conf\n\n```\n On Kubernetes 1.29+ the `super-admin.conf` file should also be modified, if present. For example,\n\n \n```\nchmod 600 /etc/kubernetes/super-admin.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0105": {
+   "controlID": "C-0105",
+   "name": "CIS-1.1.14 Ensure that the default administrative credential file ownership is set to root:root",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that the `admin.conf` (and `super-admin.conf` file, where it exists) file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/admin.conf\n\n```\n On Kubernetes 1.29+ the super-admin.conf file should also be modified, if present. For example,\n\n \n```\nchown root:root /etc/kubernetes/super-admin.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0106": {
+   "controlID": "C-0106",
+   "name": "CIS-1.1.15 Ensure that the scheduler.conf file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `scheduler.conf` file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/scheduler.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0107": {
+   "controlID": "C-0107",
+   "name": "CIS-1.1.16 Ensure that the scheduler.conf file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `scheduler.conf` file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/scheduler.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0108": {
+   "controlID": "C-0108",
+   "name": "CIS-1.1.17 Ensure that the controller-manager.conf file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `controller-manager.conf` file has permissions of 600 or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/controller-manager.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0109": {
+   "controlID": "C-0109",
+   "name": "CIS-1.1.18 Ensure that the controller-manager.conf file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `controller-manager.conf` file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown root:root /etc/kubernetes/controller-manager.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0110": {
+   "controlID": "C-0110",
+   "name": "CIS-1.1.19 Ensure that the Kubernetes PKI directory and file ownership is set to root:root",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Ensure that the Kubernetes PKI directory and file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchown -R root:root /etc/kubernetes/pki/\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0111": {
+   "controlID": "C-0111",
+   "name": "CIS-1.1.20 Ensure that the Kubernetes PKI certificate file permissions are set to 644 or more restrictive",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Ensure that Kubernetes PKI certificate files have permissions of `644` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod -R 600 /etc/kubernetes/pki/*.crt\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0112": {
+   "controlID": "C-0112",
+   "name": "CIS-1.1.21 Ensure that the Kubernetes PKI key file permissions are set to 600",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Ensure that Kubernetes PKI key files have permissions of `600`.",
+   "remediation": "Run the below command (based on the file location on your system) on the Control Plane node. For example,\n\n \n```\nchmod -R 600 /etc/kubernetes/pki/*.key\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0113": {
+   "controlID": "C-0113",
+   "name": "CIS-1.2.1 Ensure that the --anonymous-auth argument is set to false",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Disable anonymous requests to the API server.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the below parameter.\n\n \n```\n--anonymous-auth=false\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0114": {
+   "controlID": "C-0114",
+   "name": "CIS-1.2.2 Ensure that the --token-auth-file parameter is not set",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Do not use token based authentication.",
+   "remediation": "Follow the documentation and configure alternate mechanisms for authentication. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and remove the `--token-auth-file=<filename>` parameter.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0116": {
+   "controlID": "C-0116",
+   "name": "CIS-1.2.4 Ensure that the --kubelet-client-certificate and --kubelet-client-key arguments are set as appropriate",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Enable certificate based kubelet authentication.",
+   "remediation": "Follow the Kubernetes documentation and set up the TLS connection between the apiserver and kubelets. Then, edit API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the kubelet client certificate and key parameters as below.\n\n \n```\n--kubelet-client-certificate=<path/to/client-certificate-file>\n--kubelet-client-key=<path/to/client-key-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0117": {
+   "controlID": "C-0117",
+   "name": "CIS-1.2.5 Ensure that the --kubelet-certificate-authority argument is set as appropriate",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Verify kubelet's certificate before establishing connection.",
+   "remediation": "Follow the Kubernetes documentation and setup the TLS connection between the apiserver and kubelets. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--kubelet-certificate-authority` parameter to the path to the cert file for the certificate authority.\n\n \n```\n--kubelet-certificate-authority=<ca-string>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0118": {
+   "controlID": "C-0118",
+   "name": "CIS-1.2.6 Ensure that the --authorization-mode argument is not set to AlwaysAllow",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Do not always authorize all requests.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--authorization-mode` parameter to values other than `AlwaysAllow`. One such example could be as below.\n\n \n```\n--authorization-mode=RBAC\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0119": {
+   "controlID": "C-0119",
+   "name": "CIS-1.2.7 Ensure that the --authorization-mode argument includes Node",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Restrict kubelet nodes to reading only objects associated with them.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--authorization-mode` parameter to a value that includes `Node`.\n\n \n```\n--authorization-mode=Node,RBAC\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0120": {
+   "controlID": "C-0120",
+   "name": "CIS-1.2.8 Ensure that the --authorization-mode argument includes RBAC",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Turn on Role Based Access Control.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--authorization-mode` parameter to a value that includes `RBAC`, for example:\n\n \n```\n--authorization-mode=Node,RBAC\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0121": {
+   "controlID": "C-0121",
+   "name": "CIS-1.2.9 Ensure that the admission control plugin EventRateLimit is set",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Limit the rate at which the API server accepts requests.",
+   "remediation": "Follow the Kubernetes documentation and set the desired limits in a configuration file.\n\n Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` and set the below parameters.\n\n \n```\n--enable-admission-plugins=...,EventRateLimit,...\n--admission-control-config-file=<path/to/configuration/file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0122": {
+   "controlID": "C-0122",
+   "name": "CIS-1.2.10 Ensure that the admission control plugin AlwaysAdmit is not set",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Do not allow all requests.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and either remove the `--enable-admission-plugins` parameter, or set it to a value that does not include `AlwaysAdmit`.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0123": {
+   "controlID": "C-0123",
+   "name": "CIS-1.2.11 Ensure that the admission control plugin AlwaysPullImages is set",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Always pull images.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--enable-admission-plugins` parameter to include `AlwaysPullImages`.\n\n \n```\n--enable-admission-plugins=...,AlwaysPullImages,...\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0125": {
+   "controlID": "C-0125",
+   "name": "CIS-1.2.12 Ensure that the admission control plugin ServiceAccount is set",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Automate service accounts management.",
+   "remediation": "Follow the documentation and create `ServiceAccount` objects as per your environment. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and ensure that the `--disable-admission-plugins` parameter is set to a value that does not include `ServiceAccount`.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0126": {
+   "controlID": "C-0126",
+   "name": "CIS-1.2.13 Ensure that the admission control plugin NamespaceLifecycle is set",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Reject creating objects in a namespace that is undergoing termination.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--disable-admission-plugins` parameter to ensure it does not include `NamespaceLifecycle`.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0127": {
+   "controlID": "C-0127",
+   "name": "CIS-1.2.14 Ensure that the admission control plugin NodeRestriction is set",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Limit the `Node` and `Pod` objects that a kubelet could modify.",
+   "remediation": "Follow the Kubernetes documentation and configure `NodeRestriction` plug-in on kubelets. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and set the `--enable-admission-plugins` parameter to a value that includes `NodeRestriction`.\n\n \n```\n--enable-admission-plugins=...,NodeRestriction,...\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0129": {
+   "controlID": "C-0129",
+   "name": "CIS-1.2.15 Ensure that the --profiling argument is set to false",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Disable profiling, if not needed.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the below parameter.\n\n \n```\n--profiling=false\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0130": {
+   "controlID": "C-0130",
+   "name": "CIS-1.2.16 Ensure that the --audit-log-path argument is set",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Enable auditing on the Kubernetes API Server and set the desired audit log path.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--audit-log-path` parameter to a suitable path and file where you would like audit logs to be written, for example:\n\n \n```\n--audit-log-path=/var/log/apiserver/audit.log\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0131": {
+   "controlID": "C-0131",
+   "name": "CIS-1.2.17 Ensure that the --audit-log-maxage argument is set to 30 or as appropriate",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Retain the logs for at least 30 days or as appropriate.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--audit-log-maxage` parameter to 30 or as an appropriate number of days:\n\n \n```\n--audit-log-maxage=30\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0132": {
+   "controlID": "C-0132",
+   "name": "CIS-1.2.18 Ensure that the --audit-log-maxbackup argument is set to 10 or as appropriate",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Retain 10 or an appropriate number of old log files.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--audit-log-maxbackup` parameter to 10 or to an appropriate value.\n\n \n```\n--audit-log-maxbackup=10\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0133": {
+   "controlID": "C-0133",
+   "name": "CIS-1.2.19 Ensure that the --audit-log-maxsize argument is set to 100 or as appropriate",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Rotate log files on reaching 100 MB or as appropriate.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--audit-log-maxsize` parameter to an appropriate size in MB. For example, to set it as 100 MB:\n\n \n```\n--audit-log-maxsize=100\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0134": {
+   "controlID": "C-0134",
+   "name": "CIS-1.2.20 Ensure that the --request-timeout argument is set as appropriate",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Set global request timeout for API server requests as appropriate.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` and set the below parameter as appropriate and if needed. For example,\n\n \n```\n--request-timeout=300s\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0135": {
+   "controlID": "C-0135",
+   "name": "CIS-1.2.21 Ensure that the --service-account-lookup argument is set to true",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Validate service account before validating token.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the below parameter.\n\n \n```\n--service-account-lookup=true\n\n```\n Alternatively, you can delete the `--service-account-lookup` parameter from this file so that the default takes effect.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0136": {
+   "controlID": "C-0136",
+   "name": "CIS-1.2.22 Ensure that the --service-account-key-file argument is set as appropriate",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Explicitly set a service account public key file for service accounts on the apiserver.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the `--service-account-key-file` parameter to the public key file for service accounts:\n\n \n```\n--service-account-key-file=<filename>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0137": {
+   "controlID": "C-0137",
+   "name": "CIS-1.2.23 Ensure that the --etcd-certfile and --etcd-keyfile arguments are set as appropriate",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "etcd should be configured to make use of TLS encryption for client connections.",
+   "remediation": "Follow the Kubernetes documentation and set up the TLS connection between the apiserver and etcd. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and set the etcd certificate and key file parameters.\n\n \n```\n--etcd-certfile=<path/to/client-certificate-file> \n--etcd-keyfile=<path/to/client-key-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0138": {
+   "controlID": "C-0138",
+   "name": "CIS-1.2.24 Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Setup TLS connection on the API server.",
+   "remediation": "Follow the Kubernetes documentation and set up the TLS connection on the apiserver. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and set the TLS certificate and private key file parameters.\n\n \n```\n--tls-cert-file=<path/to/tls-certificate-file> \n--tls-private-key-file=<path/to/tls-key-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0139": {
+   "controlID": "C-0139",
+   "name": "CIS-1.2.25 Ensure that the --client-ca-file argument is set as appropriate",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Setup TLS connection on the API server.",
+   "remediation": "Follow the Kubernetes documentation and set up the TLS connection on the apiserver. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and set the client certificate authority file.\n\n \n```\n--client-ca-file=<path/to/client-ca-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0140": {
+   "controlID": "C-0140",
+   "name": "CIS-1.2.26 Ensure that the --etcd-cafile argument is set as appropriate",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "etcd should be configured to make use of TLS encryption for client connections.",
+   "remediation": "Follow the Kubernetes documentation and set up the TLS connection between the apiserver and etcd. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and set the etcd certificate authority file parameter.\n\n \n```\n--etcd-cafile=<path/to/ca-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0141": {
+   "controlID": "C-0141",
+   "name": "CIS-1.2.27 Ensure that the --encryption-provider-config argument is set as appropriate",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Encrypt etcd key-value store.",
+   "remediation": "Follow the Kubernetes documentation and configure a `EncryptionConfig` file. Then, edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the master node and set the `--encryption-provider-config` parameter to the path of that file:\n\n \n```\n--encryption-provider-config=</path/to/EncryptionConfig/File>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0142": {
+   "controlID": "C-0142",
+   "name": "CIS-1.2.28 Ensure that encryption providers are appropriately configured",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Where `etcd` encryption is used, appropriate providers should be configured.",
+   "remediation": "Follow the Kubernetes documentation and configure a `EncryptionConfig` file. In this file, choose `aescbc`, `kms` or `secretbox` as the encryption provider.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0144": {
+   "controlID": "C-0144",
+   "name": "CIS-1.3.1 Ensure that the --terminated-pod-gc-threshold argument is set as appropriate",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Activate garbage collector on pod termination, as appropriate.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node and set the `--terminated-pod-gc-threshold` to an appropriate threshold, for example:\n\n \n```\n--terminated-pod-gc-threshold=10\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0145": {
+   "controlID": "C-0145",
+   "name": "CIS-1.3.2 Ensure that the --profiling argument is set to false",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Disable profiling, if not needed.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node and set the below parameter.\n\n \n```\n--profiling=false\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0146": {
+   "controlID": "C-0146",
+   "name": "CIS-1.3.3 Ensure that the --use-service-account-credentials argument is set to true",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Use individual service account credentials for each controller.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node to set the below parameter.\n\n \n```\n--use-service-account-credentials=true\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0147": {
+   "controlID": "C-0147",
+   "name": "CIS-1.3.4 Ensure that the --service-account-private-key-file argument is set as appropriate",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Explicitly set a service account private key file for service accounts on the controller manager.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node and set the `--service-account-private-key-file` parameter to the private key file for service accounts.\n\n \n```\n--service-account-private-key-file=<filename>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0148": {
+   "controlID": "C-0148",
+   "name": "CIS-1.3.5 Ensure that the --root-ca-file argument is set as appropriate",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Allow pods to verify the API server's serving certificate before establishing connections.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node and set the `--root-ca-file` parameter to the certificate bundle file`.\n\n \n```\n--root-ca-file=<path/to/file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0149": {
+   "controlID": "C-0149",
+   "name": "CIS-1.3.6 Ensure that the RotateKubeletServerCertificate argument is set to true",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Enable kubelet server certificate rotation on controller-manager.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node and set the `--feature-gates` parameter to include `RotateKubeletServerCertificate=true`.\n\n \n```\n--feature-gates=RotateKubeletServerCertificate=true\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0150": {
+   "controlID": "C-0150",
+   "name": "CIS-1.3.7 Ensure that the --bind-address argument is set to 127.0.0.1",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Do not bind the Controller Manager service to non-loopback insecure addresses.",
+   "remediation": "Edit the Controller Manager pod specification file `/etc/kubernetes/manifests/kube-controller-manager.yaml` on the Control Plane node and ensure the correct value for the `--bind-address` parameter",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0151": {
+   "controlID": "C-0151",
+   "name": "CIS-1.4.1 Ensure that the --profiling argument is set to false",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Disable profiling, if not needed.",
+   "remediation": "Edit the Scheduler pod specification file `/etc/kubernetes/manifests/kube-scheduler.yaml` file on the Control Plane node and set the below parameter.\n\n \n```\n--profiling=false\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0152": {
+   "controlID": "C-0152",
+   "name": "CIS-1.4.2 Ensure that the --bind-address argument is set to 127.0.0.1",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Do not bind the scheduler service to non-loopback insecure addresses.",
+   "remediation": "Edit the Scheduler pod specification file `/etc/kubernetes/manifests/kube-scheduler.yaml` on the Control Plane node and ensure the correct value for the `--bind-address` parameter",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0153": {
+   "controlID": "C-0153",
+   "name": "CIS-2.1 Ensure that the --cert-file and --key-file arguments are set as appropriate",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Configure TLS encryption for the etcd service.",
+   "remediation": "Follow the etcd service documentation and configure TLS encryption.\n\n Then, edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and set the below parameters.\n\n \n```\n--cert-file=</path/to/ca-file>\n--key-file=</path/to/key-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0154": {
+   "controlID": "C-0154",
+   "name": "CIS-2.2 Ensure that the --client-cert-auth argument is set to true",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Enable client authentication on etcd service.",
+   "remediation": "Edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and set the below parameter.\n\n \n```\n--client-cert-auth=\"true\"\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0155": {
+   "controlID": "C-0155",
+   "name": "CIS-2.3 Ensure that the --auto-tls argument is not set to true",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not use self-signed certificates for TLS.",
+   "remediation": "Edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and either remove the `--auto-tls` parameter or set it to `false`.\n\n \n```\n--auto-tls=false\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0156": {
+   "controlID": "C-0156",
+   "name": "CIS-2.4 Ensure that the --peer-cert-file and --peer-key-file arguments are set as appropriate",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "etcd should be configured to make use of TLS encryption for peer connections.",
+   "remediation": "Follow the etcd service documentation and configure peer TLS encryption as appropriate for your etcd cluster.\n\n Then, edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and set the below parameters.\n\n \n```\n--peer-client-file=</path/to/peer-cert-file>\n--peer-key-file=</path/to/peer-key-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0157": {
+   "controlID": "C-0157",
+   "name": "CIS-2.5 Ensure that the --peer-client-cert-auth argument is set to true",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "etcd should be configured for peer authentication.",
+   "remediation": "Edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and set the below parameter.\n\n \n```\n--peer-client-cert-auth=true\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0158": {
+   "controlID": "C-0158",
+   "name": "CIS-2.6 Ensure that the --peer-auto-tls argument is not set to true",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not use automatically generated self-signed certificates for TLS connections between peers.",
+   "remediation": "Edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and either remove the `--peer-auto-tls` parameter or set it to `false`.\n\n \n```\n--peer-auto-tls=false\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0159": {
+   "controlID": "C-0159",
+   "name": "CIS-2.7 Ensure that a unique Certificate Authority is used for etcd",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Use a different certificate authority for etcd from the one used for Kubernetes.",
+   "remediation": "Follow the etcd documentation and create a dedicated certificate authority setup for the etcd service.\n\n Then, edit the etcd pod specification file `/etc/kubernetes/manifests/etcd.yaml` on the master node and set the below parameter.\n\n \n```\n--trusted-ca-file=</path/to/ca-file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0160": {
+   "controlID": "C-0160",
+   "name": "CIS-3.2.1 Ensure that a minimal audit policy is created",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Kubernetes can audit the details of requests made to the API server. The `--audit-policy-file` flag must be set for this logging to be enabled.",
+   "remediation": "Create an audit policy file for your cluster.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0161": {
+   "controlID": "C-0161",
+   "name": "CIS-3.2.2 Ensure that the audit policy covers key security concerns",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Ensure that the audit policy created for the cluster covers key security concerns.",
+   "remediation": "Consider modification of the audit policy in use on the cluster to include these items, at a minimum.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0162": {
+   "controlID": "C-0162",
+   "name": "CIS-4.1.1 Ensure that the kubelet service file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `kubelet` service file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the each worker node. For example,\n\n \n```\nchmod 600 /etc/systemd/system/kubelet.service.d/kubeadm.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0163": {
+   "controlID": "C-0163",
+   "name": "CIS-4.1.2 Ensure that the kubelet service file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `kubelet` service file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the each worker node. For example,\n\n \n```\nchown root:root /etc/systemd/system/kubelet.service.d/kubeadm.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0164": {
+   "controlID": "C-0164",
+   "name": "CIS-4.1.3 If proxy kubeconfig file exists ensure permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "If `kube-proxy` is running, and if it is using a file-based kubeconfig file, ensure that the proxy kubeconfig file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the each worker node. For example,\n\n \n```\nchmod 600 <proxy kubeconfig file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0165": {
+   "controlID": "C-0165",
+   "name": "CIS-4.1.4 If proxy kubeconfig file exists ensure ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "If `kube-proxy` is running, ensure that the file ownership of its kubeconfig file is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the each worker node. For example,\n\n \n```\nchown root:root <proxy kubeconfig file>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0166": {
+   "controlID": "C-0166",
+   "name": "CIS-4.1.5 Ensure that the --kubeconfig kubelet.conf file permissions are set to 600 or more restrictive",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `kubelet.conf` file has permissions of `600` or more restrictive.",
+   "remediation": "Run the below command (based on the file location on your system) on the each worker node. For example,\n\n \n```\nchmod 600 /etc/kubernetes/kubelet.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0167": {
+   "controlID": "C-0167",
+   "name": "CIS-4.1.6 Ensure that the --kubeconfig kubelet.conf file ownership is set to root:root",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Ensure that the `kubelet.conf` file ownership is set to `root:root`.",
+   "remediation": "Run the below command (based on the file location on your system) on the each worker node. For example,\n\n \n```\nchown root:root /etc/kubernetes/kubelet.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0168": {
+   "controlID": "C-0168",
+   "name": "CIS-4.1.7 Ensure that the certificate authorities file permissions are set to 644 or more restrictive",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that the certificate authorities file has permissions of `644` or more restrictive.",
+   "remediation": "Run the following command to modify the file permissions of the `--client-ca-file`\n\n \n```\nchmod 600 <filename>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0169": {
+   "controlID": "C-0169",
+   "name": "CIS-4.1.8 Ensure that the client certificate authorities file ownership is set to root:root",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that the certificate authorities file ownership is set to `root:root`.",
+   "remediation": "Run the following command to modify the ownership of the `--client-ca-file`.\n\n \n```\nchown root:root <filename>\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0170": {
+   "controlID": "C-0170",
+   "name": "CIS-4.1.9 If the kubelet config.yaml configuration file is being used validate permissions set to 600 or more restrictive",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that if the kubelet refers to a configuration file with the `--config` argument, that file has permissions of 600 or more restrictive.",
+   "remediation": "Run the following command (using the config file location identied in the Audit step)\n\n \n```\nchmod 600 /var/lib/kubelet/config.yaml\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0171": {
+   "controlID": "C-0171",
+   "name": "CIS-4.1.10 If the kubelet config.yaml configuration file is being used validate file ownership is set to root:root",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Ensure that if the kubelet refers to a configuration file with the `--config` argument, that file is owned by root:root.",
+   "remediation": "Run the following command (using the config file location identied in the Audit step)\n\n \n```\nchown root:root /etc/kubernetes/kubelet.conf\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0172": {
+   "controlID": "C-0172",
+   "name": "CIS-4.2.1 Ensure that the --anonymous-auth argument is set to false",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Disable anonymous requests to the Kubelet server.",
+   "remediation": "If using a Kubelet config file, edit the file to set `authentication: anonymous: enabled` to `false`.\n\n If using executable arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and set the below parameter in `KUBELET_SYSTEM_PODS_ARGS` variable.\n\n \n```\n--anonymous-auth=false\n\n```\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0173": {
+   "controlID": "C-0173",
+   "name": "CIS-4.2.2 Ensure that the --authorization-mode argument is not set to AlwaysAllow",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not allow all requests. Enable explicit authorization.",
+   "remediation": "If using a Kubelet config file, edit the file to set `authorization: mode` to `Webhook`.\n\n If using executable arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and set the below parameter in `KUBELET_AUTHZ_ARGS` variable.\n\n \n```\n--authorization-mode=Webhook\n\n```\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0174": {
+   "controlID": "C-0174",
+   "name": "CIS-4.2.3 Ensure that the --client-ca-file argument is set as appropriate",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Enable Kubelet authentication using certificates.",
+   "remediation": "If using a Kubelet config file, edit the file to set `authentication: x509: clientCAFile` to the location of the client CA file.\n\n If using command line arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and set the below parameter in `KUBELET_AUTHZ_ARGS` variable.\n\n \n```\n--client-ca-file=<path/to/client-ca-file>\n\n```\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0175": {
+   "controlID": "C-0175",
+   "name": "CIS-4.2.4 Verify that the --read-only-port argument is set to 0",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Disable the read-only port.",
+   "remediation": "If using a Kubelet config file, edit the file to set `readOnlyPort` to `0`.\n\n If using command line arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and set the below parameter in `KUBELET_SYSTEM_PODS_ARGS` variable.\n\n \n```\n--read-only-port=0\n\n```\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0176": {
+   "controlID": "C-0176",
+   "name": "CIS-4.2.5 Ensure that the --streaming-connection-idle-timeout argument is not set to 0",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Do not disable timeouts on streaming connections.",
+   "remediation": "If using a Kubelet config file, edit the file to set `streamingConnectionIdleTimeout` to a value other than 0.\n\n If using command line arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and set the below parameter in `KUBELET_SYSTEM_PODS_ARGS` variable.\n\n \n```\n--streaming-connection-idle-timeout=5m\n\n```\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0178": {
+   "controlID": "C-0178",
+   "name": "CIS-4.2.6 Ensure that the --make-iptables-util-chains argument is set to true",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Allow Kubelet to manage iptables.",
+   "remediation": "If using a Kubelet config file, edit the file to set `makeIPTablesUtilChains: true`.\n\n If using command line arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and remove the `--make-iptables-util-chains` argument from the `KUBELET_SYSTEM_PODS_ARGS` variable.\n\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0179": {
+   "controlID": "C-0179",
+   "name": "CIS-4.2.7 Ensure that the --hostname-override argument is not set",
+   "severity": "Low",
+   "baseScore": 3,
+   "description": "Do not override node hostnames.",
+   "remediation": "Edit the kubelet service file `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf` on each worker node and remove the `--hostname-override` argument from the `KUBELET_SYSTEM_PODS_ARGS` variable.\n\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0180": {
+   "controlID": "C-0180",
+   "name": "CIS-4.2.8 Ensure that the eventRecordQPS argument is set to a level which ensures appropriate event capture",
+   "severity": "Low",
+   "baseScore": 2,
+   "description": "Security relevant information should be captured. The eventRecordQPS on the Kubelet configuration can be used to limit the rate at which events are gathered and sets the maximum event creations per second. Setting this too low could result in relevant events not being logged, however the unlimited setting of `0` could result in a denial of service on the kubelet.",
+   "remediation": "If using a Kubelet config file, edit the file to set `eventRecordQPS:` to an appropriate level.\n\n If using command line arguments, edit the kubelet service file `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf` on each worker node and set the below parameter in `KUBELET_ARGS` variable.\n\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0181": {
+   "controlID": "C-0181",
+   "name": "CIS-4.2.9 Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Setup TLS connection on the Kubelets.",
+   "remediation": "If using a Kubelet config file, edit the file to set tlsCertFile to the location of the certificate file to use to identify this Kubelet, and tlsPrivateKeyFile to the location of the corresponding private key file.\n\n If using command line arguments, edit the kubelet service file /etc/kubernetes/kubelet.conf on each worker node and set the below parameters in KUBELET\\_CERTIFICATE\\_ARGS variable.\n\n --tls-cert-file=<path/to/tls-certificate-file> --tls-private-key-file=<path/to/tls-key-file>\nBased on your system, restart the kubelet service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0182": {
+   "controlID": "C-0182",
+   "name": "CIS-4.2.10 Ensure that the --rotate-certificates argument is not set to false",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Enable kubelet client certificate rotation.",
+   "remediation": "If using a Kubelet config file, edit the file to add the line `rotateCertificates: true` or remove it altogether to use the default value.\n\n If using command line arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and remove `--rotate-certificates=false` argument from the `KUBELET_CERTIFICATE_ARGS` variable or set --rotate-certificates=true .\n\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0183": {
+   "controlID": "C-0183",
+   "name": "CIS-4.2.11 Verify that the RotateKubeletServerCertificate argument is set to true",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Enable kubelet server certificate rotation.",
+   "remediation": "The `RotateKubeletServerCertificate` feature gate is enabled by default, so no action is needed unless it has been explicitly disabled.\n\n If it has, edit the kubelet config file specified by `--config` and remove `RotateKubeletServerCertificate: false` from `featureGates`, or edit the kubelet service file on each worker node and remove `RotateKubeletServerCertificate=false` from the `--feature-gates` argument.\n\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0184": {
+   "controlID": "C-0184",
+   "name": "CIS-4.2.12 Ensure that the Kubelet only makes use of Strong Cryptographic Ciphers",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Ensure that the Kubelet is configured to only use strong cryptographic ciphers.",
+   "remediation": "If using a Kubelet config file, edit the file to set `TLSCipherSuites:` to `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256` or to a subset of these values.\n\n If using executable arguments, edit the kubelet service file `/etc/kubernetes/kubelet.conf` on each worker node and set the `--tls-cipher-suites` parameter as follows, or to a subset of these values.\n\n \n```\n --tls-cipher-suites=TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256\n\n```\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0185": {
+   "controlID": "C-0185",
+   "name": "CIS-5.1.1 Ensure that the cluster-admin role is only used where required",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "The RBAC role `cluster-admin` provides wide-ranging powers over the environment and should be used only where and when needed.",
+   "remediation": "Identify all clusterrolebindings to the cluster-admin role. Check if they are used and if they need this role or if they could use a role with fewer privileges.\n\n Where possible, first bind users to a lower privileged role and then remove the clusterrolebinding to the cluster-admin role :\n\n \n```\nkubectl delete clusterrolebinding [name]\n\n```",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0186": {
+   "controlID": "C-0186",
+   "name": "CIS-5.1.2 Minimize access to secrets",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "The Kubernetes API stores secrets, which may be service account tokens for the Kubernetes API or credentials used by workloads in the cluster. Access to these secrets should be restricted to the smallest possible group of users to reduce the risk of privilege escalation.",
+   "remediation": "Where possible, remove `get`, `list` and `watch` access to `secret` objects in the cluster.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0187": {
+   "controlID": "C-0187",
+   "name": "CIS-5.1.3 Minimize wildcard use in Roles and ClusterRoles",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Kubernetes Roles and ClusterRoles provide access to resources based on sets of objects and actions that can be taken on those objects. It is possible to set either of these to be the wildcard \"\\*\" which matches all items.\n\n Use of wildcards is not optimal from a security perspective as it may allow for inadvertent access to be granted when new resources are added to the Kubernetes API either as CRDs or in later versions of the product.",
+   "remediation": "Where possible replace any use of wildcards in clusterroles and roles with specific objects or actions.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0188": {
+   "controlID": "C-0188",
+   "name": "CIS-5.1.4 Minimize access to create pods",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "The ability to create pods in a namespace can provide a number of opportunities for privilege escalation, such as assigning privileged service accounts to these pods or mounting hostPaths with access to sensitive data (unless Pod Security Policies are implemented to restrict this access)\n\n As such, access to create new pods should be restricted to the smallest possible group of users.",
+   "remediation": "Where possible, remove `create` access to `pod` objects in the cluster.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0189": {
+   "controlID": "C-0189",
+   "name": "CIS-5.1.5 Ensure that default service accounts are not actively used.",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "The `default` service account should not be used to ensure that rights granted to applications can be more easily audited and reviewed.",
+   "remediation": "Create explicit service accounts wherever a Kubernetes workload requires specific access to the Kubernetes API server.\n\n Modify the configuration of each default service account to include this value\n\n \n```\nautomountServiceAccountToken: false\n\n```",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0190": {
+   "controlID": "C-0190",
+   "name": "CIS-5.1.6 Ensure that Service Account Tokens are only mounted where necessary",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Service accounts tokens should not be mounted in pods except where the workload running in the pod explicitly needs to communicate with the API server",
+   "remediation": "Modify the definition of pods and service accounts which do not need to mount service account tokens to disable it.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0191": {
+   "controlID": "C-0191",
+   "name": "CIS-5.1.8 Limit use of the Bind, Impersonate and Escalate permissions in the Kubernetes cluster",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Cluster roles and roles with the impersonate, bind or escalate permissions should not be granted unless strictly required. Each of these permissions allow a particular subject to escalate their privileges beyond those explicitly granted by cluster administrators",
+   "remediation": "Where possible, remove the impersonate, bind and escalate rights from subjects.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0192": {
+   "controlID": "C-0192",
+   "name": "CIS-5.2.1 Ensure that the cluster has at least one active policy control mechanism in place",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Every Kubernetes cluster should have at least one policy control mechanism in place to enforce the other requirements in this section. This could be the in-built Pod Security Admission controller, or a third party policy control system.",
+   "remediation": "Ensure that either Pod Security Admission or an external policy control system is in place for every namespace which contains user workloads.",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0193": {
+   "controlID": "C-0193",
+   "name": "CIS-5.2.2 Minimize the admission of privileged containers",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Do not generally permit containers to be run with the `securityContext.privileged` flag set to `true`.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of privileged containers.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0197": {
+   "controlID": "C-0197",
+   "name": "CIS-5.2.6 Minimize the admission of containers with allowPrivilegeEscalation",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not generally permit containers to be run with the `allowPrivilegeEscalation` flag set to true. Allowing this right can lead to a process running a container getting more rights than it started with.\n\n It's important to note that these rights are still constrained by the overall container sandbox, and this setting does not relate to the use of privileged containers.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of conatiners with `securityContext: allowPrivilegeEscalation: true`",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0198": {
+   "controlID": "C-0198",
+   "name": "CIS-5.2.7 Minimize the admission of root containers",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not generally permit containers to be run as the root user.",
+   "remediation": "Create a policy for each namespace in the cluster, ensuring that either `MustRunAsNonRoot` or `MustRunAs` with the range of UIDs not including 0, is set.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0199": {
+   "controlID": "C-0199",
+   "name": "CIS-5.2.8 Minimize the admission of containers with the NET\\_RAW capability",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not generally permit containers with the potentially dangerous NET\\_RAW capability.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of containers with the `NET_RAW` capability.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0201": {
+   "controlID": "C-0201",
+   "name": "CIS-5.2.9 Minimize the admission of containers with capabilities assigned",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Do not generally permit containers with capabilities",
+   "remediation": "Review the use of capabilities in applications running on your cluster. Where a namespace contains applications which do not require any Linux capabilities to operate consider adding a policy which forbids the admission of containers which do not drop all capabilities.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0202": {
+   "controlID": "C-0202",
+   "name": "CIS-5.2.10 Minimize the admission of Windows HostProcess Containers",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Do not generally permit Windows containers to be run with the `hostProcess` flag set to true.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of `hostProcess` containers.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0203": {
+   "controlID": "C-0203",
+   "name": "CIS-5.2.11 Minimize the admission of HostPath volumes",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "Do not generally admit containers which make use of `hostPath` volumes.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of containers which use `hostPath` volumes.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0204": {
+   "controlID": "C-0204",
+   "name": "CIS-5.2.12 Minimize the admission of containers which use HostPorts",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Do not generally permit containers which require the use of HostPorts.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of containers which use `hostPort` sections.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0205": {
+   "controlID": "C-0205",
+   "name": "CIS-5.3.1 Ensure that the CNI in use supports Network Policies",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "There are a variety of CNI plugins available for Kubernetes. If the CNI in use does not support Network Policies it may not be possible to effectively restrict traffic in the cluster.",
+   "remediation": "If the CNI plugin in use does not support network policies, consideration should be given to making use of a different plugin, or finding an alternate mechanism for restricting traffic in the Kubernetes cluster.",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0206": {
+   "controlID": "C-0206",
+   "name": "CIS-5.3.2 Ensure that all Namespaces have Network Policies defined",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Use network policies to isolate traffic in your cluster network.",
+   "remediation": "Follow the documentation and create `NetworkPolicy`, `CiliumNetworkPolicy`, or `CiliumClusterwideNetworkPolicy` objects as you need them.",
+   "category": "Network",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0207": {
+   "controlID": "C-0207",
+   "name": "CIS-5.4.1 Prefer using secrets as files over secrets as environment variables",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Kubernetes supports mounting secrets as data volumes or as environment variables. Minimize the use of environment variable secrets.",
+   "remediation": "If possible, rewrite application code to read secrets from mounted secret files, rather than from environment variables.",
+   "category": "Workload",
+   "subCategory": "Secrets",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0208": {
+   "controlID": "C-0208",
+   "name": "CIS-5.4.2 Consider external secret storage",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Consider the use of an external secrets storage and management system, instead of using Kubernetes Secrets directly, if you have more complex secret management needs. Ensure the solution requires authentication to access secrets, has auditing of access to and use of secrets, and encrypts secrets. Some solutions also make it easier to rotate secrets.",
+   "remediation": "Refer to the secrets management options offered by your cloud provider or a third-party secrets management solution.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0209": {
+   "controlID": "C-0209",
+   "name": "CIS-5.6.1 Create administrative boundaries between resources using namespaces",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Use namespaces to isolate your Kubernetes objects.",
+   "remediation": "Follow the documentation and create namespaces for objects in your deployment as you need them.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0210": {
+   "controlID": "C-0210",
+   "name": "CIS-5.6.2 Ensure that the seccomp profile is set to docker/default in your pod definitions",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Enable `docker/default` seccomp profile in your pod definitions.",
+   "remediation": "Use security context to enable the `docker/default` seccomp profile in your pod definitions. An example is as below:\n\n \n```\n  securityContext:\n    seccompProfile:\n      type: RuntimeDefault\n\n```",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0211": {
+   "controlID": "C-0211",
+   "name": "CIS-5.6.3 Apply Security Context to Your Pods and Containers",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "Apply Security Context to Your Pods and Containers",
+   "remediation": "Follow the Kubernetes documentation and apply security contexts to your pods. For a suggested list of security contexts, you may refer to the CIS Security Benchmark for Docker Containers.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0212": {
+   "controlID": "C-0212",
+   "name": "CIS-5.6.4 The default namespace should not be used",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Kubernetes provides a default namespace, where objects are placed if no namespace is specified for them. Placing objects in this namespace makes application of RBAC and other controls more difficult.",
+   "remediation": "Ensure that namespaces are created to allow for appropriate segregation of Kubernetes resources and that all new resources are created in a specific namespace.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0246": {
+   "controlID": "C-0246",
+   "name": "CIS-5.1.7 Avoid use of system:masters group",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "The special group `system:masters` should not be used to grant permissions to any user or service account, except where strictly necessary (e.g. bootstrapping access prior to RBAC being fully available)",
+   "remediation": "Remove the `system:masters` group from all users in the cluster.",
+   "category": "",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0270": {
+   "controlID": "C-0270",
+   "name": "Ensure CPU limits are set",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "This control identifies all Pods for which the CPU limits are not set.",
+   "remediation": "Set the CPU limits or use exception mechanism to avoid unnecessary notifications.",
+   "category": "Workload",
+   "subCategory": "Resource management",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0271": {
+   "controlID": "C-0271",
+   "name": "Ensure memory limits are set",
+   "severity": "High",
+   "baseScore": 8,
+   "description": "This control identifies all Pods for which the memory limits are not set.",
+   "remediation": "Set the memory limits or use exception mechanism to avoid unnecessary notifications.",
+   "category": "Workload",
+   "subCategory": "Resource management",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0275": {
+   "controlID": "C-0275",
+   "name": "CIS-5.2.3 Minimize the admission of containers wishing to share the host process ID namespace",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Do not generally permit containers to be run with the `hostPID` flag set to true.",
+   "remediation": "Configure the Admission Controller to restrict the admission of `hostPID` containers.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0276": {
+   "controlID": "C-0276",
+   "name": "CIS-5.2.4 Minimize the admission of containers wishing to share the host IPC namespace",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Do not generally permit containers to be run with the `hostIPC` flag set to true.",
+   "remediation": "Add policies to each namespace in the cluster which has user workloads to restrict the admission of `hostIPC` containers.",
+   "category": "Workload",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": true
+  },
+  "C-0277": {
+   "controlID": "C-0277",
+   "name": "CIS-1.2.29 Ensure that the API Server only makes use of Strong Cryptographic Ciphers",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Ensure that the API server is configured to only use strong cryptographic ciphers.",
+   "remediation": "Edit the API server pod specification file /etc/kubernetes/manifests/kube-apiserver.yaml on the Control Plane node and set the below parameter.\n\n \n```\n--tls-cipher-suites=TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256.\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0278": {
+   "controlID": "C-0278",
+   "name": "CIS-5.1.9 Minimize access to create persistent volumes",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "The ability to create persistent volumes in a cluster can provide an opportunity for privilege escalation, via the creation of `hostPath` volumes. As persistent volumes are not covered by Pod Security Admission, a user with access to create persistent volumes may be able to get access to sensitive files from the underlying host even where restrictive Pod Security Admission policies are in place.",
+   "remediation": "Where possible, remove `create` access to `PersistentVolume` objects in the cluster.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0279": {
+   "controlID": "C-0279",
+   "name": "CIS-5.1.10 Minimize access to the proxy sub-resource of nodes",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Users with access to the `Proxy` sub-resource of `Node` objects automatically have permissions to use the Kubelet API, which may allow for privilege escalation or bypass cluster security controls such as audit logs.\n\n The Kubelet provides an API which includes rights to execute commands in any container running on the node. Access to this API is covered by permissions to the main Kubernetes API via the `node` object. The proxy sub-resource specifically allows wide ranging access to the Kubelet API.\n\n Direct access to the Kubelet API bypasses controls like audit logging (there is no audit log of Kubelet API access) and admission control.",
+   "remediation": "Where possible, remove access to the `proxy` sub-resource of `node` objects.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0280": {
+   "controlID": "C-0280",
+   "name": "CIS-5.1.11 Minimize access to the approval sub-resource of certificatesigningrequests objects",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Users with access to the update the `approval` sub-resource of `certificatesigningrequests` objects can approve new client certificates for the Kubernetes API effectively allowing them to create new high-privileged user accounts.\n\n This can allow for privilege escalation to full cluster administrator, depending on users configured in the cluster",
+   "remediation": "Where possible, remove access to the `approval` sub-resource of `certificatesigningrequests` objects.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0281": {
+   "controlID": "C-0281",
+   "name": "CIS-5.1.12 Minimize access to webhook configuration objects",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Users with rights to create/modify/delete `validatingwebhookconfigurations` or `mutatingwebhookconfigurations` can control webhooks that can read any object admitted to the cluster, and in the case of mutating webhooks, also mutate admitted objects. This could allow for privilege escalation or disruption of the operation of the cluster.",
+   "remediation": "Where possible, remove access to the `validatingwebhookconfigurations` or `mutatingwebhookconfigurations` objects",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0282": {
+   "controlID": "C-0282",
+   "name": "CIS-5.1.13 Minimize access to the service account token creation",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Users with rights to create new service account tokens at a cluster level, can create long-lived privileged credentials in the cluster. This could allow for privilege escalation and persistent access to the cluster, even if the users account has been revoked.",
+   "remediation": "Where possible, remove access to the `token` sub-resource of `serviceaccount` objects.",
+   "category": "Access control",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0283": {
+   "controlID": "C-0283",
+   "name": "CIS-1.2.3 Ensure that the DenyServiceExternalIPs is set",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "This admission controller rejects all net-new usage of the Service field externalIPs.",
+   "remediation": "Edit the API server pod specification file /etc/kubernetes/manifests/kube-apiserver.yaml on the master node and append the Kubernetes API server flag --enable-admission-plugins with the DenyServiceExternalIPs plugin. Note, the Kubernetes API server flag --enable-admission-plugins takes a comma-delimited list of admission control plugins to be enabled, even if they are in the list of plugins enabled by default.\n\n kube-apiserver --enable-admission-plugins=DenyServiceExternalIPs",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0284": {
+   "controlID": "C-0284",
+   "name": "CIS-4.2.13 Ensure that a limit is set on pod PIDs",
+   "severity": "Low",
+   "baseScore": 2,
+   "description": "Ensure that the Kubelet sets limits on the number of PIDs that can be created by pods running on the node.",
+   "remediation": "Decide on an appropriate level for this parameter and set it, either via the `--pod-max-pids` command line parameter or the `PodPidsLimit` configuration file setting.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0286": {
+   "controlID": "C-0286",
+   "name": "CIS-3.1.1 Client certificate authentication should not be used for users",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Kubernetes provides the option to use client certificates for user authentication. However as there is no way to revoke these certificates when a user leaves an organization or loses their credential, they are not suitable for this purpose.\n\n It is not possible to fully disable client certificate use within a cluster as it is used for component to component authentication.",
+   "remediation": "Alternative mechanisms provided by Kubernetes such as the use of OIDC should be implemented in place of client certificates.",
+   "category": "",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0287": {
+   "controlID": "C-0287",
+   "name": "CIS-3.1.2 Service account token authentication should not be used for users",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Kubernetes provides service account tokens which are intended for use by workloads running in the Kubernetes cluster, for authentication to the API server.\n\n These tokens are not designed for use by end-users and do not provide for features such as revocation or expiry, making them insecure. A newer version of the feature (Bound service account token volumes) does introduce expiry but still does not allow for specific revocation.",
+   "remediation": "Alternative mechanisms provided by Kubernetes such as the use of OIDC should be implemented in place of service account tokens.",
+   "category": "",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0288": {
+   "controlID": "C-0288",
+   "name": "CIS-3.1.3 Bootstrap token authentication should not be used for users",
+   "severity": "Medium",
+   "baseScore": 4,
+   "description": "Kubernetes provides bootstrap tokens which are intended for use by new nodes joining the cluster\n\n These tokens are not designed for use by end-users they are specifically designed for the purpose of bootstrapping new nodes and not for general authentication",
+   "remediation": "Alternative mechanisms provided by Kubernetes such as the use of OIDC should be implemented in place of bootstrap tokens.",
+   "category": "",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0289": {
+   "controlID": "C-0289",
+   "name": "CIS-5.5.1 Configure Image Provenance using ImagePolicyWebhook admission controller",
+   "severity": "High",
+   "baseScore": 7,
+   "description": "Configure Image Provenance for your deployment.",
+   "remediation": "Follow the Kubernetes documentation and setup image provenance.",
+   "category": "",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0290": {
+   "controlID": "C-0290",
+   "name": "CIS-1.2.30 Ensure that the --service-account-extend-token-expiration parameter is set to false",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "By default Kubernetes extends service account token lifetimes to one year. This should be set to false for security.",
+   "remediation": "Edit the API server pod specification file `/etc/kubernetes/manifests/kube-apiserver.yaml` on the Control Plane node and set the below parameter.\n\n```\n--service-account-extend-token-expiration=false\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0291": {
+   "controlID": "C-0291",
+   "name": "CIS-4.3.1 Ensure that the kube-proxy metrics service is bound to localhost",
+   "severity": "Medium",
+   "baseScore": 5,
+   "description": "Do not bind the kube-proxy metrics port to non-loopback addresses.",
+   "remediation": "If running kube-proxy with a configuration file, edit the kube-proxy configuration file and set the metricsBindAddress to `127.0.0.1:10249`.\n\nIf running kube-proxy with command line arguments, set `--metrics-bind-address=127.0.0.1:10249`.\n\nRestart kube-proxy for changes to take effect.",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0292": {
+   "controlID": "C-0292",
+   "name": "Nginx Ingress Controller End of Life",
+   "severity": "Medium",
+   "baseScore": 6,
+   "description": "The nginx ingress controller project reaches End of Life (EOL) in March 2026. After this date, no security patches or functional updates will be provided. This control identifies workloads using nginx ingress controllers to help users plan migration to supported alternatives.",
+   "remediation": "Migrate to a supported ingress controller solution: 1) F5 NGINX Ingress Controller (https://docs.nginx.com/nginx-ingress-controller/) for a supported NGINX-based option, 2) Kubernetes Gateway API for a cloud-native approach, 3) HAProxy Ingress, 4) Traefik, 5) Cloud-native solutions (AWS ALB Ingress Controller, GKE Ingress, Azure Application Gateway Ingress Controller). Plan your migration before the EOL date to ensure continued security and support.",
+   "category": "Workload",
+   "subCategory": "Resource management",
+   "frameworks": [
+    "NSA"
+   ],
+   "nanoEvaluable": false
+  },
+  "C-0318": {
+   "controlID": "C-0318",
+   "name": "CIS-4.2.14 Ensure that the --seccomp-default parameter is set to true",
+   "severity": "Low",
+   "baseScore": 2,
+   "description": "Enable the RuntimeDefault seccomp profile for all workloads that do not specify one.",
+   "remediation": "Set the parameter, either via the `--seccomp-default` command line argument or the `seccompDefault` setting in the kubelet config file. Setting it to `true` enables the RuntimeDefault profile for workloads that do not declare one.\n\n Based on your system, restart the `kubelet` service. For example:\n\n \n```\nsystemctl daemon-reload\nsystemctl restart kubelet.service\n\n```",
+   "category": "Control plane",
+   "subCategory": "",
+   "frameworks": [
+    "cis-v1.12.0"
+   ],
+   "nanoEvaluable": false
+  }
+ }
+}

@@ -1,0 +1,238 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Azure Log Analytics (Microsoft.OperationalInsights). See servicebus.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py generic catalog + core/azure_operationalinsights_core.py); 'offline' = the appliance, which shares the same generic ARM catalog.",
+ "azure.loganalytics.workspace.crud": {
+  "title": "Workspaces \u2014 create, list, get, update, delete, pricing tier, retention, daily cap",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.agents": {
+  "title": "Agents management \u2014 workspace ID and primary/secondary shared keys (getSharedKeys / regenerateSharedKey)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Keys are simulated values derived from the workspace id, not cryptographically meaningful; no real agent ever authenticates with them."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.usage": {
+  "title": "Usage and estimated costs (usages action) and the daily cap (workspaceCapping)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Data Analyzed always reads 0 bytes \u2014 there is no ingestion pipeline to meter; Tables and Saved searches counts are real.",
+   "Data analyzed is the real byte volume ingested today through the data-plane APIs, and the daily cap really drops further ingestion once reached; no per-table billing breakdown or commitment-tier pricing is computed."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.savedsearches": {
+  "title": "Saved searches \u2014 create, list, get, update, delete",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.tables": {
+  "title": "Tables \u2014 built-in tables plus custom (_CL/_RST) table create/update/delete, retention and plan",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.datasources": {
+  "title": "Data sources \u2014 create, list (by kind), get, delete",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Data sources are stored and listed like real ARM but never receive data \u2014 there is no VM extension/agent in this simulator to collect from."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.legacysolutions": {
+  "title": "Legacy solutions (intelligencePacks) \u2014 list, enable, disable",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Enabling a solution only flips its flag; it does not add the solution's own tables or saved searches."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.logs": {
+  "title": "Logs \u2014 KQL query editor (api/query), a real subset of KQL over real data",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only a small KQL subset is understood: a table name, then where (==/!=/contains/startswith), project, sort by/order by, take/limit and count \u2014 summarize, join and the rest of the language raise the real ARM-shaped error rather than a silent empty result.",
+   "The AzureActivity table returns real rows (this subscription's Activity log feed); every other built-in table (Heartbeat, Perf, Syslog, Event, Usage, AzureDiagnostics) and every custom table is always empty \u2014 there is no agent/telemetry ingestion pipeline to populate them.",
+   "The api.loganalytics.io data-plane host (azure-monitor-query / LogsQueryClient) is not modelled \u2014 only the ARM pass-through path the portal's Logs blade itself uses."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this workspace",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this Log Analytics workspace only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a Log Analytics workspace is stored and listed only: it does not block writes or deletes of the Log Analytics workspace itself."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.activitylog": {
+  "title": "Workspace activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.listactions": {
+  "title": "Toolbar actions on a workspace: Activity log's Export Activity Logs and Locks' Subscription / Resource group scope views; Feedback is not built",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "'Export Activity Logs' is real: it configures the SUBSCRIPTION's Activity Log export (a Microsoft.Insights/diagnosticSettings at subscription scope, with the real Activity-log categories) and, once saved, delivers each ARM write as a row of AzureDiagnostics in the chosen Log Analytics workspace and as JSON lines in insights-activity-logs of the chosen storage account (core/azure_diag_pipeline.py); deleting the setting stops delivery. It is a different resource from the workspace's own Diagnostic settings and Data export. Event Hub destinations and the partner-solution destination are not delivered.",
+   "The Locks page's Subscription / Resource group buttons list the locks really in effect at those scopes (ARM locks API at subscription and resource group scope, the group list including inherited subscription locks); creating or deleting them is done from the group's or subscription's own Locks page. The portal's Feedback button sends nothing (there is no Microsoft feedback service) and says so.",
+   "Column customization, one-time CSV export, filtering, the per-event detail dialog and 'Reset to default' on both the Activity log and Locks panels are real (consoles/src/azure/kit/ActivityLog.jsx, BrowseGrid.jsx, client-side over the real rows)."
+  ],
+  "tests": ["tests/conformance/test_azure_activity_log_export.py", "tests/conformance/test_azure_sdk_defender_automation_export.py", "tests/cli/azure-defender-automation-cli-smoke.sh", "tests/conformance/test_azure_activity_log_core.py"]
+ },
+ "azure.loganalytics.workspace.properties": {
+  "title": "Properties (read-only resource summary)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.exporttemplate": {
+  "title": "Export template (ARM template)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only the ARM Template tab is generated from the workspace's real properties; Bicep and Terraform export are not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.iam": {
+  "title": "Access control (IAM) on a workspace",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Check access, Role assignments and Deny assignments are REAL and scoped to this workspace's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.loganalytics.workspace.networking": {
+  "title": "Public network access for ingestion/query (set at create time and from Properties)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "publicNetworkAccessForIngestion (Data Collector / DCR ingestion) and publicNetworkAccessForQuery (api/query) are enforced: Disabled returns 403 InsufficientAccessError unless the declared caller arrives through an approved private endpoint that targets the workspace. Diagnostic-settings delivery is a platform path and is not blocked by it, as in Azure.",
+   "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+   "Azure Monitor Private Link Scopes (AMPLS) are not modelled; access modes (Open / PrivateOnly) are not evaluated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_operationalinsights_core.py",
+   "tests/conformance/test_azure_netenforce.py",
+   "tests/conformance/test_azure_netenforce_sdk.py",
+   "tests/cli/azure-netenforce-cli-smoke.sh"
+  ]
+ },
+ "azure.loganalytics.workspace.monitoring": {
+  "title": "Workbooks on a workspace",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Workbooks are real Microsoft.Insights/workbooks resources (CRUD, shared/private kind, category, sourceId) and the workspace's Workbooks tab lists the ones sourced from it. Real Azure renders serializedData client-side in the portal; Vyomi renders it server-side (POST .../workbooks/{name}/render, core/azure_workbooks_core.py): text, parameters ({Name}, {Name:value}, {TimeRange} expansion), KQL query items and groups with conditionalVisibility are executed against the workspace's Log Analytics KQL subset (including the live AzureActivity feed) and returned as tables, shown as a table with a simple bar for bar/pie charts.",
+   "Not rendered, and reported per item as 'unsupported' or 'error' rather than blanked: Azure Monitor metrics items, Azure Resource Graph / Data Explorer / custom-endpoint queries (queryType other than 0), map/graph/tile visualisations, Resource Health items, the gallery of Microsoft templates and the visual editor (the tab offers a JSON editor). KQL operators outside the supported subset (no join/union/let/render charts) fail that item with the engine's error. Only the first resolved workspace of an item is queried (no cross-workspace union). Alerts, Metrics and Diagnostic settings on a workspace are real through the shared panels (azure.common.resource_monitoring, azure.common.diagnostic_settings)."
+  ],
+  "tests": ["tests/conformance/test_azure_workbooks_core.py", "tests/conformance/test_azure_workbooks_sdk.py", "tests/cli/azure-workbooks-cli-smoke.sh"]
+ },
+ "azure.loganalytics.workspace.tools": {
+  "title": "Diagnose and solve problems, Computer groups (classic), Linked storage accounts",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Linked storage accounts are real Microsoft.OperationalInsights/workspaces/{ws}/linkedStorageAccounts/{CustomLogs|AzureWatson|Query|Ingestion|Alerts} resources (CRUD, list, validation: known data source type, 1-5 distinct existing storage accounts, same region as the workspace). The link is CONFIGURATION only: custom-log ingestion, saved queries, alert rules and Watson dumps are not re-routed through or stored in the linked account (they stay in the simulator's workspace store).",
+   "Computer groups (classic) are saved searches (category 'Computer Groups', functionAlias = the group name) whose query returns a Computer column, exposed through a Vyomi view (workspaces/{ws}/computerGroups[/{name}][/members]); members are the distinct Computer values of the query evaluated live over the workspace's data, and a group works in KQL as `Computer in (GroupName)`. Active Directory and WSUS group imports (agent-driven), group-based Update Management scoping and the legacy OMS portal sync are not modelled.",
+   "Diagnose and solve problems runs the shared resource-scoped detectors (retention, daily cap, public network access, provisioning state, recent failed operations) computed from the workspace's live record and Activity log; there is no platform telemetry, guided troubleshooter or auto-remediation. Resource health (azure.common.resource_health) and Support + Troubleshooting (azure.common.support) are the shared panels and are not part of this entry. Data export is real: azure.loganalytics.workspace.dataexport."
+  ],
+  "tests": ["tests/conformance/test_azure_loganalytics_tools.py", "tests/conformance/test_azure_loganalytics_tools_sdk.py", "tests/cli/azure-loganalytics-tools-cli-smoke.sh", "tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.loganalytics.workspace.dataexport": {
+  "title": "Data export rules (to a storage account) and the Purge API",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Rows ingested through the HTTP Data Collector / Logs Ingestion APIs for an exported table are really written (JSON lines) to blobs in the destination storage account ('am-<table>' container, WorkspaceResourceId=\u2026/y=/m=/d=/h=/m=/PT05M.json), and the Purge API really deletes the matching rows. Event Hub destinations are rejected, not faked. AzureActivity and agent-fed built-in tables have no ingestion pipeline here, so they have nothing to export. Real Azure exports in ~5-minute batches; Vyomi writes at ingest time."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_loganalytics_export_purge.py"
+  ]
+ }
+}

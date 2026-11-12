@@ -95,20 +95,20 @@ try {
 
   const dp = tabIndex(/Model deployments/i);
   await open(dp);
-  answers.push("ui-chat", "gpt-4o", "2024-08-06", "10");
+  answers.push("ui-chat", "qwen2.5-7b", "1", "10");
   await page.locator(".sub-content button").filter({ hasText: /Create deployment/i }).first().click({ timeout: 5000 });
   await sleep(1500);
   const deps = await page.locator(".sub-content").innerText();
-  check(/ui-chat/.test(deps) && /gpt-4o/.test(deps) && /Standard/.test(deps), "deployment created in the blade is listed", deps.slice(0, 200));
+  check(/ui-chat/.test(deps) && /qwen2.5-7b/.test(deps) && /Standard/.test(deps), "deployment created in the blade is listed", deps.slice(0, 200));
   const rg = await page.evaluate(() => RG);
   const SUBID = await page.evaluate(() => SUB);
   const dj = await page.evaluate(async ([sub, rg, n, av]) => {
     const r = await fetch(`/subscriptions/${sub}/resourceGroups/${rg}/providers/Microsoft.CognitiveServices/accounts/${n}/deployments/ui-chat?${av}`);
     return { status: r.status, body: await r.json().catch(() => ({})) };
   }, [SUBID, rg, name, AV]);
-  check(dj.status === 200 && dj.body.properties?.model?.name === "gpt-4o" && dj.body.sku?.capacity === 10, "…and readable over ARM", JSON.stringify(dj).slice(0, 160));
+  check(dj.status === 200 && dj.body.properties?.model?.name === "qwen2.5-7b" && dj.body.sku?.capacity === 10, "…and readable over ARM", JSON.stringify(dj).slice(0, 160));
   const qt = await (async () => { await open(tabIndex(/Quotas/i)); return page.locator(".sub-content").innerText(); })();
-  check(/gpt-4o/.test(qt) && /Tokens Per Minute/.test(qt), "Quotas shows model quota usage", qt.slice(0, 160));
+  check(/qwen2.5-7b/.test(qt) && /Tokens Per Minute/.test(qt), "Quotas shows model quota usage", qt.slice(0, 160));
 
   await open(tabIndex(/Overview/i));
   await page.locator("#blade button").filter({ hasText: /^delete$/i }).first().click({ timeout: 5000 });

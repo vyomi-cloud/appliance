@@ -37,10 +37,23 @@ def _vm_sink(ns: str, name: str, dims: list, pt: list) -> None:
     urllib.request.urlopen(req, timeout=2).close()
 
 
+def _db_path() -> str:
+    """VYOMI_CW_DB, else next to the appliance state file (CLOUDLEARN_STATE_FILE) so metrics /
+    alarms / dashboards live — and survive a restart — with the rest of the appliance's state
+    (a container's /tmp does not survive one); /tmp only when no state file is configured."""
+    explicit = os.environ.get("VYOMI_CW_DB", "").strip()
+    if explicit:
+        return explicit
+    state = os.environ.get("CLOUDLEARN_STATE_FILE", "").strip()
+    if state:
+        return os.path.join(os.path.dirname(os.path.abspath(state)), "vyomi-cw.sqlite")
+    return "/tmp/vyomi-cw.sqlite"
+
+
 def get_store() -> PersistentCloudWatchStore:
     global _store
     if _store is None:
-        _store = PersistentCloudWatchStore(SqliteStateBackend(os.environ.get("VYOMI_CW_DB", "/tmp/vyomi-cw.sqlite")))
+        _store = PersistentCloudWatchStore(SqliteStateBackend(_db_path()))
         if VM_URL:
             _store.metric_sink = _vm_sink
     return _store
@@ -63,6 +76,11 @@ def _form_action(raw: bytes) -> str:
 
 async def handle(request: Request) -> Response:
     raw = await request.body()
+    try:   # refresh the AWS/* request series from MEASURED traffic before serving a read
+        from core import observability_core as _obsc
+        _obsc.publish_cloudwatch(_obsc.default_store(), get_store())
+    except Exception:
+        pass
     out = cw.wire(get_store(), request.method, request.url.path, dict(request.headers), raw, dict(request.query_params))
     action = _action_of(request, raw)
     if out["status"] < 300 and action in _USAGE_ACTIONS:

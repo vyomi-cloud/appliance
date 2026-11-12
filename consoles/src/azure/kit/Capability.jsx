@@ -1,0 +1,128 @@
+/* Capability disclaimers, driven by core/capabilities/azure/*.json (the same registry
+ * tests/conformance/test_capabilities.py proves against the backend). Never hand-write a
+ * disclaimer in a page — wrap the section in <CapabilityContainer id=…> instead.
+ *
+ *   full           → no badge
+ *   limited        → "Dev Simplified" badge + popover with the limitations
+ *   config_only    → "Config only" badge + popover; saves add "not enforced" to the notice
+ *   not_simulated  → the whole section becomes the honest Not-simulated panel
+ */
+import { CardTab, MarkerSpan, useCardSlot } from "../../common/cardTab.jsx";
+import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
+import { NotSimulatedContainer } from "./common.jsx";
+import cap_acr from "../../../../core/capabilities/azure/acr.json";
+import cap_aks from "../../../../core/capabilities/azure/aks.json";
+import cap_apim from "../../../../core/capabilities/azure/apim.json";
+import cap_appconfiguration from "../../../../core/capabilities/azure/appconfiguration.json";
+import cap_appservices from "../../../../core/capabilities/azure/appservices.json";
+import cap_cognitiveservices from "../../../../core/capabilities/azure/cognitiveservices.json";
+import cap_common from "../../../../core/capabilities/azure/common.json";
+import cap_containerapps from "../../../../core/capabilities/azure/containerapps.json";
+import cap_cosmos from "../../../../core/capabilities/azure/cosmos.json";
+import cap_cost from "../../../../core/capabilities/azure/cost.json";
+import cap_defender from "../../../../core/capabilities/azure/defender.json";
+import cap_dns from "../../../../core/capabilities/azure/dns.json";
+import cap_entra from "../../../../core/capabilities/azure/entra.json";
+import cap_eventgrid from "../../../../core/capabilities/azure/eventgrid.json";
+import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
+import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
+import cap_loganalytics from "../../../../core/capabilities/azure/loganalytics.json";
+import cap_managedidentity from "../../../../core/capabilities/azure/managedidentity.json";
+import cap_monitor from "../../../../core/capabilities/azure/monitor.json";
+import cap_nsgs from "../../../../core/capabilities/azure/nsgs.json";
+import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegroups.json";
+import cap_servicebus from "../../../../core/capabilities/azure/servicebus.json";
+import cap_streamanalytics from "../../../../core/capabilities/azure/streamanalytics.json";
+import cap_sql from "../../../../core/capabilities/azure/sql.json";
+import cap_storage from "../../../../core/capabilities/azure/storage.json";
+import cap_subscriptions from "../../../../core/capabilities/azure/subscriptions.json";
+import cap_vms from "../../../../core/capabilities/azure/vms.json";
+import cap_vnets from "../../../../core/capabilities/azure/vnets.json";
+import cap_panels from "../../../../core/capabilities/azure/panels.json";
+import bk_defender_storage from "../../../../core/capabilities/azure/defender-storage.json";
+import BACKENDS from "vyomi-backends:azure";
+
+const REGISTRY = { ...cap_panels, ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appconfiguration, ...cap_appservices, ...cap_cognitiveservices, ...cap_common, ...cap_containerapps, ...cap_cosmos, ...cap_cost, ...cap_defender, ...cap_dns, ...cap_entra, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_loganalytics, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql, ...cap_streamanalytics, ...cap_storage, ...cap_subscriptions, ...cap_vms, ...cap_vnets , ...cap_managedidentity };
+
+/** Per-service registry files (service id == file name), incl. services the REGISTRY above does not spread. */
+const BY_SERVICE = { "acr": cap_acr, "aks": cap_aks, "apim": cap_apim, "appconfiguration": cap_appconfiguration, "appservices": cap_appservices, "cognitiveservices": cap_cognitiveservices, "common": cap_common, "containerapps": cap_containerapps, "cosmos": cap_cosmos, "cost": cap_cost, "defender": cap_defender, "defender-storage": bk_defender_storage, "dns": cap_dns, "entra": cap_entra, "eventgrid": cap_eventgrid, "functionapp": cap_functionapp, "keyvaults": cap_keyvaults, "loganalytics": cap_loganalytics, "managedidentity": cap_managedidentity, "monitor": cap_monitor, "nsgs": cap_nsgs, "panels": cap_panels, "resourcegroups": cap_resourcegroups, "servicebus": cap_servicebus, "sql": cap_sql, "storage": cap_storage, "streamanalytics": cap_streamanalytics, "subscriptions": cap_subscriptions, "vms": cap_vms, "vnets": cap_vnets };
+
+export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
+
+/** {title, level, limitations, api} for this substrate, or null if the id is unknown. */
+export function capability(id) {
+  const e = REGISTRY[id];
+  if (!e) {
+    if (typeof console !== "undefined") console.warn(`[vyomi] unknown capability id ${id}`);
+    return null;
+  }
+  return { ...e, id, level: e.level?.[SUBSTRATE] || e.level?.offline || "not_simulated" };
+}
+
+const LABEL = { limited: "Dev Simplified", config_only: "Config only" };
+const DEFAULT_NOTE = {
+  limited: "A simplified version of this service, built for developing and testing your app. Where Vyomi differs from the real cloud, it is listed below.",
+  config_only: "Vyomi stores this setting and returns it from the API exactly as configured, but does not enforce it.",
+};
+
+export function CapabilityBadge({ id }) {
+  const [markerRef, slot] = useCardSlot();
+  const c = capability(id);
+  if (!c || c.level === "full" || c.level === "not_simulated") return null;
+  const attrs = { "data-vyomi-capability": c.level, "data-vyomi-capability-id": id };
+  const popover = (trigger) => (
+    <Popover withArrow>
+      <PopoverTrigger disableButtonEnhancement>{trigger}</PopoverTrigger>
+      <PopoverSurface style={{ maxWidth: 320 }}>
+        <b>{c.title}: {LABEL[c.level]}</b>
+        <p style={{ margin: "6px 0" }}>{DEFAULT_NOTE[c.level]}</p>
+        {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
+        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Applies to this Vyomi environment ({SUBSTRATE}).</div>
+      </PopoverSurface>
+    </Popover>
+  );
+  const btn = (children) => (
+    <button type="button" aria-label={`${LABEL[c.level]} — details`}
+      style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>{children}</button>
+  );
+  return (
+    <>
+      <MarkerSpan markerRef={markerRef} />
+      {slot
+        ? <CardTab slot={slot} attrs={attrs}>{popover(btn(LABEL[c.level]))}</CardTab>
+        : <span {...attrs}>{popover(btn(<Badge color={c.level === "limited" ? "brand" : "informative"} appearance="tint">{LABEL[c.level]}</Badge>))}</span>}
+    </>
+  );
+}
+
+/** A console section; limited / config-only ones become a bordered card whose capability tab
+ *  attaches to the bottom-right border. Becomes the honest Not-simulated panel when the registry says so. */
+export function CapabilityContainer({ id, title, actions, children, noBadge }) {
+  const c = capability(id);
+  if (!c || c.level === "not_simulated") {
+    return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
+  }
+  const carded = c.level === "limited" || c.level === "config_only";
+  return (
+    <section className={carded ? "vy-form-section vy-cap-card" : "vy-form-section"}>
+      <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span>{title}</span>
+        {actions && <span style={{ marginLeft: "auto" }}>{actions}</span>}
+      </h3>
+      {children}
+      {!noBadge && <CapabilityBadge id={id} />}
+    </section>
+  );
+}
+
+/** Text to append to a save confirmation for a setting at this capability level. */
+export function saveNotice(id) {
+  const c = capability(id);
+  if (c?.level === "config_only") return " Vyomi stores this setting but does not enforce it.";
+  if (c?.level === "limited") return " Some behaviour is limited in Vyomi — see the badge for details.";
+  return "";
+}
+
+/** For the help panel's "How Vyomi runs this service": the narrative data file + that service's registry file. */
+export const BACKENDS_DATA = BACKENDS;
+export const registryFileFor = (serviceId) => BY_SERVICE[serviceId] || null;

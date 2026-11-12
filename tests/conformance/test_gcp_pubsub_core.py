@@ -12,6 +12,7 @@ Run in Pyodide: loaded by the wasm/ harness (same file).
 """
 import base64
 import json
+from datetime import datetime, timezone
 
 try:
     from core.messaging_store import InMemoryMessagingStore
@@ -130,6 +131,266 @@ def run() -> int:
     miss_topic = ps.dispatch(st, "GET", f"/v1/{TOPIC}", {}, {}, b"")
     _check("deleted topic 404 NOT_FOUND", miss_topic.status == 404
            and _jbody(miss_topic)["error"]["status"] == "NOT_FOUND")
+
+    # 11. topic config: labels, CMEK, retention, schema settings round-trip + patch
+    T2 = f"projects/{P}/topics/orders2"
+    ct2 = ps.dispatch(st, "PUT", f"/v1/{T2}", {}, {}, json.dumps({
+        "labels": {"env": "prod"}, "kmsKeyName": "projects/p/locations/g/keyRings/r/cryptoKeys/k",
+        "messageRetentionDuration": "600s",
+    }).encode())
+    t2body = _jbody(ct2)
+    _check("topic config stored", t2body.get("labels", {}).get("env") == "prod"
+           and t2body.get("kmsKeyName", "").endswith("/k") and t2body.get("messageRetentionDuration") == "600s")
+    patched = ps.dispatch(st, "PATCH", f"/v1/{T2}", {}, {}, json.dumps({
+        "topic": {"labels": {"env": "staging"}}, "updateMask": "labels",
+    }).encode())
+    _check("topic patch updates labels", _jbody(patched)["labels"]["env"] == "staging")
+
+    # 12. publish with an ordering key -> echoed back on pull
+    SUB3 = f"projects/{P}/subscriptions/sub-ordering"
+    ps.dispatch(st, "PUT", f"/v1/{SUB3}", {}, {}, json.dumps({"topic": T2, "enableMessageOrdering": True}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T2}:publish", {}, {}, json.dumps({
+        "messages": [{"data": base64.b64encode(b"ordered").decode(), "orderingKey": "k1"}],
+    }).encode())
+    opull = ps.dispatch(st, "POST", f"/v1/{SUB3}:pull", {}, {}, json.dumps({"maxMessages": 1}).encode())
+    _check("ordering key round-trips", _jbody(opull)["receivedMessages"][0]["message"]["orderingKey"] == "k1")
+
+    # 13. subscription config: labels, dead-letter policy, retry policy round-trip + patch
+    SUB4 = f"projects/{P}/subscriptions/sub-config"
+    cs4 = ps.dispatch(st, "PUT", f"/v1/{SUB4}", {}, {}, json.dumps({
+        "topic": T2, "labels": {"team": "core"}, "retainAckedMessages": True,
+        "deadLetterPolicy": {"deadLetterTopic": T2, "maxDeliveryAttempts": 2},
+        "retryPolicy": {"minimumBackoff": "10s", "maximumBackoff": "600s"},
+    }).encode())
+    s4body = _jbody(cs4)
+    _check("subscription config stored", s4body["labels"]["team"] == "core" and s4body["retainAckedMessages"] is True
+           and s4body["deadLetterPolicy"]["maxDeliveryAttempts"] == 2 and s4body["retryPolicy"]["minimumBackoff"] == "10s")
+    patched_sub = ps.dispatch(st, "PATCH", f"/v1/{SUB4}", {}, {}, json.dumps({
+        "subscription": {"ackDeadlineSeconds": 30}, "updateMask": "ackDeadlineSeconds",
+    }).encode())
+    _check("subscription patch updates ack deadline", _jbody(patched_sub)["ackDeadlineSeconds"] == 30)
+
+    # 14. retain acknowledged messages: acked message stays out of future pulls but isn't dropped
+    ps.dispatch(st, "POST", f"/v1/{T2}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"keepme").decode()}]}).encode())
+    rp = ps.dispatch(st, "POST", f"/v1/{SUB4}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    rack = _jbody(rp)["receivedMessages"][-1]["ackId"]
+    ps.dispatch(st, "POST", f"/v1/{SUB4}:acknowledge", {}, {}, json.dumps({"ackIds": [rack]}).encode())
+    rp2 = ps.dispatch(st, "POST", f"/v1/{SUB4}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("acked message (retain) absent from next pull", not _jbody(rp2).get("receivedMessages"))
+
+    # 15. dead-lettering: a message redelivered past maxDeliveryAttempts lands on the DLQ topic
+    SUB5 = f"projects/{P}/subscriptions/sub-dlq"
+    dlq_topic = f"projects/{P}/topics/orders-dlq"
+    ps.dispatch(st, "PUT", f"/v1/{dlq_topic}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{SUB5}", {}, {}, json.dumps({
+        "topic": T2, "ackDeadlineSeconds": 10,
+        "deadLetterPolicy": {"deadLetterTopic": dlq_topic, "maxDeliveryAttempts": 2},
+    }).encode())
+    DLQ_SUB = f"projects/{P}/subscriptions/sub-dlq-reader"
+    ps.dispatch(st, "PUT", f"/v1/{DLQ_SUB}", {}, {}, json.dumps({"topic": dlq_topic}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T2}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"poison").decode()}]}).encode())
+    for _ in range(3):   # 2 deliveries without ack == maxDeliveryAttempts; the 3rd goes to the DLQ instead
+        pr = ps.dispatch(st, "POST", f"/v1/{SUB5}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+        st.advance(11)   # past the 10s ack deadline -> eligible for redelivery / DLQ on next pull
+    dlq_read = ps.dispatch(st, "POST", f"/v1/{DLQ_SUB}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("poison message forwarded to dead-letter topic", any(
+        base64.b64decode(m["message"]["data"]) == b"poison" for m in _jbody(dlq_read).get("receivedMessages", [])))
+
+    # 16. message retention pruning: an old, un-acked message disappears once retention elapses
+    SUB6 = f"projects/{P}/subscriptions/sub-retention"
+    ps.dispatch(st, "PUT", f"/v1/{SUB6}", {}, {}, json.dumps({"topic": T2, "messageRetentionDuration": "5s"}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T2}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"stale").decode()}]}).encode())
+    st.advance(10)
+    pruned = ps.dispatch(st, "POST", f"/v1/{SUB6}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("message pruned once retention elapses", not _jbody(pruned).get("receivedMessages"))
+
+    # 17. snapshots: create from a subscription, list, seek restores the captured backlog
+    SUB7 = f"projects/{P}/subscriptions/sub-snap"
+    ps.dispatch(st, "PUT", f"/v1/{SUB7}", {}, {}, json.dumps({"topic": T2}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T2}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"snapme").decode()}]}).encode())
+    SNAP = f"projects/{P}/snapshots/snap-a"
+    snc = ps.dispatch(st, "PUT", f"/v1/{SNAP}", {}, {}, json.dumps({"subscription": SUB7}).encode())
+    _check("create snapshot 200", snc.status == 200 and _jbody(snc)["subscription"] == SUB7)
+    lsnap = ps.dispatch(st, "GET", f"/v1/projects/{P}/snapshots", {}, {}, b"")
+    _check("list snapshots has snap-a", any(s["name"] == SNAP for s in _jbody(lsnap)["snapshots"]))
+    drain = ps.dispatch(st, "POST", f"/v1/{SUB7}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    ps.dispatch(st, "POST", f"/v1/{SUB7}:acknowledge", {}, {}, json.dumps({"ackIds": [m["ackId"] for m in _jbody(drain)["receivedMessages"]]}).encode())
+    seek = ps.dispatch(st, "POST", f"/v1/{SUB7}:seek", {}, {}, json.dumps({"snapshot": SNAP}).encode())
+    _check("seek to snapshot 200", seek.status == 200)
+    replayed = ps.dispatch(st, "POST", f"/v1/{SUB7}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("seek restores snapshotted backlog", any(
+        base64.b64decode(m["message"]["data"]) == b"snapme" for m in _jbody(replayed).get("receivedMessages", [])))
+    dsnap = ps.dispatch(st, "DELETE", f"/v1/{SNAP}", {}, {}, b"")
+    _check("delete snapshot 200", dsnap.status == 200)
+    miss_snap = ps.dispatch(st, "GET", f"/v1/{SNAP}", {}, {}, b"")
+    _check("deleted snapshot 404 NOT_FOUND", miss_snap.status == 404)
+
+    # 18. schemas: create (BASIC + FULL views), list, delete
+    SCHEMA = f"projects/{P}/schemas/order-v1"
+    scc = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas", {"schemaId": "order-v1"}, {},
+                      json.dumps({"type": "AVRO", "definition": '{"type":"record","name":"Order","fields":[]}'}).encode())
+    _check("create schema 200 returns definition", scc.status == 200 and "Order" in _jbody(scc)["definition"])
+    basic = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {}, {}, b"")
+    _check("get schema BASIC view omits definition", "definition" not in _jbody(basic))
+    full = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {"view": "FULL"}, {}, b"")
+    _check("get schema FULL view includes definition", "Order" in _jbody(full)["definition"])
+    lschema = ps.dispatch(st, "GET", f"/v1/projects/{P}/schemas", {}, {}, b"")
+    _check("list schemas has order-v1", any(s["name"] == SCHEMA for s in _jbody(lschema)["schemas"]))
+    dschema = ps.dispatch(st, "DELETE", f"/v1/{SCHEMA}", {}, {}, b"")
+    _check("delete schema 200", dschema.status == 200)
+    miss_schema = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {}, {}, b"")
+    _check("deleted schema 404 NOT_FOUND", miss_schema.status == 404)
+
+    # 19. retry policy backoff: a redelivery doesn't happen the instant the ack deadline
+    # expires — it waits out the configured (exponential, capped) backoff window too.
+    T3 = f"projects/{P}/topics/retrytopic"
+    SUB_RETRY = f"projects/{P}/subscriptions/sub-retry"
+    ps.dispatch(st, "PUT", f"/v1/{T3}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{SUB_RETRY}", {}, {}, json.dumps({
+        "topic": T3, "ackDeadlineSeconds": 5, "retryPolicy": {"minimumBackoff": "20s", "maximumBackoff": "20s"},
+    }).encode())
+    ps.dispatch(st, "POST", f"/v1/{T3}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"retryme").decode()}]}).encode())
+    first = ps.dispatch(st, "POST", f"/v1/{SUB_RETRY}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("retry: first delivery attempt", len(_jbody(first).get("receivedMessages", [])) == 1)
+    st.advance(6)   # past the 5s ack deadline, but inside the 20s backoff window
+    still_backing_off = ps.dispatch(st, "POST", f"/v1/{SUB_RETRY}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("retry backoff withholds redelivery inside the window", not _jbody(still_backing_off).get("receivedMessages"))
+    st.advance(20)   # now past both the ack deadline AND the backoff window
+    redelivered = ps.dispatch(st, "POST", f"/v1/{SUB_RETRY}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    redel = _jbody(redelivered).get("receivedMessages", [])
+    _check("retry backoff redelivers once the window elapses", len(redel) == 1 and redel[0]["deliveryAttempt"] == 2)
+
+    # 20. message ordering: only the earliest unacked message for a given ordering key is
+    # ever delivered; the next one waits until it's acked, even once its own deadline lapses.
+    T4 = f"projects/{P}/topics/orderedtopic"
+    SUB_ORD = f"projects/{P}/subscriptions/sub-ordered"
+    ps.dispatch(st, "PUT", f"/v1/{T4}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{SUB_ORD}", {}, {}, json.dumps({"topic": T4, "enableMessageOrdering": True}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T4}:publish", {}, {}, json.dumps({"messages": [
+        {"data": base64.b64encode(b"first").decode(), "orderingKey": "k1"},
+        {"data": base64.b64encode(b"second").decode(), "orderingKey": "k1"},
+    ]}).encode())
+    ord1 = ps.dispatch(st, "POST", f"/v1/{SUB_ORD}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    ord1_recv = _jbody(ord1)["receivedMessages"]
+    _check("ordering: only the head-of-key message is delivered while it's unacked",
+           len(ord1_recv) == 1 and base64.b64decode(ord1_recv[0]["message"]["data"]) == b"first")
+    ps.dispatch(st, "POST", f"/v1/{SUB_ORD}:acknowledge", {}, {}, json.dumps({"ackIds": [ord1_recv[0]["ackId"]]}).encode())
+    ord2 = ps.dispatch(st, "POST", f"/v1/{SUB_ORD}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    ord2_recv = _jbody(ord2)["receivedMessages"]
+    _check("ordering: the next same-key message is delivered only after the head is acked",
+           len(ord2_recv) == 1 and base64.b64decode(ord2_recv[0]["message"]["data"]) == b"second")
+
+    # 21. subscription filter: only messages whose attributes match the filter are
+    # delivered; an unparsable filter is rejected when the subscription is created.
+    T5 = f"projects/{P}/topics/filteredtopic"
+    SUB_FILTER = f"projects/{P}/subscriptions/sub-filtered"
+    ps.dispatch(st, "PUT", f"/v1/{T5}", {}, {}, b"{}")
+    fsub = ps.dispatch(st, "PUT", f"/v1/{SUB_FILTER}", {}, {}, json.dumps({
+        "topic": T5, "filter": 'attributes.kind = "keep"',
+    }).encode())
+    _check("filter stored on subscription", _jbody(fsub).get("filter") == 'attributes.kind = "keep"')
+    ps.dispatch(st, "POST", f"/v1/{T5}:publish", {}, {}, json.dumps({"messages": [
+        {"data": base64.b64encode(b"keep-me").decode(), "attributes": {"kind": "keep"}},
+        {"data": base64.b64encode(b"drop-me").decode(), "attributes": {"kind": "drop"}},
+    ]}).encode())
+    filtered = ps.dispatch(st, "POST", f"/v1/{SUB_FILTER}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    fbodies = [base64.b64decode(m["message"]["data"]) for m in _jbody(filtered).get("receivedMessages", [])]
+    _check("filter: only the matching message is delivered", fbodies == [b"keep-me"])
+    bad_filter = ps.dispatch(st, "PUT", f"/v1/projects/{P}/subscriptions/sub-bad-filter", {}, {},
+                             json.dumps({"topic": T5, "filter": "hasPrefix(("}).encode())
+    _check("invalid filter rejected at subscription create", bad_filter.status == 400
+           and _jbody(bad_filter)["error"]["status"] == "INVALID_ARGUMENT")
+
+    # 22. topic message retention + seek-by-time: a subscription created AFTER a message
+    # was published can still replay it from the topic's own retained backlog.
+    T6 = f"projects/{P}/topics/retainedtopic"
+    ps.dispatch(st, "PUT", f"/v1/{T6}", {}, {}, json.dumps({"messageRetentionDuration": "3600s"}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T6}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"old").decode()}]}).encode())
+    st.advance(2)
+    cutoff = datetime.fromtimestamp(st.now(), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    st.advance(2)
+    ps.dispatch(st, "POST", f"/v1/{T6}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"new").decode()}]}).encode())
+    LATE_SUB = f"projects/{P}/subscriptions/sub-late"
+    ps.dispatch(st, "PUT", f"/v1/{LATE_SUB}", {}, {}, json.dumps({"topic": T6}).encode())
+    seeked = ps.dispatch(st, "POST", f"/v1/{LATE_SUB}:seek", {}, {}, json.dumps({"time": cutoff}).encode())
+    _check("seek-by-time 200", seeked.status == 200)
+    replayed_time = ps.dispatch(st, "POST", f"/v1/{LATE_SUB}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    rbodies = [base64.b64decode(m["message"]["data"]) for m in _jbody(replayed_time).get("receivedMessages", [])]
+    _check("seek-by-time replays only messages published after the cutoff", rbodies == [b"new"])
+
+    NORET_TOPIC = f"projects/{P}/topics/noretentiontopic"
+    NORET_SUB = f"projects/{P}/subscriptions/sub-noretention"
+    ps.dispatch(st, "PUT", f"/v1/{NORET_TOPIC}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{NORET_SUB}", {}, {}, json.dumps({"topic": NORET_TOPIC}).encode())
+    bad_seek = ps.dispatch(st, "POST", f"/v1/{NORET_SUB}:seek", {}, {}, json.dumps({"time": cutoff}).encode())
+    _check("seek-by-time without topic retention is rejected", bad_seek.status == 400
+           and _jbody(bad_seek)["error"]["status"] == "FAILED_PRECONDITION")
+
+    # 23. AVRO/JSON schema validation on publish: a message matching the schema's shape
+    # publishes; one that doesn't is rejected rather than silently accepted.
+    SCHEMA2 = f"projects/{P}/schemas/order-v2"
+    ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas", {"schemaId": "order-v2"}, {}, json.dumps({
+        "type": "AVRO",
+        "definition": json.dumps({"type": "record", "name": "Order", "fields": [{"name": "id", "type": "string"}]}),
+    }).encode())
+    T7 = f"projects/{P}/topics/schematized"
+    ps.dispatch(st, "PUT", f"/v1/{T7}", {}, {}, json.dumps({"schemaSettings": {"schema": SCHEMA2, "encoding": "JSON"}}).encode())
+    good_msg = ps.dispatch(st, "POST", f"/v1/{T7}:publish", {}, {},
+                           json.dumps({"messages": [{"data": base64.b64encode(json.dumps({"id": "o-1"}).encode()).decode()}]}).encode())
+    _check("schema-conformant message publishes", good_msg.status == 200)
+    bad_msg = ps.dispatch(st, "POST", f"/v1/{T7}:publish", {}, {},
+                          json.dumps({"messages": [{"data": base64.b64encode(json.dumps({"wrong": "field"}).encode()).decode()}]}).encode())
+    _check("schema-violating message rejected", bad_msg.status == 400 and _jbody(bad_msg)["error"]["status"] == "INVALID_ARGUMENT")
+
+    # 24. (C0g) modifyAckDeadline: 0 nacks (redelivered on the next pull), N extends the lease.
+    T8, S8 = f"projects/{P}/topics/modack", f"projects/{P}/subscriptions/modack-sub"
+    ps.dispatch(st, "PUT", f"/v1/{T8}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{S8}", {}, {}, json.dumps({"topic": T8}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T8}:publish", {}, {}, json.dumps({"messages": [{"data": "eA=="}]}).encode())
+    first = _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b'{"maxMessages": 1}'))["receivedMessages"][0]
+    _check("leased message is not redelivered", _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b"{}")) == {})
+    nack = ps.dispatch(st, "POST", f"/v1/{S8}:modifyAckDeadline", {}, {},
+                       json.dumps({"ackIds": [first["ackId"]], "ackDeadlineSeconds": 0}).encode())
+    again = _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b"{}")).get("receivedMessages", [])
+    _check("modifyAckDeadline 0 redelivers immediately", nack.status == 200 and len(again) == 1
+           and again[0]["deliveryAttempt"] == 2)
+    ps.dispatch(st, "POST", f"/v1/{S8}:modifyAckDeadline", {}, {},
+                json.dumps({"ackIds": [again[0]["ackId"]], "ackDeadlineSeconds": 300}).encode())
+    st.advance(60)
+    _check("modifyAckDeadline extends the lease", _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b"{}")) == {})
+    bad = ps.dispatch(st, "POST", f"/v1/{S8}:modifyAckDeadline", {}, {}, b'{"ackIds": [], "ackDeadlineSeconds": 601}')
+    _check("modifyAckDeadline > 600s rejected", bad.status == 400)
+
+    # 25. (C0g) topic sub-collections, modifyPushConfig, detach, snapshot patch, IAM, schema validate.
+    subs = _jbody(ps.dispatch(st, "GET", f"/v1/{T8}/subscriptions", {}, {}, b""))
+    _check("topics.subscriptions.list", subs.get("subscriptions") == [S8])
+    SN8 = f"projects/{P}/snapshots/modack-snap"
+    ps.dispatch(st, "PUT", f"/v1/{SN8}", {}, {}, json.dumps({"subscription": S8}).encode())
+    _check("topics.snapshots.list", _jbody(ps.dispatch(st, "GET", f"/v1/{T8}/snapshots", {}, {}, b"")).get("snapshots") == [SN8])
+    patched = _jbody(ps.dispatch(st, "PATCH", f"/v1/{SN8}", {}, {},
+                                 json.dumps({"snapshot": {"labels": {"a": "b"}}, "updateMask": "labels"}).encode()))
+    _check("snapshots.patch labels", patched.get("labels") == {"a": "b"})
+    ps.dispatch(st, "POST", f"/v1/{S8}:modifyPushConfig", {}, {},
+                json.dumps({"pushConfig": {"pushEndpoint": "https://h.example/p"}}).encode())
+    _check("modifyPushConfig stored", _jbody(ps.dispatch(st, "GET", f"/v1/{S8}", {}, {}, b""))["pushConfig"]
+           == {"pushEndpoint": "https://h.example/p"})
+    pol = _jbody(ps.dispatch(st, "POST", f"/v1/{T8}:setIamPolicy", {}, {},
+                             json.dumps({"policy": {"bindings": [{"role": "roles/pubsub.publisher", "members": ["user:a@b.c"]}]}}).encode()))
+    got = _jbody(ps.dispatch(st, "POST", f"/v1/{T8}:getIamPolicy", {}, {}, b"{}"))
+    _check("set/getIamPolicy round-trip", got.get("bindings") == pol.get("bindings") and got.get("etag"))
+    ps.dispatch(st, "POST", f"/v1/{S8}:detach", {}, {}, b"{}")
+    _check("subscriptions.detach", _jbody(ps.dispatch(st, "GET", f"/v1/{S8}", {}, {}, b""))["topic"] == "_deleted-topic_"
+           and "subscriptions" not in _jbody(ps.dispatch(st, "GET", f"/v1/{T8}/subscriptions", {}, {}, b"")))
+    okv = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas:validate", {}, {},
+                      json.dumps({"schema": {"type": "AVRO", "definition": '{"type": "string"}'}}).encode())
+    badv = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas:validate", {}, {},
+                       json.dumps({"schema": {"type": "AVRO", "definition": "{bad"}}).encode())
+    _check("schemas.validate", okv.status == 200 and badv.status == 400)
+    vm = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas:validateMessage", {}, {}, json.dumps({
+        "name": SCHEMA2, "encoding": "JSON", "message": base64.b64encode(b'{"wrong": 1}').decode()}).encode())
+    _check("schemas.validateMessage rejects a violating message", vm.status == 400)
+    unk = ps.dispatch(st, "GET", f"/v1/{T8}/nope", {}, {}, b"")
+    _check("unknown sub-path is a google.rpc NOT_FOUND", unk.status == 404 and _jbody(unk)["error"]["status"] == "NOT_FOUND")
 
     print("\nGCP Pub/Sub-core conformance: ALL GREEN")
     return 0

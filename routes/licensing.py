@@ -499,6 +499,7 @@ def register(app: FastAPI) -> None:
     def api_runtime_tier():
         """Surface the full per-tier policy table + the active license's tier."""
         from core import tier_policy as _tp
+        from core import k8s_tier_gate as _k8s_gate
         try:
             tenant = ctx._tenant_dict(ctx._active_tenant_id())
         except Exception:
@@ -512,6 +513,7 @@ def register(app: FastAPI) -> None:
             "active_tier":   active_tier,
             "active_policy": _tp.policy_for(active_tier),
             "primary_cloud": (tenant or {}).get("primary_cloud", ""),
+            "kubernetes_locked": _k8s_gate.ui_verdicts(),   # managed K8s: Pro/Max/Enterprise only
             "all_tiers":     _tp.all_tiers(),
             "currency":      "INR",
             "_meta": {

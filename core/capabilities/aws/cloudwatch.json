@@ -1,0 +1,333 @@
+{
+ "$doc": "Vyomi capability registry — CloudWatch (metrics, alarms, dashboards) + CloudWatch Logs. See s3.json for the contract.",
+ "aws.cloudwatch.metrics": {
+  "title": "Metrics (PutMetricData, ListMetrics, GetMetricStatistics, GetMetricData incl. metric math)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.metric": {
+  "title": "Metric alarms (create, evaluate on every PutMetricData, state + history)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Static threshold alarms and anomaly-detection-band alarms (see aws.cloudwatch.anomaly-detection) are both evaluated live.",
+   "SNS, Lambda (aws.cloudwatch.alarms.actions.lambda), EC2 (aws.cloudwatch.alarms.actions.ec2) and Auto Scaling (aws.cloudwatch.alarms.actions.compute) alarm actions all really fire."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.composite": {
+  "title": "Composite alarms (AlarmRule grammar over child alarm states)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.history": {
+  "title": "Alarm history (configuration + state + action records)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.actions.compute": {
+  "title": "Auto Scaling alarm action",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A scaling-policy ARN (core/autoscaling_core.py) really executes when the alarm transitions: the group's desired capacity is adjusted (clamped to MinSize/MaxSize) and real EC2 instances are launched/terminated through the same vpc_core lifecycle RunInstances/TerminateInstances use.",
+   "The EC2 console's Auto Scaling section (ec2.auto-scaling) builds and manages the group/policy; SimpleScaling, StepScaling and TargetTrackingScaling, scheduled actions and lifecycle hooks are all modeled — see ec2.auto-scaling for exactly what's real vs. simplified.",
+   "Routed natively offline too (routes/aws_s3.py, a durable space-scoped store — routes/aws_autoscaling.py), not just on Nano.",
+   "Warm pools and mixed-instances policies aren't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py",
+   "tests/conformance/test_autoscaling_depth_core.py",
+   "tests/conformance/test_autoscaling_offline_route.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.actions.ec2": {
+  "title": "EC2 alarm action",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Stop/Terminate/Reboot really change the state of the instance named by the alarm's own InstanceId dimension, through the same EC2 instance lifecycle (vpc_core.py) the EC2 console uses.",
+   "Recover isn't offered — AWS's underlying hardware-recovery automation has no equivalent in Vyomi.",
+   "If the alarm's metric carries no InstanceId dimension, the action is recorded as failed, the same as a real misconfigured EC2 alarm action."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.actions.lambda": {
+  "title": "Lambda alarm action",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The invocation is fire-and-forget, the same as a real CloudWatch alarm action: Vyomi does not surface the function's return value or errors back onto the alarm's history."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.anomaly-detection": {
+  "title": "Anomaly detection bands",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The band is a simple mean ± N standard-deviations model trained from the metric's own history (not AWS's ML model), so it won't learn seasonality or periodic spikes.",
+   "A SINGLE_METRIC detector trains (PENDING_TRAINING → TRAINED) once it has seen 10 datapoints; METRIC_MATH detectors stay PENDING_TRAINING."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.dashboards": {
+  "title": "Custom dashboards (create, add widgets, save, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.dashboards.automatic": {
+  "title": "Automatic dashboards",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Really derived from whatever AWS/* namespaces ListMetrics already has real datapoints for (e.g. an EC2 instance's own StatusCheckFailed family, published from its real status-check state) — never a synthetic/random series, and empty until a resource actually publishes.",
+   "Only as many per-service dashboards as Vyomi has real service-to-CloudWatch metric integrations for (currently EC2) — AWS's full curated per-service widget catalog (CPU/network/request/throttle graphs for every service) isn't replicated."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.metrics.multi-source-query": {
+  "title": "Multi source query, cross-account Options and Source selection",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Multi source query is a real (partial) Metrics Insights SQL engine — SELECT AVG|SUM|MIN|MAX|COUNT(metric) FROM SCHEMA(\"Namespace\"[, dim]) [WHERE dim = 'v'] [GROUP BY dim] [ORDER BY func() ASC|DESC] [LIMIT n] — evaluated against the SAME ListMetrics/GetMetricData data the Browse tab shows, not a fabricated result. Joins, subqueries and the full Metrics Insights grammar aren't implemented.",
+   "Options really changes how the Graph section renders (widget type, statistic, period) — not a cosmetic no-op.",
+   "Source shows the real widget JSON the current graphed metrics/options resolve to.",
+   "Vyomi simulates a single account/region: the Source selection AWS shows once cross-account observability is linked has nothing to select here, same as a real AWS account that never enabled cross-account observability."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.groups": {
+  "title": "Log groups (create, retention, log class, KMS association, deletion protection, tags)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.streams": {
+  "title": "Log streams",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.events": {
+  "title": "Log events (PutLogEvents, GetLogEvents, FilterLogEvents)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.metric-filters": {
+  "title": "Metric filters (create, test, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.subscription-filters": {
+  "title": "Subscription filters",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Lambda and Kinesis destinations really receive the gzip+base64 `awslogs` envelope (a real invoke / PutRecord); a Firehose destination has no backing core and is kept as a delivery counter only."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.insights": {
+  "title": "Logs Insights queries (Logs Insights QL)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Supported: fields/display, filter (=, !=, >, <, >=, <=, like), sort, limit, pattern, stats count(*) [by field | by bin(duration)]. Only count() aggregation and OpenSearch PPL/SQL query languages are not offered."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.patterns-visualization": {
+  "title": "Logs Insights Patterns and Visualization tabs",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Patterns are mined with a simple tokenizer (numbers/hex/UUIDs masked to <*>, grouped, counted) — AWS's own clustering model may group lines differently.",
+   "Visualization only renders the result of a stats-by-bin() query (a bar list), not the full Logs Insights chart types (line/stacked area/pie)."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.live-tail": {
+  "title": "Live Tail",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi polls FilterLogEvents on an interval instead of the real bidirectional Live Tail streaming protocol, so new events can take a few seconds to appear."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.data-sources": {
+  "title": "Log management Data sources tab",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "VPC Flow Logs vended to CloudWatch Logs is modeled: adding a data source really creates the EC2 Flow Log resource (core/vpc_core.py) and its destination log group (core/logs_core.py), the same two native calls a real console onboarding wizard makes.",
+   "Vyomi has no EC2 Auto Scaling, VPC, or ENI network namespace to generate real per-packet traffic, so the flow log resource exists and round-trips but delivers no log events — see core/vpc_core.py's CreateFlowLogs note (core/netsim/flowlogs.py renders real records for the offline appliance's network enforcer, not wired to this EC2 API).",
+   "Other vended source types AWS offers from this tab (Route 53 Resolver query logs, WAF logs, CloudFront, Config, Security Hub, …) aren't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.anomaly-detection": {
+  "title": "Log group anomaly detection",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A detector really trains on the first 20 real log events a covered group ingests (via the same pattern-mining tokenizer the Patterns tab uses), then really flags any later event whose masked pattern wasn't in that trained baseline — not a canned or random finding.",
+   "Anomaly severity/priority is derived from the pattern text (error/exception/fail/fatal/panic -> HIGH, else MEDIUM); AWS's ML-scored priority isn't replicated.",
+   "Suppressing/acknowledging an anomaly (UpdateAnomaly) is real and persists; marking a pattern as an expected baseline retroactively is not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.data-protection": {
+  "title": "Log group data protection (sensitive data masking)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "8 managed data identifiers are recognized (EmailAddress, CreditCardNumber, Ssn-US, AwsSecretKey, AwsAccessKey, PhoneNumber-US, IpAddress, Url) — AWS's full managed identifier catalog (100+, with locale variants) is not offered.",
+   "Masking is enforced at ingestion (PutLogEvents permanently replaces the match with asterisks, as AWS does); Audit-only findings are counted on the log group but not forwarded to a findings destination (CloudTrail/Security Hub/S3)."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.field-indexes": {
+  "title": "Log group field indexes",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A field index is stored and returned exactly as AWS defines it (a cost/performance hint, not a correctness filter) — Vyomi's Logs Insights already scans every field, so indexing a field doesn't change query results or make the query faster, just like on AWS it doesn't change results, only cost."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.transformer": {
+  "title": "Log group transformer",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "4 processors are run for real at ingestion (parseJSON, addKeys, deleteKeys, renameKeys), restructuring the stored event exactly as AWS does. AWS's other processors (grok, csv, splitString, substituteString, dateTimeConverter, type converters, …) are rejected by PutTransformer — not silently accepted."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.contributor-insights": {
+  "title": "Log group Contributor Insights rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only LogFormat JSON is scanned; CLF/W3C log formats are accepted and stored by PutInsightRule but GetInsightRuleReport finds no contributors for them.",
+   "Filters only support the In / NotIn operators (exact-value membership); AWS's other operators (IsPresent, StartsWith, …) are not evaluated.",
+   "The report is computed over the whole requested window as one bucket, not broken down per-Period like AWS's time series."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ }
+}

@@ -1,0 +1,105 @@
+{
+ "cloud": "aws",
+ "service": "s3",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/aws/services/s3/UploadPage.jsx:91",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Permissions\" note=\"Per-object ACL grants at upload time aren't modeled; uploaded objects use the bucket's Object Ownership setting.\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/Buckets.jsx:59",
+   "component": "NotSimulated",
+   "props": "feature=\"Directory buckets (S3 Express One Zone)\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/Buckets.jsx:62",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Account snapshot\" note=\"Storage/object counts and cost summaries aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/Buckets.jsx:63",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"External access summary\" note=\"IAM Access Analyzer findings for S3 aren't modeled in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/index.jsx:11",
+   "component": "NotSimulatedContainer",
+   "props": "title={title}"
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:39",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Metadata configuration\" note=\"S3 Metadata (the queryable metadata table for a bucket) isn't modeled in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:44",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Access Points\" feature=\"S3 Access Points\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:118",
+   "component": "NotSimulatedContainer",
+   "props": "title={title}"
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:148",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"AWS CloudTrail data events\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:150",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Amazon EventBridge\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:468",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Bucket metrics\" feature=\"CloudWatch storage metrics for S3\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:469",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Storage Lens metrics\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:471",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Replication metrics\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/BucketDetail.jsx:472",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Data transfer metrics\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/ObjectDetail.jsx:87",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Object management overview\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/ObjectDetail.jsx:95",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Additional checksums\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/ObjectDetail.jsx:96",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Tags\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/ObjectDetail.jsx:151",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Object Lock legal hold\" note=\"Object Lock is disabled for this bucket.\""
+  },
+  {
+   "where": "consoles/src/aws/services/s3/ObjectDetail.jsx:179",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Object Lock retention\" note=\"Object Lock is disabled for this bucket.\""
+  }
+ ]
+}

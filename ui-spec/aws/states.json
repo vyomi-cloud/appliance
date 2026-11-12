@@ -1,0 +1,307 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "states",
+  "console_path": "/states/",
+  "status": "draft",
+  "captured_at": "2026-11-01",
+  "nav": [
+    { "label": "State machines", "page_id": "state-machines" },
+    { "label": "Activities", "page_id": "activities" }
+  ],
+  "pages": [
+    {
+      "id": "state-machines",
+      "kind": "list",
+      "title": "State machines",
+      "route": "/states/home#/statemachines",
+      "breadcrumbs": ["Step Functions", "State machines"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "No private capture checkout was available for this run; written from product knowledge, not a screenshot. Re-verify on the next capture.",
+      "table": {
+        "resource_label": "State machines",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": ["Refresh", "Delete", "Create state machine"],
+        "filter_placeholder": "Search state machines",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No state machines",
+        "empty_state_action": "Create state machine",
+        "columns": ["Name", "Type", "Status", "Created"]
+      }
+    },
+    {
+      "id": "create-state-machine",
+      "kind": "create",
+      "title": "Create state machine",
+      "route": "/states/home#/statemachines/create",
+      "breadcrumbs": ["Step Functions", "State machines", "Create state machine"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create state machine",
+      "sections": [
+        {
+          "title": "Define state machine",
+          "fields": [
+            { "label": "Name", "type": "text", "required": true, "placeholder": "Enter the state machine name" },
+            { "label": "Type", "type": "radio", "required": true, "default": "Standard", "options": ["Standard", "Express"] }
+          ]
+        },
+        {
+          "title": "Definition",
+          "actions": ["Validate state machine definition"],
+          "fields": [
+            { "label": "Definition", "type": "textarea", "required": true, "help": "Amazon States Language (ASL), as JSON." }
+          ]
+        },
+        {
+          "title": "Permissions",
+          "fields": [
+            { "label": "Execution role", "type": "text", "required": true, "help": "IAM role ARN the state machine assumes. Vyomi accepts any arn:aws:iam:: role; it is not validated against IAM." }
+          ]
+        },
+        {
+          "title": "Logging",
+          "fields": [
+            { "label": "Log level", "type": "select", "default": "OFF", "options": ["OFF", "ERROR", "ALL"] },
+            { "label": "Include execution data in logs", "type": "checkbox", "default": false }
+          ]
+        },
+        {
+          "title": "X-Ray tracing",
+          "fields": [
+            { "label": "Active tracing", "type": "toggle", "default": false }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            { "label": "Tags", "type": "tags", "required": false, "actions": ["Add new tag", "Remove"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "state-machine-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/states/home#/statemachines/view/{resource-name}",
+      "breadcrumbs": ["Step Functions", "State machines", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Delete", "Start execution"],
+      "tabs": ["Executions", "Definition", "Aliases", "Versions", "Tags"],
+      "tab_panels": [
+        {
+          "label": "Executions",
+          "sections": [
+            {
+              "title": "Executions",
+              "table": {
+                "resource_label": "Executions",
+                "counter": true,
+                "selection": "none",
+                "header_actions": ["Refresh", "Start execution"],
+                "columns": ["Name", "Status", "Start time", "End time"]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Definition",
+          "sections": [
+            {
+              "title": "Definition",
+              "actions": ["Edit"],
+              "fields": [
+                { "label": "Definition", "type": "readonly" },
+                { "label": "Type", "type": "readonly" }
+              ]
+            },
+            {
+              "title": "Permissions",
+              "fields": [
+                { "label": "Execution role", "type": "readonly" }
+              ]
+            },
+            {
+              "title": "Logging",
+              "actions": ["Edit"],
+              "fields": [
+                { "label": "Log level", "type": "readonly" },
+                { "label": "Include execution data in logs", "type": "readonly" }
+              ]
+            },
+            {
+              "title": "X-Ray tracing",
+              "actions": ["Edit"],
+              "fields": [
+                { "label": "Active tracing", "type": "readonly" }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Aliases",
+          "sections": [
+            {
+              "title": "Aliases",
+              "table": {
+                "resource_label": "Aliases",
+                "counter": true,
+                "selection": "single",
+                "header_actions": ["Delete", "Create alias"],
+                "columns": ["Name", "Routing", "Created"]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Versions",
+          "sections": [
+            {
+              "title": "Versions",
+              "table": {
+                "resource_label": "Versions",
+                "counter": true,
+                "header_actions": ["Publish new version"],
+                "columns": ["Version", "Created"]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "actions": ["Manage tags"],
+              "fields": [
+                { "label": "Tags", "type": "tags", "required": false, "actions": ["Add new tag", "Remove"] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "start-execution",
+      "kind": "create",
+      "title": "New execution",
+      "route": "/states/home#/statemachines/view/{resource-name}/execute",
+      "breadcrumbs": ["Step Functions", "State machines", "{resource-name}", "New execution"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Start execution",
+      "sections": [
+        {
+          "title": "New execution",
+          "fields": [
+            { "label": "Name", "type": "text", "required": false, "help": "A unique name is generated if left blank." },
+            { "label": "Input", "type": "textarea", "required": false, "default": "{}", "help": "JSON input for the execution." }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "execution-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/states/v2/home#/executions/details/{resource-name}",
+      "breadcrumbs": ["Step Functions", "State machines", "Executions", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Simplified from the real console's split graph/table layout; map-run iteration drill-down is out of scope for this pass.",
+      "header_actions": ["Stop execution", "Redrive execution"],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            { "label": "Execution status", "type": "readonly" },
+            { "label": "Start date", "type": "readonly" },
+            { "label": "End date", "type": "readonly" }
+          ]
+        },
+        {
+          "title": "Graph view"
+        },
+        {
+          "title": "Execution event history",
+          "table": {
+            "resource_label": "Events",
+            "counter": true,
+            "columns": ["ID", "Type", "Step", "Timestamp"]
+          }
+        },
+        {
+          "title": "Input and output",
+          "fields": [
+            { "label": "Input", "type": "readonly" },
+            { "label": "Output", "type": "readonly" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "activities",
+      "kind": "list",
+      "title": "Activities",
+      "route": "/states/home#/activities",
+      "breadcrumbs": ["Step Functions", "Activities"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Activities",
+        "counter": true,
+        "selection": "single",
+        "header_actions": ["Refresh", "Delete", "Create activity"],
+        "filter_placeholder": "Search activities",
+        "pagination": true,
+        "empty_state": "No activities",
+        "empty_state_action": "Create activity",
+        "columns": ["Name", "Created"]
+      }
+    },
+    {
+      "id": "create-activity",
+      "kind": "create",
+      "title": "Create activity",
+      "route": "/states/home#/activities/create",
+      "breadcrumbs": ["Step Functions", "Activities", "Create activity"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create activity",
+      "sections": [
+        {
+          "title": "Activity details",
+          "fields": [
+            { "label": "Activity name", "type": "text", "required": true }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "activity-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/states/home#/activities/details/{resource-name}",
+      "breadcrumbs": ["Step Functions", "Activities", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Delete"],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            { "label": "Name", "type": "readonly" },
+            { "label": "ARN", "type": "readonly" },
+            { "label": "Created", "type": "readonly" }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "No private captures repo was available for this run (no screenshots or page text to check against), so this spec is written from Step Functions product knowledge (provenance=reference throughout) rather than extracted from a capture. Scoped to what core/stepfunctions_core.py models for real: state machines (CRUD, versions, aliases), executions (start/stop/redrive/history), and activities — the state machines list/create, executions list/detail with event history + graph, and activities list/create/detail the queue goal asked for. Deliberately out of scope and omitted rather than stubbed: CloudWatch metrics/alarms dashboards, Map Runs drill-down, Workflow Studio's visual drag-and-drop editor (the Definition field is the JSON/ASL editor only), and X-Ray's actual trace viewer. Re-verify against a real capture when one becomes available."
+}

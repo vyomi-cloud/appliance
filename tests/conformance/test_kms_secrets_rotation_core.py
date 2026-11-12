@@ -37,6 +37,32 @@ def run():
     _check("DisableKeyRotation → disabled",
            kms.dispatch(ks, "TrentService.GetKeyRotationStatus", {"KeyId": kid}).body["KeyRotationEnabled"] is False)
 
+    # ── automatic rotation really fires (lazy, on next touch — no background
+    # scheduler, same pattern as Secrets Manager / DynamoDB TTL) ────────────
+    kms.dispatch(ks, "TrentService.EnableKeyRotation", {"KeyId": kid, "RotationPeriodInDays": 90})
+    ct2 = kms.dispatch(ks, "TrentService.Encrypt",
+                       {"KeyId": kid, "Plaintext": base64.b64encode(b"before-auto-rotation").decode()}).body["CiphertextBlob"]
+    before = kms.dispatch(ks, "TrentService.DescribeKey", {"KeyId": kid}).body["KeyMetadata"]["KeyMaterialId"]
+    ks.get_key(kid)["LastRotationDate"] -= 91 * 86400  # backdate past the period, like the GCS lifecycle conformance test
+    after = kms.dispatch(ks, "TrentService.DescribeKey", {"KeyId": kid}).body["KeyMetadata"]
+    _check("past-due period auto-rotates on next touch", after["KeyMaterialId"] != before)
+    rotations = kms.dispatch(ks, "TrentService.ListKeyRotations", {"KeyId": kid}).body["Rotations"]
+    _check("auto rotation recorded as AWS_KMS_AUTOMATIC", rotations[-1]["RotationType"] == "AWS_KMS_AUTOMATIC")
+    pt2 = kms.dispatch(ks, "TrentService.Decrypt", {"CiphertextBlob": ct2}).body["Plaintext"]
+    _check("ciphertext from before auto-rotation still decrypts", base64.b64decode(pt2) == b"before-auto-rotation")
+    not_due = kms.dispatch(ks, "TrentService.DescribeKey", {"KeyId": kid}).body["KeyMetadata"]["KeyMaterialId"]
+    _check("does not re-rotate again before the next period is due", not_due == after["KeyMaterialId"])
+
+    # ── AWS managed keys always rotate automatically, non-configurable ─────
+    mkid = kms.dispatch(ks, "TrentService.Encrypt",
+                        {"KeyId": "alias/aws/rotationtest", "Plaintext": base64.b64encode(b"x").decode()}
+                        ).body["KeyId"]
+    mstatus = kms.dispatch(ks, "TrentService.GetKeyRotationStatus", {"KeyId": mkid}).body
+    _check("AWS managed key rotation is on by default", mstatus["KeyRotationEnabled"] is True and mstatus["RotationPeriodInDays"] == 365)
+    blocked = kms.dispatch(ks, "TrentService.DisableKeyRotation", {"KeyId": mkid})
+    _check("DisableKeyRotation on an AWS managed key is rejected",
+           blocked.body.get("__type") == "UnsupportedOperationException")
+
     # ── Secrets rotation ──────────────────────────────────────────────────
     kv = InMemoryKvStore()
     sec.dispatch(kv, "secretsmanager.CreateSecret", {"Name": "db", "SecretString": "p1"})

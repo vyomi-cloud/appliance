@@ -1,0 +1,341 @@
+{
+ "$doc": "Vyomi capability registry — Azure Storage accounts. See aws/s3.json for the contract. One entry per console section (StorageAccountBlade.jsx MENU id).",
+ "azure.storage.account.crud": {
+  "title": "Storage accounts (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.vnet_rules": {
+  "title": "Virtual network rules and IP firewall rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "networkAcls.virtualNetworkRules and ipRules are real ARM state with real validation: each subnet must exist and carry the Microsoft.Storage service endpoint (the portal enables it for you), IP rules must be public IPv4 addresses / CIDRs (no private ranges, no /31 or /32 CIDR, no duplicates). The rules ARE enforced on Blob data-plane requests from a caller that declares its source network (x-vyomi-source-ip / x-vyomi-source-subnet headers; see azure.storage.networking and core/azure_netaccess.py); Queue/Table requests and callers that declare no network identity are not filtered."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
+ "azure.storage.account.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.containers": {
+  "title": "Containers (create, list, delete) over the Blob REST data plane",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["A container's anonymous access level (x-ms-blob-public-access: blob|container, set at create) is stored and echoed back on GetContainerProperties/ListContainers exactly as configured; enforcing it against a genuinely credential-less reader is not modelled (see azure.storage.configuration)."],
+  "tests": ["tests/conformance/test_azure_blob_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
+ },
+ "azure.storage.blobs": {
+  "title": "Blobs (upload, download, list, delete) over the Blob REST data plane",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Every blob uploaded through the console is a block blob; page/append blobs are not simulated."],
+  "tests": ["tests/conformance/test_azure_blob_core.py"]
+ },
+ "azure.storage.accesskeys": {
+  "title": "Access keys (listKeys / regenerateKey / key expiration policy)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["REAL: key1/key2 are random per-account 64-byte keys minted on first use; regenerateKey really rotates the named key (the other is unchanged), stamps properties.keyCreationTime, and keyPolicy.keyExpirationPeriodInDays yields a per-key keyExpirationTime. Vyomi does not verify SharedKey request signatures, so a rotated-out key keeps working against the Blob data plane."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_ext_core.py"]
+ },
+ "azure.storage.endpoints": {
+  "title": "Endpoints",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Only the Blob service endpoint is a live Vyomi URL; Data Lake Storage, File, Queue and Table endpoints shown are cosmetic (the Queue data plane is reachable at a different, unscoped path — see azure.storage.queues)."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.configuration": {
+  "title": "Configuration (performance, secure transfer, TLS, access tier, replication SKU, …)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED: allowSharedKeyAccess=false really rejects a SharedKey-authenticated request (403 KeyBasedAuthenticationNotPermitted), and the Blob access tier (default) really seeds a newly uploaded blob's tier when the request carries no x-ms-access-tier of its own. Still config-only: HTTPS-only (secure transfer) and minimum TLS version have no real TLS negotiation layer underneath to enforce a protocol/version against, Entra-only portal auth is a console preference, and the permitted-scope-for-copy-operations restriction is not checked on copy."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
+ },
+ "azure.storage.redundancy": {
+  "title": "Redundancy (replication SKU)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED: an RA-GRS/RA-GZRS sku really exposes a separate, read-only `{account}-secondary` Blob endpoint serving this account's own data; any other sku 404s it, and writes against it always 403. Geo-replication status (paired secondary region, geoReplicationStats) and customer-managed failover (POST .../failover: swaps primary/secondary and converts to LRS, LRS accounts refused) are real ARM state (tests/conformance/test_azure_backup_core.py storage_geo). Still not simulated: actual replication lag and a genuinely separate secondary-region data store — Vyomi stores data once, locally."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py", "tests/conformance/test_azure_netaccess.py"]
+ },
+ "azure.storage.networking": {
+  "title": "Networking (public network access / firewall default action / routing preference)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. ENFORCED for a caller that declares its network identity (request headers x-vyomi-source-ip / x-vyomi-source-subnet / x-vyomi-private-endpoint / x-vyomi-trusted-service, core/azure_netaccess.py): networkAcls.defaultAction=Deny is checked against ipRules (CIDR/IP), virtualNetworkRules (the subnet must carry the Microsoft.Storage service endpoint), networkAcls.bypass=AzureServices, and an Approved private endpoint connection to the account (which also bypasses publicNetworkAccess=Disabled; a Pending/Rejected connection or unknown endpoint is denied) - all answer 403 AuthorizationFailure. A caller that declares no identity (the browser console, an SDK with no header) keeps the legacy behaviour: only publicNetworkAccess=Disabled blocks, allow-lists are not applied, because the simulator has no real client network to read an address from. routingPreference is still not simulated.",
+   "Resource instances (networkAcls.resourceAccessRules), custom domain (customDomain, no real CNAME validation) and route-specific endpoints (routingPreference.publishMicrosoftEndpoints/publishInternetEndpoints -> primaryEndpoints.microsoftEndpoints/internetEndpoints, both resolving to the account's single data path) are stored and returned exactly as configured but not enforced / not DNS-validated."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py", "tests/conformance/test_azure_storage_ext_core.py", "tests/conformance/test_azure_netaccess.py"]
+ },
+ "azure.storage.encryption": {
+  "title": "Encryption (key source)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "ENFORCED: selecting customer-managed keys requires a keyvaulturi + keyname and rejects (400) a keyvaulturi that doesn't name a Key Vault that actually exists in this subscription. The named key is looked up in the Key Vault keys data plane (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled) by key name (one keyspace shared by all vaults), and every account is still encrypted the same way underneath — infrastructure (double) encryption and encryption scopes are not simulated.",
+   "requireInfrastructureEncryption and the CMK queue/table support flag are stored on encryption exactly as sent (create wizard + Encryption blade) but there is no second encryption pass."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.dataprotection": {
+  "title": "Data protection (soft delete, point-in-time restore, versioning, change feed) over the blobServices/default ARM sub-resource",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "ENFORCED: Enable soft delete for blobs/containers really makes DELETE recoverable (invisible to normal listings, visible with include=deleted, restorable with comp=undelete, purged for real once the configured retention window elapses); Enable versioning for blobs really keeps an overwritten body as a separately fetchable version (?versionid=); Enable blob change feed really logs BlobCreated/BlobDeleted events from actual mutations. Still not enforced: operational backup (no backup engine), point-in-time restore, permanent delete, file-share soft delete (no Azure Files core) and version-level immutability.",
+   "The create wizard's Data protection tab writes the same blobServices/default document after the account is created; version-level immutability support is stored as properties.immutableStorageWithVersioning but immutability policies are not enforced."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this storage account",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this storage account only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a storage account is stored and listed only: it does not block writes or deletes of the storage account itself."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.activitylog": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 6-hours/30/90-day timespan picker are not modelled, and 'caller' is a fixed placeholder identity rather than the real signed-in principal."],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.queues": {
+  "title": "Queues (create, list, delete) and messages (send, receive, peek, delete) over the Azure Storage Queue REST data plane",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["core/azure_queue_core.py keeps one global queue namespace per Nano instance (the same simplification the Key Vault keys/secrets stores make) — queues are not isolated per storage account, so two accounts share the same queue list."],
+  "tests": ["tests/conformance/test_azure_queue_core.py"]
+ },
+ "azure.storage.diagnose": {
+  "title": "Diagnose and solve problems",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Diagnose and solve problems is real: detectors (core/azure_diagnose_core.py) are computed from the resource's live configuration, child resources and recorded operations; there is no platform telemetry behind a simulator, so none reads invented metrics and there is no AI troubleshooter."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_services_depth.py"
+  ]
+ },
+ "azure.storage.iam": {
+  "title": "Access control (IAM) scoped to a storage account",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Check access really calls core/azure_iam_core.py's checkAccess evaluator scoped to THIS account's resource id (explicit-deny-wins, scope inheritance from the subscription/resource group); Role assignments/Deny assignments really filter the shared RBAC store to assignments whose scope covers this account, and new assignments are created scoped to it. Vyomi has no real directory, so principal IDs are free text (not validated against a tenant) and 'My access'/Classic administrators (a legacy pre-RBAC model) stay honest gaps."],
+  "tests": ["tests/conformance/test_azure_rbac_core.py"]
+ },
+ "azure.storage.datamigration": {
+  "title": "Data migration (AzCopy / Storage Mover / Data Box)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Generates ready-made AzCopy commands against this account's Vyomi endpoint and hands in-product copies to Storage Mover (real). Azure Data Box needs a physical device shipped by Microsoft: not simulated."],
+  "tests": ["tests/conformance/test_azure_storagemover_core.py"]
+ },
+ "azure.storage.events": {
+  "title": "Events (Event Grid subscriptions on storage events)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The Events tab is the shared Event Grid resource-events panel (azure.eventgrid.resourceevents); see that entry for what is delivered. Subscriptions are modelled through the Event Grid resource, not as a separate storage-scoped system topic."
+  ],
+  "tests": ["tests/conformance/test_azure_eventgrid_scoped_core.py"]
+ },
+ "azure.storage.storagebrowser": {
+  "title": "Storage browser",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["A real master-detail view over the account's own containers and blobs (the same Blob REST calls the Containers page uses) — uploads, access tiers and SAS stay on the Containers/Blob pages rather than being duplicated here, same as the real portal's own cross-links."],
+  "tests": ["tests/conformance/test_azure_blob_core.py"]
+ },
+ "azure.storage.storagemover": {
+  "title": "Storage Mover",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Microsoft.StorageMover (movers, endpoints, projects, job definitions, job runs) with real validation. Job runs really copy bytes between Blob containers and Azure Files shares hosted by Vyomi (Additive or Mirror, sub-paths, skip-unchanged, per-file errors). NOT modelled: the on-premises migration agent (NFS/SMB mount sources end in Failed/NoAgentAvailable), bandwidth schedules, ACL/metadata preservation, AWS S3 multicloud sources."],
+  "tests": ["tests/conformance/test_azure_storagemover_core.py"]
+ },
+ "azure.storage.partnersolutions": {
+  "title": "Partner solutions (Vyomi Marketplace)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Vyomi publishes its own SaaS-simulator offers (Storage / Observability categories here); subscribing creates a real Microsoft.SaaS/resources resource with generated access credentials. The third-party vendors' service APIs are not emulated and nothing is billed."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
+ },
+ "azure.storage.fileshares": {
+  "title": "File shares (Azure Files)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Real ARM control plane (core/azure_files_core.py): name/quota/tier/protocol validation (NFS only on Premium FileStorage, 5120 GiB without large file shares, 102400 with them or on Premium), soft delete + restore, snapshots, leases, and a content browser (directories, upload, download, delete) with shareQuota enforced on write. NOT modelled: the SMB 3.x / NFS 4.1 protocols themselves (nothing can mount a Vyomi share), AD DS / Entra Kerberos identity enforcement and share-level ACLs; the content browser is a Vyomi ARM extension, not account.file.core.windows.net."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
+ },
+ "azure.storage.tables": {
+  "title": "Table storage",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["core/azure_table_core.py models table create/list/delete and entity insert/get/query/replace/merge/delete over the native OData/JSON wire, in ONE global namespace per Nano instance (the same simplification Queues makes — tables are not isolated per storage account). $filter supports only `Field eq 'value'` terms joined by `and`; batch/transaction (EntityGroupTransaction), continuation-token paging and complex OData queries are not simulated."],
+  "tests": ["tests/conformance/test_azure_table_core.py"]
+ },
+ "azure.storage.frontdoorcdn": {
+  "title": "Front Door and CDN: caching reverse proxy in front of Blob",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A real caching edge (core/azure_cdn_edge_core.py): route matching, origin selection, per-endpoint cache with TTL from the rule set's CacheExpiration action or Cache-Control, query-string caching modes, 304 revalidation, ModifyResponseHeader, purge and hit/miss statistics, over Blob origins. There is exactly one edge location (no PoPs/geo), no WAF, no TLS termination, custom domains stay Pending, origin health probes are not run, and only storage-account Blob origins are reachable (others return 502). Reached at /_edge/{endpoint host}/... (offline: /azure-data/blob/_edge/...) rather than by DNS name."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_cdn_edge.py"
+  ]
+ },
+ "azure.storage.sas": {
+  "title": "Shared access signature (SAS) generation",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The form builds a structurally correct SAS query string (sv/ss/srt/sp/st/se/spr/sig) from the selected options and signs it with the account's listKeys value, but core/azure_blob_core.py and core/azure_queue_core.py do not verify any request signature (SharedKey or SAS) — the generated token is not a real, checkable credential."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.objectreplication": {
+  "title": "Object replication",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Object replication policies (Microsoft.Storage/storageAccounts/objectReplicationPolicies, written to both accounts like Azure) are ENFORCED: a blob written to the source container that matches the rule's prefix filter is copied to the destination container, and deleting it removes the replica. Replication is synchronous (Azure's is asynchronous, minutes), only affects blobs written after the policy exists (no backfill), needs the destination container to exist, and does not require versioning/change feed or block writes to the destination container."],
+  "tests": ["tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.inventory": {
+  "title": "Blob inventory",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED: 'Run inventory now' really lists this account's current containers/blobs and writes a real CSV report blob into the configured destination container. Vyomi has no job scheduler, so this is on-demand rather than the real feature's daily/weekly scheduled run — the rule definition itself (scope, format, scheduling) is not stored or replayed."],
+  "tests": ["tests/conformance/test_azure_blob_core.py"]
+ },
+ "azure.storage.staticwebsite": {
+  "title": "Static website hosting (properties.staticWebsite on blobServices/default)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Enforced: core/azure_blob_core.py serves the $web container's blobs (indexDocument for '/', errorDocument404Path on a miss) once staticWebsite.enabled is set. Served at a synthetic /{account}/__website__/ path rather than a distinct public hostname — this single-origin relay has no separate account.z#.web.core.windows.net host to route on."],
+  "tests": ["tests/conformance/test_azure_storage_depth_core.py"]
+ },
+ "azure.storage.lifecycle": {
+  "title": "Lifecycle management policies",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Enforced, but lazily: core/azure_blob_core.py re-evaluates every enabled rule's prefixMatch filter against blob age on each list/get (not a daily background job) and applies the most aggressive matching baseBlob action (delete > tierToArchive > tierToCool), setting a real x-ms-access-tier / <AccessTier> or removing the blob. blobTypes beyond blockBlob, snapshot/version actions and the 'days after last access/creation' trigger variants are not modelled."],
+  "tests": ["tests/conformance/test_azure_storage_depth_core.py"]
+ },
+ "azure.storage.azureaisearch": {
+  "title": "Azure AI Search (index this storage account)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Real search service (Microsoft.Search) + Import data: a data source, index and indexer are created and the indexer really reads the container's blobs (text, JSON, JSON arrays, CSV) into a queryable index (TF-IDF ranking, $filter, facets). Also modelled (core/azure_search_vector_core.py): Collection(Edm.Single) vector fields with vectorSearch profiles, vector / text-vectorizer / hybrid (RRF) queries by exact cosine scan, and skillsets with SplitSkill + AzureOpenAIEmbeddingSkill executed in indexer runs plus index projections (integrated vectorization) over the local embedding model (its vectors are resized to the declared dimensions; a deterministic bag-of-words embedding is used when no model backend is running, so similarity is lexical). NOT modelled: other skills (OCR, entity, language, image, custom WebApi) - an indexer using one fails naming it, semantic ranker, HNSW graphs, scoring profiles, synonym maps, the Lucene query parser."],
+  "tests": ["tests/conformance/test_azure_search_core.py", "tests/conformance/test_azure_search_vector_core.py"]
+ },
+ "azure.storage.datalakegen2upgrade": {
+  "title": "Data Lake Gen2 upgrade",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED: the upgrade really flips isHnsEnabled false→true on the account (core/azure_arm_core.py rejects it on an ineligible account kind, and rejects turning it back off — one-way, same as real Azure). Vyomi's blob core has no directory/path metadata to rewrite, so the real feature's full-container metadata migration has nothing to simulate — containers stay a flat namespace either way."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.cors": {
+  "title": "Resource sharing (CORS) rules",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Enforced for the Blob service only: core/azure_blob_core.py answers an OPTIONS preflight against the configured corsRules, denying (403 CorsPreflightFailure) any Origin/method/header combination that matches no rule and 200ing with real Access-Control-* headers for one that does. File/Queue/Table service CORS are honest gaps — Set/Get Service Properties isn't implemented on those data planes."],
+  "tests": ["tests/conformance/test_azure_storage_depth_core.py"]
+ },
+ "azure.storage.advisor": {
+  "title": "Advisor recommendations",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The Advisor tab is the shared Advisor panel (azure.common.advisor): a small fixed rule set over the account's stored configuration, Security category only. Cost, Reliability and Performance recommendations need fleet-wide usage telemetry Vyomi does not have."
+  ],
+  "tests": ["tests/conformance/test_azure_health_core.py"]
+ },
+ "azure.storage.insights": {
+  "title": "Insights (storage account metrics dashboards)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Shows the SAME real numbers as Metrics (UsedCapacity/BlobCount/ContainerCount/Transactions/Ingress/Egress, derived from this account's own activity) as an at-a-glance dashboard rather than a historical chart — Vyomi keeps a single current value, not a time series."],
+  "tests": ["tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.alerts": {
+  "title": "Alerts",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Alert rules are real Microsoft.Insights/metricAlerts resources scoped to this account (properties.scopes); the console evaluates each rule's criteria against the account's REAL current metric value to show Fired/OK. There is no background evaluation loop or notification delivery (action groups aren't wired) — the status is only (re)computed when the page is viewed, the same lazy-evaluation simplification Lifecycle makes."],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.metrics": {
+  "title": "Metrics",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED over the real native Microsoft.Insights/metrics wire: UsedCapacity/BlobCount/ContainerCount are computed live from the account's actual containers/blobs, and Transactions/Ingress/Egress are real per-account counters bumped by every Blob data-plane request core/azure_blob_core.py serves. A single current-value data point, not a persisted historical time series; Availability and SuccessE2ELatency are not modelled (Vyomi has no transient failures or network latency to measure)."],
+  "tests": ["tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.workbooks": {
+  "title": "Workbooks",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Workbooks are real Microsoft.Insights/workbooks ARM resources scoped to this account (sourceId); opening one re-renders the REAL current value of its pinned metric. Not a KQL/query-step authoring canvas — one metric per workbook, no visualizations gallery."],
+  "tests": ["tests/conformance/test_azure_monitor_core.py"]
+ },
+ "azure.storage.diagnostics": {
+  "title": "Diagnostic settings",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Diagnostic settings are real Microsoft.Insights/diagnosticSettings ARM extension resources scoped to this account; a storageAccountId destination must name a storage account that actually exists (400 otherwise). Enabling a log category here REALLY GATES what Logs shows for this account (see azure.storage.logs) — but logs are captured in-memory by core/azure_blob_core.py and read back through this console's own Logs page, not actually delivered to the configured workspace/storage account/event hub (no Log Analytics/Event Hub ingestion engine exists)."],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.logs": {
+  "title": "Logs (Log Analytics queries over storage diagnostics)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["A real field filter over this account's real, in-memory request log (core/azure_blob_core.py), gated by which log categories an actual Diagnostic setting on this account has enabled — not a KQL/Log Analytics workspace query engine, and nothing is persisted once the Nano instance/appliance restarts."],
+  "tests": ["tests/conformance/test_azure_storage_wave5b_core.py"]
+ },
+ "azure.storage.tasks": {
+  "title": "Tasks (Azure Automation runbooks)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Tasks are real Logic App workflows (Recurrence trigger plus Http-to-ARM actions, core/azure_tasks_core.py): scheduled runs call the simulator's own ARM and keep results in the run output; only Recurrence triggers and Http/Compose actions run, there is no e-mail or Teams connector, and Nano only fires schedules while the tab is open. These are Logic App workflows, not Azure Automation runbooks: arbitrary customer PowerShell or Python is never executed."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_services_depth.py"
+  ]
+ },
+ "azure.storage.exporttemplate": {
+  "title": "Export template (ARM/Bicep/Terraform generated client-side from this resource)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Download, Add to library, Deploy and Visualize template are honest 'Not simulated' actions — only template generation from the account's current ARM properties is real."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.support": {
+  "title": "Support + Troubleshooting",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Support + Troubleshooting is the shared support-request panel (azure.common.support): tickets are filed with Vyomi, not Microsoft."
+  ],
+  "tests": ["tests/conformance/test_azure_support_core.py"]
+ },
+ "azure.storage.fileservice": {
+  "title": "File service settings (share soft delete, SMB settings, CORS)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Share soft-delete retention (1-365 days) is enforced on share delete / restore; SMB versions / authentication / channel-encryption values are validated and multichannel is Premium-only. CORS rules are validated and stored; the Vyomi file content API does not evaluate preflight requests."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
+ },
+ "azure.storage.queueservice": {"title": "Queue service properties", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Service properties (Set/Get Service Properties XML: Logging, HourMetrics, MinuteMetrics, Cors, retention) are stored in the storage-account record shared with the ARM queueServices/default CORS, the data plane answers CORS preflight with the rules (403 CorsPreflightFailure when no rule matches) and adds Access-Control headers, counts requests into hour/minute metrics (API-level when includeAPIs), logs per the read/write/delete flags and purges beyond the retention days.", "Logs and metrics are kept in a bounded in-memory ring served at ?restype=service&comp=vyomi-logs|vyomi-metrics, not written to the $logs blob container / $Metrics tables. Queue, Table and Blob service-root requests are indistinguishable on one relay: send the <acct>.queue.core.windows.net host or x-vyomi-service: queue. Served identically on the offline appliance (the Queue wire runs through the same azure_storage_svc_core wrapper; the app-wide CORS layer defers to the account's own rules for Queue/Table preflights), proved with the native azure-storage-queue SDK in tests/conformance/test_azure_offline_wiring.py."], "tests": ["tests/conformance/test_azure_storage_service_props_sdk.py", "tests/conformance/test_azure_files_core.py", "tests/conformance/test_azure_offline_wiring.py"]},
+ "azure.storage.tableservice": {"title": "Table service properties", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Service properties (Set/Get Service Properties XML: Logging, HourMetrics, MinuteMetrics, Cors, retention) are stored in the storage-account record shared with the ARM tableServices/default CORS, the data plane answers CORS preflight with the rules (403 CorsPreflightFailure when no rule matches) and adds Access-Control headers, counts requests into hour/minute metrics (API-level when includeAPIs), logs per the read/write/delete flags and purges beyond the retention days.", "Logs and metrics are kept in a bounded in-memory ring served at ?restype=service&comp=vyomi-logs|vyomi-metrics, not written to the $logs blob container / $Metrics tables. Queue, Table and Blob service-root requests are indistinguishable on one relay: send the <acct>.table.core.windows.net host or x-vyomi-service: table. Served identically on the offline appliance (the Table wire runs through the same azure_storage_svc_core wrapper), proved with the native azure-data-tables SDK in tests/conformance/test_azure_offline_wiring.py."], "tests": ["tests/conformance/test_azure_storage_service_props_sdk.py", "tests/conformance/test_azure_files_core.py", "tests/conformance/test_azure_offline_wiring.py"]},
+ "azure.storage.largefileshares": {
+  "title": "Large file shares, NFS v3 and SFTP account properties",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["largeFileSharesState is validated (Standard LRS/ZRS/GRS/GZRS only, one-way) and raises the share quota ceiling to 102400 GiB; isNfsV3Enabled needs hierarchical namespace, secure transfer off and is fixed at creation; isSftpEnabled needs hierarchical namespace. NFS v3 / SFTP protocol servers are NOT served: the flags are validated and reported, not enforced on a data plane."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
+ },
+ "azure.storage.exceptions": {
+   "title": "Networking exceptions (networkAcls.bypass)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "networkAcls.bypass (None / AzureServices / Logging / Metrics) is validated and ENFORCED: with defaultAction=Deny a declared trusted Azure service (x-vyomi-trusted-service) passes only when bypass includes AzureServices - the same rule the diagnostic-settings pipeline applies when it writes logs to a firewalled storage account (the delivery fails without it).",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "Logging / Metrics (Storage Analytics) bypass has no separate effect: the simulator has no Storage Analytics writer that is subject to the firewall. Blob is the only storage data plane that knows its account (queue and table are one shared store), so the firewall is enforced on Blob only."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_cfgext_core.py",
+    "tests/conformance/test_azure_cmk_keylookup.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
+  },
+ "azure.storage.encryptionscopes": {"title": "Encryption scopes (account ARM children) + container default scope + version-level immutability flag", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["ENFORCED: scope names, source (Microsoft.Storage|Microsoft.KeyVault with a Key Vault key URI whose vault exists), Enabled/Disabled state, immutable infrastructure encryption; a container's defaultEncryptionScope / deny-override must name an Enabled scope (ARM and the x-ms-default-encryption-scope header), blob writes inherit/validate the scope and report x-ms-encryption-scope, disabled scopes refuse writes, version-level container immutability needs the account flag and cannot be switched off.", "NOT modelled: blob bytes are not encrypted with a per-scope key, the key's existence inside the vault is not checked, and version-level immutability does not block overwrite/delete (no WORM enforcement); legal holds and time-based retention policies are separate (not simulated)."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
+ "azure.storage.fileshare_backup": {"tier": "pro", "title": "Azure Files backup and restore (full share / item level)", "level": {"nano": "full", "offline": "full"}, "limitations": ["Share contents are captured byte-for-byte as a Blob artifact; restore supports FullShareRestore/ItemLevelRestore with CreateCopy, Overwrite, Skip, FailOnConflict to the original or an alternate share."], "tests": ["tests/conformance/test_azure_backup_core.py"]},
+ "azure.storage.geo_replication": {"title": "Geo-redundancy: secondary region, geo-replication stats, customer-initiated failover", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["GRS/RA-GRS/GZRS/RA-GZRS accounts get the paired secondaryLocation, geoReplicationStats and RA secondary endpoints; failover swaps the account's primary region and converts it to LRS like the real RP. There is no second physical region: the secondary endpoints do not serve a separate data copy, lastSyncTime is the write time, Deleted storage accounts are recoverable for 14 days (locations/{loc}/deletedAccounts + restore, tests/conformance/test_azure_dpbackup_core.py); the restore re-creates the account configuration and the containers still in the Blob store."], "tests": ["tests/conformance/test_azure_backup_core.py"]},
+ "azure.storage.deleted_account_restore": {"title": "Restore a deleted storage account", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Deleting an account records it under locations/{loc}/deletedAccounts for 14 days; POST .../deletedAccounts/{name}/restore re-creates it with its SKU, kind, tags and the containers still held by the Blob store, refusing when the name is taken or the resource group is gone. Vyomi does not purge blob data on account delete, so contents are never lost inside the window; the restore action is a Vyomi route (the portal flow has no public REST contract)."], "tests": ["tests/conformance/test_azure_dpbackup_core.py"]}
+}

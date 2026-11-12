@@ -52,6 +52,16 @@ class SpaceSnsStore(MessagingStore):
 
     def deliver_sqs(self, endpoint_arn, body, attrs, group, dedup) -> bool:
         """Fan an SNS notification into one of the appliance's SQS queues."""
+        from core import wire_ingress as _wi
+        if _wi.is_unified("sqs"):
+            # v4 C0e: the queues are the shared SQS core's (one messaging store)
+            from core import sqs_core
+            st = _wi.appliance_router().msg
+            queue = st.get_queue_by_arn(endpoint_arn)
+            if queue is None:
+                return False
+            sqs_core.enqueue(st, queue, body, attrs or None, message_group_id=group, message_dedup_id=dedup)
+            return True
         s = _srv()
         queue = next((q for q in s._sqs_list_queues() if q.get("queue_arn") == endpoint_arn
                       or s._sqs_queue_arn(q.get("queue_name", "")) == endpoint_arn), None)
@@ -81,10 +91,22 @@ DELIVERY = sns_delivery.Delivery(
     invoke_lambda=_invoke_lambda, deliver_sqs=STORE.deliver_sqs)
 
 
+def _store():
+    """v4 C0e: with "sns" unified the engine runs over the ONE messaging store SQS and
+    EventBridge share (core/appliance_stores.AppStateMessagingStore — the same topics +
+    SNS state slots as STORE, plus the SQS queues, so SQS subscriptions deliver directly)."""
+    from core import wire_ingress as _wi
+    if _wi.is_unified("sns"):
+        st = _wi.appliance_router().msg
+        st.adopt()
+        return st
+    return STORE
+
+
 async def sns_query(request: Request) -> Response:
     """Root-dispatched native SNS request (SDK / `aws sns`)."""
     params = await _srv()._ec2_query_params(request)
-    r = sns.dispatch(STORE, params)
+    r = sns.dispatch(_store(), params)
     return Response(content=r.body, status_code=r.status, headers=dict(r.headers), media_type=r.media_type)
 
 
@@ -105,7 +127,7 @@ def register(app: FastAPI) -> None:
                 body = await request.json()
             except Exception:
                 body = {}
-        status, out = sns.console_dispatch(STORE, request.method, "/api/aws/sns/" + rest,
+        status, out = sns.console_dispatch(_store(), request.method, "/api/aws/sns/" + rest,
                                            dict(request.query_params), body)
         if status >= 400:
             return JSONResponse({"detail": f"{out.get('code', 'Error')}: {out.get('error', '')}"}, status_code=status)

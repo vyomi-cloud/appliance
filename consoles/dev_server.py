@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""v4 console dev server — no Docker, no appliance boot.
+
+Serves the built consoles at /v4/<cloud>/ and answers /_wire/* with the SAME
+core.aws_wire_router.AwsWireRouter that Nano and the appliance's unified ingress use
+(in-memory stores). A fast inner loop for developing a service page and for the UI
+conformance suite; final verification still runs on the real offline appliance + Nano.
+
+    python3 consoles/dev_server.py [--port 8740]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qsl, urlsplit
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from core.aws_wire_router import AwsWireRouter  # noqa: E402
+from core.azure_arm_core import AzureArm  # noqa: E402
+from core import k8s_tier_gate as K8S_GATE  # noqa: E402
+
+# Managed-Kubernetes tier gate. Default: NOT enforced (every existing UI suite runs unchanged). `--tier free|nano|micro|lite|pro|max|enterprise`
+# (+ `--primary azure|gcp|aws` for pro) arms it; POST/GET /_dev/tier?tier=..&primary=.. switches it at runtime (used by the tier smoke).
+DEV_TIER = {"tier": None, "primary": ""}
+
+
+def _set_dev_tier(tier, primary=""):
+    DEV_TIER.update(tier=tier or None, primary=primary or "")
+    K8S_GATE.set_provider((lambda: (DEV_TIER["tier"], DEV_TIER["primary"])) if tier else None)
+
+# Headless 4.0.0 builds only wasm/v4 (Nano is the UI target); fall back to it when static/v4 is absent.
+STATIC = ROOT / "static" if (ROOT / "static" / "v4").is_dir() else ROOT / "wasm"
+# Azure ARM (/subscriptions/*) is not in AwsWireRouter. Nano sends /_wire/subscriptions/* to
+# the same substrate-free AzureArm core (wasm/sw.js handleWire → the azure/_arm tuple) and the
+# appliance serves it with providers/azure_services.handle_arm (which AzureArm ports), so the
+# dev server does the same — the Azure lens's control plane, in-memory like the rest.
+ARM = AzureArm()
+# Shared with the router (stores= seam) so the Blob core can read CORS/lifecycle/static-website
+# config back out of ARM's `blobServices/default` / `managementPolicies/default` records.
+ROUTER = AwsWireRouter(stores={"az_arm": ARM})
+# VYOMI_K8S_BACKEND=k3s (needs Docker): install the real-Kubernetes runtime so AKS/GKE/EKS clusters created through this server are real k3s clusters.
+from core import k3s_runtime  # noqa: E402
+k3s_runtime.install_if_enabled()
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def _wire(self):
+        u = urlsplit(self.path)
+        n = int(self.headers.get("content-length") or 0)
+        body = self.rfile.read(n) if n else b""
+        rest = u.path[len("/_wire"):] or "/"
+        if rest.startswith("/subscriptions/") or rest.startswith("/providers/Microsoft.ResourceGraph/") or rest.startswith("/api/azure/operations/"):
+            return self._arm(rest, dict(parse_qsl(u.query, keep_blank_values=True)), body)
+        try:
+            out = ROUTER.handle(self.command, u.path[len("/_wire"):] or "/", dict(parse_qsl(u.query, keep_blank_values=True)),
+                                {k.lower(): v for k, v in self.headers.items()}, body)
+        except Exception as e:  # surface router bugs as a native-looking 500, never a dropped connection
+            out = {"status": 500, "headers": {"content-type": "text/plain"}, "body": f"InternalError: {e!r}".encode()}
+        data = out.get("body") or b""
+        if isinstance(data, str):
+            data = data.encode()
+        self.send_response(int(out.get("status", 200)))
+        sent_length = False
+        for k, v in (out.get("headers") or {}).items():
+            if k.lower() in ("transfer-encoding", "connection"):
+                continue
+            if k.lower() == "content-length":
+                sent_length = True
+            self.send_header(k, v)
+        # A HEAD response legitimately has no body but a real Content-Length (e.g. HeadObject
+        # reporting the object's size); only fall back to len(data) when the handler didn't
+        # already say — recomputing it here would silently zero out that value.
+        if not sent_length:
+            self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def _arm(self, path, query, body):
+        try:
+            payload = json.loads(body) if body.strip() else None
+        except ValueError:
+            payload = None
+        try:
+            out = ARM.handle(self.command, path, query, payload)
+        except Exception as e:
+            out = {"status": 500, "headers": {}, "body": {"error": {"code": "InternalServerError", "message": repr(e)}}}
+        data = b"" if out.get("body") is None else json.dumps(out["body"]).encode()
+        self.send_response(int(out.get("status", 200)))
+        for k, v in (out.get("headers") or {}).items():
+            self.send_header(k, v)
+        self.send_header("content-type", "application/json; charset=utf-8")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def _static(self):
+        p = urlsplit(self.path).path
+        if p in ("/", "/v4", "/v4/"):
+            self.send_response(302); self.send_header("location", "/v4/aws/"); self.send_header("content-length", "0"); self.end_headers(); return
+        f = (STATIC / p.lstrip("/")).resolve()
+        if f.is_dir():
+            f = f / "index.html"
+        if not str(f).startswith(str(STATIC / "v4")) or not f.is_file():
+            self.send_response(404); self.send_header("content-length", "0"); self.end_headers(); return
+        data = f.read_bytes()
+        self.send_response(200)
+        self.send_header("content-type", mimetypes.guess_type(f.name)[0] or "application/octet-stream")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    _EC2_PREV: dict = {}
+
+    def _dev_counters(self):
+        """TEST HARNESS ONLY: stands in for the offline appliance's `docker exec` sampler. POST the raw counters blob (the
+        output of core.ec2_metrics_core.READ_COUNTERS_CMD) for ?instance=&volume=&vcpus=&t=<epoch>; it goes through the same
+        parse + publish path the appliance uses, so the dev server can exercise the Monitoring tabs without Docker."""
+        from core import ec2_metrics_core as em
+        u = urlsplit(self.path)
+        q = dict(parse_qsl(u.query))
+        n = int(self.headers.get("content-length") or 0)
+        c = em.parse_counters(self.rfile.read(n).decode() if n else "")
+        names = [] if c is None else em.publish(ROUTER.cw, q["instance"], c, self._EC2_PREV.setdefault(q["instance"], {}), float(q["t"]), int(q.get("vcpus", 1)), q.get("volume"))
+        data = json.dumps({"published": names}).encode()
+        self.send_response(200); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
+
+    def _json(self, obj, status=200):
+        data = json.dumps(obj).encode()
+        self.send_response(status); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data))); self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def _go(self):
+        u = urlsplit(self.path)
+        if u.path == "/_dev/tier":
+            q = dict(parse_qsl(u.query))
+            if "tier" in q:
+                _set_dev_tier(q["tier"], q.get("primary", ""))
+            return self._json(dict(DEV_TIER))
+        if u.path.endswith("/api/runtime/tier"):    # the consoles read the plan here (appliance: routes/licensing.py; Nano: sw.js)
+            return self._json({"active_tier": DEV_TIER["tier"] or "max", "primary_cloud": DEV_TIER["primary"], "kubernetes_locked": K8S_GATE.ui_verdicts()})
+        if self.path.startswith("/_dev/ec2-counters"):
+            return self._dev_counters()
+        if self.path.startswith("/_wire"):
+            return self._wire()
+        return self._static()
+
+    do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _go
+
+    def log_message(self, fmt, *args):
+        if "-q" not in sys.argv:
+            sys.stderr.write("%s %s\n" % (self.command, self.path[:120]))
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=8740)
+    ap.add_argument("-q", action="store_true")
+    ap.add_argument("--tier", default="", help="arm the managed-Kubernetes tier gate as this plan (default: not enforced)")
+    ap.add_argument("--primary", default="", help="Pro primary cloud")
+    a = ap.parse_args()
+    if a.tier:
+        _set_dev_tier(a.tier, a.primary)
+    print(f"v4 consoles: http://127.0.0.1:{a.port}/v4/aws/   (/_wire → AwsWireRouter, in-memory)")
+    ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()

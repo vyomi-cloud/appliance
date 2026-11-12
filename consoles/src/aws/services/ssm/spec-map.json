@@ -1,0 +1,70 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "parameters": {
+    "route": "#/ssm/parameters",
+    "live": "live-parameter"
+  },
+  "create-parameter": {
+    "route": "#/ssm/create-parameter",
+    "expand": ["text=SecureString"]
+  },
+  "parameter-detail": {
+    "route": "#/ssm/parameters/view?name={live}",
+    "live": "live-parameter"
+  },
+  "documents": {
+    "route": "#/ssm/documents",
+    "live": "live-document"
+  },
+  "create-document": {
+    "route": "#/ssm/create-document"
+  },
+  "document-detail": {
+    "route": "#/ssm/documents/view?name={live}",
+    "live": "live-document"
+  },
+  "commands": {
+    "route": "#/ssm/commands",
+    "live": "live-command"
+  },
+  "run-command": {
+    "route": "#/ssm/run-command"
+  },
+  "command-detail": {
+    "route": "#/ssm/commands/{live}",
+    "live": "live-command"
+  },
+  "associations": {
+    "route": "#/ssm/associations",
+    "live": "live-association"
+  },
+  "create-association": {
+    "route": "#/ssm/create-association"
+  },
+  "association-detail": {
+    "route": "#/ssm/associations/{live}",
+    "live": "live-association"
+  },
+  "maintenance-windows": {
+    "route": "#/ssm/maintenance-windows",
+    "live": "live-maintenance-window"
+  },
+  "create-maintenance-window": {
+    "route": "#/ssm/create-maintenance-window"
+  },
+  "maintenance-window-detail": {
+    "route": "#/ssm/maintenance-windows/{live}",
+    "live": "live-maintenance-window"
+  },
+  "patch-baselines": {
+    "route": "#/ssm/patch-baselines",
+    "live": "live-patch-baseline"
+  },
+  "create-patch-baseline": {
+    "route": "#/ssm/create-patch-baseline"
+  },
+  "patch-baseline-detail": {
+    "route": "#/ssm/patch-baselines/{live}",
+    "live": "live-patch-baseline"
+  }
+}

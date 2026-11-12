@@ -1,0 +1,189 @@
+name: v4 known-issues fixer (hourly, per cloud)
+
+# Every hour, per cloud: take ONE fixable open row of docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md, fix it with a headless agent
+# (tests/conformance/nightly/KNOWN-ISSUES-AGENT.md), re-test, gate, and fast-forward to v4-on-main only when the gate is green.
+#   pick     known_issues_pick.py: no fixable row (or an attempt in the last 24 h) -> the job ends green, nothing pushed, no stack started
+#   branch   known-issues/<cloud>-<yyyymmddHH> fresh from v4-on-main
+#   baseline run_suites.py for the cloud (offline + nano)            -> before.json
+#   agent    claude-code-action (CLAUDE_CODE_OAUTH_TOKEN only; never an API key)
+#   guard    the diff may not touch release files (.github/workflows, VERSION, CHANGELOG, packaging/)
+#   re-test + tests/conformance/nightly/gate.py (nothing green may go red) -> fast-forward v4-on-main (VYOMI_INTEGRATOR=1)
+# NEVER: main, tags, releases, image publish, the portal. The v3 conformance workflows (hourly/daily/watchdog) target main and stay separate.
+# Kill switch: set the repository variable V4_KNOWN_ISSUES_PAUSE=true.
+# Secrets: CLAUDE_CODE_OAUTH_TOKEN, CONFORMANCE_BOT_TOKEN (push to v4-on-main and to the ci-state branch), VYOMI_TEST_LICENSE_JWT (optional).
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: 'Cloud to run'
+        type: choice
+        options: [azure, aws, gcp, all]
+        default: all
+      merge:
+        description: 'Fast-forward v4-on-main when the gate is green (false = push the branch only)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: v4-known-issues-${{ inputs.cloud || 'all' }}
+  cancel-in-progress: false
+
+env:
+  VYOMI_BASE_URL: http://localhost:9000
+  RELAY_HTTP: http://127.0.0.1:8090
+  NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+  TRUNK: v4-on-main
+
+jobs:
+  plan:
+    if: vars.V4_KNOWN_ISSUES_PAUSE != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      clouds: ${{ steps.c.outputs.clouds }}
+      stamp: ${{ steps.c.outputs.stamp }}
+    steps:
+      - id: c
+        run: |
+          IN="${{ inputs.cloud }}"; [ -n "$IN" ] || IN=all
+          if [ "$IN" = all ]; then echo 'clouds=["azure","aws","gcp"]' >> "$GITHUB_OUTPUT"; else echo "clouds=[\"$IN\"]" >> "$GITHUB_OUTPUT"; fi
+          echo "stamp=$(TZ=Asia/Kolkata date +%Y%m%d%H)" >> "$GITHUB_OUTPUT"
+
+  fix:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: ${{ fromJSON(needs.plan.outputs.clouds) }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLOUD: ${{ matrix.cloud }}
+      FIX_BRANCH: known-issues/${{ matrix.cloud }}-${{ needs.plan.outputs.stamp }}
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+    steps:
+      - name: Require the bot token
+        run: '[ -n "$GH_TOKEN" ] || { echo "::error::Set the CONFORMANCE_BOT_TOKEN secret"; exit 1; }'
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TRUNK }}
+          fetch-depth: 0
+          token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+
+      - name: Pick a row (no fixable row = no-op)
+        id: pick
+        run: |
+          git config user.name "vyomi-known-issues-bot"; git config user.email "known-issues-bot@users.noreply.github.com"
+          # attempts live on the orphan branch ci-state (one small json); a missing branch = no attempts yet
+          rm -rf /tmp/ci-state; mkdir -p /tmp/ci-state
+          if git ls-remote --exit-code --heads origin ci-state >/dev/null 2>&1; then
+            git fetch -q origin ci-state; git show origin/ci-state:known-issues-attempts.json > /tmp/ci-state/attempts.json 2>/dev/null || echo '{}' > /tmp/ci-state/attempts.json
+          else echo '{}' > /tmp/ci-state/attempts.json; fi
+          ID=$(python3 tests/conformance/nightly/known_issues_pick.py --cloud "$CLOUD" --state /tmp/ci-state/attempts.json || true)
+          echo "issue=$ID" >> "$GITHUB_OUTPUT"
+          if [ -z "$ID" ]; then echo "No fixable open known-issue row for $CLOUD: nothing to do." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          echo "Picked $ID for $CLOUD" | tee -a "$GITHUB_STEP_SUMMARY"
+          # remember the attempt NOW (a crash or a skipped row must not be re-picked every hour)
+          python3 tests/conformance/nightly/known_issues_pick.py --cloud "$CLOUD" --state /tmp/ci-state/attempts.json --record "$ID"
+          W=$(mktemp -d); git clone -q --no-checkout "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "$W"
+          cd "$W"; git config user.name "vyomi-known-issues-bot"; git config user.email "known-issues-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin ci-state >/dev/null 2>&1; then git checkout -q -B ci-state origin/ci-state; else git checkout -q --orphan ci-state; git rm -rfq . 2>/dev/null || true; fi
+          cp /tmp/ci-state/attempts.json known-issues-attempts.json; git add known-issues-attempts.json
+          git commit -q -m "known-issues: attempt $ID ($CLOUD)" && git push -q origin HEAD:ci-state
+
+      - name: Fix branch (fresh from trunk)
+        if: steps.pick.outputs.issue != ''
+        run: git checkout -q -B "$FIX_BRANCH" "origin/$TRUNK" && git push -q origin "HEAD:$FIX_BRANCH"
+
+      - uses: ./.github/actions/conformance-stack
+        if: steps.pick.outputs.issue != ''
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+
+      - name: Baseline (before the fix)
+        if: steps.pick.outputs.issue != ''
+        continue-on-error: true
+        run: |
+          python3 tests/conformance/hourly/run_suites.py --target offline --cloud "$CLOUD"
+          python3 tests/conformance/hourly/run_suites.py --target nano --cloud "$CLOUD"
+          python3 - <<'PY'
+          import json, glob, os
+          suites = []
+          for f in sorted(glob.glob("tests/conformance/hourly/out/results-*-" + os.environ["CLOUD"] + ".json")):
+              suites += json.load(open(f))["suites"]
+          json.dump({"suites": suites}, open("before.json", "w"))
+          PY
+
+      - name: Agent - fix ${{ steps.pick.outputs.issue }} (${{ matrix.cloud }})
+        if: steps.pick.outputs.issue != ''
+        continue-on-error: true
+        timeout-minutes: 150
+        uses: anthropics/claude-code-action@v1
+        env:
+          ISSUE_ID: ${{ steps.pick.outputs.issue }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'github-actions'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Follow tests/conformance/nightly/KNOWN-ISSUES-AGENT.md exactly. CLOUD=${{ matrix.cloud }}. ISSUE_ID=${{ steps.pick.outputs.issue }}.
+            FIX_BRANCH=${{ env.FIX_BRANCH }} (already checked out). Baseline: before.json and tests/conformance/hourly/out/.
+            Push only to ${{ env.FIX_BRANCH }}. Never main, tags, releases, the portal or an image publish.
+          claude_args: >-
+            --max-turns 250
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Guard (a fix may not touch release files)
+        if: steps.pick.outputs.issue != ''
+        id: guard
+        run: |
+          git pull -q --rebase origin "$FIX_BRANCH" || true
+          git fetch -q origin "$TRUNK"
+          BAD=$(git diff --name-only "origin/$TRUNK...HEAD" | grep -E '^(\.github/workflows/|VERSION$|CHANGELOG|packaging/)' || true)
+          if [ -n "$BAD" ]; then echo "::error::The fix touches release/CI files, not merging:"; echo "$BAD"; exit 1; fi
+          echo "ahead=$(git rev-list --count "origin/$TRUNK..HEAD")" >> "$GITHUB_OUTPUT"
+
+      - name: Re-test on the fixed branch
+        if: steps.pick.outputs.issue != '' && steps.guard.outputs.ahead != '0'
+        continue-on-error: true
+        run: |
+          rm -f tests/conformance/hourly/out/results-*.json
+          python3 tests/conformance/hourly/run_suites.py --target offline --cloud "$CLOUD"
+          python3 tests/conformance/hourly/run_suites.py --target nano --cloud "$CLOUD"
+          python3 - <<'PY'
+          import json, glob, os
+          suites = []
+          for f in sorted(glob.glob("tests/conformance/hourly/out/results-*-" + os.environ["CLOUD"] + ".json")):
+              suites += json.load(open(f))["suites"]
+          json.dump({"suites": suites}, open("after.json", "w"))
+          PY
+
+      - name: Gate (nothing green may go red)
+        if: steps.pick.outputs.issue != '' && steps.guard.outputs.ahead != '0'
+        id: gate
+        run: python3 tests/conformance/nightly/gate.py before.json after.json
+
+      - name: Fast-forward v4-on-main
+        if: steps.gate.outcome == 'success' && (github.event_name == 'schedule' || inputs.merge)
+        run: |
+          for i in 1 2 3; do
+            git fetch -q origin "$TRUNK" "$FIX_BRANCH"; git checkout -q "$FIX_BRANCH"; git rebase -q "origin/$TRUNK" || { git rebase --abort; echo "::warning::rebase conflict, not merging"; exit 0; }
+            [ "$(git rev-list --count "origin/$TRUNK..HEAD")" -gt 0 ] || { echo "Nothing to merge."; exit 0; }
+            VYOMI_INTEGRATOR=1 git push origin "HEAD:$TRUNK" && { echo "Merged ${{ steps.pick.outputs.issue }} to $TRUNK" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+            sleep $((i*5))
+          done
+          echo "::warning::trunk kept moving, branch $FIX_BRANCH is pushed but not merged"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.pick.outputs.issue != ''
+        with: { name: "known-issues-${{ matrix.cloud }}", path: "before.json\nafter.json\ntests/conformance/hourly/out/", include-hidden-files: true, retention-days: 7 }
+
+      - name: Tear down
+        if: always() && steps.pick.outputs.issue != ''
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v

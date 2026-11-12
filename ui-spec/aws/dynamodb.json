@@ -1,0 +1,1969 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "dynamodb",
+  "console_path": "/dynamodbv2/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Dashboard",
+      "page_id": "dashboard"
+    },
+    {
+      "label": "Tables",
+      "page_id": "tables"
+    },
+    {
+      "label": "Explore items",
+      "page_id": "explore-items"
+    },
+    {
+      "label": "PartiQL editor",
+      "page_id": "partiql-editor"
+    },
+    {
+      "label": "Backups",
+      "page_id": "backups"
+    },
+    {
+      "label": "Exports to S3",
+      "page_id": "exports-to-s3"
+    },
+    {
+      "label": "Imports from S3",
+      "page_id": "imports-from-s3"
+    },
+    {
+      "label": "Integrations",
+      "page_id": "integrations"
+    },
+    {
+      "label": "Reserved capacity",
+      "page_id": "reserved-capacity"
+    },
+    {
+      "label": "Settings",
+      "page_id": "settings"
+    },
+    {
+      "label": "DAX",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Clusters",
+          "page_id": "dax-clusters"
+        },
+        {
+          "label": "Subnet groups",
+          "page_id": "dax-subnet-groups"
+        },
+        {
+          "label": "Parameter groups",
+          "page_id": "dax-parameter-groups"
+        },
+        {
+          "label": "Events",
+          "page_id": "dax-events"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "dashboard",
+      "kind": "dashboard",
+      "title": "Dashboard",
+      "route": "/dynamodbv2/home#dashboard",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Dashboard"
+      ],
+      "captures": [
+        "A-dynamodbv2/003-L2-dashboard"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Alarms",
+          "table": {
+            "resource_label": "Alarms",
+            "counter": true,
+            "header_actions": [
+              "Manage in CloudWatch"
+            ],
+            "empty_state": "No custom alarms",
+            "columns": [
+              "Alarm name",
+              "Status"
+            ]
+          }
+        },
+        {
+          "title": "Favorite tables",
+          "table": {
+            "header_actions": [
+              "View all tables"
+            ],
+            "empty_state": "No favorite tables",
+            "columns": [
+              "Table name",
+              "Status",
+              "Created at (UTC)"
+            ]
+          }
+        },
+        {
+          "title": "DAX clusters",
+          "table": {
+            "resource_label": "DAX clusters",
+            "counter": true,
+            "selection": "single",
+            "header_actions": [
+              "View details"
+            ],
+            "empty_state": "No clusters",
+            "empty_state_action": "Create cluster",
+            "columns": [
+              "Cluster name",
+              "Status"
+            ]
+          }
+        },
+        {
+          "title": "Create resources",
+          "actions": [
+            "Create table",
+            "Create DAX cluster"
+          ]
+        },
+        {
+          "title": "What's new"
+        }
+      ]
+    },
+    {
+      "id": "tables",
+      "kind": "list",
+      "title": "Tables",
+      "route": "/dynamodbv2/home#tables",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Tables"
+      ],
+      "captures": [
+        "A-dynamodbv2/004-L2-tables"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Tables",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Delete",
+          "Create table"
+        ],
+        "filter_placeholder": "Find tables",
+        "filters": [
+          "Filter by tag",
+          "Filter by tag value"
+        ],
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "You have no tables in this account in this AWS Region.",
+        "empty_state_action": "Create table",
+        "confidence": "high",
+        "columns": [
+          "Name",
+          "Status",
+          "Partition key",
+          "Sort key",
+          "Indexes",
+          "Replication Regions",
+          "Deletion protection",
+          "Favorite",
+          "Read capacity mode",
+          "Write capacity mode",
+          "Total size",
+          "Table class"
+        ]
+      },
+      "notes": "Header shows 'Last updated <timestamp>' left of Refresh. 'Create table' is a split button."
+    },
+    {
+      "id": "table-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/dynamodbv2/home#table?name={resource-name}",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Tables",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not yet crawled (account had no tables). 'Settings' is the default tab (confirmed by Settings > Default table tab).",
+      "header_actions": [
+        "Actions",
+        "Explore table items"
+      ],
+      "tabs": [
+        "Settings",
+        "Indexes",
+        "Monitor",
+        "Global tables",
+        "Backups",
+        "Exports and streams",
+        "Permissions"
+      ],
+      "tab_panels": [
+        {
+          "label": "Settings",
+          "sections": [
+            {
+              "title": "General information",
+              "fields": [
+                {
+                  "label": "Partition key",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Sort key",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Capacity mode",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Table status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Alarms",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Point-in-time recovery (PITR)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Item count",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Table size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Average item size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Resource-based policy",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Amazon Resource Name (ARN)",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Read/write capacity",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Capacity mode",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Table class",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Time to Live (TTL)",
+              "actions": [
+                "Turn on",
+                "Turn off"
+              ],
+              "fields": [
+                {
+                  "label": "TTL status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "TTL attribute",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Encryption",
+              "actions": [
+                "Manage encryption"
+              ],
+              "fields": [
+                {
+                  "label": "Key management",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Deletion protection",
+              "actions": [
+                "Turn on",
+                "Turn off"
+              ],
+              "fields": [
+                {
+                  "label": "Deletion protection",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "actions": [
+                "Manage tags"
+              ],
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "help": "Key / Value pairs; up to 50 tags",
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Indexes",
+          "sections": [
+            {
+              "title": "Global secondary indexes",
+              "table": {
+                "counter": true,
+                "selection": "single",
+                "header_actions": [
+                  "Delete",
+                  "Create index"
+                ],
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Partition key",
+                  "Sort key",
+                  "Read capacity",
+                  "Write capacity",
+                  "Projected attributes",
+                  "Size",
+                  "Item count"
+                ]
+              }
+            },
+            {
+              "title": "Local secondary indexes",
+              "table": {
+                "counter": true,
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Partition key",
+                  "Sort key",
+                  "Projected attributes",
+                  "Size",
+                  "Item count"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Monitor",
+          "sections": [
+            {
+              "title": "CloudWatch alarms",
+              "actions": [
+                "Create alarm"
+              ]
+            },
+            {
+              "title": "CloudWatch metrics"
+            }
+          ]
+        },
+        {
+          "label": "Global tables",
+          "sections": [
+            {
+              "title": "Replicas",
+              "table": {
+                "selection": "single",
+                "header_actions": [
+                  "Delete replica",
+                  "Create replica"
+                ],
+                "columns": [
+                  "Region",
+                  "Status",
+                  "Read capacity mode",
+                  "Write capacity mode"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Backups",
+          "sections": [
+            {
+              "title": "Point-in-time recovery (PITR)",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Status",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Backups",
+              "table": {
+                "counter": true,
+                "selection": "single",
+                "header_actions": [
+                  "Restore",
+                  "Delete",
+                  "Create backup"
+                ],
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Creation time",
+                  "Size",
+                  "Type"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Exports and streams",
+          "sections": [
+            {
+              "title": "Exports to S3",
+              "table": {
+                "header_actions": [
+                  "Export to S3"
+                ],
+                "columns": [
+                  "Export ARN",
+                  "Destination S3 bucket",
+                  "Status",
+                  "Export job start time",
+                  "Export type"
+                ]
+              }
+            },
+            {
+              "title": "Amazon Kinesis data stream details",
+              "actions": [
+                "Turn on"
+              ]
+            },
+            {
+              "title": "DynamoDB stream details",
+              "actions": [
+                "Turn on",
+                "Turn off"
+              ],
+              "fields": [
+                {
+                  "label": "Stream status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "View type",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Trigger",
+              "table": {
+                "header_actions": [
+                  "Delete",
+                  "Create trigger"
+                ],
+                "columns": [
+                  "Function name",
+                  "Status",
+                  "Batch size"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Resource-based policy for table",
+              "actions": [
+                "Create table policy",
+                "Edit",
+                "Delete"
+              ],
+              "fields": [
+                {
+                  "label": "Policy",
+                  "type": "textarea"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-table",
+      "kind": "create",
+      "title": "Create table",
+      "route": "/dynamodbv2/home#create-table",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Tables",
+        "Create table"
+      ],
+      "captures": [
+        "A-dynamodbv2/017-L2-create-table"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create table",
+      "header_actions": [
+        "Cancel",
+        "Create table"
+      ],
+      "sections": [
+        {
+          "title": "Table details",
+          "fields": [
+            {
+              "label": "Table name",
+              "type": "text",
+              "required": true,
+              "placeholder": "Enter name for table",
+              "constraints": "3-255 chars: letters, numbers, '_', '-', '.'"
+            },
+            {
+              "label": "Partition key",
+              "type": "text",
+              "required": true,
+              "placeholder": "Enter the partition key name",
+              "constraints": "1 to 255 characters and case-sensitive."
+            },
+            {
+              "label": "Partition key type",
+              "type": "select",
+              "required": true,
+              "default": "String",
+              "options": [
+                "String",
+                "Number",
+                "Binary"
+              ]
+            },
+            {
+              "label": "Sort key",
+              "type": "text",
+              "required": false,
+              "placeholder": "Enter the sort key name",
+              "constraints": "1 to 255 characters and case-sensitive."
+            },
+            {
+              "label": "Sort key type",
+              "type": "select",
+              "required": false,
+              "default": "String",
+              "options": [
+                "String",
+                "Number",
+                "Binary"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Table settings",
+          "fields": [
+            {
+              "label": "Table settings",
+              "type": "radio",
+              "required": true,
+              "default": "Default settings",
+              "options": [
+                "Default settings",
+                "Customize settings"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Default table settings",
+          "fields": [
+            {
+              "label": "Default table settings",
+              "type": "table",
+              "columns": [
+                "Setting",
+                "Value",
+                "Editable after creation"
+              ],
+              "visible_when": "Table settings = Default settings",
+              "help": "Rows: Table class, Capacity mode, Max RCU/WCU, LSI, GSI, Encryption, Deletion protection, Resource-based policy"
+            }
+          ]
+        },
+        {
+          "title": "Table class",
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Table class",
+              "type": "radio",
+              "default": "DynamoDB Standard",
+              "options": [
+                "DynamoDB Standard",
+                "DynamoDB Standard-IA"
+              ],
+              "visible_when": "Table settings = Customize settings"
+            }
+          ]
+        },
+        {
+          "title": "Read/write capacity settings",
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Capacity mode",
+              "type": "radio",
+              "default": "On-demand",
+              "options": [
+                "On-demand",
+                "Provisioned"
+              ],
+              "visible_when": "Table settings = Customize settings"
+            },
+            {
+              "label": "Maximum table throughput",
+              "type": "checkbox",
+              "default": false,
+              "visible_when": "Capacity mode = On-demand"
+            },
+            {
+              "label": "Read capacity auto scaling",
+              "type": "toggle",
+              "default": "On",
+              "visible_when": "Capacity mode = Provisioned"
+            },
+            {
+              "label": "Write capacity auto scaling",
+              "type": "toggle",
+              "default": "On",
+              "visible_when": "Capacity mode = Provisioned"
+            },
+            {
+              "label": "Provisioned capacity units",
+              "type": "number",
+              "default": 5,
+              "visible_when": "Capacity mode = Provisioned"
+            }
+          ]
+        },
+        {
+          "title": "Warm throughput",
+          "provenance": "reference",
+          "confidence": "low",
+          "fields": [
+            {
+              "label": "Warm throughput",
+              "type": "readonly",
+              "visible_when": "Table settings = Customize settings"
+            }
+          ]
+        },
+        {
+          "title": "Secondary indexes",
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Local indexes",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Partition key",
+                "Sort key",
+                "Projected attributes"
+              ],
+              "actions": [
+                "Delete",
+                "Create local index"
+              ],
+              "visible_when": "Table settings = Customize settings"
+            },
+            {
+              "label": "Global indexes",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Partition key",
+                "Sort key",
+                "Projected attributes"
+              ],
+              "actions": [
+                "Delete",
+                "Create global index"
+              ],
+              "visible_when": "Table settings = Customize settings"
+            }
+          ]
+        },
+        {
+          "title": "Encryption at rest",
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Encryption key management",
+              "type": "radio",
+              "default": "Owned by Amazon DynamoDB",
+              "options": [
+                "Owned by Amazon DynamoDB",
+                "AWS managed key",
+                "Stored in your account, and owned and managed by you"
+              ],
+              "visible_when": "Table settings = Customize settings"
+            }
+          ]
+        },
+        {
+          "title": "Deletion protection",
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Turn on deletion protection",
+              "type": "checkbox",
+              "default": false,
+              "visible_when": "Table settings = Customize settings"
+            }
+          ]
+        },
+        {
+          "title": "Resource-based policy",
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Resource-based policy",
+              "type": "textarea",
+              "required": false,
+              "visible_when": "Table settings = Customize settings"
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "required": false,
+              "help": "No tags are associated with the resource. You can add 50 more tags.",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "explore-items",
+      "kind": "other",
+      "title": "Explore items",
+      "route": "/dynamodbv2/home#item-explorer",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Explore items"
+      ],
+      "captures": [
+        "A-dynamodbv2/005-L2-explore-items"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Split layout: table picker on the left, items panel on the right.",
+      "header_actions": [
+        "Autopreview",
+        "View table details"
+      ],
+      "sections": [
+        {
+          "title": "Tables",
+          "table": {
+            "resource_label": "Tables",
+            "counter": true,
+            "selection": "single",
+            "filter_placeholder": "Find tables",
+            "filters": [
+              "Filter by tag",
+              "Filter by tag value"
+            ],
+            "pagination": true,
+            "preferences": true,
+            "empty_state": "You have no tables in this account in this AWS Region.",
+            "empty_state_action": "Create table",
+            "columns": [
+              "Name"
+            ]
+          }
+        },
+        {
+          "title": "Scan or query items",
+          "actions": [
+            "Run",
+            "Reset"
+          ],
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Operation",
+              "type": "radio",
+              "default": "Scan",
+              "options": [
+                "Scan",
+                "Query"
+              ]
+            },
+            {
+              "label": "Select a table or index",
+              "type": "select"
+            },
+            {
+              "label": "Select attribute projection",
+              "type": "select",
+              "default": "All attributes"
+            },
+            {
+              "label": "Filters - optional",
+              "type": "other",
+              "actions": [
+                "Add filter"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Items returned",
+          "table": {
+            "selection": "multi",
+            "header_actions": [
+              "Actions",
+              "Create item"
+            ],
+            "columns": [
+              "{partition key}",
+              "{sort key}",
+              "{attributes...}"
+            ]
+          },
+          "provenance": "reference",
+          "confidence": "medium"
+        }
+      ]
+    },
+    {
+      "id": "partiql-editor",
+      "kind": "other",
+      "title": "PartiQL editor",
+      "route": "/dynamodbv2/home#partiql-editor",
+      "breadcrumbs": [
+        "DynamoDB",
+        "PartiQL editor"
+      ],
+      "captures": [
+        "A-dynamodbv2/006-L2-partiql-editor",
+        "A-dynamodbv2/006-L2-partiql-editor--tab-02-table-view",
+        "A-dynamodbv2/006-L2-partiql-editor--tab-03-json-view"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tables",
+          "table": {
+            "empty_state": "No tables",
+            "columns": [
+              "Name"
+            ]
+          }
+        },
+        {
+          "title": "Query 1",
+          "actions": [
+            "Run",
+            "Clear"
+          ],
+          "fields": [
+            {
+              "label": "PartiQL",
+              "type": "textarea"
+            }
+          ]
+        },
+        {
+          "title": "Items returned",
+          "fields": [
+            {
+              "label": "Results view",
+              "type": "radio",
+              "default": "Table view",
+              "options": [
+                "Table view",
+                "JSON view"
+              ]
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Table view",
+        "JSON view"
+      ]
+    },
+    {
+      "id": "backups",
+      "kind": "list",
+      "title": "Backups",
+      "route": "/dynamodbv2/home#list-backups",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Backups"
+      ],
+      "captures": [
+        "A-dynamodbv2/007-L2-backups"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Backup settings",
+          "actions": [
+            "Turn off"
+          ],
+          "fields": [
+            {
+              "label": "Advanced features with AWS Backup",
+              "type": "readonly",
+              "default": "Activated"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "resource_label": "Backups",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "View details",
+          "Restore",
+          "Copy",
+          "Delete",
+          "Create backup"
+        ],
+        "pagination": true,
+        "empty_state": "No backups",
+        "empty_state_action": "Create backup",
+        "columns": [
+          "Name",
+          "Table",
+          "Status",
+          "Creation time",
+          "ARN",
+          "Size",
+          "Type"
+        ]
+      }
+    },
+    {
+      "id": "create-backup",
+      "kind": "create",
+      "title": "Create on-demand backup",
+      "route": "/dynamodbv2/home#create-backup",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Backups",
+        "Create on-demand backup"
+      ],
+      "captures": [
+        "A-dynamodbv2/029-L3-create-backup"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create backup",
+      "sections": [
+        {
+          "title": "Source table",
+          "fields": [
+            {
+              "label": "Source table",
+              "type": "select",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Backup settings",
+          "fields": [
+            {
+              "label": "Backup settings",
+              "type": "radio",
+              "default": "Default settings",
+              "options": [
+                "Default settings",
+                "Customize settings"
+              ]
+            },
+            {
+              "label": "Backup name",
+              "type": "text",
+              "visible_when": "Backup settings = Customize settings",
+              "help": "A backup name will be created automatically."
+            },
+            {
+              "label": "Backup window",
+              "type": "readonly",
+              "default": "Start in 1 hour"
+            },
+            {
+              "label": "Backup management",
+              "type": "readonly",
+              "default": "AWS Backup"
+            },
+            {
+              "label": "Transition to cold storage",
+              "type": "readonly",
+              "default": "Never"
+            },
+            {
+              "label": "Retention period",
+              "type": "readonly",
+              "default": "Always"
+            },
+            {
+              "label": "Backup vault",
+              "type": "readonly",
+              "default": "Default"
+            },
+            {
+              "label": "IAM Role",
+              "type": "readonly",
+              "default": "AWSBackupDefaultServiceRole"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "required": false,
+              "help": "Key / Value pairs; up to 50 tags",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "exports-to-s3",
+      "kind": "list",
+      "title": "Exports to S3",
+      "route": "/dynamodbv2/home#exports",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Exports to S3"
+      ],
+      "captures": [
+        "A-dynamodbv2/008-L2-exports-to-s3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Exports",
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "View details",
+          "Export to S3"
+        ],
+        "filters": [
+          "Initiated by = User"
+        ],
+        "pagination": true,
+        "empty_state": "No exports",
+        "empty_state_action": "Export to S3",
+        "columns": [
+          "Export ARN",
+          "Table name",
+          "Destination S3 bucket",
+          "Status",
+          "Export job start time",
+          "Export type"
+        ]
+      }
+    },
+    {
+      "id": "export-to-s3",
+      "kind": "create",
+      "title": "Export table to Amazon S3",
+      "route": "/dynamodbv2/home#export-table",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Exports to S3",
+        "Export table to Amazon S3"
+      ],
+      "captures": [
+        "A-dynamodbv2/030-L3-export-to-s3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Export",
+      "sections": [
+        {
+          "title": "Export details",
+          "fields": [
+            {
+              "label": "Source table",
+              "type": "select",
+              "required": true,
+              "help": "Note that you can't export archived tables to Amazon S3."
+            },
+            {
+              "label": "Destination S3 bucket",
+              "type": "text",
+              "required": true,
+              "help": "Format: s3://bucket/prefix",
+              "actions": [
+                "View",
+                "Browse S3"
+              ]
+            },
+            {
+              "label": "S3 bucket owner",
+              "type": "radio",
+              "default": "This AWS account",
+              "options": [
+                "This AWS account",
+                "A different AWS account"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Filter table data - optional",
+          "expandable": true
+        },
+        {
+          "title": "Export settings",
+          "fields": [
+            {
+              "label": "Export type",
+              "type": "radio",
+              "default": "Point-in-time export",
+              "options": [
+                "Point-in-time export",
+                "Incremental data export"
+              ]
+            },
+            {
+              "label": "Export from a specific point in time",
+              "type": "radio",
+              "default": "Current time",
+              "options": [
+                "Current time",
+                "Export from an earlier point in time"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Additional settings",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Exported file format",
+              "type": "radio",
+              "default": "DynamoDB JSON",
+              "options": [
+                "DynamoDB JSON",
+                "Amazon Ion"
+              ]
+            },
+            {
+              "label": "Encryption key type",
+              "type": "radio",
+              "default": "Amazon S3 key (SSE-S3)",
+              "options": [
+                "Amazon S3 key (SSE-S3)",
+                "AWS KMS key (SSE-KMS)"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "imports-from-s3",
+      "kind": "list",
+      "title": "Imports from S3",
+      "route": "/dynamodbv2/home#imports",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Imports from S3"
+      ],
+      "captures": [
+        "A-dynamodbv2/009-L2-imports-from-s3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Imports from S3",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Import from S3"
+        ],
+        "pagination": true,
+        "columns": [
+          "Import ID",
+          "Table",
+          "Format",
+          "Status",
+          "Import job start time",
+          "End time"
+        ]
+      }
+    },
+    {
+      "id": "import-from-s3",
+      "kind": "create",
+      "title": "Import from S3",
+      "route": "/dynamodbv2/home#import-from-s3",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Imports from S3",
+        "Import from S3"
+      ],
+      "captures": [
+        "A-dynamodbv2/032-L3-import-from-s3"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "submit": "Import",
+      "steps": [
+        {
+          "title": "Import options",
+          "sections": [
+            {
+              "title": "Import details",
+              "fields": [
+                {
+                  "label": "Source S3 URL",
+                  "type": "text",
+                  "required": true,
+                  "help": "Example formats: s3://countries or s3://countries/territories/",
+                  "actions": [
+                    "View",
+                    "Browse S3"
+                  ]
+                },
+                {
+                  "label": "S3 bucket owner",
+                  "type": "radio",
+                  "default": "This AWS account",
+                  "options": [
+                    "This AWS account",
+                    "A different AWS account"
+                  ]
+                },
+                {
+                  "label": "Import file compression",
+                  "type": "radio",
+                  "default": "No compression",
+                  "options": [
+                    "No compression",
+                    "GZIP",
+                    "ZSTD"
+                  ]
+                },
+                {
+                  "label": "Import file format",
+                  "type": "radio",
+                  "default": "DynamoDB JSON",
+                  "options": [
+                    "DynamoDB JSON",
+                    "Amazon Ion",
+                    "CSV"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Destination table",
+          "sections": [
+            {
+              "title": "Table details",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Table name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Partition key",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Sort key",
+                  "type": "text",
+                  "required": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review and import"
+        }
+      ]
+    },
+    {
+      "id": "integrations",
+      "kind": "list",
+      "title": "Integrations",
+      "route": "/dynamodbv2/home#integrations",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Integrations"
+      ],
+      "captures": [
+        "A-dynamodbv2/010-L2-integrations"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Zero-ETL integrations overview",
+          "fields": [
+            {
+              "label": "Total integrations",
+              "type": "readonly"
+            },
+            {
+              "label": "Active",
+              "type": "readonly"
+            },
+            {
+              "label": "Inactive",
+              "type": "readonly"
+            },
+            {
+              "label": "Needs attention",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "resource_label": "Zero-ETL integrations",
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Manage",
+          "Create integration"
+        ],
+        "empty_state": "No integrations",
+        "columns": [
+          "Integration name",
+          "Status",
+          "Integration type",
+          "Source table",
+          "Created on"
+        ]
+      }
+    },
+    {
+      "id": "reserved-capacity",
+      "kind": "list",
+      "title": "Reserved capacity",
+      "route": "/dynamodbv2/home#reserved-capacity",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Reserved capacity"
+      ],
+      "captures": [
+        "A-dynamodbv2/011-L2-reserved-capacity"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Purchase reserved capacity"
+      ],
+      "sections": [
+        {
+          "title": "Total capacity for the {region} Region",
+          "fields": [
+            {
+              "label": "Standard reserved read capacity",
+              "type": "readonly"
+            },
+            {
+              "label": "Standard reserved write capacity",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Provisioned capacity consumption",
+          "fields": [
+            {
+              "label": "Approximate total read request units",
+              "type": "readonly"
+            },
+            {
+              "label": "Approximate total write request units",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "resource_label": "Capacity reservations for the {region} Region",
+        "filters": [
+          "All purchases"
+        ],
+        "empty_state": "No capacity reservations",
+        "empty_state_action": "Purchase reserved capacity",
+        "columns": [
+          "Purchase date",
+          "Capacity type",
+          "Capacity units",
+          "Upfront price",
+          "Term",
+          "Days remaining",
+          "Status",
+          "ID"
+        ]
+      }
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/dynamodbv2/home#preferences",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Settings"
+      ],
+      "captures": [
+        "A-dynamodbv2/012-L2-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Layout and navigation settings",
+          "actions": [
+            "Edit"
+          ],
+          "fields": [
+            {
+              "label": "Content density",
+              "type": "readonly",
+              "default": "Comfortable"
+            },
+            {
+              "label": "Default entry page",
+              "type": "readonly",
+              "default": "Dashboard"
+            },
+            {
+              "label": "Default table tab",
+              "type": "readonly",
+              "default": "Settings"
+            }
+          ]
+        },
+        {
+          "title": "Explore items settings",
+          "actions": [
+            "Edit"
+          ],
+          "fields": [
+            {
+              "label": "Default query type",
+              "type": "readonly",
+              "default": "Scan"
+            },
+            {
+              "label": "Default item editor view",
+              "type": "readonly",
+              "default": "Form view"
+            },
+            {
+              "label": "Default JSON view syntax",
+              "type": "readonly",
+              "default": "DynamoDB JSON"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edit-layout-settings",
+      "kind": "settings",
+      "title": "Edit layout and navigation settings",
+      "route": "/dynamodbv2/home#preferences-layout",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Settings",
+        "Edit layout and navigation settings"
+      ],
+      "captures": [
+        "A-dynamodbv2/036-L3-edit"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Save changes",
+      "sections": [
+        {
+          "title": "Layout and navigation settings",
+          "fields": [
+            {
+              "label": "Content density",
+              "type": "radio",
+              "default": "Comfortable",
+              "options": [
+                "Comfortable",
+                "Compact"
+              ]
+            },
+            {
+              "label": "Default entry page",
+              "type": "radio",
+              "default": "Dashboard",
+              "options": [
+                "Dashboard",
+                "Tables",
+                "Explore items"
+              ]
+            },
+            {
+              "label": "Default table tab",
+              "type": "select",
+              "default": "Settings",
+              "options": [
+                "Settings",
+                "Indexes",
+                "Monitor",
+                "Global tables",
+                "Backups",
+                "Exports and streams",
+                "Permissions"
+              ],
+              "confidence": "medium"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edit-explore-items-settings",
+      "kind": "settings",
+      "title": "Edit explore items settings",
+      "route": "/dynamodbv2/home#preferences-items",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Settings",
+        "Edit explore items settings"
+      ],
+      "captures": [
+        "A-dynamodbv2/037-L3-edit"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Save changes",
+      "sections": [
+        {
+          "title": "Explore items settings",
+          "fields": [
+            {
+              "label": "Default query type",
+              "type": "radio",
+              "default": "Scan",
+              "options": [
+                "Scan",
+                "Query"
+              ]
+            },
+            {
+              "label": "Default item editor view",
+              "type": "radio",
+              "default": "Form view",
+              "options": [
+                "Form view",
+                "JSON view"
+              ]
+            },
+            {
+              "label": "Default JSON view syntax",
+              "type": "radio",
+              "default": "DynamoDB JSON",
+              "options": [
+                "DynamoDB JSON",
+                "JSON"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "purchase-reserved-capacity",
+      "kind": "create",
+      "title": "Purchase reserved capacity",
+      "route": "/dynamodbv2/home#purchase-reserved-capacity",
+      "breadcrumbs": [
+        "DynamoDB",
+        "Reserved capacity",
+        "Purchase"
+      ],
+      "captures": [
+        "A-dynamodbv2/034-L3-purchase-reserved-capacity"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Billing action; render as 'Not simulated in Vyomi'.",
+      "sections": [
+        {
+          "title": "Purchase reserved capacity",
+          "fields": [
+            {
+              "label": "Provisioned capacity type",
+              "type": "select",
+              "placeholder": "Choose capacity type"
+            },
+            {
+              "label": "Term",
+              "type": "select",
+              "placeholder": "Choose term"
+            },
+            {
+              "label": "Provisioned capacity units",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dax-clusters",
+      "kind": "list",
+      "title": "Clusters",
+      "route": "/dynamodbv2/home#dax-clusters",
+      "breadcrumbs": [
+        "DAX",
+        "Clusters"
+      ],
+      "captures": [
+        "A-dynamodbv2/013-L2-clusters"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Clusters",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "View details",
+          "Delete",
+          "Create cluster"
+        ],
+        "columns": [
+          "Cluster name",
+          "Status",
+          "Node type",
+          "Nodes",
+          "Availability Zones",
+          "Endpoint"
+        ]
+      }
+    },
+    {
+      "id": "dax-create-cluster",
+      "kind": "create",
+      "title": "Create DAX cluster",
+      "route": "/dynamodbv2/home#dax-cluster-create",
+      "breadcrumbs": [
+        "DAX",
+        "Clusters",
+        "Create cluster"
+      ],
+      "captures": [
+        "A-dynamodbv2/022-L3-create-cluster"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "sections": [
+        {
+          "title": "Cluster details",
+          "fields": [
+            {
+              "label": "Cluster name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Node types",
+              "type": "table",
+              "columns": [
+                "Node type",
+                "vCPU",
+                "Memory (GiB)",
+                "Network performance"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": "Multi-step wizard; only step 1 captured."
+    },
+    {
+      "id": "dax-subnet-groups",
+      "kind": "list",
+      "title": "Subnet groups",
+      "route": "/dynamodbv2/home#dax-subnet-groups-list",
+      "breadcrumbs": [
+        "DAX",
+        "Subnet groups"
+      ],
+      "captures": [
+        "A-dynamodbv2/014-L2-subnet-groups"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Subnet groups",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create subnet group"
+        ],
+        "columns": [
+          "Name",
+          "Description",
+          "VPC ID",
+          "Active subnets"
+        ]
+      }
+    },
+    {
+      "id": "dax-create-subnet-group",
+      "kind": "create",
+      "title": "Create subnet group",
+      "route": "/dynamodbv2/home#dax-create-subnet-group",
+      "breadcrumbs": [
+        "DAX",
+        "Subnet groups",
+        "Create subnet group"
+      ],
+      "captures": [
+        "A-dynamodbv2/040-L3-create-subnet-group"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "submit": "Create subnet group",
+      "sections": [
+        {
+          "title": "Create subnet group",
+          "fields": [
+            {
+              "label": "Subnet group name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Subnet group description",
+              "type": "text",
+              "required": false
+            },
+            {
+              "label": "VPC ID",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Subnets",
+              "type": "table",
+              "columns": [
+                "Subnet ID",
+                "Availability Zone",
+                "IPv4 CIDR",
+                "IPv6 CIDR"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dax-parameter-groups",
+      "kind": "list",
+      "title": "Parameter groups",
+      "route": "/dynamodbv2/home#dax-parameter-groups-list",
+      "breadcrumbs": [
+        "DAX",
+        "Parameter groups"
+      ],
+      "captures": [
+        "A-dynamodbv2/015-L2-parameter-groups"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Parameter groups",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create parameter group"
+        ],
+        "columns": [
+          "Name",
+          "Description",
+          "Item Time to Live (TTL)",
+          "Query Time to Live (TTL)"
+        ]
+      }
+    },
+    {
+      "id": "dax-create-parameter-group",
+      "kind": "create",
+      "title": "Create parameter group",
+      "route": "/dynamodbv2/home#dax-create-parameter-group",
+      "breadcrumbs": [
+        "DAX",
+        "Parameter groups",
+        "Create parameter group"
+      ],
+      "captures": [
+        "A-dynamodbv2/042-L3-create-parameter-group"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "submit": "Create parameter group",
+      "sections": [
+        {
+          "title": "Create parameter group",
+          "fields": [
+            {
+              "label": "Group name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Group description",
+              "type": "text",
+              "required": false
+            },
+            {
+              "label": "Item Time to Live (TTL)",
+              "type": "number",
+              "default": 5,
+              "help": "minutes"
+            },
+            {
+              "label": "Query Time to Live (TTL)",
+              "type": "number",
+              "default": 5,
+              "help": "minutes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dax-events",
+      "kind": "list",
+      "title": "Events",
+      "route": "/dynamodbv2/home#dax-events",
+      "breadcrumbs": [
+        "DAX",
+        "Events"
+      ],
+      "captures": [
+        "A-dynamodbv2/016-L2-events"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Events",
+        "counter": true,
+        "columns": [
+          "Time",
+          "Source type",
+          "Source ID",
+          "Event"
+        ]
+      }
+    }
+  ],
+  "gaps_note": "Table detail page, item editor and the 'Customize settings' branch of Create table are provenance=reference (the captured account had no tables and the crawl does not toggle radios). Service landing (#service) is a marketing page and omitted. Re-verify on the next capture."
+}

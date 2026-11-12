@@ -1,0 +1,313 @@
+{
+ "$doc": "Vyomi capability registry — Pub/Sub. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.pubsub.topics.crud": {
+  "title": "Topics (create, list, get, patch, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "topics.create",
+   "topics.get",
+   "topics.list",
+   "topics.patch",
+   "topics.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.topics.config": {
+  "title": "Topic labels, message retention and CMEK",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Labels are stored and returned exactly as configured.",
+   "messageRetentionDuration is ENFORCED: Vyomi keeps a replayable backlog of every message published to the topic for that long, independent of any subscription, so subscriptions.seek can replay by timestamp — even from a subscription created after the message was published.",
+   "kmsKeyName is stored and returned, but Vyomi does not call Cloud KMS to encrypt/decrypt message data — there is no real encryption-at-rest difference between a Google-managed key and a customer-managed one in Vyomi."
+  ],
+  "api": [
+   "topics.create",
+   "topics.patch",
+   "topics.publish",
+   "subscriptions.seek"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.topics.schema": {
+  "title": "Attach a schema to a topic",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "schemaSettings (schema name + encoding) is stored on the topic and returned as configured.",
+   "A message published with JSON encoding against an AVRO schema IS validated — required fields and primitive/record/array/map/enum shapes are checked, and a violating message is rejected rather than published.",
+   "BINARY-encoded Avro and PROTOCOL_BUFFER schemas are not decoded, so messages in those encodings still publish unvalidated."
+  ],
+  "api": [
+   "topics.create",
+   "topics.publish",
+   "schemas.create",
+   "schemas.get",
+   "schemas.list",
+   "schemas.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.publish": {
+  "title": "Publish messages (attributes, ordering key)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.crud": {
+  "title": "Subscriptions (create, list, get, patch, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.get",
+   "subscriptions.list",
+   "subscriptions.patch",
+   "subscriptions.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.pull-ack": {
+  "title": "Pull, acknowledge, ack-deadline redelivery, message retention",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A message not acknowledged within ackDeadlineSeconds becomes eligible for redelivery the next time the subscription is pulled, rather than on a background timer."
+  ],
+  "api": [
+   "subscriptions.pull",
+   "subscriptions.acknowledge"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.dead-lettering": {
+  "title": "Dead-letter topic after maxDeliveryAttempts",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.push": {
+  "title": "Push delivery config",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "pushConfig.pushEndpoint is stored and returned exactly as configured.",
+   "Vyomi never makes the outbound HTTP call — a push subscriber is not actually invoked. Use Pull delivery to receive messages in Vyomi."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.ordering-exactly-once": {
+  "title": "Message ordering and exactly-once delivery flags",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "enableMessageOrdering is ENFORCED: when set, the next message for a given orderingKey is never delivered until the earlier message with that key has been acknowledged, even if its own ack deadline has lapsed.",
+   "enableExactlyOnceDelivery is stored and returned as configured, but Vyomi does not deduplicate redelivered messages — a subscriber may still see a message more than once."
+  ],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.pull",
+   "subscriptions.acknowledge"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.retry-policy": {
+  "title": "Retry policy (immediate vs. exponential backoff)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "minimumBackoff/maximumBackoff are ENFORCED: a redelivery is withheld until the exponential backoff window (capped at maximumBackoff) has elapsed, not just the ack deadline.",
+   "As with all pull-based redelivery, the backoff only takes effect on the subscriber's next pull call rather than via a background timer."
+  ],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.filter": {
+  "title": "Subscription message filter",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A documented subset of the filter language is evaluated at publish time: attributes.key = \"value\", attributes.key != \"value\", hasPrefix(attributes.key, \"prefix\"), attributes:\"key\" (has-attribute), NOT/AND/OR and parentheses.",
+   "The ':' substring-match form on a value (e.g. attributes.key:\"-suffix\") and any CEL-style expressions beyond this subset aren't implemented; an unparsable filter is rejected when the subscription is created, not silently ignored."
+  ],
+  "api": [
+   "subscriptions.create",
+   "topics.publish",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.bigquery-gcs-delivery": {
+  "title": "Write to BigQuery / write to Cloud Storage delivery",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Write to Cloud Storage delivery is ENFORCED: each delivered message is written as a real newline-delimited TEXT object into the configured bucket (named from filenamePrefix/filenameSuffix) in Vyomi's own GCS store — never queued on the subscription. The bucket must already exist; avroConfig output isn't modeled.",
+   "Write to BigQuery delivery is not modeled: there is no BigQuery dataset/table resource anywhere in Vyomi to stream rows into (not 'out of scope for Pub/Sub' — no such resource type is simulated at all). Choose Pull, Push, or Cloud Storage delivery instead."
+  ],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.patch",
+   "topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
+  ]
+ },
+ "gcp.pubsub.topics.ingestion": {
+  "title": "Topic ingestion from external sources (AWS/Azure/Kafka/CDC)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ingestionDataSourceSettings.cloudStorage is ENFORCED: a topic configured with it really ingests objects from a real GCS bucket as messages (one message per object, matching matchGlob if set), lazily catching up on the next topics.get/publish or a pull on one of its subscriptions — Vyomi has no background poller, so a brand-new object doesn't appear until something next touches the topic.",
+   "Every other declared source (AWS Kinesis, Azure Event Hubs, Confluent/Kafka, database CDC) is rejected at create/patch time: Vyomi has no connector for any of them — not a 'separate product' excuse, there is no such external resource simulated anywhere to ingest from."
+  ],
+  "api": [
+   "topics.create",
+   "topics.patch",
+   "topics.get",
+   "topics.publish",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
+  ]
+ },
+ "gcp.pubsub.topics.message-transforms": {
+  "title": "Message transforms (JavaScript UDFs on publish)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A documented SUBSET of JavaScript is really parsed and executed against every published message (not a fixed menu of transform kinds): const/let, property get/set, delete, if/else, return, object/array literals + spread, JSON.parse/stringify, a few String/Object/Array builtins (toUpperCase/toLowerCase/trim/includes/startsWith/endsWith/split/join/keys/isArray), +, ===, !==, &&, ||, !.",
+   "No loops, classes, async, regular expressions, or arbitrary globals. A transform that fails to PARSE is rejected at topic create/patch time (INVALID_ARGUMENT), matching the real API's compile step. A transform that throws AT RUNTIME is skipped for that one message (fails open) rather than blocking the whole publish call.",
+   "Returning null/undefined (or falling off the end of the function) drops the message, same as the real API — it is never delivered, retained, or returned in the publish response's messageIds."
+  ],
+  "api": [
+   "topics.create",
+   "topics.patch",
+   "topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
+  ]
+ },
+ "gcp.pubsub.metrics": {
+  "title": "Topic / subscription metrics and monitoring charts",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Three series are mirrored into the shared Cloud Monitoring store from the core's OWN activity (never synthetic/random data): pubsub.googleapis.com/topic/send_message_operation_count (a live cumulative publish count), subscription/num_undelivered_messages (the subscription's real current backlog) and subscription/oldest_unacked_message_age, refreshed on every publish/pull/acknowledge/get.",
+   "Published as a GAUGE snapshot of the running total/current value rather than GCP's own per-minute DELTA rate, same simplification core/gcp_logging_core.py's usage-metrics mirror already makes. Every other Pub/Sub metric (publish/pull request latency, retained-byte quota usage, …) isn't collected."
+  ],
+  "api": [
+   "topics.publish",
+   "subscriptions.pull",
+   "subscriptions.acknowledge"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
+  ]
+ },
+ "gcp.pubsub.snapshots.crud": {
+  "title": "Snapshots (create, list, get, delete) and seek",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "snapshots.create",
+   "snapshots.get",
+   "snapshots.list",
+   "snapshots.delete",
+   "subscriptions.seek"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.schemas.crud": {
+  "title": "Schemas (create, list, get, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "schemas.create",
+   "schemas.get",
+   "schemas.list",
+   "schemas.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ }
+}

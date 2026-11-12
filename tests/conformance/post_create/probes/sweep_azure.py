@@ -51,7 +51,7 @@ def main():
     kv = f"{tag}kv"
     call("PUT", f"{rg}/providers/Microsoft.KeyVault/vaults/{kv}?api-version=2023-07-01",
          {"location": "eastus", "properties": {"sku": {"family": "A", "name": "standard"}, "tenantId": "00000000-0000-0000-0000-000000000000"}})
-    st, _ = call("PUT", f"/azure-data/keyvault/{kv}/secrets/s1", {"value": "topsecret"})
+    st, _ = call("PUT", f"/azure-data/keyvault/{kv}/secrets/s1?api-version=7.4", {"value": "topsecret"})
     check(st == 200, "Key Vault secret set", f"HTTP {st}")
     vm = f"{tag}vm"
     call("PUT", f"{rg}/providers/Microsoft.Compute/virtualMachines/{vm}?api-version=2023-09-01", {"location": "eastus", "properties": {
@@ -68,7 +68,7 @@ def main():
     check(st in (200, 202, 204), "RG delete accepted", f"HTTP {st}")
     time.sleep(3)
     check(not containers(vm), "RG delete removed the VM container", str(containers(vm)))
-    st, _ = call("GET", f"/azure-data/keyvault/{kv}/secrets/s1")
+    st, _ = call("GET", f"/azure-data/keyvault/{kv}/secrets/s1?api-version=7.4")
     check(st != 200, "RG delete destroyed Key Vault secrets (no longer readable)", f"HTTP {st}")
     # --- Item 2: API Management gateway: wrong key 401, unknown API 404, valid flow proxies
     svc = f"{rg}/providers/Microsoft.ApiManagement/service/{tag}apim"

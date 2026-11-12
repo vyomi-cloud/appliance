@@ -25,6 +25,12 @@ State shapes:
     keys     : { key_id -> metadata }   (public KeyMetadata fields, AWS-shaped)
     material : { key_id -> bytes }       (the secret key material, NEVER serialised)
     aliases  : { "alias/name" -> key_id }
+    custom_key_stores : { "cks-…" -> CustomKeyStoresListEntry }   (AWS KMS only)
+
+Optional hook a store MAY implement (the offline appliance does — v4 C0c):
+    legacy_decrypt(key_ref, blob) -> (key_id, plaintext) | None
+        ciphertext a pre-v4 backend minted (Vault transit `vault:v1:…`), which does
+        not self-identify its key the way an engine blob does.
 """
 from __future__ import annotations
 
@@ -123,6 +129,8 @@ class KeyStore:
         self.keys: dict[str, dict[str, Any]] = {}
         self.material: dict[str, bytes] = {}
         self.aliases: dict[str, str] = {}
+        # AWS KMS custom key stores (CloudHSM / XKS metadata) — state, so it persists.
+        self.custom_key_stores: dict[str, dict[str, Any]] = {}
         self.engine: KmsEngine = engine or InMemoryKmsEngine()
         self.account_id = account_id
 

@@ -9,12 +9,41 @@ SDKs / CLI, and the console REST under /api/logs/*.
 from __future__ import annotations
 
 import json
+from collections.abc import MutableMapping
 
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
 from core import app_context as ctx
 from core import logs_core
+
+
+class _AnomalySlot(MutableMapping):
+    """logs_core keys anomalies by (detectorArn, pattern) tuples; the persisted state is JSON, so
+    the slot keeps them under "arn\x1fpattern" string keys and this view hands tuples back."""
+
+    _SEP = "\x1f"
+
+    def __init__(self, backing: dict) -> None:
+        self._d = backing
+
+    def _k(self, key) -> str:
+        return self._SEP.join(key) if isinstance(key, tuple) else str(key)
+
+    def __getitem__(self, key):
+        return self._d[self._k(key)]
+
+    def __setitem__(self, key, value):
+        self._d[self._k(key)] = value
+
+    def __delitem__(self, key):
+        del self._d[self._k(key)]
+
+    def __iter__(self):
+        return (tuple(k.split(self._SEP, 1)) for k in list(self._d))
+
+    def __len__(self):
+        return len(self._d)
 
 
 class SpaceLogsStore(logs_core.LogsStore):
@@ -33,6 +62,19 @@ class SpaceLogsStore(logs_core.LogsStore):
     resource_policies = property(lambda self: self._slot("resource_policies"))
     query_definitions = property(lambda self: self._slot("query_definitions"))
     queries = property(lambda self: self._slot("queries"))
+    anomaly_detectors = property(lambda self: self._slot("anomaly_detectors"))
+    lam_store = None       # runtime links set by the wire router (subscription-filter delivery) — never persisted
+    kinesis_store = None
+
+    @property
+    def anomalies(self):
+        return _AnomalySlot(self._slot("anomalies"))
+
+    @anomalies.setter
+    def anomalies(self, value):
+        d = self._slot("anomalies")
+        d.clear()
+        d.update({_AnomalySlot._SEP.join(k) if isinstance(k, tuple) else str(k): v for k, v in dict(value).items()})
 
     def persist(self) -> None:
         ctx.persist_state()

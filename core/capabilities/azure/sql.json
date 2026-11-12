@@ -1,0 +1,163 @@
+{
+ "$doc": "Vyomi capability registry — Azure SQL databases. See aws/s3.json for the contract.",
+ "azure.sql.server.crud": {
+  "title": "Servers (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.vnet_rules": {
+  "title": "Virtual network rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Microsoft.Sql/servers/virtualNetworkRules is a real ARM child resource: the subnet must exist and carry the Microsoft.Sql service endpoint (enabled for you from the console). The rule is not enforced against SQL connections: there is no network path to evaluate it against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
+ "azure.sql.database.crud": {
+  "title": "Databases (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The subscription-wide \"SQL databases\" browse grid aggregates the native per-server Databases_List call across every known server (the ARM core's generic list does not scope by the server segment in the path) instead of calling a real Azure Resource Graph query, which is what the actual portal uses for this one blade."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.firewallrules": {
+  "title": "Server firewall rules (Microsoft.Sql/servers/firewallRules)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.networking": {
+  "title": "Server public network access toggle",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "When publicNetworkAccess is Disabled, the azure-sql query data plane now rejects every connection with a 403 (matching real SQL servers, where disabling it blocks public-endpoint traffic outright). A caller that declares its network identity (request headers x-vyomi-source-ip / x-vyomi-source-subnet / x-vyomi-private-endpoint / x-vyomi-trusted-service, core/azure_netaccess.py) is checked against the server's firewall rules (start/end IP ranges, the 0.0.0.0 'Allow Azure services' rule for trusted services), virtualNetworkRules (subnet must carry the Microsoft.Sql service endpoint) and Approved private endpoint connections; a miss answers 403 ClientIpNotAllowed. A caller that declares nothing (the browser console) keeps the legacy behaviour - any connection succeeds while public access stays Enabled - because there is no real client network in a browser-only simulator."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netaccess.py"]
+ },
+ "azure.sql.query_editor": {
+  "title": "Query editor (real SQL execution over the azure-sql data plane)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Runs on the same SqlStore seam as RDS/Cloud SQL (sqlite in Nano); T-SQL-specific syntax, stored procedures and SQL-authentication credential checks beyond a plain login/password string compare are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py"]
+ },
+ "azure.sql.sample_data": {
+  "title": "\"Use existing data: Sample\" canned dataset load",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Loads a small fixed Customer/Product/SalesOrderHeader schema with a few rows via the query data plane — not the real AdventureWorksLT sample database."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py"]
+ },
+ "azure.sql.compute_storage": {
+  "title": "Compute + storage (service/compute tier, vCore auto-scaling, auto-pause, max size, zone redundancy)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "maxSizeBytes is now enforced on the query data plane: once the database's real on-disk size (sqlite's own page accounting) reaches the configured cap, further INSERT/UPDATE/REPLACE statements are rejected with the real error 40544 (DatabaseSizeQuotaExceeded) until data is freed or the cap is raised. Service/compute tier, vCore auto-scaling, auto-pause and zone redundancy remain config-only — Vyomi does not enforce vCore limits, pause the compute, or model zone placement."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.transparent_data_encryption": {
+  "title": "Transparent data encryption on/off, with a customer-managed Key Vault protector",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "properties.transparentDataEncryption.state round-trips through ARM, but data at rest is never actually encrypted or decrypted based on it. A customer-managed key (keyVaultKeyUri) IS enforced for real: the query data plane requires the database's system-assigned managed identity AND a real, enabled Key Vault key — disabling the key or removing the identity makes the database inaccessible (TdeProtectorUnavailable) until the key is re-enabled or the protector is switched back to service-managed. There is no Microsoft Entra permission check on top of that (Vyomi has no Key Vault access-policy/RBAC model) — only the key's own enabled state and the identity's presence are checked."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.identity": {
+  "title": "System-assigned managed identity",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The identity block (including a generated principalId) round-trips through ARM and is now a real precondition for one feature: a customer-managed-key TDE protector is only honored while the database carries a system-assigned identity (azure.sql.transparent_data_encryption). It is still not usable for genuine Microsoft Entra authorization (RBAC role-assignment checks) to any other Vyomi service."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.automatic_tuning": {
+  "title": "Automatic tuning options (FORCE_LAST_GOOD_PLAN, CREATE_INDEX, DROP_INDEX) and Performance recommendations",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "CREATE_INDEX recommendations are real: generated from the Query editor's own statement log by checking the SAME engine's EXPLAIN QUERY PLAN for WHERE-equality lookups that need a table scan, shown on Performance recommendations with an Apply action that runs a real CREATE INDEX. When the automatic tuning option is On, matching recommendations are applied automatically instead of waiting for Apply. FORCE_LAST_GOOD_PLAN and DROP_INDEX stay config-only — no plan-regression detection or orphan-index pruning is modelled."
+  ],
+  "api": ["recommendations", "recommendations/{id}/apply"],
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to a database",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this SQL database only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a SQL database is stored and listed only: it does not block writes or deletes of the SQL database itself."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.export_import": {
+  "tier": "pro",
+  "title": "Database export / import (.bacpac to and from Blob storage)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "POST .../databases/{db}/export and .../databases/{db}/import or .../servers/{server}/import write / read the .bacpac in the simulator's OWN Azure Blob store. The storageUri host (<account>.blob.core.windows.net) is only parsed — the account must exist in the simulator (an ARM storage account or the emulator's devstoreaccount1) and the container must exist, otherwise the request fails; nothing is ever resolved on the internet.",
+   "The .bacpac is a zip carrying the database as a replayable SQL script (model.sql) plus Origin.json, not SqlPackage's DACPAC model, so only simulator-written bacpacs import; the storage key / SAS and administrator credentials are recorded but not checked. The operation completes synchronously (no importExportOperationResults polling) and the console's Export button is not wired yet."
+  ],
+  "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
+ },
+ "azure.sql.connectivity": {
+   "title": "Server connection policy (connectionPolicies/default)",
+   "level": { "nano": "limited", "offline": "limited" },
+   "limitations": [
+    "Server firewall rules, the 'Allow Azure services' 0.0.0.0 rule, virtual network rules (subnet must carry Microsoft.Sql), private endpoints and publicNetworkAccess are enforced on the SQL query wire (403 ClientIpNotAllowed / PublicNetworkAccessDisabled). The connection policy (connectionPolicies/default) decides how the declared caller is routed and every query answer reports it: Proxy -> gateway :1433, Redirect -> node port range (:11000), Default -> Redirect for a caller inside Azure (declared subnet / private endpoint / trusted service) and Proxy from outside.",
+    "The caller is a DECLARED simulated client (x-vyomi-source-ip / -source-subnet / -private-endpoint / -trusted-service request headers, or the same names as query parameters on ARM-proxied planes): neither substrate sees a real client network (offline sees only the Docker gateway, Nano has no socket), so nothing is guessed from a peer address. An undeclared caller (the console, a plain SDK) is only subject to the on/off public-network-access setting; allow-lists apply to declared callers.",
+    "The SQL front door is an HTTP query endpoint, not TDS: no real redirect happens on a socket and there is no 11000-11999 listener; the routing decision is computed and reported, not performed by a driver. Minimal TLS version is not enforced."
+   ],
+   "tests": [
+    "tests/conformance/test_azure_sql_ext_core.py",
+    "tests/conformance/test_azure_netenforce.py",
+    "tests/conformance/test_azure_netenforce_sdk.py",
+    "tests/cli/azure-netenforce-cli-smoke.sh"
+   ]
+  },
+ "azure.sql.datamasking": {"title": "Dynamic Data Masking (dataMaskingPolicies/Default and its rules)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Masking is APPLIED to SELECT result sets for any login other than the server admin / exempt principals / users granted UNMASK (GRANT UNMASK TO user, REVOKE UNMASK FROM user). Functions: Default, Email, Number, Text/Custom, CCN, SSN. The login is the x-vyomi-sql-login header (TDS/Entra identity is not modelled).", "Like the real feature only direct column references are masked, not expressions over them; stored data is untouched. Enforced identically on the offline appliance: the /azure-sql data plane is routed through the same azure_sql_core engine as Nano (proved over the offline HTTP wire in tests/conformance/test_azure_offline_wiring.py)."], "tests": ["tests/conformance/test_azure_sql_security_enforced.py", "tests/conformance/test_azure_sql_security_sdk.py", "tests/conformance/test_azure_sql_ext_core.py", "tests/conformance/test_azure_offline_wiring.py"]},
+ "azure.sql.ledger": {"title": "Ledger (isLedgerOn at create)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Ledger tables (CREATE TABLE ... WITH (LEDGER = ON [(APPEND_ONLY = ON)]), or every table when the database is created with isLedgerOn): append-only tables reject UPDATE/DELETE/TRUNCATE (37359); every write appends a block to a SHA-256 hash chain stored in the database with the table-state hash; row versions are kept in a ledger history; digests are generated and verify recomputes chain, digests and table state, detecting tampering outside the ledger path.", "Digests are returned and stored in the database, not uploaded to immutable blob storage or Confidential ledger; the ledger views are exposed as REST (security/ledger), not as <table>_Ledger SQL views; one block per write statement. Enforced identically on the offline appliance: the /azure-sql data plane is routed through the same azure_sql_core engine as Nano (proved over the offline HTTP wire in tests/conformance/test_azure_offline_wiring.py)."], "tests": ["tests/conformance/test_azure_sql_security_enforced.py", "tests/conformance/test_azure_offline_wiring.py"]},
+ "azure.sql.maintenance": {
+  "title": "Maintenance window and event history",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The configured maintenance window (maintenanceConfigurationId) is the database's real property; the event history is always empty because Vyomi never performs platform maintenance."],
+  "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
+ },
+ "azure.sql.addazuresearch": {
+  "title": "Add Azure AI Search (SQL)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["A real search service, index, data source and indexer are created through Microsoft.Search, but Vyomi indexers only read Blob data: running the indexer on an azuresql data source ends in transientFailure with that message. Pulling table rows into an index is not implemented."],
+  "tests": ["tests/conformance/test_azure_search_core.py"]
+ },
+ "azure.sql.datadiscovery": {"title": "Data Discovery & Classification (column sensitivity labels)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A scan of the database's REAL tables classifies columns by name pattern and by sampled data (email, SSN, credit card with Luhn check, phone, IPv4 over up to 200 rows); labels persist as ARM sensitivityLabels and every SELECT that reads a labelled column writes dataSensitivityInformation into the audit record.", "Labels do not themselves block or mask reads (masking is a separate feature); Purview and Defender are not involved. Enforced identically on the offline appliance: the /azure-sql data plane is routed through the same azure_sql_core engine as Nano (proved over the offline HTTP wire in tests/conformance/test_azure_offline_wiring.py)."], "tests": ["tests/conformance/test_azure_sql_security_enforced.py", "tests/conformance/test_azure_sql_security_sdk.py", "tests/conformance/test_azure_cfgext_core.py", "tests/conformance/test_azure_offline_wiring.py"]},
+ "azure.sql.copy_restore": {"title": "Copy database, point-in-time restore, restore dropped database", "level": {"nano": "full", "offline": "full"}, "limitations": ["createMode Copy / PointInTimeRestore / Restore / RestoreLongTermRetentionBackup move real table data. PITR uses a base snapshot plus a write-ahead log of statements run through the data plane, so the restored state is exact to the statement; the log is in process memory (not durable across restart) and bulk bacpac imports are not logged."], "tests": ["tests/conformance/test_azure_sqlbackup_core.py"]},
+ "azure.sql.geo_replication": {"title": "Active geo-replication (secondary, replica links, failover, terminate)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Secondary databases are seeded from the primary and every later write is replayed on them synchronously; secondaries are read-only (error 3906); failover swaps roles, delete terminates the link. No replication lag, 'region' is a label; failover groups and Hyperscale named replicas are not modelled."], "tests": ["tests/conformance/test_azure_sqlbackup_core.py"]},
+ "azure.sql.retention": {"title": "Short-term and long-term backup retention", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Short-term retention (1-35 days, differential 12|24 h) bounds PITR; the LTR policy is validated (ISO-8601, 10-year cap) and one LTR backup artifact is taken when the policy is set, restorable and deletable. Weekly/monthly/yearly cadence is not scheduled."], "tests": ["tests/conformance/test_azure_sqlbackup_core.py"]},
+ "azure.sql.query_performance": {"title": "Query Performance Insight (top queries by measured duration)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Built from the wall-clock timing and outcome of every statement run through the Vyomi SQL data plane (query editor / SDK). Not Query Store: no execution plans or wait stats, and no DTU/CPU metric because the engine has no resource governor. Auditing has no storage / Log Analytics / Event Hub destination."], "tests": ["tests/conformance/test_obs_azure_sql_insights.py"]},
+ "azure.sql.perf_overview": {"title": "Performance overview (statement counts, latency percentiles, size)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Built from the wall-clock timing and outcome of every statement run through the Vyomi SQL data plane (query editor / SDK). Not Query Store: no execution plans or wait stats, and no DTU/CPU metric because the engine has no resource governor. Auditing has no storage / Log Analytics / Event Hub destination."], "tests": ["tests/conformance/test_obs_azure_sql_insights.py"]},
+ "azure.sql.auditing": {"title": "Auditing (audit records of executed statements)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Built from the wall-clock timing and outcome of every statement run through the Vyomi SQL data plane (query editor / SDK). Not Query Store: no execution plans or wait stats, and no DTU/CPU metric because the engine has no resource governor. Auditing has no storage / Log Analytics / Event Hub destination."], "tests": ["tests/conformance/test_obs_azure_sql_insights.py"]},
+ "azure.sql.server.iam": {"title": "SQL server: Access control (IAM) over ARM", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Role assignments and the built-in role definitions are real ARM objects (Microsoft.Authorization) scoped to the server; the data-plane query path does not consult them (the simulator's single signed-in principal is not an Entra identity)."], "tests": ["tests/conformance/test_azure_arm_core.py"]}
+}

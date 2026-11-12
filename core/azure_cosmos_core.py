@@ -24,6 +24,9 @@ Wire summary (paths are the azure-cosmos resource hierarchy):
   GET    /dbs/{db}/colls/{c}/docs          list documents    -> {"Documents","_count"}
   GET    /dbs/{db}/colls/{c}/docs/{id}     read document
   DELETE /dbs/{db}/colls/{c}/docs/{id}     delete document
+  GET    /dbs/{db}/colls/{c}/docs          with `A-IM: Incremental feed` = CHANGE FEED (latest-version mode): documents
+                                           whose _lsn is above the `If-None-Match` continuation (none -> from the start);
+                                           the new continuation is returned in `etag`, 304 when nothing changed.
 
 Errors: JSON {"code": "NotFound", "message": ...} matching the HTTP status
 (404 NotFound, 409 Conflict, 400 BadRequest).
@@ -88,6 +91,14 @@ class CosmosStore:
         """Write-through hook (no-op in-memory; a backed subclass overrides it)."""
 
 
+def _next_lsn(store: "CosmosStore") -> int:
+    cur = getattr(store, "_lsn_seq", None)
+    if cur is None:   # first write on a (re)loaded store: continue after the highest persisted _lsn
+        cur = max([int(d.get("_lsn", 0)) for cs in store.docs.values() for c in cs.values() for d in c.values()] or [0])
+    store._lsn_seq = cur + 1
+    return store._lsn_seq
+
+
 # ── resource views ────────────────────────────────────────────────────────
 def _db_view(db_id: str, entry: dict) -> dict:
     return {
@@ -99,6 +110,46 @@ def _db_view(db_id: str, entry: dict) -> dict:
         "_colls": "colls/",
         "_users": "users/",
     }
+
+
+def validate_partition_key(pk) -> str | None:
+    """Error text for an invalid container partitionKey definition, else None. Hash = one path; MultiHash
+    (hierarchical, version 2) = two or three distinct paths, as in the real service."""
+    if not isinstance(pk, dict):
+        return "partitionKey must be an object with 'paths' and 'kind'."
+    paths = pk.get("paths")
+    kind = pk.get("kind", "Hash")
+    if kind not in ("Hash", "MultiHash"):
+        return f"Unsupported partition key kind '{kind}'."
+    if not isinstance(paths, list) or not paths or not all(isinstance(x, str) for x in paths):
+        return "partitionKey.paths must be a non-empty list of paths."
+    for x in paths:
+        if not x.startswith("/") or len(x) < 2 or x.endswith("/") or "//" in x:
+            return f"Partition key path '{x}' is invalid: a path starts with '/' and names a property (e.g. /tenantId)."
+    if len({x.lower() for x in paths}) != len(paths):
+        return "Partition key paths must be unique."
+    if kind == "Hash" and len(paths) != 1:
+        return "A Hash partition key takes exactly one path; use kind 'MultiHash' (version 2) for hierarchical partition keys."
+    if kind == "MultiHash":
+        if not 2 <= len(paths) <= 3:
+            return "A hierarchical (MultiHash) partition key takes two or three paths."
+        if pk.get("version", 2) != 2:
+            return "Hierarchical partition keys require partition key version 2."
+    return None
+
+
+def _pk_from_doc(doc: dict, paths: list):
+    out = []
+    for path in paths:
+        cur = doc
+        for part in path.strip("/").split("/"):
+            if isinstance(cur, dict) and part in cur:
+                cur = cur[part]
+            else:
+                cur = None
+                break
+        out.append(cur)
+    return out
 
 
 def _coll_view(db: dict, coll_id: str, entry: dict) -> dict:
@@ -121,74 +172,117 @@ def _coll_view(db: dict, coll_id: str, entry: dict) -> dict:
     }
 
 
-# ── SQL query (minimal SELECT support) ─────────────────────────────────────
+# ── SQL query (pragmatic SELECT subset) ─────────────────────────────────────
+def _lit(rhs: str) -> Any:
+    rhs = rhs.strip()
+    if (rhs.startswith("'") and rhs.endswith("'")) or \
+       (rhs.startswith('"') and rhs.endswith('"')):
+        return rhs[1:-1]
+    if rhs.lower() in ("true", "false"):
+        return rhs.lower() == "true"
+    if rhs.lower() == "null":
+        return None
+    try:
+        return int(rhs)
+    except ValueError:
+        try:
+            return float(rhs)
+        except ValueError:
+            return rhs
+
+
+def _match_condition(doc: dict, cond: str) -> bool:
+    """A single WHERE condition: a scalar function call, an IN membership
+    test, or a comparison. Unrecognised conditions pass through (don't
+    filter the document out) — same fallback the original subset used."""
+    cond = cond.strip()
+
+    fm = re.match(
+        r"^(contains|startswith|endswith)\s*\(\s*(?:c|root)\.([A-Za-z_]\w*)\s*,\s*(.+?)\s*\)$",
+        cond, re.IGNORECASE)
+    if fm:
+        fn, field_name, rhs = fm.group(1).lower(), fm.group(2), fm.group(3)
+        actual, val = doc.get(field_name), _lit(rhs)
+        if not isinstance(actual, str) or not isinstance(val, str):
+            return False
+        if fn == "contains":
+            return val in actual
+        if fn == "startswith":
+            return actual.startswith(val)
+        return actual.endswith(val)
+
+    inm = re.match(r"^(?:c|root)\.([A-Za-z_]\w*)\s+in\s*\((.*)\)$",
+                   cond, re.IGNORECASE | re.DOTALL)
+    if inm:
+        field_name = inm.group(1)
+        members = [_lit(p) for p in inm.group(2).split(",")]
+        return doc.get(field_name) in members
+
+    cm = re.match(
+        r"""^(?:c|root)\.([A-Za-z_]\w*)\s*
+            (=|==|!=|<>|>=|<=|>|<)\s*
+            (.+?)\s*$""",
+        cond, re.VERBOSE)
+    if not cm:
+        return True  # unsupported predicate -> don't filter it out
+    field_name, op, rhs = cm.group(1), cm.group(2), cm.group(3).strip()
+    val: Any = _lit(rhs)
+    actual = doc.get(field_name)
+    if op in ("=", "=="):
+        return actual == val
+    if op in ("!=", "<>"):
+        return actual != val
+    try:
+        if op == ">":
+            return actual > val
+        if op == "<":
+            return actual < val
+        if op == ">=":
+            return actual >= val
+        if op == "<=":
+            return actual <= val
+    except TypeError:
+        return False
+    return True
+
+
 def _run_query(docs: list[dict], query: str) -> list[dict]:
     """A pragmatic subset of the Cosmos SQL grammar sufficient for the native
-    SDK's common patterns: SELECT * / SELECT c.a, c.b, with an optional
-    WHERE c.field = value (=, !=, >, <, >=, <=). Unrecognised queries fall
-    back to returning all documents (SELECT * semantics)."""
+    SDK's common patterns: SELECT */fields/TOP n/VALUE, an optional WHERE
+    combining comparisons (=,!=,>,<,>=,<=), IN (...) and CONTAINS/STARTSWITH/
+    ENDSWITH(...) with a single logical operator throughout (either all AND
+    or all OR — mixed/parenthesized boolean expressions are not parsed),
+    ORDER BY one field, OFFSET n LIMIT n, and a top-level COUNT(...) / VALUE
+    COUNT(...) aggregate. Unrecognised queries fall back to SELECT * / don't
+    filter the predicate out, so the subset degrades gracefully rather than
+    silently dropping rows."""
     q = query.strip()
-    ql = q.lower()
 
-    # WHERE clause -> filter predicate.
+    # TOP n — a row cap baked into the projection clause.
+    top_n = None
+    mtop = re.match(r"^\s*select\s+top\s+(\d+)\s+(.*)$", q, re.IGNORECASE | re.DOTALL)
+    if mtop:
+        top_n = int(mtop.group(1))
+        q = "SELECT " + mtop.group(2)
+
+    value_mode = bool(re.match(r"^\s*select\s+value\s+", q, re.IGNORECASE))
+
+    # WHERE clause -> filter predicate, terminated by ORDER BY / OFFSET / end.
     where = None
-    m = re.search(r"\bwhere\b(.*?)(?:\border\s+by\b|$)", q, re.IGNORECASE | re.DOTALL)
+    m = re.search(r"\bwhere\b(.*?)(?:\border\s+by\b|\boffset\b|$)", q, re.IGNORECASE | re.DOTALL)
     if m:
         where = m.group(1).strip()
-
-    def _lit(rhs: str) -> Any:
-        rhs = rhs.strip()
-        if (rhs.startswith("'") and rhs.endswith("'")) or \
-           (rhs.startswith('"') and rhs.endswith('"')):
-            return rhs[1:-1]
-        if rhs.lower() in ("true", "false"):
-            return rhs.lower() == "true"
-        if rhs.lower() == "null":
-            return None
-        try:
-            return int(rhs)
-        except ValueError:
-            try:
-                return float(rhs)
-            except ValueError:
-                return rhs
 
     def _match(doc: dict) -> bool:
         if not where:
             return True
-        # c.field IN (v1, v2, ...) — membership test.
-        inm = re.match(r"^\s*(?:c|root)\.([A-Za-z_][\w]*)\s+in\s*\((.*)\)\s*$",
-                       where, re.IGNORECASE | re.DOTALL)
-        if inm:
-            field_name = inm.group(1)
-            members = [_lit(p) for p in inm.group(2).split(",")]
-            return doc.get(field_name) in members
-        cm = re.match(
-            r"""^\s*(?:c|root)\.([A-Za-z_][\w]*)\s*
-                (=|==|!=|<>|>=|<=|>|<)\s*
-                (.+?)\s*$""",
-            where, re.VERBOSE)
-        if not cm:
-            return True  # unsupported predicate -> don't filter it out
-        field_name, op, rhs = cm.group(1), cm.group(2), cm.group(3).strip()
-        val: Any = _lit(rhs)
-        actual = doc.get(field_name)
-        if op in ("=", "=="):
-            return actual == val
-        if op in ("!=", "<>"):
-            return actual != val
-        try:
-            if op == ">":
-                return actual > val
-            if op == "<":
-                return actual < val
-            if op == ">=":
-                return actual >= val
-            if op == "<=":
-                return actual <= val
-        except TypeError:
-            return False
-        return True
+        # Pragmatic subset: a single logical operator throughout (no mixing,
+        # no parentheses) — OR takes precedence over an all-AND reading.
+        or_parts = re.split(r"\s+or\s+", where, flags=re.IGNORECASE)
+        if len(or_parts) > 1:
+            return any(_match_condition(doc, p) for p in or_parts)
+        and_parts = re.split(r"\s+and\s+", where, flags=re.IGNORECASE)
+        return all(_match_condition(doc, p) for p in and_parts)
 
     matched = [d for d in docs if _match(d)]
 
@@ -206,13 +300,29 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
             return (not present, type(v).__name__ if present else "", v if present else "")
         matched = sorted(matched, key=_sort_key, reverse=(direction == "desc"))
 
-    # Projection: SELECT * vs SELECT c.a, c.b
-    sm = re.match(r"^\s*select\s+(.*?)\s+from\b", ql, re.DOTALL)
+    # OFFSET n LIMIT n — a page of the (filtered, ordered) result set.
+    offm = re.search(r"\boffset\s+(\d+)\s+limit\s+(\d+)\b", q, re.IGNORECASE)
+    if offm:
+        offset, limit = int(offm.group(1)), int(offm.group(2))
+        matched = matched[offset:offset + limit]
+    if top_n is not None:
+        matched = matched[:top_n]
+
+    # Aggregate: SELECT [VALUE] COUNT(...) FROM c — no GROUP BY.
+    if re.match(r"^\s*select\s+(?:value\s+)?count\s*\([^)]*\)\s+from\b", q, re.IGNORECASE):
+        n = len(matched)
+        return [n] if value_mode else [{"$1": n}]
+
+    # Projection: SELECT * / SELECT c.a, c.b [AS alias] / SELECT VALUE c.a
+    sm = re.match(r"^\s*select\s+(?:value\s+)?(.*?)\s+from\b", q, re.IGNORECASE | re.DOTALL)
     proj = sm.group(1).strip() if sm else "*"
     if proj == "*":
         return matched
 
-    # projected fields
+    if value_mode:
+        vm = re.match(r"^(?:c|root)\.([A-Za-z_]\w*)$", proj, re.IGNORECASE)
+        return [d.get(vm.group(1)) for d in matched] if vm else matched
+
     fields = []
     for part in proj.split(","):
         part = part.strip()
@@ -230,9 +340,9 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
-def dispatch(store: CosmosStore, method: str, path: str,
-             query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> Response:
+def _dispatch_inner(store: CosmosStore, method: str, path: str,
+                    query: dict | None = None, headers: dict | None = None,
+                    body: bytes = b"") -> Response:
     query = query or {}
     headers = {(k or "").lower(): v for k, v in (headers or {}).items()}
     method = method.upper()
@@ -319,10 +429,15 @@ def dispatch(store: CosmosStore, method: str, path: str,
             if coll_id in colls:
                 return _err(409, "Conflict",
                             f"Collection with id '{coll_id}' already exists.")
+            pk = b.get("partitionKey", {"paths": ["/id"], "kind": "Hash"})
+            pk_err = validate_partition_key(pk)
+            if pk_err:
+                return _err(400, "BadRequest", pk_err)
+            if pk.get("kind") == "MultiHash":
+                pk = {**pk, "version": 2}
             entry = {
                 "_rid": _rid(), "_etag": _etag(), "_ts": _now_ts(),
-                "partitionKey": b.get("partitionKey",
-                                      {"paths": ["/id"], "kind": "Hash"}),
+                "partitionKey": pk,
             }
             if "indexingPolicy" in b:
                 entry["indexingPolicy"] = b["indexingPolicy"]
@@ -380,6 +495,15 @@ def dispatch(store: CosmosStore, method: str, path: str,
             if not doc_id:
                 return _err(400, "BadRequest", "The document must carry an 'id'.")
             is_upsert = str(headers.get("x-ms-documentdb-is-upsert", "")).lower() == "true"
+            hdr = headers.get("x-ms-documentdb-partitionkey")
+            if hdr:
+                try:
+                    want = json.loads(hdr)
+                except ValueError:
+                    return _err(400, "BadRequest", "The x-ms-documentdb-partitionkey header is not valid JSON.")
+                have = _pk_from_doc(b, (coll_entry.get("partitionKey") or {"paths": ["/id"]}).get("paths", ["/id"]))
+                if isinstance(want, list) and len(want) == len(have) and any(h is not None and h != w for h, w in zip(have, want)):
+                    return _err(400, "BadRequest", "PartitionKey extracted from document doesn't match the one specified in the header.")
             if doc_id in docs and not is_upsert:
                 return _err(409, "Conflict",
                             f"Document with id '{doc_id}' already exists.")
@@ -391,10 +515,24 @@ def dispatch(store: CosmosStore, method: str, path: str,
             doc["_etag"] = _etag()
             doc["_ts"] = _now_ts()
             doc["_attachments"] = "attachments/"
+            doc["_lsn"] = _next_lsn(store)
+            existed = doc_id in docs
             docs[doc_id] = doc
             store.persist()
-            return _json(200 if (doc_id in docs and is_upsert) else 201, doc,
+            return _json(200 if (existed and is_upsert) else 201, doc,
                          {"etag": doc["_etag"]})
+        if method == "GET" and "incremental feed" in str(headers.get("a-im", "")).lower():   # change feed
+            try:
+                since = int(str(headers.get("if-none-match") or "0").strip('"') or 0)
+            except ValueError:
+                return _err(400, "BadRequest", "The If-None-Match continuation token is not valid.")
+            items = sorted((d for d in docs.values() if int(d.get("_lsn", 0)) > since), key=lambda d: d.get("_lsn", 0))
+            top = int(headers.get("x-ms-max-item-count") or 0) or len(items)
+            items = items[:top]
+            if not items:
+                return Response(status=304, body=b"", media_type=None, headers={"etag": f'"{since}"'})
+            return _json(200, {"_rid": coll_entry["_rid"], "Documents": items, "_count": len(items)},
+                         {"etag": f'"{items[-1]["_lsn"]}"', "x-ms-item-count": str(len(items))})
         if method == "GET":                           # list documents
             items = list(docs.values())
             return _json(200, {"_rid": coll_entry["_rid"],
@@ -423,6 +561,7 @@ def dispatch(store: CosmosStore, method: str, path: str,
         doc["_etag"] = _etag()
         doc["_ts"] = _now_ts()
         doc["_attachments"] = "attachments/"
+        doc["_lsn"] = _next_lsn(store)
         docs[doc_id] = doc
         store.persist()
         return _json(200, doc, {"etag": doc["_etag"]})
@@ -433,3 +572,764 @@ def dispatch(store: CosmosStore, method: str, path: str,
         store.persist()
         return Response(status=204, body=b"", media_type=None)
     return _err(400, "BadRequest", f"Unsupported method {method} on document")
+
+
+# ── account-level enforcement (RU/s throughput + network rules) ───────────────────────────────────────
+# The data-plane wire names no account, so the caller says which account it is talking to with `x-vyomi-account`
+# (or a `{name}.documents.azure.com` Host); with neither, the ONLY Cosmos account in the ARM state is used; with
+# several accounts and no signal nothing is enforced (the shared keyspace cannot attribute the call).
+_TP_TYPES = ("microsoft.documentdb/databaseaccounts/sqldatabases/throughputsettings",
+             "microsoft.documentdb/databaseaccounts/sqldatabases/containers/throughputsettings")
+_clock = time.time            # tests replace it
+_WINDOW: dict = {}            # (account_id, scope) -> [(ts, ru)] consumed in the trailing 1 s
+
+
+def request_charge(method: str, nbytes: int, status: int = 200, is_query: bool = False) -> float:
+    """Modelled RU charge (Microsoft's published cost model, same as observability_core): 1 KB point read = 1 RU,
+    1 KB write ~ 5 RU, a query >= 2.5 RU. A MODEL on the measured request size, not a metering engine."""
+    kb = max(1.0, nbytes / 1024.0)
+    if status >= 400:
+        return 1.0
+    if method.upper() in ("POST", "PUT", "PATCH", "DELETE") and not is_query:
+        return round(5.0 * kb, 2)
+    return round(max(2.5, kb) if is_query else kb, 2)
+
+
+def validate_throughput_settings(props: dict) -> str | None:
+    """Error text for a throughputSettings `properties.resource`, else None (manual >= 400 in steps of 100; autoscale max
+    >= 1000 in steps of 1000; exactly one of the two)."""
+    res = (props or {}).get("resource")
+    if not isinstance(res, dict):
+        return "properties.resource is required."
+    tp, au = res.get("throughput"), res.get("autoscaleSettings")
+    if (tp is None) == (au is None):
+        return "Specify exactly one of throughput (manual) or autoscaleSettings.maxThroughput (autoscale)."
+    if tp is not None and (not isinstance(tp, int) or isinstance(tp, bool) or tp < 400 or tp % 100):
+        return "The offer throughput must be at least 400 RU/s and a multiple of 100."
+    if au is not None:
+        mx = (au or {}).get("maxThroughput")
+        if not isinstance(mx, int) or isinstance(mx, bool) or mx < 1000 or mx % 1000:
+            return "autoscaleSettings.maxThroughput must be at least 1000 RU/s and a multiple of 1000."
+    return None
+
+
+def _cosmos_accounts(arm_state: dict) -> list:
+    out = []
+    for key, rec in (arm_state or {}).items():
+        if str(rec.get("_type") or rec.get("type") or "").lower() == "microsoft.documentdb/databaseaccounts":
+            out.append(rec if rec.get("id") else {**rec, "id": key})
+    return out
+
+
+def resolve_account(arm_state: dict | None, headers: dict) -> dict | None:
+    accts = _cosmos_accounts(arm_state or {})
+    name = str(headers.get("x-vyomi-account") or "").strip().lower()
+    if not name:
+        host = str(headers.get("host") or "").split(":")[0].lower()
+        if host.endswith(".documents.azure.com"):
+            name = host.split(".")[0]
+    if name:
+        for a in accts:
+            if (a.get("name") or a["id"].rsplit("/", 1)[-1]).lower() == name:
+                return a
+        return None
+    return accts[0] if len(accts) == 1 else None
+
+
+def _limit_for(arm_state: dict, acct_id: str, db: str, coll: str):
+    """(scope_key, limit RU/s, mode) — the container's own offer, else the database's shared offer, else None."""
+    base = acct_id.lower()
+    cands = []
+    if coll:
+        cands.append((f"{base}/sqldatabases/{db}/containers/{coll}/throughputsettings/default".lower(), f"{db}/{coll}"))
+    if db:
+        cands.append((f"{base}/sqldatabases/{db}/throughputsettings/default".lower(), db))
+    for key, scope in cands:
+        rec = (arm_state or {}).get(key)
+        res = ((rec or {}).get("properties") or {}).get("resource") or {}
+        if res.get("autoscaleSettings"):
+            return scope, int(res["autoscaleSettings"].get("maxThroughput") or 0), "autoscale"
+        if res.get("throughput"):
+            return scope, int(res["throughput"]), "manual"
+    return None
+
+
+def _cosmos_net_denied(arm_state, acct, headers):
+    try:
+        from core import azure_netaccess as na
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_netaccess as na  # type: ignore
+    props = acct.get("properties") or {}
+    ctx = na.caller_context(headers)
+    ip_rules = [r.get("ipAddressOrRange", "") for r in props.get("ipRules") or [] if isinstance(r, dict)]
+    vn_rules = [r.get("id", "") for r in props.get("virtualNetworkRules") or [] if isinstance(r, dict)]
+    if ctx and ctx.get("private_endpoint"):
+        ok, why = na._pe_reaches(arm_state, ctx["private_endpoint"], acct["id"])
+        return None if ok else (403, "Forbidden", f"Request is blocked: the private endpoint cannot reach this account ({why}).")
+    if props.get("publicNetworkAccess") == "Disabled":
+        return 403, "Forbidden", "Request is blocked because public network access is disabled for this account; use a private endpoint."
+    if not ctx or not (props.get("isVirtualNetworkFilterEnabled") or ip_rules or vn_rules):
+        return None
+    ip, subnet = ctx.get("source_ip"), ctx.get("source_subnet")
+    if ip and any(na._ip_in_rule(ip, r) for r in ip_rules):
+        return None
+    if subnet and any(v.lower() == subnet.lower() for v in vn_rules) and na._subnet_has_endpoint(arm_state, subnet, "Microsoft.AzureCosmosDB"):
+        return None
+    return 403, "Forbidden", (f"Request originated from client IP {ip or 'unknown'} through public internet. This is blocked by your "
+                              "Cosmos DB account firewall settings.")
+
+
+def _cors_origin_ok(rule_origins: str, origin: str) -> bool:
+    for o in str(rule_origins or "").split(","):
+        o = o.strip()
+        if o == "*" or o.lower() == origin.lower():
+            return True
+        if o.startswith(("http://*.", "https://*.")):
+            scheme, _, dom = o.partition("://*.")
+            if origin.lower().startswith(scheme + "://") and origin.lower().endswith("." + dom.lower()) and len(origin) > len(scheme) + 3 + len(dom) + 1:
+                return True
+    return False
+
+
+def _cors_rule(acct: dict | None, origin: str, method: str = "", req_headers: str = ""):
+    """The account's first properties.cors rule that admits this Origin (and, when the rule restricts them, the method
+    and request headers) - azure.cosmos.cors."""
+    for rule in ((acct or {}).get("properties") or {}).get("cors") or []:
+        if not isinstance(rule, dict) or not _cors_origin_ok(rule.get("allowedOrigins"), origin):
+            continue
+        ms = [m.strip().upper() for m in str(rule.get("allowedMethods") or "").split(",") if m.strip()]
+        if method and ms and method.upper() not in ms:
+            continue
+        hs = [h.strip().lower() for h in str(rule.get("allowedHeaders") or "").split(",") if h.strip()]
+        if req_headers and hs and "*" not in hs and not all(h.strip().lower() in hs for h in req_headers.split(",") if h.strip()):
+            continue
+        return rule
+    return None
+
+
+def _cors_headers(rule: dict, origin: str, preflight_headers: str = "") -> dict:
+    h = {"access-control-allow-origin": "*" if str(rule.get("allowedOrigins", "")).strip() == "*" else origin, "vary": "Origin"}
+    if preflight_headers:
+        h["access-control-allow-headers"] = preflight_headers
+        h["access-control-allow-methods"] = str(rule.get("allowedMethods") or "GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH").replace(",", ", ").replace(",  ", ", ")
+        h["access-control-max-age"] = str(rule.get("maxAgeInSeconds", 0) or 0)
+    if rule.get("exposedHeaders"):
+        h["access-control-expose-headers"] = str(rule["exposedHeaders"])
+    return h
+
+
+# ── customer-managed key (account.properties.keyVaultKeyUri): ENFORCED envelope encryption at rest ──────────────
+# Documents live in `store.docs` only inside a request. Between requests `store.docs` holds a single CMK envelope
+# ({"$cmk": envelope}, DEK wrapped by the Key Vault key — core/azure_cmk_core.py); a request opens it (unwrapKey),
+# serves, and re-seals under the key's latest version. A disabled / deleted / expired key => 403 Forbidden
+# (substatus 4000, "customer-managed key inaccessible") and the data stays unreadable at rest. The simulator has ONE
+# Cosmos data store shared by every account (documents are not partitioned per account), so the sealed unit is that
+# whole store, driven by the account the request resolves to.
+CMK_SLOT = "$cmk"
+
+
+def _cmk_scope_for(store, acct, arm_state=None):
+    uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
+    sealed = isinstance(getattr(store, "docs", None), dict) and CMK_SLOT in store.docs
+    if not uri:      # the data store is shared by every account: any CMK account protects it, so re-seal under that key
+        for a in _cosmos_accounts(arm_state or {}):
+            u = (a.get("properties") or {}).get("keyVaultKeyUri")
+            if u:
+                uri = u
+                break
+    return uri, sealed
+
+
+class _CmkScope:
+    def __init__(self, store, uri, sealed, kv_store=None):
+        self.store, self.uri, self.sealed, self.kv = store, uri, sealed, kv_store
+        self.active = False
+
+    def __enter__(self):
+        from core import azure_cmk_core as cmk
+        self.cmk = cmk
+        self.kv = cmk.keys(self.kv)
+        cmk.LOCK.acquire()
+        self.locked = True
+        try:
+            return self._enter(cmk)
+        except BaseException:
+            self.locked = False
+            cmk.LOCK.release()
+            raise
+
+    def _enter(self, cmk):
+        self.sealed = isinstance(getattr(self.store, "docs", None), dict) and CMK_SLOT in self.store.docs
+        if self.kv is None or not (self.uri or self.sealed):
+            return self
+        if self.uri:
+            ok, why = cmk.usable(self.kv, self.uri)
+            if not ok:
+                raise _CmkDenied(f"Request is blocked: the account's customer-managed key cannot be used ({why}). "
+                                 "Data is unreadable until the key is enabled / recovered.")
+        if self.sealed:
+            try:
+                plain = json.loads(cmk.unseal(self.kv, self.store.docs[CMK_SLOT]).decode())
+            except cmk.CmkError as e:
+                raise _CmkDenied(e.message)
+            self.store.docs.clear()
+            self.store.docs.update(plain)
+        self.active = True
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if not self.active or not self.uri:
+                return False
+            try:
+                env = self.cmk.seal(self.kv, self.uri, json.dumps(self.store.docs, sort_keys=True, default=str).encode())
+            except self.cmk.CmkError:
+                return False
+            self.store.docs.clear()
+            self.store.docs[CMK_SLOT] = env
+            try:
+                self.store.persist()
+            except Exception:
+                pass
+            return False
+        finally:
+            if getattr(self, "locked", False):
+                self.locked = False
+                self.cmk.LOCK.release()
+
+
+class _CmkDenied(Exception):
+    pass
+
+
+def rotate_cmk(store, acct, kv_store=None):
+    """Key rotation: re-wrap the envelope's DEK under the account key's latest version (data ciphertext untouched)."""
+    from core import azure_cmk_core as cmk
+    kv = cmk.keys(kv_store)
+    uri = ((acct or {}).get("properties") or {}).get("keyVaultKeyUri")
+    if kv is not None and uri and CMK_SLOT in store.docs:
+        store.docs[CMK_SLOT] = cmk.rewrap(kv, store.docs[CMK_SLOT], uri)
+    return store.docs.get(CMK_SLOT)
+
+
+# ── Dedicated gateway: INTEGRATED CACHE (databaseAccounts/services/SqlDedicatedGateway) ──────────────────────────────
+# A request that arrives on the dedicated-gateway endpoint (host `<acct>.sqlx.cosmos.azure.com`, or header
+# `x-vyomi-endpoint: dedicated`) is served through a read-through cache in front of the account's data: point reads and
+# queries are cached for `x-ms-dedicatedgateway-max-age` ms (MaxIntegratedCacheStaleness; default 300000 = 5 min; 0 or
+# `x-ms-cosmos-bypass-integrated-cache` bypasses).  A hit costs 0 RU and carries `x-ms-cosmos-cachehit: True`.  Item writes
+# through the gateway are write-through for that item's point-read entry (replace updates, delete evicts); the QUERY cache is
+# never invalidated by writes - it is stale until its TTL, exactly the real trade-off.  Requests on the dedicated endpoint
+# are refused (503) when the account has no running SqlDedicatedGateway service.  The cache is per account, bounded
+# (CACHE_MAX entries, oldest evicted) and holds nothing for the standard gateway endpoint.
+CACHE_MAX = 1000
+DEFAULT_MAX_AGE_MS = 300000
+
+
+def _dedicated_request(hd) -> bool:
+    return str(hd.get("x-vyomi-endpoint", "")).lower() == "dedicated" or str(hd.get("host", "")).split(":")[0].lower().endswith(".sqlx.cosmos.azure.com")
+
+
+def _gateway_running(arm_state, acct) -> bool:
+    rec = (arm_state or {}).get(f"{acct['id']}/services/sqldedicatedgateway".lower())
+    return bool(rec) and str(((rec.get("properties") or {}).get("status") or "Running")).lower() == "running"
+
+
+def _gw(store):
+    g = getattr(store, "_dgw", None)
+    if g is None:
+        g = store._dgw = {"cache": {}, "metrics": {}}
+    return g
+
+
+def gateway_metrics(store, acct_id=None):
+    out = {}
+    for k, m in _gw(store)["metrics"].items():
+        if acct_id is None or k == acct_id.lower():
+            n = sum(1 for ck in _gw(store)["cache"] if ck[0] == k)
+            out[k] = {**m, "entries": n, "hitRatio": round(m["hits"] / (m["hits"] + m["misses"]), 3) if (m["hits"] + m["misses"]) else None}
+    return out
+
+
+def _gateway_dispatch(store, acct, hd, method, path, query, headers, body, arm_state, kv_store, now=None):
+    g = _gw(store)
+    key0 = acct["id"].lower()
+    m = g["metrics"].setdefault(key0, {"hits": 0, "misses": 0, "bypass": 0, "writeThrough": 0, "evictions": 0, "requestChargeSaved": 0.0})
+    now = now if now is not None else _clock()
+    segs = [s for s in path.split("?", 1)[0].split("/") if s]
+    meth = method.upper()
+    is_query = str(hd.get("x-ms-documentdb-isquery", "")).lower() == "true" or str(hd.get("content-type", "")).startswith("application/query+json")
+    doc_path = len(segs) >= 6 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs"
+    coll_docs = len(segs) == 5 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs"
+    pk = hd.get("x-ms-documentdb-partitionkey", "")
+    inner = lambda: _dispatch_cmk(store, method, path, query, headers, body, arm_state, kv_store)
+    cacheable = (meth == "GET" and doc_path) or (meth == "POST" and coll_docs and is_query)
+    try:
+        max_age = int(hd.get("x-ms-dedicatedgateway-max-age", DEFAULT_MAX_AGE_MS))
+    except ValueError:
+        max_age = DEFAULT_MAX_AGE_MS
+    bypass = max_age <= 0 or str(hd.get("x-ms-cosmos-bypass-integrated-cache", "")).lower() == "true"
+    if cacheable and not bypass:
+        ck = (key0, meth, path.split("?", 1)[0].rstrip("/"), pk, bytes(body or b"") if is_query else b"")
+        hit = g["cache"].get(ck)
+        if hit and hit["expires"] > now and hit["stored_at"] + max_age / 1000.0 > now:
+            m["hits"] += 1
+            m["requestChargeSaved"] = round(m["requestChargeSaved"] + hit["charge"], 3)
+            r = Response(status=hit["status"], headers={**hit["headers"], "x-ms-request-charge": "0", "x-ms-cosmos-cachehit": "True"}, body=hit["body"])
+            return r
+        r = inner()
+        m["misses"] += 1
+        if r.status == 200:
+            if len(g["cache"]) >= CACHE_MAX:
+                for old in sorted(g["cache"], key=lambda k: g["cache"][k]["stored_at"])[:max(1, CACHE_MAX // 10)]:
+                    g["cache"].pop(old, None)
+                    m["evictions"] += 1
+            g["cache"][ck] = {"stored_at": now, "expires": now + DEFAULT_MAX_AGE_MS * 1000.0, "status": r.status,
+                              "headers": {k: v for k, v in (r.headers or {}).items() if k.lower() != "x-ms-request-charge"},
+                              "body": r.body, "charge": float((r.headers or {}).get("x-ms-request-charge") or 0)}
+        r.headers["x-ms-cosmos-cachehit"] = "False"
+        return r
+    if cacheable:
+        m["bypass"] += 1
+    r = inner()
+    wt_base = None
+    if doc_path and meth in ("PUT", "DELETE") and r.status < 300:      # item write-through / evict (point-read entries only)
+        wt_base = path.split("?", 1)[0].rstrip("/")
+    elif coll_docs and meth == "POST" and not is_query and r.status < 300:        # create / upsert
+        try:
+            wt_base = path.split("?", 1)[0].rstrip("/") + "/" + str(json.loads(r.body).get("id"))
+            meth = "PUT"
+        except Exception:
+            wt_base = None
+    if wt_base:
+        base = wt_base
+        for ck in [k for k in g["cache"] if k[0] == key0 and k[1] == "GET" and k[2] == base]:
+            if meth == "DELETE":
+                g["cache"].pop(ck, None)
+                m["evictions"] += 1
+            else:
+                g["cache"][ck].update(body=r.body, stored_at=now)
+                m["writeThrough"] += 1
+    return r
+
+
+def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> Response:
+    """Cosmos CORS wrapper (azure.cosmos.cors) around the data-plane dispatch: an OPTIONS preflight is answered from the
+    account's properties.cors rules (no matching rule -> 403 and NO Access-Control-* headers, so a browser blocks the call),
+    and a real request carrying an admitted Origin gets Access-Control-Allow-Origin / -Expose-Headers on its response."""
+    hdrs = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    origin = hdrs.get("origin")
+    acct = resolve_account(arm_state, hdrs) if arm_state else None
+    if acct is None or not origin:
+        resp = _dispatch_data(store, method, path, query, headers, body, arm_state, kv_store)
+        if acct is not None:      # diagnostic settings (DataPlaneRequests): real delivery (core/azure_diag_pipeline.py)
+            try:
+                from core import azure_diag_pipeline as _dp
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_diag_pipeline as _dp  # type: ignore
+            _dp.emit_log(arm_state, acct["id"], "DataPlaneRequests", f"{method.upper()} {path.split('?', 1)[0]}",
+                         "Success" if resp.status < 400 else "Failure", {"statusCode": resp.status})
+        return resp
+    denied = _cosmos_net_denied(arm_state, acct, hdrs)
+    if denied:
+        return _err(*denied)
+    if method.upper() == "OPTIONS":
+        rule = _cors_rule(acct, origin, hdrs.get("access-control-request-method", ""), hdrs.get("access-control-request-headers", ""))
+        if rule is None:
+            return _err(403, "Forbidden", f"CORS preflight rejected: origin '{origin}' is not allowed by the account's CORS rules.")
+        return Response(status=200, headers=_cors_headers(rule, origin, hdrs.get("access-control-request-headers") or "x-ms-version"), body=b"", media_type=None)
+    resp = _dispatch_data(store, method, path, query, headers, body, arm_state, kv_store)
+    rule = _cors_rule(acct, origin, method)
+    if rule is not None:
+        resp.headers = {**(resp.headers or {}), **_cors_headers(rule, origin)}
+    return resp
+
+
+def _dispatch_data(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> Response:
+    """CMK-aware entry: seals / opens the account's data around `_dispatch_plain`."""
+    hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hd) if arm_state else None
+    if acct is not None and _dedicated_request(hd) and [x for x in path.split("/") if x][:2] != ["vyomi", "dedicatedgateway"]:
+        if not _gateway_running(arm_state, acct):
+            return _err(503, "ServiceUnavailable", f"The dedicated gateway endpoint of account '{acct.get('name')}' is not available: no running "
+                                                   "SqlDedicatedGateway service is provisioned for this account.")
+        return _gateway_dispatch(store, acct, hd, method, path, query, headers, body, arm_state, kv_store)
+    if [x for x in path.split("?", 1)[0].split("/") if x][:2] == ["vyomi", "dedicatedgateway"] and method.upper() == "GET":
+        return _json(200, {"metrics": gateway_metrics(store, acct["id"] if acct else None)})
+    return _dispatch_cmk(store, method, path, query, headers, body, arm_state, kv_store)
+
+
+def _dispatch_cmk(store, method, path, query, headers, body, arm_state, kv_store):
+    hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hd) if arm_state else None
+    uri, sealed = _cmk_scope_for(store, acct, arm_state)
+    if not (uri or sealed):
+        return _dispatch_plain(store, method, path, query, headers, body, arm_state)
+    try:
+        with _CmkScope(store, uri, sealed, kv_store):
+            return _dispatch_plain(store, method, path, query, headers, body, arm_state)
+    except _CmkDenied as e:
+        r = _err(403, "Forbidden", str(e))
+        r.headers["x-ms-substatus"] = "4000"
+        return r
+
+
+def _dispatch_plain(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+                    body: bytes = b"", arm_state: dict | None = None) -> Response:
+    """Data-plane dispatch. With `arm_state` (the Azure ARM state) the target account's network rules and provisioned /
+    autoscale throughput are ENFORCED: a denied caller gets 403, a request that would exceed the offer in the trailing
+    second gets 429 (RequestRateTooLarge) with x-ms-retry-after-ms; every response carries x-ms-request-charge (modelled RU)."""
+    hdrs = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hdrs) if arm_state else None
+    segs = [s for s in path.split("?", 1)[0].split("/") if s]
+    if acct is not None and segs:
+        denied = _cosmos_net_denied(arm_state, acct, hdrs)
+        if denied:
+            return _err(*denied)
+    if segs[:2] == ["vyomi", "migrations"]:
+        m = method.upper()
+        if m == "GET":
+            return _json(200, {"migrations": list(getattr(store, "migrations", []) or [])})
+        if m == "POST":
+            try:
+                spec = json.loads(body.decode("utf-8")) if body else {}
+            except ValueError:
+                return _err(400, "BadRequest", "Migration spec is not valid JSON.")
+            job = migrate(store, spec, arm_state, acct)
+            return _json(400 if job.get("status") == "Failed" and "read" not in job else 200, job)
+        return _err(405, "MethodNotAllowed", "GET or POST only.")
+    if segs[:2] in (["vyomi", "export"], ["vyomi", "odata"]):
+        return _export_route(store, method, segs, query or {})
+    is_query = str(hdrs.get("x-ms-documentdb-isquery", "")).lower() == "true"
+    charge = request_charge(method, len(body or b""), 200, is_query)
+    lim = None
+    if acct is not None and len(segs) >= 4 and segs[0] == "dbs" and segs[2] == "colls" and (len(segs) >= 5 or method.upper() != "GET"):
+        lim = _limit_for(arm_state, acct["id"], segs[1], segs[3])
+    if lim is not None:
+        scope, limit, mode = lim
+        now = _clock()
+        win = _WINDOW.setdefault((acct["id"].lower(), scope), [])
+        win[:] = [(t, c) for t, c in win if now - t < 1.0]
+        used = sum(c for _, c in win)
+        if used + charge > limit and used > 0 or charge > limit:
+            retry = max(1, int(1000 - (now - win[0][0]) * 1000)) if win else 1000
+            r = _err(429, "RequestRateTooLarge",
+                     f"Request rate is large. More Request Units may be needed, so no changes were made. Please retry this request later. "
+                     f"({mode} offer {limit} RU/s on '{scope}', {round(used, 2)} RU used in the last second, this request costs {charge} RU)")
+            r.headers.update({"x-ms-retry-after-ms": str(retry), "x-ms-request-charge": str(charge), "x-ms-substatus": "3200"})
+            return r
+        win.append((now, charge))
+    r = _dispatch_inner(store, method, path, query, headers, body)
+    if r.status < 400:
+        r.headers.setdefault("x-ms-request-charge", str(charge))
+        if arm_state and r.status in (200, 201) and len(segs) >= 5 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs" \
+                and method.upper() in ("POST", "PUT") and not is_query:
+            try:
+                doc = json.loads(r.body) if isinstance(r.body, (bytes, str)) else r.body
+                if isinstance(doc, dict) and doc.get("id") is not None:
+                    fire_change_feed_triggers(arm_state, acct, segs[1], segs[3], [doc])
+            except Exception:   # a failing trigger never fails the write
+                pass
+    return r
+
+
+# ── Export endpoints for BI tools (azure.cosmos.powerbi): REAL data read from the container, served as OData v4 (Power BI
+# Desktop "OData feed"), CSV, JSON and Parquet. This is an export endpoint over the data, NOT a Power BI service connector. ──
+#   GET /vyomi/odata/{db}                      OData service document (one entity set per container)
+#   GET /vyomi/odata/{db}/$metadata            CSDL (entity type inferred from the documents)
+#   GET /vyomi/odata/{db}/{container}          {"@odata.context", "value": [...]}   ($top, $skip honoured)
+#   GET /vyomi/export/{db}/{container}.csv|.json|.parquet
+def _export_docs(store, db, coll):
+    r = _dispatch_inner(store, "GET", f"/dbs/{db}/colls/{coll}/docs")
+    if r.status >= 400:
+        return None, r
+    docs = json.loads(r.body.decode("utf-8")).get("Documents") or []
+    return [{k: v for k, v in d.items() if k not in _SYS_PROPS} for d in docs], None
+
+
+def _flat(doc, prefix=""):
+    out = {}
+    for k, v in doc.items():
+        key = f"{prefix}{k}"
+        if isinstance(v, dict):
+            out.update(_flat(v, key + "."))
+        elif isinstance(v, list):
+            out[key] = json.dumps(v)
+        else:
+            out[key] = v
+    return out
+
+
+def _kind(vals):
+    vs = [v for v in vals if v is not None]
+    if vs and all(isinstance(v, bool) for v in vs):
+        return "bool"
+    if vs and all(isinstance(v, int) and not isinstance(v, bool) for v in vs):
+        return "int64"
+    if vs and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vs):
+        return "float64"
+    return "string"
+
+
+def _table(docs):
+    rows = [_flat(d) for d in docs]
+    cols = []
+    for r in rows:
+        for k in r:
+            if k not in cols:
+                cols.append(k)
+    return cols, rows
+
+
+def _export_route(store, method, segs, query):
+    if method.upper() != "GET":
+        return _err(405, "MethodNotAllowed", "Export endpoints are read-only (GET).")
+    if segs[1] == "odata":
+        if len(segs) < 3:
+            return _err(400, "BadRequest", "Use /vyomi/odata/{database}.")
+        db = segs[2]
+        base = "/vyomi/odata/" + db
+        dbs = json.loads(_dispatch_inner(store, "GET", "/dbs").body.decode("utf-8")).get("Databases") or []
+        if db not in [d.get("id") for d in dbs]:
+            return _err(404, "NotFound", f"Database '{db}' not found.")
+        colls = [c["id"] for c in json.loads(_dispatch_inner(store, "GET", f"/dbs/{db}/colls").body.decode("utf-8")).get("DocumentCollections") or []]
+        if len(segs) == 3:
+            return _json(200, {"@odata.context": base + "/$metadata", "value": [{"name": c, "kind": "EntitySet", "url": c} for c in colls]},
+                         {"OData-Version": "4.0"})
+        if segs[3] == "$metadata":
+            ents, sets = [], []
+            for c in colls:
+                docs, _ = _export_docs(store, db, c)
+                cols, rows = _table(docs or [])
+                edm = {"bool": "Edm.Boolean", "int64": "Edm.Int64", "float64": "Edm.Double", "string": "Edm.String"}
+                props = "".join(f'<Property Name="{k.replace(".", "_")}" Type="{edm[_kind([r.get(k) for r in rows])]}" Nullable="true"/>' for k in cols if k != "id")
+                ents.append(f'<EntityType Name="{c}"><Key><PropertyRef Name="id"/></Key><Property Name="id" Type="Edm.String" Nullable="false"/>{props}</EntityType>')
+                sets.append(f'<EntitySet Name="{c}" EntityType="Vyomi.{c}"/>')
+            xml = ('<?xml version="1.0" encoding="utf-8"?><edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">'
+                   '<edmx:DataServices><Schema Namespace="Vyomi" xmlns="http://docs.oasis-open.org/odata/ns/edm">'
+                   + "".join(ents) + '<EntityContainer Name="Container">' + "".join(sets) + "</EntityContainer></Schema></edmx:DataServices></edmx:Edmx>")
+            return Response(status=200, headers={"OData-Version": "4.0"}, body=xml.encode("utf-8"), media_type="application/xml")
+        if segs[3] not in colls:
+            return _err(404, "NotFound", f"Entity set '{segs[3]}' not found.")
+        docs, bad = _export_docs(store, db, segs[3])
+        _cols, rows = _table(docs)
+        rows = [{k.replace(".", "_"): v for k, v in r.items()} for r in rows]
+        try:
+            skip, top = int(query.get("$skip") or 0), query.get("$top")
+            rows = rows[skip:skip + int(top)] if top is not None else rows[skip:]
+        except ValueError:
+            return _err(400, "BadRequest", "$top and $skip must be integers.")
+        return _json(200, {"@odata.context": f"{base}/$metadata#{segs[3]}", "value": rows}, {"OData-Version": "4.0"})
+    # /vyomi/export/{db}/{container}.{fmt}
+    if len(segs) != 4 or "." not in segs[3]:
+        return _err(400, "BadRequest", "Use /vyomi/export/{database}/{container}.csv|json|parquet.")
+    db, (coll, fmt) = segs[2], segs[3].rsplit(".", 1)
+    docs, bad = _export_docs(store, db, coll)
+    if bad is not None:
+        return bad
+    cols, rows = _table(docs)
+    if fmt == "json":
+        return _json(200, {"value": docs})
+    if fmt == "csv":
+        import csv
+        import io
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(cols)
+        for r in rows:
+            w.writerow(["" if r.get(c) is None else r.get(c) for c in cols])
+        return Response(status=200, headers={"Content-Disposition": f'attachment; filename="{coll}.csv"'}, body=buf.getvalue().encode("utf-8"), media_type="text/csv")
+    if fmt == "parquet":
+        try:
+            from core import rds_core as _r
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            import rds_core as _r  # type: ignore
+        wr = _r._resolve_parquet_writer()
+        if wr is None:
+            return _err(501, "NotImplemented", "Parquet export needs the offline appliance (pyarrow); this context has no Parquet engine. Use .csv or the OData feed.")
+        schema = [{"name": c, "type": _kind([r.get(c) for r in rows])} for c in cols]
+        columns = [[r.get(c) if _kind([x.get(c) for x in rows]) != "string" or r.get(c) is None else str(r.get(c)) for r in rows] for c in cols]
+        try:
+            data = wr(schema, columns)
+        except Exception as e:  # noqa: BLE001
+            return _err(500, "InternalServerError", f"Parquet writer failed: {e}")
+        if not isinstance(data, (bytes, bytearray)):
+            return _err(501, "NotImplemented", "The Parquet engine in this context is asynchronous; use the offline appliance, .csv or the OData feed.")
+        return Response(status=200, headers={"Content-Disposition": f'attachment; filename="{coll}.parquet"'}, body=bytes(data), media_type="application/octet-stream")
+    return _err(400, "BadRequest", f"Unknown format '{fmt}'. Use csv, json or parquet.")
+
+
+# ── Data Migration (the portal's "Data Migration" blade): a REAL container -> container / JSON -> container copy ──────────
+_SYS_PROPS = ("_rid", "_self", "_etag", "_ts", "_attachments", "_lsn")
+
+
+def _apply_mapping(doc: dict, mapping: dict) -> dict:
+    out = {k: v for k, v in doc.items() if k not in _SYS_PROPS}
+    for old, new in (mapping.get("rename") or {}).items():
+        if old in out and new and new != old:
+            out[new] = out.pop(old)
+    for k in mapping.get("drop") or []:
+        out.pop(k, None)
+    for k, v in (mapping.get("set") or {}).items():
+        out[k] = v
+    return out
+
+
+def migrate(store: CosmosStore, spec: dict, arm_state: dict | None = None, acct: dict | None = None) -> dict:
+    """Copy documents into a target container through the SAME write path the data plane uses (system properties
+    regenerated, _lsn advanced so the change feed / cosmosDBTrigger functions see every migrated row, partition-key
+    path of the target honoured).  Source: a container (optionally narrowed by a SQL query) or inline JSON rows.
+    ``conflict``: upsert (default) | skip | fail (stop at the first existing id).  ``dryRun`` only counts."""
+    src, dst = spec.get("source") or {}, spec.get("target") or {}
+    conflict = str(spec.get("conflict") or "upsert").lower()
+    if conflict not in ("upsert", "skip", "fail"):
+        return {"status": "Failed", "error": "conflict must be upsert, skip or fail."}
+    mapping = spec.get("mapping") or {}
+    tdb, tcoll = dst.get("database"), dst.get("container")
+    if not tdb or not tcoll:
+        return {"status": "Failed", "error": "target.database and target.container are required."}
+    if str(src.get("type") or "container").lower() == "json":
+        rows = src.get("data")
+        if isinstance(rows, str):
+            try:
+                rows = json.loads(rows)
+            except ValueError:
+                return {"status": "Failed", "error": "source.data is not valid JSON."}
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            return {"status": "Failed", "error": "source.data must be a JSON array of objects."}
+        label = "json"
+    else:
+        sdb, scoll = src.get("database"), src.get("container")
+        if sdb not in store.docs or scoll not in store.docs.get(sdb, {}):
+            return {"status": "Failed", "error": f"Source container '{sdb}/{scoll}' does not exist."}
+        if (sdb, scoll) == (tdb, tcoll):
+            return {"status": "Failed", "error": "Source and target are the same container."}
+        rows = list(store.docs[sdb][scoll].values())
+        if src.get("query"):
+            try:
+                rows = _run_query(rows, src["query"])
+            except Exception as e:                         # noqa: BLE001
+                return {"status": "Failed", "error": f"Source query failed: {e}"}
+        rows = sorted(rows, key=lambda d: d.get("_lsn", 0))
+        label = f"{sdb}/{scoll}"
+    job = {"id": _rid(), "source": label, "target": f"{tdb}/{tcoll}", "conflict": conflict, "dryRun": bool(spec.get("dryRun")),
+           "startedAt": _now_ts(), "read": len(rows), "migrated": 0, "created": 0, "replaced": 0, "skipped": 0, "failed": 0, "errors": []}
+    if not job["dryRun"]:
+        if tdb not in store.dbs:
+            _dispatch_inner(store, "POST", "/dbs", body=json.dumps({"id": tdb}).encode())
+        if tcoll not in store.colls.get(tdb, {}):
+            pk = dst.get("partitionKeyPath") or "/id"
+            r = _dispatch_inner(store, "POST", f"/dbs/{tdb}/colls", body=json.dumps({"id": tcoll, "partitionKey": {"paths": [pk], "kind": "Hash"}}).encode())
+            if r.status >= 400:
+                job.update(status="Failed", error="Could not create the target container.")
+                return job
+            job["createdTarget"] = True
+    existing = store.docs.get(tdb, {}).get(tcoll, {})
+    for raw in rows:
+        doc = _apply_mapping(raw, mapping)
+        did = doc.get("id")
+        if did in (None, ""):
+            job["failed"] += 1
+            job["errors"].append("a source row has no 'id'")
+            if conflict == "fail":
+                break
+            continue
+        did = str(did)
+        doc["id"] = did
+        if did in existing and conflict == "skip":
+            job["skipped"] += 1
+            continue
+        if did in existing and conflict == "fail":
+            job["failed"] += 1
+            job["errors"].append(f"id '{did}' already exists in the target; stopped (conflict=fail)")
+            break
+        if job["dryRun"]:
+            job["replaced" if did in existing else "created"] += 1
+            job["migrated"] += 1
+            continue
+        had = did in existing
+        r = _dispatch_inner(store, "POST", f"/dbs/{tdb}/colls/{tcoll}/docs", headers={"x-ms-documentdb-is-upsert": "true"},
+                            body=json.dumps(doc).encode())
+        if r.status >= 400:
+            job["failed"] += 1
+            job["errors"].append(f"{did}: {r.status}")
+            continue
+        job["replaced" if had else "created"] += 1
+        job["migrated"] += 1
+        if arm_state:
+            try:
+                fire_change_feed_triggers(arm_state, acct, tdb, tcoll, [json.loads(r.body) if isinstance(r.body, (bytes, str)) else r.body])
+            except Exception:                              # noqa: BLE001 - a failing trigger never fails the copy
+                pass
+    job["errors"] = job["errors"][:20]
+    job["status"] = "Failed" if (job["failed"] and not job["migrated"]) else ("CompletedWithErrors" if job["failed"] else "Succeeded")
+    job["completedAt"] = _now_ts()
+    if not job["dryRun"]:
+        hist = getattr(store, "migrations", None)
+        if hist is None:
+            hist = store.migrations = []
+        hist.append(job)
+        del hist[:-50]
+        store.persist()
+    return job
+
+
+# ── Azure Functions cosmosDBTrigger (change feed -> function) ──────────────────────────────────────────────────────────
+def _binding_get(b: dict, *names):
+    for n in names:
+        if b.get(n) not in (None, ""):
+            return b[n]
+    return None
+
+
+def _trigger_account(rec: dict, conn_name: str) -> str | None:
+    """Account name a function app's connection setting points at (`<conn>` connection string or `<conn>__accountEndpoint`)."""
+    st = rec.get("_appsettings") or {}
+    val = st.get(conn_name) or st.get(f"{conn_name}__accountEndpoint") or ""
+    m = re.search(r"https?://([a-z0-9-]+)\.documents\.azure\.com", str(val), re.I)
+    return m.group(1).lower() if m else None
+
+
+def change_feed_triggers(arm_state: dict, acct: dict | None, db: str, coll: str) -> list:
+    """(app record, function, binding) for every enabled cosmosDBTrigger function watching this container."""
+    out = []
+    want_acct = ((acct or {}).get("name") or (acct or {}).get("id", "").rsplit("/", 1)[-1]).lower() if acct else None
+    for rec in (arm_state or {}).values():
+        fns = rec.get("_functions") if isinstance(rec, dict) else None
+        if not fns or str((rec.get("properties") or {}).get("state", "Running")).lower() == "stopped":
+            continue
+        for fn in fns.values():
+            fp = fn.get("properties") or {}
+            if fp.get("isDisabled"):
+                continue
+            for b in (fp.get("config") or {}).get("bindings") or []:
+                if str(b.get("type", "")).lower() != "cosmosdbtrigger" or str(b.get("direction", "in")).lower() != "in":
+                    continue
+                if _binding_get(b, "databaseName", "database_name") != db or _binding_get(b, "containerName", "container_name", "collectionName") != coll:
+                    continue
+                conn = _binding_get(b, "connection", "connectionStringSetting")
+                tacct = _trigger_account(rec, conn) if conn else None
+                if want_acct and tacct != want_acct:
+                    continue
+                out.append((rec, fn, b))
+    return out
+
+
+def fire_change_feed_triggers(arm_state: dict, acct: dict | None, db: str, coll: str, docs: list) -> int:
+    """Run every watching function with the changed documents, through the Function App's real sandboxed invoke path
+    (so scale/network/auth gates apply and the run lands in the invocation log). Returns the number of functions run."""
+    try:
+        from core.azure_webapp_core import _invoke_function
+    except ImportError:  # pragma: no cover
+        from azure_webapp_core import _invoke_function  # type: ignore
+    n = 0
+    for rec, fn, b in change_feed_triggers(arm_state, acct, db, coll):
+        req = {"method": "POST", "query": {}, "headers": {"x-vyomi-trigger": "cosmosDBTrigger"},
+               "body": {"documents": docs}, "trigger": {"type": "cosmosDBTrigger", "databaseName": db, "containerName": coll,
+                                                         "bindingName": b.get("name")}}
+        _invoke_function(rec, fn, req)
+        n += 1
+    return n

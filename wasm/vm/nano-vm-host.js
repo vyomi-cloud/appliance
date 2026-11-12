@@ -72,7 +72,7 @@
       const m = e.data || {};
       if (m.rid && h.waits.has(m.rid)) { const r = h.waits.get(m.rid); h.waits.delete(m.rid); r(m); }
       if (m.type === "vm-status" || (m.rid && m.state)) { h.status = { ...m }; onStatus(id, h.status); }
-      if (m.type === "serial-out") for (const f of serialSubs) { try { f(id, m.data); } catch (_) {} }
+      if (m.type === "serial-out") { noteSerial(id, m.data); for (const f of serialSubs) { try { f(id, m.data); } catch (_) {} } }
     };
     w.port.start();
     handles.set(id, h);
@@ -89,6 +89,61 @@
   }
   const serialSubs = new Set();
 
+  // ── guest agent (Compute Engine only) ───────────────────────────────────
+  // What the GCE guest agent does, done from the page: (1) keep a bounded tail of the VM's real ttyS0 output and report it, so
+  // instances.getSerialPortOutput returns the VM's actual console text; (2) once the VM is running, read os-release / uname /
+  // /proc over the same serial shell and report it, so osInfo + getGuestAttributes answer from the live guest. Both reports
+  // ride the existing Annotate path (rec.update) into the instance record; private `_`-keys are not part of the instance JSON.
+  // The probe types one line into the VM shell (visible if the xterm panel is open). Not available for EC2/Azure VMs.
+  const SERIAL_KEEP = 32768;
+  const tails = new Map();      // id -> {text, base}
+  const flushT = new Map();
+  function noteSerial(id, data) {
+    if (typeof data !== "string") return;
+    let t = tails.get(id); if (!t) { t = { text: "", base: 0 }; tails.set(id, t); }
+    t.text += data;
+    if (t.text.length > SERIAL_KEEP) { const cut = t.text.length - SERIAL_KEEP; t.text = t.text.slice(cut); t.base += cut; }
+    if (flushT.has(id)) return;
+    flushT.set(id, setTimeout(() => { flushT.delete(id); reportGuest(id, {}); }, 4000));
+  }
+  function reportGuest(id, extra) {
+    const it = readReg()[id], t = tails.get(id);
+    if (!it || it.cloud !== "gcp" || !annotateFn || !t) return;
+    try { annotateFn(it.cloud, it.ref, { _serial: t.text, _serialBase: t.base, ...extra }); } catch (_) {}
+  }
+  const PROBE = "echo VYGA-$((1+1))-B; . /etc/os-release 2>/dev/null; echo \"PN=$PRETTY_NAME\"; echo \"ID=$ID\"; echo \"VER=$VERSION_ID\"; " +
+    "echo \"HN=$(hostname)\"; echo \"KR=$(uname -sr)\"; echo \"AR=$(uname -m)\"; echo \"UP=$(cut -d' ' -f1 /proc/uptime)\"; " +
+    "echo \"MEM=$(grep MemTotal /proc/meminfo | tr -s ' ' | cut -d' ' -f2)\"; echo VYGA-$((1+1))-E\r";
+  const probed = new Map();     // id -> {tries, done}
+  function probeGuest(id) {
+    const it = readReg()[id]; if (!it || it.cloud !== "gcp") return Promise.resolve(false);
+    const h = attach(id);
+    return new Promise((resolve) => {
+      let buf = "";
+      const off = onSerial((sid, d) => {
+        if (sid !== id || typeof d !== "string") return;
+        buf += d;
+        const m = /VYGA-2-B\r?\n([\s\S]*?)VYGA-2-E/.exec(buf);
+        if (!m) return;
+        off(); clearTimeout(to);
+        const kv = {}; m[1].split(/\r?\n/).forEach((l) => { const i = l.indexOf("="); if (i > 0) kv[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+        const guest = { prettyName: kv.PN || "", id: kv.ID || "", version: kv.VER || "", hostname: kv.HN || "", kernel: kv.KR || "", architecture: kv.AR || "",
+                        uptimeSeconds: parseFloat(kv.UP) || null, memoryKb: parseInt(kv.MEM, 10) || null, reportedAt: new Date().toISOString() };
+        reportGuest(id, { _guest: guest }); resolve(true);
+      });
+      const to = setTimeout(() => { off(); resolve(false); }, 15000);
+      h.port.postMessage({ type: "serial-in", data: PROBE });
+    });
+  }
+  function maybeProbe(id, st) {
+    if (st.state !== "running") { probed.delete(id); return; }
+    const p = probed.get(id) || { tries: 0, done: false };
+    probed.set(id, p);
+    if (p.done || p.busy || p.tries >= 4) return;
+    p.busy = true;
+    setTimeout(async () => { p.tries++; p.done = await probeGuest(id); p.busy = false; if (!p.done) setTimeout(() => maybeProbe(id, { state: "running" }), 10000); }, p.tries ? 1000 : 6000);
+  }
+
   // Runtime facts → the instance record (grid / describe show launch status + ssh port).
   let annotateFn = null;
   const lastAnn = new Map();
@@ -103,6 +158,7 @@
     }
     const reg = readReg(), it = reg[id];
     if (!it || !annotateFn) return;
+    if (it.cloud === "gcp") maybeProbe(id, st);
     const ann = { launch_status: st.state === "running" ? "ready" : st.state, nano_vm: { engine: "v86", state: st.state, host_port: st.host_port || null, image: st.image } };
     if (st.state === "running" && st.host_port) ann.ssh_command = sshCommand(it, st.host_port);
     const sig = JSON.stringify(ann);
@@ -117,7 +173,7 @@
     const k = await accountKey();
     const keys = [k.pub, ...(it.keys || [])].join("\n");
     return call(it.id, { type: "launch", id: it.id, cloud: it.cloud, user: it.user, pubkey: keys, hostname: it.name || it.ref,
-                         mem_mb: it.mem_mb || 256, relay: relayBase() });
+                         mem_mb: it.mem_mb || 512, relay: relayBase() });
   }
 
   // ── reconcile: stores → VMs ─────────────────────────────────────────────
@@ -156,8 +212,10 @@
     })().finally(() => { reconciling = null; });
     return reconciling;
   }
+  let loop = null;
   function kick() {
     if (!enabled()) return;
+    if (!loop && listDesired) loop = setInterval(reconcile, 5000);   // the flag may have been turned on after init (no reload)
     clearTimeout(recTimer);
     recTimer = setTimeout(async () => { await reconcile(); setTimeout(reconcile, 1500); }, 50);
   }
@@ -203,6 +261,15 @@
       if (!r.ok) return http(r.error === "timeout" || /timed out/.test(r.error || "") ? 504 : 409, { detail: r.error || "exec failed" });
       return { ok: true, message: "Console command executed", instance_id: ref, stdout: r.stdout, stderr: "", exit_code: r.exit_code, output: r.stdout };
     }
+    if (/^Guest(Inventory|Performance|Updates)$/.test(op)) {
+      // Azure VM guest views: the appliance's own scripts, run in the VM; parsed by core/nano_vm_runtime_core.py.
+      if (!st || st.state !== "running") return http(409, { detail: "InstanceNotRunning", state: st && st.state, hint: st && st.detail });
+      if (!pyHooks) return http(409, { detail: { error: "NoRuntime", hint: "The Python engine is not loaded in this view." } });
+      const kind = op.slice(5).toLowerCase(), body = (params && params.body) || {};
+      const r = await call(it.id, { type: "exec", command: pyHooks.guestCommand(kind, JSON.stringify(body)), user: "root", timeout_ms: 120000 }, 125000);
+      if (!r.ok) return http(r.error === "timeout" || /timed out/.test(r.error || "") ? 504 : 409, { detail: r.error || "guest command failed" });
+      return JSON.parse(pyHooks.guestParse(kind, r.stdout || ""));
+    }
     if (op === "ConnectInfo") {
       if (!st || st.state !== "running") {
         return http(409, { detail: { error: st && st.state === "error" ? "VmFailed" : "InstanceNotReady",
@@ -238,7 +305,7 @@
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `No general internet egress from the VM yet (only CORS-enabled plain-HTTP URLs, fetched by the browser): git clone / apk / pip from the internet do not work.`,
+              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the mesh (Pro/Max).`,
       };
     }
     return http(400, { detail: "unknown op " + op });
@@ -274,6 +341,8 @@
     const b = h("button", { style: S.btn, onclick: async () => { try { await navigator.clipboard.writeText(cmd); b.textContent = "Copied"; } catch (_) { b.textContent = "Copy failed"; } setTimeout(() => (b.textContent = "Copy"), 1200); } }, "Copy");
     return h("div", { style: "display:flex;gap:8px;align-items:flex-start" }, h("pre", { style: S.pre, "data-nano-cmd": "1" }, cmd), b);
   }
+  // The legacy consoles' fetch shim maps /api/* into the service-worker scope; the v4 consoles (/nano/v4/<cloud>/) have no shim.
+  const apiBase = () => { const m = /^(.*)\/v4\//.exec(location.pathname); return m ? m[1] : ""; };
   function renderConnect(host, cloud, ref) {
     const wrap = h("div", { class: "nano-vm-connect", "data-cloud": cloud, "data-ref": ref });
     host.append(wrap);
@@ -281,13 +350,33 @@
     const userHint = { aws: "ec2-user (Amazon Linux AMIs) or ubuntu (Ubuntu AMIs)", gcp: "the user from your ssh-keys metadata (default gcpuser)", azure: "the VM's adminUsername (default azureuser)" }[cloud];
     async function paint() {
       wrap.innerHTML = "";
+      // Mesh first: with a running Codespace mesh, compute lives there as Docker VMs and "Open shell" must reach THAT VM, never the in-browser one.
+      const VB = window.VyomiMesh;
+      if (VB && VB.sessionLive && VB.sessionLive() && !readReg()[vmId(cloud, ref)]) {
+        const t = await VB.shellTarget(cloud, ref);
+        if (!wrap.isConnected) return;
+        if (t.ok) { wrap.append(meshShellBox(cloud, ref, t.container)); return; }
+        if (t.down || t.code === "InstanceNotRunning") {
+          const down = !!t.down;
+          const box = h("div", { style: S.box + ";" + S.warn, "data-nano-mesh-msg": down ? "down" : "stopped" },
+            h("div", { style: S.title }, down ? "Codespace mesh unreachable" : "VM is not running"),
+            h("div", { style: S.sub }, down ? "Your shell opens in the Docker VM inside your Codespace, which cannot be reached right now. The in-browser VM is not used for mesh instances. Retrying automatically."
+                                            : "Start the instance, then open the shell again (it opens inside your Codespace VM)."),
+            h("button", { style: S.btn, onclick: paint }, "Retry now"));
+          wrap.append(box);
+          setTimeout(() => { if (wrap.isConnected && box.isConnected) paint(); }, 5000);
+          return;
+        }
+        // not on the mesh (InstanceNotFound / ContainerNotAllowed / no shell support): fall through to the in-browser VM
+      }
       wrap.append(h("div", { style: S.box },
         h("div", { style: S.title }, "In-browser VM"),
         h("div", { style: S.sub }, { aws: "Instance ID", gcp: "Instance", azure: "Virtual machine" }[cloud] + ": " + ref),
         h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86, Alpine Linux). " +
           "The cloud's image is not booted: the OS is Alpine, the login user follows the cloud (" + userHint + ").")));
       let r, j = null;
-      try { r = await fetch(P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
+      try { r = await fetch(apiBase() + P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
+      if (!wrap.isConnected) return;   // a newer paint (React remount / repaint) owns the host now; never steal its shell
       const d = (j && j.detail) || {};
       if (!r.status || r.status !== 200 || !j || !j.ok) {
         const err = d.error || (j && j.reason) || "unavailable";
@@ -295,7 +384,7 @@
           h("div", { style: S.title }, err === "NoRuntime" ? "In-browser VMs are off" : err === "TunnelRequired" ? "SSH needs vyomi-tunnel" : "VM not ready"),
           h("div", { style: S.sub }, d.hint || String(err)));
         if (err === "NoRuntime") {
-          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} kick(); setTimeout(paint, 400); } }, "Turn on in-browser VMs"));  // no page reload: it dropped the user back to the console Home
+          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} kick(); try { window.dispatchEvent(new CustomEvent("nano-vm-power", { detail: { id: null, state: "enabled" } })); } catch (_) {} setTimeout(paint, 400); } }, "Turn on in-browser VMs"));  // no page reload: it dropped the user back to the console Home
         } else if (err === "TunnelRequired") {
           box.append(cmdRow("brew install vyomi-cloud/tap/vyomi-tunnel && vyomi-tunnel"));
         }
@@ -309,7 +398,7 @@
           h("div", { style: S.title }, "SSH from your terminal"),
           h("div", { style: S.sub }, `vyomi-tunnel forwards 127.0.0.1:${s.port} on this machine to the VM's SSH port, while this Nano tab is open.`),
           h("div", { style: S.sub }, "1. Download the key (one key per browser profile, valid for every Nano VM)"),
-          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, onclick: (e) => { e.preventDefault(); (window.vyDownloadKey || ((u, n) => fetch(u).then(r => r.blob()).then(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click(); })))(s.key_download_url, s.key_local_filename); }, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
+          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, onclick: (e) => { e.preventDefault(); (window.vyDownloadKey || ((u, n) => fetch(apiBase() + u).then(r => r.blob()).then(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click(); })))(s.key_download_url, s.key_local_filename); }, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
           h("div", { style: S.sub }, "2. Move it into place"), cmdRow(s.key_setup_command || ""),
           h("div", { style: S.sub }, "3. Connect"), cmdRow(s.command || ""),
           h("div", { style: S.sub }, `Logs you in as ${s.user} on ${rt.os || "the VM"}, ${rt.mem_mb || "?"} MB RAM.`)));
@@ -317,7 +406,7 @@
       // Browser shell: a real terminal (xterm.js) on the VM's serial console (ttyS0 -> /bin/sh). No tunnel needed.
       wrap.append(shellBox(cloud, ref));
       wrap.append(h("div", { style: S.sub }, "Limits: 32-bit x86 only; RAM is the VM's disk (Stop saves it, Terminate discards it); " +
-        "a background tab runs the VM several times slower; no general internet egress (only plain-HTTP URLs that allow CORS, fetched by the browser), so git clone / apk / pip from the internet do not work yet."));
+        "a background tab runs the VM several times slower; toolchain is git + Python (pip, apk) — package downloads need vyomi-tunnel running (allow-listed hosts only). Other languages run on the mesh."));
     }
     paint();
     return wrap;
@@ -357,6 +446,7 @@
     const onFs = () => { if (!holder.isConnected) { document.removeEventListener("fullscreenchange", onFs); return; } holder.style.padding = document.fullscreenElement === holder ? "10px" : "6px"; setTimeout(fit, 80); };
     document.addEventListener("fullscreenchange", onFs);
     loadXterm().then((T) => {
+      if (!holder.isConnected) return;   // painted into a host that was already replaced
       if (!T) { holder.textContent = "Terminal failed to load."; return; }
       let t = terms.get(id);
       if (t) { holder.append(t.el); try { t.term.refresh(0, t.term.rows - 1); } catch (_) {} return; }
@@ -372,11 +462,79 @@
     return box;
   }
 
+  // ── Codespace shell: xterm.js attached to a PTY in the mesh's Docker VM (stream path via the relay; wasm/mesh-link.js openShell) ──
+  const bshells = new Map();   // vm id -> {conn, term, el}: survives console re-renders like the in-browser terminals
+  function meshShellBox(cloud, ref, container) {
+    const id = vmId(cloud, ref);
+    const status = h("div", { style: S.sub + ";font-weight:600", "data-nano-mesh-status": "1" }, "Connecting to your Codespace VM " + container + "...");
+    const holder = h("div", { "data-nano-shell": "1", "data-nano-shell-kind": "mesh", style: "background:#0c0c0c;border-radius:6px;padding:6px;min-height:120px" });
+    const reBtn = h("button", { style: S.btn + ";display:none;margin-top:6px", "data-nano-mesh-reconnect": "1" }, "Reconnect");
+    const fsBtn = h("button", { style: S.btn + ";float:right", title: "Full screen (Esc to exit)", "data-nano-shell-fs": "1" }, "Full screen");
+    const box = h("div", { style: S.box + ";" + S.ok, "data-nano-mesh-shell": container },
+      h("div", { style: S.title }, "Shell", fsBtn),
+      status,
+      h("div", { style: S.sub }, "A real terminal inside the Docker VM on your Codespace (" + { aws: "EC2 instance ", gcp: "Compute Engine instance ", azure: "Azure VM " }[cloud] + ref + ", container " + container + "). Not the in-browser VM. Click inside and type."),
+      holder, reBtn);
+    const fit = () => {
+      const t = bshells.get(id); if (!t) return;
+      try {
+        if (document.fullscreenElement !== holder) { t.term.resize(110, 22); return; }
+        const d = t.term._core._renderService.dimensions.css.cell;
+        t.term.resize(Math.max(40, Math.floor((holder.clientWidth - 16) / d.width)), Math.max(10, Math.floor((holder.clientHeight - 16) / d.height))); t.term.focus();
+      } catch (_) {}
+    };
+    fsBtn.onclick = () => { if (document.fullscreenElement === holder) document.exitFullscreen(); else if (holder.requestFullscreen) holder.requestFullscreen(); };
+    const onFs = () => { if (!holder.isConnected) { document.removeEventListener("fullscreenchange", onFs); return; } setTimeout(fit, 80); };
+    document.addEventListener("fullscreenchange", onFs);
+    const setStatus = (text, ok) => { status.textContent = text; status.style.color = ok === false ? "#d13212" : ok ? "#1d8102" : ""; };
+    const MSG = { MeshDown: "The Codespace mesh is not reachable. Your VM keeps running there; reconnect when the mesh is back.",
+                  MeshSessionExpired: "The mesh session has ended, so the shell was closed.", IdleTimeout: "Shell closed after being idle.",
+                  InstanceNotRunning: "The VM is not running. Start it, then reconnect.", MeshLinkClosed: "The mesh link dropped. Reconnect when it is back." };
+    function connect(t) {
+      t.term.write("\r\n\x1b[90m[connecting to " + container + " in your Codespace...]\x1b[0m\r\n");
+      setStatus("Connecting to your Codespace VM " + container + "...");
+      reBtn.style.display = "none";
+      t.conn = window.VyomiMesh.openShell(cloud, ref, {
+        cols: t.term.cols, rows: t.term.rows,
+        onOpen: (c) => setStatus("Connected to your Codespace VM " + (c || container), true),
+        onData: (u8) => t.term.write(u8),
+        onClose: (info) => {
+          const m = MSG[info.code] || info.message || "The shell closed.";
+          setStatus(info.wasOpen && info.code === "Closed" ? "Shell ended (the VM keeps running in your Codespace)." : m, info.wasOpen && info.code === "Closed" ? undefined : false);
+          t.term.write("\r\n\x1b[31m[" + (info.wasOpen && info.code === "Closed" ? "shell closed" : m) + "]\x1b[0m\r\n");
+          reBtn.style.display = ""; t.conn = null;
+        },
+      });
+    }
+    reBtn.onclick = () => { const t = bshells.get(id); if (t && !t.conn) connect(t); };
+    loadXterm().then((T) => {
+      if (!holder.isConnected) return;
+      if (!T) { holder.textContent = "Terminal failed to load."; return; }
+      let t = bshells.get(id);
+      if (t) {
+        holder.append(t.el); try { t.term.refresh(0, t.term.rows - 1); } catch (_) {}
+        if (t.conn) setStatus("Connected to your Codespace VM " + container, true); else { setStatus("Disconnected from your Codespace VM " + container, false); reBtn.style.display = ""; }
+        return;
+      }
+      const el = h("div", { class: "vy-term" });
+      holder.append(el);
+      const term = new T({ cols: 110, rows: 22, cursorBlink: true, fontSize: 13, fontFamily: "ui-monospace,Menlo,Consolas,monospace", theme: { background: "#0c0c0c" }, scrollback: 3000 });
+      term.open(el);
+      t = { term, el, conn: null };
+      bshells.set(id, t);
+      term.onData((d) => { if (t.conn) t.conn.send(d); });
+      term.onResize((sz) => { if (t.conn) t.conn.resize(sz.cols, sz.rows); });
+      connect(t);
+    });
+    return box;
+  }
+
   // ── animated pending state ───────────────────────────────────────────
   (function () {
     const st = document.createElement("style");
     st.textContent = "@keyframes vyspin{to{transform:rotate(360deg)}}@keyframes vypulse{50%{opacity:.45}}@keyframes vylive{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.35)}}" +
       ".vy-live .pip,.vy-live .dot{animation:vylive 2s ease-in-out infinite}.vy-live:not(:has(.pip,.dot))::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:1px;animation:vylive 2s ease-in-out infinite}.vy-spin .pip,.vy-spin .dot{display:none}.vy-spin{animation:vypulse 1.3s ease-in-out infinite}.vy-spin::before{content:'';display:inline-block;width:9px;height:9px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:vyspin .8s linear infinite}";
+    st.textContent += "[data-vy-pending]{animation:vypulse 1.3s ease-in-out infinite}[data-vy-pending=spin]::before{content:'';display:inline-block;width:9px;height:9px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:vyspin .8s linear infinite}";   // class-free hook the v4 status components set
     document.head.appendChild(st);
     const PEND = /^(pending|starting|provisioning|staging|vm starting|creating|stopping|shutting-down|deallocating|vm stopping|vm deallocating)$/i;
     const LIVE = /^(running|vm running)$/i;
@@ -405,11 +563,15 @@
   // rewritten to "stopped" (VM compute off / VM not running: start it manually from Connect) or "pending" (booting).
   // The SDK/CLI/service-worker paths never go through this fetch, so their instance states are unchanged.
   const vmPower = (cloud, ref) => {
+    // A running Codespace mesh owns compute: its instances are Docker VMs there, not in-browser VMs, so the store's state stands.
+    if (window.VyomiMesh && window.VyomiMesh.sessionLive && window.VyomiMesh.sessionLive() && !readReg()[vmId(cloud, ref)]) return "running";
     if (!enabled()) return "stopped";
     const s = (handles.get(vmId(cloud, ref)) || {}).status;
     const st = s && s.state;
     return st === "running" ? "running" : (!st || st === "booting" || st === "launching" || st === "starting") ? "pending" : "stopped";
   };
+  // what a v4 console shows for a store-"running" instance: running | pending | stopped
+  const shownPower = (cloud, ref) => vmPower(cloud, ref);
   const AWS_S = { stopped: "stopped", pending: "pending" }, GCP_S = { stopped: "TERMINATED", pending: "PROVISIONING" };
   const AZ_S = { stopped: "stopped", pending: "starting" };
   function viewFix(node, depth) {
@@ -439,15 +601,34 @@
       try {
         const u = typeof input === "string" ? input : (input && input.url) || "";
         const m = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
-        if (m !== "GET" || !VM_URL.test(u) || /private-key|connect-info|\/exec|vm-status/.test(u) || !/json/i.test(res.headers.get("content-type") || "")) return res;
+        if (m !== "GET" || !VM_URL.test(u) || /\/_wire\//.test(u) || /private-key|connect-info|\/exec|vm-status/.test(u) || !/json/i.test(res.headers.get("content-type") || "")) return res;
         const j = await res.clone().json(); viewFix.url = u; viewFix(j, 0);
         return new Response(JSON.stringify(j), { status: res.status, statusText: res.statusText, headers: res.headers });
       } catch (_) { return res; }
     };
   }
+  // ── sync/async helpers for the Python engines (core/nano_vm_runtime_core.py) ──────────────
+  let pyHooks = null;
+  const runningVms = () => {
+    if (!enabled()) return [];
+    const reg = readReg(), out = [];
+    for (const id of Object.keys(reg)) {
+      const it = reg[id], hs = handles.get(id);
+      if (hs && hs.status && hs.status.state === "running" && it.desired !== "stop" && it.desired !== "terminate") out.push(it);
+    }
+    return out;
+  };
+  // The VM that hosts Container Apps replicas: the first running Azure VM, else any running VM.
+  const hostVm = () => { const r = runningVms(), it = r.find((x) => x.cloud === "azure") || r[0]; return JSON.stringify(it ? { id: it.id, cloud: it.cloud, ref: it.ref } : null); };
+  const runningOf = (cloud) => JSON.stringify(runningVms().filter((x) => x.cloud === cloud).map((x) => ({ ref: x.ref, name: x.name || x.ref, ip: "", az: x.zone || "" })));
+  // Run an sh script as root in a running VM; resolves {exit_code, stdout} or {error} (never throws).
+  async function runScript(vm, script, timeoutMs) {
+    const r = await call(vm, { type: "exec", command: script, user: "root", timeout_ms: timeoutMs || 30000 }, (timeoutMs || 30000) + 3000);
+    return r && r.ok ? { exit_code: r.exit_code, stdout: r.stdout || "" } : { error: (r && r.error) || "VM did not answer", state: r && r.state };
+  }
   window.NanoVM = {
-    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect,
-    registry: readReg,
+    enabled, kick, resume, handle, hostVm, runningOf, runScript, setPyHooks(h) { pyHooks = h; }, onSerial, serialSend, accountKey, vmId, renderConnect, shownPower,
+    registry: readReg, probeGuest: (cloud, ref) => probeGuest(vmId(cloud, ref)),
     status: (cloud, ref) => call(vmId(cloud, ref), { type: "status" }, 10000),
     init(o) { listDesired = o.listDesired; annotateFn = o.annotate || null; if (enabled()) { resume(); reconcile(); setInterval(reconcile, 5000); } },
   };

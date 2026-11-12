@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-
 // startLocalhostBridge maps 127.0.0.1:<port> → <vmIp>:<port> via netsh portproxy
 // (Start-LocalhostBridge). Windows-only; a no-op elsewhere.
 func (c *Config) startLocalhostBridge(vmIp string) {
@@ -29,7 +28,7 @@ func (c *Config) startLocalhostBridge(vmIp string) {
 	}
 }
 
-// showUrlBanner prints the READY banner and opens the browser (Show-UrlBanner).
+// showUrlBanner prints the READY banner (Show-UrlBanner).
 func (c *Config) showUrlBanner(vmIp string) {
 	port := c.simulatorPort()
 	url := fmt.Sprintf("http://localhost:%d/", port)
@@ -45,9 +44,8 @@ func (c *Config) showUrlBanner(vmIp string) {
 	if vmIp != "" {
 		progress(fmt.Sprintf("  Direct: http://%s:%d/   (VM IP, no bridge needed)", vmIp, port))
 	}
-	if envAny("", "VYOMI_NO_OPEN", "CLOUD_LEARN_NO_OPEN") != "1" {
-		openBrowser(url)
-	}
+	// Headless appliance (4.0.0): nothing to open at the endpoint. The UI is Nano.
+	progress("  UI: Nano — https://vyomi.cloud/nano   (the appliance is API/SDK/CLI only)")
 }
 
 func openBrowser(url string) {
@@ -122,7 +120,7 @@ func (c *Config) printVBoxManualFallback(vbox string) {
 	progress("     psexec -s -nobanner -accepteula $vb list runningvms      # note the \"name\"")
 	progress(fmt.Sprintf(`     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi%d,tcp,127.0.0.1,%d,,%d"`, port, port, port))
 	progress("")
-	progress(fmt.Sprintf("   Then open http://localhost:%d/", port))
+	progress(fmt.Sprintf("   Then point your SDK/CLI at http://localhost:%d/ (API endpoint)", port))
 	progress("  ------------------------------------------------------------")
 }
 

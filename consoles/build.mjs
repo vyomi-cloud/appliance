@@ -1,0 +1,155 @@
+/* Build the v4 consoles once and emit them to every substrate:
+ *   wasm/v4/<cloud>/    — Nano canonical (served by the portal at /nano/v4/<cloud>/)
+ * Everything is bundled locally (no CDN) so Nano and air-gapped appliances work offline.
+ *
+ *   node build.mjs [--watch] [--cloud aws]
+ */
+import * as esbuild from "esbuild";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "..");
+// Headless appliance 4.0.0: Nano (wasm/v4) is the only UI target.
+const TARGETS = [join(ROOT, "wasm", "v4")];
+const argv = process.argv.slice(2);
+const only = argv.includes("--cloud") ? argv[argv.indexOf("--cloud") + 1] : null;
+const TITLES = { aws: "Vyomi · AWS", gcp: "Vyomi · Google Cloud", azure: "Vyomi · Azure" };
+const CLOUDS = ["aws", "gcp", "azure"].filter((c) => (!only || c === only) && existsSync(join(HERE, "src", c, "main.jsx")));
+
+// Nano: the page must boot the in-browser backend — nano-boot.js registers the service
+// worker (which answers /_wire) and runs Pyodide in this page; nano-kernel.js shows the
+// once-per-launch loader. Offline/sandbox pages talk to the appliance and need neither.
+// Content-hash the boot scripts so a fixed nano-boot.js / nano-kernel.js always reaches an open
+// browser (a fixed ?v= let a broken boot script linger in caches).
+const _bootHash = (f) => { try { return createHash("sha256").update(readFileSync(new URL(`../wasm/${f}`, import.meta.url))).digest("hex").slice(0, 12); } catch { return "0"; } };
+const NANO_HEAD = `<script src="../../mesh-link.js?v=${_bootHash("mesh-link.js")}"></script>\n<script type="module" src="../../nano-boot.js?v=${_bootHash("nano-boot.js")}"></script>\n`;
+const NANO_BODY = `<script src="../../nano-kernel.js?v=${_bootHash("nano-kernel.js")}"></script>\n<script>window.__nk = window.NanoKernel && NanoKernel.start("Vyomi console");</script>\n`;
+// Nano chrome the legacy consoles carried and users see today: the bottom app bar (Spaces / Health / Knowledge /
+// SDK & CLI / API, back to clouds.html) and the "How Nano <cloud> works" video banner (mounted on each Home by
+// consoles/src/common/NanoVideoBanner.jsx). Plain scripts, shared with clouds.html; v4 pages sit two levels down.
+const nanoChrome = (cloud) => `<script>window.__VY_ASSET_BASE = "../../";</script>\n<script src="../../nano-video.js?v=${_bootHash("nano-video.js")}"></script>\n<script src="../../nano-disk-chip.js?v=${_bootHash("nano-disk-chip.js")}"></script>\n<script src="../../mesh-widget.js?v=${_bootHash("mesh-widget.js")}" data-cloud="${cloud}" defer></script>\n<script src="../../vyomi-appbar.js?v=${_bootHash("vyomi-appbar.js")}" data-cloud="${cloud}" data-clouds="../../clouds.html" defer></script>\n`;
+
+// Cache-busting: asset URLs carry a hash of the bundle, so browsers (and Nano's service
+// worker) fetch the new build after every rebuild/upgrade instead of a stale main.js.
+let assetVersion = "dev";
+// Nano: the relay-tunnel footer (Start tunnel / Logs / Local tunnel + Cloudflare tabs) is the shared
+// widget the Nano pages carry. It is lifted verbatim from wasm/aws-console.html at build time (single
+// source) and mounted on every v4 Nano console; __NANO_BASE points it at the bundle root (../..).
+function nanoFoot() {
+  try {
+    const src = readFileSync(join(ROOT, "wasm", "aws-console.html"), "utf8");
+    const i = src.indexOf(" #nano-star{");
+    const a = i < 0 ? -1 : src.lastIndexOf("<style>", i);
+    const b = src.indexOf('<script src="./vyomi-appbar.js"', a);
+    if (a < 0 || b < 0) throw new Error("tunnel footer block not found in wasm/aws-console.html");
+    return '<script>window.__NANO_BASE = "../..";</script>\n' + src.slice(a, b) + "\n";
+  } catch (e) { console.warn("[v4] tunnel footer not embedded:", e.message); return ""; }
+}
+const NANO_FOOT = nanoFoot();
+const _fbHash = createHash("sha256").update(readFileSync(new URL("./feedback-widget.js", import.meta.url))).digest("hex").slice(0, 12);
+// Automatic issue reporting (consent dialog + error capture). Single source: wasm/issue-reporter.js (also imported by the Nano service worker).
+const _irHash = createHash("sha256").update(readFileSync(new URL("../wasm/issue-reporter.js", import.meta.url))).digest("hex").slice(0, 12);
+
+const html = (cloud, title, nano = false) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<meta name="vyomi-substrate" content="${nano ? "nano" : "offline"}">
+${existsSync(join(HERE, "..", "wasm", "v4", cloud, "main.css")) ? `<link rel="stylesheet" href="./main.css?v=${assetVersion}">\n` : ""}${nano ? NANO_HEAD : ""}</head>
+<body>
+${nano ? NANO_BODY : ""}<div id="root"></div>
+${nano ? nanoChrome(cloud) : ""}<script type="module" src="./main.js?v=${assetVersion}"></script>
+${nano ? NANO_FOOT : ""}<script src="./feedback.js?v=${_fbHash}" defer></script>
+<script src="./issue-reporter.js?v=${_irHash}" defer></script>
+</body>
+</html>
+`;
+
+async function buildCloud(cloud, watch) {
+  const out = join(HERE, "dist", cloud);
+  await rm(out, { recursive: true, force: true });
+  await mkdir(out, { recursive: true });
+  const opts = {
+    entryPoints: { main: join(HERE, "src", cloud, "main.jsx") },
+    outdir: out,
+    bundle: true,
+    splitting: false,           // esbuild does not load CSS of lazy chunks; per-service splitting is P3 (bundle budget)
+    format: "esm",
+    minify: !watch,
+    sourcemap: watch ? "inline" : false,
+    target: ["es2020"],
+    jsx: "automatic",
+    loader: { ".woff": "file", ".woff2": "file", ".ttf": "file", ".svg": "file", ".png": "file" },
+    assetNames: "assets/[name]-[hash]",
+    chunkNames: "chunks/[name]-[hash]",
+    define: { "process.env.NODE_ENV": watch ? '"development"' : '"production"' },
+    logLevel: "info",
+    plugins: [backendsData(cloud)],
+  };
+  await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
+  await cp(join(HERE, "..", "wasm", "issue-reporter.js"), join(out, "issue-reporter.js"));   // automatic issue reporting (both substrates)
+  await cp(join(HERE, "feedback-widget.js"), join(out, "feedback.js"));   // "Share feedback" floating button (both substrates)
+  if (watch) {
+    const ctx = await esbuild.context({ ...opts, plugins: [backendsData(cloud), emit(cloud, out)] });
+    await ctx.watch();
+    return;
+  }
+  await esbuild.build(opts);
+  await publish(cloud, out);
+}
+
+/* `import X from "vyomi-backends:<cloud>"` -> core/capabilities/backends/<cloud>.json ("How Vyomi runs this
+ * service" side-panel data, bundled like the capability registry). The file is written by a separate data
+ * branch and may not exist yet: then the module is `{}` and the panel says "not documented yet". */
+const backendsData = () => ({
+  name: "vyomi-backends",
+  setup(b) {
+    b.onResolve({ filter: /^vyomi-backends:/ }, (a) => ({ path: a.path.slice("vyomi-backends:".length), namespace: "vyomi-backends" }));
+    b.onLoad({ filter: /.*/, namespace: "vyomi-backends" }, (a) => {
+      const f = join(ROOT, "core", "capabilities", "backends", `${a.path}.json`);
+      return existsSync(f) ? { contents: readFileSync(f, "utf8"), loader: "json", watchFiles: [f] } : { contents: "{}", loader: "json" };
+    });
+  },
+});
+
+const emit = (cloud, out) => ({ name: "emit", setup(b) { b.onEnd(() => publish(cloud, out)); } });
+
+async function publish(cloud, out) {
+  const h = createHash("sha256");
+  for (const f of ["main.js", "main.css"]) h.update(await readFile(join(out, f)).catch(() => ""));
+  assetVersion = h.digest("hex").slice(0, 12);
+  await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
+  for (const t of TARGETS) {
+    const dst = join(t, cloud);
+    await rm(dst, { recursive: true, force: true });
+    await mkdir(dst, { recursive: true });
+    await cp(out, dst, { recursive: true });
+    if (t.includes(`${join("wasm", "v4")}`)) await writeFile(join(dst, "index.html"), html(cloud, TITLES[cloud], true));
+  }
+  console.log(`[v4] ${cloud} → wasm/v4/${cloud}`);
+}
+
+// "API reference" + "SDK & CLI usage" docs: generated from the registry + botocore/GCP discovery models + a live probe of the
+// Nano wire router (scripts/gen_nano_docs.py -> wasm/docs/, rendered by wasm/nano-docs.js in clouds.html). The output is
+// committed; regenerate with --docs (needs `pip install botocore google-api-python-client`, interpreter via $VYOMI_DOCS_PY).
+function docs() {
+  const idx = join(ROOT, "wasm", "docs", "index.json");
+  if (argv.includes("--docs")) {
+    const r = spawnSync(process.env.VYOMI_DOCS_PY || "python3", [join(ROOT, "scripts", "gen_nano_docs.py")], { encoding: "utf8" });
+    if (r.status !== 0) { console.error(r.stdout + r.stderr); throw new Error("gen_nano_docs.py failed"); }
+  }
+  if (!existsSync(idx)) throw new Error("wasm/docs/index.json missing — run: node build.mjs --docs");
+  const ix = JSON.parse(readFileSync(idx, "utf8")), n = (c) => ix.clouds[c].reduce((a, s) => a + s.o, 0);
+  console.log(`[docs] aws ${ix.clouds.aws.length} svc / ${n("aws")} ops · gcp ${ix.clouds.gcp.length} / ${n("gcp")} · azure ${ix.clouds.azure.length} / ${n("azure")}`);
+}
+
+const watch = argv.includes("--watch");
+for (const c of CLOUDS) await buildCloud(c, watch);
+if (!only || argv.includes("--docs")) docs();

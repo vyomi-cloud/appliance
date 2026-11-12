@@ -1,0 +1,127 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (requires base-branch allowlist entry — eventbridge has none, so every page below maps to a real v4 route). Unlisted spec pages count as missing.",
+  "home": {
+    "route": "#/eventbridge/home"
+  },
+  "dashboard": {
+    "route": "#/eventbridge/dashboard"
+  },
+  "event-buses": {
+    "route": "#/eventbridge/event-buses",
+    "live": "live-bus"
+  },
+  "event-bus-detail": {
+    "route": "#/eventbridge/event-buses/uic-bus",
+    "fixtures": [
+      "eb-bus"
+    ],
+    "vars": {
+      "resource-name": "uic-bus"
+    },
+    "live": "live-rule-on-bus"
+  },
+  "create-event-bus": {
+    "route": "#/eventbridge/create-event-bus"
+  },
+  "create-classic-event-bus": {
+    "route": "#/eventbridge/create-event-bus"
+  },
+  "edit-event-bus": {
+    "route": "#/eventbridge/event-buses/uic-bus/edit",
+    "fixtures": [
+      "eb-bus"
+    ]
+  },
+  "send-events": {
+    "route": "#/eventbridge/event-buses/default/send"
+  },
+  "rules": {
+    "route": "#/eventbridge/rules",
+    "live": "live-rule"
+  },
+  "create-rule": {
+    "route": "#/eventbridge/create-rule"
+  },
+  "create-rule-advanced": {
+    "route": "#/eventbridge/create-rule"
+  },
+  "rule-detail": {
+    "route": "#/eventbridge/rules/uic-rule",
+    "fixtures": [
+      "eb-rule"
+    ],
+    "vars": {
+      "resource-name": "uic-rule"
+    },
+    "live": "live-rule-description"
+  },
+  "archives": {
+    "route": "#/eventbridge/archives",
+    "live": "live-archive"
+  },
+  "create-archive": {
+    "route": "#/eventbridge/create-archive"
+  },
+  "scheduled-rules": {
+    "route": "#/eventbridge/scheduled-rules",
+    "live": "live-scheduled-rule"
+  },
+  "create-scheduled-rule": {
+    "route": "#/eventbridge/create-scheduled-rule"
+  },
+  "schedules": {
+    "route": "#/eventbridge/schedules",
+    "live": "live-schedule"
+  },
+  "create-schedule": {
+    "route": "#/eventbridge/create-schedule"
+  },
+  "schedule-groups": {
+    "route": "#/eventbridge/schedule-groups",
+    "live": "live-schedule-group"
+  },
+  "pipes": {
+    "route": "#/eventbridge/pipes",
+    "honest_page": true
+  },
+  "create-pipe": {
+    "route": "#/eventbridge/create-pipe"
+  },
+  "partner-event-sources": {
+    "route": "#/eventbridge/partner-event-sources"
+  },
+  "api-destinations": {
+    "route": "#/eventbridge/api-destinations",
+    "honest_page": true
+  },
+  "create-api-destination": {
+    "route": "#/eventbridge/create-api-destination"
+  },
+  "connections": {
+    "route": "#/eventbridge/connections",
+    "honest_page": true
+  },
+  "create-connection": {
+    "route": "#/eventbridge/create-connection"
+  },
+  "schemas": {
+    "route": "#/eventbridge/schemas",
+    "honest_page": true
+  },
+  "global-endpoints": {
+    "route": "#/eventbridge/global-endpoints",
+    "honest_page": true
+  },
+  "create-global-endpoint": {
+    "route": "#/eventbridge/create-global-endpoint"
+  },
+  "learn": {
+    "route": "#/eventbridge/learn"
+  },
+  "sandbox": {
+    "route": "#/eventbridge/sandbox"
+  },
+  "quick-starts": {
+    "route": "#/eventbridge/quick-starts"
+  }
+}

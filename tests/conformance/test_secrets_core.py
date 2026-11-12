@@ -17,10 +17,14 @@ Run in Pyodide: loaded by wasm/ harness (same file).
 
 # Allow running both as a repo script (host) and from a flat FS (Pyodide).
 try:
+    from core.kms_keystore import InMemoryKeyStore
     from core.kv_store import InMemoryKvStore
+    from core import kms_core as kms
     from core import secrets_core as sm
 except ImportError:  # pragma: no cover - Pyodide flat layout
+    from kms_keystore import InMemoryKeyStore  # type: ignore
     from kv_store import InMemoryKvStore  # type: ignore
+    import kms_core as kms  # type: ignore
     import secrets_core as sm  # type: ignore
 
 T = "secretsmanager."  # the native Secrets Manager X-Amz-Target prefix
@@ -127,6 +131,230 @@ def run() -> int:
     _check("missing secret ResourceNotFoundException", nf.body["__type"] == "ResourceNotFoundException")
     noact = sm.dispatch(st, "", {})
     _check("missing target MissingAction", noact.body["__type"] == "MissingAction")
+
+    # 16. Tags: set on create, then Tag/UntagResource
+    sm.dispatch(st, T + "CreateSecret", {"Name": "tagged", "SecretString": "v", "Tags": [{"Key": "env", "Value": "prod"}],
+                                          "KmsKeyId": "alias/custom"})
+    dt = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"})
+    _check("create Tags round-trip", dt.body["Tags"] == [{"Key": "env", "Value": "prod"}])
+    _check("create KmsKeyId round-trips", dt.body["KmsKeyId"] == "alias/custom")
+    sm.dispatch(st, T + "TagResource", {"SecretId": "tagged", "Tags": [{"Key": "team", "Value": "sec"}]})
+    tagged = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body["Tags"]
+    _check("TagResource adds a tag", {"Key": "team", "Value": "sec"} in tagged and len(tagged) == 2)
+    sm.dispatch(st, T + "UntagResource", {"SecretId": "tagged", "TagKeys": ["env"]})
+    untagged = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body["Tags"]
+    _check("UntagResource removes a tag", untagged == [{"Key": "team", "Value": "sec"}])
+
+    # 17. UpdateSecret with no value touches metadata only (no new version)
+    before_v = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body["VersionIdsToStages"]
+    sm.dispatch(st, T + "UpdateSecret", {"SecretId": "tagged", "KmsKeyId": "alias/other"})
+    after_v = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"})
+    _check("metadata-only UpdateSecret creates no new version", after_v.body["VersionIdsToStages"] == before_v)
+    _check("metadata-only UpdateSecret still updates KmsKeyId", after_v.body["KmsKeyId"] == "alias/other")
+
+    # 18. RotateSecret flips rotation metadata + stages (same shape ListSecrets/DescribeSecret expose)
+    rot = sm.dispatch(st, T + "RotateSecret", {"SecretId": "tagged", "RotationRules": {"AutomaticallyAfterDays": 30}})
+    _check("rotate returns a VersionId", "VersionId" in rot.body)
+    rdesc = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body
+    _check("rotation enabled reflected", rdesc["RotationEnabled"] is True)
+    _check("rotation rules reflected", rdesc["RotationRules"] == {"AutomaticallyAfterDays": 30})
+    _check("last rotated date set", "LastRotatedDate" in rdesc)
+
+    # 19. GetSecretValue stamps LastAccessedDate (ListSecrets/DescribeSecret column)
+    sm.dispatch(st, T + "GetSecretValue", {"SecretId": "tagged"})
+    _check("last accessed date set", "LastAccessedDate" in sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body)
+
+    # 20. Resource policy: Get (none) -> Put -> Get (round-trips) -> Delete -> Get (gone)
+    rp0 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
+    _check("no resource policy initially", "ResourcePolicy" not in rp0.body)
+    policy = ('{"Version":"2012-10-17","Statement":[{"Effect":"Allow",'
+              '"Principal":{"AWS":"arn:aws:iam::123456789012:root"},'
+              '"Action":"secretsmanager:GetSecretValue","Resource":"*"}]}')
+    sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": policy})
+    rp1 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
+    _check("resource policy round-trips", rp1.body["ResourcePolicy"] == policy)
+    sm.dispatch(st, T + "DeleteResourcePolicy", {"SecretId": "tagged"})
+    rp2 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
+    _check("resource policy deleted", "ResourcePolicy" not in rp2.body)
+
+    # 21. PutResourcePolicy validates shape (v4 depth pass)
+    bad_json = sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": "not json"})
+    _check("malformed JSON rejected", bad_json.body["__type"] == "MalformedPolicyDocumentException")
+    no_statement = sm.dispatch(st, T + "PutResourcePolicy",
+                               {"SecretId": "tagged", "ResourcePolicy": '{"Version":"2012-10-17","Statement":[]}'})
+    _check("empty Statement rejected", no_statement.body["__type"] == "MalformedPolicyDocumentException")
+
+    # 22. PutResourcePolicy blocks a public policy by default, allows it with BlockPublicPolicy=false
+    public_policy = '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"secretsmanager:GetSecretValue","Resource":"*"}]}'
+    blocked = sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": public_policy})
+    _check("public policy blocked by default", blocked.body["__type"] == "PublicPolicyException")
+    allowed = sm.dispatch(st, T + "PutResourcePolicy",
+                          {"SecretId": "tagged", "ResourcePolicy": public_policy, "BlockPublicPolicy": False})
+    _check("public policy allowed with BlockPublicPolicy=false", allowed.status == 200)
+    sm.dispatch(st, T + "DeleteResourcePolicy", {"SecretId": "tagged"})
+
+    # 23. Automatic rotation really fires on its own schedule (lazy, on access — no Lambda,
+    # so the "new" version carries the same value forward, same as RotateImmediately).
+    sm.dispatch(st, T + "CreateSecret", {"Name": "not-due-yet", "SecretString": "v1"})
+    nv1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "not-due-yet"}).body["VersionId"]
+    sm.dispatch(st, T + "RotateSecret", {"SecretId": "not-due-yet",
+               "RotationRules": {"AutomaticallyAfterDays": 30}, "RotateImmediately": False})
+    still_v1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "not-due-yet"}).body["VersionId"]
+    _check("a 30-day schedule does not fire immediately", still_v1 == nv1)
+
+    sm.dispatch(st, T + "CreateSecret", {"Name": "auto-rotated", "SecretString": "v1"})
+    v1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "auto-rotated"}).body["VersionId"]
+    sm.dispatch(st, T + "RotateSecret", {"SecretId": "auto-rotated",
+               "RotationRules": {"AutomaticallyAfterDays": 0}, "RotateImmediately": False})
+    before = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "auto-rotated"}).body
+    _check("rotation scheduled with a NextRotationDate", "NextRotationDate" in before)
+    v2 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "auto-rotated"}).body["VersionId"]  # AutomaticallyAfterDays=0 → already due
+    _check("GetSecretValue lazily auto-rotates when due", v2 != v1)
+    after = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "auto-rotated"}).body
+    _check("auto-rotation reschedules NextRotationDate forward", after["NextRotationDate"] > before["NextRotationDate"])
+
+    # 24. A customer KmsKeyId is genuinely encrypted/decrypted through the KMS core
+    # (v4 depth wave 5) when a kms_store is passed — every check above ran WITHOUT
+    # one and must keep behaving exactly as before (plaintext stored as-is).
+    ks = InMemoryKeyStore()
+    key1 = kms.dispatch(ks, "TrentService.CreateKey", {}).body["KeyMetadata"]["KeyId"]
+    key2 = kms.dispatch(ks, "TrentService.CreateKey", {}).body["KeyMetadata"]["KeyId"]
+    sm.dispatch(st, T + "CreateSecret", {"Name": "cmk", "SecretString": "s3cr3t", "KmsKeyId": key1}, kms_store=ks)
+    cmk_v1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body
+    _check("KMS-encrypted secret still round-trips plaintext", cmk_v1["SecretString"] == "s3cr3t")
+    _check("KmsKeyId round-trips on DescribeSecret",
+           sm.dispatch(st, T + "DescribeSecret", {"SecretId": "cmk"}, kms_store=ks).body["KmsKeyId"] == key1)
+
+    # Disabling the key really blocks access — proof the value is actually
+    # encrypted under it, not just stored next to a KmsKeyId label.
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": key1})
+    blocked_get = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks)
+    _check("GetSecretValue fails when the CMK is disabled", blocked_get.body.get("__type") == "InvalidRequestException")
+    blocked_put = sm.dispatch(st, T + "PutSecretValue", {"SecretId": "cmk", "SecretString": "new"}, kms_store=ks)
+    _check("PutSecretValue fails when the CMK is disabled", blocked_put.body.get("__type") == "InvalidRequestException")
+    kms.dispatch(ks, "TrentService.EnableKey", {"KeyId": key1})
+    _check("re-enabling the CMK restores access",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body["SecretString"] == "s3cr3t")
+
+    # PutSecretValue (no explicit KmsKeyId) re-encrypts the new version under the
+    # secret's existing key, and ClientRequestToken idempotency compares plaintext
+    # (decrypting both sides) rather than raw ciphertext.
+    put1 = sm.dispatch(st, T + "PutSecretValue",
+                       {"SecretId": "cmk", "SecretString": "s3cr3t-2", "ClientRequestToken": "tok-1"}, kms_store=ks)
+    _check("PutSecretValue under a CMK succeeds", put1.status == 200)
+    retry = sm.dispatch(st, T + "PutSecretValue",
+                        {"SecretId": "cmk", "SecretString": "s3cr3t-2", "ClientRequestToken": "tok-1"}, kms_store=ks)
+    _check("idempotent retry (same value) returns the same version", retry.body["VersionId"] == put1.body["VersionId"])
+    conflict = sm.dispatch(st, T + "PutSecretValue",
+                           {"SecretId": "cmk", "SecretString": "different", "ClientRequestToken": "tok-1"}, kms_store=ks)
+    _check("idempotent retry (different value) is ResourceExistsException",
+           conflict.body.get("__type") == "ResourceExistsException")
+
+    # UpdateSecret to a new KmsKeyId re-encrypts every existing version under it —
+    # disabling the OLD key afterwards must NOT block access, proving the value
+    # really moved to the new key (KMS embeds the key id in the ciphertext).
+    sm.dispatch(st, T + "UpdateSecret", {"SecretId": "cmk", "KmsKeyId": key2}, kms_store=ks)
+    _check("KmsKeyId updated", sm.dispatch(st, T + "DescribeSecret", {"SecretId": "cmk"}, kms_store=ks).body["KmsKeyId"] == key2)
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": key1})
+    still_ok = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks)
+    _check("re-wrapped secret still readable after the OLD key is disabled",
+           still_ok.status == 200 and still_ok.body["SecretString"] == "s3cr3t-2")
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": key2})
+    _check("re-wrapped secret now blocked once the NEW (current) key is disabled",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body.get("__type") == "InvalidRequestException")
+    kms.dispatch(ks, "TrentService.EnableKey", {"KeyId": key2})
+
+    # RotateSecret (immediate + lazy auto-rotation) carries the current, decrypted
+    # value forward and re-encrypts it, under a kms_store.
+    rotated = sm.dispatch(st, T + "RotateSecret", {"SecretId": "cmk"}, kms_store=ks)
+    _check("RotateSecret works under a kms_store", rotated.status == 200)
+    _check("rotated value still decrypts correctly",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body["SecretString"] == "s3cr3t-2")
+
+    # A secret with no KmsKeyId is unaffected by kms_store being present — it
+    # stays on the implicit default (no real encryption modeled for that path).
+    sm.dispatch(st, T + "CreateSecret", {"Name": "no-cmk", "SecretString": "plain"}, kms_store=ks)
+    _check("no-CMK secret has no KmsKeyId",
+           "KmsKeyId" not in sm.dispatch(st, T + "DescribeSecret", {"SecretId": "no-cmk"}, kms_store=ks).body)
+    _check("no-CMK secret still round-trips",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "no-cmk"}, kms_store=ks).body["SecretString"] == "plain")
+
+    # 25. Cross-Region replication (v4 depth wave 5b). ReplicateSecretToRegions
+    # adds a replica; GetSecretValue/DescribeSecret via the replica's own
+    # Region-qualified ARN read through to the owner's live current version.
+    sm.dispatch(st, T + "CreateSecret", {"Name": "repl/db", "SecretString": "primary-v1"})
+    rep = sm.dispatch(st, T + "ReplicateSecretToRegions",
+                      {"SecretId": "repl/db", "AddReplicaRegions": [{"Region": "us-west-2"}, {"Region": "eu-west-1", "KmsKeyId": "alias/eu"}]})
+    _check("replicate 200", rep.status == 200)
+    regions = {r["Region"] for r in rep.body["ReplicationStatus"]}
+    _check("replicate returns both regions", regions == {"us-west-2", "eu-west-1"})
+    _check("replicas report InSync", all(r["Status"] == "InSync" for r in rep.body["ReplicationStatus"]))
+    replica_arn = f"arn:aws:secretsmanager:us-west-2:{st.account_id}:secret:repl/db"
+    rget = sm.dispatch(st, T + "GetSecretValue", {"SecretId": replica_arn})
+    _check("replica GetSecretValue reads the owner's current value", rget.body["SecretString"] == "primary-v1")
+    _check("replica GetSecretValue returns the REPLICA's own Region-qualified ARN", rget.body["ARN"] == replica_arn)
+
+    # Writing to the primary is visible through the replica (one shared store —
+    # replicas are always caught up, no propagation lag to simulate).
+    sm.dispatch(st, T + "PutSecretValue", {"SecretId": "repl/db", "SecretString": "primary-v2"})
+    _check("replica reflects a write made to the primary",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": replica_arn}).body["SecretString"] == "primary-v2")
+    _check("DescribeSecret on the owner lists ReplicationStatus",
+           {r["Region"] for r in sm.dispatch(st, T + "DescribeSecret", {"SecretId": "repl/db"}).body["ReplicationStatus"]} == regions)
+
+    # Replicas are read-only: every write action on a replica ARN is rejected.
+    for tgt, extra in [("PutSecretValue", {"SecretString": "x"}), ("UpdateSecret", {"Description": "x"}),
+                       ("DeleteSecret", {}), ("RestoreSecret", {}), ("RotateSecret", {}),
+                       ("TagResource", {"Tags": [{"Key": "k", "Value": "v"}]}), ("UntagResource", {"TagKeys": ["k"]}),
+                       ("PutResourcePolicy", {"ResourcePolicy": "{}"}), ("DeleteResourcePolicy", {})]:
+        r = sm.dispatch(st, T + tgt, {"SecretId": replica_arn, **extra})
+        _check(f"{tgt} on a replica ARN is rejected", r.body.get("__type") == "InvalidParameterException")
+
+    # Re-adding an existing replica region without Force is rejected; a region
+    # that already hosts the primary can't be added as a replica of itself.
+    dup = sm.dispatch(st, T + "ReplicateSecretToRegions", {"SecretId": "repl/db", "AddReplicaRegions": [{"Region": "us-west-2"}]})
+    _check("duplicate replica region rejected", dup.body.get("__type") == "ResourceExistsException")
+    own = sm.dispatch(st, T + "ReplicateSecretToRegions", {"SecretId": "repl/db", "AddReplicaRegions": [{"Region": sm.SM_REGION}]})
+    _check("replicating into the primary's own Region rejected", own.body.get("__type") == "InvalidParameterException")
+
+    # A secret with live replicas can't be deleted until they're removed.
+    blocked_del = sm.dispatch(st, T + "DeleteSecret", {"SecretId": "repl/db"})
+    _check("DeleteSecret blocked while replicas exist", blocked_del.body.get("__type") == "InvalidParameterException")
+
+    # RemoveRegionsFromReplication deletes a replica outright (no snapshot) —
+    # it becomes unreachable, and the secret can now be deleted.
+    rm = sm.dispatch(st, T + "RemoveRegionsFromReplication", {"SecretId": "repl/db", "RemoveReplicaRegions": ["eu-west-1"]})
+    _check("remove-region leaves one replica", {r["Region"] for r in rm.body["ReplicationStatus"]} == {"us-west-2"})
+    eu_arn = f"arn:aws:secretsmanager:eu-west-1:{st.account_id}:secret:repl/db"
+    gone = sm.dispatch(st, T + "GetSecretValue", {"SecretId": eu_arn})
+    _check("removed replica is unreachable", gone.body.get("__type") == "ResourceNotFoundException")
+
+    # StopReplicationToReplica ("Promote to standalone secret") snapshots the
+    # current value into a brand-new, independent, writable secret — the owner
+    # loses that replica, and a later write to the owner does NOT propagate.
+    promo = sm.dispatch(st, T + "StopReplicationToReplica", {"SecretId": replica_arn})
+    _check("promote 200", promo.status == 200)
+    _check("promoted secret keeps the Region-qualified ARN", promo.body["ARN"] == replica_arn)
+    _check("owner has no replicas left",
+           "ReplicationStatus" not in sm.dispatch(st, T + "DescribeSecret", {"SecretId": "repl/db"}).body)
+    standalone_get = sm.dispatch(st, T + "GetSecretValue", {"SecretId": replica_arn})
+    _check("promoted secret still readable with its current snapshot", standalone_get.body["SecretString"] == "primary-v2")
+    sm.dispatch(st, T + "PutSecretValue", {"SecretId": "repl/db", "SecretString": "primary-v3"})
+    _check("promoted secret no longer follows the (former) owner's writes",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": replica_arn}).body["SecretString"] == "primary-v2")
+    promoted_put = sm.dispatch(st, T + "PutSecretValue", {"SecretId": replica_arn, "SecretString": "standalone-v2"})
+    _check("promoted secret accepts its own writes now", promoted_put.status == 200)
+    _check("owner (now replica-free) can be deleted",
+           sm.dispatch(st, T + "DeleteSecret", {"SecretId": "repl/db", "ForceDeleteWithoutRecovery": True}).status == 200)
+    _check("deleting the owner did not touch the promoted standalone secret",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": replica_arn}).body.get("SecretString") == "standalone-v2")
+
+    # CreateSecret(AddReplicaRegions=...) replicates in the same call (the "Store
+    # a new secret" wizard's Replicate-secret step).
+    created_with_replica = sm.dispatch(st, T + "CreateSecret",
+                                       {"Name": "repl/at-create", "SecretString": "v1",
+                                        "AddReplicaRegions": [{"Region": "ap-south-1"}]})
+    _check("CreateSecret can replicate inline", {r["Region"] for r in created_with_replica.body["ReplicationStatus"]} == {"ap-south-1"})
 
     print("\nRESULT: PASS — Secrets Manager core conforms (native wire semantics) on this substrate.")
     return 0

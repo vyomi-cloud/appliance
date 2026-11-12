@@ -134,7 +134,7 @@ def resolve(value, proj: dict | None = None) -> str:
     if v.startswith("projects/"):
         v = v[len("projects/"):].split("/", 1)[0]
     proj = proj or current()
-    if not v or v in (proj["projectId"], proj["projectNumber"]):
+    if not v or v in (proj["projectId"], proj["projectNumber"], *_nano_alias(proj)):
         return proj["projectId"]
     return ""
 
@@ -183,8 +183,14 @@ def unknown_project_error(path: str, method: str, project: str) -> tuple[int, di
                                         "metadata": {"consumer": f"projects/{p}"}}]}}
 
 
+def _nano_alias(proj: dict) -> tuple:
+    """Nano's one fixed project is `nano-project`, but every v4 console (and SDK snippet) defaults to
+    the standard `vyomi-project` id; on Nano that id addresses the same single project."""
+    return (DEFAULT_PROJECT_ID,) if proj.get("projectId") == NANO_PROJECT["projectId"] else ()
+
+
 def _old_ids(proj: dict) -> list[str]:
-    return [x for x in (proj["projectNumber"],) if x and x != proj["projectId"]]
+    return [x for x in (proj["projectNumber"], *_nano_alias(proj)) if x and x != proj["projectId"]]
 
 
 def _alt(old) -> str:

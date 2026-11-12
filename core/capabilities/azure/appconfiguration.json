@@ -1,0 +1,184 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Azure App Configuration. See aws/s3.json for the contract.",
+ "azure.appconfiguration.store.crud": {
+  "title": "Configuration stores (create, get, list, delete, soft delete/recover/purge) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.store.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.access_keys": {
+  "title": "Access settings: access keys (listKeys, regenerateKey)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Enable/disable access key authentication (disableLocalAuth) is stored and returned exactly as written, and really blocks HMAC-authenticated data-plane calls once set \u2014 but Vyomi has no signed-in-identity/session-principal concept behind a data-plane call, so a store with access keys disabled cannot be reached by any other credential either (real App Configuration would fall back to Microsoft Entra ID)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.kv.crud": {
+  "title": "Configuration explorer: key-values (get, list, create, update, delete, labels, tags, revisions, snapshots)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.kv.locks": {
+  "title": "Key-value locks (read-only keys)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.feature_flags": {
+  "title": "Feature manager (feature flags)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Feature flags are Vyomi's UI convention over plain key-values (the reserved `.appconfig.featureflag/` key prefix and the `application/vnd.microsoft.appconfig.ff+json` content type, exactly as real App Configuration stores them) \u2014 there is no dedicated feature-flag engine, so malformed flag JSON is stored and round-tripped as-is rather than schema-validated like the real service does."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.replicas": {
+  "title": "Geo-replication (replicas)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A replica is a real ARM child resource with its own endpoint, but key-value reads/writes against a replica's endpoint are not modelled separately \u2014 Vyomi has one data-plane relay per store (see azure.appconfiguration.kv.crud), not one per replica, so there is nothing to simulate region-local latency or replication lag with."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.networking": {
+  "title": "Networking (public network access)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "publicNetworkAccess=Disabled is ENFORCED: every data-plane request (read or write) returns 403 Forbidden while the control plane stays reachable. Vyomi has no private-link network path, so private endpoints (created through Microsoft.Network, connections approved/rejected on the store) are stored but cannot restore access \u2014 every caller counts as public."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py",
+   "tests/conformance/test_azure_netcfg_core.py"
+  ]
+ },
+ "azure.appconfiguration.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this configuration store",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this App Configuration store only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a App Configuration store is stored and listed only: it does not block writes or deletes of the App Configuration store itself."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.appconfiguration.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than the real signed-in principal. Severity/category filtering is not modelled (every recorded event is Informational/Administrative).",
+   "The Timespan picker IS enforced: its lower bound is a real OData `eventTimestamp ge` predicate (core/azure_arm_core.py _activity_log_query) \u2014 narrowing it really narrows the result, it isn't a cosmetic control."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.appconfiguration.iam": {
+  "title": "Access control (IAM)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Check access, Role assignments and Deny assignments are REAL and scoped to this configuration store's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.appconfiguration.importexport": {
+  "title": "Import/export of key-values (file, App Service, another configuration store)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Runs in the console over the real data plane (/kv) and Microsoft.Web app settings: JSON, .properties and simple YAML (maps and scalars only, no anchors or lists), the az appconfig kv import/export CLI is not part of Vyomi.",
+   "Feature flags are skipped on export; Key Vault references are copied as plain values."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.encryption": {"title": "Customer-managed key encryption", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Data is envelope-encrypted at rest: a per-store data-encryption key is wrapped by the Key Vault key (wrapKey); requests unwrap it (unwrapKey) and re-seal under the key's latest version, so rotation re-wraps. Disabling, expiring or deleting the key makes every request fail 403 and the data stays ciphertext until the key is usable again. Requires a Standard or Premium store, a managed identity and an existing Key Vault key (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled at configuration time). Offline appliance: the data plane (native azure-appconfiguration SDK) runs through the same engine over the offline ARM state; sealed-at-rest and key-disable 403 are verified over the offline wire in tests/conformance/test_azure_offline_wiring.py."], "tests": ["tests/conformance/test_azure_cmk_enforced.py", "tests/conformance/test_azure_cmk_sdk.py", "tests/conformance/test_azure_cfgext_core.py", "tests/conformance/test_azure_offline_wiring.py"]},
+ "azure.appconfiguration.tasks": {
+  "title": "Tasks (Logic App-backed task templates)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_tasks_core.py"
+  ]
+ },
+ "azure.appconfiguration.identity": {
+  "title": "Identity (system and user assigned managed identity)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "System assigned managed identity mints a stable principalId/tenantId (core/azure_arm_core.py _apply_identity), persists across PATCH and clears on 'None'. User assigned identities are real: references to Microsoft.ManagedIdentity/userAssignedIdentities are resolved, an unknown reference is rejected with 400 ResourceNotFound. The identity is not used to authorize anything beyond being the subject of a role assignment on Access control (IAM)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ }
+}

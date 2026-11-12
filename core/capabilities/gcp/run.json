@@ -1,0 +1,465 @@
+{
+ "$doc": "Vyomi capability registry — GCP Cloud Run (services, jobs, worker pools, domain mappings). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.run.services.crud": {
+  "title": "Services (deploy, list, get, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.services.get",
+   "projects.locations.services.list",
+   "projects.locations.services.patch",
+   "projects.locations.services.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.services.revisions": {
+  "title": "Revisions (history, traffic splitting, rollback)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.services.revisions.get",
+   "projects.locations.services.revisions.list",
+   "projects.locations.services.revisions.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.services.authentication": {
+  "title": "Authentication (allow unauthenticated / IAM invoker)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.services.getIamPolicy",
+   "projects.locations.services.setIamPolicy"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.services.scaling_billing": {
+  "title": "Service scaling, ingress and CPU allocation (request-based / instance-based billing)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Billing is not metered; the console mirrors the cpuIdle setting but Vyomi does not charge for instance time."
+  ],
+  "api": [
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.services.source": {
+  "title": "Source (inline function entry point, runtime, code)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "\"Save and redeploy\" is enforced, not just stored: a source/runtime/entry-point edit changes the revision's image fingerprint, so the same revision-diff logic the Admin API uses for any template change cuts a real new revision (visible on the Revisions tab, traffic following it) exactly as a redeploy would.",
+   "For Python sources, Vyomi parses the code on create/update and rejects it the way a real build would fail: a syntax error or an entry point the source doesn't define returns a 400 instead of saving. Other runtimes are stored and returned as configured but not parsed.",
+   "Vyomi does not build a container image or run the code; there is no invocation (see Observability for the metrics/logs gap)."
+  ],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.services.yaml": {
+  "title": "YAML view of the service config",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The YAML view is generated read-only from the real service state; editing and re-applying YAML directly is not simulated — use the other tabs."
+  ],
+  "api": [
+   "projects.locations.services.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.services.continuous_deployment": {
+  "title": "Continuously deploy from a repository (Cloud Build / GitHub) or set up continuous deployment on an existing service",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Offline: \"Continuously deploy from a repository\" creates the same trigger Cloud Run does against a repository on the simulator's built-in git host (the CI seam, the same one `git push` through the vyomi extension or a Gitea-style host feeds): a push to the matching branch runs a Cloud Build whose steps are the standard Build (docker build on the BuildKit builder), Push (into the simulated Artifact Registry) and Deploy (`gcloud run deploy|services update`, executed against the simulated Cloud Run, so validation, Binary Authorization and revision cutting all apply). A failing deploy fails the build and leaves the service on its previous revision.",
+   "Nano / offline-without-Docker: no container runtime, so the daemonless layer builder (core/ci_core.py LayerBuilder) builds a REAL OCI image: each COPY/ADD is a deterministic gzip tar layer with real sha256 diff-ids/digests, ENV/WORKDIR/EXPOSE/CMD/ENTRYPOINT/LABEL/USER/VOLUME/ARG populate the image config, multi-stage COPY --from works, and docker push puts the manifest + blobs into the simulated Artifact Registry. NOT built: any RUN (nothing can execute commands), any base image other than `scratch`, an earlier stage or a tag the builder made earlier (base layers cannot be pulled without registry egress), remote ADD URLs, buildpacks / Dockerfile-less builds, --target/--platform/cache flags. Those builds FAIL with that reason and the service keeps its previous revision. The trigger store, push event wiring (vyomiPush), build records and the standard gcloud run deploy step run identically on Nano (Cloud Run revisions there are control-plane records; the container is not executed).",
+   "Not simulated: GitHub / Cloud Source Repositories / Bitbucket connections (no network egress from the cores; only the built-in git host), buildpacks (a Dockerfile is required), Cloud Build worker pools, and any builder step other than docker build/push and gcloud run deploy/services update."
+  ],
+  "api": [
+   "cloudbuild projects.triggers.create/run (build steps: docker build, docker push, gcloud run deploy|services update)",
+   "(Vyomi) cloudbuild triggers:vyomiPush"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_continuous_deployment.py",
+   "tests/conformance/test_gcp_nano_layered_cd.py"
+  ]
+ },
+ "gcp.run.services.triggers": {
+  "title": "Event triggers (Eventarc) and Cloud Build source deploys",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Modelled as a Pub/Sub-transport Eventarc trigger (a service sub-resource, since Vyomi has no eventarc.googleapis.com): \"Add trigger\" binds the service to an existing Pub/Sub topic, and publishing on that topic — from the Pub/Sub console, the native wire, or any other trigger that publishes — really invokes the destination service once per message (the trigger's service account is implicitly a run.invoker; a direct :invoke enforces the IAM invoker policy) and writes a real Cloud Logging entry read back on the Observability tab. The Functions console's services/{s}/triggers path is the same Trigger resource.",
+   "Only Pub/Sub-sourced events are modelled; Vyomi has no Eventarc backend for Storage, Audit Log or direct Cloud Build source-deploy triggers, and \"Continuously deploy from a repository\" is not simulated (see continuous_deployment).",
+   "Vyomi does not run a container image, so a delivered event to a container-image service is recorded (honest 202) but cannot change its behaviour; only a Python function source really executes.",
+   "Event sources: Pub/Sub topics and Cloud Storage object finalize/delete (fired by real object writes). Audit-log, Firestore and direct events, and event triggers that start Cloud Run jobs, are not simulated."
+  ],
+  "api": [
+   "projects.locations.services.eventarcTriggers.create (simulator-only sub-resource)",
+   "projects.locations.services.eventarcTriggers.list",
+   "projects.locations.services.eventarcTriggers.delete",
+   "pubsub.projects.topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py",
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.services.observability": {
+  "title": "Observability (request metrics, container instance count, logs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi does not run the deployed container and does not meter real HTTP request traffic, so there are no request-count/latency time series or container instance metrics to show.",
+   "The Logs section is real, not synthetic: every service create/update (new revision)/delete, authentication change and Eventarc trigger delivery writes a real Cloud Logging entry (resource type cloud_run_revision), read back here over the native entries:list API — derived from actual API activity, never random."
+  ],
+  "api": [
+   "logging.entries.write",
+   "logging.entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.jobs.crud": {
+  "title": "Jobs (create, list, run, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.jobs.create",
+   "projects.locations.jobs.get",
+   "projects.locations.jobs.list",
+   "projects.locations.jobs.delete",
+   "projects.locations.jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.jobs.yaml": {
+  "title": "YAML view of the job config",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The YAML view is generated read-only from the real job state; editing and re-applying YAML directly is not simulated."
+  ],
+  "api": [
+   "projects.locations.jobs.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.jobs.observability": {
+  "title": "Job observability (execution metrics, logs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Metrics are real, derived from this job's own execution history (executions/succeeded/failed/task counts), not metered container resource usage — Vyomi runs each task to completion synchronously, so there are no per-task CPU/memory/duration series.",
+   "The Logs section is real: every execution start writes a real Cloud Logging entry (resource type cloud_run_job), read back over the native entries:list API — including executions started by a Cloud Scheduler trigger."
+  ],
+  "api": [
+   "logging.entries.write",
+   "logging.entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.jobs.triggers": {
+  "title": "Job triggers (Eventarc, Cloud Scheduler bindings shown on the job)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A Cloud Scheduler trigger is ENFORCED, not just displayed: \"Add trigger\" creates a Cloud Scheduler job whose httpTarget names this job's own Admin API v2 :run endpoint, and when that scheduler job fires (on its cron schedule, or via \"Run now\") the appliance's httpTarget delivery really calls jobs.run — a new execution starts, exactly like a real OIDC-authenticated Cloud Scheduler → Cloud Run Jobs binding.",
+   "Vyomi has no Eventarc backend, so event-based triggers (Pub/Sub, Storage, Audit Log events) are not modelled — only the Cloud Scheduler binding shown here."
+  ],
+  "api": [
+   "projects.locations.jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py",
+   "tests/conformance/test_gcp_cloudscheduler_core.py",
+   "tests/conformance/test_aws_wire_router.py"
+  ]
+ },
+ "gcp.run.workerpools.crud": {
+  "title": "Worker pools (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Worker pool instance splits across revisions are not modelled; a worker pool always runs its current template."
+  ],
+  "api": [
+   "projects.locations.workerPools.create",
+   "projects.locations.workerPools.get",
+   "projects.locations.workerPools.list",
+   "projects.locations.workerPools.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.domainmappings.crud": {
+  "title": "Domain mappings (map a custom domain to a service, DNS records)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Vyomi does not provision a real TLS certificate or serve traffic on the mapped domain; the DNS records it returns are illustrative."
+  ],
+  "api": [
+   "domainmappings.create",
+   "domainmappings.get",
+   "domainmappings.list",
+   "domainmappings.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.run.template.autoscaling": {
+  "tier": "pro",
+  "title": "Autoscaling factors (target utilization, concurrency)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The autoscaling rule (desired instances from in-flight requests, concurrency target, CPU target, min/max) is computed and validated, but Vyomi runs no real instance fleet: invocations are served in-process, so instance counts shown are the autoscaler's decision, not running containers."
+  ],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.template.health-checks": {
+  "title": "Startup and liveness probes",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Probe definitions are validated against the real Cloud Run rules (one handler, period/timeout/threshold bounds) and stored; Vyomi does not run a container, so probes are never executed and a failing probe never restarts an instance."
+  ],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.template.volumes": {
+  "title": "Volumes and volume mounts (in-memory, Secret Manager, Cloud Storage, NFS)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Volumes and mounts are validated (unique names, one source, absolute and unique mount paths, referenced bucket exists, second-generation requirements) and stored; no filesystem is actually mounted into a container."
+  ],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.template.ephemeral-disk": {
+  "title": "Ephemeral disk (emptyDir on disk with a size limit)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Requires the second-generation execution environment and a size limit as on the real service; the disk is not allocated, since Vyomi runs no container."
+  ],
+  "api": [
+   "projects.locations.services.create"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.template.cloudsql": {
+  "title": "Cloud SQL connections",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Connection names are validated and each must name a Cloud SQL instance that exists in Vyomi; the /cloudsql unix-socket proxy is not started, connect to the instance's own endpoint instead."
+  ],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.jobs.create"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.template.cmek": {
+  "title": "Customer-managed encryption key (CMEK)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The key must be a CryptoKey in the same region that exists in Vyomi; revision data is not actually encrypted with it, and revoking the key does not stop instances."
+  ],
+  "api": [
+   "projects.locations.services.create"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.binary-authorization": {
+  "title": "Binary Authorization",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Enforced for real at deploy (core/gcp_binauthz_core.py): a service/patch with binaryAuthorization {useDefault | policy} evaluates every container image against the project policy (projects/P/policy) or a named Cloud Run platform policy: admission allowlist (incl. the global Google-image allowlist), ALWAYS_ALLOW / ALWAYS_DENY / REQUIRE_ATTESTATION, ENFORCED_BLOCK_AND_AUDIT_LOG vs DRYRUN_AUDIT_LOG_ONLY. REQUIRE_ATTESTATION verifies real ECDSA P-256/SHA-256 signatures of Container Analysis ATTESTATION occurrences against the attestor's PKIX keys and the payload's image digest (tags are resolved through the simulated Artifact Registry). A denied deploy fails with FAILED_PRECONDITION and no service/revision is created (real Cloud Run creates the revision and leaves it not-ready).",
+   "Only ECDSA_P256_SHA256 PKIX keys are supported (RSA, other curves and Cloud KMS-backed attestor keys are refused at write time, not faked). GKE/Anthos cluster rules and continuous validation are stored on the policy but not enforced. The admission decision log is a Vyomi extension (GET projects/P/policy:decisions); it is not written to Cloud Audit Logs."
+  ],
+  "api": [
+   "projects.policy.get/update",
+   "projects.attestors.create/get/list/update/delete/validateAttestationOccurrence",
+   "projects.platforms.policies.create/get/list/replace/delete",
+   "containeranalysis projects.occurrences.create/get/list/delete (ATTESTATION only)",
+   "(Vyomi) projects/P/policy:evaluate, projects/P/policy:decisions",
+   "projects.locations.services.create",
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_binauthz.py",
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.services.revision-tags": {
+  "title": "Revision tags",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Tags give a revision a dedicated tagged URL and are validated (format, uniqueness) and returned in trafficStatuses; the wildcard tagged URL is served by Vyomi's own endpoint, not a public DNS name."
+  ],
+  "api": [
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_ext.py"
+  ]
+ },
+ "gcp.run.gpu": {
+  "title": "GPU (config stored; CPU-only unless the host has a GPU)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified. The GPU configuration (template.nodeSelector.accelerator=nvidia-l4, resources.limits['nvidia.com/gpu']=1, at least 4 CPU and 16Gi, gpuZonalRedundancyDisabled) is validated and stored and returned from the API. The revision carries the annotation vyomi.dev/gpu-status: 'No GPU on this host' (revision runs CPU-only, no CUDA) or, when the host Docker engine has an NVIDIA runtime, a note saying it was detected. This build does not pass a GPU through to Cloud Run revisions, so nothing runs accelerated either way.",
+   "Only nvidia-l4 is accepted; GPU quota, zonal redundancy and GPU pricing are not modelled. Nano (browser) never has a GPU."
+  ],
+  "api": [
+   "services.create (template.nodeSelector.accelerator)",
+   "services.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_gpu.py"
+  ]
+ },
+ "gcp.run.networking": {
+  "title": "Networking (HTTP/2 end-to-end, session affinity, VPC egress, service mesh, custom audiences)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "These are validated configuration on the revision/service, enforced and round-tripped like the real Cloud Run Admin API v2: ports[].name http1/h2c (one port, ingress container only), sessionAffinity, vpcAccess (connector in the same region that must exist in the VPC core, or one Direct VPC interface whose subnetwork must exist, egress ALL_TRAFFIC / PRIVATE_RANGES_ONLY, network tags), serviceMesh resource name, and customAudiences.",
+   "Vyomi's local request path is plain HTTP/1.1 with no load balancer: HTTP/2 end-to-end, session affinity and VPC egress routing change nothing about how a request is actually served or where outbound traffic goes, and the service mesh resource is format-checked only (Network Services meshes are not modelled). Custom domains are the Domain mappings feature; no managed certificate is issued."
+  ],
+  "api": [
+   "services.create",
+   "services.patch",
+   "revisions.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_networking.py"
+  ]
+ },
+ "gcp.run.source-deploy-ar": {
+  "title": "Source deploy pushes the BuildKit image into Artifact Registry (cloud-run-source-deploy)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Offline: a connected-repo source deploy builds the Dockerfile on BuildKit, pushes the image into the simulated Artifact Registry repository cloud-run-source-deploy (created on demand, as gcloud does) and cuts the revision with that Artifact Registry reference. Vyomi still does not run the container for arbitrary images; no buildpacks.",
+   "Nano: still not simulated for a connected GitHub repo - the Cloud Run source build fetches the branch from github.com and Nano has no outbound HTTP. The daemonless layer builder now exists (see gcp.run.services.continuous_deployment), and the Cloud Build push-trigger path pushes its image into cloud-run-source-deploy and cuts the revision, but the Cloud Run 'Deploy from source' (connect-repo) entry itself has no Nano source."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudbuild_core.py"
+  ]
+ }
+}

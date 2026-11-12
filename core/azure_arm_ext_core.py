@@ -41,6 +41,7 @@ read the same data):
 whose activity log the operation belongs to).
 """
 from __future__ import annotations
+import re
 
 import base64
 import datetime
@@ -149,8 +150,23 @@ def lock_conflict(state, rid: str, method: str):
         return None
     if "/providers/microsoft.authorization/locks" in rid.lower():
         return None
+    # Real ARM exempts Microsoft.Authorization operations (role assignments/definitions, deployment
+    # credentials, ...) from management locks: a lock cannot lock you out of fixing access.
+    if "/providers/microsoft.authorization/" in rid.lower():
+        return None
+    # The Microsoft.Web engine also serves lock management in the short form sites/{n}/locks/{lock};
+    # lock management is never blocked by the lock it manages (else a ReadOnly lock could not be removed).
+    if re.search(r"/providers/microsoft\.web/sites/[^/]+/locks(/[^/]+)?$", rid.lower()):
+        return None
     blocking = []
+    _t = str((state.get(rid.lower()) or {}).get("_type", "")).lower()
     for lk in locks_at(state, rid):
+        # A lock set directly on a resource is enforced for the types whose blades model it (VMs, Service
+        # Bus, Event Grid topics, Microsoft.Web); on other catalog types it stays config-only (v4 contract:
+        # delete cascades the lock). RG / subscription locks are inherited by everything.
+        if lk.get("_scope", "").lower() == rid.lower() and _t and not (
+                _t == VM_T or _t.startswith(("microsoft.servicebus/", "microsoft.web/")) or _t == "microsoft.eventgrid/topics"):
+            continue
         lvl = (lk.get("properties") or {}).get("level", "")
         if lvl == "ReadOnly" or (lvl == "CanNotDelete" and m == "DELETE"):
             blocking.append(lk.get("_scope", ""))
@@ -191,6 +207,7 @@ def _locks(state, method, scope, rest, payload):
         if notes and len(str(notes)) > 512:
             return _err(400, "LockNotesTooLong", "Lock notes can be at most 512 characters.")
         rec = old or _new_rec(rid, name, LOCK_T, scope=scope)
+        rec["_lock_scope"] = scope.lower()   # one lock store with core/azure_locks_core.py (v4 blades read it back)
         rec["properties"] = {"level": level, "notes": notes or "",
                              "owners": props.get("owners", (old or {}).get("properties", {}).get("owners", []))}
         state[key] = rec
@@ -224,7 +241,7 @@ def apply_identity(rec: dict, payload) -> None:
     identity allocates its service principal (principalId) in the tenant; disabling it
     drops the principal; user-assigned identities get their principal/client ids."""
     idn = (payload or {}).get("identity")
-    if not isinstance(idn, dict):
+    if not isinstance(idn, dict) or "type" not in idn:
         return
     t = _ID_TYPES.get(str(idn.get("type") or "None").replace(" ", "").lower(), "None")
     cur = rec.get("identity") if isinstance(rec.get("identity"), dict) else {}
@@ -475,6 +492,14 @@ def _pip(state, method, sub, rg, after, payload):
             return _err(400, "PublicIPAddressInUse",
                         f"Public IP address {rid} can not be deleted since it is still allocated to resource "
                         f"{rec['properties']['ipConfiguration'].get('id')}.")
+        if rec:
+            try:
+                from core import azure_netsvc_core as _ns
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_netsvc_core as _ns  # type: ignore
+            blocked = _ns.before_delete(state, rec)   # bastion / firewall still referencing it
+            if blocked:
+                return blocked
         state.pop(key, None)
         return _ok(None, 200 if rec else 204, rid, PIP_T, name)
     if method in ("PUT", "PATCH"):
@@ -570,12 +595,17 @@ def _nic(state, method, sub, rg, after, payload):
                 if other and not str(other.get("id", "")).lower().startswith(key + "/"):
                     return _err(400, "PublicIPAddressInUse",
                                 f"Public IP address {pip_id} is already allocated to {other.get('id')}.")
-            alloc = ip_props.get("privateIPAllocationMethod") or "Dynamic"
+            alloc = ip_props.get("privateIPAllocationMethod") or ("Static" if ip_props.get("privateIPAddress") else "Dynamic")
             ip = ip_props.get("privateIPAddress") if alloc == "Static" else None
             if alloc == "Static":
                 if not ip or ipaddress.ip_address(ip) not in ipaddress.ip_network(prefix, strict=False):
                     return _err(400, "PrivateIPAddressNotInSubnet",
                                 f"IP address {ip} does not belong to subnet {sub_id}.")
+                _net_ = ipaddress.ip_network(prefix, strict=False)
+                if ipaddress.ip_address(ip) in list(_net_.hosts())[:3] or ipaddress.ip_address(ip) == _net_.network_address \
+                        or ipaddress.ip_address(ip) == _net_.broadcast_address:
+                    return _err(400, "PrivateIPAddressIsReserved",
+                                f"IP address {ip} is reserved by Azure (the first four and last address of a subnet).")
                 if ip in _used_private_ips(state, key):
                     return _err(400, "PrivateIPAddressInUse", f"IP address {ip} is already in use.")
             else:
@@ -613,7 +643,7 @@ def _nic(state, method, sub, rg, after, payload):
         rec.setdefault("tags", {})
         state[key] = rec
         _nic_link(state, rec)
-        return _ok(_view(rec), 200 if old else 201, rid, NIC_T, name)
+        return _ok(_view(rec), 200, rid, NIC_T, name)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
@@ -625,7 +655,8 @@ def _nic_link(state, nic):
     for ipc in nic["properties"].get("ipConfigurations") or []:
         pip_id = ((ipc.get("properties") or {}).get("publicIPAddress") or {}).get("id")
         if pip_id and state.get(pip_id.lower()):
-            state[pip_id.lower()].setdefault("properties", {})["ipConfiguration"] = {"id": ipc["id"]}
+            ipc_id = ipc.get("id") or f"{rid}/ipConfigurations/{ipc.get('name') or 'ipconfig1'}"
+            state[pip_id.lower()].setdefault("properties", {})["ipConfiguration"] = {"id": ipc_id}
 
 
 def _nic_unlink(state, nic):
@@ -678,10 +709,12 @@ def on_delete(state, rec):
         return
     rid = str(rec.get("id", ""))
     low = rid.lower()
-    for k in [k for k in list(state.keys()) if str(k).startswith(low + "/")]:
-        state.pop(k, None)
+    for k in [k for k in list(state.keys()) if str(k).startswith(low + "/") and "/__event__/" not in str(k)]:
+        state.pop(k, None)   # (a deleted resource's Activity log rows stay, like real Azure)
     if str(rec.get("_type", "")).lower() == SQL_DB_T:
-        _sql_drop(state, rec)
+        _pfx = (rid.split("/databases/")[0] + "/restorableDroppedDatabases/" + str(rec.get("name", "")) + ",").lower()
+        if not any(str(k).startswith(_pfx) for k in state):   # v4's azure_sqlbackup_core already kept a restorable snapshot
+            _sql_drop(state, rec)
     if str(rec.get("_type", "")).lower() == VM_T:
         for ref in _nic_refs(rec.get("properties")):
             nic = state.get(ref["id"].lower())
@@ -983,9 +1016,7 @@ def _storage_fill(rec):
     p = rec.setdefault("properties", {})
     name = rec.get("name", "")
     now = _now()
-    if not isinstance(rec.get("_keys"), list) or len(rec["_keys"]) != 2:
-        rec["_keys"] = _initial_storage_keys(name)
-        p["keyCreationTime"] = {"key1": rec.get("_created") or now, "key2": rec.get("_created") or now}
+    _skeys(rec)   # v4's key store (random 64-byte keys, rotation); one store shared with listKeys/regenerateKey
     p.setdefault("creationTime", rec.get("_created") or now)
     p.setdefault("publicNetworkAccess", "Enabled")
     p.setdefault("minimumTlsVersion", "TLS1_2")
@@ -1020,6 +1051,8 @@ def after_upsert(state, rec, payload=None) -> None:
     p = rec.setdefault("properties", {})
     if t == VM_T:
         _vm_fill(rec)
+    if t == NIC_T.lower():
+        _nic_link(state, rec)   # v4's generic NIC PUT path: public IP / NSG back-references
     if t == STORAGE_T:
         _storage_fill(rec)
     elif t == SQL_SERVER_T:
@@ -1089,11 +1122,18 @@ def after_upsert(state, rec, payload=None) -> None:
             p["lastModifiedTime"] = _now()
 
 
+try:
+    from core import azure_storage_ext_core as _sx
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import azure_storage_ext_core as _sx  # type: ignore
+
+
+def _skeys(rec):
+    return _sx._keys(rec)
+
+
 def _storage_keys_view(rec):
-    p = rec.get("properties") or {}
-    kct = p.get("keyCreationTime") or {}
-    return {"keys": [{"keyName": f"key{i + 1}", "value": v, "permissions": "FULL",
-                      "creationTime": kct.get(f"key{i + 1}")} for i, v in enumerate(rec["_keys"])]}
+    return _sx.list_keys(rec)
 
 
 def _account_sas(rec, body):
@@ -1117,7 +1157,7 @@ def _account_sas(rec, body):
     if (rec.get("properties") or {}).get("allowSharedKeyAccess") is False:
         return _err(403, "KeyBasedAuthenticationNotPermitted",
                     "Key based authentication is not permitted on this storage account (allowSharedKeyAccess is false).")
-    key = rec["_keys"][int(key_name[-1]) - 1]
+    key = _skeys(rec)[key_name]
     ses = str(b.get("signedEncryptionScope") or "")
     to_sign = "\n".join([rec.get("name", ""), sp, ss, srt, st, se, sip, spr, SAS_VERSION, ses, ""])
     sig = base64.b64encode(hmac.new(base64.b64decode(key), to_sign.encode("utf-8"), hashlib.sha256).digest()).decode()
@@ -1141,9 +1181,7 @@ def _storage_action(state, rid, rec, action, payload):
         kn = str((payload or {}).get("keyName") or "")
         if kn not in ("key1", "key2"):
             return _err(400, "InvalidValuesForRequestParameters", "keyName must be key1 or key2.")
-        i = int(kn[-1]) - 1
-        rec["_keys"][i] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
-        rec.setdefault("properties", {}).setdefault("keyCreationTime", {})[kn] = _now()
+        _sx.regenerate(rec, {"keyName": kn})
         return _ok(_storage_keys_view(rec), 200, rid, "Microsoft.Storage/storageAccounts/regenerateKey", rec.get("name", ""))
     if a == "listaccountsas":
         return _account_sas(rec, payload)
@@ -1502,7 +1540,7 @@ def _key():
 
 def site_log(rec, message, level="Information"):
     """Append one line to the app's log stream (platform + application events)."""
-    logs = rec.setdefault("_logs", [])
+    logs = rec.setdefault("_logstream", [])
     logs.append({"timestamp": _now(), "level": level, "message": str(message)[:2000]})
     del logs[:-500]
 
@@ -1671,7 +1709,7 @@ def _site_route(state, method, sub, rg, after, payload):
         mark_changed(site)
         return _ok(None, 200, site_id, "Microsoft.Web/sites/" + rest[0], site.get("name", ""))
     if rest == ["config", "appsettings", "list"] and method == "POST":
-        return _ok(_view(state[f"{site_id}/config/appsettings".lower()]))
+        return None   # app settings live on v4's Microsoft.Web engine (PUT/PATCH/list share one store)
     hk = site["_hostkeys"]
     if rest == ["host", "default", "listkeys"] and method == "POST":
         return _ok(dict(hk))
@@ -1697,7 +1735,7 @@ def _site_route(state, method, sub, rg, after, payload):
         fk = fn.setdefault("_keys", {"default": _key()})
         return _ok(dict(fk))
     if rest[:1] == ["extensions"] and rest[1:] == ["api", "logs"] and method == "GET":
-        return _ok({"value": list(reversed(site.get("_logs") or []))[:200]})
+        return _ok({"value": list(reversed(site.get("_logstream") or []))[:200]})
     return None
 
 
@@ -1789,7 +1827,7 @@ def _vnet_fill(state, rec):
         sp.setdefault("privateLinkServiceNetworkPolicies", "Enabled")
         used = _subnet_nics(state, sid)
         if used:
-            sp["ipConfigurations"] = [{"id": ipc["id"]} for _, ipc in used]
+            sp["ipConfigurations"] = [{"id": ipc["id"]} for _, ipc in used if ipc.get("id")]
         else:
             sp.pop("ipConfigurations", None)
     plan = (p.get("ddosProtectionPlan") or {}).get("id")
@@ -1848,7 +1886,7 @@ def _ddos_plans(state, method, sub, rg, after, payload):
     if method == "DELETE":
         rec = state.get(key)
         if rec and (rec.get("properties") or {}).get("virtualNetworks"):
-            return _err(400, "DdosProtectionPlanInUse", f"DDoS protection plan {name} is associated with virtual networks.")
+            return _err(400, "InUseDdosProtectionPlanCannotBeDeleted", f"DDoS protection plan {name} is associated with virtual networks.")
         state.pop(key, None)
         return _ok(None, 200 if rec else 204, rid, DDOS_T, name)
     if method in ("PUT", "PATCH"):
@@ -1978,6 +2016,13 @@ def _sb_route(state, method, sub, rg, after, payload):
 EG_T = "microsoft.eventgrid/topics"
 
 
+def _eg_keys(rec):
+    """Real shape {key1,key2}; the v4 `keys` list rides along for clients that read it."""
+    k1, k2 = rec["_keys"]
+    return {"key1": k1, "key2": k2, "keys": [{"keyName": "key1", "value": k1, "permissions": "FULL"},
+                                              {"keyName": "key2", "value": k2, "permissions": "FULL"}]}
+
+
 def _eg_route(state, method, sub, rg, after, payload):
     low = [a.lower() for a in after]
     rid = scope_id(sub, rg, after[:3])
@@ -1993,8 +2038,8 @@ def _eg_route(state, method, sub, rg, after, payload):
         if kn not in ("key1", "key2"):
             return _err(400, "BadRequest", "keyName must be key1 or key2.")
         rec["_keys"][int(kn[-1]) - 1] = _sas_key()
-        return _ok({"key1": rec["_keys"][0], "key2": rec["_keys"][1]}, 200, rid, "Microsoft.EventGrid/topics/regenerateKey", rec.get("name", ""))
-    return _ok({"key1": rec["_keys"][0], "key2": rec["_keys"][1]})
+        return _ok(_eg_keys(rec), 200, rid, "Microsoft.EventGrid/topics/regenerateKey", rec.get("name", ""))
+    return _ok(_eg_keys(rec))
 
 
 # ── API Management: named values (secret values hidden), custom domains ──
@@ -2106,7 +2151,7 @@ def _apim_backup(state, svc_id, svc, payload, blob, restore):
     at = b.get("accessType") or "AccessKey"
     if at == "AccessKey":
         _storage_fill(sa)
-        if b.get("accessKey") not in sa["_keys"]:
+        if b.get("accessKey") not in list(_skeys(sa).values()):
             return _err(400, "InvalidParameters", "accessKey is not a valid key of the storage account.")
     elif at == "SystemAssignedManagedIdentity":
         if "SystemAssigned" not in str((svc.get("identity") or {}).get("type", "")):
@@ -2180,6 +2225,11 @@ def _vm_fill(rec):
     md.setdefault("storageAccountType", "Premium_LRS")
     md["id"] = f"{rg_id}/providers/Microsoft.Compute/disks/{od['name']}"
     for d in sp.get("dataDisks") or []:
+        if str((d.get("managedDisk") or {}).get("id") or "") and d.get("createOption") == "Attach":
+            d.setdefault("name", str(d["managedDisk"]["id"]).rsplit("/", 1)[-1])   # an existing disk (v4 azure_disks_core): keep its id
+            d.setdefault("caching", "None")
+            d.setdefault("deleteOption", "Detach")
+            continue
         d.setdefault("name", f"{name}_DataDisk_{d.get('lun', 0)}")
         d.setdefault("createOption", "Empty")
         d.setdefault("caching", "None")
@@ -2223,6 +2273,10 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         scope = scope_id(sub, rg, parent_after)
         parent = state.get(scope.lower())
         if parent is None:
+            if len(parent_after) >= 2 and parent_after[-2].lower() == "locations":
+                return None   # {provider}/locations/{region}/providers/... (quota, capabilities): not stored resources — v4's engines
+            if method == "GET" and len(ext) == 2 and (ext[0].lower(), ext[1].lower()) in (("microsoft.authorization", "locks"), ("microsoft.insights", "diagnosticsettings")):
+                return _ok({"value": []})   # a deleted resource's locks went with it (v4 list contract)
             return _err(404, "ParentResourceNotFound", f"Resource '{scope}' not found.")
         ns, rest = ext[0], ext[1:]
         nsl, t0 = ns.lower(), rest[0].lower()
@@ -2231,16 +2285,28 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         if nsl == "microsoft.authorization" and t0 == "roleassignments":
             return _role_assignments(state, method, scope, rest, payload)
         if nsl == "microsoft.authorization" and t0 == "checkaccess" and method == "POST":
-            return _arm_check_access(state, scope, payload)
+            return None
         if nsl == "microsoft.resourcehealth" and t0 == "availabilitystatuses":
             return _health(parent, scope, rest) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
         if nsl == "microsoft.managedidentity" and t0 == "identities":
             return _identity_default(parent, scope) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+        if nsl == "microsoft.vyomi":
+            return None   # Vyomi diagnostics extension (azure_diagnose_core): v4's engine
+        if nsl == "microsoft.security":
+            return None   # Defender for Cloud assessments / sub-assessments: v4's security engine
+        if nsl in ("microsoft.kubernetesconfiguration", "microsoft.network"):
+            return None   # AKS GitOps/extensions and network extension resources (netcfg/netsvc): v4's engines
+        if nsl == "microsoft.servicelinker":
+            return None   # Service Connector linkers on a web app: v4's Microsoft.Web engine (injects the app settings)
+        if nsl == "microsoft.eventgrid":
+            return None   # scoped event subscriptions: v4's Event Grid engine
+        if nsl == "microsoft.insights":
+            return None   # diagnostic settings, DCR associations, metrics, activity-log feed: v4's Insights engines
+        if nsl == "microsoft.compute" and t0 == "restorepoints":
+            return None   # per-VM restore points are v4's AzureArm._vm_restore_points
         return _generic_ext(state, method, scope, ns, rest, payload)
-    if low[0] == "microsoft.authorization" and low[1] == "checkaccess" and method == "POST":
-        return _arm_check_access(state, scope_id(sub, rg, []), payload)
-    if low[0] == "microsoft.authorization" and low[1] == "roledefinitions" and method == "GET" and len(after) <= 3:
-        return _role_definitions(state, sub, after)
+    # (subscription / resource-group scope checkAccess is v4's AzureArm role engine)
+    # (role definitions / assignments / checkAccess at subscription + RG scope: v4's AzureArm RBAC engine)
     # Locks at subscription / resource-group scope.
     if low[0] == "microsoft.authorization" and low[1] == "locks":
         return _locks(state, method, scope_id(sub, rg, []), after[1:], payload)
@@ -2249,13 +2315,15 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
     if low[0] == "microsoft.network" and low[1] == "ddosprotectionplans" and len(after) <= 3:
         return _ddos_plans(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.network" and low[1] == "networkinterfaces" and len(after) <= 3:
+        if method in ("PUT", "PATCH", "DELETE") and len(after) == 3:
+            return None   # NIC writes go through v4's generic path so the network/LB/ASG validators + after-put hooks run (IP allocation: after_upsert)
         return _nic(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.network" and low[1] == "publicipaddresses" and len(after) <= 3:
         return _pip(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.devtestlab" and low[1] == "schedules" and len(after) <= 3:
         return _schedules(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.storage" and low[1] == "storageaccounts" and len(after) == 4 and method == "POST" \
-            and low[3] in ("listkeys", "regeneratekey", "listaccountsas", "failover"):
+            and low[3] in ("listaccountsas",):   # (listKeys / regenerateKey: v4 azure_storage_ext_core; failover: v4 azure_backup_core geo-replication)
         rid = scope_id(sub, rg, after[:3])
         rec = state.get(rid.lower())
         if rec is None:
@@ -2265,7 +2333,7 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         if r is not None:
             return r
     if low[0] == "microsoft.servicebus" and low[1] == "namespaces" and len(after) == 6 and method == "POST" \
-            and low[3] in ("authorizationrules", "disasterrecoveryconfigs"):
+            and low[3] in ("authorizationrules",):   # (disasterRecoveryConfigs are v4's AzureArm engine)
         r = _sb_route(state, method, sub, rg, after, payload)
         if r is not None:
             return r
@@ -2289,8 +2357,17 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _err(404, "ResourceNotFound", f"Subscription '{after[4]}' not found.")
         pk, sk = apim_sub_keys(svc_id, after[4], srec)
         return _ok({"primaryKey": pk, "secondaryKey": sk})
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) == 4 and low[3] == "vyomianalytics":
+        svc = state.get(scope_id(sub, rg, after[:3]).lower())   # gateway request analytics + capacity gauge (core/azure_apim_gateway_core.py)
+        if svc is None:
+            return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+        try:
+            from core import azure_apim_gateway_core as _gw
+        except ImportError:
+            import azure_apim_gateway_core as _gw   # type: ignore
+        return _ok(_gw.analytics(svc)) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
     if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) >= 4 and low[3] == "namedvalues" \
-            and (method == "GET" or (len(after) == 6 and low[5] == "listvalue")):
+            and method == "GET":   # (listValue is v4's: AzureArm._apim_namedvalue_listvalue resolves Key Vault refs for real)
         r = _apim_route(state, method, sub, rg, after, payload)
         if r is not None:
             return r

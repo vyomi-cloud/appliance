@@ -1,0 +1,286 @@
+/* Azure Monitor (Microsoft.Insights) + Log Analytics (Microsoft.OperationalInsights) over the
+ * native ARM wire: `/_wire/subscriptions/{sub}/…?api-version=…`. Served by
+ * core/azure_monitor_core.py and core/azure_operationalinsights_core.py on every substrate
+ * (appliance: providers/azure_services.handle_arm; Nano + dev server: core/azure_arm_core.AzureArm),
+ * so whatever the console creates an azure-mgmt-monitor / azure-mgmt-loganalytics SDK or `az`
+ * CLI sees, and the reverse.
+ * Not modelled by the backend (core/azure_monitor_core.py docstring): metric definitions/values,
+ * scheduled query rules. Pages for those stay honest. */
+import { restJson } from "../../../common/wire.js";
+import { armType, getSubscription, parseId } from "../../kit/arm.js";
+
+export const ACTION_GROUPS = armType("Microsoft.Insights", "actionGroups", "2023-01-01");
+export const METRIC_ALERTS = armType("Microsoft.Insights", "metricAlerts", "2018-03-01");
+export const ACTIVITY_LOG_ALERTS = armType("Microsoft.Insights", "activityLogAlerts", "2020-10-01");
+export const AUTOSCALE = armType("Microsoft.Insights", "autoscaleSettings", "2022-10-01");
+export const WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
+export const WORKBOOKS = armType("Microsoft.Insights", "workbooks", "2022-04-01");
+export const DATA_COLLECTION_RULES = armType("Microsoft.Insights", "dataCollectionRules", "2023-03-11");
+export const DATA_COLLECTION_ENDPOINTS = armType("Microsoft.Insights", "dataCollectionEndpoints", "2023-03-11");
+export const PRIVATE_LINK_SCOPES = armType("Microsoft.Insights", "privateLinkScopes", "2021-07-01-preview");
+export const HEALTH_MODELS = armType("Microsoft.Insights", "healthModels", "2023-04-01-preview");
+export const PIPELINE_GROUPS = armType("Microsoft.Insights", "pipelineGroups", "2023-10-01-preview");
+
+const withRg = (a) => ({ ...a, resourceGroup: parseId(a.id).resourceGroup });
+
+// ── action groups ───────────────────────────────────────────────────────────────────
+export const listActionGroups = async () => (await ACTION_GROUPS.list()).map(withRg);
+export const getActionGroup = (rg, name) => ACTION_GROUPS.get(rg, name).then(withRg);
+export const putActionGroup = (rg, name, body) => ACTION_GROUPS.put(rg, name, body);
+export const deleteActionGroup = (rg, name) => ACTION_GROUPS.remove(rg, name);
+export const subscribeActionGroupReceiver = (rg, name, receiverName) => ACTION_GROUPS.action(rg, name, "subscribe", { receiverName });
+export const sendTestNotification = (rg, name, alertType = "servicehealth") => ACTION_GROUPS.action(rg, name, "createNotifications", { alertType });
+
+// ── metric alert rules ──────────────────────────────────────────────────────────────
+export const listMetricAlerts = async () => (await METRIC_ALERTS.list()).map(withRg);
+export const getMetricAlert = (rg, name) => METRIC_ALERTS.get(rg, name).then(withRg);
+export const putMetricAlert = (rg, name, body) => METRIC_ALERTS.put(rg, name, body);
+export const deleteMetricAlert = (rg, name) => METRIC_ALERTS.remove(rg, name);
+
+// ── activity log alert rules ─────────────────────────────────────────────────────────
+export const listActivityLogAlerts = async () => (await ACTIVITY_LOG_ALERTS.list()).map(withRg);
+export const putActivityLogAlert = (rg, name, body) => ACTIVITY_LOG_ALERTS.put(rg, name, body);
+export const deleteActivityLogAlert = (rg, name) => ACTIVITY_LOG_ALERTS.remove(rg, name);
+
+// ── log search alert rules (Microsoft.Insights/scheduledQueryRules) — the rule's KQL is executed by the
+// REAL Log Analytics KQL engine over the workspace's stored rows (core/azure_alerts_core.py).
+export const SCHEDULED_QUERY_RULES = armType("Microsoft.Insights", "scheduledQueryRules", "2023-03-15-preview");
+export const listScheduledQueryRules = async () => (await SCHEDULED_QUERY_RULES.list()).map(withRg);
+export const putScheduledQueryRule = (rg, name, body) => SCHEDULED_QUERY_RULES.put(rg, name, body);
+export const deleteScheduledQueryRule = (rg, name) => SCHEDULED_QUERY_RULES.remove(rg, name);
+
+// ── fired alerts (Microsoft.AlertsManagement/alerts) — raised only when a rule's condition is really met
+export const ALERTS_API_VERSION = "2019-03-01";
+const alertsPath = () => `/subscriptions/${getSubscription()}/providers/Microsoft.AlertsManagement`;
+export const listFiredAlerts = async (query = {}) =>
+  (await restJson("GET", `${alertsPath()}/alerts`, { query: { "api-version": ALERTS_API_VERSION, ...query } })).value || [];
+export const getAlertsSummary = async (groupby = "severity,alertState") =>
+  (await restJson("GET", `${alertsPath()}/alertsSummary`, { query: { "api-version": ALERTS_API_VERSION, groupby } })).properties;
+export const changeAlertState = (name, newState) =>
+  restJson("POST", `${alertsPath()}/alerts/${encodeURIComponent(name)}/changestate`, { query: { "api-version": ALERTS_API_VERSION, newState }, body: {} });
+export const getAlertHistory = async (name) =>
+  (await restJson("GET", `${alertsPath()}/alerts/${encodeURIComponent(name)}/history`, { query: { "api-version": ALERTS_API_VERSION } })).value || [];
+/** Vyomi extension: run the evaluation loop now, ignoring each rule's evaluationFrequency. */
+export const evaluateAlertsNow = () =>
+  restJson("POST", `${alertsPath()}/evaluate`, { query: { "api-version": ALERTS_API_VERSION }, body: {} });
+
+// ── alert processing rules (Microsoft.AlertsManagement/actionRules) + Prometheus rule groups
+export const PROCESSING_RULES = armType("Microsoft.AlertsManagement", "actionRules", "2021-08-08");
+export const PROMETHEUS_RULE_GROUPS = armType("Microsoft.AlertsManagement", "prometheusRuleGroups", "2023-03-01");
+export const listProcessingRules = async () => (await PROCESSING_RULES.list()).map(withRg);
+export const putProcessingRule = (rg, name, body) => PROCESSING_RULES.put(rg, name, body);
+export const deleteProcessingRule = (rg, name) => PROCESSING_RULES.remove(rg, name);
+export const listPrometheusRuleGroups = async () => (await PROMETHEUS_RULE_GROUPS.list()).map(withRg);
+export const putPrometheusRuleGroup = (rg, name, body) => PROMETHEUS_RULE_GROUPS.put(rg, name, body);
+export const deletePrometheusRuleGroup = (rg, name) => PROMETHEUS_RULE_GROUPS.remove(rg, name);
+
+/** Resources collecting through a data collection rule: every association that names it. */
+export const listDcrResources = async (rg, name) =>
+  (await restJson("GET", `${DATA_COLLECTION_RULES.path(rg, name)}/associations`, { query: { "api-version": DATA_COLLECTION_RULES.apiVersion } })).value || [];
+
+/** Both alert rule types normalized into one shape for the combined "Alerts" grid. */
+export async function listAlertRules() {
+  const [metric, activity, sqr] = await Promise.all([listMetricAlerts(), listActivityLogAlerts(), listScheduledQueryRules().catch(() => [])]);
+  return [
+    ...sqr.map((r) => ({ id: r.id, name: r.name, resourceGroup: r.resourceGroup, kind: "Log search", severity: r.properties.severity,
+      enabled: r.properties.enabled, scopes: r.properties.scopes, condition: (r.properties.criteria?.allOf?.[0]?.query || "--").split("\n")[0].slice(0, 60), raw: r })),
+    ...metric.map((r) => ({ id: r.id, name: r.name, resourceGroup: r.resourceGroup, kind: "Metric", severity: r.properties.severity,
+      enabled: r.properties.enabled, scopes: r.properties.scopes, condition: conditionSummary(r), raw: r })),
+    ...activity.map((r) => ({ id: r.id, name: r.name, resourceGroup: r.resourceGroup, kind: "Activity Log", severity: null,
+      enabled: r.properties.enabled, scopes: r.properties.scopes, condition: activityConditionSummary(r), raw: r })),
+  ];
+}
+export function conditionSummary(rule) {
+  const c = (rule.properties.criteria?.allOf || [])[0];
+  if (!c) return "--";
+  return `${c.metricName} ${c.operator === "GreaterThan" ? ">" : c.operator === "LessThan" ? "<" : c.operator} ${c.threshold ?? ""}`.trim();
+}
+export function activityConditionSummary(rule) {
+  const cat = (rule.properties.condition?.allOf || []).find((c) => c.field?.toLowerCase() === "category");
+  return cat ? `Category = ${cat.equals}` : "--";
+}
+export const SEVERITY_LABEL = { 0: "0 - Critical", 1: "1 - Error", 2: "2 - Warning", 3: "3 - Informational", 4: "4 - Verbose" };
+
+// ── autoscale settings ───────────────────────────────────────────────────────────────
+export const listAutoscaleSettings = async () => (await AUTOSCALE.list()).map(withRg);
+export const getAutoscaleSetting = (rg, name) => AUTOSCALE.get(rg, name).then(withRg);
+export const putAutoscaleSetting = (rg, name, body) => AUTOSCALE.put(rg, name, body);
+export const deleteAutoscaleSetting = (rg, name) => AUTOSCALE.remove(rg, name);
+
+// ── activity log (Microsoft.Insights/eventtypes, subscription-wide ARM activity feed) ──
+export async function listActivityLog(resourceId, extraFilter) {
+  const query = { "api-version": "2015-04-01" };
+  const parts = [resourceId ? `resourceUri eq '${resourceId}'` : null, extraFilter || null].filter(Boolean);
+  if (parts.length) query["$filter"] = parts.join(" and ");
+  const r = await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query });
+  return r.value || [];
+}
+
+// ── Log Analytics workspaces (Microsoft.OperationalInsights) ───────────────────────────
+export const listWorkspaces = async () => (await WORKSPACES.list()).map(withRg);
+export const getWorkspace = (rg, name) => WORKSPACES.get(rg, name).then(withRg);
+export const putWorkspace = (rg, name, body) => WORKSPACES.put(rg, name, body);
+export const deleteWorkspace = (rg, name) => WORKSPACES.remove(rg, name);
+export const WORKSPACE_SKUS = ["PerGB2018", "Free", "Standalone", "PerNode", "Standard", "Premium", "CapacityReservation"];
+
+// ── Logs query (.../workspaces/{ws}/api/query) — the same ARM pass-through path the
+// Azure Portal's Logs blade uses, carrying a small real KQL subset (core/azure_operationalinsights_core.py).
+export const LOG_QUERY_API_VERSION = "2017-10-01";
+export const runLogQuery = (rg, name, query) =>
+  restJson("POST", `${WORKSPACES.path(rg, name)}/api/query`, { query: { "api-version": LOG_QUERY_API_VERSION }, body: { query } });
+
+// ── workbooks (Microsoft.Insights/workbooks) ────────────────────────────────────────
+export const listWorkbooks = async () => (await WORKBOOKS.list()).map(withRg);
+export const putWorkbook = (rg, name, body) => WORKBOOKS.put(rg, name, body);
+export const deleteWorkbook = (rg, name) => WORKBOOKS.remove(rg, name);
+
+// ── data collection rules (Microsoft.Insights/dataCollectionRules) ──────────────────
+export const listDataCollectionRules = async () => (await DATA_COLLECTION_RULES.list()).map(withRg);
+export const putDataCollectionRule = (rg, name, body) => DATA_COLLECTION_RULES.put(rg, name, body);
+export const deleteDataCollectionRule = (rg, name) => DATA_COLLECTION_RULES.remove(rg, name);
+
+// ── data collection endpoints (Microsoft.Insights/dataCollectionEndpoints) ──────────
+export const listDataCollectionEndpoints = async () => (await DATA_COLLECTION_ENDPOINTS.list()).map(withRg);
+export const putDataCollectionEndpoint = (rg, name, body) => DATA_COLLECTION_ENDPOINTS.put(rg, name, body);
+export const deleteDataCollectionEndpoint = (rg, name) => DATA_COLLECTION_ENDPOINTS.remove(rg, name);
+
+// ── private link scopes (Microsoft.Insights/privateLinkScopes) ─────────────────────
+export const listPrivateLinkScopes = async () => (await PRIVATE_LINK_SCOPES.list()).map(withRg);
+export const putPrivateLinkScope = (rg, name, body) => PRIVATE_LINK_SCOPES.put(rg, name, body);
+export const deletePrivateLinkScope = (rg, name) => PRIVATE_LINK_SCOPES.remove(rg, name);
+
+// ── private link scope "Azure Monitor Resources" tab (Microsoft.Insights/privateLinkScopes/
+// {name}/scopedResources) — links a Log Analytics workspace INTO the scope; a real sub-resource
+// (validated against the resource it names), not a stored-but-inert setting.
+export const listScopedResources = async (rg, scopeName) =>
+  (await restJson("GET", `${PRIVATE_LINK_SCOPES.path(rg, scopeName)}/scopedResources`, { query: { "api-version": PRIVATE_LINK_SCOPES.apiVersion } })).value || [];
+export const putScopedResource = (rg, scopeName, name, linkedResourceId) =>
+  restJson("PUT", `${PRIVATE_LINK_SCOPES.path(rg, scopeName)}/scopedResources/${encodeURIComponent(name)}`,
+    { query: { "api-version": PRIVATE_LINK_SCOPES.apiVersion }, body: { properties: { linkedResourceId } } });
+export const deleteScopedResource = (rg, scopeName, name) =>
+  restJson("DELETE", `${PRIVATE_LINK_SCOPES.path(rg, scopeName)}/scopedResources/${encodeURIComponent(name)}`,
+    { query: { "api-version": PRIVATE_LINK_SCOPES.apiVersion } });
+
+// ── diagnostic settings (Microsoft.Insights/diagnosticSettings) — a real ARM extension
+// resource scoped to ANY other resource's own id (the path re-enters "providers", the same
+// shape Microsoft.Authorization/locks uses), so it's a plain restJson call keyed off the
+// resource's own full id rather than an armType() (which only knows RG-scoped collections).
+export const DIAGNOSTIC_SETTINGS_API_VERSION = "2021-05-01-preview";
+export const listDiagnosticSettings = async (resourceId) =>
+  (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/diagnosticSettings`,
+    { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (resourceId, name, body) =>
+  restJson("PUT", `${resourceId}/providers/Microsoft.Insights/diagnosticSettings/${encodeURIComponent(name)}`,
+    { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION }, body });
+export const deleteDiagnosticSetting = (resourceId, name) =>
+  restJson("DELETE", `${resourceId}/providers/Microsoft.Insights/diagnosticSettings/${encodeURIComponent(name)}`,
+    { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION } });
+
+// ── generic resource inventory (Insights per-resource-type dashboards, Metrics scope) ──
+// Microsoft.Insights has no per-resource-type telemetry rollup in Vyomi (not modelled); these
+// dashboards show the real inventory of each resource type instead.
+export const RESOURCE_TYPES = [
+  { provider: "Microsoft.Compute", type: "virtualMachines", apiVersion: "2023-09-01", label: "Virtual machine" },
+  { provider: "Microsoft.Storage", type: "storageAccounts", apiVersion: "2023-01-01", label: "Storage account" },
+  { provider: "Microsoft.Web", type: "sites", apiVersion: "2023-12-01", label: "App Service" },
+  { provider: "Microsoft.Network", type: "virtualNetworks", apiVersion: "2023-11-01", label: "Virtual network" },
+  { provider: "Microsoft.DocumentDB", type: "databaseAccounts", apiVersion: "2024-05-15", label: "Azure Cosmos DB account" },
+  { provider: "Microsoft.KeyVault", type: "vaults", apiVersion: "2023-07-01", label: "Key vault" },
+  { provider: "Microsoft.ServiceBus", type: "namespaces", apiVersion: "2022-10-01-preview", label: "Service Bus namespace" },
+  { provider: "Microsoft.ContainerService", type: "managedClusters", apiVersion: "2024-09-02-preview", label: "Kubernetes service" },
+  { provider: "Microsoft.Cache", type: "redis", apiVersion: "2024-03-01", label: "Azure Cache for Redis" },
+  { provider: "Microsoft.Kusto", type: "clusters", apiVersion: "2023-08-15", label: "Azure Data Explorer cluster" },
+];
+export async function listResourcesOfType(rt) {
+  const items = await armType(rt.provider, rt.type, rt.apiVersion).list();
+  return items.map(withRg);
+}
+/** Vyomi's full real inventory across every type a Monitor scope picker would offer. */
+export async function listAllResources() {
+  const lists = await Promise.all(RESOURCE_TYPES.map((rt) => listResourcesOfType(rt).catch(() => [])));
+  return RESOURCE_TYPES.flatMap((rt, i) => lists[i].map((r) => ({ ...r, resourceType: `${rt.provider}/${rt.type}`, typeLabel: rt.label })));
+}
+export const LOCATIONS_OF = (resources) => [...new Set(resources.map((r) => r.location).filter(Boolean))].sort();
+
+// ── metrics data plane (Microsoft.Insights/metricDefinitions, metrics) — a real resource-
+// scoped extension API, same re-entrant "providers" shape diagnostic settings uses. Vyomi has
+// exactly one real metric: a count of the resource's own Activity log rows, never synthetic data.
+export const METRICS_API_VERSION = "2018-01-01";
+export const listMetricDefinitions = async (resourceId) =>
+  (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/metricDefinitions`,
+    { query: { "api-version": METRICS_API_VERSION } })).value || [];
+export const getMetrics = (resourceId, { metricnames, aggregation = "Total", interval = "PT1H", timespan, filter } = {}) =>
+  restJson("GET", `${resourceId}/providers/Microsoft.Insights/metrics`,
+    { query: { "api-version": METRICS_API_VERSION, metricnames, aggregation, interval, ...(timespan ? { timespan } : {}), ...(filter ? { $filter: filter } : {}) } });
+
+/** Azure metrics `$filter` from the chart's Add filter rows + Apply splitting dimension, e.g.
+ *  `(OperationName eq 'a' or OperationName eq 'b') and Status eq '*'`. Splitting is `Dim eq '*'`. */
+export function metricFilter(filters = [], splitBy = "") {
+  const terms = filters.filter((f) => f.dimension && f.values?.length).map((f) =>
+    f.operator === "ne" ? f.values.map((v) => `${f.dimension} ne '${v}'`).join(" and ")
+      : `(${f.values.map((v) => `${f.dimension} eq '${v}'`).join(" or ")})`);
+  if (splitBy) terms.push(`${splitBy} eq '*'`);
+  return terms.join(" and ");
+}
+
+// ── Save to dashboard: a real Microsoft.Portal/dashboards resource in the ARM store, one metrics-chart part per pin ──
+export const DASHBOARDS = armType("Microsoft.Portal", "dashboards", "2022-12-01-preview");
+export const listDashboards = async () => (await DASHBOARDS.list()).map(withRg);
+export const getDashboard = (rg, name) => DASHBOARDS.get(rg, name).then(withRg);
+export const putDashboard = (rg, name, body) => DASHBOARDS.put(rg, name, body);
+export const deleteDashboard = (rg, name) => DASHBOARDS.remove(rg, name);
+
+// ── data collection rule associations (Microsoft.Insights/dataCollectionRuleAssociations) —
+// the real extension resource behind "Observability agents (preview)": links a target resource
+// to an existing Data Collection Rule, validated against the shared ARM store.
+export const DCRA_API_VERSION = "2023-03-11";
+export const listDcrAssociations = async (resourceId) =>
+  (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/dataCollectionRuleAssociations`,
+    { query: { "api-version": DCRA_API_VERSION } })).value || [];
+export const putDcrAssociation = (resourceId, name, dataCollectionRuleId) =>
+  restJson("PUT", `${resourceId}/providers/Microsoft.Insights/dataCollectionRuleAssociations/${encodeURIComponent(name)}`,
+    { query: { "api-version": DCRA_API_VERSION }, body: { properties: { dataCollectionRuleId } } });
+export const deleteDcrAssociation = (resourceId, name) =>
+  restJson("DELETE", `${resourceId}/providers/Microsoft.Insights/dataCollectionRuleAssociations/${encodeURIComponent(name)}`,
+    { query: { "api-version": DCRA_API_VERSION } });
+
+// ── health models (Microsoft.Insights/healthModels) — a named collection of member resource
+// ids; rollup health is computed client-side from the real Activity log (status field), never
+// stored or fabricated.
+export const listHealthModels = async () => (await HEALTH_MODELS.list()).map(withRg);
+export const putHealthModel = (rg, name, body) => HEALTH_MODELS.put(rg, name, body);
+export const deleteHealthModel = (rg, name) => HEALTH_MODELS.remove(rg, name);
+
+// ── Azure Monitor pipelines (Microsoft.Insights/pipelineGroups) — collector fleet config:
+// stored and validated exactly like the real resource; nothing is ever actually collected.
+export const listPipelineGroups = async () => (await PIPELINE_GROUPS.list()).map(withRg);
+export const putPipelineGroup = (rg, name, body) => PIPELINE_GROUPS.put(rg, name, body);
+export const deletePipelineGroup = (rg, name) => PIPELINE_GROUPS.remove(rg, name);
+
+/** Every Activity log row across the whole subscription whose status isn't Succeeded — the
+ *  real (never fabricated) signal behind "Issues" and the Health models rollup. Today the only
+ *  path that logs a non-Succeeded row is a failed ARM template deployment (core/azure_arm_core.py). */
+export async function listFailedActivity() {
+  const rows = await listActivityLog();
+  return rows.filter((r) => r.status?.value && r.status.value !== "Succeeded");
+}
+
+// ── Azure Monitor workspaces (Managed Prometheus) + Azure Managed Grafana (core/azure_monitorproducts_core.py) ──
+export const MONITOR_ACCOUNTS = armType("Microsoft.Monitor", "accounts", "2023-04-03");
+export const GRAFANA = armType("Microsoft.Dashboard", "grafana", "2023-09-01");
+export const listMonitorAccounts = async () => (await MONITOR_ACCOUNTS.list()).map(withRg);
+export const putMonitorAccount = (rg, name, body) => MONITOR_ACCOUNTS.put(rg, name, body);
+export const deleteMonitorAccount = (rg, name) => MONITOR_ACCOUNTS.remove(rg, name);
+export const listGrafana = async () => (await GRAFANA.list()).map(withRg);
+export const putGrafana = (rg, name, body) => GRAFANA.put(rg, name, body);
+export const deleteGrafana = (rg, name) => GRAFANA.remove(rg, name);
+
+// ── Azure Local clusters + SCOM managed instances (core/azure_monitorproducts_core.py) ──
+export const AZURE_LOCAL = armType("Microsoft.AzureStackHCI", "clusters", "2024-04-01");
+export const SCOM_INSTANCES = armType("Microsoft.Scom", "managedInstances", "2023-07-07-preview");
+export const listAzureLocalClusters = async () => (await AZURE_LOCAL.list()).map(withRg);
+export const putAzureLocalCluster = (rg, name, body) => AZURE_LOCAL.put(rg, name, body);
+export const deleteAzureLocalCluster = (rg, name) => AZURE_LOCAL.remove(rg, name);
+export const listScomInstances = async () => (await SCOM_INSTANCES.list()).map(withRg);
+export const putScomInstance = (rg, name, body) => SCOM_INSTANCES.put(rg, name, body);
+export const deleteScomInstance = (rg, name) => SCOM_INSTANCES.remove(rg, name);

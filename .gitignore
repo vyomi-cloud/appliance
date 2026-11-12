@@ -85,3 +85,9 @@ packaging/docker/mcp/
 # locally built launcher / MCP binary (cd cmd/vyomi && go build -o vyomi .)
 cmd/vyomi/vyomi
 cmd/vyomi/vyomi.exe
+
+# Pyodide runtime vendored for Nano by wasm/fetch_pyodide.py (binaries; not committed)
+wasm/vendor/pyodide/
+
+# Kubescape framework artifacts downloaded once by providers/kubescape_runner.py (appliance data)
+kubescape-artifacts/
