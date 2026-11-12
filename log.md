@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-12T16:09:44+00:00
+
+Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**4 change(s), 2 actionable.**
+- 🔧 `spec-commit` Azure keyvault: Pinned Go Administration SDK to API version 2026-04-01 (#48190) ([link](https://github.com/Azure/azure-rest-api-specs/commit/cca7d8aa23da771c2f70457092238b6fbdf6dd17))
+- 🔧 `spec-commit` Azure keyvault: Pinned Keys and Administration SDK to API version 2026-04-01 (#48189) ([link](https://github.com/Azure/azure-rest-api-specs/commit/a13e90d5c854426efc263544193640dc6039a5a3))
+- · `announcement` API Gateway: Feature (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
+- · `release` pypi:google-cloud-pubsub: 2.43.0 → 2.44.0
+
+Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-12T15:09:39+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3010,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `operation-changed` AWS logs: operation DeleteAccountPolicy changed
 - · `operation-changed` AWS logs: operation PutAccountPolicy changed
 - · `announcement` Amazon RDS for Oracle no longer requires automatic minor version upgrades for JVM, Spatial, Locator, and OLAP options ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/oracle-jvm-spatial-locator-olap-options-amvu-optional/))
-- · `spec-commit` Azure storage: STG105 add handwritten swaggers for new api version (#47761) ([link](https://github.com/Azure/azure-rest-api-specs/commit/418fc8bf77b536fe624f81f60212aa5a12569354))
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-- · `release` cli:aws: 2.39.2 → 2.39.3
-- · `release` go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.72.2 → v1.72.3
-- · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.7 → v1.52.8
-- · `release` pypi:boto3: 1.43.122 → 1.43.123

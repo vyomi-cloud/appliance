@@ -1,13 +1,41 @@
 {
- "at": "2026-11-12T15:09:39+00:00",
+ "at": "2026-11-12T16:09:44+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "azure",
+   "service": "keyvault",
+   "kind": "spec-commit",
+   "key": "azure:keyvault:cca7d8aa23",
+   "title": "Azure keyvault: Pinned Go Administration SDK to API version 2026-04-01 (#48190)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/cca7d8aa23da771c2f70457092238b6fbdf6dd17",
+   "actionable": true
+  },
+  {
+   "cloud": "azure",
+   "service": "keyvault",
+   "kind": "spec-commit",
+   "key": "azure:keyvault:a13e90d5c8",
+   "title": "Azure keyvault: Pinned Keys and Administration SDK to API version 2026-04-01 (#48189)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/a13e90d5c854426efc263544193640dc6039a5a3",
+   "actionable": true
+  },
+  {
    "cloud": "sdk",
-   "service": "pypi:google-cloud-kms",
+   "service": "pypi:google-cloud-pubsub",
    "kind": "release",
-   "key": "ver:pypi:google-cloud-kms:3.19.0",
-   "title": "pypi:google-cloud-kms: 3.18.0 \u2192 3.19.0",
+   "key": "ver:pypi:google-cloud-pubsub:2.44.0",
+   "title": "pypi:google-cloud-pubsub: 2.43.0 \u2192 2.44.0",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "API Gateway",
+   "kind": "announcement",
+   "key": "feed:gcp:1b35ae393761",
+   "title": "API Gateway: Feature (November 10, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_10_2026",
+   "detail": "TLS 1.3 for connections to backends API Gateway is rolling out support for TLS 1.3 on connections to backend services. Once the rollout reaches a gateway, it uses TLS 1.3 with backends that support it. No configuration is required.",
    "actionable": false
   }
  ],
