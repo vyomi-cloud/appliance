@@ -311,9 +311,9 @@ def dispatch(store, method: str, path: str, query=None, headers=None, body: byte
             if method == "POST":
                 return _json(_create(store, run_store, project, location, query, data, pubsub_store=pubsub_store, gcs_store=gcs_store))
             if method == "GET":
-                items = sorted((_view(t) for n, t in trg.items() if n.startswith(prefix)), key=lambda t: t["createTime"])
-                if location == "-":
-                    pass
+                # `locations/-` is the native wildcard: every region of the project (the console's trigger list)
+                pre = (f"projects/{project}/locations/" if location == "-" else prefix)
+                items = sorted((_view(t) for n, t in trg.items() if n.startswith(pre) and "/triggers/" in n), key=lambda t: t["createTime"])
                 return _json({"triggers": items})
         else:
             full = prefix + rid

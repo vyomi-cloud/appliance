@@ -58,6 +58,7 @@ const rest = async (method, path, body) => {
 const nget = async (s, n) => { if (s.idOf) { const id = await s.idOf(n); return id ? rest("GET", s.get(id)) : { status: 404, body: null }; } return rest("GET", s.get(n)); };
 const ndel = async (s, n) => { if (s.idOf) { const id = await s.idOf(n); return id ? rest("DELETE", s.del(id)) : { status: 404, body: null }; } return rest("DELETE", s.del(n)); };
 // Each service: ui = [list route, create route|null]; create(n) -> [method, path, body]; get(n) -> path; del(n) -> path.
+const EA = { bucket: "rt-ea-" + Date.now().toString(36).slice(-6), svc: "rt-ea-dest" };
 const SVC = {
   vpc: { ui: ["networking/networks/list", "networking/networks/add"],
     create: (n) => ["POST", `/compute/v1/projects/${P}/global/networks`, { name: n, autoCreateSubnetworks: false }],
@@ -69,6 +70,12 @@ const SVC = {
       disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }],
       networkInterfaces: [{ network: `projects/${P}/global/networks/default` }] }],
     get: (n) => `/compute/v1/projects/${P}/zones/${Z}/instances/${n}`, del: (n) => `/compute/v1/projects/${P}/zones/${Z}/instances/${n}` },
+  // Eventarc triggers need a bucket and a Cloud Run service to point at; both are created natively once, below.
+  eventarc: { pre: async (pg) => { await pg.getByRole("combobox", { name: "Bucket" }).click(); await pg.getByRole("option", { name: EA.bucket }).click();
+      await pg.getByRole("combobox", { name: "Service" }).click(); await pg.getByRole("option", { name: EA.svc }).click(); },
+    nfill: 1, ui: ["eventarc/triggers", "eventarc/triggers/new"],
+    create: (n) => ["POST", `/v1/projects/${P}/locations/${R}/triggers?triggerId=${n}`, { eventFilters: [{ attribute: "type", value: "google.cloud.storage.object.v1.finalized" }, { attribute: "bucket", value: EA.bucket }], destination: { cloudRun: { service: EA.svc, region: R } } }],
+    get: (n) => `/v1/projects/${P}/locations/${R}/triggers/${n}`, del: (n) => `/v1/projects/${P}/locations/${R}/triggers/${n}` },
   storage: { ui: ["storage/browser", "storage/create-bucket"],
     create: (n) => ["POST", `/storage/v1/b?project=${P}`, { name: n }],
     get: (n) => `/storage/v1/b/${n}`, del: (n) => `/storage/v1/b/${n}` },
@@ -112,10 +119,9 @@ const SVC = {
 };
 const SKIP = {
   "functions:*": "the v4 'functions' console IS Cloud Run (see run), not the Cloud Functions API",
-  "eventarc:*": "no v4 Eventarc console service exists",
   "apigateway:*": "no v4 API Gateway console service exists",
 };
-const ONLY = (process.env.ONLY || [...Object.keys(SVC), "functions", "eventarc", "apigateway"].join(",")).split(",");
+const ONLY = (process.env.ONLY || [...Object.keys(SVC), "functions", "apigateway"].join(",")).split(",");
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 1100 } });
@@ -187,6 +193,10 @@ async function uiDelete(svc, name) {
   await sleep(3000);
 }
 
+if (ONLY.includes("eventarc")) {
+  await rest("POST", `/storage/v1/b?project=${P}`, { name: EA.bucket });
+  await rest("POST", `/v2/projects/${P}/locations/${R}/services?serviceId=${EA.svc}`, { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } });
+}
 if (ONLY.includes("iam")) {   // the real console derives the Service account ID live from the name until the ID is edited
   try {
     await go("iam-admin/serviceaccounts/create");
@@ -218,6 +228,22 @@ for (const svc of ONLY) {
   try { const d = await ndel(s, b); if (d.status >= 300) throw new Error(`native delete ${d.status} ${JSON.stringify(d.body)}`); check(svc, "C native delete -> UI drops it", !(await listed(svc, b)), "UI still lists it"); }
   catch (e) { check(svc, "C native delete -> UI drops it", false, String(e).split("\n")[0]); }
   if (!s.serial) await stepD();
+}
+if (ONLY.includes("eventarc")) {   // trigger detail page renders what the API holds, and a real storage event is delivered
+  const n = "rtd" + Date.now().toString(36).slice(-5);
+  try {
+    const [m, u, bd] = SVC.eventarc.create(n); await rest(m, u, bd);
+    await go(`eventarc/triggers/${R}/${n}`);
+    const t = await body();
+    check("eventarc", "detail page shows event type, bucket filter and destination", t.includes("storage.object.v1.finalized") && t.includes(EA.bucket) && t.includes(EA.svc), t.slice(0, 200));
+    await fetch(`${WIRE}/upload/storage/v1/b/${EA.bucket}/o?uploadType=media&name=hello.txt`, { method: "POST", headers: { "content-type": "text/plain" }, body: "hi" });
+    await sleep(1500);
+    const dl = await rest("GET", `/v1/projects/${P}/locations/${R}/triggers/${n}/deliveries`);
+    check("eventarc", "object upload fires the trigger (delivery recorded natively)", ((dl.body?.delivered || 0) + (dl.body?.failed || 0)) >= 1 || (dl.body?.deliveries || []).length >= 1, JSON.stringify(dl.body).slice(0, 200));
+    await go(`eventarc/triggers/${R}/${n}`);
+    check("eventarc", "UI detail lists the delivery", /Deliveries \((\d+) delivered, (\d+) failed\)/.test(await body()) && !/Deliveries \(0 delivered, 0 failed\)/.test(await body()), (await body()).slice(-300));
+    await ndel(SVC.eventarc, n);
+  } catch (e) { check("eventarc", "trigger detail / delivery", false, String(e).split("\n")[0]); }
 }
 await browser.close(); if (dev) dev.kill();
 mkdirSync(dirname(OUT), { recursive: true });
