@@ -26,7 +26,11 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 SUITES = ROOT / "tests/conformance/hourly/suites.json"
 OUT = ROOT / "tests/conformance/hourly/out"
-PATTERN = re.compile(r"bidirectional|roundtrip|round-trip|bidi", re.I)
+PATTERN = re.compile(r"bidirectional|roundtrip|round-trip|bidi|validation", re.I)
+# Stable ids the gap-map agent registers (pending until built): bidi-<cloud>-<cli|sdk|api>-ui, validation-<cloud>-ui, crawl-<cloud>-ui.
+# bidi-/validation- print [PASS]/[FAIL] checks and are mapped here; crawl-<cloud>-ui (and nano-ui-crawl) write the crawler JSON and are
+# mapped by crawl_report.py, which `report` runs for you when out/ui-*-<cloud>.json exists.
+CRAWL_IDS = re.compile(r"^crawl-|crawl$")
 # Suites that match the pattern but cannot pass on the v4 headless image by construction (they target the legacy console);
 # reported in the summary, never registered as issues. Remove an id when the suite is retargeted.
 EXCLUDE = {"offline-ui-sdk-roundtrip": "targets the legacy /console/aws, not served by v4 (AWS-1 finding, test debt)"}
@@ -51,7 +55,10 @@ def suite_script(cmd: str) -> str:
 def select(cloud: str, target: str | None = None) -> list[dict]:
     out = []
     for s in json.load(open(SUITES))["suites"]:
-        if s.get("cloud") != cloud or not PATTERN.search(s["id"]) or s["id"] in EXCLUDE:
+        if s["id"] in EXCLUDE:
+            continue
+        is_crawl = bool(CRAWL_IDS.search(s["id"])) and s.get("cloud") in (cloud, "all")
+        if not is_crawl and (s.get("cloud") != cloud or not PATTERN.search(s["id"])):
             continue
         if target and s.get("target") != target:
             continue
@@ -83,7 +90,7 @@ def _log_of(res: dict, results_dir: Path) -> str:
 
 
 def report(cloud: str, results_dir: Path, md: Path, by: str, extras: list[tuple[str, str, str]]) -> dict:
-    known = {s["id"]: s for s in select(cloud)}
+    known = {s["id"]: s for s in select(cloud) if not CRAWL_IDS.search(s["id"])}
     runs = []                                  # (suite_id, script, status, log_text)
     for f in sorted(results_dir.glob(f"results-*-{cloud}.json")):
         for r in json.load(open(f)).get("suites", []):
@@ -127,11 +134,42 @@ def report(cloud: str, results_dir: Path, md: Path, by: str, extras: list[tuple[
             "resolved": sorted(set(resolved)), "excluded": skipped}
 
 
+def cli_report(cloud: str, results_json: Path, md: Path, by: str) -> dict:
+    """tests/release/cli_crosscheck.py results.json -> rows `AUTO-<cloud>-bidi-cli-ui-<check>` (cloud filtered by the check's 'AWS:'/'gcp:'... prefix)."""
+    names = {"aws": ("aws", "s3", "sqs", "dynamodb", "sns", "secrets"), "gcp": ("gcp", "gcloud"), "azure": ("azure", "az")}[cloud]
+    added, resolved = [], []
+    if not results_json.exists():
+        return {"cli_checked": 0, "added": added, "resolved": resolved}
+    n = 0
+    open_ids = {r["id"] for r in ki.list_open(cloud, md)}
+    for r in json.load(open(results_json)):
+        if r.get("section") not in ("both-ways", "identity"):
+            continue
+        head = r["name"].split(":", 1)[0].strip().lower()
+        if head not in names:
+            continue
+        n += 1
+        key = f"bidi-cli-ui-{slug(r['name'])}"
+        rid = f"AUTO-{cloud}-{key}"
+        if not r.get("ok"):
+            what = f"[bidi-{cloud}-cli-ui] {r['name']}" + (f": {r.get('detail','')[:200]}" if r.get("detail") else "")
+            impact = "S1" if S1_WORDS.search(what) or "shows in" in r["name"] else "S2"
+            ki.add_issue(cloud, key, impact, what, "tests/release/cli_crosscheck.py", path=md); added.append(rid)
+        elif rid in open_ids and ki.resolve(rid, by or "daily bi-directional run", md):
+            resolved.append(rid)
+    return {"cli_checked": n, "added": added, "resolved": resolved}
+
+
 def summary(c: dict) -> str:
     L = [f"### Bi-directional daily: {c['cloud']}", f"- suites run: {', '.join(c['suites_run']) or 'none (nothing ran: no results found)'}",
          f"- new issues: {', '.join(c['added']) or 'none'}", f"- still failing (refreshed): {', '.join(c['updated']) or 'none'}",
          f"- resolved (passing again): {', '.join(c['resolved']) or 'none'}"]
     L += [f"- excluded: {e}" for e in c["excluded"]]
+    if "cli" in c:
+        L.append(f"- CLI<->UI cross-check: {c['cli']['cli_checked']} checks; new {', '.join(c['cli']['added']) or 'none'}; resolved {', '.join(c['cli']['resolved']) or 'none'}")
+    if "crawl" in c:
+        k = c["crawl"]
+        L.append(f"- UI crawl: {k['crawled']} services; new {', '.join(k['added']) or 'none'}; resolved {', '.join(k['resolved']) or 'none'}")
     return "\n".join(L) + "\n"
 
 
@@ -145,6 +183,8 @@ def main(argv=None) -> int:
     ap.add_argument("--by", default=os.environ.get("GITHUB_SHA", "")[:9])
     ap.add_argument("--out", default="")
     ap.add_argument("--require-run", action="store_true", help="exit 3 when no bi-directional suite produced results (never a silent empty run)")
+    ap.add_argument("--cli-results", default="", help="tests/release/cli_crosscheck.py results.json (CLI<->UI both ways)")
+    ap.add_argument("--ui", action="append", default=[], help="crawler JSON (default: out/ui-*-<cloud>.json when present)")
     ap.add_argument("--extra", action="append", default=[], help="SUITE_ID=LOGFILE[=SCRIPT]")
     a = ap.parse_args(argv)
     if a.cmd == "select":
@@ -152,6 +192,18 @@ def main(argv=None) -> int:
         return 0
     extras = [tuple((e.split("=", 2) + [""])[:3]) for e in a.extra]
     c = report(a.cloud, Path(a.results), Path(a.file), a.by, extras)
+    if a.cli_results:
+        c["cli"] = cli_report(a.cloud, Path(a.cli_results), Path(a.file), a.by)
+    ui = a.ui or sorted(str(x) for x in Path(a.results).glob(f"ui-*-{a.cloud}.json"))
+    if ui:
+        spec = importlib.util.spec_from_file_location("crawl_report", HERE / "crawl_report.py")
+        cr = importlib.util.module_from_spec(spec); spec.loader.exec_module(cr)
+        c["crawl"] = cr.report(a.cloud, ui, Path(a.file), a.by)
+        c["added"] = sorted(set(c["added"]) | set(c["crawl"]["added"]) | set(c.get("cli", {}).get("added", [])))
+        c["resolved"] = sorted(set(c["resolved"]) | set(c["crawl"]["resolved"]) | set(c.get("cli", {}).get("resolved", [])))
+        c["suites_run"] = c["suites_run"] + (["ui-crawl"] if c["crawl"]["crawled"] else [])
+    elif "cli" in c:
+        c["added"] = sorted(set(c["added"]) | set(c["cli"]["added"])); c["resolved"] = sorted(set(c["resolved"]) | set(c["cli"]["resolved"]))
     text = summary(c)
     print(text)
     if os.environ.get("GITHUB_STEP_SUMMARY"):

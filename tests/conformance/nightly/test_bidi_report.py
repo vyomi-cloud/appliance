@@ -74,3 +74,23 @@ check("an optional live-Mesh log is reported too", any("azure-mesh-vm" in i for 
 c = run("fail", "[FAIL] x :: y\n", sid="nightly-aws-v4-roundtrip", cloud="aws")
 check("other clouds report under their own prefix", any(i.startswith("AUTO-aws-") for i in c["added"]) and not any(i.startswith("AUTO-aws-") for i in auto("azure")))
 print("PASS")
+
+# --- owner scope: stable ids + crawl + CLI<->UI mapping
+import json as _j, tempfile as _t, shutil as _s
+from pathlib import Path as _P
+_md = _P(_t.mkdtemp()) / "KI.md"; _s.copy(br.ki.DEFAULT, _md)
+check("validation suites are selected", any("validation" in x["id"] for x in br.select("gcp")))
+check("crawl ids are selected for the cloud", any(br.CRAWL_IDS.search(x["id"]) for x in br.select("azure")))
+check("stable id patterns match", all(br.PATTERN.search(i) for i in ("bidi-aws-cli-ui", "bidi-gcp-sdk-ui", "bidi-azure-api-ui", "validation-aws-ui")) and br.CRAWL_IDS.search("crawl-gcp-ui"))
+_r = _P(_t.mkdtemp()) / "r.json"
+_r.write_text(_j.dumps([{"section": "both-ways", "name": "AWS: s3 created with the CLI shows in the console", "ok": False, "detail": "missing"},
+                        {"section": "both-ways", "name": "GCP: topic created in the console", "ok": False, "detail": "x"}]))
+_c = br.cli_report("aws", _r, _md, "t")
+check("CLI<->UI failure becomes an AWS row only", _c["added"] == ["AUTO-aws-bidi-cli-ui-aws-s3-created-with-the-cli-shows-in-the-console"] and not [i for i in br.ki.list_open("gcp", _md) if "bidi-cli-ui" in i["id"]])
+_r.write_text(_j.dumps([{"section": "both-ways", "name": "AWS: s3 created with the CLI shows in the console", "ok": True, "detail": ""}]))
+check("CLI<->UI pass resolves the row", br.cli_report("aws", _r, _md, "t")["resolved"] == _c["added"])
+_u = _P(_t.mkdtemp()) / "ui-nano-aws.json"
+_u.write_text(_j.dumps({"services": [{"cloud": "aws", "service": "s3", "findings": [{"type": "PAGE_ERROR", "detail": "x"}]}]}))
+_rd = _P(_t.mkdtemp()); (_rd / "ui-nano-aws.json").write_text(_u.read_text())
+_o = _P(_t.mkdtemp()) / "o.json"
+check("main merges crawl rows into the report", br.main(["report", "--cloud", "aws", "--results", str(_rd), "--file", str(_md), "--out", str(_o)]) == 0 and _j.load(open(_o))["crawl"]["added"])
