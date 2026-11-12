@@ -4,6 +4,10 @@ name: v4 bi-directional daily (find broken functionality, report to the known-is
 # created by the client shows in the console, deleted both ways), then tests/conformance/nightly/bidi_report.py turns every failing
 # check into a row `AUTO-<cloud>-<suite>-<check>` in docs/architecture/v4.0/V4.0.0-KNOWN-ISSUES.md and resolves the rows whose checks
 # pass again (self-healing). The hourly known-issues fixer (v4-known-issues-hourly.yml) works that register.
+# SCOPE (owner): (1) CLI<->UI, (2) SDK<->UI, (3) API<->UI bi-directional (create on one side, compare data on the other, both ways, delete both ways),
+# (4) the UI exhaustively (all sections, every click/toggle/dropdown, form validation, PAGE_ERROR/5xx/dead tab/placeholder/raw errors). Suites are
+# selected by id: bidi-<cloud>-<cli|sdk|api>-ui, crawl-<cloud>-ui, validation-<cloud>-ui (+ the existing round-trip, validation and nano-ui-crawl suites),
+# plus tests/release/cli_crosscheck.py. bidi_report.py maps all of it (crawler JSON included) to AUTO rows.
 # Base = v4-on-main. Only the known-issues file is committed back to v4-on-main. No tag, no main, no image, no release.
 # Secrets: CONFORMANCE_BOT_TOKEN (push the register), VYOMI_TEST_LICENSE_JWT (optional), NIGHTLY_CODESPACES_PAT (live-Mesh job).
 # Variable: NIGHTLY_MESH_SIM_URL (an already-forwarded Mesh endpoint for the live-Mesh job; without it that job says NOT RUN).
@@ -82,9 +86,13 @@ jobs:
             python3 tests/conformance/hourly/run_suites.py --target "$T" --cloud "$CLOUD" --only "$IDS" || true
           done
 
+      - name: CLI<->UI cross-check (real aws/gcloud/az CLIs, both directions)
+        continue-on-error: true
+        run: ENDPOINT="$VYOMI_BASE_URL" OUT=cli-check python3 tests/release/cli_crosscheck.py
+
       - name: Report to the known-issues register
         id: report
-        run: python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --by "${GITHUB_SHA::9}" --out changes.json --require-run
+        run: python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --cli-results cli-check/results.json --by "${GITHUB_SHA::9}" --out changes.json --require-run
 
       - name: Commit the register to v4-on-main
         if: always() && steps.report.outcome == 'success' && (github.event_name == 'schedule' || inputs.record)
@@ -93,7 +101,7 @@ jobs:
           for attempt in 1 2 3 4 5; do
             git fetch -q origin "$TRUNK"
             git checkout -q -B bidi-register "origin/$TRUNK"       # start from the current register: three clouds push in parallel
-            python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --by "${GITHUB_SHA::9}" --out changes.json >/dev/null
+            python3 tests/conformance/nightly/bidi_report.py report --cloud "$CLOUD" --cli-results cli-check/results.json --by "${GITHUB_SHA::9}" --out changes.json >/dev/null
             if git diff --quiet -- "$REGISTER"; then echo "Register unchanged ($CLOUD)." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
             python3 - > commit-msg.txt <<'PY'
           import json
@@ -114,7 +122,7 @@ jobs:
         if: always()
         with:
           name: "bidi-${{ matrix.cloud }}"
-          path: "changes.json\ntests/conformance/hourly/out/"
+          path: "changes.json\ncli-check/\ntests/conformance/hourly/out/"
           include-hidden-files: true
           retention-days: 14
       - name: Tear down
