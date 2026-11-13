@@ -24,7 +24,23 @@
       "CreateDeployment",
       "CreateStage"
      ],
+     "capabilities": 17,
+     "capability_service": "apigateway",
      "id": "apigateway",
+     "level_counts": {
+      "nano": {
+       "full": 14,
+       "limited": 3
+      },
+      "offline": {
+       "full": 15,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "API Gateway",
      "pack_id": "cloudlearn.apigateway.basic",
      "protocol": "aws-like",
@@ -33,13 +49,45 @@
      "summary": "APIs, resources, methods, integrations, deployments, stages, and invoke routes are available."
     },
     {
+     "capabilities": 17,
+     "capability_service": "apigateway",
      "id": "apigatewayv2",
+     "level_counts": {
+      "nano": {
+       "full": 14,
+       "limited": 3
+      },
+      "offline": {
+       "full": 15,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "API Gateway V2",
      "released_in": "3.0.25",
      "status": "released"
     },
     {
+     "capabilities": 25,
+     "capability_service": "cloudwatch",
      "id": "cloudwatch",
+     "level_counts": {
+      "nano": {
+       "full": 10,
+       "limited": 15
+      },
+      "offline": {
+       "full": 10,
+       "limited": 15
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Amazon CloudWatch",
      "released_in": "3.0.26",
      "status": "released"
@@ -58,9 +106,26 @@
       "BatchGetItem",
       "BatchWriteItem"
      ],
+     "capabilities": 30,
+     "capability_service": "dynamodb",
      "id": "dynamodb",
+     "level_counts": {
+      "nano": {
+       "full": 6,
+       "limited": 24
+      },
+      "offline": {
+       "full": 6,
+       "limited": 24
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "DynamoDB",
      "pack_id": "cloudlearn.dynamodb.basic",
+     "pro_capabilities": 6,
      "protocol": "aws-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -73,16 +138,51 @@
       "StopInstances",
       "TerminateInstances"
      ],
+     "capabilities": 56,
+     "capability_service": "ec2",
      "id": "ec2",
+     "level_counts": {
+      "nano": {
+       "full": 22,
+       "limited": 33,
+       "not_simulated": 1
+      },
+      "offline": {
+       "full": 23,
+       "limited": 32,
+       "not_simulated": 1
+      }
+     },
+     "levels": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+     },
      "name": "EC2",
      "pack_id": "cloudlearn.ec2.basic",
+     "pro_capabilities": 3,
      "protocol": "aws-like",
      "released_in": "<=3.0.8",
      "status": "released",
      "summary": "Instances, runtime bootstrap, and console access are available."
     },
     {
+     "capabilities": 3,
+     "capability_service": "ec2#ec2.load-",
      "id": "elbv2",
+     "level_counts": {
+      "nano": {
+       "full": 1,
+       "limited": 2
+      },
+      "offline": {
+       "full": 1,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Elastic Load Balancing",
      "released_in": "3.0.10",
      "status": "released"
@@ -98,10 +198,27 @@
       "CreateEventBus",
       "DeleteEventBus"
      ],
+     "capabilities": 23,
+     "capability_service": "eventbridge",
      "data_plane": "NATS (cloudlearn-nats:4222) — PutEvents publishes to aws.eventbridge.<bus>.<source> subjects",
      "id": "eventbridge",
+     "level_counts": {
+      "nano": {
+       "full": 9,
+       "limited": 14
+      },
+      "offline": {
+       "full": 9,
+       "limited": 14
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "EventBridge",
      "pack_id": "cloudlearn.eventbridge.basic",
+     "pro_capabilities": 2,
      "protocol": "aws-like",
      "released_in": "<=3.0.8",
      "status": "released"
@@ -113,9 +230,26 @@
       "CreatePolicy",
       "AttachPolicy"
      ],
+     "capabilities": 41,
+     "capability_service": "iam",
      "id": "iam",
+     "level_counts": {
+      "nano": {
+       "full": 18,
+       "limited": 23
+      },
+      "offline": {
+       "full": 18,
+       "limited": 23
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "IAM",
      "pack_id": "cloudlearn.iam.basic",
+     "pro_capabilities": 2,
      "protocol": "aws-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -133,8 +267,24 @@
       "DeleteAlias",
       "ScheduleKeyDeletion"
      ],
+     "capabilities": 12,
+     "capability_service": "kms",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit engine; X-Amz-Target=TrentService.* dispatch via vault_routes._aws_kms_dispatch",
      "id": "kms",
+     "level_counts": {
+      "nano": {
+       "full": 8,
+       "limited": 4
+      },
+      "offline": {
+       "full": 8,
+       "limited": 4
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "KMS",
      "pack_id": "cloudlearn.kms.basic",
      "protocol": "aws-like",
@@ -153,7 +303,26 @@
       "RemovePermission",
       "GetPolicy"
      ],
+     "capabilities": 25,
+     "capability_service": "lambda",
      "id": "lambda",
+     "level_counts": {
+      "nano": {
+       "full": 10,
+       "limited": 15
+      },
+      "offline": {
+       "full": 10,
+       "limited": 15
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "mesh_only": [
+      "lambda.microvms"
+     ],
      "name": "Lambda",
      "pack_id": "cloudlearn.lambda.basic",
      "protocol": "aws-like",
@@ -162,7 +331,23 @@
      "summary": "Functions, code/config updates, permissions, versions, and invoke flows are available."
     },
     {
+     "capabilities": 25,
+     "capability_service": "cloudwatch",
      "id": "logs",
+     "level_counts": {
+      "nano": {
+       "full": 10,
+       "limited": 15
+      },
+      "offline": {
+       "full": 10,
+       "limited": 15
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "CloudWatch Logs",
      "released_in": "3.0.11",
      "status": "released"
@@ -178,10 +363,27 @@
       "CreateDBSubnetGroup",
       "CreateDBParameterGroup"
      ],
+     "capabilities": 31,
+     "capability_service": "rds",
      "data_plane": "metadata-only (Postgres engine reuse for real connections is post-MVP — see [[mvp-backend-stack-shipped]])",
      "id": "rds",
+     "level_counts": {
+      "nano": {
+       "full": 10,
+       "limited": 21
+      },
+      "offline": {
+       "full": 10,
+       "limited": 21
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "RDS",
      "pack_id": "cloudlearn.rds.basic",
+     "pro_capabilities": 5,
      "protocol": "aws-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -195,7 +397,23 @@
       "DeleteObject",
       "ListObjects"
      ],
+     "capabilities": 47,
+     "capability_service": "s3",
      "id": "s3",
+     "level_counts": {
+      "nano": {
+       "full": 11,
+       "limited": 36
+      },
+      "offline": {
+       "full": 11,
+       "limited": 36
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "S3",
      "pack_id": "cloudlearn.s3.basic",
      "protocol": "aws-like",
@@ -214,8 +432,24 @@
       "ListSecretVersionIds",
       "RotateSecret"
      ],
+     "capabilities": 12,
+     "capability_service": "secretsmanager",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — KV v2 backed; X-Amz-Target dispatch via vault_routes._aws_secrets_dispatch",
      "id": "secretsmanager",
+     "level_counts": {
+      "nano": {
+       "full": 4,
+       "limited": 8
+      },
+      "offline": {
+       "full": 4,
+       "limited": 8
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Secrets Manager",
      "pack_id": "cloudlearn.secretsmanager.basic",
      "protocol": "aws-like",
@@ -223,7 +457,23 @@
      "status": "released"
     },
     {
+     "capabilities": 24,
+     "capability_service": "sns",
      "id": "sns",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 17
+      },
+      "offline": {
+       "full": 10,
+       "limited": 14
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Amazon SNS",
      "released_in": "3.0.28",
      "status": "released"
@@ -244,7 +494,23 @@
       "UntagQueue",
       "ListQueueTags"
      ],
+     "capabilities": 12,
+     "capability_service": "sqs",
      "id": "sqs",
+     "level_counts": {
+      "nano": {
+       "full": 8,
+       "limited": 4
+      },
+      "offline": {
+       "full": 8,
+       "limited": 4
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "SQS",
      "pack_id": "cloudlearn.sqs.basic",
      "protocol": "aws-like",
@@ -253,13 +519,45 @@
      "summary": "Queues, message delivery, visibility, purge, and tags are available."
     },
     {
+     "capabilities": 8,
+     "capability_service": "ssm",
      "id": "ssm",
+     "level_counts": {
+      "nano": {
+       "full": 4,
+       "limited": 4
+      },
+      "offline": {
+       "full": 4,
+       "limited": 4
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Systems Manager",
      "released_in": "3.0.12",
      "status": "released"
     },
     {
+     "capabilities": 7,
+     "capability_service": "states",
      "id": "stepfunctions",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 2
+      },
+      "offline": {
+       "full": 5,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Step Functions",
      "released_in": "3.0.13",
      "status": "released"
@@ -271,9 +569,26 @@
       "CreateSecurityGroup",
       "CreateRouteTable"
      ],
+     "capabilities": 40,
+     "capability_service": "vpc",
      "id": "vpc",
+     "level_counts": {
+      "nano": {
+       "full": 14,
+       "limited": 26
+      },
+      "offline": {
+       "full": 14,
+       "limited": 26
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "VPC",
      "pack_id": "cloudlearn.vpc.basic",
+     "pro_capabilities": 5,
      "protocol": "aws-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -358,6 +673,204 @@
      "tool": "boto3"
     }
    },
+   "v4_services": [
+    {
+     "capabilities": 6,
+     "id": "bedrock",
+     "level_counts": {
+      "nano": {
+       "limited": 6
+      },
+      "offline": {
+       "limited": 6
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "mesh_only": [
+      "bedrock.agentcore.runtime"
+     ],
+     "name": "Amazon Bedrock",
+     "status": "v4"
+    },
+    {
+     "capabilities": 21,
+     "id": "cloudformation",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 14
+      },
+      "offline": {
+       "full": 7,
+       "limited": 14
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "CloudFormation",
+     "status": "v4"
+    },
+    {
+     "capabilities": 2,
+     "id": "cost-explorer",
+     "level_counts": {
+      "nano": {
+       "limited": 2
+      },
+      "offline": {
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Cost Explorer",
+     "pro_capabilities": 1,
+     "status": "v4",
+     "tier": "pro"
+    },
+    {
+     "capabilities": 7,
+     "id": "ecr",
+     "level_counts": {
+      "nano": {
+       "full": 3,
+       "limited": 4
+      },
+      "offline": {
+       "full": 3,
+       "limited": 4
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Elastic Container Registry",
+     "status": "v4"
+    },
+    {
+     "capabilities": 16,
+     "id": "eks",
+     "level_counts": {
+      "nano": {
+       "not_simulated": 16
+      },
+      "offline": {
+       "config_only": 5,
+       "full": 1,
+       "limited": 8,
+       "not_simulated": 2
+      }
+     },
+     "levels": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+     },
+     "name": "eks",
+     "status": "v4"
+    },
+    {
+     "capabilities": 10,
+     "id": "kinesis",
+     "level_counts": {
+      "nano": {
+       "full": 9,
+       "limited": 1
+      },
+      "offline": {
+       "full": 9,
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Kinesis",
+     "status": "v4"
+    },
+    {
+     "capabilities": 1,
+     "id": "malware-protection",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "malware-protection",
+     "status": "v4"
+    },
+    {
+     "capabilities": 1,
+     "id": "panels",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "panels",
+     "status": "v4"
+    },
+    {
+     "capabilities": 1,
+     "id": "redshift",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "redshift",
+     "status": "v4"
+    },
+    {
+     "capabilities": 3,
+     "id": "securityhub",
+     "level_counts": {
+      "nano": {
+       "full": 1,
+       "limited": 2
+      },
+      "offline": {
+       "full": 1,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Security Hub & GuardDuty",
+     "status": "v4"
+    }
+   ],
    "wiring": {
     "env": [
      {
@@ -416,30 +929,97 @@
       "Subscription_CreateOrUpdate",
       "Policy_CreateOrUpdate"
      ],
+     "capabilities": 33,
+     "capability_service": "apim",
      "data_plane": "metadata-only (policy XML stored; not enforced)",
      "id": "apim",
+     "level_counts": {
+      "nano": {
+       "full": 16,
+       "limited": 17
+      },
+      "offline": {
+       "full": 17,
+       "limited": 16
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "API Management",
      "pack_id": "cloudlearn.azure.apim.basic",
+     "pro_capabilities": 1,
      "protocol": "azure-arm",
      "released_in": "<=3.0.8",
      "status": "released",
      "summary": "API Management service CRUD via ARM (LRO)."
     },
     {
+     "capabilities": 41,
+     "capability_service": "appservices",
      "id": "app",
+     "level_counts": {
+      "nano": {
+       "full": 12,
+       "limited": 29
+      },
+      "offline": {
+       "full": 12,
+       "limited": 29
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Container Apps",
+     "pro_capabilities": 3,
      "released_in": "3.0.18",
      "status": "released"
     },
     {
+     "capabilities": 15,
+     "capability_service": "appconfiguration",
      "id": "appconfiguration",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 8
+      },
+      "offline": {
+       "full": 7,
+       "limited": 8
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "App Configuration",
      "released_in": "3.0.19",
      "status": "released"
     },
     {
+     "capabilities": 14,
+     "capability_service": "cognitiveservices",
      "id": "cognitiveservices",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 9
+      },
+      "offline": {
+       "full": 6,
+       "limited": 8
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Azure AI services",
+     "pro_capabilities": 1,
      "released_in": "3.0.20",
      "status": "released"
     },
@@ -455,17 +1035,50 @@
       "Docs_Create",
       "Docs_Query"
      ],
+     "capabilities": 22,
+     "capability_service": "cosmos",
      "data_plane": "in-process SQL API subset under /azure-data/cosmos/{account}/dbs/{db}/colls/{coll}/docs",
      "id": "cosmos",
+     "level_counts": {
+      "nano": {
+       "full": 4,
+       "limited": 18
+      },
+      "offline": {
+       "full": 4,
+       "limited": 18
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Cosmos DB",
      "pack_id": "cloudlearn.azure.cosmos.basic",
+     "pro_capabilities": 1,
      "protocol": "azure-arm+rest",
      "released_in": "<=3.0.8",
      "status": "released",
      "summary": "Account CRUD + sim-native Cosmos SQL REST (dbs/colls/docs) under /azure-data/cosmos."
     },
     {
+     "capabilities": 10,
+     "capability_service": "dns",
      "id": "dns",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 5
+      },
+      "offline": {
+       "full": 5,
+       "limited": 5
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "DNS zones",
      "released_in": "3.0.21",
      "status": "released"
@@ -479,8 +1092,24 @@
       "EventSubscriptions_CreateOrUpdate",
       "Events_Publish"
      ],
+     "capabilities": 23,
+     "capability_service": "eventgrid",
      "data_plane": "NATS (cloudlearn-nats:4222) — events publish to azure.eventgrid.<topic> subjects",
      "id": "eventgrid",
+     "level_counts": {
+      "nano": {
+       "full": 12,
+       "limited": 11
+      },
+      "offline": {
+       "full": 12,
+       "limited": 11
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Event Grid topics",
      "pack_id": "cloudlearn.azure.eventgrid.basic",
      "protocol": "azure-arm+rest",
@@ -499,10 +1128,30 @@
       "WebApps_ListFunctions",
       "WebApps_CreateOrUpdateSlot"
      ],
+     "capabilities": 39,
+     "capability_service": "functionapp",
      "data_plane": "metadata only (function exec not yet wired; see post-MVP roadmap)",
      "id": "functionapp",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 32
+      },
+      "offline": {
+       "full": 7,
+       "limited": 32
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "mesh_only": [
+      "azure.functionapp.function.invoke"
+     ],
      "name": "Function apps",
      "pack_id": "cloudlearn.azure.functionapp.basic",
+     "pro_capabilities": 1,
      "protocol": "azure-arm",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -519,8 +1168,24 @@
       "Secrets_Get",
       "Secrets_Put"
      ],
+     "capabilities": 15,
+     "capability_service": "keyvaults",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit for keys, KV v2 for secrets",
      "id": "keyvault",
+     "level_counts": {
+      "nano": {
+       "full": 6,
+       "limited": 9
+      },
+      "offline": {
+       "full": 6,
+       "limited": 9
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Key vaults",
      "pack_id": "cloudlearn.azure.keyvault.basic",
      "protocol": "azure-arm+rest",
@@ -528,19 +1193,71 @@
      "status": "released"
     },
     {
+     "capabilities": 38,
+     "capability_service": "monitor",
      "id": "monitor",
+     "level_counts": {
+      "nano": {
+       "config_only": 1,
+       "full": 13,
+       "limited": 24
+      },
+      "offline": {
+       "config_only": 1,
+       "full": 13,
+       "limited": 24
+      }
+     },
+     "levels": {
+      "nano": "config_only",
+      "offline": "config_only"
+     },
      "name": "Monitor alerts",
+     "pro_capabilities": 1,
      "released_in": "3.0.22",
      "status": "released"
     },
     {
+     "capabilities": 15,
+     "capability_service": "nsgs",
      "id": "nsg",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 8
+      },
+      "offline": {
+       "full": 7,
+       "limited": 8
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Network Security Group",
+     "pro_capabilities": 1,
      "released_in": "<=3.0.8",
      "status": "released"
     },
     {
+     "capabilities": 19,
+     "capability_service": "loganalytics",
      "id": "operationalinsights",
+     "level_counts": {
+      "nano": {
+       "full": 9,
+       "limited": 10
+      },
+      "offline": {
+       "full": 9,
+       "limited": 10
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Log Analytics",
      "released_in": "3.0.23",
      "status": "released"
@@ -553,8 +1270,22 @@
       "RoleAssignments_List",
       "RoleDefinitions_List"
      ],
+     "capabilities": 1,
+     "capability_service": "subscriptions#azure.subscriptions.access_control_iam",
      "data_plane": "Cedar policy engine (compiles RBAC assignments → Cedar permit rules; evaluated via /api/iam/evaluate)",
      "id": "rbac",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Entra ID / RBAC",
      "pack_id": "cloudlearn.azure.rbac.basic",
      "protocol": "azure-arm",
@@ -574,8 +1305,24 @@
       "Topics_CreateOrUpdate",
       "Subscriptions_CreateOrUpdate"
      ],
+     "capabilities": 27,
+     "capability_service": "servicebus",
      "data_plane": "in-process broker under /azure-data/servicebus/{namespace}/{entity}/messages",
      "id": "servicebus",
+     "level_counts": {
+      "nano": {
+       "full": 12,
+       "limited": 15
+      },
+      "offline": {
+       "full": 12,
+       "limited": 15
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Service Bus",
      "pack_id": "cloudlearn.azure.servicebus.basic",
      "protocol": "azure-arm+rest",
@@ -595,10 +1342,27 @@
       "Databases_List",
       "FirewallRules_CreateOrUpdate"
      ],
+     "capabilities": 28,
+     "capability_service": "sql",
      "data_plane": "postgres:16-alpine (each Microsoft.Sql/servers/databases backed by a real Postgres DB via gcp_sql_engine)",
      "id": "sql",
+     "level_counts": {
+      "nano": {
+       "full": 6,
+       "limited": 22
+      },
+      "offline": {
+       "full": 6,
+       "limited": 22
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "SQL servers",
      "pack_id": "cloudlearn.azure.sql.basic",
+     "pro_capabilities": 1,
      "protocol": "azure-arm",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -618,10 +1382,27 @@
       "Blob_Get",
       "Blob_Delete"
      ],
+     "capabilities": 52,
+     "capability_service": "storage",
      "data_plane": "fake-gcs-server (Blob bytes shared with GCP storage layer)",
      "id": "storage",
+     "level_counts": {
+      "nano": {
+       "full": 9,
+       "limited": 43
+      },
+      "offline": {
+       "full": 9,
+       "limited": 43
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Storage accounts",
      "pack_id": "cloudlearn.azure.storage.basic",
+     "pro_capabilities": 1,
      "protocol": "azure-arm+blob",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -638,10 +1419,27 @@
       "VirtualMachines_Restart",
       "VirtualMachines_Deallocate"
      ],
+     "capabilities": 32,
+     "capability_service": "vms",
      "data_plane": "lxd/multipass (LXD-backed VMs with tier-mapped limits)",
      "id": "vm",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 25
+      },
+      "offline": {
+       "full": 7,
+       "limited": 25
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Virtual Machines",
      "pack_id": "cloudlearn.azure.vm.basic",
+     "pro_capabilities": 2,
      "protocol": "azure-arm",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -657,10 +1455,29 @@
       "VirtualNetworkPeerings_CreateOrUpdate",
       "NetworkSecurityGroups_CreateOrUpdate"
      ],
+     "capabilities": 26,
+     "capability_service": "vnets",
      "data_plane": "topology metadata only (no real packet flow)",
      "id": "vnet",
+     "level_counts": {
+      "nano": {
+       "config_only": 1,
+       "full": 9,
+       "limited": 16
+      },
+      "offline": {
+       "config_only": 1,
+       "full": 9,
+       "limited": 16
+      }
+     },
+     "levels": {
+      "nano": "config_only",
+      "offline": "config_only"
+     },
      "name": "Virtual networks",
      "pack_id": "cloudlearn.azure.vnet.basic",
+     "pro_capabilities": 2,
      "protocol": "azure-arm",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -752,6 +1569,262 @@
      "tool": "azure-sdk-for-python"
     }
    },
+   "v4_services": [
+    {
+     "capabilities": 27,
+     "id": "acr",
+     "level_counts": {
+      "nano": {
+       "full": 8,
+       "limited": 19
+      },
+      "offline": {
+       "full": 8,
+       "limited": 19
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Container registries",
+     "pro_capabilities": 1,
+     "status": "v4"
+    },
+    {
+     "capabilities": 23,
+     "id": "aks",
+     "level_counts": {
+      "nano": {
+       "config_only": 2,
+       "full": 4,
+       "limited": 17
+      },
+      "offline": {
+       "config_only": 2,
+       "full": 4,
+       "limited": 17
+      }
+     },
+     "levels": {
+      "nano": "config_only",
+      "offline": "config_only"
+     },
+     "mesh": true,
+     "mesh_only": [
+      "azure.aks.cluster.crud",
+      "azure.aks.node_pools.crud",
+      "azure.aks.run_command",
+      "azure.aks.workloads"
+     ],
+     "name": "Kubernetes services",
+     "pro_capabilities": 2,
+     "status": "v4"
+    },
+    {
+     "capabilities": 11,
+     "id": "common",
+     "level_counts": {
+      "nano": {
+       "limited": 11
+      },
+      "offline": {
+       "limited": 11
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "common",
+     "status": "v4"
+    },
+    {
+     "capabilities": 17,
+     "id": "containerapps",
+     "level_counts": {
+      "nano": {
+       "full": 8,
+       "limited": 9
+      },
+      "offline": {
+       "full": 8,
+       "limited": 9
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "mesh_only": [
+      "azure.containerapps.app.scale",
+      "azure.containerapps.job.crud"
+     ],
+     "name": "Container Apps",
+     "status": "v4"
+    },
+    {
+     "capabilities": 13,
+     "id": "cost",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 5,
+       "not_simulated": 1
+      },
+      "offline": {
+       "full": 7,
+       "limited": 5,
+       "not_simulated": 1
+      }
+     },
+     "levels": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+     },
+     "name": "Cost Management",
+     "pro_capabilities": 3,
+     "status": "v4"
+    },
+    {
+     "capabilities": 11,
+     "id": "defender",
+     "level_counts": {
+      "nano": {
+       "full": 3,
+       "limited": 8
+      },
+      "offline": {
+       "full": 3,
+       "limited": 8
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Microsoft Defender for Cloud",
+     "pro_capabilities": 11,
+     "status": "v4",
+     "tier": "pro"
+    },
+    {
+     "capabilities": 1,
+     "id": "defender-storage",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "defender-storage",
+     "pro_capabilities": 1,
+     "status": "v4",
+     "tier": "pro"
+    },
+    {
+     "capabilities": 18,
+     "id": "entra",
+     "level_counts": {
+      "nano": {
+       "full": 9,
+       "limited": 9
+      },
+      "offline": {
+       "full": 9,
+       "limited": 9
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Microsoft Entra ID",
+     "status": "v4"
+    },
+    {
+     "capabilities": 1,
+     "id": "managedidentity",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "managedidentity",
+     "status": "v4"
+    },
+    {
+     "capabilities": 25,
+     "id": "panels",
+     "level_counts": {
+      "nano": {
+       "limited": 25
+      },
+      "offline": {
+       "limited": 25
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "panels",
+     "pro_capabilities": 1,
+     "status": "v4",
+     "tier": "pro"
+    },
+    {
+     "capabilities": 11,
+     "id": "resourcegroups",
+     "level_counts": {
+      "nano": {
+       "full": 6,
+       "limited": 5
+      },
+      "offline": {
+       "full": 6,
+       "limited": 5
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Resource groups",
+     "status": "v4"
+    },
+    {
+     "capabilities": 1,
+     "id": "streamanalytics",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Stream Analytics jobs",
+     "status": "v4"
+    }
+   ],
    "wiring": {
     "env": [
      {
@@ -819,7 +1892,21 @@
       "Apis.deploy",
       "Apis.stages"
      ],
+     "capabilities": 1,
+     "capability_service": "apigateway",
      "id": "apigateway",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "API Gateway",
      "pack_id": "cloudlearn.gcp.apigateway.basic",
      "protocol": "gcp-like",
@@ -828,16 +1915,50 @@
      "summary": "APIs, configs, and gateways are available."
     },
     {
+     "capabilities": 9,
+     "capability_service": "artifacts",
      "id": "artifactregistry",
+     "level_counts": {
+      "nano": {
+       "full": 4,
+       "limited": 5
+      },
+      "offline": {
+       "full": 4,
+       "limited": 5
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Artifact Registry",
      "released_in": "3.0.29",
      "status": "released"
     },
     {
+     "capabilities": 4,
+     "capability_service": "cloudscheduler",
      "id": "cloudscheduler",
+     "level_counts": {
+      "nano": {
+       "full": 2,
+       "limited": 2
+      },
+      "offline": {
+       "full": 2,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Cloud Scheduler",
+     "pro_capabilities": 4,
      "released_in": "3.0.14",
-     "status": "released"
+     "status": "released",
+     "tier": "pro"
     },
     {
      "actions": [
@@ -849,9 +1970,26 @@
       "Instances.stop",
       "Instances.restart"
      ],
+     "capabilities": 14,
+     "capability_service": "sql",
      "id": "cloudsql",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 9
+      },
+      "offline": {
+       "full": 5,
+       "limited": 9
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Cloud SQL",
      "pack_id": "cloudlearn.gcp.cloudsql.basic",
+     "pro_capabilities": 3,
      "protocol": "gcp-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -867,17 +2005,62 @@
       "Instances.stop",
       "Instances.reset"
      ],
+     "capabilities": 38,
+     "capability_service": "compute",
      "id": "compute",
+     "level_counts": {
+      "nano": {
+       "config_only": 1,
+       "full": 8,
+       "limited": 28,
+       "not_simulated": 1
+      },
+      "offline": {
+       "config_only": 1,
+       "full": 8,
+       "limited": 27,
+       "not_simulated": 2
+      }
+     },
+     "levels": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+     },
      "name": "Compute Engine",
      "pack_id": "cloudlearn.gcp.compute.basic",
+     "pro_capabilities": 4,
      "protocol": "gcp-like",
      "released_in": "<=3.0.8",
      "status": "released",
      "summary": "Instances, project/zone routing, start/stop/reset, and delete flows are available."
     },
     {
+     "capabilities": 18,
+     "capability_service": "kubernetes",
      "id": "container",
+     "level_counts": {
+      "nano": {
+       "full": 11,
+       "limited": 7
+      },
+      "offline": {
+       "full": 11,
+       "limited": 7
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "mesh": true,
+     "mesh_only": [
+      "gcp.kubernetes.cluster.crud",
+      "gcp.kubernetes.cluster.autopilot-create",
+      "gcp.kubernetes.nodepool.crud",
+      "gcp.kubernetes.workloads"
+     ],
      "name": "Kubernetes Engine",
+     "pro_capabilities": 1,
      "released_in": "3.0.15",
      "status": "released"
     },
@@ -890,8 +2073,22 @@
       "projects.locations.channels.create",
       "projects.locations.channels.publish"
      ],
+     "capabilities": 3,
+     "capability_service": "eventarc",
      "data_plane": "NATS (cloudlearn-nats:4222) — trigger.fire and channels:publish push to gcp.eventarc.<trigger> subjects",
      "id": "eventarc",
+     "level_counts": {
+      "nano": {
+       "limited": 3
+      },
+      "offline": {
+       "limited": 3
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Eventarc",
      "pack_id": "cloudlearn.gcp.eventarc.basic",
      "protocol": "gcp-like",
@@ -907,9 +2104,26 @@
       "Documents.delete",
       "Documents.query"
      ],
+     "capabilities": 16,
+     "capability_service": "firestore",
      "id": "firestore",
+     "level_counts": {
+      "nano": {
+       "full": 8,
+       "limited": 8
+      },
+      "offline": {
+       "full": 8,
+       "limited": 8
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Firestore",
      "pack_id": "cloudlearn.gcp.firestore.basic",
+     "pro_capabilities": 2,
      "protocol": "gcp-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -924,7 +2138,28 @@
       "Functions.delete",
       "Functions.invoke"
      ],
+     "capabilities": 14,
+     "capability_service": "functions",
      "id": "functions",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 7
+      },
+      "offline": {
+       "full": 7,
+       "limited": 7
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "mesh_only": [
+      "gcp.functions.jobs.crud",
+      "gcp.functions.workerpools.crud",
+      "gcp.functions.gpu"
+     ],
      "name": "Cloud Functions",
      "pack_id": "cloudlearn.gcp.functions.basic",
      "protocol": "gcp-like",
@@ -941,17 +2176,51 @@
       "AttachPolicy",
       "DetachPolicy"
      ],
+     "capabilities": 33,
+     "capability_service": "iam-admin",
      "id": "iam",
+     "level_counts": {
+      "nano": {
+       "full": 10,
+       "limited": 23
+      },
+      "offline": {
+       "full": 10,
+       "limited": 23
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "IAM & Admin",
      "pack_id": "cloudlearn.gcp.iam.basic",
+     "pro_capabilities": 5,
      "protocol": "gcp-like",
      "released_in": "<=3.0.8",
      "status": "released",
      "summary": "Project IAM policy, test permissions, service accounts, and account settings are available."
     },
     {
+     "capabilities": 33,
+     "capability_service": "iam-admin",
      "id": "iamcredentials",
+     "level_counts": {
+      "nano": {
+       "full": 10,
+       "limited": 23
+      },
+      "offline": {
+       "full": 10,
+       "limited": 23
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "IAM Service Account Credentials",
+     "pro_capabilities": 5,
      "released_in": "3.0.16",
      "status": "released"
     },
@@ -964,8 +2233,26 @@
       "projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.list",
       "projects.locations.keyRings.list"
      ],
+     "capabilities": 10,
+     "capability_service": "kms",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit engine; routed via core/vault_routes._register_gcp",
      "id": "kms",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 4,
+       "not_simulated": 1
+      },
+      "offline": {
+       "full": 5,
+       "limited": 4,
+       "not_simulated": 1
+      }
+     },
+     "levels": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+     },
      "name": "Cloud KMS",
      "pack_id": "cloudlearn.gcp.kms.basic",
      "protocol": "gcp-like",
@@ -973,8 +2260,25 @@
      "status": "released"
     },
     {
+     "capabilities": 23,
+     "capability_service": "monitoring",
      "id": "monitoring",
+     "level_counts": {
+      "nano": {
+       "full": 4,
+       "limited": 19
+      },
+      "offline": {
+       "full": 4,
+       "limited": 19
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Cloud Monitoring",
+     "pro_capabilities": 1,
      "released_in": "3.0.30",
      "status": "released"
     },
@@ -987,7 +2291,23 @@
       "Topics.publish",
       "Subscriptions.pull"
      ],
+     "capabilities": 17,
+     "capability_service": "pubsub",
      "id": "pubsub",
+     "level_counts": {
+      "nano": {
+       "full": 8,
+       "limited": 9
+      },
+      "offline": {
+       "full": 8,
+       "limited": 9
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Pub/Sub",
      "pack_id": "cloudlearn.gcp.pubsub.basic",
      "protocol": "gcp-like",
@@ -996,8 +2316,25 @@
      "summary": "Topics, subscriptions, publish, pull, acknowledge, and ack deadline changes are available."
     },
     {
+     "capabilities": 9,
+     "capability_service": "memorystore",
      "id": "redis",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 4
+      },
+      "offline": {
+       "full": 6,
+       "limited": 3
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Memorystore for Redis",
+     "pro_capabilities": 1,
      "released_in": "3.0.17",
      "status": "released"
     },
@@ -1012,8 +2349,24 @@
       "projects.secrets.versions.list",
       "projects.secrets.versions.disable"
      ],
+     "capabilities": 12,
+     "capability_service": "secret-manager",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — KV v2 backed; routed via core/vault_routes._register_gcp",
      "id": "secretmanager",
+     "level_counts": {
+      "nano": {
+       "full": 6,
+       "limited": 6
+      },
+      "offline": {
+       "full": 6,
+       "limited": 6
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Secret Manager",
      "pack_id": "cloudlearn.gcp.secretmanager.basic",
      "protocol": "gcp-like",
@@ -1030,7 +2383,23 @@
       "Objects.insert",
       "Objects.delete"
      ],
+     "capabilities": 27,
+     "capability_service": "storage",
      "id": "storage",
+     "level_counts": {
+      "nano": {
+       "full": 6,
+       "limited": 21
+      },
+      "offline": {
+       "full": 6,
+       "limited": 21
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "Cloud Storage",
      "pack_id": "cloudlearn.gcp.storage.basic",
      "protocol": "gcp-like",
@@ -1047,9 +2416,26 @@
       "FirewallRules.list",
       "FirewallRules.insert"
      ],
+     "capabilities": 17,
+     "capability_service": "networking",
      "id": "vpc",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 10
+      },
+      "offline": {
+       "full": 7,
+       "limited": 10
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
      "name": "VPC Network",
      "pack_id": "cloudlearn.gcp.vpc.basic",
+     "pro_capabilities": 3,
      "protocol": "gcp-like",
      "released_in": "<=3.0.8",
      "status": "released",
@@ -1116,6 +2502,182 @@
      "tool": "google-cloud-python"
     }
    },
+   "v4_services": [
+    {
+     "capabilities": 1,
+     "id": "backupdr",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Backup and DR",
+     "pro_capabilities": 1,
+     "status": "v4",
+     "tier": "pro"
+    },
+    {
+     "capabilities": 2,
+     "id": "cloudbuild",
+     "level_counts": {
+      "nano": {
+       "limited": 2
+      },
+      "offline": {
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Cloud Build",
+     "status": "v4"
+    },
+    {
+     "capabilities": 2,
+     "id": "clouddeploy",
+     "level_counts": {
+      "nano": {
+       "limited": 2
+      },
+      "offline": {
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Cloud Deploy",
+     "status": "v4"
+    },
+    {
+     "capabilities": 2,
+     "id": "hub",
+     "level_counts": {
+      "nano": {
+       "limited": 2
+      },
+      "offline": {
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "hub",
+     "status": "v4"
+    },
+    {
+     "capabilities": 10,
+     "id": "logs",
+     "level_counts": {
+      "nano": {
+       "full": 5,
+       "limited": 5
+      },
+      "offline": {
+       "full": 5,
+       "limited": 5
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Logging",
+     "status": "v4"
+    },
+    {
+     "capabilities": 6,
+     "id": "resource-manager",
+     "level_counts": {
+      "nano": {
+       "full": 4,
+       "limited": 2
+      },
+      "offline": {
+       "full": 4,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Manage resources",
+     "status": "v4"
+    },
+    {
+     "capabilities": 26,
+     "id": "run",
+     "level_counts": {
+      "nano": {
+       "full": 7,
+       "limited": 18,
+       "not_simulated": 1
+      },
+      "offline": {
+       "full": 7,
+       "limited": 19
+      }
+     },
+     "levels": {
+      "nano": "not_simulated",
+      "offline": "limited"
+     },
+     "name": "Cloud Run",
+     "pro_capabilities": 1,
+     "status": "v4"
+    },
+    {
+     "capabilities": 4,
+     "id": "securitycenter",
+     "level_counts": {
+      "nano": {
+       "full": 2,
+       "limited": 2
+      },
+      "offline": {
+       "full": 2,
+       "limited": 2
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "securitycenter",
+     "status": "v4"
+    },
+    {
+     "capabilities": 13,
+     "id": "vertex-ai",
+     "level_counts": {
+      "nano": {
+       "limited": 13
+      },
+      "offline": {
+       "limited": 13
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "Vertex AI",
+     "status": "v4"
+    }
+   ],
    "wiring": {
     "env": [
      {
@@ -1156,6 +2718,381 @@
   "tls_port": 9443
  },
  "generated_by": "scripts/gen_mcp_matrix.py",
+ "homes": {
+  "mesh": {
+   "about": "A Pro/Max mesh serves the same :9000/:9443 surface as the offline appliance (spec section 2); not re-verified by D0.",
+   "clouds": {
+    "aws": {
+     "env": [
+      {
+       "name": "AWS_ENDPOINT_URL",
+       "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code.",
+       "value": "{sim}"
+      },
+      {
+       "name": "AWS_ACCESS_KEY_ID",
+       "value": "test"
+      },
+      {
+       "name": "AWS_SECRET_ACCESS_KEY",
+       "value": "test"
+      },
+      {
+       "name": "AWS_DEFAULT_REGION",
+       "value": "us-east-1"
+      },
+      {
+       "name": "AWS_REGION",
+       "value": "us-east-1"
+      },
+      {
+       "name": "AWS_PAGER",
+       "note": "Stops AWS CLI v2's pager swallowing short output.",
+       "value": ""
+      }
+     ],
+     "notes": [
+      "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
+      "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+      "SNS->SQS fan-out works natively (shared MessagingStore)."
+     ],
+     "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}"
+    },
+    "azure": {
+     "env": [
+      {
+       "name": "AZURE_STORAGE_CONNECTION_STRING",
+       "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1.",
+       "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};"
+      },
+      {
+       "name": "AZURE_STORAGE_ACCOUNT",
+       "value": "{account}"
+      },
+      {
+       "name": "AZURE_SUBSCRIPTION_ID",
+       "note": "The only subscription a space has; any other id returns SubscriptionNotFound.",
+       "value": "00000000-0000-0000-0000-cloudlearn01"
+      },
+      {
+       "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+       "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted.",
+       "value": "{sim}"
+      },
+      {
+       "name": "AZURE_COSMOS_ENDPOINT",
+       "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate.",
+       "value": "https://{tls_hostport}/azure-data/cosmos/{account}"
+      },
+      {
+       "name": "AZURE_COSMOS_KEY",
+       "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+      },
+      {
+       "name": "AZURE_KEYVAULT_URL",
+       "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form.",
+       "value": "https://cloudlearn.vault.localtest.me:{tls_port}"
+      }
+     ],
+     "notes": [
+      "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+      "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
+     ],
+     "terraform": "",
+     "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
+    },
+    "gcp": {
+     "env": [
+      {
+       "name": "STORAGE_EMULATOR_HOST",
+       "note": "GCS rides the simulator endpoint.",
+       "value": "{sim}"
+      },
+      {
+       "name": "PUBSUB_EMULATOR_HOST",
+       "note": "Separate gRPC emulator container, NOT the simulator port.",
+       "value": "{host}:8085"
+      },
+      {
+       "name": "FIRESTORE_EMULATOR_HOST",
+       "note": "Separate gRPC emulator container, NOT the simulator port.",
+       "value": "{host}:8080"
+      },
+      {
+       "name": "GOOGLE_CLOUD_PROJECT",
+       "note": "Use your active space's project id if it differs.",
+       "value": "cloudlearn"
+      }
+     ],
+     "notes": [
+      "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
+      "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://{tls_hostport} (caddy) and trust its certificate.",
+      "gcloud command adapters are partial; prefer client libraries."
+     ],
+     "terraform": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+     "terraform_note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
+    }
+   },
+   "same_as": "offline"
+  },
+  "nano": {
+   "about": "Nano: the simulator runs in a browser tab; local SDKs reach it through the local tunnel (vyomi-tunnel, http://127.0.0.1:8090) or the cloud relay URL from the Nano footer. Every value comes from D0 (docs/architecture/v4.0/MCP-V4-DISCOVERY.md section 1); 'verified': false marks a value D0 did not exercise on Nano. 'unavailable' lists settings an SDK cannot use through the Nano tunnel: the MCP drops them and returns the warning instead.",
+   "clouds": {
+    "aws": {
+     "env": [
+      {
+       "name": "AWS_ENDPOINT_URL",
+       "note": "The local tunnel forwards to the Nano tab; keep the tab open. Older SDKs need endpoint_url / endpointOverride in code.",
+       "value": "{sim}",
+       "verified": true
+      },
+      {
+       "name": "AWS_ACCESS_KEY_ID",
+       "value": "test",
+       "verified": true
+      },
+      {
+       "name": "AWS_SECRET_ACCESS_KEY",
+       "value": "test",
+       "verified": true
+      },
+      {
+       "name": "AWS_DEFAULT_REGION",
+       "value": "us-east-1",
+       "verified": true
+      },
+      {
+       "name": "AWS_REGION",
+       "value": "us-east-1",
+       "verified": true
+      },
+      {
+       "name": "AWS_PAGER",
+       "note": "Stops AWS CLI v2's pager swallowing short output.",
+       "value": "",
+       "verified": false
+      }
+     ],
+     "notes": [
+      "One endpoint serves every AWS service; plain HTTP only (there is no TLS endpoint on Nano).",
+      "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+      "SNS->SQS fan-out works on Nano (verified with boto3).",
+      "RDS Data API on Nano: single statements answer, but a table created in one ExecuteStatement call is not visible to the next one today (D0 row 7)."
+     ],
+     "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}",
+     "terraform_note": "UNVERIFIED on Nano: D0 did not run Terraform through the tunnel."
+    },
+    "azure": {
+     "env": [
+      {
+       "name": "AZURE_STORAGE_CONNECTION_STRING",
+       "note": "Well-known Azurite key; path-style Blob and host-style Queue endpoints both work through the tunnel. *.localtest.me resolves to 127.0.0.1.",
+       "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};",
+       "verified": true
+      },
+      {
+       "name": "AZURE_STORAGE_ACCOUNT",
+       "value": "{account}",
+       "verified": true
+      },
+      {
+       "name": "AZURE_SUBSCRIPTION_ID",
+       "note": "The only subscription a space has (unverified on Nano).",
+       "value": "00000000-0000-0000-0000-cloudlearn01",
+       "verified": false
+      },
+      {
+       "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+       "note": "ARM base_url for the management SDKs; any credential is accepted (unverified on Nano).",
+       "value": "{sim}",
+       "verified": false
+      },
+      {
+       "name": "AZURE_COSMOS_ENDPOINT",
+       "note": "Plain HTTP, root endpoint (not /azure-data/cosmos/<account>). Verified with Python azure-cosmos; other-language SDKs may insist on https.",
+       "value": "{sim}",
+       "verified": true
+      },
+      {
+       "name": "AZURE_COSMOS_KEY",
+       "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+       "verified": true
+      },
+      {
+       "name": "AZURE_SERVICEBUS_CONNECTION_STRING",
+       "note": "AMQP on {host}:5672 through the tunnel's amqp feature. Create the queue/topic first (Nano console, or REST PUT {sim}/<name> with an atom+xml TopicDescription); ServiceBusAdministrationClient needs HTTPS and fails.",
+       "value": "Endpoint=sb://{host};SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
+       "verified": true
+      }
+     ],
+     "notes": [
+      "Service Bus: AMQP works through the Nano tunnel (UseDevelopmentEmulator=true, port 5672); entities must exist before the first send.",
+      "Blob and Queue share the endpoint; keep the account as the first path segment, or use the host form <account>.blob.localtest.me:<port>."
+     ],
+     "terraform": "",
+     "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}.",
+     "unavailable": [
+      {
+       "name": "AZURE_KEYVAULT_URL",
+       "sdk": "azure-keyvault-*",
+       "warning": "Key Vault needs TLS; not available through the Nano tunnel (the SDKs refuse bearer tokens on plain-HTTP URLs). Use a Pro/Max mesh (https :9443), or see vyomi_capability."
+      }
+     ]
+    },
+    "gcp": {
+     "env": [
+      {
+       "name": "STORAGE_EMULATOR_HOST",
+       "note": "GCS rides the tunnel endpoint (plain HTTP).",
+       "value": "{sim}",
+       "verified": true
+      },
+      {
+       "name": "GOOGLE_CLOUD_PROJECT",
+       "note": "Nano's project id (alias of nano-project); 'cloudlearn' is rejected with 403/404.",
+       "value": "vyomi-project",
+       "verified": true
+      }
+     ],
+     "notes": [
+      "Pub/Sub and Firestore: REST (JSON) only on Nano, at {sim}/v1/projects/vyomi-project/...; the gRPC client libraries do not work through the tunnel.",
+      "Secret Manager and Cloud KMS: REST against {sim} over plain HTTP (unverified on Nano).",
+      "gcloud command adapters are partial; prefer client libraries."
+     ],
+     "terraform": "provider \"google\" {\n  project                 = \"vyomi-project\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+     "terraform_note": "UNVERIFIED on Nano: D0 did not run Terraform through the tunnel.",
+     "unavailable": [
+      {
+       "name": "PUBSUB_EMULATOR_HOST",
+       "sdk": "google-cloud-pubsub (gRPC)",
+       "warning": "google-cloud-pubsub speaks gRPC (HTTP/2) and the Nano tunnel is HTTP/1.1 only, so the client hangs. Use the Pub/Sub REST API at {sim}/v1/projects/vyomi-project/... (works on Nano), or a Pro/Max mesh for the gRPC emulator."
+      },
+      {
+       "name": "FIRESTORE_EMULATOR_HOST",
+       "sdk": "google-cloud-firestore (gRPC)",
+       "warning": "google-cloud-firestore speaks gRPC (HTTP/2) and the Nano tunnel is HTTP/1.1 only, so the client hangs. Use the Firestore REST API at {sim}/v1/projects/vyomi-project/databases/(default)/documents (works on Nano), or a Pro/Max mesh for the gRPC emulator."
+      }
+     ]
+    }
+   },
+   "source": "docs/architecture/v4.0/MCP-V4-DISCOVERY.md"
+  },
+  "offline": {
+   "about": "The v3 and v4.0.0 offline appliance: simulator :9000, caddy TLS :9443, separate gRPC emulators.",
+   "clouds": {
+    "aws": {
+     "env": [
+      {
+       "name": "AWS_ENDPOINT_URL",
+       "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code.",
+       "value": "{sim}"
+      },
+      {
+       "name": "AWS_ACCESS_KEY_ID",
+       "value": "test"
+      },
+      {
+       "name": "AWS_SECRET_ACCESS_KEY",
+       "value": "test"
+      },
+      {
+       "name": "AWS_DEFAULT_REGION",
+       "value": "us-east-1"
+      },
+      {
+       "name": "AWS_REGION",
+       "value": "us-east-1"
+      },
+      {
+       "name": "AWS_PAGER",
+       "note": "Stops AWS CLI v2's pager swallowing short output.",
+       "value": ""
+      }
+     ],
+     "notes": [
+      "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
+      "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+      "SNS->SQS fan-out works natively (shared MessagingStore)."
+     ],
+     "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}"
+    },
+    "azure": {
+     "env": [
+      {
+       "name": "AZURE_STORAGE_CONNECTION_STRING",
+       "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1.",
+       "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};"
+      },
+      {
+       "name": "AZURE_STORAGE_ACCOUNT",
+       "value": "{account}"
+      },
+      {
+       "name": "AZURE_SUBSCRIPTION_ID",
+       "note": "The only subscription a space has; any other id returns SubscriptionNotFound.",
+       "value": "00000000-0000-0000-0000-cloudlearn01"
+      },
+      {
+       "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+       "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted.",
+       "value": "{sim}"
+      },
+      {
+       "name": "AZURE_COSMOS_ENDPOINT",
+       "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate.",
+       "value": "https://{tls_hostport}/azure-data/cosmos/{account}"
+      },
+      {
+       "name": "AZURE_COSMOS_KEY",
+       "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+      },
+      {
+       "name": "AZURE_KEYVAULT_URL",
+       "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form.",
+       "value": "https://cloudlearn.vault.localtest.me:{tls_port}"
+      }
+     ],
+     "notes": [
+      "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+      "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
+     ],
+     "terraform": "",
+     "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
+    },
+    "gcp": {
+     "env": [
+      {
+       "name": "STORAGE_EMULATOR_HOST",
+       "note": "GCS rides the simulator endpoint.",
+       "value": "{sim}"
+      },
+      {
+       "name": "PUBSUB_EMULATOR_HOST",
+       "note": "Separate gRPC emulator container, NOT the simulator port.",
+       "value": "{host}:8085"
+      },
+      {
+       "name": "FIRESTORE_EMULATOR_HOST",
+       "note": "Separate gRPC emulator container, NOT the simulator port.",
+       "value": "{host}:8080"
+      },
+      {
+       "name": "GOOGLE_CLOUD_PROJECT",
+       "note": "Use your active space's project id if it differs.",
+       "value": "cloudlearn"
+      }
+     ],
+     "notes": [
+      "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
+      "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://{tls_hostport} (caddy) and trust its certificate.",
+      "gcloud command adapters are partial; prefer client libraries."
+     ],
+     "terraform": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+     "terraform_note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
+    }
+   }
+  }
+ },
  "host_ports": {
   "caddy": [
    "9443:9443"
@@ -1573,7 +3510,7 @@
    "gcp/secretmanager": "No Google emulator exists: use the REST/HttpJson transport against https://{tls_hostport}."
   }
  },
- "schema": 1,
+ "schema": 2,
  "settings": [
   {
    "commented_out": true,

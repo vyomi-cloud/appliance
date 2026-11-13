@@ -14,7 +14,18 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 
 ## Architecture
 - `docs/architecture/v4.0/MCP-V4-DISCOVERY.md`: D0 evidence (Nano SDK wiring through the local relay, `vyomi-tunnel list --json`).
-- (K1–H3 sections are added as each step lands.)
+- **K1 — knowledge v2 generator** (`scripts/gen_mcp_matrix.py`, `scripts/mcp_wiring.json`). It writes three outputs into `cmd/vyomi/`:
+  - `mcp_matrix.json` (schema 2): the v3 fields, plus `homes.{offline,nano,mesh}` wiring, and per registry service
+    `capability_service`, `levels{nano,offline}` (worst), `level_counts`, `tier`/`mesh` (anchor capability), `mesh_only`, `pro_capabilities`.
+    `v4_services` lists capability files the v3 registry lacks (bedrock, eks, aks, ...).
+  - `mcp_caps.json.gz`: every capability of `core/capabilities/{aws,gcp,azure}/*.json` (`id, title, level, tier, mesh, limitations, tests`),
+    grouped by cloud and file stem.
+  - `mcp_docs.json.gz`: per service of `wasm/docs/**`, the wired operations with a short description, the console's own
+    CLI/Python/JavaScript/curl snippets aimed at `{sim}`, the `pickOps` defaults, the per-feature level and Azure data-plane rows.
+    Snippets are rendered by running `wasm/nano-docs.js` under node (no second copy of the templates).
+  - `mcp_wiring.json` now holds `homes` (the old `clouds` block moved to `homes.offline`; `homes.nano` from D0, each value
+    with `verified`; `unavailable` for settings an SDK cannot use through the tunnel; `homes.mesh = same_as offline`) and
+    `capability_aliases` (registry key -> capability stem, e.g. `logs` -> `cloudwatch`, `elbv2` -> `ec2#ec2.load-`).
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |
@@ -22,6 +33,10 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 | D0 static server on `:8017` instead of `:8000` | stopping the process on `:8000` | `:8000` belonged to an unrelated local app and `:8001` to Docker; the harness takes `TAB_URL` |
 | D0 item 3 run against a local fake portal with dummy env keys, `HOME`/`VYOMI_HOME` in a temp dir | reading the real key; calling vyomi.cloud | the session rules forbid both; this still exercises every `list` branch except a live Codespace |
 | Regenerated `cmd/vyomi/mcp_matrix.json` in its own commit first | leaving `--check` red until K1 | the base was red only because `VERSION` moved to 4.0.0; every later commit must be green |
+| K1 snippets: run `wasm/nano-docs.js` (the console's templates) under node from the generator | port the templates to Python, or to Go at runtime | one source of truth: the MCP hands out exactly what the console's SDK & CLI tab shows; a port would drift. Cost: the generator needs `node` |
+| K1 `--check` compares the *decompressed* JSON of the `.gz` outputs; writes are deterministic (sorted keys, `mtime=0`, no name, level 9) | byte-compare the `.gz` files | deflate output can differ across zlib builds (macOS vs Ubuntu, zlib-ng), which would make CI flaky for no content change. L1-01 (byte-identical twice on one machine) still holds |
+| K1 service-level `tier`/`mesh` = the service's anchor (first) capability; extras listed in `mesh_only` / `pro_capabilities` | any capability mesh-only => service mesh-only; all => service | "any" would mark all of Lambda and Bedrock mesh-only (one extra each); "all" would miss AKS/GKE, whose clusters (the anchor) need a mesh |
+| K1 per-service `levels` = worst level (as the plan says), plus `level_counts` | worst only | S3 is 11 full / 36 limited: "limited" alone hides that most of it works |
 
 ### Decisions taken unattended
 (Defaults taken without the owner because the session ran overnight; each is reversible.)
@@ -31,8 +46,10 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 - [ ] `vyomi-tunnel list --json` envelope is `{targets, notes}` with no `schema`; the spec says `{rows, notes}` + `schema: 1` (T1, owner: tunnel session)
 - [ ] Nano `/health` lists RDS proxies under `vms[]`, never `dbs[]` (owner: tunnel session)
 - [ ] Nano RDS Data API loses state between statements; `e2e-relay.mjs` step 7 fails on the trunk (owner: Nano core)
+- [ ] `gen_mcp_matrix.py` now needs `node` (snippets). `release.yml:156` and `conformance-release.yml:132` run it on GitHub runners (node preinstalled); `ci.yml:35` runs `--check` as a warning only. Confirm node is on every runner that regenerates (owner: integrator)
 - [ ] No claim row in `SESSION-CLAIMS.md`: this branch edits only non-shared paths (`cmd/vyomi/**`, `scripts/gen_mcp_matrix.py`, `scripts/mcp_wiring.json`, docs), and the claims file lives on the trunk (owner: integrator, if a row is wanted)
 
 ## Testing
 - Base (`41161ac3e`): `cd cmd/vyomi && go test ./...` 28 PASS / 0 FAIL; `python3 scripts/gen_mcp_matrix.py --check` red (stale version stamp only).
+- K1: L1-01 PASS (three outputs byte-identical across two runs; `--check` exit 0). L1-02 PASS (in a `/tmp` copy, `s3.bucket.versioning` `level.nano` full -> limited: `--check` exit 1, names `mcp_matrix.json` and `mcp_caps.json.gz (changed: core/capabilities/aws/s3.json)`). L1-03 PASS (`TestMCPCapsIndexMatchesRegistry`: 1,444 / 86 / 16). L1-04 PASS (`TestMCPDocsSnippetsUsePlaceholder`: 24,636 snippets, all with `{sim}`, none hard-coded).
 - D0: headless Nano tab via Playwright + local relay; real Python SDKs; results in `MCP-V4-DISCOVERY.md`. Not run: the local portal on `:8099` with the service worker, a real Chrome tab, the cloud relay.
