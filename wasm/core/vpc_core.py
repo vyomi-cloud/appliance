@@ -3400,7 +3400,7 @@ def _delete_security_group(store, params):
     if sg.get("is_default"):
         raise VpcError("CannotDelete", "The default security group cannot be deleted.")
     for inst in m["instances"].values():
-        if sg["id"] in inst.get("sg_ids", []):
+        if sg["id"] in inst.get("sg_ids", []) and inst.get("state") != "terminated":   # a terminated instance no longer holds its groups (matches the subnet/VPC checks)
             raise VpcError("DependencyViolation", f"resource {sg['id']} has a dependent object (in use by {inst['id']}).")
     _check_no_active_share(store, "security-group", sg["id"])
     m["sgs"].pop(sg["id"])
