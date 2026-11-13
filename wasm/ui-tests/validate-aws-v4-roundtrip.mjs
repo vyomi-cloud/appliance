@@ -66,8 +66,13 @@ async function uiCreate(svc, name) {
   for (let i = 0; i < await els.count(); i++) { const e = els.nth(i); if (/optional/i.test((await e.getAttribute("aria-label")) || "")) continue; const v = await e.inputValue().catch(() => "x"); if (!v && /s3\.amazonaws\.com/.test((await e.getAttribute("placeholder")) || "")) { await e.fill("https://s3.amazonaws.com/rt-cfn-templates/t.json").catch(() => {}); continue; } if (!v || /^(my|My|Music|new-|database-|\/vyomi|\/aws|default)/.test(v)) await e.fill(name).catch(() => {}); }
   step = "submit";
   for (let i = 0; i < (svc === "cloudformation" ? 0 : 8); i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); const e2 = page.locator(INP); for (let j = 0; j < await e2.count(); j++) { const e = e2.nth(j); if (/optional/i.test((await e.getAttribute("aria-label")) || "")) continue; if (!(await e.inputValue().catch(() => "x"))) await e.fill(name).catch(() => {}); } }
-  // the form's own submit: not the feedback widget and not a (hidden) modal such as DynamoDB's "Create global index"
-  await page.locator("button:not(.vyfb-send):not([role=dialog] *)", { hasText: /^\s*(create|add|launch|store|save|finish|submit)\b/i }).filter({ visible: true }).last().click({ timeout: 8000 }); await sleep(3000);
+  // the form's own submit: not the feedback widget, and not a (hidden) modal such as DynamoDB's "Create global index";
+  // forms that ARE a modal (ECR, Backup, Network Manager, Image Builder) use the visible modal's button first.
+  const SUBMIT = /^\s*(create|add|launch|store|save|finish|submit)\b/i;
+  const pageBtn = page.locator("button:not(.vyfb-send):not([role=dialog] *)", { hasText: SUBMIT }).filter({ visible: true });
+  const modalBtn = page.locator("[role=dialog]:not(:has(.vyfb-send)) button", { hasText: SUBMIT }).filter({ visible: true });
+  const modalOpen = await page.evaluate(() => [...document.querySelectorAll("[role=dialog]")].some((d) => d.getClientRects().length > 0 && getComputedStyle(d).visibility !== "hidden" && !d.querySelector(".vyfb-send")));
+  await (modalOpen ? modalBtn : pageBtn).last().click({ timeout: 8000 }); await sleep(3000);
 }
 async function uiDelete(svc, name) {
   step = "open list"; await go(svc);
