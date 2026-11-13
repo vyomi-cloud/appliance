@@ -417,6 +417,59 @@ func TestMCPStatusOtherHints(t *testing.T) {
 
 func fmt_(v any) string { s, _ := v.(string); return s }
 
+// D0 item 4 (run 3, a real v4 mesh): a fresh mesh has one default space per cloud, so a call has exactly one place to land and
+// there is no warning. With several spaces of one cloud the warning names where each cloud's calls land (the active space for its
+// cloud, otherwise that cloud's first space) and says the Nano console's switch does not reach the mesh. Bodies as /api/spaces answered.
+func TestMCPStatusMeshSpacesWarning(t *testing.T) {
+	s, _ := testMCPServer(t)
+	defaults := `{"space_id":"space-legacy","name":"aws-default","provider":"aws"},{"space_id":"space-azure-default","name":"azure-default","provider":"azure"},` +
+		`{"space_id":"space-gcp-default","name":"gcp-default","provider":"gcp"}`
+	extra := `,{"space_id":"space-df5afd24f69c","name":"run3-one","provider":"aws"},{"space_id":"space-2eaf506b27fd","name":"run3-two","provider":"aws"}`
+	cases := []struct {
+		name, spaces, active string
+		want, not            []string
+	}{
+		{"fresh mesh, one space per cloud", defaults, "space-legacy", nil, nil},
+		{"three aws spaces, run3-two active", defaults + extra, "space-2eaf506b27fd",
+			[]string{"5 spaces (3 aws)", "aws -> run3-two (the active space)", "gcp -> gcp-default", "azure -> azure-default",
+				"Nano console does not change", "/api/spaces/<space_id>/switch"}, []string{"aws -> aws-default"}},
+		{"three aws spaces, a gcp space active", defaults + extra, "space-gcp-default",
+			[]string{"aws -> aws-default;", "gcp -> gcp-default (the active space)"}, []string{"run3-two"}},
+	}
+	for _, c := range cases {
+		deadHomes(t)
+		srv := httptest.NewServer(jsonHandler(map[string]string{
+			"/mesh/status":       strings.ReplaceAll(meshStatusBody, "%LOCKED%", "false"),
+			"/healthz":           `{"status":"ok"}`,
+			"/api/spaces":        `{"spaces":[` + c.spaces + `],"active_space_id":"` + c.active + `"}`,
+			"/api/spaces/active": `{"active_space_id":"` + c.active + `","space":{"name":"x"}}`,
+		}))
+		t.Setenv("VYOMI_MESH_URL", srv.URL)
+		res, _ := statusOf(t, s)
+		srv.Close()
+		w, has := res["spaces_warning"].(string)
+		if res["selected"] != homeMeshLocal {
+			t.Fatalf("%s: selected=%v", c.name, res["selected"])
+		}
+		if c.want == nil {
+			if has {
+				t.Errorf("%s: no warning expected, got %q", c.name, w)
+			}
+			continue
+		}
+		for _, x := range c.want {
+			if !strings.Contains(w, x) {
+				t.Errorf("%s: warning lacks %q: %q", c.name, x, w)
+			}
+		}
+		for _, x := range c.not {
+			if strings.Contains(w, x) {
+				t.Errorf("%s: warning must not contain %q: %q", c.name, x, w)
+			}
+		}
+	}
+}
+
 // L1-20: vyomi_reach merges the tunnel's /health rows with `list --json` rows and leaves no process behind.
 func TestMCPReach(t *testing.T) {
 	s, _ := testMCPServer(t)

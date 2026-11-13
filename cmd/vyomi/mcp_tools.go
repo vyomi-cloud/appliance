@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -263,8 +264,8 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 }
 
 // applianceState adds the live /api/* state of a :9000-style appliance (offline or mesh): health, licence,
-// backend readiness, active space. On a mesh it also counts the spaces (spec Q4: direct SDK calls land in the
-// active space; warn when the mesh hosts more than one).
+// backend readiness, active space. On a mesh it also reads the spaces and warns when one cloud has several
+// (spec Q4, see spacesWarning).
 func (s *mcpServer) applianceState(out map[string]any, base string, mesh bool) {
 	health, err := s.getJSON(base, "/healthz")
 	if err != nil {
@@ -300,37 +301,101 @@ func (s *mcpServer) applianceState(out map[string]any, base string, mesh bool) {
 		out["active_space"] = summarizeSpace(sp)
 	}
 	if mesh {
-		if n := s.countSpaces(base); n > 1 {
-			out["spaces_warning"] = fmt.Sprintf("This mesh hosts %d spaces. Direct SDK calls to %s land in the mesh's active space (active_space); switch spaces in the Nano console if the user works in another one.", n, base)
+		if spaces, active := s.meshSpaces(base); len(spaces) > 1 {
+			if w := spacesWarning(spaces, active, base); w != "" {
+				out["spaces_warning"] = w
+			}
 		}
 	}
 }
 
-func (s *mcpServer) countSpaces(base string) int {
+// meshSpace is one entry of a mesh's /api/spaces, in the mesh's order (oldest first).
+type meshSpace struct{ ID, Name, Cloud string }
+
+// meshSpaces reads /api/spaces: the spaces (an absent provider is aws, as on the appliance) and the active id.
+func (s *mcpServer) meshSpaces(base string) ([]meshSpace, string) {
 	resp, err := s.client.Get(strings.TrimRight(base, "/") + "/api/spaces")
 	if err != nil {
-		return 0
+		return nil, ""
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		return 0
+		return nil, ""
 	}
 	var v any
 	if json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&v) != nil {
-		return 0
+		return nil, ""
 	}
+	var list []any
+	active := ""
 	switch x := v.(type) {
 	case []any:
-		return len(x)
+		list = x
 	case map[string]any:
+		active, _ = x["active_space_id"].(string)
 		switch sp := x["spaces"].(type) {
 		case []any:
-			return len(sp)
+			list = sp
 		case map[string]any:
-			return len(sp)
+			for _, e := range sp {
+				list = append(list, e)
+			}
 		}
 	}
-	return 0
+	out := make([]meshSpace, 0, len(list))
+	for _, e := range list {
+		m, _ := e.(map[string]any)
+		sp := meshSpace{Cloud: "aws"}
+		if m != nil {
+			sp.ID, _ = m["space_id"].(string)
+			sp.Name, _ = m["name"].(string)
+			if c, _ := m["provider"].(string); strings.TrimSpace(c) != "" {
+				sp.Cloud = strings.ToLower(strings.TrimSpace(c))
+			}
+		}
+		out = append(out, sp)
+	}
+	return out, active
+}
+
+// spacesWarning (spec Q4, D0 item 4 verified on a local mesh): a call for cloud X lands in the mesh's own active
+// space when that space is an X space, otherwise in the first X space. Nothing in the request picks the space, and
+// the Nano console's space switch does not reach the mesh. One space per cloud (a fresh mesh has aws-, gcp- and
+// azure-default) is therefore unambiguous: warn only when some cloud has more than one space.
+func spacesWarning(spaces []meshSpace, active string, base string) string {
+	byCloud := map[string][]meshSpace{}
+	var clouds []string
+	activeCloud, activeName := "", ""
+	for _, sp := range spaces {
+		if _, ok := byCloud[sp.Cloud]; !ok {
+			clouds = append(clouds, sp.Cloud)
+		}
+		byCloud[sp.Cloud] = append(byCloud[sp.Cloud], sp)
+		if sp.ID != "" && sp.ID == active {
+			activeCloud, activeName = sp.Cloud, firstNonEmpty(sp.Name, sp.ID)
+		}
+	}
+	var shared []string
+	for _, c := range clouds {
+		if n := len(byCloud[c]); n > 1 {
+			shared = append(shared, fmt.Sprintf("%d %s", n, c))
+		}
+	}
+	if len(shared) == 0 {
+		return ""
+	}
+	sort.Strings(clouds)
+	var lands []string
+	for _, c := range clouds {
+		where := firstNonEmpty(byCloud[c][0].Name, byCloud[c][0].ID)
+		if c == activeCloud {
+			where = activeName + " (the active space)"
+		}
+		lands = append(lands, c+" -> "+where)
+	}
+	return fmt.Sprintf("This mesh hosts %d spaces (%s). Direct SDK and CLI calls to %s go to ONE space per cloud: the mesh's own active space for its cloud, otherwise that cloud's first space. Now: %s. "+
+		"Switching spaces in the Nano console does not change this; only POST %s/api/spaces/<space_id>/switch on the mesh does. Ask the user which space they mean before creating resources.",
+		len(spaces), strings.Join(shared, ", "), base, strings.Join(lands, "; "), strings.TrimRight(base, "/"))
 }
 
 // Hints by home (spec decision 8). `vyomi up` appears only for the offline appliance and a local mesh.
