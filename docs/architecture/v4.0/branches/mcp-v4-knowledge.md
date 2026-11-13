@@ -180,6 +180,16 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
 - [x] Claim row: on the trunk since `debec6ae7` (`wasm/relay/...`, `packaging/tunnel/**`); remove it when this branch merges (owner: integrator)
 - [ ] `test-amqp-bridge.mjs` needs the vendored Pyodide (`wasm/vendor/pyodide`, absent in a worktree); not run (fixture for a conformance test, unrelated to T1)
 
+## Owner review fixes (2026-11-14, independent Linux verification)
+
+Found by re-running the branch on Linux (the overnight runs tested on macOS only):
+
+| # | Problem | Fix |
+|---|---|---|
+| 1 | `TestMCPHomesCodespaceTimeout` and `TestMCPReach` failed on Linux: the killed probe processes are zombies until init reaps them, and `kill(pid, 0)` succeeds on a zombie. The product code (process-group kill) was correct; macOS reaps at once, so the runs never saw it. Would break Linux CI and containers without a prompt reaper. | `stillRunning(pid)` in `mcp_homes_test.go`: treats state `Z` in `/proc/<pid>/stat` as gone and waits up to 2 s. 59/59 on Linux, both tests stable over repeated runs, race-clean; vet clean for darwin and windows. |
+| 2 | `vyomi-tunnel mcp` logged `endpoint http://127.0.0.1:9000` at startup even when the selected home was the Nano tab. | The banner names what is probed (Nano tunnel port, mesh/appliance URL, Codespace via vyomi-tunnel) and points to `vyomi_status`. `--help` now lists `vyomi_reach`. |
+| 3 | `gen_mcp_matrix.py` (and so `build_tunnel_mcp.sh`) rewrote `mcp_caps.json.gz` / `mcp_docs.json.gz` on every run; gzip bytes differ between zlib builds, so on any other machine the tracked files showed as modified with identical content. | A `.gz` output is rewritten only when its decompressed content changed. Verified: a content-identical file recompressed differently is left alone; a stale file still fails `--check` and is rewritten. |
+
 ## Testing
 - Run 2, gate 0a (after merging the trunk @ `debec6ae7`): `go test ./...` 59 PASS / 0 FAIL; `gen_mcp_matrix.py --check` OK; relay
   `test-mesh-link` 29 PASS, `test-mesh-shell` 47 PASS (with `PY=` a venv that has uvicorn + websockets), `test-mesh-session-derived` 4 PASS,

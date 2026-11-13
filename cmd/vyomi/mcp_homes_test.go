@@ -266,7 +266,7 @@ func TestMCPHomesCodespaceTimeout(t *testing.T) {
 	raw, _ := os.ReadFile(pidFile)
 	for _, f := range strings.Fields(string(raw)) {
 		pid, _ := strconv.Atoi(f)
-		if pid > 0 && syscall.Kill(pid, 0) == nil {
+		if pid > 0 && stillRunning(pid) {
 			t.Errorf("probe child %d still alive after the timeout", pid)
 			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
@@ -447,7 +447,7 @@ func TestMCPReach(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 	raw, _ := os.ReadFile(pidFile)
-	if pid, _ := strconv.Atoi(strings.TrimSpace(string(raw))); pid > 0 && syscall.Kill(pid, 0) == nil {
+	if pid, _ := strconv.Atoi(strings.TrimSpace(string(raw))); pid > 0 && stillRunning(pid) {
 		t.Errorf("vyomi_reach left process %d running", pid)
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
@@ -459,5 +459,29 @@ func TestMCPReach(t *testing.T) {
 	}
 	if _, isErr := callTool(t, s, "vyomi_reach", map[string]any{"scope": "galaxy"}); !isErr {
 		t.Error("bad scope must be a tool error")
+	}
+}
+
+// stillRunning reports whether pid is a live (non-zombie) process, waiting up to 2 s for it to go away.
+// A killed child whose parent has already exited is a zombie until init reaps it: kill(pid, 0) still
+// succeeds on a zombie, and on Linux (CI runners, containers) the reap can lag. macOS reaps at once.
+func stillRunning(pid int) bool {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if syscall.Kill(pid, 0) != nil {
+			return false
+		}
+		if b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); err == nil {
+			// Fields after the "(comm)" field; the first is the state. comm may contain spaces.
+			if i := strings.LastIndexByte(string(b), ')'); i >= 0 {
+				if f := strings.Fields(string(b)[i+1:]); len(f) > 0 && f[0] == "Z" {
+					return false
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

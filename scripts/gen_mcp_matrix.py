@@ -523,6 +523,10 @@ def main() -> int:
         return 0
     for path, rendered, gz in outputs:
         if gz:
+            # gzip bytes differ between zlib builds even for identical content; rewriting an unchanged file
+            # would show the tracked .gz as modified on every other machine (and in build_tunnel_mcp.sh).
+            if path.exists() and _gunzip(path) == rendered:
+                continue
             path.write_bytes(_gz(rendered))
         else:
             path.write_text(rendered)

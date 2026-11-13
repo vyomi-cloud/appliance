@@ -119,7 +119,7 @@ Environment:
   VYOMI_MESH_URL          Mesh control base URL (default http://127.0.0.1:9000)
   RELAY_PORT              Local Nano tunnel port (default 8090)
 
-Tools: vyomi_status, vyomi_services, vyomi_capability, vyomi_snippet, vyomi_env, vyomi_scan_repo, vyomi_write_env
+Tools: vyomi_status, vyomi_reach, vyomi_services, vyomi_capability, vyomi_snippet, vyomi_env, vyomi_scan_repo, vyomi_write_env
 `)
 			return 0
 		}
@@ -129,8 +129,8 @@ Tools: vyomi_status, vyomi_services, vyomi_capability, vyomi_snippet, vyomi_env,
 		fmt.Fprintln(os.Stderr, "vyomi mcp:", err)
 		return 1
 	}
-	fmt.Fprintf(os.Stderr, "vyomi mcp: serving on stdio (knowledge from appliance v%s, endpoint %s)\n",
-		s.version, s.target(nil).simURL())
+	fmt.Fprintf(os.Stderr, "vyomi mcp: serving on stdio (knowledge from appliance v%s; the simulator home is detected on each call: Nano tunnel 127.0.0.1:%d, mesh/appliance %s, Codespace via vyomi-tunnel; see vyomi_status)\n",
+		s.version, relayPort(), meshURL())
 	if err := s.serve(os.Stdin); err != nil {
 		fmt.Fprintln(os.Stderr, "vyomi mcp:", err)
 		return 1
