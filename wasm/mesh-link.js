@@ -744,7 +744,33 @@
     return (termsAgreed() ? Promise.resolve(true) : termsModal()).then(function (ok) {      // terms are a modal dialog, never inline
       if (!ok) return { cancelled: true };
       termsAccept(); lastFail = null;
-      return portalApi("start" + (cloud ? "?cloud=" + encodeURIComponent(cloud) : ""), "POST").then(function (r) { return loadSession().then(function () { return r; }); });
+      return portalApi("start" + (cloud ? "?cloud=" + encodeURIComponent(cloud) : ""), "POST").then(function (r) {
+        if (r && r.ok && r.j && r.j.browser_launch) return browserLaunch(r.j.browser_launch).then(function (r2) { return loadSession().then(function () { return r2; }); });
+        return loadSession().then(function () { return r; });
+      });
+    });
+  }
+  // Browser launch (portal MESH_BROWSER_LAUNCH=1): the portal hands this page the launch; GitHub's create call is made FROM THIS BROWSER (the user's
+  // own network), then the codespace name goes back to the portal. The token lives only in this closure and is dropped after the call.
+  function browserLaunch(bl) {
+    var tries = 0;
+    function create() {
+      var body = { machine: bl.machine, devcontainer_path: bl.devcontainer_path, idle_timeout_minutes: bl.idle_timeout_minutes, display_name: bl.display_name };
+      if (bl.ref) body.ref = bl.ref;
+      return realFetch(bl.api + "/repos/" + bl.repo + "/codespaces", {
+        method: "POST", headers: { accept: "application/vnd.github+json", authorization: "Bearer " + bl.token, "content-type": "application/json", "x-github-api-version": "2022-11-28" },
+        body: JSON.stringify(body) })
+        .then(function (g) { return g.json().catch(function () { return {}; }).then(function (j) { return { status: g.status, j: j || {} }; }); },
+              function () { return { status: 599, j: { message: "network error" } }; })
+        .then(function (g) {
+          if (g.status === 429 && tries < 2) { tries++; return new Promise(function (res) { setTimeout(res, 15000); }).then(create); }      // a Codespaces creation throttle: retry twice
+          return g;
+        });
+    }
+    return create().then(function (g) {
+      bl.token = "";
+      if (g.status >= 200 && g.status < 300 && g.j && g.j.name) return portalApi("launched", "POST", { codespace_name: g.j.name });
+      return portalApi("launch_failed", "POST", { status: g.status, message: (g.j && g.j.message) || "" });
     });
   }
   function sessionStop() { return portalApi("stop", "POST").then(function (r) { return loadSession().then(function () { return r; }); }); }
