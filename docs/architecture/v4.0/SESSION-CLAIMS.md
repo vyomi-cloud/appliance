@@ -6,4 +6,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 
 | Session | Branch | Repo | Paths claimed | Since |
 |---|---|---|---|---|
-| tunnel redesign | (the tunnel session) | appliance | packaging/tunnel/**, wasm/relay/** | 2026-11-09 |
+| mcp-v4 | v4/mcp-v4-knowledge | appliance | wasm/relay/local-relay.mjs, wasm/relay/mesh-cli.mjs, wasm/relay/mcp-launch.mjs, wasm/relay/test-*.mjs, packaging/tunnel/** | 2026-11-14 |
