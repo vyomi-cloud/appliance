@@ -821,6 +821,7 @@ class AwsWireRouter:
         self.az_table = s.get("az_table") or AzureTableStore()
         self.az_arm = s.get("az_arm") or AzureArm()   # ARM control plane — read by the blob core for CORS/lifecycle/static-website enforcement
         self.az_arm.acr_store = None   # set below once the ACR store exists (Defender for Containers image scanning)
+        self.az_arm.kv_keys_store = self.az_kvkeys     # vault delete purges the vault's keys too
         self.az_arm.kv_certs_store = self.az_kvcerts   # vault delete / RG delete purges the vault's secrets + certs
         self.az_arm.kv_secrets_store = self.az_kvsec   # APIM named values: Key Vault-type listValue resolves against this SAME space's KV secrets
         if getattr(self.az_arm, "sql_store", None) is None:   # Azure SQL export/import: this router's SQL data plane + Blob store
@@ -2478,6 +2479,8 @@ class AwsWireRouter:
                     return {"status": _nf.status, "headers": {"content-type": "application/json"}, "body": _nf.body}
                 if svc in ("az-kv-secrets", "az-kv-certs"):
                     store = az_kvsec.scoped(store, vault)    # per-vault secrets/certs (no vault -> shared legacy namespace)
+                elif svc == "az-kv-keys":
+                    store = az_kvkeys.scoped(store, vault)   # per-vault keys (no vault -> shared legacy namespace)
                 if vault and keyvault_network_denied(self.az_arm.state, vault):
                     body_json = json.dumps({"error": {"code": "Forbidden",
                         "message": f"Client address is not authorized and caller is not a trusted "

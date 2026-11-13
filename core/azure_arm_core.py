@@ -1249,6 +1249,7 @@ class AzureArm:
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
         self.graph_store = None                  # set by the router/registry: this space's Entra GraphStore (Managed identity sign-ins)
         self.kv_certs_store = None
+        self.kv_keys_store = None                # set by aws_wire_router.py: this space's Key Vault keys store (purged with its vault)
         self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
         self.sql_store = None                    # set by the platform: the Azure SQL data plane's SqlStore (database export/import)
         self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
@@ -2461,6 +2462,15 @@ class AzureArm:
                         pass
                 for _s in _stores:
                     _kvs.purge_vault(_s, _vn)
+                from core import azure_keyvault_keys_core as _kvk
+                _ks = getattr(self, "kv_keys_store", None)
+                if _ks is None:
+                    try:
+                        from core import appliance_stores as _aps
+                        _ks = _aps.az_kv_keys_store()
+                    except Exception:
+                        pass
+                _kvk.purge_vault(_ks, _vn)
             except Exception:
                 pass
         cb = getattr(self, "on_child_delete", None)

@@ -647,7 +647,7 @@ def ae_create_cek(store, db_id, kv_store, name, cmk_name):
     name_k, ver = cmk.parse_key_uri(row[0][0])
     cek = os.urandom(32)
     try:
-        wrapped = cmk._kv_call(kv_store, "wrapkey", name_k, ver or "", cek)
+        wrapped = cmk._kv_call(kv_store, "wrapkey", name_k, ver or "", cek, cmk.key_vault(row[0][0]))
     except cmk.CmkError as e:
         raise SecError(403, "KeyVaultKeyInaccessible", e.message)
     _x(store, db_id, f"DELETE FROM {_A}cek WHERE name=?", [name])
@@ -664,7 +664,7 @@ def _cek_bytes(store, db_id, kv_store, cek_name):
         raise SecError(404, "ResourceNotFound", f"Column encryption key '{cek_name}' does not exist.")
     name_k, _ = cmk.parse_key_uri(row[0][2])
     try:
-        return _unb64(cmk._kv_call(kv_store, "unwrapkey", name_k, row[0][1], _unb64(row[0][0]))["value"])
+        return _unb64(cmk._kv_call(kv_store, "unwrapkey", name_k, row[0][1], _unb64(row[0][0]), cmk.key_vault(row[0][2]))["value"])
     except cmk.CmkError as e:
         raise SecError(500, "ColumnEncryptionKeyUnavailable",
                        f"Failed to decrypt a column encryption key using key store provider 'AZURE_KEY_VAULT'. {e.message}")

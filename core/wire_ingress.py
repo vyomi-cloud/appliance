@@ -640,6 +640,8 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
             return {"status": resp404.status, "headers": {"content-type": "application/json"}, "body": resp404.body}
         if kind in ("secrets", "deletedsecrets", "certificates"):
             st = kvs.scoped(st, vault0)          # per-vault secrets/certs (no vault -> legacy shared namespace)
+        elif kind in ("keys", "deletedkeys"):
+            st = kvk.scoped(st, vault0)          # per-vault keys (no vault -> legacy shared namespace)
         if vault0 and keyvault_network_denied(arm_st, vault0):
             import json as _json
             body_json = _json.dumps({"error": {"code": "Forbidden",

@@ -161,8 +161,8 @@ def _deleted_secrets(store, method: str, segs: list) -> KvResponse:
 # (`/azure-data/keyvault/{vault}/...`, the console's `x-vyomi-vault` header, or a
 # `<vault>.vault.azure.net` Host) and the store is wrapped in a view whose `secrets` map is
 # namespaced `<vault>/<name>`. No vault in the request -> the legacy shared namespace (old
-# state keeps working). Keys stay per-space (customer-managed-key envelopes resolve them by
-# name from the unscoped store).
+# state keeps working). Keys are per vault too (azure_keyvault_keys_core.scoped); customer-managed-key
+# references resolve the key in the vault their URI names, falling back to the legacy unscoped namespace.
 _VAULT_SEP = "/"
 
 

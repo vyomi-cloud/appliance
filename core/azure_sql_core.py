@@ -138,7 +138,7 @@ def _tde_protector_error(arm_state: dict | None, kv_store, server: str, database
     if kv_store is None:
         return None
     name, version = _parse_kv_key_uri(key_uri)
-    status = kv_keys.key_enabled(kv_store, name, version)
+    status = kv_keys.key_enabled(kv_keys.for_key(kv_store, kv_keys.vault_of_uri(key_uri), name), name, version)
     if status is False:
         return _err(403, "TdeProtectorUnavailable",
                     f"The Key Vault key protecting database '{database}' with transparent "

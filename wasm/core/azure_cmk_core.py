@@ -85,7 +85,13 @@ def _stream(dek: bytes, nonce: bytes, n: int) -> bytes:
     return bytes(out[:n])
 
 
-def _kv_call(kv_store, op: str, name: str, version: str, value: bytes):
+def key_vault(key_uri: str) -> str:
+    """The vault named by a key URI's host ('' when it is not a <vault>.vault.azure.net host: unscoped)."""
+    return kvk.vault_of_uri(key_uri)
+
+
+def _kv_call(kv_store, op: str, name: str, version: str, value: bytes, vault: str = ""):
+    kv_store = kvk.for_key(kv_store, vault, name)      # keys are per vault (legacy unscoped keys still resolve)
     path = f"/keys/{name}/{version}/{op}" if version else f"/keys/{name}/{op}"
     r = kvk.dispatch(kv_store, "POST", path, {}, {}, json.dumps({"alg": "RSA-OAEP", "value": _b64(value)}).encode())
     try:
@@ -110,9 +116,10 @@ def seal(kv_store, key_uri: str, plaintext: bytes) -> dict:
     nonce = os.urandom(16)
     ct = bytes(a ^ b for a, b in zip(plaintext, _stream(dek, nonce, len(plaintext))))
     tag = hmac.new(dek, b"mac" + nonce + ct, hashlib.sha256).digest()
-    wrapped = _kv_call(kv_store, "wrapkey", name, version or "", dek)
+    vault = key_vault(key_uri)
+    wrapped = _kv_call(kv_store, "wrapkey", name, version or "", dek, vault)
     kid = wrapped.get("kid", "")
-    return {"fmt": MAGIC, "kid": kid, "keyName": name, "keyVersion": kid.rstrip("/").rsplit("/", 1)[-1],
+    return {"fmt": MAGIC, "kid": kid, "keyVault": vault, "keyName": name, "keyVersion": kid.rstrip("/").rsplit("/", 1)[-1],
             "wrappedDek": wrapped["value"], "nonce": _b64(nonce), "ct": _b64(ct), "tag": _b64(tag)}
 
 
@@ -123,7 +130,7 @@ def is_envelope(x) -> bool:
 def unseal(kv_store, env: dict) -> bytes:
     if not is_envelope(env):
         raise CmkError(400, "InvalidEnvelope", "Not a CMK envelope.")
-    dek = _unb64(_kv_call(kv_store, "unwrapkey", env["keyName"], env["keyVersion"], _unb64(env["wrappedDek"]))["value"])
+    dek = _unb64(_kv_call(kv_store, "unwrapkey", env["keyName"], env["keyVersion"], _unb64(env["wrappedDek"]), env.get("keyVault") or "")["value"])
     nonce, ct = _unb64(env["nonce"]), _unb64(env["ct"])
     if not hmac.compare_digest(hmac.new(dek, b"mac" + nonce + ct, hashlib.sha256).digest(), _unb64(env["tag"])):
         raise CmkError(400, "DataIntegrity", "Ciphertext failed authentication (tampered or wrong key).")
@@ -132,11 +139,12 @@ def unseal(kv_store, env: dict) -> bytes:
 
 def rewrap(kv_store, env: dict, key_uri: str) -> dict:
     """Key rotation: unwrap the DEK with the old key version, wrap it under `key_uri` (latest when versionless)."""
-    old = _kv_call(kv_store, "unwrapkey", env["keyName"], env["keyVersion"], _unb64(env["wrappedDek"]))
+    old = _kv_call(kv_store, "unwrapkey", env["keyName"], env["keyVersion"], _unb64(env["wrappedDek"]), env.get("keyVault") or "")
     name, version = parse_key_uri(key_uri)
-    new = _kv_call(kv_store, "wrapkey", name, version or "", _unb64(old["value"]))
+    vault = key_vault(key_uri)
+    new = _kv_call(kv_store, "wrapkey", name, version or "", _unb64(old["value"]), vault)
     kid = new.get("kid", "")
-    return dict(env, kid=kid, keyName=name, keyVersion=kid.rstrip("/").rsplit("/", 1)[-1], wrappedDek=new["value"])
+    return dict(env, kid=kid, keyVault=vault, keyName=name, keyVersion=kid.rstrip("/").rsplit("/", 1)[-1], wrappedDek=new["value"])
 
 
 def usable(kv_store, key_uri: str):
@@ -144,7 +152,7 @@ def usable(kv_store, key_uri: str):
     name, version = parse_key_uri(key_uri)
     if not name:
         return False, "malformed key identifier"
-    st = kvk.key_enabled(kv_store, name, version)
+    st = kvk.key_enabled(kvk.for_key(kv_store, key_vault(key_uri), name), name, version)
     if st is None:
         return False, "key not found (deleted or never created)"
     if st is False:

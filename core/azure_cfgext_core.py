@@ -128,11 +128,11 @@ def bind_key_store(store_or_getter) -> None:
     except ImportError:  # pragma: no cover - Pyodide flat layout
         import azure_keyvault_keys_core as kvk  # type: ignore
 
-    def _lk(name, version):
+    def _lk(name, version, vault=""):
         st = store_or_getter() if callable(store_or_getter) else store_or_getter
         if hasattr(st, "adopt"):
             st.adopt()
-        return kvk.key_enabled(st, name, version)
+        return kvk.key_enabled(kvk.for_key(st, vault, name), name, version)     # keys are per vault
     set_key_lookup(_lk)
 
 
@@ -140,7 +140,7 @@ def check_key_exists(vault: str, key_name: str, version, what: str):
     if KEY_LOOKUP is None or not key_name:
         return None
     try:
-        st = KEY_LOOKUP(key_name, version or None)
+        st = KEY_LOOKUP(key_name, version or None, vault)
     except Exception:
         return None
     if st is None:

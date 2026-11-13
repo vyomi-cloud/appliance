@@ -151,6 +151,85 @@ def _rsa_sig(alg: str):
     return pad, utils.Prehashed(h)
 
 
+# ── per-vault scoping ──────────────────────────────────────────────────────
+# Keys are per VAULT, like secrets/certificates (azure_keyvault_secrets_core.scoped). A vault's keys
+# live in the shared store under `<vault>::<name>/<version>` (names/versions never contain "::", so a
+# legacy unscoped `name/version` id can never be mistaken for a vault's). No vault in the request ->
+# the unscoped legacy namespace. Soft-deleted keys are kept per vault too.
+_KEY_VAULT_SEP = "::"
+_KEY_VIEWS: dict = {}
+
+
+def vault_of_uri(uri: str) -> str:
+    """'https://<vault>.vault.azure.net/keys/...' -> '<vault>' ('' for any other host: unscoped)."""
+    host = str(uri or "").split("://", 1)[-1].split("/", 1)[0].split(":")[0].lower()
+    if host.endswith(".vault.azure.net") and host.count(".") >= 3:
+        return host.split(".")[0]
+    return ""
+
+
+def scoped(store, vault: str):
+    """`store` itself without a vault; else a KeyStore view over this vault's keys only."""
+    if not vault or store is None:
+        return store
+    try:
+        from core.azure_keyvault_secrets_core import _PrefixDict
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        from azure_keyvault_secrets_core import _PrefixDict  # type: ignore
+    base = store.__dict__["_base"] if "_base" in getattr(store, "__dict__", {}) else store
+    vault = vault.lower()
+    base_cls = type(base)
+    cls = _KEY_VIEWS.get(base_cls)
+    if cls is None:
+        def _grave(self):
+            g = self.__dict__["_base"].__dict__.setdefault("_deleted_keys_by_vault", {})
+            return g.setdefault(self.__dict__["_vault"], {})
+        cls = type("VaultScoped" + base_cls.__name__, (base_cls,), {
+            "keys": property(lambda self: self.__dict__["_pk"]),
+            "material": property(lambda self: self.__dict__["_pm"]),
+            "_k": property(lambda self: self.__dict__["_pk"]),
+            "_m": property(lambda self: self.__dict__["_pm"]),
+            "_deleted_keys": property(_grave),
+            "__getattr__": lambda self, n: getattr(self.__dict__["_base"], n),
+        })
+        _KEY_VIEWS[base_cls] = cls
+    v = cls.__new__(cls)
+    pre = vault + _KEY_VAULT_SEP
+    v.__dict__["_base"], v.__dict__["_vault"] = base, vault
+    v.__dict__["_pk"] = _PrefixDict(lambda: base.keys, pre)
+    v.__dict__["_pm"] = _PrefixDict(lambda: base.material, pre)
+    return v
+
+
+def for_key(store, vault: str, name: str):
+    """The store a customer-managed-key reference resolves `name` in: the named vault's keys, else (keys
+    created before per-vault scoping, or by a request that named no vault) the legacy shared namespace."""
+    view = scoped(store, vault)
+    if view is store or _latest(view, name) is not None:
+        return view
+    legacy = any(_KEY_VAULT_SEP not in kid and (store.get_key(kid) or {}).get("name") == name for kid in store.key_ids())
+    return store if legacy else view
+
+
+def purge_vault(store, vault: str) -> int:
+    """Drop every key (live and soft-deleted) a deleted vault owned."""
+    if store is None or not vault:
+        return 0
+    view = scoped(store, vault)
+    ids = list(view.keys)
+    for kid in ids:
+        view.keys.pop(kid, None)
+        view.material.pop(kid, None)
+    base = view.__dict__["_base"]
+    base.__dict__.get("_deleted_keys_by_vault", {}).pop(vault.lower(), None)
+    if ids:
+        try:
+            base.persist()
+        except Exception:
+            pass
+    return len(ids)
+
+
 # ── store helpers (key_id in the KeyStore == "name/version") ───────────────
 def _kid_key(name: str, version: str) -> str:
     return f"{name}/{version}"
