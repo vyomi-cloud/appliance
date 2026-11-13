@@ -11,6 +11,10 @@ keeps running on the real cloud. The `vyomi` MCP server (bundled with this
 plugin) knows what Vyomi emulates, where the user's simulator lives and how to
 point code at it.
 
+**Requires `vyomi-tunnel` 1.3.0 or newer**: the plugin runs its MCP server as
+`vyomi-tunnel mcp`, which first shipped in 1.3.0 (check with
+`vyomi-tunnel --version`).
+
 In v4 the simulator lives in one of these **homes**:
 
 - **Nano** (`nano-local`, `nano-cloud`): a browser tab at https://vyomi.cloud/nano

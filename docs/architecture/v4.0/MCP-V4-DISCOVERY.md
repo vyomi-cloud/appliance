@@ -86,6 +86,10 @@ Captured with the in-repo canonical CLI (`node wasm/relay/local-relay.mjs list <
 `VYOMI_PORTAL_URL=http://127.0.0.1:18099`: a local fake portal answering `POST /api/tunnel/session` (scripts:
 `/tmp/mcpv4-scripts/list-cases.sh`, `fake-portal.mjs`; full output `/tmp/mcpv4-logs/list-cases.txt`).
 
+**Resolved in T1 (vyomi-tunnel 1.3.0, same branch, run 2):** the envelope is now `{schema: 1, rows, notes}`; JSON is printed on
+every path but a usage error (no credentials: exit 2 with the error as a note); `NoMeshSession`/`SessionEnded` list Nano and note the
+Mesh; listing never runs `configureSsh`. The 1.2.x observations below are kept as recorded.
+
 **Envelope (actual):** `{"targets": [ {where, name, type, address, connect}, ... ], "notes": [string, ...]}`. There is **no
 `schema` field**, and the array is named **`targets`, not `rows`** as spec §4.3 says. T1 must decide: rename to `rows`, add
 `schema: 1`, or both. The H1 parser reads both names (see the branch document, unattended decisions).

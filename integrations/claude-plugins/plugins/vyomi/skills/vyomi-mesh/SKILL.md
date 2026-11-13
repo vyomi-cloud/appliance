@@ -11,6 +11,11 @@ runs either **locally** (the headless appliance on `:9000`, TLS on `:9443`) or
 in the user's own **GitHub Codespace**, reached from this machine through
 `vyomi-tunnel` over their own `gh codespace ssh` session.
 
+**Requires `vyomi-tunnel` 1.3.0 or newer** (`vyomi-tunnel --version`): it runs
+this plugin's MCP server (`vyomi-tunnel mcp`) and lists the Codespace mesh. A
+Codespace mesh also needs a Pro or Max access key in `~/.vyomi/credentials`;
+ask the user, never read the file.
+
 ## Workflow
 
 1. **Status.** Call `vyomi_status`.
@@ -22,9 +27,9 @@ in the user's own **GitHub Codespace**, reached from this machine through
 2. **Local mesh** (`mesh-local`): `vyomi mesh status` shows the same state on
    the command line. If no mesh answers and the user has one installed, suggest
    `vyomi up`.
-3. **Codespace mesh** (`mesh-codespace`): call `vyomi_reach` with scope `mesh`.
-   It lists the host, instances, k3s, LLM and services, each with the command to
-   connect. Then propose, for the user to run **in another terminal** (forwards
+3. **Codespace mesh** (`mesh-codespace`): call `vyomi_reach` with scope `mesh`
+   (the same rows as `vyomi-tunnel list mesh`). It lists the host, instances,
+   k3s, LLM and services, each with the command to connect. Then propose, for the user to run **in another terminal** (forwards
    are long-running; never start one yourself):
    - the API: `vyomi-tunnel forward <appliance target> 9000:9000` (the
      `vyomi_status` hint names the target),
@@ -32,7 +37,11 @@ in the user's own **GitHub Codespace**, reached from this machine through
      then `kubectl --server https://127.0.0.1:6443` with the kubeconfig the
      console gives,
    - databases: the forward line `vyomi_reach` prints for each,
-   - VMs: `ssh <vm>.vyomi` (or `ssh host.vyomi` for the Codespace host).
+   - VMs: `ssh <vm>.vyomi` (or `ssh host.vyomi` for the Codespace host). Once
+     per machine this needs `vyomi-tunnel config`, which adds an `Include` line
+     to `~/.ssh/config`: ask before suggesting it (listing never edits ssh
+     config; a `vyomi_reach` note says when it is missing). VM logins use the
+     mesh's own key and user: `vyomi-tunnel help ssh`.
    Call `vyomi_status` again: the Codespace home is `serving` once the API
    forward is up.
 4. **Continue with `vyomi-setup`** using `home: mesh`: scan, env, propose, ask,

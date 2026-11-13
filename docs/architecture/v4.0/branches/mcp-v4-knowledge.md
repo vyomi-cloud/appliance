@@ -70,12 +70,18 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
   `vyomi_write_env` header `# Vyomi <home> <endpoint> — generated <RFC3339>`, filenames must start with `.env.vyomi`, an existing
   non-regular file (symlink) is never written through, and unavailable settings become `# WARNING` comments. `vyomi_services home=` says which
   `levels` column applies.
-- **S1 (stretch, draft only)** — skill text in `integrations/claude-plugins/plugins/vyomi/skills/`: `vyomi-setup/SKILL.md` rewritten
+- **S1 wiring (run 2)** — `plugin.json`: `mcpServers.vyomi = {"command":"vyomi-tunnel","args":["mcp"]}`, version 4.0.0 (appliance `VERSION`),
+  description names Nano/mesh and the 1.3.0 floor; `marketplace.json`: metadata and plugin version 4.0.0, same description change;
+  `integrations/claude-plugins/README.md` rewritten per plan S1.5 (install the tunnel >= 1.3.0 by brew or npm, then the marketplace and
+  `/plugin install vyomi@vyomi`; MCP-only registration `claude mcp add --scope user vyomi -- vyomi-tunnel mcp`; v4.0.0 offline users keep
+  `vyomi mcp`; the 8 tools and 3 skills). The three skills now state the minimum tunnel version (1.3.0) explicitly; `vyomi-mesh` says that
+  `ssh <vm>.vyomi` needs a one-time `vyomi-tunnel config` (asked first), since T1 listing no longer edits ssh config.
+- **S1 (stretch, draft in run 1)** — skill text in `integrations/claude-plugins/plugins/vyomi/skills/`: `vyomi-setup/SKILL.md` rewritten
   (home-aware: status -> ask when ambiguous / hand off -> scan with `home` -> env -> propose -> ask -> write -> verify with `vyomi_snippet`),
   new `vyomi-nano/SKILL.md` (tunnel install and version, key by asking never reading, tab check, relay-URL fallback, the Nano limits found in
   D0) and new `vyomi-mesh/SKILL.md` (locked handling, `vyomi mesh status`, `vyomi_reach mesh` and the forwards for the user to run, then
   `home: mesh`, AI via `vyomi_capability`). The four shared rules are word for word; added: "`vyomi up` only for offline / mesh-local".
-  `plugin.json`, `marketplace.json` and the plugin README are **not** changed (they move with T1/T2/R1).
+  (Run 1 left `plugin.json`, `marketplace.json` and the README alone; run 2 changed them, above.)
 
 - **T1 — `vyomi-tunnel mcp`** (`wasm/relay/mcp-launch.mjs` new; `local-relay.mjs`, `mesh-cli.mjs`; packaging copies in
   `packaging/tunnel/bin/`, `package.json` 1.3.0, `README.md`).
@@ -155,6 +161,9 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
 | T2 Python in the workflow | `actions/setup-python` 3.12 (the job used the runner's python3 before) | plan T2.4 ("then Python") |
 | T2 size guard unit | 25 MiB (26,214,400 bytes) on npm's packed `size`; the step also fails if one of the five binaries is missing | plan T2.5 |
 | T2 Homebrew formula | unchanged (it installs the same npm tarball); L2-10 not run (needs the tap branch and two Macs) | plan T2.6 |
+| S1 plugin version | 4.0.0 in `plugin.json` and both `marketplace.json` fields (= appliance `VERSION`) | spec decision 11, Q6 |
+| S1 plugin description | updated in both manifests to say Nano/mesh and "Needs vyomi-tunnel 1.3.0" (the manifest has no version-floor field) | spec decision 11 |
+| S1 plugin icon | none added (validator advisory `ICON_MISSING`, non-blocking; 3.0.45 had none either) | out of scope (no asset to use) |
 
 ## Open issues
 - [ ] D0 item 2 (Codespace mesh API target) and item 4 (space semantics on a mesh) need a Pro/Max key and a Mesh Codespace (owner: Rohith)
@@ -165,7 +174,9 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
 - [x] `vyomi-tunnel list` no longer runs `configureSsh` (T1). It still runs `gh` for a Pro key (that is how it reaches the Codespace)
 - [ ] Codespace API target name (`service` row on :9000) is a guess until D0 item 2 runs; the resolver says so in `detail.api_target` (owner: Rohith)
 - [ ] `gen_mcp_matrix.py` now needs `node` (snippets). `release.yml:156` and `conformance-release.yml:132` run it on GitHub runners (node preinstalled); `ci.yml:35` runs `--check` as a warning only. Confirm node is on every runner that regenerates (owner: integrator)
-- [ ] S1 is a draft: the skills reference `vyomi-tunnel` >= 1.3.0 and `vyomi-tunnel mcp`, which exist only after T1/T2; `plugin.json` still says `vyomi mcp` / 3.0.45. Do not sync the plugin before R1 step 1. The A-tier evals (A-01..A-08) have not run (owner: Rohith)
+- [ ] S1 is wired (`plugin.json` runs `vyomi-tunnel mcp`, 4.0.0) but `vyomi-tunnel` 1.3.0 is not published: **do not sync the plugin before R1 step 1** (the tunnel release). The A-tier evals (A-01..A-08) have not run (owner: Rohith)
+- [ ] Not run for T2: L2-10 (brew on arm64 + x64 macOS), L2-11 in the `node:20` linux/amd64 + linux/arm64 containers, P-02 (workflow dry run), P-03 (after a real publish) (owner: Rohith / release)
+- [ ] Plugin icon: `claude plugin validate` advises `ICON_MISSING` (non-blocking) (owner: Rohith)
 - [x] Claim row: on the trunk since `debec6ae7` (`wasm/relay/...`, `packaging/tunnel/**`); remove it when this branch merges (owner: integrator)
 - [ ] `test-amqp-bridge.mjs` needs the vendored Pyodide (`wasm/vendor/pyodide`, absent in a worktree); not run (fixture for a conformance test, unrelated to T1)
 
@@ -181,6 +192,11 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
 - T2, P-01 PASS (local): `scripts/build_tunnel_mcp.sh` in ~20 s (binaries 7.6–8.3 MB; the generator rewrote nothing tracked);
   `npm pack --dry-run` lists `bin/mcp-launch.mjs` and the five `mcp/<platform>-<arch>/vyomi-mcp[.exe]`, 18 files, package size 19.6 MB
   (18.7 MiB) / unpacked 41.9 MB; the workflow's guard snippet passes; no `optionalDependencies`; `git status` shows no binaries.
+- S1, P-04 PASS (local): `claude plugin validate` (Claude Code 2.1.309) passes for the marketplace, the plugin and the skills directory
+  (one non-blocking advisory, `ICON_MISSING`); JSON parses; each `SKILL.md` has `name` = folder + `description` (289/327/390 chars); the four
+  shared rules are byte-identical to the 3.0.46 skill in all three (the fifth, the old `vyomi-docker` install line, is replaced on purpose);
+  `vyomi up` appears only in the restricting rule, the never-start rule and the local-mesh step. `plugin.json` command = `vyomi-tunnel mcp`,
+  which L2-11 below exercises from an installed tarball.
 - T2, L2-11 local half PASS (macOS arm64 only): `npm pack` to `/tmp`, `npm i -g --prefix /tmp/mcpv4-npm ./vyomi-tunnel-1.3.0.tgz`; all five
   bundled binaries are 0755 after install; `vyomi-tunnel mcp` with a temp HOME and no key answered `initialize` (server `vyomi` 4.0.0,
   protocol 2024-11-05) and `tools/list` (8 tools), exit 0, stdout = exactly the two responses, nothing written to HOME. Not run:
