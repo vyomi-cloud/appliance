@@ -36,9 +36,9 @@ const click = async (name, opts = {}) => { const l = (opts.scope || page).getByR
 const tab = async (name) => { const l = page.locator("nav, [role=navigation], [role=tablist], .vy-nav, aside").getByText(name, { exact: true }).first(); await l.waitFor({ timeout: 15000 }); await l.click(); await sleep(1500); };
 const poll = async (fn, ms = 40000, step = 1500) => { const t = Date.now(); let r; while (Date.now() - t < ms) { try { r = await fn(); if (r) return r; } catch { /* retry */ } await sleep(step); } return r; };
 const seenInUi = async (text, hash) => { if (hash) await go(hash); return !!(await poll(async () => (await body()).includes(text), 12000, 1500)); };
-const uiDelete = async (name, openHash) => {
+const uiDelete = async (name, openHash, btn = /^Delete$/) => {
   if (openHash) await go(openHash);
-  await click(/^Delete$/); const dlg = page.getByRole("dialog").last();
+  await click(btn); const dlg = page.getByRole("dialog").last();
   await dlg.getByLabel("Confirm deletion").fill(name); await dlg.getByRole("button", { name: /^Delete$/ }).dispatchEvent("click");
 };
 const shows = async (re, ms = 15000) => !!(await poll(async () => (re.test(await body()) ? true : null), ms, 1000));
@@ -51,8 +51,8 @@ const uiRowDelete = async (name) => {
 const ctx = { shows, uiRowDelete, arm, v, go, body, click, tab, poll, seenInUi, uiDelete, page, base, RG, P, SUB, sleep, rec };
 const SECTIONS = {};
 export const section = (id, title, fn) => { SECTIONS[id] = { title, fn }; };
-const mods = (await Promise.all(["vms", "storage", "keyvaults", "nsgs", "dns", "servicebus", "appconfiguration", "sql", "cosmos", "appservices", "functionapp", "aks", "acr", "eventgrid", "loganalytics", "containerapps", "vnets"].map((m) => import(new URL(`./azure-actions/${m}.mjs`, import.meta.url).href).catch((e) => { console.log("no driver", m, e.message.slice(0, 60)); return null; }))));
-for (const m of mods) if (m && m.default) { const { id, title, fn } = m.default; SECTIONS[id] = { title, fn }; }
+const mods = (await Promise.all(["vms", "storage", "keyvaults", "nsgs", "dns", "servicebus", "appconfiguration", "sql", "cosmos", "appservices", "functionapp", "aks", "acr", "eventgrid", "loganalytics", "containerapps", "vnets", "generic"].map((m) => import(new URL(`./azure-actions/${m}.mjs`, import.meta.url).href).catch((e) => { console.log("no driver", m, e.message.slice(0, 60)); return null; }))));
+for (const m of mods) if (m && m.default) for (const d of [].concat(m.default)) SECTIONS[d.id] = { title: d.title, fn: d.fn };
 
 try {
   await page.goto(`${base}/v4/azure/index.html`, { waitUntil: "domcontentloaded" });
