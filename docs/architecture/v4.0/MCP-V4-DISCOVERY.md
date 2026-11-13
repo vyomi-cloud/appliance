@@ -1,15 +1,15 @@
 # MCP v4 — Phase 0 discovery (D0)
 
-Status: 2026-11-14. Branch `v4/mcp-v4-knowledge`, base `origin/v4-on-main` @ `41161ac3e`. Answers the "Not yet verified" list of
+Status: 2026-11-14 (items 2 and 4 added in run 3). Branch `v4/mcp-v4-knowledge`, base `origin/v4-on-main` @ `41161ac3e`. Answers the "Not yet verified" list of
 `vyomi-mcp-v4-spec.md` §1 (spec and plan live outside the repo, in the owner's specs folder). Run unattended; every value below
 was observed, not inferred, unless the row says "code reading".
 
 | D0 item | Status |
 |---|---|
 | 1. Nano wiring per cloud through `:8090` | **done** (headless Nano tab, real SDKs) — table §1 |
-| 2. Codespace mesh API target in `vyomi-tunnel list mesh` | **open - owner run** (needs a Pro/Max key and a running Mesh Codespace) |
+| 2. Codespace mesh API target in `vyomi-tunnel list mesh` | **verified locally; real-Codespace confirmation folded into MESH-GOLIVE-CHECKLIST §4** (run 3, §4.1) |
 | 3. `vyomi-tunnel list --json` shape | **done** (every branch except a live Codespace) — §2 |
-| 4. Space semantics on a mesh (which space a direct `:9000` call hits) | **open - owner run** (needs a mesh with two mesh-homed spaces) |
+| 4. Space semantics on a mesh (which space a direct `:9000` call hits) | **verified locally; real-Codespace confirmation folded into MESH-GOLIVE-CHECKLIST §4** (run 3, §4.2) |
 
 ## 0. Rig (exact)
 
@@ -106,7 +106,7 @@ Mesh; listing never runs `configureSsh`. The 1.2.x observations below are kept a
 | Pro key, no GitHub login (no Codespace reachable) | as Free | exit 1; notes `["mesh: not signed in to GitHub. Run \`vyomi-tunnel login\`."]` | nano rows + that note |
 | Portal says `NoMeshSession` | exit 1; stdout empty; stderr `vyomi-tunnel: Mesh is not running. Start it in the Vyomi console, then retry.` | same | same |
 | Session ended (`session_end` past) | exit 1; stdout empty; stderr `vyomi-tunnel: your Mesh session has ended. Start Mesh again in the console.` | same | same |
-| Pro key + live Codespace | **open - owner run** (item 2). From code (`mesh-cli.mjs:358-361`): rows `{where:"mesh", name, type: host\|instance\|k3s\|llm\|service, address: "<ip>[:<port0>]", connect}` with `connect` = `vyomi-tunnel forward <name> 6443:6443` (k3s), `ssh <name>.vyomi` (ssh-able), or `vyomi-tunnel forward <name> <p>:<p>` (first port) | | |
+| Pro key + live Codespace | Rows verified locally in run 3 (§4.1); a live Codespace is still to confirm (item 2). From code (`mesh-cli.mjs:358-361`): rows `{where:"mesh", name, type: host\|instance\|k3s\|llm\|service, address: "<ip>[:<port0>]", connect}` with `connect` = `vyomi-tunnel forward <name> 6443:6443` (k3s), `ssh <name>.vyomi` (ssh-able), or `vyomi-tunnel forward <name> <p>:<p>` (first port) | | |
 
 Verbatim sample (Free key, tab up, two Nano RDS instances created by the probes):
 
@@ -141,10 +141,111 @@ writes `~/.local/state/gh/device-id`. The MCP's codespace probe therefore is **n
 4. **GCP project id.** Nano rejects `cloudlearn`; v4 consoles and docs use `vyomi-project`. Whether a v4 mesh still accepts
    `cloudlearn` was not checked: an L2 item.
 
-## 4. Items 2 and 4 — open, owner run
+## 4. Items 2 and 4 — verified locally (run 3, 2026-11-14)
 
-- **Item 2:** with a Pro/Max key and a running Mesh Codespace run `vyomi-tunnel list mesh --json`; record the appliance
-  container's `name`, `type` and `address`; then `vyomi-tunnel forward <it> 9000:9000` and `curl -s 127.0.0.1:9000/mesh/status`.
-- **Item 4:** on a mesh with two mesh-homed spaces, `aws --endpoint-url http://127.0.0.1:9000 s3 ls` and
-  `curl -s 127.0.0.1:9000/api/spaces/active`; note which space answered. Answers spec Q4 (default if unanswered: report the
-  mesh's active space and warn when there is more than one).
+Both items ran on a **local** v4 mesh; no licence, portal, GitHub, Codespace or relay was involved. What a real Codespace still has
+to confirm (the ssh transport, the real `docker ps` of a Codespace, the Nano tab against a Codespace mesh) belongs in
+`MESH-GOLIVE-CHECKLIST.md` §4. The lines to add there are in §4.3. Run 3 did not edit the checklist, which is outside this branch's paths.
+
+**Rig.** Image `vyomi-mcpv4-mesh:local` built from this worktree (`docker build`, VERSION 4.0.0). `codespace/.devcontainer/mesh/docker-compose.mesh.yml`
+ran unchanged as compose project `vyomi-mesh` (so the container is `vyomi-mesh-simulator-1`, as in a Codespace), plus an override in `/tmp`:
+image `vyomi-mcpv4-mesh:local`, `127.0.0.1:9100:9000`, and **one deviation**: the network was renamed `mcpv4-run3-net` (and
+`VYOMI_INSTANCE_NETWORK` with it). The compose file pins the name `vyomi-net`, and on this machine that network belongs to the owner's
+`vyomi` project, which runs its own `simulator` service. Neither the container name nor the classification depends on the network name.
+`up -d --pull never simulator` was used because the file says `pull_policy: always` and a local image cannot be pulled. The session token
+was minted as in `MESH-LOCAL-VALIDATION.md`: `core.mesh_session.mint('local-max','max', now+8h, key=<random>)`, passed as
+`VYOMI_MESH_SESSION_KEY` / `VYOMI_MESH_SESSION_TOKEN`. There was no AI profile. `curl -s 127.0.0.1:9100/mesh/status` returned `mesh: true, headless: true,
+version 4.0.0, tier max, locked false, health ok`.
+
+### 4.1 Item 2: the appliance row in `vyomi-tunnel list mesh`
+
+`docker inspect` with the exact format from `wasm/relay/mesh-ssh.mjs` `list()`, run on the mesh project's running containers
+(a Codespace runs only those; this Mac runs about 40 others):
+
+```
+/vyomi-mesh-simulator-1|vyomi-mcpv4-mesh:local|172.23.0.2 |9000/tcp
+```
+
+`classifyTargets()` (imported from `mesh-ssh.mjs`, unmodified) returned two targets: `host` (kind `host`, ports `[22]`) and
+**`{name: "vyomi-mesh-simulator-1", kind: "service", what: "service container", ip: "172.23.0.2", ports: [9000]}`**. Through the
+`list` mapping in `mesh-cli.mjs`, this becomes the `list mesh --json` row:
+
+```json
+{ "where": "mesh", "name": "vyomi-mesh-simulator-1", "type": "service", "address": "172.23.0.2:9000",
+  "connect": "vyomi-tunnel forward vyomi-mesh-simulator-1 9000:9000" }
+```
+
+So the appliance API target is the **compose container name `vyomi-mesh-simulator-1`, type `service`, port 9000**. The H1 guess
+("a service row on :9000") holds. The image `EXPOSE`s only 9000 and compose `expose`s 9000, so `ports[0]` is 9000.
+
+**The name "simulator".**
+- The compose-service lookup (`simulatorTarget()`: `docker ps --filter label=com.docker.compose.service=simulator`) **does resolve** the
+  service. It is what `httpToSimulator` (the Nano tab's compute calls) uses. On this shared Mac it matched two containers
+  (`vyomi-mesh-simulator-1` and the owner's `vyomi-simulator-1`), and `head -1` picked the mesh's. A Codespace has only one.
+- `vyomi-tunnel forward simulator 9000:9000` **does not resolve**: `forwardSsh` calls `resolve()`, which tries only `vyomi-i-simulator`,
+  `vyomi-simulator` and `simulator` as container names (all "no such container"). It never consults the compose label. The user has
+  to type the full name, which is what the `connect` line shows. A tunnel follow-up could make `resolve("simulator")` fall back to
+  `composeContainer("simulator")`. This branch does not touch `wasm/**`.
+
+**MCP.** `vyomi mcp` (this branch) was run with `VYOMI_TUNNEL_BIN` set to a fake tunnel that prints `{schema:1, rows, notes}` built
+from the classification above, plus `VYOMI_ACCESS_KEY_ID=<dummy>` and `HOME`/`VYOMI_HOME` in `/tmp`. The calls were `initialize`, `vyomi_status` and
+`vyomi_reach {scope: mesh}`:
+
+| Scenario | `vyomi_status` selected | Notes |
+|---|---|---|
+| Codespace rows only, nothing local (`VYOMI_MESH_URL` and `:9000` dead) | `mesh-codespace` (reachable, not serving) | `detail.api_target = vyomi-mesh-simulator-1`; hint ``Run `vyomi-tunnel forward vyomi-mesh-simulator-1 9000:9000` ...``; reach lists both rows plus the "no forward yet" note |
+| + a forward row `127.0.0.1:9100 -> vyomi-mesh-simulator-1:9000`, `VYOMI_MESH_URL=http://127.0.0.1:9100`, `:9000` dead | `mesh-codespace` (serving, endpoint `http://127.0.0.1:9100`) | mesh-local is folded in ("this port is the Codespace forward"); `active_space` and `spaces_warning` from the mesh |
+| Codespace rows, `VYOMI_MESH_URL=:9100`, no forward row, `:9000` dead | `mesh-local` (`:9100`) | `mesh-codespace` reachable with the same `api_target` |
+| Either of the above with the owner's offline appliance live on `:9000` | none (`several homes answer (mesh-local, offline)` / `(offline, mesh-codespace)`) | correct: two homes serve; the hint asks which space |
+
+`codespaceHome` picks the appliance row as is, so item 2 needed **no fix**.
+
+### 4.2 Item 4: several spaces on one mesh
+
+A fresh mesh already has **three spaces, one per cloud**: `space-legacy` (aws-default, active), `space-azure-default` and
+`space-gcp-default`. Two more AWS spaces were created with `POST /api/spaces {provider: aws, name}` (`run3-one` = `space-df5afd24f69c`,
+`run3-two` = `space-2eaf506b27fd`). **Creating a space does not activate it.** After each step, boto3 1.44.3 (path-style, dummy keys,
+`endpoint_url=http://127.0.0.1:9100`) ran `create_bucket` and `list_buckets`:
+
+| Step | `/api/spaces/active` | `create_bucket` | `list_buckets` (= space answering) |
+|---|---|---|---|
+| 0 fresh mesh | space-legacy (aws-default, aws) | run3-b0 ok | run3-b0 → **aws-default** |
+| 1 after creating run3-one + run3-two | space-legacy (unchanged) | run3-b-aftercreate ok | run3-b-aftercreate, run3-b0 → **aws-default** |
+| 2 switch → run3-one | space-df5afd24f69c | run3-b1 ok | run3-b1 → **run3-one** |
+| 3 switch → run3-two | space-2eaf506b27fd | run3-b2 ok | run3-b2 → **run3-two** |
+| 4 switch back → run3-one | space-df5afd24f69c | — | run3-b1 → **run3-one** (isolated, kept) |
+| 5 switch → aws-default | space-legacy | — | run3-b-aftercreate, run3-b0 → **aws-default** |
+| 6 switch → gcp-default (a GCP space active) | space-gcp-default (gcp), unchanged by the call | run3-b-gcpactive ok | run3-b-aftercreate, run3-b-gcpactive, run3-b0 → **aws-default** (the pivot) |
+| 7 switch → run3-two | space-2eaf506b27fd | — | run3-b2 → **run3-two** |
+
+**Answer to spec Q4.** On a mesh, nothing in a direct SDK or CLI call picks the space. A call for cloud X lands in the mesh's own,
+process-wide **active space when that space is an X space**. Otherwise it lands in **the first X space** (`_SpaceScopedDictProxy._pivot_to_matching_space`,
+`core/app_context.py:907`, which walks the spaces in insertion order), and the active space does not change (step 6). Each space
+keeps its own buckets. The mesh's active space changes only with `POST /api/spaces/<id>/switch` on the mesh.
+
+**How the Nano tab differs** (code reading, `wasm/` unchanged). The Nano tab keeps its active space in the browser: `sw.js:1478` handles
+`POST /api/spaces/<id>/switch` by writing IndexedDB `meta.active` only, and `mesh-link.js` learns `active` from the service
+worker's answers (`setActive`, `localStorage vyomi.active_space`). For a mesh-homed active space, or any compute call during a portal
+session, `mesh-link.js` forwards `/_wire/*` to the mesh with only the session or mesh token. **No space id is sent**, so the mesh serves
+its own active space, or the first space of the call's cloud. The space a Nano user selects and the mesh space that answers are
+therefore independent. Switching in the Nano console does not move a laptop SDK call either, and neither does it move the tab's own mesh-routed calls.
+
+**`vyomi_status` (`VYOMI_MESH_URL=http://127.0.0.1:9100`).** `active_space` reported the mesh's `/api/spaces/active`, `run3-two`, correctly.
+`spaces_warning` **was seen**, but the original wording had two defects, both fixed in `cmd/vyomi/mcp_tools.go` (`spacesWarning`):
+1. The warning appeared on **every fresh mesh** ("This mesh hosts 3 spaces", with one space per cloud and no ambiguity). Now it appears
+   only when some cloud has more than one space.
+2. It said "switch spaces in the Nano console", which does not change the mesh. Now it names where each cloud's calls land and how
+   the mesh's active space really changes. Output after the fix, on this mesh: *"This mesh hosts 5 spaces (3 aws). Direct SDK and CLI
+   calls to http://127.0.0.1:9100 go to ONE space per cloud: the mesh's own active space for its cloud, otherwise that cloud's first
+   space. Now: aws -> run3-two (the active space); azure -> azure-default; gcp -> gcp-default. Switching spaces in the Nano console does
+   not change this; only POST http://127.0.0.1:9100/api/spaces/<space_id>/switch on the mesh does. Ask the user which space they mean
+   before creating resources."*
+
+   Regression test: `TestMCPStatusMeshSpacesWarning`, which fails on the old code and uses the `/api/spaces` bodies from this run.
+
+### 4.3 For `MESH-GOLIVE-CHECKLIST.md` §4 (real Codespace; to add, not added by this branch)
+- [ ] `vyomi-tunnel list mesh --json` shows `{where: mesh, name: vyomi-mesh-simulator-1, type: service, address: <ip>:9000}` (and nothing else from
+      the compose project unless the AI profile runs); `vyomi-tunnel forward vyomi-mesh-simulator-1 9000:9000`, then `curl -s 127.0.0.1:9000/mesh/status`
+      → `mesh: true`. `vyomi_status` selects `mesh-codespace` (serving).
+- [ ] Two AWS spaces on the Codespace mesh: a laptop `aws --endpoint-url http://127.0.0.1:9000 s3 ls` follows the mesh's `/api/spaces/active`,
+      not the space selected in the Nano tab; `vyomi_status` shows `spaces_warning`.

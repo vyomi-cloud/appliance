@@ -11,8 +11,11 @@ or a Codespace mesh, not only a Docker appliance on `:9000`. This branch carries
 - H1–H3: home detection and home-aware tools.
 - Run 2 (2026-11-14, owner decision: same branch): T1 (`vyomi-tunnel mcp`, the `list --json` contract), T2 option C (the five
   `vyomi-mcp` binaries bundled in the `vyomi-tunnel` npm package) and S1 wiring (plugin manifest, README, skills).
+- Run 3 (2026-11-14, unattended): D0 items 2 and 4 **locally** (a local v4 mesh from this worktree's image, no licence, portal, GitHub
+  or Codespace), and the `spaces_warning` fix that item 4 found.
 
-Out of scope for this branch: publishing (npm, tap, plugins repo), releases and tags, the portal, D0 items 2 and 4, the agent evals.
+Out of scope for this branch: publishing (npm, tap, plugins repo), releases and tags, the portal, D0 items 2 and 4 on a real Codespace
+(run 3 did them locally), the agent evals.
 
 ## Architecture
 - `docs/architecture/v4.0/MCP-V4-DISCOVERY.md`: D0 evidence (Nano SDK wiring through the local relay, `vyomi-tunnel list --json`).
@@ -118,6 +121,12 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
     setup-node 22 (the generator needs node); `scripts/build_tunnel_mcp.sh` before the dry pack; the dry-pack step now also reads
     `npm pack --dry-run --json` and fails when any of the five binaries is missing or the packed size is over 25 MiB. Trusted publishing,
     the status step and the tap bump are unchanged. Not run (no workflow runs from this branch).
+- **Run 3: `spaces_warning` (D0 item 4)** (`cmd/vyomi/mcp_tools.go`). `countSpaces` became `meshSpaces` (reads id, name and cloud for each
+  space, plus `active_space_id`, from `/api/spaces`; an absent provider is aws, as on the appliance) and `spacesWarning`. The warning now
+  appears only when one cloud has more than one space (a fresh mesh has aws-, gcp- and azure-default, which used to trigger it). It names
+  where each cloud's calls land (the mesh's active space for its cloud, otherwise that cloud's first space) and says that only
+  `POST <mesh>/api/spaces/<id>/switch` moves it, not the Nano console. Regression test: `TestMCPStatusMeshSpacesWarning`.
+  Evidence: `MCP-V4-DISCOVERY.md` §4.
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |
@@ -165,14 +174,38 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
 | S1 plugin description | updated in both manifests to say Nano/mesh and "Needs vyomi-tunnel 1.3.0" (the manifest has no version-floor field) | spec decision 11 |
 | S1 plugin icon | none added (validator advisory `ICON_MISSING`, non-blocking; 3.0.45 had none either) | out of scope (no asset to use) |
 
+### Decisions taken unattended (run 3)
+| Decision point | Default taken | Source of the default |
+|---|---|---|
+| Compose project name | `vyomi-mesh`, as asked: no project of that name existed (`docker compose ls -a`), so the container is `vyomi-mesh-simulator-1`, as in a Codespace | run-3 instructions |
+| `vyomi-net` (fixed network name in the mesh compose) belongs to the owner's running `vyomi` project, whose `simulator` is on it | the `/tmp` override also renamed the network to `mcpv4-run3-net` (and `VYOMI_INSTANCE_NETWORK` with it). Joining it would have put two `simulator` services on one network, and `down` would have tried to remove the owner's network. Classification does not depend on the network name | Docker hygiene rule (never touch what this run did not create) wins over "override only image and port" |
+| `pull_policy: always` in the compose file vs a local image | `docker compose up -d --pull never simulator` (CLI flag; the override stays minimal) | the compose file stays unchanged |
+| boto3 for item 4 | the existing `/tmp/mcpv4-venv` (boto3 1.44.3, from run 1), used read-only; the system python has no boto3 | no new install needed |
+| Item 2 inspect rows on a shared Docker host | `docker ps -q` limited to `label=com.docker.compose.project=vyomi-mesh` (a Codespace runs only those); the exact `-f` format of `mesh-ssh.mjs`. The all-host listing (43 rows) was kept in `/tmp` only | faithful to a Codespace |
+| The MCP's view with the owner's offline appliance on `:9000` | recorded as is (ambiguous, correct), and repeated with `VYOMI_SIMULATOR_PORT` pointing at a dead port to show the Codespace selection | the owner's `:9000` must not be stopped |
+| The fake tunnel's rows | built by the `list` mapping of `mesh-cli.mjs` (copied verbatim into a `/tmp` script) from the real `classifyTargets()` output; a second variant adds a `forward` row for `127.0.0.1:9100` (the published port stands in for `vyomi-tunnel forward`) | task: "built from that real classification" |
+| `spaces_warning` false positive and wrong advice (item 4) | fixed in `cmd/vyomi/mcp_tools.go` with a regression test (allowed: a fix found in item 4); `wasm/**` and the skill left alone | run-3 rules |
+| `MESH-GOLIVE-CHECKLIST.md` §4 | not edited (outside the allowed paths); the lines to add are in `MCP-V4-DISCOVERY.md` §4.3 | run-3 rules |
+| `vyomi-tunnel forward simulator` not resolving | recorded as an open issue for the tunnel session, not fixed (`wasm/**` is off limits) | run-3 rules |
+
 ## Open issues
-- [ ] D0 item 2 (Codespace mesh API target) and item 4 (space semantics on a mesh) need a Pro/Max key and a Mesh Codespace (owner: Rohith)
+- [x] D0 items 2 and 4 verified locally in run 3 (`MCP-V4-DISCOVERY.md` §4). A real Codespace is still to confirm: add the two lines of
+  `MCP-V4-DISCOVERY.md` §4.3 to `MESH-GOLIVE-CHECKLIST.md` §4 (not edited here; owner: Rohith)
 - [x] `vyomi-tunnel list --json` envelope: now `{schema: 1, rows, notes}` (T1)
 - [ ] Nano `/health` lists RDS proxies under `vms[]`, never `dbs[]` (owner: tunnel session)
 - [ ] Nano RDS Data API loses state between statements; `e2e-relay.mjs` step 7 fails on the trunk (owner: Nano core)
 - [ ] Console bug: `wasm/docs` AWS `cli` names come from botocore serviceId (`scripts/gen_nano_docs.py:255`), so the Nano console's SDK & CLI tab shows `aws s3 put-object`, `aws secrets-manager ...`, `aws cloudwatch-logs ...`. The MCP corrects them (K2); fix the generator on the trunk and drop `_aws_cli_fix` (owner: Nano docs)
 - [x] `vyomi-tunnel list` no longer runs `configureSsh` (T1). It still runs `gh` for a Pro key (that is how it reaches the Codespace)
-- [ ] Codespace API target name (`service` row on :9000) is a guess until D0 item 2 runs; the resolver says so in `detail.api_target` (owner: Rohith)
+- [x] Codespace API target name: `vyomi-mesh-simulator-1`, a `service` row on :9000 (run 3). `codespaceHome` picks it. The fallback text for
+  "no service row on :9000" still says "not verified yet (D0 item 2)"; reword it on the next code change (owner: this branch)
+- [ ] `vyomi-tunnel forward simulator 9000:9000` fails ("not found in the Codespace"): `resolve()` tries only `vyomi-i-<n>`, `vyomi-<n>` and `<n>`,
+  never the compose-service label that `simulatorTarget()` uses. The user has to type `vyomi-mesh-simulator-1`, which `list` shows. Fix it in
+  `wasm/relay/mesh-ssh.mjs` `resolve()` with a fallback to `composeContainer(name)` (owner: tunnel session)
+- [ ] The Nano tab's active space and the mesh's active space are independent: `mesh-link.js` forwards `/_wire/*` without a space id, and a
+  Nano switch writes only IndexedDB, so a mesh-homed Nano space is served by whatever space is active on the mesh. A product decision:
+  send the space id, or switch the mesh too (owner: Nano core / mesh)
+- [ ] `skills/vyomi-mesh/SKILL.md` describes `spaces_warning` as "direct SDK calls land in the active one". This is still true per cloud, but
+  the skill could say "per cloud" and "not via the Nano console" (owner: this branch, next S1 touch)
 - [ ] `gen_mcp_matrix.py` now needs `node` (snippets). `release.yml:156` and `conformance-release.yml:132` run it on GitHub runners (node preinstalled); `ci.yml:35` runs `--check` as a warning only. Confirm node is on every runner that regenerates (owner: integrator)
 - [ ] S1 is wired (`plugin.json` runs `vyomi-tunnel mcp`, 4.0.0) but `vyomi-tunnel` 1.3.0 is not published: **do not sync the plugin before R1 step 1** (the tunnel release). The A-tier evals (A-01..A-08) have not run (owner: Rohith)
 - [ ] Not run for T2: L2-10 (brew on arm64 + x64 macOS), L2-11 in the `node:20` linux/amd64 + linux/arm64 containers, P-02 (workflow dry run), P-03 (after a real publish) (owner: Rohith / release)
@@ -191,6 +224,11 @@ Found by re-running the branch on Linux (the overnight runs tested on macOS only
 | 3 | `gen_mcp_matrix.py` (and so `build_tunnel_mcp.sh`) rewrote `mcp_caps.json.gz` / `mcp_docs.json.gz` on every run; gzip bytes differ between zlib builds, so on any other machine the tracked files showed as modified with identical content. | A `.gz` output is rewritten only when its decompressed content changed. Verified: a content-identical file recompressed differently is left alone; a stale file still fails `--check` and is rewritten. |
 
 ## Testing
+- Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
+  mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;
+  `vyomi mcp` with a fake `list mesh --json` in five scenarios (`MCP-V4-DISCOVERY.md` §4.1); item 4 with eight boto3 steps (§4.2).
+  After the fix: `go test ./...` 60 PASS / 0 FAIL (new: `TestMCPStatusMeshSpacesWarning`, which fails on `8708cfe83`'s `mcp_tools.go`);
+  `GOOS=windows go vet` clean; `--check` OK; the fixed binary on the live mesh printed the per-cloud warning.
 - Run 2, gate 0a (after merging the trunk @ `debec6ae7`): `go test ./...` 59 PASS / 0 FAIL; `gen_mcp_matrix.py --check` OK; relay
   `test-mesh-link` 29 PASS, `test-mesh-shell` 47 PASS (with `PY=` a venv that has uvicorn + websockets), `test-mesh-session-derived` 4 PASS,
   `test-mesh-ssh` 23 PASS.
