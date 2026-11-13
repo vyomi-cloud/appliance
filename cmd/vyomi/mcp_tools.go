@@ -66,6 +66,14 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			handler:     s.toolStatus,
 		},
 		{
+			Name:        "vyomi_reach",
+			Title:       "What can I connect to?",
+			Description: "Lists what is reachable from this machine, in the shape of `vyomi-tunnel list --json`: the Nano API through the local tunnel, in-browser VMs and databases (ssh / db ports), the AMQP bridge, a local mesh API, and the Codespace mesh's hosts, instances, k3s, LLM and services with the command to connect to each. Read-only: never starts a forward.",
+			Schema:      obj(map[string]any{"scope": map[string]any{"type": "string", "enum": []string{"nano", "mesh", "all"}, "description": "Default all."}}),
+			ReadOnly:    true,
+			handler:     s.toolReach,
+		},
+		{
 			Name:        "vyomi_services",
 			Title:       "Services Vyomi emulates",
 			Description: "Which AWS / GCP / Azure services Vyomi emulates (released services, first version, plus the v4 services), with each service's level on Nano and offline/mesh (worst feature, and the spread), Pro tier and mesh-only flags, supported API actions, data plane and per-SDK support. Works offline; adds live pack state when the simulator is running. vyomi_capability answers per feature.",
@@ -201,8 +209,6 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 	if err := decodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	t := s.target(nil)
-	base := t.simURL()
 	p := s.homes()
 	var selected any
 	if p.Selected != nil {
@@ -212,17 +218,57 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 		"homes":                       p.Homes,
 		"selected":                    selected,
 		"why":                         p.Why,
-		"endpoint":                    base,
-		"tls_endpoint":                fmt.Sprintf("https://%s:%d", t.Host, t.TLSPort),
 		"substrate":                   s.cfg.resolveSubstrate(),
 		"appliance_knowledge_version": s.version,
 	}
+	h := p.Selected
+	if h != nil && h.Endpoint != "" {
+		out["endpoint"] = h.Endpoint
+		if h.TLSEndpoint != "" {
+			out["tls_endpoint"] = h.TLSEndpoint
+		}
+	}
+	if hint := s.homeHint(p); hint != "" {
+		out["hint"] = hint
+	}
+	switch {
+	case h == nil:
+		return out, nil
+	case h.ID == homeOffline:
+		// 3.0.46-era fields, exactly as before: endpoint, tls_endpoint, running, health, license, readiness, active_space.
+		t := s.target(nil)
+		out["endpoint"] = t.simURL()
+		out["tls_endpoint"] = fmt.Sprintf("https://%s:%d", t.Host, t.TLSPort)
+		s.applianceState(out, t.simURL(), false)
+	case h.ID == homeMeshLocal || (h.ID == homeMeshCodespace && h.Serving):
+		out["mesh"] = h.Detail
+		if h.Serving {
+			s.applianceState(out, h.Endpoint, true)
+		}
+	case h.ID == homeNanoLocal:
+		out["nano"] = h.Detail
+		out["running"] = h.Serving
+	case h.ID == homeNanoCloud:
+		out["running"] = h.Reachable
+	case h.ID == homeMeshCodespace:
+		out["mesh"] = h.Detail
+		out["running"] = false
+	}
+	return out, nil
+}
+
+// applianceState adds the live /api/* state of a :9000-style appliance (offline or mesh): health, licence,
+// backend readiness, active space. On a mesh it also counts the spaces (spec Q4: direct SDK calls land in the
+// active space; warn when the mesh hosts more than one).
+func (s *mcpServer) applianceState(out map[string]any, base string, mesh bool) {
 	health, err := s.getJSON(base, "/healthz")
 	if err != nil {
 		out["running"] = false
 		out["error"] = err.Error()
-		out["hint"] = "The simulator is not reachable at " + base + ". Start it with `vyomi up`, or set VYOMI_ENDPOINT if it runs elsewhere (e.g. the Multipass VM IP on the Max tier). vyomi_services / vyomi_env / vyomi_scan_repo still work offline."
-		return out, nil
+		if !mesh {
+			out["hint"] = "The simulator is not reachable at " + base + ". Start it with `vyomi up`, or set VYOMI_ENDPOINT if it runs elsewhere (e.g. the Multipass VM IP on the Max tier). vyomi_services / vyomi_env / vyomi_scan_repo still work offline."
+		}
+		return
 	}
 	out["running"] = true
 	out["health"] = health
@@ -248,7 +294,208 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 	if sp, err := s.getJSON(base, "/api/spaces/active"); err == nil {
 		out["active_space"] = summarizeSpace(sp)
 	}
-	return out, nil
+	if mesh {
+		if n := s.countSpaces(base); n > 1 {
+			out["spaces_warning"] = fmt.Sprintf("This mesh hosts %d spaces. Direct SDK calls to %s land in the mesh's active space (active_space); switch spaces in the Nano console if the user works in another one.", n, base)
+		}
+	}
+}
+
+func (s *mcpServer) countSpaces(base string) int {
+	resp, err := s.client.Get(strings.TrimRight(base, "/") + "/api/spaces")
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return 0
+	}
+	var v any
+	if json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&v) != nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case []any:
+		return len(x)
+	case map[string]any:
+		switch sp := x["spaces"].(type) {
+		case []any:
+			return len(sp)
+		case map[string]any:
+			return len(sp)
+		}
+	}
+	return 0
+}
+
+// Hints by home (spec decision 8). `vyomi up` appears only for the offline appliance and a local mesh.
+const (
+	hintNanoOpenTab   = "Open https://vyomi.cloud/nano and keep the tab open; the tunnel is running."
+	hintNanoOnboard   = "No Vyomi simulator found. For Nano (the browser simulator, Free and up): `brew install vyomi-cloud/tap/vyomi-tunnel` (or `npm i -g vyomi-tunnel`), save your access key to ~/.vyomi/credentials, run `vyomi-tunnel`, and open https://vyomi.cloud/nano; or copy the cloud relay URL from the Nano footer into VYOMI_ENDPOINT. If the simulator runs on another machine, set VYOMI_ENDPOINT to it. vyomi_services / vyomi_capability / vyomi_env / vyomi_scan_repo still work without it."
+	hintNanoTunnelOff = "vyomi-tunnel is installed but not running: run `vyomi-tunnel` and open https://vyomi.cloud/nano (keep the tab open); or copy the cloud relay URL from the Nano footer into VYOMI_ENDPOINT."
+	hintMeshLocked    = "Mesh is locked (trial or subscription ended). Browser-homed spaces still work. Renew, or use a Nano space."
+	hintAmbiguous     = "Several Vyomi homes are reachable. Ask the user which space they are working in: the one in the browser (Nano) or the mesh / appliance. Then pass home=nano | mesh | offline to vyomi_env, vyomi_scan_repo and vyomi_write_env (or set VYOMI_TARGET)."
+	hintRelayDown     = "The Nano relay URL in VYOMI_ENDPOINT did not answer. Check that the Nano tab is open and copy the current URL from the Nano footer (relay sessions are short-lived), or run `vyomi-tunnel` for the local tunnel."
+)
+
+func (s *mcpServer) homeHint(p *homeProbe) string {
+	h := p.Selected
+	if h == nil {
+		if strings.HasPrefix(p.Why, "several") {
+			return hintAmbiguous
+		}
+		if n := p.find(homeNanoLocal); n != nil && n.Reachable { // several reachable, none serving
+			return hintNanoOpenTab
+		}
+		if tunnelBin() != "" {
+			return hintNanoTunnelOff
+		}
+		return hintNanoOnboard
+	}
+	switch h.ID {
+	case homeNanoLocal:
+		if !h.Reachable {
+			if tunnelBin() != "" {
+				return hintNanoTunnelOff
+			}
+			return hintNanoOnboard
+		}
+		if !h.Serving {
+			return hintNanoOpenTab
+		}
+	case homeNanoCloud:
+		if !h.Reachable {
+			return hintRelayDown
+		}
+	case homeMeshLocal, homeMeshCodespace:
+		if h.Detail["locked"] == true {
+			return hintMeshLocked
+		}
+		if h.ID == homeMeshCodespace && !h.Serving {
+			target, _ := h.Detail["api_target"].(string)
+			if target == "" || strings.HasPrefix(target, "unknown") {
+				target = "<appliance target from vyomi_reach mesh>"
+			}
+			return "Run `vyomi-tunnel forward " + target + " 9000:9000` in another terminal and keep it open; then call vyomi_status again."
+		}
+		if h.ID == homeMeshLocal && !h.Reachable {
+			return "No mesh answered at " + meshURL() + ". Start the local mesh with `vyomi up` (Pro/Max), or set VYOMI_MESH_URL if it runs elsewhere."
+		}
+	case homeOffline:
+		// applianceState sets today's hint when the appliance does not answer.
+	}
+	return ""
+}
+
+// ── vyomi_reach ──────────────────────────────────────────────────────────────
+
+// toolReach lists what the user can connect to, in the shape of `vyomi-tunnel list --json` rows
+// ({where, name, type, address, connect}). Built from the (cached) home probes: it never starts a forward,
+// a tunnel or anything else (spec decision 6).
+func (s *mcpServer) toolReach(raw json.RawMessage) (any, error) {
+	var a struct {
+		Scope string `json:"scope"`
+	}
+	if err := decodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if a.Scope == "" {
+		a.Scope = "all"
+	}
+	if a.Scope != "nano" && a.Scope != "mesh" && a.Scope != "all" {
+		return nil, fmt.Errorf("scope must be nano, mesh or all")
+	}
+	p := s.homes()
+	rows := []map[string]any{}
+	notes := []string{}
+	row := func(where, name, typ, address, connect string) {
+		rows = append(rows, map[string]any{"where": where, "name": name, "type": typ, "address": address, "connect": connect})
+	}
+	if a.Scope != "mesh" {
+		if n := p.find(homeNanoLocal); n != nil && n.Reachable {
+			tab := "tab connected"
+			if !n.Serving {
+				tab = "tab NOT connected: open https://vyomi.cloud/nano"
+			}
+			row("local", "nano-api", "api", n.Endpoint, "aws --endpoint-url "+n.Endpoint+" ...   ("+tab+")")
+			if feats, _ := n.Detail["features"].([]any); containsAny(feats, "amqp") {
+				row("local", "nano-amqp", "amqp", "127.0.0.1:5672", "Service Bus SDK: Endpoint=sb://127.0.0.1;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true; (tunnel default port)")
+			}
+			for _, v := range asMaps(n.Detail["vms"]) {
+				hp := fmt.Sprint(v["host_port"])
+				row("browser", fmt.Sprint(v["vm"]), "vm", "127.0.0.1:"+hp, "ssh -p "+hp+" user@127.0.0.1")
+			}
+			for _, d := range asMaps(n.Detail["dbs"]) {
+				hp := fmt.Sprint(d["host_port"])
+				row("browser", fmt.Sprint(d["db"]), "db", "127.0.0.1:"+hp, fmt.Sprint(d["engine"])+" client -> 127.0.0.1:"+hp)
+			}
+		} else {
+			notes = append(notes, fmt.Sprintf("local tunnel not running on :%d (run: vyomi-tunnel)", relayPort()))
+		}
+		if c := p.find(homeNanoCloud); c != nil {
+			row("cloud", "nano-relay", "api", c.Endpoint, "aws --endpoint-url "+c.Endpoint+" ...")
+		}
+	}
+	if a.Scope != "nano" {
+		if m := p.find(homeMeshLocal); m != nil && m.Reachable {
+			row("local", "mesh-api", "api", m.Endpoint, "aws --endpoint-url "+m.Endpoint+" ...   (TLS: "+m.TLSEndpoint+")")
+		}
+		cs := p.find(homeMeshCodespace)
+		if cs != nil {
+			for _, r := range asMaps(cs.Detail["targets"]) {
+				row(fmt.Sprint(r["where"]), fmt.Sprint(r["name"]), fmt.Sprint(r["type"]), fmt.Sprint(r["address"]), fmt.Sprint(r["connect"]))
+			}
+			for _, n := range asStrings(cs.Detail["notes"]) {
+				notes = append(notes, "mesh: "+n)
+			}
+			if n, _ := cs.Detail["note"].(string); n != "" {
+				notes = append(notes, "mesh: "+n)
+			}
+			if cs.Reachable && !cs.Serving {
+				notes = append(notes, "No forward to the Codespace mesh API yet: the user runs the `vyomi-tunnel forward <target> 9000:9000` connect line in another terminal (the MCP never starts forwards).")
+			}
+		}
+	}
+	return map[string]any{"scope": a.Scope, "rows": rows, "notes": notes,
+		"note": "Read-only. Commands in `connect` are for the user to run; forwards are long-running and stay in their own terminal."}, nil
+}
+
+func asMaps(v any) []map[string]any {
+	var out []map[string]any
+	switch x := v.(type) {
+	case []map[string]any:
+		return x
+	case []any:
+		for _, e := range x {
+			if m, ok := e.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+func asStrings(v any) []string {
+	switch x := v.(type) {
+	case []string:
+		return x
+	case []any:
+		var out []string
+		for _, e := range x {
+			out = append(out, fmt.Sprint(e))
+		}
+		return out
+	}
+	return nil
+}
+
+func containsAny(xs []any, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
 }
 
 // summarizeSpace keeps what an agent needs from /api/spaces/active (the raw

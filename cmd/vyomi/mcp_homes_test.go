@@ -308,3 +308,156 @@ func TestMCPHomesCache(t *testing.T) {
 		t.Errorf("want one probe within the cache window, got %d", hits)
 	}
 }
+
+// L1-17: Nano tunnel without a tab: the open-tab hint, and `vyomi up` nowhere in the output.
+func TestMCPStatusNanoNoTab(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	fakeNano(t, false)
+	res, _ := statusOf(t, s)
+	if res["selected"] != homeNanoLocal || res["hint"] != hintNanoOpenTab {
+		t.Errorf("selected=%v hint=%v", res["selected"], res["hint"])
+	}
+	if raw, _ := json.Marshal(res); strings.Contains(string(raw), "vyomi up") {
+		t.Errorf("a Nano status must never say `vyomi up`: %s", raw)
+	}
+	if res["running"] != false || res["nano"] == nil {
+		t.Errorf("running/nano: %v %v", res["running"], res["nano"])
+	}
+	// With the tab: no hint, running, the tunnel endpoint.
+	fakeNano(t, true)
+	res, _ = statusOf(t, s)
+	if res["hint"] != nil || res["running"] != true || res["endpoint"] != "http://127.0.0.1:"+os.Getenv("RELAY_PORT") {
+		t.Errorf("nano with tab: %v", res)
+	}
+}
+
+// L1-18: a locked mesh is still selected and gets the locked text.
+func TestMCPStatusMeshLocked(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	fakeMesh(t, true)
+	res, _ := statusOf(t, s)
+	if res["selected"] != homeMeshLocal || res["hint"] != hintMeshLocked {
+		t.Errorf("selected=%v hint=%v why=%v", res["selected"], res["hint"], res["why"])
+	}
+	if res["mesh"].(map[string]any)["locked"] != true {
+		t.Errorf("mesh detail: %v", res["mesh"])
+	}
+}
+
+// L1-19: nothing reachable and no tunnel on PATH: the Nano onboarding hint.
+func TestMCPStatusNothingReachable(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	res, _ := statusOf(t, s)
+	if res["selected"] != nil || res["hint"] != hintNanoOnboard {
+		t.Errorf("selected=%v hint=%v", res["selected"], res["hint"])
+	}
+	if raw, _ := json.Marshal(res); strings.Contains(string(raw), "vyomi up") {
+		t.Errorf("onboarding must not send the user to `vyomi up`: %s", raw)
+	}
+	// The tunnel installed but not running: run it.
+	fakeTunnel(t, "exit 2")
+	t.Setenv("VYOMI_ACCESS_KEY_ID", "")
+	res, _ = statusOf(t, s)
+	if res["hint"] != hintNanoTunnelOff {
+		t.Errorf("tunnel installed: hint=%v", res["hint"])
+	}
+	// An explicit offline endpoint that is down keeps the 3.0.46 behaviour (running=false, `vyomi up`).
+	t.Setenv("VYOMI_ENDPOINT", "http://127.0.0.1:"+strconv.Itoa(deadPort(t)))
+	res, _ = statusOf(t, s)
+	if res["selected"] != homeOffline || res["running"] != false || !strings.Contains(res["hint"].(string), "vyomi up") {
+		t.Errorf("offline down: %v", res)
+	}
+}
+
+// Ambiguous homes get the "which space" hint; a Codespace without a forward gets the forward command;
+// a dead relay URL gets the relay hint; a multi-space mesh warns which space SDK calls land in (spec Q4).
+func TestMCPStatusOtherHints(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	fakeNano(t, true)
+	fakeMesh(t, false)
+	res, _ := statusOf(t, s)
+	if res["hint"] != hintAmbiguous {
+		t.Errorf("ambiguous hint: %v", res["hint"])
+	}
+
+	deadHomes(t)
+	fakeTunnel(t, "cat <<'EOF'\n"+listMeshJSON+"\nEOF")
+	res, _ = statusOf(t, s)
+	if !strings.Contains(fmt_(res["hint"]), "vyomi-tunnel forward vyomi-appliance 9000:9000") {
+		t.Errorf("codespace hint: %v", res["hint"])
+	}
+
+	deadHomes(t)
+	t.Setenv("VYOMI_TUNNEL_BIN", "")
+	t.Setenv("VYOMI_ACCESS_KEY_ID", "")
+	t.Setenv("VYOMI_ENDPOINT", "http://10.255.255.1:1/sess-abc") // non-routable: the relay does not answer
+	res, _ = statusOf(t, s)
+	if res["selected"] != homeNanoCloud || res["hint"] != hintRelayDown {
+		t.Errorf("relay down: selected=%v hint=%v", res["selected"], res["hint"])
+	}
+
+	deadHomes(t)
+	srv := httptest.NewServer(jsonHandler(map[string]string{
+		"/mesh/status":       strings.ReplaceAll(meshStatusBody, "%LOCKED%", "false"),
+		"/healthz":           `{"status":"ok"}`,
+		"/api/spaces":        `{"spaces":[{"space_id":"a"},{"space_id":"b"}],"active_space_id":"a"}`,
+		"/api/spaces/active": `{"active_space_id":"a","space":{"name":"web"}}`,
+	}))
+	defer srv.Close()
+	t.Setenv("VYOMI_MESH_URL", srv.URL)
+	res, _ = statusOf(t, s)
+	if !strings.Contains(fmt_(res["spaces_warning"]), "2 spaces") || res["active_space"] == nil || res["running"] != true {
+		t.Errorf("multi-space mesh: %v", res)
+	}
+}
+
+func fmt_(v any) string { s, _ := v.(string); return s }
+
+// L1-20: vyomi_reach merges the tunnel's /health rows with `list --json` rows and leaves no process behind.
+func TestMCPReach(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	fakeNano(t, true)
+	dir := fakeTunnel(t, "")
+	pidFile := filepath.Join(dir, "pids")
+	_ = os.WriteFile(os.Getenv("VYOMI_TUNNEL_BIN"), []byte("#!/bin/sh\nsleep 30 &\necho $! > "+pidFile+"\ncat <<'EOF'\n"+listMeshJSON+"\nEOF\n"), 0o755)
+	s.homeCache = homeCache{}
+	res, isErr := callTool(t, s, "vyomi_reach", map[string]any{"scope": "all"})
+	if isErr {
+		t.Fatal(res["error"])
+	}
+	types := map[string]bool{}
+	for _, r := range res["rows"].([]any) {
+		m := r.(map[string]any)
+		types[m["where"].(string)+"/"+m["type"].(string)] = true
+		for _, k := range []string{"where", "name", "type", "address", "connect"} {
+			if _, ok := m[k]; !ok {
+				t.Errorf("row without %s: %v", k, m)
+			}
+		}
+	}
+	for _, want := range []string{"local/api", "local/amqp", "browser/vm", "browser/db", "mesh/host", "mesh/service", "mesh/k3s"} {
+		if !types[want] {
+			t.Errorf("missing %s row (have %v)", want, types)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+	raw, _ := os.ReadFile(pidFile)
+	if pid, _ := strconv.Atoi(strings.TrimSpace(string(raw))); pid > 0 && syscall.Kill(pid, 0) == nil {
+		t.Errorf("vyomi_reach left process %d running", pid)
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+	nano, _ := callTool(t, s, "vyomi_reach", map[string]any{"scope": "nano"})
+	for _, r := range nano["rows"].([]any) {
+		if r.(map[string]any)["where"] == "mesh" {
+			t.Errorf("scope nano returned a mesh row: %v", r)
+		}
+	}
+	if _, isErr := callTool(t, s, "vyomi_reach", map[string]any{"scope": "galaxy"}); !isErr {
+		t.Error("bad scope must be a tool error")
+	}
+}

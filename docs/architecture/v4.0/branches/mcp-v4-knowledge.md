@@ -48,6 +48,15 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
   dbs[].db/engine/host_port`). `selectHome`: `VYOMI_TARGET` > `VYOMI_ENDPOINT` > the single serving home > the single reachable home; else none.
   Results are cached 10 s per process. `vyomi_status` gains `homes`, `selected`, `why` (legacy fields unchanged until H2); tools with
   `home=auto` use the selection and fall back to the legacy target with a warning when several homes answer.
+- **H2 — `vyomi_status` v2 + `vyomi_reach`** (`cmd/vyomi/mcp_tools.go`). Status returns `homes`, `selected`, `why`, `endpoint`/`tls_endpoint`
+  of the selected home and a hint per home (spec decision 8): Nano onboarding (nothing found), "run `vyomi-tunnel`" (installed, not running),
+  "Open https://vyomi.cloud/nano" (tunnel without a tab), relay URL dead, mesh locked, Codespace without an API forward (the exact
+  `vyomi-tunnel forward <target> 9000:9000`), "ask which space" (several homes). `vyomi up` appears only for an offline appliance or local
+  mesh that does not answer. Selected `offline`: the 3.0.46 fields unchanged (`running, health, license, readiness, active_space`). Mesh:
+  the `/mesh/status` whitelist under `mesh`, the same `/api/*` state, and `spaces_warning` when `/api/spaces` lists more than one (spec Q4
+  default). Nano: `nano` (tunnel whitelist) and `running` = tab connected. `vyomi_reach {scope}` builds `{where,name,type,address,connect}`
+  rows from the cached probes (tunnel `/health`: api, amqp, VMs, DBs; local mesh API; Codespace `list` rows) plus notes; it starts nothing,
+  and the tunnel probe's process group is reaped after it exits.
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |
@@ -90,4 +99,5 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 - K1: L1-01 PASS (three outputs byte-identical across two runs; `--check` exit 0). L1-02 PASS (in a `/tmp` copy, `s3.bucket.versioning` `level.nano` full -> limited: `--check` exit 1, names `mcp_matrix.json` and `mcp_caps.json.gz (changed: core/capabilities/aws/s3.json)`). L1-03 PASS (`TestMCPCapsIndexMatchesRegistry`: 1,444 / 86 / 16). L1-04 PASS (`TestMCPDocsSnippetsUsePlaceholder`: 24,636 snippets, all with `{sim}`, none hard-coded).
 - K2: L1-05 PASS (`TestMCPCapabilityIDPrefix`), L1-06 PASS (`TestMCPCapabilityWords`), L1-07 PASS (`TestMCPSnippetNano`, also the cloud-relay URL form), L1-08 PASS (`TestMCPServicesLevels`), L1-09 PASS (`TestMCPInstructionsNoVyomiUpForNano` + `TestMCPInstructionsSteerAwayFromRealCloud`); regression `TestMCPSnippetAWSCLICommandNames`. `go test ./...` 37 PASS / 0 FAIL.
 - H1: L1-10..L1-16 PASS (`TestMCPHomesNanoOnly`, `...MeshOnly`, `...Offline`, `...Ambiguous`, `...Codespace`, `...CodespaceTimeout` (8.0 s, no child left), `...MeshWhitelist`) + `TestMCPHomesCache`. `go test -race` clean; `GOOS=windows go vet` clean. All tests hide any real `vyomi-tunnel`/credentials (`isolateHomes`) and probing tests use dead ports (`deadHomes`). Manual: the built binary against this machine saw the headless Nano tab (`nano-local`, serving) and a Docker offline appliance on `:9000`, and correctly selected nothing.
+- H2: L1-17 PASS (`TestMCPStatusNanoNoTab`), L1-18 PASS (`TestMCPStatusMeshLocked`), L1-19 PASS (`TestMCPStatusNothingReachable`, also tunnel-installed and explicit-offline-down cases), L1-20 PASS (`TestMCPReach`: rows from `/health` + `list`, the fake tunnel's backgrounded `sleep` is gone after the call); `TestMCPStatusOtherHints` (ambiguous, Codespace forward, relay down, multi-space mesh). L1-13's "hint asks which space" is covered here. `go test -race` clean.
 - D0: headless Nano tab via Playwright + local relay; real Python SDKs; results in `MCP-V4-DISCOVERY.md`. Not run: the local portal on `:8099` with the service worker, a real Chrome tab, the cloud relay.

@@ -18,3 +18,11 @@ func probeProcGroup(cmd *exec.Cmd) {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 }
+
+// probeReap kills whatever the probe left in its process group after it exited (a backgrounded helper), so a
+// read-only call never leaves a process behind.
+func probeReap(cmd *exec.Cmd) {
+	if cmd.Process != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+}

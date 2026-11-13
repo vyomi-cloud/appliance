@@ -326,6 +326,7 @@ func runTunnelList(ctx context.Context, bin, scope string) (*tunnelList, string)
 	stderr := &limitedBuffer{limit: 4096}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := cmd.Run()
+	probeReap(cmd)
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, "timeout"
 	}
