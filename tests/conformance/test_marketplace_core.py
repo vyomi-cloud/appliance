@@ -71,7 +71,7 @@ def main():
     _check("unsubscribe blocked while instance runs", s == 409)
     ec2("TerminateInstances", **{"InstanceId.1": iid.group(1)})
     _check("unsubscribe after terminate", mp("DELETE", f"/agreements/{a['AgreementId']}")[0] == 200
-           and ami not in ec2("DescribeImages", **{"ImageId.1": ami})[1])
+           and "InvalidAMIID.NotFound" in ec2("DescribeImages", **{"ImageId.1": ami})[1])
     print("Marketplace core: all green")
 
 
