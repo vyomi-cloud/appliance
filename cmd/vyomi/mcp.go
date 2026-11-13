@@ -66,14 +66,17 @@ const (
 )
 
 type mcpServer struct {
-	cfg     *Config
-	matrix  *mcpMatrix
-	tools   []*mcpTool
-	byName  map[string]*mcpTool
-	client  *http.Client
-	out     io.Writer
-	outMu   sync.Mutex
-	version string
+	cfg    *Config
+	matrix *mcpMatrix
+	tools  []*mcpTool
+	byName map[string]*mcpTool
+	client *http.Client
+	// probeClient carries per-request timeouts (homeProbeTimeout); homeCache keeps the last probe (mcp_homes.go).
+	probeClient *http.Client
+	homeCache   homeCache
+	out         io.Writer
+	outMu       sync.Mutex
+	version     string
 }
 
 func newMCPServer(c *Config, out io.Writer) (*mcpServer, error) {
@@ -82,11 +85,12 @@ func newMCPServer(c *Config, out io.Writer) (*mcpServer, error) {
 		return nil, err
 	}
 	s := &mcpServer{
-		cfg:     c,
-		matrix:  m,
-		client:  &http.Client{Timeout: 3 * time.Second},
-		out:     out,
-		version: m.ApplianceVersion,
+		cfg:         c,
+		matrix:      m,
+		client:      &http.Client{Timeout: 3 * time.Second},
+		probeClient: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		out:         out,
+		version:     m.ApplianceVersion,
 	}
 	s.tools = s.buildTools()
 	s.byName = map[string]*mcpTool{}

@@ -60,7 +60,7 @@ func (s *mcpServer) buildTools() []*mcpTool {
 		{
 			Name:        "vyomi_status",
 			Title:       "Vyomi simulator status",
-			Description: "Is the local Vyomi simulator running? Returns the endpoint, license tier (trial/expiry), active space, backend readiness and substrate (docker or multipass). Call this first.",
+			Description: "Where is the Vyomi simulator and is it running? Probes every home (Nano browser tab through vyomi-tunnel, local mesh, offline appliance, Codespace mesh) and returns homes[], the selected one and why, with its live state (tier, trial, lock, tab, forwards) and the next step when nothing usable is found. Call this first.",
 			Schema:      obj(map[string]any{}),
 			ReadOnly:    true,
 			handler:     s.toolStatus,
@@ -203,7 +203,15 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 	}
 	t := s.target(nil)
 	base := t.simURL()
+	p := s.homes()
+	var selected any
+	if p.Selected != nil {
+		selected = p.Selected.ID
+	}
 	out := map[string]any{
+		"homes":                       p.Homes,
+		"selected":                    selected,
+		"why":                         p.Why,
 		"endpoint":                    base,
 		"tls_endpoint":                fmt.Sprintf("https://%s:%d", t.Host, t.TLSPort),
 		"substrate":                   s.cfg.resolveSubstrate(),

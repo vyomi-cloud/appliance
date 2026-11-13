@@ -14,6 +14,7 @@ import (
 func testMCPServer(t *testing.T) (*mcpServer, *bytes.Buffer) {
 	t.Helper()
 	t.Setenv("VYOMI_SUBSTRATE", "docker") // never shell out to multipass in tests
+	isolateHomes(t)
 	out := &bytes.Buffer{}
 	s, err := newMCPServer(&Config{VyomiHome: t.TempDir()}, out)
 	if err != nil {
@@ -277,6 +278,7 @@ func TestMCPWriteEnv(t *testing.T) {
 
 func TestMCPStatus(t *testing.T) {
 	s, _ := testMCPServer(t)
+	deadHomes(t)
 
 	t.Setenv("VYOMI_ENDPOINT", "http://127.0.0.1:1") // nothing listens on port 1
 	down, _ := callTool(t, s, "vyomi_status", map[string]any{})
