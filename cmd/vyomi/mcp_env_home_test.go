@@ -185,6 +185,26 @@ func TestMCPScanNanoHome(t *testing.T) {
 	}
 }
 
+// Regression: a service whose level in the selected home is not_simulated (EKS on Nano) is reported as
+// not emulated there, not as emulated.
+func TestMCPScanNotSimulatedInHome(t *testing.T) {
+	s, _ := testMCPServer(t)
+	clearHomeEnv(t)
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "k.py"), "import boto3\neks = boto3.client('eks')\n")
+	for home, wantGap := range map[string]bool{"nano": true, "offline": false} {
+		res, isErr := callTool(t, s, "vyomi_scan_repo", map[string]any{"path": root, "home": home})
+		if isErr {
+			t.Fatal(res["error"])
+		}
+		sum, _ := json.Marshal(res["summary"])
+		gap := strings.Contains(string(sum), "NOT emulated: eks (not simulated on")
+		if gap != wantGap {
+			t.Errorf("home %s: summary %s", home, sum)
+		}
+	}
+}
+
 // L1-25: write_env refuses paths outside the project and anything but .env.vyomi*; a valid write has the home header.
 func TestMCPWriteEnvHome(t *testing.T) {
 	s, _ := testMCPServer(t)

@@ -49,6 +49,7 @@ type scanService struct {
 	Examples []scanHit `json:"examples"`
 	Warning  string    `json:"warning,omitempty"`
 	langSet  map[string]bool
+	noneHere bool // every feature is not_simulated in the selected home (e.g. EKS on Nano)
 }
 
 type scanReport struct {
@@ -238,6 +239,9 @@ func (s *mcpServer) scanRepo(root string, maxFiles int, sel homeSel) (*scanRepor
 						if ms := s.matrix.service(r.cloud, svc); ms != nil {
 							e.Status, e.Name = ms.Status, ms.Name
 							e.Level, e.Tier, e.Mesh, e.MeshOnly = ms.Levels[levelKey], ms.Tier, ms.Mesh, ms.MeshOnly
+							if c := ms.LevelCounts[levelKey]; ms.Capabilities > 0 && c["not_simulated"] == ms.Capabilities {
+								e.noneHere = true
+							}
 						}
 						e.Warning = s.scanWarning(r.cloud+"/"+svc, sel)
 						if e.Mesh && wiringHome(sel.ID) != "mesh" {
@@ -310,6 +314,9 @@ func (s *mcpServer) summarize(rep *scanReport) {
 			switch {
 			case !emulated(e.Status):
 				gaps = append(gaps, e.Service)
+			case e.noneHere:
+				// in the registry, but not simulated in this home (e.g. EKS on Nano)
+				gaps = append(gaps, e.Service+" (not simulated on "+rep.Home+")")
 			case e.Mesh && wiringHome(rep.Home) != "mesh":
 				meshNeeded = append(meshNeeded, e.Service)
 			default:
