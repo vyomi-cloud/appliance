@@ -1,5 +1,5 @@
 {
- "at": "2026-11-13T16:10:29+00:00",
+ "at": "2026-11-13T17:10:22+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
@@ -7,15 +7,12 @@
   "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
   "maven/software.amazon.awssdk:sqs: The read operation timed out",
   "maven/com.google.cloud:google-cloud-storage: The read operation timed out",
+  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
   "maven/com.google.cloud:google-cloud-firestore: The read operation timed out",
   "maven/com.azure:azure-storage-blob: The read operation timed out",
   "maven/com.azure:azure-cosmos: The read operation timed out",
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
   "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out",
   "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
-  "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out",
   "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
