@@ -105,3 +105,9 @@ The one Azure finding (Function apps "Deployment slots" tab 404) was already fix
 - hosted-relay `relay.vyomi.cloud/health -> 503` (103 findings per cloud): the tunnel panel now probes it only while the Cloudflare tab carries traffic (`wasm/nano-tunnel-tabs.js`); idle shows 'not in use'. Applies to AWS and GCP crawls too.
 - `/vendor/pyodide/pyodide.mjs -> 404` (24 per cloud): loaders read tracked `wasm/pyodide-source.json` ({"local": false}); `wasm/fetch_pyodide.py` flips it to true. No nightly-workflow change is needed for the crawl any more; a deploy that ships vendor/pyodide must run fetch_pyodide.py (it does the flip).
 - Azure Nano crawl after: 33/34 services clean (was 0/25, 127 findings); remaining: PLACEHOLDER_CELL 'Topic type' blank after create (2). `nano-ui-azure-tags-tab` fails 9 (Event Grid namespace/topics/domain/partner*, rediscache, dataexplorer have no Tags tab) - pre-existing on trunk, not from this change.
+
+## GCP nightly, 2026-11-13
+- FIXED: Cloud SQL `instances.insert` never set `createTime` (Nano grid "Created" blank; nano-ui-gcp-create-defaults red -> green). Touched shared `core/gcp_cloudsql_core.py` (record is built there); `wasm/core` re-vendored.
+- Offline GCP suites red in the baseline AND re-run here (pubsub-tabs-project NOT_FOUND on a just-created topic, gce-ssh 400, ui-* waitForFunction timeouts; `/console/gcp` is 404 on the local :9000 stack and `static/*-console.html` no longer exists in v4). Looks like the offline stack/suites are stale vs v4 (decision for the trunk owner: retire or port these suites). Not guessed at.
+- `gcp-eventarc-nano-http-bridge` shows fail with exit 0 and an "ok" log: runner marks it fail although the test passes (harness/runner owner; not changed).
+- Not fixed, need Docker/Go modules/network: offline-sdk-go-gcp, offline-sdk-go-gcp-artifactregistry, offline-post-create-gcp-event-delivery, offline-post-create-gcp-apigateway-invoke.
