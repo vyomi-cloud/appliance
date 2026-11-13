@@ -1,18 +1,39 @@
 {
- "at": "2026-11-13T17:10:22+00:00",
+ "at": "2026-11-13T18:10:18+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "web",
+   "kind": "spec-commit",
+   "key": "azure:web:5489588d84",
+   "title": "Azure web: [Microsoft.Web] Introduce api version 2026-09-01 and VirtualConnections Entity (#45406)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/5489588d840c97097d653b15566cb73f003205cb",
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:bc02293fdbf3",
+   "title": "Announcing Accelerated Compute Insights for Amazon CloudWatch",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/accelerated-compute-insights-cloudwatch/",
+   "detail": "Amazon CloudWatch now offers accelerated compute insights, a capability that provides monitoring and observability for self-hosted AI inference workloads running in Amazon EKS clusters. Previously, platform and AI teams lacked fleet-level visibility into their accelerators, whether workloads were running efficiently, and what was causing performance issues. Accelerated compute insights collects telemetry from across the inference stack to help teams identify idle accelerators, optimize workloads to reduce costs, and troubleshoot common inference issues such as high time to first token. Getting",
+   "actionable": false
+  }
+ ],
  "errors": [
   "maven/software.amazon.awssdk:s3: The read operation timed out",
   "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
   "maven/software.amazon.awssdk:sqs: The read operation timed out",
   "maven/com.google.cloud:google-cloud-storage: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
   "maven/com.google.cloud:google-cloud-firestore: The read operation timed out",
   "maven/com.azure:azure-storage-blob: The read operation timed out",
-  "maven/com.azure:azure-cosmos: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
   "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out",
   "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out",
   "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
