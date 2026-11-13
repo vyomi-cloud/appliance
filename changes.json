@@ -1,8 +1,53 @@
 {
- "at": "2026-11-13T03:10:03+00:00",
+ "at": "2026-11-13T04:10:02+00:00",
  "baseline": false,
- "changes": [],
- "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
- ]
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "apimanagement",
+   "kind": "spec-commit",
+   "key": "azure:apimanagement:558f7669cb",
+   "title": "Azure apimanagement: Validate Java management SDK directories against namespace (#48024)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/558f7669cbf6cf88dd7f18678937dcb7cd45acd2",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "resources",
+   "kind": "spec-commit",
+   "key": "azure:resources:558f7669cb",
+   "title": "Azure resources: Validate Java management SDK directories against namespace (#48024)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/558f7669cbf6cf88dd7f18678937dcb7cd45acd2",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "app",
+   "kind": "spec-commit",
+   "key": "azure:app:558f7669cb",
+   "title": "Azure app: Validate Java management SDK directories against namespace (#48024)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/558f7669cbf6cf88dd7f18678937dcb7cd45acd2",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "monitor",
+   "kind": "spec-commit",
+   "key": "azure:monitor:558f7669cb",
+   "title": "Azure monitor: Validate Java management SDK directories against namespace (#48024)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/558f7669cbf6cf88dd7f18678937dcb7cd45acd2",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Cloud Monitoring",
+   "kind": "announcement",
+   "key": "feed:gcp:23e7a8dfb807",
+   "title": "Cloud Monitoring: Feature (November 12, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_12_2026",
+   "detail": "Creating SQL-based alerting policies to monitor your Observability Analytics query results in Cloud Monitoring is generally available (GA) . You can create SQL-based alerting policies by using the Google Cloud console or the Cloud Monitoring API. For more information, see Cloud Logging: Monitor your SQL query results with an alerting policy and Cloud Trace: Monitor your SQL query results with an alerting policy .",
+   "actionable": false
+  }
+ ],
+ "errors": []
 }
