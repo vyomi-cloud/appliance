@@ -101,6 +101,17 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
     first, so the copy is a pure regeneration.
   - Tests: `wasm/relay/test-mcp-launch.mjs` (L1-26..L1-28, exit code and SIGTERM passthrough) and `wasm/relay/test-list-json.mjs`
     (L1-29, auth-error JSON, no ssh edits, usage errors), both `node --test`, against a temp copy / the packaged bin.
+- **T2 — bundle the binaries in `vyomi-tunnel` (option C)** (`scripts/build_tunnel_mcp.sh` new, `.gitignore`, `packaging/tunnel/package.json`,
+  `.github/workflows/tunnel-release.yml`).
+  - `scripts/build_tunnel_mcp.sh [outdir]`: `gen_mcp_matrix.py` (fresh embedded knowledge), then `CGO_ENABLED=0 go -C cmd/vyomi build -trimpath
+    -ldflags "-s -w"` for darwin/arm64, darwin/amd64, linux/arm64, linux/amd64, windows/amd64 into `packaging/tunnel/mcp/{darwin-arm64,darwin-x64,
+    linux-arm64,linux-x64,win32-x64}/vyomi-mcp[.exe]` (Node's names, the launcher's lookup), `chmod 755`.
+  - `packaging/tunnel/mcp/` is git-ignored (one line next to `packaging/docker/mcp/`). `package.json` `files`: `bin/`, `mcp/`, `README.md`;
+    no `optionalDependencies`, no new packages.
+  - `tunnel-release.yml`: `actions/setup-go` (`go-version-file: cmd/vyomi/go.mod`) and `actions/setup-python` 3.12 next to the existing
+    setup-node 22 (the generator needs node); `scripts/build_tunnel_mcp.sh` before the dry pack; the dry-pack step now also reads
+    `npm pack --dry-run --json` and fails when any of the five binaries is missing or the packed size is over 25 MiB. Trusted publishing,
+    the status step and the tap bump are unchanged. Not run (no workflow runs from this branch).
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |
@@ -141,6 +152,9 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
 | `list --json` key `targets` | dropped (`rows` only, plan T1.3); the two assertions in `test-tunnel-credentials.mjs` that read `.targets` now read `.rows` (+ `schema`). The MCP reads both shapes | plan T1.3, spec §4.3 |
 | `NoMeshSession` / `SessionEnded` | the key is valid: list Nano, note the Mesh; same in text mode (was: nothing listed, exit 1) | plan T1.3 ("still print valid JSON with a note") |
 | Listing and ssh config | never configured by `list`; a note points at `vyomi-tunnel config` when needed | plan T1.3, D0 §2 |
+| T2 Python in the workflow | `actions/setup-python` 3.12 (the job used the runner's python3 before) | plan T2.4 ("then Python") |
+| T2 size guard unit | 25 MiB (26,214,400 bytes) on npm's packed `size`; the step also fails if one of the five binaries is missing | plan T2.5 |
+| T2 Homebrew formula | unchanged (it installs the same npm tarball); L2-10 not run (needs the tap branch and two Macs) | plan T2.6 |
 
 ## Open issues
 - [ ] D0 item 2 (Codespace mesh API target) and item 4 (space semantics on a mesh) need a Pro/Max key and a Mesh Codespace (owner: Rohith)
@@ -164,6 +178,13 @@ Out of scope for this branch: publishing (npm, tap, plugins repo), releases and 
   against the 1.2.1 code (`git archive HEAD`): the old `list mesh --json` writes `~/.ssh/config`, so the test fails there. Also green:
   the four relay tests above, `test-tunnel-credentials`, `test-mesh-ssh-transport`, `test-tunnel-k3s`, `test-keeper`, `test-gw-egress`,
   `test-gh-manager`, `test-mesh-lazy-hub`, `test-mesh-forwarded-host`, `test-worker-egress`; go 59/0; generator `--check` OK.
+- T2, P-01 PASS (local): `scripts/build_tunnel_mcp.sh` in ~20 s (binaries 7.6–8.3 MB; the generator rewrote nothing tracked);
+  `npm pack --dry-run` lists `bin/mcp-launch.mjs` and the five `mcp/<platform>-<arch>/vyomi-mcp[.exe]`, 18 files, package size 19.6 MB
+  (18.7 MiB) / unpacked 41.9 MB; the workflow's guard snippet passes; no `optionalDependencies`; `git status` shows no binaries.
+- T2, L2-11 local half PASS (macOS arm64 only): `npm pack` to `/tmp`, `npm i -g --prefix /tmp/mcpv4-npm ./vyomi-tunnel-1.3.0.tgz`; all five
+  bundled binaries are 0755 after install; `vyomi-tunnel mcp` with a temp HOME and no key answered `initialize` (server `vyomi` 4.0.0,
+  protocol 2024-11-05) and `tools/list` (8 tools), exit 0, stdout = exactly the two responses, nothing written to HOME. Not run:
+  the `node:20` linux/amd64 and linux/arm64 containers, L2-10 (brew), P-02 (workflow dry run), P-03 (after a real publish).
 - Base (`41161ac3e`): `cd cmd/vyomi && go test ./...` 28 PASS / 0 FAIL; `python3 scripts/gen_mcp_matrix.py --check` red (stale version stamp only).
 - K1: L1-01 PASS (three outputs byte-identical across two runs; `--check` exit 0). L1-02 PASS (in a `/tmp` copy, `s3.bucket.versioning` `level.nano` full -> limited: `--check` exit 1, names `mcp_matrix.json` and `mcp_caps.json.gz (changed: core/capabilities/aws/s3.json)`). L1-03 PASS (`TestMCPCapsIndexMatchesRegistry`: 1,444 / 86 / 16). L1-04 PASS (`TestMCPDocsSnippetsUsePlaceholder`: 24,636 snippets, all with `{sim}`, none hard-coded).
 - K2: L1-05 PASS (`TestMCPCapabilityIDPrefix`), L1-06 PASS (`TestMCPCapabilityWords`), L1-07 PASS (`TestMCPSnippetNano`, also the cloud-relay URL form), L1-08 PASS (`TestMCPServicesLevels`), L1-09 PASS (`TestMCPInstructionsNoVyomiUpForNano` + `TestMCPInstructionsSteerAwayFromRealCloud`); regression `TestMCPSnippetAWSCLICommandNames`. `go test ./...` 37 PASS / 0 FAIL.

@@ -5,6 +5,8 @@
 # npm: TRUSTED PUBLISHING (OIDC), no stored token. One-time setup on npmjs.com -> vyomi-tunnel -> Settings ->
 #      Trusted Publisher: repo vyomi-cloud/appliance, workflow  tunnel-release.yml
 # Homebrew: HOMEBREW_TAP_TOKEN (repo secret) bumps vyomi-cloud/homebrew-tap Formula/vyomi-tunnel.rb.
+# Since 1.3.0 the package bundles the five vyomi-mcp binaries (`vyomi-tunnel mcp`), built here right before packing
+# (scripts/build_tunnel_mcp.sh; never committed). The packed tarball must stay under 25 MB (about 18 MB measured).
 name: Tunnel release
 
 on:
@@ -34,15 +36,32 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm install -g npm@^11.5.1     # trusted publishing needs npm >= 11.5.1
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Tag must match package.json
         if: github.ref_type == 'tag'
         run: |
           PKG=$(node -p "require('./packaging/tunnel/package.json').version")
           TAG="${GITHUB_REF_NAME#tunnel-v}"
           [ "$PKG" = "$TAG" ] || { echo "::error::tag $GITHUB_REF_NAME != packaging/tunnel/package.json $PKG"; exit 1; }
-      - name: Package contents (dry pack)
+      - name: Build the bundled vyomi-mcp binaries
+        run: scripts/build_tunnel_mcp.sh
+      - name: Package contents (dry pack) + 25 MB guard
         working-directory: packaging/tunnel
-        run: npm pack --dry-run
+        run: |
+          npm pack --dry-run
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e '
+            const p = require("/tmp/pack.json")[0], files = p.files.map((f) => f.path), max = 25 * 1024 * 1024;
+            const want = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"].map((d) => `mcp/${d}/vyomi-mcp${d.startsWith("win32") ? ".exe" : ""}`);
+            const missing = want.filter((w) => !files.includes(w));
+            console.log(`packed ${(p.size / 1048576).toFixed(1)} MB, unpacked ${(p.unpackedSize / 1048576).toFixed(1)} MB, ${files.length} files`);
+            if (missing.length) { console.log(`::error::bundled vyomi-mcp missing: ${missing.join(", ")}`); process.exit(1); }
+            if (p.size > max) { console.log(`::error::vyomi-tunnel tarball is ${p.size} bytes, over the 25 MB guard`); process.exit(1); }'
       - name: Status (npm / tap)
         id: st
         run: |
