@@ -50,6 +50,8 @@ func obj(props map[string]any, required ...string) map[string]any {
 var (
 	cloudEnum  = map[string]any{"type": "string", "enum": []string{"aws", "gcp", "azure"}}
 	hostProp   = map[string]any{"type": "string", "description": "Simulator host (or host:port) as seen from where the code runs, e.g. a Multipass VM IP. Defaults to VYOMI_ENDPOINT or 127.0.0.1:9000."}
+	homeProp   = map[string]any{"type": "string", "enum": []string{"auto", "nano", "mesh", "offline"}, "description": "Which simulator home to target: nano (browser tab via vyomi-tunnel on 127.0.0.1:8090, or the relay URL in VYOMI_ENDPOINT), mesh (a Pro/Max mesh, VYOMI_MESH_URL), offline (the v4.0.0 / v3 appliance on :9000). Default auto: the home vyomi_status selects."}
+	langProp   = map[string]any{"type": "string", "enum": snippetLangs, "description": "cli (aws / gcloud / az), python, javascript or curl. Default cli."}
 	accountArg = map[string]any{"type": "string", "description": "Azure storage/Cosmos account name (default devstoreaccount1)."}
 )
 
@@ -66,13 +68,38 @@ func (s *mcpServer) buildTools() []*mcpTool {
 		{
 			Name:        "vyomi_services",
 			Title:       "Services Vyomi emulates",
-			Description: "Which AWS / GCP / Azure services Vyomi emulates (released services, first version), supported API actions, data plane and per-SDK support. Works offline; adds live pack state when the simulator is running.",
+			Description: "Which AWS / GCP / Azure services Vyomi emulates (released services, first version, plus the v4 services), with each service's level on Nano and offline/mesh (worst feature, and the spread), Pro tier and mesh-only flags, supported API actions, data plane and per-SDK support. Works offline; adds live pack state when the simulator is running. vyomi_capability answers per feature.",
 			Schema: obj(map[string]any{
 				"cloud": cloudEnum,
 				"live":  map[string]any{"type": "boolean", "description": "Merge live state from the running simulator (default true)."},
 			}),
 			ReadOnly: true,
 			handler:  s.toolServices,
+		},
+		{
+			Name:        "vyomi_capability",
+			Title:       "Does Vyomi support a feature?",
+			Description: "Searches the v4 capability registry (every console feature of AWS / GCP / Azure) by id prefix (s3.bucket, azure.aks.cluster) or title words (bucket versioning). Returns up to 20 matches with the level on Nano (browser) and offline/mesh (full, limited, config_only, not_simulated), limitations, Pro tier and mesh-only flags, and the conformance tests behind each claim. Works offline.",
+			Schema: obj(map[string]any{
+				"query": map[string]any{"type": "string", "description": "Capability id prefix or words from its title."},
+				"cloud": cloudEnum,
+			}, "query"),
+			ReadOnly: true,
+			handler:  s.toolCapability,
+		},
+		{
+			Name:        "vyomi_snippet",
+			Title:       "CLI / SDK example for a Vyomi operation",
+			Description: "A ready-to-run CLI, Python, JavaScript or curl call for one service operation, pointed at the selected home's endpoint. Generated from the API docs the Nano console shows (only operations that really answer). Without op, picks a representative operation.",
+			Schema: obj(map[string]any{
+				"cloud":   cloudEnum,
+				"service": map[string]any{"type": "string", "description": "Service id (e.g. s3, dynamodb, pubsub, storage, cosmos); vyomi_services lists them."},
+				"op":      map[string]any{"type": "string", "description": "Operation name (PutObject, put_object, put-object, storage.buckets.insert). Default: a representative operation."},
+				"lang":    langProp,
+				"home":    homeProp,
+			}, "cloud", "service"),
+			ReadOnly: true,
+			handler:  s.toolSnippet,
 		},
 		{
 			Name:        "vyomi_env",
@@ -265,8 +292,10 @@ func (s *mcpServer) toolServices(raw json.RawMessage) (any, error) {
 		"appliance_knowledge_version": s.version,
 		"status_legend": map[string]string{
 			"released": "Shipped and covered by the conformance suite (services/registry.json, the list vyomi.cloud publishes). released_in = first version.",
+			"v4":       "In the v4 capability registry (core/capabilities) but not in the v3 services list.",
 		},
-		"live": reachable,
+		"levels_legend": "levels{nano,offline}: the WORST level among the service's features (full > limited > config_only > not_simulated); level_counts shows the spread. nano = the browser tab, offline = the Docker appliance / mesh. tier/mesh describe the service's main feature: mesh=true means it needs a Pro/Max mesh; mesh_only lists single features that do. Ask vyomi_capability for one feature.",
+		"live":          reachable,
 	}
 	out := map[string]any{}
 	for _, cloud := range clouds {
@@ -280,6 +309,7 @@ func (s *mcpServer) toolServices(raw json.RawMessage) (any, error) {
 		entry := map[string]any{
 			"display_name":  c.DisplayName,
 			"services":      c.Services,
+			"v4_services":   c.V4Services,
 			"status_counts": statusCounts(c.Services),
 			"sdk_support":   tools,
 		}

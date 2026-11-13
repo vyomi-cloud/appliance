@@ -25,7 +25,16 @@ type mcpMatrix struct {
 	HostPorts        map[string][]string  `json:"host_ports"`
 	Settings         []mcpSetting         `json:"settings"`
 	Clouds           map[string]*mcpCloud `json:"clouds"`
+	Homes            map[string]*mcpHome  `json:"homes"`
 	Scan             mcpScanConfig        `json:"scan"`
+}
+
+// mcpHome is one homes.<offline|nano|mesh> block: the client wiring for that kind of home.
+type mcpHome struct {
+	About  string                `json:"about,omitempty"`
+	Source string                `json:"source,omitempty"`
+	SameAs string                `json:"same_as,omitempty"`
+	Clouds map[string]*mcpWiring `json:"clouds"`
 }
 
 type mcpDefaults struct {
@@ -46,6 +55,7 @@ type mcpCloud struct {
 	DisplayName    string                     `json:"display_name"`
 	NativeServices json.RawMessage            `json:"native_services,omitempty"`
 	Services       []mcpService               `json:"services"`
+	V4Services     []mcpService               `json:"v4_services"`
 	Tools          map[string]json.RawMessage `json:"tools"`
 	Wiring         mcpWiring                  `json:"wiring"`
 }
@@ -60,19 +70,38 @@ type mcpService struct {
 	Actions    []string `json:"actions,omitempty"`
 	DataPlane  string   `json:"data_plane,omitempty"`
 	Protocol   string   `json:"protocol,omitempty"`
+	// Knowledge v2: roll-up of the service's capabilities in core/capabilities (scripts/gen_mcp_matrix.py _rollup).
+	CapabilityService string                    `json:"capability_service,omitempty"`
+	Capabilities      int                       `json:"capabilities,omitempty"`
+	Levels            map[string]string         `json:"levels,omitempty"`
+	LevelCounts       map[string]map[string]int `json:"level_counts,omitempty"`
+	Tier              string                    `json:"tier,omitempty"`
+	Mesh              bool                      `json:"mesh,omitempty"`
+	MeshOnly          []string                  `json:"mesh_only,omitempty"`
+	ProCapabilities   int                       `json:"pro_capabilities,omitempty"`
 }
 
 type mcpWiring struct {
-	Env           []mcpEnvVar `json:"env"`
-	Notes         []string    `json:"notes"`
-	Terraform     string      `json:"terraform"`
-	TerraformNote string      `json:"terraform_note,omitempty"`
+	Env           []mcpEnvVar      `json:"env"`
+	Unavailable   []mcpUnavailable `json:"unavailable,omitempty"`
+	Notes         []string         `json:"notes"`
+	Terraform     string           `json:"terraform"`
+	TerraformNote string           `json:"terraform_note,omitempty"`
 }
 
 type mcpEnvVar struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-	Note  string `json:"note,omitempty"`
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Note     string `json:"note,omitempty"`
+	Verified *bool  `json:"verified,omitempty"` // homes.nano: whether D0 exercised the value on Nano
+}
+
+// mcpUnavailable is a setting an SDK cannot use in a home (e.g. Key Vault through the plain-HTTP Nano tunnel):
+// the MCP never hands out a value for it, only the warning.
+type mcpUnavailable struct {
+	Name    string `json:"name"`
+	SDK     string `json:"sdk,omitempty"`
+	Warning string `json:"warning"`
 }
 
 type mcpScanRule struct {
@@ -107,6 +136,11 @@ func loadMCPMatrix() (*mcpMatrix, error) {
 		if m.Clouds[c] == nil {
 			return nil, fmt.Errorf("embedded mcp_matrix.json is missing cloud %q", c)
 		}
+		for _, h := range []string{"offline", "nano", "mesh"} {
+			if m.Homes[h] == nil || m.Homes[h].Clouds[c] == nil {
+				return nil, fmt.Errorf("embedded mcp_matrix.json is missing homes.%s.clouds.%s", h, c)
+			}
+		}
 	}
 	if m.Defaults.SimPort == 0 {
 		m.Defaults.SimPort = 9000
@@ -140,9 +174,10 @@ func (m *mcpMatrix) service(cloud, id string) *mcpService {
 type mcpTarget struct {
 	Scheme  string
 	Host    string
-	SimPort int
-	TLSPort int
+	SimPort int // 0: the scheme's default port (e.g. https://relay.vyomi.cloud/<session>)
+	TLSPort int // 0: no TLS endpoint (Nano)
 	Account string
+	Path    string // base path, e.g. the cloud relay's /<session>
 }
 
 type mcpTargetArgs struct {
@@ -190,12 +225,19 @@ func (s *mcpServer) target(a *mcpTargetArgs) mcpTarget {
 	return t
 }
 
-func (t mcpTarget) simURL() string { return fmt.Sprintf("%s://%s:%d", t.Scheme, t.Host, t.SimPort) }
+func (t mcpTarget) simURL() string { return t.Scheme + "://" + t.hostPort() + t.Path }
+
+func (t mcpTarget) hostPort() string {
+	if t.SimPort == 0 {
+		return t.Host
+	}
+	return fmt.Sprintf("%s:%d", t.Host, t.SimPort)
+}
 
 func (t mcpTarget) render(s string) string {
 	return strings.NewReplacer(
 		"{sim}", t.simURL(),
-		"{sim_hostport}", fmt.Sprintf("%s:%d", t.Host, t.SimPort),
+		"{sim_hostport}", t.hostPort(),
 		"{sim_port}", strconv.Itoa(t.SimPort),
 		"{tls_hostport}", fmt.Sprintf("%s:%d", t.Host, t.TLSPort),
 		"{tls_port}", strconv.Itoa(t.TLSPort),

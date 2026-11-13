@@ -351,6 +351,18 @@ def _by_lang(snips: list) -> dict:
     return out
 
 
+def _aws_cli_fix(api: dict, text: str) -> str:
+    """wasm/docs derives an AWS API's `cli` word from botocore's serviceId (secrets-manager, api-gateway,
+    cloudwatch-logs, elastic-load-balancing-v2, sfn, s3), but the AWS CLI command is the botocore service
+    name (secretsmanager, apigateway, logs, elbv2, stepfunctions) and low-level S3 is `s3api`. Until
+    scripts/gen_nano_docs.py emits the right word, correct it here so the MCP hands out commands that run."""
+    want = "s3api" if api.get("id") == "s3" else api.get("id", "")
+    have = api.get("cli", "")
+    if not want or not have or want == have:
+        return text
+    return text.replace("aws --endpoint-url {sim} " + have + " ", "aws --endpoint-url {sim} " + want + " ")
+
+
 def _short(text: str, n: int = 160) -> str:
     t = re.split(r"(?<=\.)\s", str(text or "").strip(), maxsplit=1)[0]
     return t if len(t) <= n else t[: n - 3] + "..."
@@ -371,12 +383,15 @@ def _docs() -> dict:
         for stem, entry in sorted(raw[cloud].items()):
             d = entry["d"]
             apis = []
-            for a in entry["apis"]:
+            for ai, a in enumerate(entry["apis"]):
+                raw_api = d["apis"][ai]
                 ops = []
                 for item in a["ops"]:
                     o = item["o"]
                     op = {"n": o["n"], "m": o.get("m", ""), "u": o.get("ex") or o.get("u", ""), "d": _short(o.get("d", "")),
                           "s": _by_lang(item["s"])}
+                    if cloud == "aws" and "cli" in op["s"]:
+                        op["s"]["cli"] = _aws_cli_fix(raw_api, op["s"]["cli"])
                     names = sorted({str(x).lower() for x in (o.get("py"), o.get("cli"), o.get("az")) if x} - {o["n"].lower()})
                     if names:
                         op["k"] = names
