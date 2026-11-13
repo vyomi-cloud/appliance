@@ -156,6 +156,10 @@ export async function configureSsh({ yes = false, cmd = "vyomi-tunnel", sshDir =
   fs.writeFileSync(main, inc + "\n\n" + cur, { mode: 0o600 });          // Include must come first to apply to all hosts
   return { changed: true, file: main };
 }
+/** Read-only: does ~/.ssh/config already Include ~/.vyomi/ssh_config? (`list` reports it; listing never writes ssh config.) */
+export function sshConfigured({ sshDir = path.join(os.homedir(), ".ssh") } = {}) {
+  try { return fs.readFileSync(path.join(sshDir, "config"), "utf8").split("\n").some((l) => l.trim() === `Include ${SSH_CONF}`); } catch { return false; }
+}
 export function removeSshConfig({ sshDir = path.join(os.homedir(), ".ssh") } = {}) {
   const main = path.join(sshDir, "config"), inc = `Include ${SSH_CONF}`;
   try { const cur = fs.readFileSync(main, "utf8"); fs.writeFileSync(main, cur.split("\n").filter((l) => l.trim() !== inc).join("\n").replace(/^\n+/, "")); } catch { /* none */ }
@@ -200,7 +204,10 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
                           let a Nano API Gateway reach your local backend (see: help gateway-backend)
   vyomi-tunnel            start the local relay for the Nano console
 
-Everything needs a key (Free works for Nano; Mesh needs Pro or Max).
+Agents:
+  vyomi-tunnel mcp        the Vyomi MCP server for Claude Code and other agents (see: help mcp)
+
+Everything else needs a key (Free works for Nano; Mesh needs Pro or Max).
 Get one: 'vyomi-tunnel help credentials'.
 Log in to a Mesh VM over SSH: 'vyomi-tunnel help ssh'. Something failing? 'vyomi-tunnel help troubleshoot'.
 `;
@@ -242,7 +249,8 @@ Shows what you can reach right now, and the command for each.
 Add a type to narrow it:
   vyomi-tunnel list nano vm        (also: api, db)
   vyomi-tunnel list mesh k3s       (also: host, instance, llm, service, forward)
-A type alone works too: vyomi-tunnel list vm`,
+A type alone works too: vyomi-tunnel list vm
+--json prints {schema: 1, rows: [{where, name, type, address, connect}], notes: [...]} (exit 0 rows, 1 none, 2 no key).`,
   ssh: `Log in to a Mesh VM over SSH
 
 1. See your Mesh and its VMs:
@@ -277,16 +285,23 @@ A new Mesh is a new machine with a new key: repeat step 3. Problems: 'vyomi-tunn
 Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespace.
   vyomi-tunnel forward k3s 6443:6443
   vyomi-tunnel forward host 2222:22`,
+  mcp: `vyomi-tunnel mcp
+
+Runs the Vyomi MCP server (vyomi-mcp, bundled with this package) on stdin/stdout, for Claude Code and other agents:
+  claude mcp add vyomi -- vyomi-tunnel mcp
+It finds your simulator (the Nano tab through this tunnel, a local mesh, or your Mesh Codespace), and answers what Vyomi
+supports and how to point your SDKs at it. It needs no key; only live Mesh Codespace details need one (through 'list').
+Without a bundled binary for this platform it runs 'vyomi-mcp' or 'vyomi mcp' from your PATH.`,
 };
 export const helpText = (topic) => (topic && DETAILS[topic]) || HELP;
 
 /** Credentials -> Vyomi session -> an ssh transport to the user's Mesh Codespace. Returns {transport, sess} or {error, code}. */
-export async function openMesh({ cs, log = () => {} } = {}) {
+export async function openMesh({ cs, log = () => {}, configure = true } = {}) {
   const { createSessionManager } = await import("./credentials.mjs");
   const ssh = await import("./mesh-ssh.mjs");
   let sess; try { sess = await createSessionManager({ log }).get(); } catch (e) { return { error: e.message, code: e.code }; }
   if (!sess.meshAllowed) return { error: "Mesh needs a Pro or Max plan.", code: "PlanNotAllowed" };
-  try { await configureSsh({ yes: true }); } catch { /* ssh setup is best effort */ }
+  if (configure) try { await configureSsh({ yes: true }); } catch { /* ssh setup is best effort */ }
   const transport = ssh.createSshTransport({ codespace: cs || sess.codespace || null, env: sess.githubToken ? { GH_TOKEN: sess.githubToken } : {}, log });
   if (sess.sessionEnd) transport.stopAt(sess.sessionEnd);
   return { transport, sess };
@@ -304,7 +319,7 @@ export async function main(argv) {
   if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { const topic = cmd === "help" ? rest[0] : (["-h", "--help", "-help", "-?"].includes(cmd) ? undefined : cmd); const t = topic && DETAILS[topic];
     if (topic && !t) { console.error(`vyomi-tunnel: no help for "${topic}".`); process.stdout.write(HELP); return 2; }
     process.stdout.write((t || HELP) + (t ? "\n" : "")); return cmd ? 0 : 2; }
-  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.2.1"); return 0; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.3.0"); return 0; }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
@@ -359,9 +374,15 @@ export async function main(argv) {
     return 2;
   }
   if (cmd === "list" || cmd === "ls") {                                // every transport line, with the command to use it
+    // --json is a contract (read by the Vyomi MCP): {schema: 1, rows: [{where, name, type, address, connect}], notes: [string]}. Exit 0 with rows,
+    // 1 with none, 2 with no credentials or a usage error; JSON is printed in every case but a usage error. Listing never edits ssh config.
     const json = rest.includes("--json"); const pos = rest.filter((x) => !x.startsWith("-"));
     const auth = await requireSession();                                                                // nothing is listed without a valid key, Nano included
-    if (auth.error) { console.error("vyomi-tunnel: " + auth.error); return auth.code === "NoCredentials" ? 2 : 1; }
+    const meshDown = !!auth.error && ["NoMeshSession", "SessionEnded"].includes(auth.code);             // the key is valid, only the Mesh is not running
+    if (auth.error && !meshDown) {
+      if (json) console.log(JSON.stringify({ schema: 1, rows: [], notes: [auth.error] }, null, 2));
+      console.error("vyomi-tunnel: " + auth.error); return auth.code === "NoCredentials" ? 2 : 1;
+    }
     const KINDS = ["api", "vm", "db", "host", "instance", "k3s", "llm", "service", "forward"];
     const SCOPES = { nano: ["api", "vm", "db"], mesh: ["host", "instance", "k3s", "llm", "service", "forward"], all: KINDS };      // forwards go to a Mesh target
     const norm = (w) => { w = String(w || "").toLowerCase(); return w === "k3s" || KINDS.includes(w) || SCOPES[w] ? w : w.replace(/(s|es)$/, "") && KINDS.includes(w.replace(/s$/, "")) ? w.replace(/s$/, "") : w; };   // vms -> vm, dbs -> db
@@ -375,7 +396,7 @@ export async function main(argv) {
     const rows = []; const notes = [];
     let transport = null, meshP = Promise.resolve(null);
     if (kinds.some((k) => ["host", "instance", "k3s", "llm", "service"].includes(k))) {                    // Mesh also needs a plan that allows it
-      const o = await openMesh({ cs });
+      const o = meshDown ? { error: auth.error } : await openMesh({ cs, configure: false });
       if (o.error) meshP = Promise.resolve({ err: o.error });
       else { transport = o.transport; meshP = transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })); }
     }
@@ -400,7 +421,8 @@ export async function main(argv) {
       rows.push({ where: "local", name: `${d.target}`, type: "forward", address: `127.0.0.1:${d.local}`, connect: `-> ${d.target}:${d.remote} (pid ${d.pid})` });
     } } catch { /* none */ }
     const out = rows.filter((r) => kinds.includes(r.type));
-    if (json) { console.log(JSON.stringify({ targets: out, notes }, null, 2)); return out.length ? 0 : 1; }
+    if (out.some((r) => r.connect.startsWith("ssh ") && r.connect.endsWith(SUFFIX)) && !sshConfigured()) notes.push(`'ssh <name>${SUFFIX}' needs a one-time setup: vyomi-tunnel config`);
+    if (json) { console.log(JSON.stringify({ schema: 1, rows: out, notes }, null, 2)); return out.length ? 0 : 1; }
     const w = [9, 22, 10, 22]; const line = (r) => [r.where, r.name, r.type, r.address].map((c, i) => String(c).padEnd(w[i])).join(" ") + " " + r.connect;
     if (out.length) { console.log(line({ where: "WHERE", name: "NAME", type: "TYPE", address: "ADDRESS", connect: "CONNECT" })); for (const r of out) console.log(line(r)); }
     else console.log(want && want !== "all" ? `No ${want} targets right now.` : "Nothing reachable right now.");

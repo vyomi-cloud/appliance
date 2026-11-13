@@ -9,8 +9,10 @@ or a Codespace mesh, not only a Docker appliance on `:9000`. This branch carries
 - D0 discovery, items 1 and 3: Nano SDK wiring through the local relay, and `vyomi-tunnel list --json`.
 - K1–K2: knowledge v2, from `core/capabilities/**` and `wasm/docs/**`.
 - H1–H3: home detection and home-aware tools.
+- Run 2 (2026-11-14, owner decision: same branch): T1 (`vyomi-tunnel mcp`, the `list --json` contract), T2 option C (the five
+  `vyomi-mcp` binaries bundled in the `vyomi-tunnel` npm package) and S1 wiring (plugin manifest, README, skills).
 
-Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plugin manifest, and release work.
+Out of scope for this branch: publishing (npm, tap, plugins repo), releases and tags, the portal, D0 items 2 and 4, the agent evals.
 
 ## Architecture
 - `docs/architecture/v4.0/MCP-V4-DISCOVERY.md`: D0 evidence (Nano SDK wiring through the local relay, `vyomi-tunnel list --json`).
@@ -75,6 +77,31 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
   `home: mesh`, AI via `vyomi_capability`). The four shared rules are word for word; added: "`vyomi up` only for offline / mesh-local".
   `plugin.json`, `marketplace.json` and the plugin README are **not** changed (they move with T1/T2/R1).
 
+- **T1 — `vyomi-tunnel mcp`** (`wasm/relay/mcp-launch.mjs` new; `local-relay.mjs`, `mesh-cli.mjs`; packaging copies in
+  `packaging/tunnel/bin/`, `package.json` 1.3.0, `README.md`).
+  - Dispatch: `argv[2] === "mcp"` is the first thing both entry files do (`local-relay.mjs` and the hand-derived
+    `packaging/tunnel/bin/vyomi-tunnel.mjs`), before the `ws` require and the credentials gate, so the MCP needs no key and
+    nothing reaches stdout before it.
+  - `mcp-launch.mjs`: `resolveMcp` picks `../mcp/<platform>-<arch>/vyomi-mcp[.exe]` (relative to the launcher; restores 0755 once
+    if an unpack dropped the bit), else `vyomi-mcp`, else `vyomi mcp` on PATH; nothing found = one stderr line + exit 127.
+    `launchMcp` spawns with `stdio: inherit`, sets `VYOMI_TUNNEL_BIN` to the entry script (real path), appends node's directory
+    to the child's PATH (the MCP runs `node <entry> list ...`), forwards SIGINT/SIGTERM/SIGHUP and passes the exit code through
+    (128 + signal when killed).
+  - `list --json` is now the contract `{schema: 1, rows: [{where, name, type, address, connect}], notes: [string]}`. Exit 0 with
+    rows, 1 with none, 2 with no credentials or a usage error. JSON on every path but a usage error: no credentials or a bad key
+    print `{schema:1, rows:[], notes:[<error>]}`. `NoMeshSession`/`SessionEnded` mean the key is valid and only the Mesh is down,
+    so the Nano rows are listed and the Mesh gets a `mesh: ...` note (text mode too). Listing calls `openMesh({configure:false})`:
+    it never writes `~/.ssh/config` or `~/.vyomi/ssh_config`; when a row's connect is `ssh <name>.vyomi` and the Include is
+    missing (read-only `sshConfigured()`), a note says `vyomi-tunnel config`. `connect`/`forward` still configure ssh as before.
+  - Help: an "Agents" heading with `vyomi-tunnel mcp`, `help mcp`, and the `--json` contract under `help list`.
+  - Packaging regeneration (no generator exists; the old header pointed at itself): `bin/*.mjs` other than the entry are copies of
+    `wasm/relay/<same>` with only the version stamps changed (`mesh-cli.mjs` `vyomi-tunnel X.Y.Z`, `credentials.mjs`
+    `version = "X.Y.Z"`); the entry is ported by hand. The recipe is now in the entry's header. The 1.2.1 help text that existed
+    only in the packaging copy (`help ssh`, `help troubleshoot`, the https note) was back-ported to the canonical `mesh-cli.mjs`
+    first, so the copy is a pure regeneration.
+  - Tests: `wasm/relay/test-mcp-launch.mjs` (L1-26..L1-28, exit code and SIGTERM passthrough) and `wasm/relay/test-list-json.mjs`
+    (L1-29, auth-error JSON, no ssh edits, usage errors), both `node --test`, against a temp copy / the packaged bin.
+
 ## Design decisions
 | Decision | Alternatives rejected | Why |
 |---|---|---|
@@ -102,19 +129,41 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 | Nano tunnel up but no tab | `reachable: true, serving: false`; it is selected only when it is the only reachable home (so the hint can say "open the tab") and does not make a working mesh ambiguous | spec decision 8 (tab:false hint) + §2 "exactly one reachable" |
 | `VYOMI_ENDPOINT` meaning in v4 | a relay host (`*relay.vyomi.cloud`) or a non-local URL with a path is the Nano cloud relay; a bare host[:port] stays an appliance (Multipass VM IP), as in 3.0.46 | spec §2 (`nano-cloud` endpoint via `VYOMI_ENDPOINT`) + backward compatibility |
 
+### Decisions taken unattended (run 2)
+| Decision point | Default taken | Source of the default |
+|---|---|---|
+| Gate 0a: trunk moved past `41161ac3e` | merged `origin/v4-on-main` @ `debec6ae7` (claims-only commit) as `e7acaff98`, full suite green, pushed | run-2 instructions |
+| Gate 0b: claim | proceed: the only row on the trunk's `SESSION-CLAIMS.md` is this branch's, claiming `wasm/relay/{local-relay,mesh-cli,mcp-launch,test-*}.mjs` and `packaging/tunnel/**` | run-2 instructions |
+| `test-mesh-shell` red on the unchanged base (`simulator refused the shell: HTTP 404`) | environment, not code: the system Python's uvicorn has no WebSocket library. Run with `PY=` a temp venv (fastapi, uvicorn, websockets); no repo change | test header (`PY=<venv>/bin/python`) |
+| How to "regenerate" `packaging/tunnel/bin` (the header named only itself) | copy + version stamps for the shared modules, hand-port for the entry; recipe written into the entry header | how 1.2.1 was actually made (`a10498d75`) |
+| Packaging `mesh-cli.mjs` was ahead of canonical (1.2.1 help text) | back-ported to canonical before editing, so nothing is lost on regeneration | spec §1 (canonical source is `wasm/relay`) |
+| Canonical version strings | unchanged (`1.2.0`, as before: canonical is not stamped per release); packaging stamped `1.3.0` with `package.json` | existing practice |
+| `list --json` key `targets` | dropped (`rows` only, plan T1.3); the two assertions in `test-tunnel-credentials.mjs` that read `.targets` now read `.rows` (+ `schema`). The MCP reads both shapes | plan T1.3, spec §4.3 |
+| `NoMeshSession` / `SessionEnded` | the key is valid: list Nano, note the Mesh; same in text mode (was: nothing listed, exit 1) | plan T1.3 ("still print valid JSON with a note") |
+| Listing and ssh config | never configured by `list`; a note points at `vyomi-tunnel config` when needed | plan T1.3, D0 §2 |
+
 ## Open issues
 - [ ] D0 item 2 (Codespace mesh API target) and item 4 (space semantics on a mesh) need a Pro/Max key and a Mesh Codespace (owner: Rohith)
-- [ ] `vyomi-tunnel list --json` envelope is `{targets, notes}` with no `schema`; the spec says `{rows, notes}` + `schema: 1` (T1, owner: tunnel session)
+- [x] `vyomi-tunnel list --json` envelope: now `{schema: 1, rows, notes}` (T1)
 - [ ] Nano `/health` lists RDS proxies under `vms[]`, never `dbs[]` (owner: tunnel session)
 - [ ] Nano RDS Data API loses state between statements; `e2e-relay.mjs` step 7 fails on the trunk (owner: Nano core)
 - [ ] Console bug: `wasm/docs` AWS `cli` names come from botocore serviceId (`scripts/gen_nano_docs.py:255`), so the Nano console's SDK & CLI tab shows `aws s3 put-object`, `aws secrets-manager ...`, `aws cloudwatch-logs ...`. The MCP corrects them (K2); fix the generator on the trunk and drop `_aws_cli_fix` (owner: Nano docs)
-- [ ] The Codespace probe is not side-effect free: `vyomi-tunnel list mesh` with a Pro key runs `configureSsh({yes:true})` (appends to `~/.ssh/config`) and `gh` (D0 §2). A status call should not edit ssh config; T1 could skip `configureSsh` for `--json` (owner: tunnel session)
+- [x] `vyomi-tunnel list` no longer runs `configureSsh` (T1). It still runs `gh` for a Pro key (that is how it reaches the Codespace)
 - [ ] Codespace API target name (`service` row on :9000) is a guess until D0 item 2 runs; the resolver says so in `detail.api_target` (owner: Rohith)
 - [ ] `gen_mcp_matrix.py` now needs `node` (snippets). `release.yml:156` and `conformance-release.yml:132` run it on GitHub runners (node preinstalled); `ci.yml:35` runs `--check` as a warning only. Confirm node is on every runner that regenerates (owner: integrator)
 - [ ] S1 is a draft: the skills reference `vyomi-tunnel` >= 1.3.0 and `vyomi-tunnel mcp`, which exist only after T1/T2; `plugin.json` still says `vyomi mcp` / 3.0.45. Do not sync the plugin before R1 step 1. The A-tier evals (A-01..A-08) have not run (owner: Rohith)
-- [ ] No claim row in `SESSION-CLAIMS.md`: this branch edits only non-shared paths (`cmd/vyomi/**`, `scripts/gen_mcp_matrix.py`, `scripts/mcp_wiring.json`, docs), and the claims file lives on the trunk (owner: integrator, if a row is wanted)
+- [x] Claim row: on the trunk since `debec6ae7` (`wasm/relay/...`, `packaging/tunnel/**`); remove it when this branch merges (owner: integrator)
+- [ ] `test-amqp-bridge.mjs` needs the vendored Pyodide (`wasm/vendor/pyodide`, absent in a worktree); not run (fixture for a conformance test, unrelated to T1)
 
 ## Testing
+- Run 2, gate 0a (after merging the trunk @ `debec6ae7`): `go test ./...` 59 PASS / 0 FAIL; `gen_mcp_matrix.py --check` OK; relay
+  `test-mesh-link` 29 PASS, `test-mesh-shell` 47 PASS (with `PY=` a venv that has uvicorn + websockets), `test-mesh-session-derived` 4 PASS,
+  `test-mesh-ssh` 23 PASS.
+- T1: `node --test wasm/relay/test-list-json.mjs wasm/relay/test-mcp-launch.mjs` 14 PASS / 0 FAIL (L1-26..L1-29 included; L1-26 builds the real
+  `vyomi-mcp` and drives `initialize` + `tools/list` through the packaged entry with no credentials). The no-ssh-edit test was checked
+  against the 1.2.1 code (`git archive HEAD`): the old `list mesh --json` writes `~/.ssh/config`, so the test fails there. Also green:
+  the four relay tests above, `test-tunnel-credentials`, `test-mesh-ssh-transport`, `test-tunnel-k3s`, `test-keeper`, `test-gw-egress`,
+  `test-gh-manager`, `test-mesh-lazy-hub`, `test-mesh-forwarded-host`, `test-worker-egress`; go 59/0; generator `--check` OK.
 - Base (`41161ac3e`): `cd cmd/vyomi && go test ./...` 28 PASS / 0 FAIL; `python3 scripts/gen_mcp_matrix.py --check` red (stale version stamp only).
 - K1: L1-01 PASS (three outputs byte-identical across two runs; `--check` exit 0). L1-02 PASS (in a `/tmp` copy, `s3.bucket.versioning` `level.nano` full -> limited: `--check` exit 1, names `mcp_matrix.json` and `mcp_caps.json.gz (changed: core/capabilities/aws/s3.json)`). L1-03 PASS (`TestMCPCapsIndexMatchesRegistry`: 1,444 / 86 / 16). L1-04 PASS (`TestMCPDocsSnippetsUsePlaceholder`: 24,636 snippets, all with `{sim}`, none hard-coded).
 - K2: L1-05 PASS (`TestMCPCapabilityIDPrefix`), L1-06 PASS (`TestMCPCapabilityWords`), L1-07 PASS (`TestMCPSnippetNano`, also the cloud-relay URL form), L1-08 PASS (`TestMCPServicesLevels`), L1-09 PASS (`TestMCPInstructionsNoVyomiUpForNano` + `TestMCPInstructionsSteerAwayFromRealCloud`); regression `TestMCPSnippetAWSCLICommandNames`. `go test ./...` 37 PASS / 0 FAIL.
