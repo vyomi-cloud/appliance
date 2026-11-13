@@ -1,39 +1,18 @@
 {
- "at": "2026-11-12T23:09:53+00:00",
+ "at": "2026-11-13T00:10:01+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Amazon RDS, Aurora",
-   "kind": "announcement",
-   "key": "feed:aws:43f3392b4c30",
-   "title": "Amazon Aurora and RDS now support Graviton5-based R9g database instances",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-rds-postgresql-mysql-mariadb-r9g-instances/",
-   "detail": "AWS Graviton5-based R9g database instances are now generally available for Amazon Aurora with PostgreSQL compatibility and MySQL compatibility, and for Amazon RDS for PostgreSQL, MySQL, and MariaDB. Graviton5-based R9g instances provide up to a 30% performance improvement and up to a 22% price-performance improvement for on-demand pricing over Graviton4-based instances of equivalent sizes on Amazon Aurora, depending on database engine, version, and workload. Built on the AWS Nitro System, R9g instances are available in nine sizes, from large to 48xlarge. They deliver up to 192 vCPUs, an 8:1 ra",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon SQS, Amazon SNS, AWS Lambda",
-   "kind": "announcement",
-   "key": "feed:aws:5fc307e94721",
-   "title": "Amazon SNS now supports push notifications in four additional AWS Regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sns-push-four-regions/",
-   "detail": "Amazon Simple Notification Service (Amazon SNS) now supports sending push notifications in the Asia Pacific (Hyderabad), Asia Pacific (Melbourne), Europe (Zurich), and AWS GovCloud (US-East) Regions. Amazon SNS is a fully managed pub/sub service that provides message delivery to multiple endpoints, including AWS Lambda, Amazon SQS, Amazon Data Firehose, HTTP, SMS (via AWS End User Messaging), push notifications, and email. With this launch, customers in these four additional Regions can use Amazon SNS to send push notifications to the following supported push notification services: Amazon Devi",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:dbee50d3ceb7",
-   "title": "Google Kubernetes Engine: Change (November 12, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_12_2026",
-   "detail": "In GKE version 1.35.1-gke.1516000 or later, GKE Dataplane V2 clusters use a unified cilium-cni configuration instead of a chained CNI setup. With this change, Cilium configures the Pod default gateway by using its node-local virtual router interface ( cilium_host ), which has the statically assigned link-local IP address 169.254.4.6 . As a result, node-local kubelet health checks ( kube-probe for liveness, readiness, and startup probes) and NodeLocal DNSCache traffic now originate from 169.254.4.6 instead of the .1 address of the node's Pod CIDR range (for example, 10.x.x.1 ). If your workload",
+   "cloud": "sdk",
+   "service": "pypi:azure-keyvault-keys",
+   "kind": "release",
+   "key": "ver:pypi:azure-keyvault-keys:4.12.0",
+   "title": "pypi:azure-keyvault-keys: 4.11.3 \u2192 4.12.0",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
  ]
 }
