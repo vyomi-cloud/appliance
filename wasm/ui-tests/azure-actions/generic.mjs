@@ -21,8 +21,8 @@ export default [
     await go(blade); await tab("Subnets"); rec("API->UI: subnet created over ARM is listed under Subnets", (await shows(/apisub/)) ? "PASS" : "FAIL");
     try {
       await click(/Subnet/); await sleep(800);
-      const dlg = page.getByRole("dialog").last(); await dlg.getByRole("textbox").first().fill("uisub");
-      const ip = dlg.getByLabel(/Starting address|Address range|Address prefix/i); if (await ip.count()) await ip.first().fill("10.0.2.0");
+      const dlg = page.getByRole("dialog").last(); await dlg.locator("input:not([type=checkbox]):not([type=radio])").first().fill("uisub");
+      const ip = dlg.getByLabel(/Starting address|Address range|Address prefix/i); if (await ip.count()) await ip.first().fill("10.0.2.0").catch(() => {});
       await dlg.getByRole("button", { name: /^(Add|Save|OK|Create)$/ }).first().dispatchEvent("click");
       const ok = await poll(async () => (await arm("GET", `${rp}/subnets/uisub${V}`)).status === 200, 20000);
       rec("UI->API: Add subnet in the console exists in ARM", ok ? "PASS" : "FAIL");
