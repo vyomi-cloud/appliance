@@ -53,6 +53,9 @@ func wiringHome(id string) string {
 	return "offline"
 }
 
+// wiringHomeArg is the `home` tool argument that selects this home id.
+func wiringHomeArg(id string) string { return wiringHome(id) }
+
 // home is one place the simulator may live, as probed.
 type home struct {
 	ID          string         `json:"id"`
@@ -695,4 +698,32 @@ func (s *mcpServer) autoHome() homeSel {
 		sel.Warning = "Several Vyomi homes are reachable; this used the offline default. Ask the user which space they work in and pass home=nano or home=mesh."
 	}
 	return sel
+}
+
+// homeTarget resolves a tool's `home` and applies its host / account overrides. The offline home keeps the
+// legacy target exactly (VYOMI_ENDPOINT / VYOMI_SIMULATOR_PORT / host arg), so 3.0.46-era output is unchanged.
+func (s *mcpServer) homeTarget(arg string, a *mcpTargetArgs) (homeSel, mcpTarget, error) {
+	sel, err := s.resolveHome(arg)
+	if err != nil {
+		return sel, mcpTarget{}, err
+	}
+	if sel.ID == homeOffline {
+		return sel, s.target(a), nil
+	}
+	t := sel.target
+	if a != nil {
+		if h := strings.TrimSpace(a.Host); h != "" {
+			if hh, pp, ok := strings.Cut(h, ":"); ok {
+				h = hh
+				if p, err := strconv.Atoi(pp); err == nil {
+					t.SimPort = p
+				}
+			}
+			t.Host = h
+		}
+		if acc := strings.TrimSpace(a.Account); acc != "" {
+			t.Account = acc
+		}
+	}
+	return sel, t, nil
 }

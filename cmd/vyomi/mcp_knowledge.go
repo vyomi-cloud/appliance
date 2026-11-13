@@ -31,10 +31,11 @@ type mcpMatrix struct {
 
 // mcpHome is one homes.<offline|nano|mesh> block: the client wiring for that kind of home.
 type mcpHome struct {
-	About  string                `json:"about,omitempty"`
-	Source string                `json:"source,omitempty"`
-	SameAs string                `json:"same_as,omitempty"`
-	Clouds map[string]*mcpWiring `json:"clouds"`
+	About        string                `json:"about,omitempty"`
+	Source       string                `json:"source,omitempty"`
+	SameAs       string                `json:"same_as,omitempty"`
+	Clouds       map[string]*mcpWiring `json:"clouds"`
+	ScanWarnings map[string]string     `json:"scan_warnings,omitempty"` // replaces scan.warnings for this home
 }
 
 type mcpDefaults struct {
@@ -157,6 +158,7 @@ func loadMCPMatrix() (*mcpMatrix, error) {
 	return &m, nil
 }
 
+// service finds a released (registry) service, then a v4 service (core/capabilities only, status "v4").
 func (m *mcpMatrix) service(cloud, id string) *mcpService {
 	c := m.Clouds[cloud]
 	if c == nil {
@@ -167,8 +169,16 @@ func (m *mcpMatrix) service(cloud, id string) *mcpService {
 			return &c.Services[i]
 		}
 	}
+	for i := range c.V4Services {
+		if c.V4Services[i].ID == id {
+			return &c.V4Services[i]
+		}
+	}
 	return nil
 }
+
+// emulated: a registry release, or a v4 service from the capability registry.
+func emulated(status string) bool { return status == "released" || status == "v4" }
 
 // mcpTarget is where the simulator is reachable from the developer's machine.
 type mcpTarget struct {
@@ -248,14 +258,45 @@ func (t mcpTarget) render(s string) string {
 	).Replace(s)
 }
 
-// envVars renders a cloud's wiring env block for this target.
-func (s *mcpServer) envVars(cloud string, t mcpTarget) []mcpEnvVar {
-	c := s.matrix.Clouds[cloud]
-	out := make([]mcpEnvVar, 0, len(c.Wiring.Env))
-	for _, v := range c.Wiring.Env {
-		out = append(out, mcpEnvVar{Name: v.Name, Value: t.render(v.Value), Note: t.render(v.Note)})
+// wiring is a cloud's client wiring for a home (homes.<offline|nano|mesh> in the knowledge).
+func (s *mcpServer) wiring(cloud, homeID string) *mcpWiring {
+	if h := s.matrix.Homes[wiringHome(homeID)]; h != nil && h.Clouds[cloud] != nil {
+		return h.Clouds[cloud]
 	}
-	return out
+	return &s.matrix.Clouds[cloud].Wiring
+}
+
+// envVars renders a cloud's wiring env block for this home and target, with the warnings for what the home
+// cannot serve. Nano has no TLS endpoint: a value that needs one is never handed out (spec decision 8);
+// homes.nano lists such settings under `unavailable` with the reason D0 found.
+func (s *mcpServer) envVars(cloud, homeID string, t mcpTarget) ([]mcpEnvVar, []string) {
+	w := s.wiring(cloud, homeID)
+	nano := wiringHome(homeID) == "nano"
+	out := make([]mcpEnvVar, 0, len(w.Env))
+	var warns []string
+	for _, v := range w.Env {
+		val, note := v.Value, v.Note
+		if nano && strings.Contains(val, "{tls_") {
+			warns = append(warns, v.Name+" needs TLS; not available through the Nano tunnel. Use a mesh, or see vyomi_capability.")
+			continue
+		}
+		if homeID == homeNanoCloud {
+			// The cloud relay is one HTTPS URL: no *.localtest.me host routing, no AMQP / TCP (local tunnel only).
+			val = strings.ReplaceAll(val, "http://{account}.queue.localtest.me:{sim_port}", "{sim}/{account}")
+			if strings.HasPrefix(val, "Endpoint=sb://") {
+				warns = append(warns, v.Name+": Service Bus AMQP needs the local tunnel (vyomi-tunnel); the cloud relay carries HTTP only.")
+				continue
+			}
+		}
+		out = append(out, mcpEnvVar{Name: v.Name, Value: t.render(val), Note: t.render(note), Verified: v.Verified})
+	}
+	for _, u := range w.Unavailable {
+		warns = append(warns, u.Name+": "+t.render(u.Warning))
+	}
+	if homeID == homeNanoCloud {
+		warns = append(warns, "Cloud relay: the values follow the local-tunnel findings (D0) and were not verified through the relay; payload caps apply. The local tunnel (vyomi-tunnel) is faster and has no caps.")
+	}
+	return out, warns
 }
 
 // formatEnv renders env vars as dotenv | shell | powershell text.

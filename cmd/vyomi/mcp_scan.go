@@ -39,7 +39,11 @@ type scanHit struct {
 type scanService struct {
 	Service  string    `json:"service"`
 	Name     string    `json:"name,omitempty"`
-	Status   string    `json:"status"` // registry status (e.g. released) | not_emulated
+	Status   string    `json:"status"`              // registry status (e.g. released) | v4 (capability registry only) | not_emulated
+	Level    string    `json:"level,omitempty"`     // worst feature level in the selected home (nano or offline/mesh)
+	Tier     string    `json:"tier,omitempty"`      // "pro" when the service's main feature needs a Pro licence
+	Mesh     bool      `json:"mesh,omitempty"`      // the service's main feature needs a Pro/Max mesh
+	MeshOnly []string  `json:"mesh_only,omitempty"` // single features that need a mesh
 	Uses     int       `json:"uses"`
 	Langs    []string  `json:"langs"`
 	Examples []scanHit `json:"examples"`
@@ -49,6 +53,7 @@ type scanService struct {
 
 type scanReport struct {
 	Root         string                    `json:"root"`
+	Home         string                    `json:"home"`
 	FilesScanned int                       `json:"files_scanned"`
 	Truncated    bool                      `json:"truncated"`
 	Clouds       map[string][]*scanService `json:"clouds"`
@@ -111,7 +116,22 @@ func (s *mcpServer) resolveAlias(cloud, token string) string {
 	return ""
 }
 
-func (s *mcpServer) scanRepo(root string, maxFiles int) (*scanReport, error) {
+// scanWarning is the warning for cloud/svc in a home: the home's own scan_warnings, else the offline ones (which
+// mention TLS :9443 and separate emulators, so they are not used on Nano when they need TLS).
+func (s *mcpServer) scanWarning(key string, sel homeSel) string {
+	if h := s.matrix.Homes[wiringHome(sel.ID)]; h != nil {
+		if w, ok := h.ScanWarnings[key]; ok {
+			return sel.target.render(w)
+		}
+	}
+	w, ok := s.matrix.Scan.Warnings[key]
+	if !ok || (wiringHome(sel.ID) == "nano" && strings.Contains(w, "{tls_")) {
+		return ""
+	}
+	return sel.target.render(w)
+}
+
+func (s *mcpServer) scanRepo(root string, maxFiles int, sel homeSel) (*scanReport, error) {
 	if root == "" || !filepath.IsAbs(root) {
 		return nil, fmt.Errorf("path must be an absolute directory path")
 	}
@@ -132,7 +152,11 @@ func (s *mcpServer) scanRepo(root string, maxFiles int) (*scanReport, error) {
 		exts[e] = true
 	}
 
-	rep := &scanReport{Root: root, Clouds: map[string][]*scanService{}, Unrecognized: map[string][]string{}}
+	rep := &scanReport{Root: root, Home: sel.ID, Clouds: map[string][]*scanService{}, Unrecognized: map[string][]string{}}
+	levelKey := "offline"
+	if wiringHome(sel.ID) == "nano" {
+		levelKey = "nano"
+	}
 	found := map[string]map[string]*scanService{} // cloud → service → entry
 	unknown := map[string]map[string]bool{}
 
@@ -213,9 +237,16 @@ func (s *mcpServer) scanRepo(root string, maxFiles int) (*scanReport, error) {
 						e = &scanService{Service: svc, Status: "not_emulated", langSet: map[string]bool{}}
 						if ms := s.matrix.service(r.cloud, svc); ms != nil {
 							e.Status, e.Name = ms.Status, ms.Name
+							e.Level, e.Tier, e.Mesh, e.MeshOnly = ms.Levels[levelKey], ms.Tier, ms.Mesh, ms.MeshOnly
 						}
-						if w, ok := s.matrix.Scan.Warnings[r.cloud+"/"+svc]; ok {
-							e.Warning = s.target(nil).render(w)
+						e.Warning = s.scanWarning(r.cloud+"/"+svc, sel)
+						if e.Mesh && wiringHome(sel.ID) != "mesh" {
+							// spec decision 9: never silently wired to a home that cannot run it
+							mw := "needs a Pro/Max mesh: its main feature is mesh-only, so it does not run on Nano or the offline appliance."
+							if e.Warning != "" {
+								mw += " " + e.Warning
+							}
+							e.Warning = mw
 						}
 						found[r.cloud][svc] = e
 					}
@@ -274,11 +305,19 @@ func (s *mcpServer) summarize(rep *scanReport) {
 		}
 		var ok, gaps, warns []string
 		langCount := map[string]int{}
+		var meshNeeded []string
 		for _, e := range list {
-			if e.Status != "released" {
+			switch {
+			case !emulated(e.Status):
 				gaps = append(gaps, e.Service)
-			} else {
-				ok = append(ok, e.Service)
+			case e.Mesh && wiringHome(rep.Home) != "mesh":
+				meshNeeded = append(meshNeeded, e.Service)
+			default:
+				lv := e.Service
+				if e.Level != "" {
+					lv += " (" + e.Level + ")"
+				}
+				ok = append(ok, lv)
 			}
 			if e.Warning != "" {
 				warns = append(warns, e.Service)
@@ -288,6 +327,9 @@ func (s *mcpServer) summarize(rep *scanReport) {
 			}
 		}
 		line := fmt.Sprintf("%s: %d service(s) used; emulated: %s", strings.ToUpper(cloud), len(list), joinOrNone(ok))
+		if len(meshNeeded) > 0 {
+			line += "; needs a Pro/Max mesh: " + strings.Join(meshNeeded, ", ")
+		}
 		if len(gaps) > 0 {
 			line += "; NOT emulated: " + strings.Join(gaps, ", ")
 		}
@@ -302,7 +344,7 @@ func (s *mcpServer) summarize(rep *scanReport) {
 				best, bestN = l, langCount[l]
 			}
 		}
-		rep.NextSteps = append(rep.NextSteps, fmt.Sprintf("vyomi_env cloud=%s lang=%s", cloud, best))
+		rep.NextSteps = append(rep.NextSteps, fmt.Sprintf("vyomi_env cloud=%s lang=%s home=%s", cloud, best, wiringHomeArg(rep.Home)))
 		if len(gaps) > 0 {
 			rep.NextSteps = append(rep.NextSteps, fmt.Sprintf("%s services %s are not emulated: keep them on the real cloud (or stub them) during local runs.", strings.ToUpper(cloud), strings.Join(gaps, ", ")))
 		}
@@ -310,7 +352,7 @@ func (s *mcpServer) summarize(rep *scanReport) {
 	if len(rep.AlreadyWired) > 0 {
 		rep.NextSteps = append(rep.NextSteps, "Endpoint overrides already exist (see already_wired): reuse them instead of adding new ones.")
 	}
-	rep.NextSteps = append(rep.NextSteps, "With the user's OK: vyomi_write_env path=<project> clouds=[...]")
+	rep.NextSteps = append(rep.NextSteps, "With the user's OK: vyomi_write_env path=<project> clouds=[...] home="+wiringHomeArg(rep.Home))
 }
 
 func joinOrNone(xs []string) string {

@@ -1,0 +1,133 @@
+{
+  "cloud": "azure",
+  "endpoint": "http://127.0.0.1:9000",
+  "env_text": "# Vyomi: AZURE\n# Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1.\nAZURE_STORAGE_CONNECTION_STRING=\"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:9000/devstoreaccount1;QueueEndpoint=http://devstoreaccount1.queue.localtest.me:9000;\"\nAZURE_STORAGE_ACCOUNT=devstoreaccount1\n# The only subscription a space has; any other id returns SubscriptionNotFound.\nAZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-cloudlearn01\n# Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted.\nAZURE_RESOURCE_MANAGER_ENDPOINT=http://127.0.0.1:9000\n# Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate.\nAZURE_COSMOS_ENDPOINT=https://127.0.0.1:9443/azure-data/cosmos/devstoreaccount1\nAZURE_COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==\n# Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form.\nAZURE_KEYVAULT_URL=https://cloudlearn.vault.localtest.me:9443\n",
+  "notes": [
+    "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under http://127.0.0.1:9000/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+    "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
+  ],
+  "sdk": {
+    "cli": {
+      "config": {
+        "ARM endpoint": "set AZURE_RESOURCE_MANAGER_HOSTNAME to the simulator host (e.g. 192.168.252.7:9000) — the simulator serves /subscriptions/... ARM routes",
+        "subscription": "the space has one subscription, 00000000-0000-0000-0000-cloudlearn01 (GET /subscriptions returns it, as `az login` reads it); any other id is SubscriptionNotFound, as in Azure"
+      },
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "az vm list --resource-group rg-demo",
+        "az storage account list --resource-group rg-demo",
+        "az sql server list --resource-group rg-demo",
+        "az servicebus namespace list --resource-group rg-demo",
+        "az cosmosdb list --resource-group rg-demo",
+        "az functionapp list --resource-group rg-demo",
+        "az apim list --resource-group rg-demo",
+        "az network vnet list --resource-group rg-demo",
+        "az eventgrid topic list --resource-group rg-demo",
+        "az keyvault list --resource-group rg-demo",
+        "az role assignment list"
+      ],
+      "notes": "Azure CLI dev usage in the simulator: point ARM at the simulator host. Real az CLI binaries work for any service whose ARM operation is implemented (covered by the 11 service packs in packs/azure/).",
+      "status": "partial",
+      "tool": "az"
+    },
+    "go": {
+      "config": {
+        "ARM endpoint": "http://127.0.0.1:9000",
+        "ClientOptions": "arm.ClientOptions{ClientOptions: azcore.ClientOptions{Cloud: cloud.Configuration{Services: map[cloud.ServiceName]cloud.ServiceConfiguration{cloud.ResourceManager: {Endpoint: endpoint, Audience: endpoint}}}}}",
+        "credentials": "azidentity.NewDefaultAzureCredential — simulator accepts any token"
+      },
+      "dependency": "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/* (armcompute, armstorage, armsql, armservicebus, armcosmos, armappservice, armapimanagement, armnetwork, armeventgrid, armkeyvault, armauthorization)",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Configure cloud.Configuration to point ResourceManager at the simulator base URL.",
+        "Real conformance test in tests/conformance/azure-sdk-go/ proves armcompute/armstorage/armsql/armservicebus/armcosmos round-trip."
+      ],
+      "status": "integrated",
+      "tool": "azure-sdk-for-go"
+    },
+    "java": {
+      "config": {
+        "ARM endpoint": "http://127.0.0.1:9000",
+        "AzureProfile": "AzureProfile(AzureEnvironment.AZURE).withSubscription('00000000-0000-0000-0000-cloudlearn01')",
+        "credentials": "AzureCliCredential or DefaultAzureCredential — simulator accepts any"
+      },
+      "dependency": "com.azure:azure-resourcemanager-* (com.azure:azure-resourcemanager-compute, -storage, -sql, -servicebus, -cosmos, -appservice, -apimanagement, -network, -eventgrid, -keyvault, -authorization)",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Use AzureResourceManager.authenticate() with a profile that points HttpClient at the simulator.",
+        "Real conformance test in tests/conformance/azure-sdk-java/ proves armcompute/armstorage/armsql/armservicebus/armcosmos round-trip."
+      ],
+      "status": "integrated",
+      "tool": "azure-sdk-for-java"
+    },
+    "nodejs": {
+      "config": {
+        "$host": "http://127.0.0.1:9000",
+        "credentials": "DefaultAzureCredential",
+        "subscriptionId": "00000000-0000-0000-0000-cloudlearn01"
+      },
+      "dependency": "@azure/arm-compute (and other @azure/arm-* packages)",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Pass $host option to each management client constructor.",
+        "Use DefaultAzureCredential — simulator accepts any token."
+      ],
+      "status": "partial",
+      "tool": "azure-sdk-for-js"
+    },
+    "python": {
+      "config": {
+        "base_url": "http://127.0.0.1:9000",
+        "credentials": "DefaultAzureCredential",
+        "subscription_id": "00000000-0000-0000-0000-cloudlearn01"
+      },
+      "dependency": "azure-mgmt-compute (and other azure-mgmt-* packages)",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Pass base_url to each management client constructor.",
+        "Use DefaultAzureCredential — simulator accepts any token."
+      ],
+      "status": "partial",
+      "tool": "azure-sdk-for-python"
+    }
+  },
+  "terraform": {
+    "hcl": "",
+    "note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at http://127.0.0.1:9000."
+  },
+  "variables": [
+    {
+      "name": "AZURE_STORAGE_CONNECTION_STRING",
+      "value": "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:9000/devstoreaccount1;QueueEndpoint=http://devstoreaccount1.queue.localtest.me:9000;",
+      "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1."
+    },
+    {
+      "name": "AZURE_STORAGE_ACCOUNT",
+      "value": "devstoreaccount1"
+    },
+    {
+      "name": "AZURE_SUBSCRIPTION_ID",
+      "value": "00000000-0000-0000-0000-cloudlearn01",
+      "note": "The only subscription a space has; any other id returns SubscriptionNotFound."
+    },
+    {
+      "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+      "value": "http://127.0.0.1:9000",
+      "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted."
+    },
+    {
+      "name": "AZURE_COSMOS_ENDPOINT",
+      "value": "https://127.0.0.1:9443/azure-data/cosmos/devstoreaccount1",
+      "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate."
+    },
+    {
+      "name": "AZURE_COSMOS_KEY",
+      "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+    },
+    {
+      "name": "AZURE_KEYVAULT_URL",
+      "value": "https://cloudlearn.vault.localtest.me:9443",
+      "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form."
+    }
+  ]
+}

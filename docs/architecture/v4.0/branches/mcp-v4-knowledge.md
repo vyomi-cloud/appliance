@@ -57,6 +57,17 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
   default). Nano: `nano` (tunnel whitelist) and `running` = tab connected. `vyomi_reach {scope}` builds `{where,name,type,address,connect}`
   rows from the cached probes (tunnel `/health`: api, amqp, VMs, DBs; local mesh API; Codespace `list` rows) plus notes; it starts nothing,
   and the tunnel probe's process group is reaped after it exits.
+- **H3 — env, scan, write_env (and services) take `home`** (`mcp_tools.go`, `mcp_scan.go`, `mcp_knowledge.go`, `mcp_homes.go`).
+  `homeTarget` resolves `home` (auto/nano/mesh/offline); the offline home keeps the legacy target exactly. `envVars(cloud, home, target)`
+  reads `homes.<offline|nano|mesh>`, drops any `{tls_*}` value on Nano with a warning, returns `unavailable` as warnings, and for the
+  cloud relay rewrites the host-style Queue endpoint to path-style and drops AMQP. `vyomi_env` stamps `home` and adds `warnings`.
+  `vyomi_scan_repo` findings carry `level` (Nano or offline column), `tier`, `mesh`, `mesh_only`; v4-only services (`aks`, `eks`, `bedrock`...)
+  are `status: v4` (emulated) instead of "not emulated"; a mesh-anchored service on a Nano/offline home gets "needs a Pro/Max mesh" and is
+  listed separately in the summary; Nano uses `homes.nano.scan_warnings` instead of the offline ones (which talk about :9443 and gRPC
+  emulators); next steps carry `home=`. New scan aliases: `containerservice`, `armcontainerservice`, `kubernetes` -> `aks`.
+  `vyomi_write_env` header `# Vyomi <home> <endpoint> — generated <RFC3339>`, filenames must start with `.env.vyomi`, an existing
+  non-regular file (symlink) is never written through, and unavailable settings become `# WARNING` comments. `vyomi_services home=` says which
+  `levels` column applies.
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |
@@ -68,6 +79,8 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 | K1 `--check` compares the *decompressed* JSON of the `.gz` outputs; writes are deterministic (sorted keys, `mtime=0`, no name, level 9) | byte-compare the `.gz` files | deflate output can differ across zlib builds (macOS vs Ubuntu, zlib-ng), which would make CI flaky for no content change. L1-01 (byte-identical twice on one machine) still holds |
 | K1 service-level `tier`/`mesh` = the service's anchor (first) capability; extras listed in `mesh_only` / `pro_capabilities` | any capability mesh-only => service mesh-only; all => service | "any" would mark all of Lambda and Bedrock mesh-only (one extra each); "all" would miss AKS/GKE, whose clusters (the anchor) need a mesh |
 | K2 the MCP corrects AWS CLI command words in snippets (`s3`->`s3api`, `secrets-manager`->`secretsmanager`, `cloudwatch-logs`->`logs`, `sfn`->`stepfunctions`, ...) in the generator | hand out the console's snippet verbatim | `wasm/docs` takes the CLI word from botocore's serviceId, so ~15 AWS APIs give commands that do not exist; an agent would run them. Root fix belongs in `scripts/gen_nano_docs.py:255` (trunk) |
+| H3: offline `vyomi_env` checked against goldens from `42d870e` for all three clouds (`testdata/mcp_env_*_offline_42d870e.golden.json`) | Azure only (as L1-23 says) | the offline home must not change for any cloud; the goldens were produced by building `42d870e`'s `cmd/vyomi` from `git archive` in `/tmp` |
+| H3: `write_env` refuses to write through a symlink even with `overwrite=true` | keep `os.WriteFile` following links | an `.env.vyomi` symlink could point outside the project; found while adding the `.env.vyomi*` rule (regression test added) |
 | K1 per-service `levels` = worst level (as the plan says), plus `level_counts` | worst only | S3 is 11 full / 36 limited: "limited" alone hides that most of it works |
 
 ### Decisions taken unattended
@@ -100,4 +113,6 @@ Out of scope for this branch: distribution (T1/T2, `vyomi-tunnel mcp`), the plug
 - K2: L1-05 PASS (`TestMCPCapabilityIDPrefix`), L1-06 PASS (`TestMCPCapabilityWords`), L1-07 PASS (`TestMCPSnippetNano`, also the cloud-relay URL form), L1-08 PASS (`TestMCPServicesLevels`), L1-09 PASS (`TestMCPInstructionsNoVyomiUpForNano` + `TestMCPInstructionsSteerAwayFromRealCloud`); regression `TestMCPSnippetAWSCLICommandNames`. `go test ./...` 37 PASS / 0 FAIL.
 - H1: L1-10..L1-16 PASS (`TestMCPHomesNanoOnly`, `...MeshOnly`, `...Offline`, `...Ambiguous`, `...Codespace`, `...CodespaceTimeout` (8.0 s, no child left), `...MeshWhitelist`) + `TestMCPHomesCache`. `go test -race` clean; `GOOS=windows go vet` clean. All tests hide any real `vyomi-tunnel`/credentials (`isolateHomes`) and probing tests use dead ports (`deadHomes`). Manual: the built binary against this machine saw the headless Nano tab (`nano-local`, serving) and a Docker offline appliance on `:9000`, and correctly selected nothing.
 - H2: L1-17 PASS (`TestMCPStatusNanoNoTab`), L1-18 PASS (`TestMCPStatusMeshLocked`), L1-19 PASS (`TestMCPStatusNothingReachable`, also tunnel-installed and explicit-offline-down cases), L1-20 PASS (`TestMCPReach`: rows from `/health` + `list`, the fake tunnel's backgrounded `sleep` is gone after the call); `TestMCPStatusOtherHints` (ambiguous, Codespace forward, relay down, multi-space mesh). L1-13's "hint asks which space" is covered here. `go test -race` clean.
+- H3: L1-21 PASS (`TestMCPEnvNanoAWS`), L1-22 PASS (`TestMCPEnvNanoAzure`, plus GCP), L1-23 PASS (`TestMCPEnvOfflineGolden`, all three clouds), L1-24 PASS (`TestMCPScanNanoHome`), L1-25 PASS (`TestMCPWriteEnvHome`); plus `TestMCPEnvNanoCloudRelay`, `TestMCPWriteEnvRefusesSymlink` (regression), `TestMCPServicesHome`. `go test ./...` 58 PASS / 0 FAIL; `-race` clean; `GOOS=windows go vet` clean.
+- Headless end-to-end (an L2-02/L2-03 equivalent without a real Chrome): `vyomi_env home=nano` output for aws, azure and gcp, sourced as shell env, drove boto3 (S3 create/list), azure-storage-blob (upload/download) and google-cloud-storage (bucket/upload/list) against the headless Nano tab through the local relay: all three worked.
 - D0: headless Nano tab via Playwright + local relay; real Python SDKs; results in `MCP-V4-DISCOVERY.md`. Not run: the local portal on `:8099` with the service worker, a real Chrome tab, the cloud relay.

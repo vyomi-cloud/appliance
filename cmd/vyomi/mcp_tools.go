@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type mcpTool struct {
@@ -80,6 +81,7 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			Schema: obj(map[string]any{
 				"cloud": cloudEnum,
 				"live":  map[string]any{"type": "boolean", "description": "Merge live state from the running simulator (default true)."},
+				"home":  homeProp,
 			}),
 			ReadOnly: true,
 			handler:  s.toolServices,
@@ -119,6 +121,7 @@ func (s *mcpServer) buildTools() []*mcpTool {
 				"format":  map[string]any{"type": "string", "enum": []string{"dotenv", "shell", "powershell"}, "description": "Format of env_text (default dotenv)."},
 				"host":    hostProp,
 				"account": accountArg,
+				"home":    homeProp,
 			}, "cloud"),
 			ReadOnly: true,
 			handler:  s.toolEnv,
@@ -130,6 +133,7 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			Schema: obj(map[string]any{
 				"path":      map[string]any{"type": "string", "description": "Absolute path of the project directory."},
 				"max_files": map[string]any{"type": "integer", "minimum": 1, "maximum": 50000, "description": "Stop after this many files (default 5000)."},
+				"home":      homeProp,
 			}, "path"),
 			ReadOnly: true,
 			handler:  s.toolScanRepo,
@@ -141,10 +145,11 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			Schema: obj(map[string]any{
 				"path":      map[string]any{"type": "string", "description": "Absolute path of the project directory."},
 				"clouds":    map[string]any{"type": "array", "items": cloudEnum, "minItems": 1, "description": "Clouds to include (e.g. from vyomi_scan_repo)."},
-				"filename":  map[string]any{"type": "string", "description": "File name (default .env.vyomi). No directories."},
+				"filename":  map[string]any{"type": "string", "description": "File name starting with .env.vyomi (default .env.vyomi). No directories."},
 				"overwrite": map[string]any{"type": "boolean", "description": "Replace an existing file (default false)."},
 				"host":      hostProp,
 				"account":   accountArg,
+				"home":      homeProp,
 			}, "path", "clouds"),
 			handler: s.toolWriteEnv,
 		},
@@ -528,6 +533,7 @@ func (s *mcpServer) toolServices(raw json.RawMessage) (any, error) {
 	var a struct {
 		Cloud string `json:"cloud"`
 		Live  *bool  `json:"live"`
+		Home  string `json:"home"`
 	}
 	if err := decodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -551,6 +557,18 @@ func (s *mcpServer) toolServices(raw json.RawMessage) (any, error) {
 		},
 		"levels_legend": "levels{nano,offline}: the WORST level among the service's features (full > limited > config_only > not_simulated); level_counts shows the spread. nano = the browser tab, offline = the Docker appliance / mesh. tier/mesh describe the service's main feature: mesh=true means it needs a Pro/Max mesh; mesh_only lists single features that do. Ask vyomi_capability for one feature.",
 		"live":          reachable,
+	}
+	if a.Home != "" {
+		sel, err := s.resolveHome(a.Home)
+		if err != nil {
+			return nil, err
+		}
+		key := "offline"
+		if wiringHome(sel.ID) == "nano" {
+			key = "nano"
+		}
+		result["home"] = sel.ID
+		result["level_key"] = "levels." + key + " applies to the " + sel.ID + " home"
 	}
 	out := map[string]any{}
 	for _, cloud := range clouds {
@@ -598,6 +616,7 @@ func (s *mcpServer) toolEnv(raw json.RawMessage) (any, error) {
 		Cloud  string `json:"cloud"`
 		Lang   string `json:"lang"`
 		Format string `json:"format"`
+		Home   string `json:"home"`
 		mcpTargetArgs
 	}
 	if err := decodeArgs(raw, &a); err != nil {
@@ -606,19 +625,30 @@ func (s *mcpServer) toolEnv(raw json.RawMessage) (any, error) {
 	if !validCloud(a.Cloud) {
 		return nil, fmt.Errorf("cloud is required: aws, gcp or azure")
 	}
-	t := s.target(&a.mcpTargetArgs)
+	sel, t, err := s.homeTarget(a.Home, &a.mcpTargetArgs)
+	if err != nil {
+		return nil, err
+	}
 	c := s.matrix.Clouds[a.Cloud]
-	vars := s.envVars(a.Cloud, t)
-	notes := make([]string, 0, len(c.Wiring.Notes))
-	for _, n := range c.Wiring.Notes {
+	w := s.wiring(a.Cloud, sel.ID)
+	vars, warns := s.envVars(a.Cloud, sel.ID, t)
+	notes := make([]string, 0, len(w.Notes))
+	for _, n := range w.Notes {
 		notes = append(notes, t.render(n))
 	}
 	out := map[string]any{
 		"cloud":     a.Cloud,
+		"home":      sel.ID,
 		"endpoint":  t.simURL(),
 		"variables": vars,
 		"env_text":  formatEnv(a.Cloud, vars, a.Format),
 		"notes":     notes,
+	}
+	if sel.Warning != "" {
+		warns = append([]string{sel.Warning}, warns...)
+	}
+	if len(warns) > 0 {
+		out["warnings"] = warns
 	}
 	langs := sortedKeys(c.Tools)
 	if a.Lang != "" && a.Lang != "terraform" {
@@ -637,9 +667,9 @@ func (s *mcpServer) toolEnv(raw json.RawMessage) (any, error) {
 		out["sdk"] = sdk
 	}
 	if a.Lang == "" || a.Lang == "terraform" {
-		tf := map[string]any{"hcl": t.render(c.Wiring.Terraform)}
-		if c.Wiring.TerraformNote != "" {
-			tf["note"] = t.render(c.Wiring.TerraformNote)
+		tf := map[string]any{"hcl": t.render(w.Terraform)}
+		if w.TerraformNote != "" {
+			tf["note"] = t.render(w.TerraformNote)
 		}
 		out["terraform"] = tf
 	}
@@ -650,6 +680,7 @@ func (s *mcpServer) toolScanRepo(raw json.RawMessage) (any, error) {
 	var a struct {
 		Path     string `json:"path"`
 		MaxFiles int    `json:"max_files"`
+		Home     string `json:"home"`
 	}
 	if err := decodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -657,7 +688,11 @@ func (s *mcpServer) toolScanRepo(raw json.RawMessage) (any, error) {
 	if a.MaxFiles <= 0 {
 		a.MaxFiles = 5000
 	}
-	return s.scanRepo(a.Path, a.MaxFiles)
+	sel, err := s.resolveHome(a.Home)
+	if err != nil {
+		return nil, err
+	}
+	return s.scanRepo(a.Path, a.MaxFiles, sel)
 }
 
 func (s *mcpServer) toolWriteEnv(raw json.RawMessage) (any, error) {
@@ -666,6 +701,7 @@ func (s *mcpServer) toolWriteEnv(raw json.RawMessage) (any, error) {
 		Clouds    []string `json:"clouds"`
 		Filename  string   `json:"filename"`
 		Overwrite bool     `json:"overwrite"`
+		Home      string   `json:"home"`
 		mcpTargetArgs
 	}
 	if err := decodeArgs(raw, &a); err != nil {
@@ -687,12 +723,24 @@ func (s *mcpServer) toolWriteEnv(raw json.RawMessage) (any, error) {
 	if name != filepath.Base(name) || name == "." || name == ".." {
 		return nil, fmt.Errorf("filename must be a plain file name, got %q", a.Filename)
 	}
-	dest := filepath.Join(a.Path, name)
-	if _, err := os.Lstat(dest); err == nil && !a.Overwrite {
-		return nil, fmt.Errorf("%s already exists; pass overwrite=true to replace it", dest)
+	if !strings.HasPrefix(name, ".env.vyomi") {
+		return nil, fmt.Errorf("filename must start with .env.vyomi (got %q): the MCP never writes the project's own .env or other files", name)
 	}
-	t := s.target(&a.mcpTargetArgs)
+	dest := filepath.Join(a.Path, name)
+	if st, err := os.Lstat(dest); err == nil {
+		if !a.Overwrite {
+			return nil, fmt.Errorf("%s already exists; pass overwrite=true to replace it", dest)
+		}
+		if !st.Mode().IsRegular() {
+			return nil, fmt.Errorf("%s is not a regular file (a symlink?); refusing to write through it", dest)
+		}
+	}
+	sel, t, err := s.homeTarget(a.Home, &a.mcpTargetArgs)
+	if err != nil {
+		return nil, err
+	}
 	var b strings.Builder
+	fmt.Fprintf(&b, "# Vyomi %s %s — generated %s\n", sel.ID, t.simURL(), time.Now().UTC().Format(time.RFC3339))
 	fmt.Fprintf(&b, "# Generated by `vyomi mcp` (appliance v%s). Local development only:\n", s.version)
 	fmt.Fprintf(&b, "# points cloud SDKs at the Vyomi simulator (%s). Dummy credentials only.\n\n", t.simURL())
 	seen := map[string]bool{}
@@ -704,7 +752,11 @@ func (s *mcpServer) toolWriteEnv(raw json.RawMessage) (any, error) {
 			continue
 		}
 		seen[c] = true
-		b.WriteString(formatEnv(c, s.envVars(c, t), "dotenv"))
+		vars, warns := s.envVars(c, sel.ID, t)
+		for _, w := range warns {
+			fmt.Fprintf(&b, "# WARNING (%s): %s\n", strings.ToUpper(c), w)
+		}
+		b.WriteString(formatEnv(c, vars, "dotenv"))
 		b.WriteString("\n")
 	}
 	if err := os.WriteFile(dest, []byte(b.String()), 0o644); err != nil {
@@ -712,6 +764,7 @@ func (s *mcpServer) toolWriteEnv(raw json.RawMessage) (any, error) {
 	}
 	return map[string]any{
 		"written": dest,
+		"home":    sel.ID,
 		"content": b.String(),
 		"next":    "Load it only for local runs (e.g. `set -a; . ./" + name + "; set +a`, docker compose --env-file, or your framework's dotenv loader). Keep production config untouched.",
 	}, nil
@@ -760,7 +813,8 @@ func (s *mcpServer) readResource(uri string) ([]map[string]any, error) {
 		if !validCloud(c) {
 			return nil, fmt.Errorf("unknown resource %s", uri)
 		}
-		return text("text/plain", formatEnv(c, s.envVars(c, s.target(nil)), "dotenv")), nil
+		vars, _ := s.envVars(c, homeOffline, s.target(nil))
+		return text("text/plain", formatEnv(c, vars, "dotenv")), nil
 	}
 	return nil, fmt.Errorf("unknown resource %s", uri)
 }
