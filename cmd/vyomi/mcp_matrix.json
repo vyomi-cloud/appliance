@@ -1,5 +1,5 @@
 {
- "appliance_version": "3.0.47",
+ "appliance_version": "4.0.0",
  "clouds": {
   "aws": {
    "display_name": "AWS",
