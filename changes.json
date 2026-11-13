@@ -1,27 +1,8 @@
 {
- "at": "2026-11-13T02:09:58+00:00",
+ "at": "2026-11-13T03:10:03+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:4023575fdd54",
-   "title": "Google Kubernetes Engine: Feature (November 12, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_12_2026",
-   "detail": "Agent Sandbox on GKE is generally available and runs on any supported GKE version. Agent Sandbox on GKE is optimized for running isolated, stateful, single-replica workloads, such as AI agents, at no additional cost. You can install Agent Sandbox on GKE by using the open source Agent Sandbox installation . For more information, see About Agent Sandbox on GKE and Install Agent Sandbox on GKE .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:d0a9d07754db",
-   "title": "Google Kubernetes Engine: Feature (November 12, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_12_2026",
-   "detail": "Agent Gateway for GKE is now available in Preview in the Rapid channel on clusters running GKE version 1.37.2-gke.1042000 or later. Agent Gateway provides a centralized management layer to control traffic flowing to, from, and between your agents on GKE. This feature is supported in the following regions: europe-west1 us-central1 For more information, see Agent Gateway for GKE .",
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+ ]
 }
