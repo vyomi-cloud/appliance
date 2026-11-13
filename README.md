@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-13 20:49 UTC · refreshes after every pipeline run_
+_Updated 2026-11-13 21:19 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-13 20:49 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
-- **Upstream watch:** 50 open changes from the real clouds to adopt
+- **Upstream watch:** 62 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -79,15 +79,15 @@ _Updated 2026-11-13 20:49 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 7 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 15 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | DynamoDB | — | not audited | 🧩 18/19 · 🧩 18/19 | 0 · 0 | ✅ watched | before gate |
 | SQS | — | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
-| Lambda | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ✅ watched | before gate |
+| Lambda | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+lambda) | before gate |
 | API Gateway | caddy · Lite | not audited | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+apigateway) | before gate |
-| VPC | — | not audited | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ⚠️ 7 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| VPC | — | not audited | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ⚠️ 15 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 13/14 · 🧩 13/14 | 0 · 0 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ⚠️ 8 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+secretsmanager) | before gate |
 | KMS | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ✅ watched | before gate |
