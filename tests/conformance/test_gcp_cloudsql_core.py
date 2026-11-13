@@ -57,6 +57,8 @@ def run() -> int:
     _check("insert instance databaseVersion echoed", inst["databaseVersion"] == "POSTGRES_15")
     _check("insert instance tier echoed", inst["settings"]["tier"] == "db-custom-1-3840")
     _check("insert instance connectionName", inst["connectionName"] == "demo-proj:us-central1:appdb")
+    _check("insert instance createTime is an RFC3339 timestamp (console Created column)",
+           bool(__import__("re").match(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$", inst.get("createTime", ""))))
 
     # 1b. duplicate instance -> 409 ALREADY_EXISTS
     dup = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},

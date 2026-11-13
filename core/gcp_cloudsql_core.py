@@ -378,6 +378,7 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         "settings": settings,
         "diskEncryptionConfiguration": body.get("diskEncryptionConfiguration") or None,
         "etag": _etag(),
+        "createTime": _now_iso(),  # real instances.get always carries createTime (console "Created" column)
         "databases": {},  # name -> database metadata (control-plane view)
         "users": {},       # "name@host" -> user metadata
         "operations": [],  # most-recent-first
