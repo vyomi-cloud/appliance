@@ -30,7 +30,8 @@ if (ONLY.includes("eks")) { try { const n = "rtprobe" + Date.now().toString(36);
 const check = (name, ok, extra = "") => {
   const m = /^\[(\w+)\] ([ABCD]) /.exec(name); const why = m && (SKIP[`${m[1]}:*`] || SKIP[`${m[1]}:${m[2]}`]);
   if (why && !ok) { skipped.push(name); console.log(`[SKIP] ${name} :: ${why}`); return; } results.push(ok); console.log(`[${ok ? "PASS" : "FAIL"}] ${name}${ok ? "" : " :: " + extra}`); };
-const vis = (sel, re) => page.locator(sel, { hasText: re }).filter({ visible: true });
+// never match the feedback widget (hidden "Submit" .vyfb-send sorts last and swallowed the form's Create click)
+const vis = (sel, re) => page.locator(`:is(${sel}):not(.vyfb-send, .vyfb-send *)`, { hasText: re }).filter({ visible: true });
 const ROUTES = { s3: ["s3", "s3/create"], sqs: ["sqs/queues", "sqs/create-queue"], sns: ["sns/topics", "sns/create-topic"], dynamodb: ["dynamodb/tables", "dynamodb/create-table"],
   kms: ["kms/customer-managed-keys", "kms/create-key"], secretsmanager: ["secretsmanager/listsecrets", "secretsmanager/newsecret"], iam: ["iam/users", "iam/create-user"], vpc: ["vpc/vpcs", "vpc/create-vpc"],
   ec2: ["ec2/key-pairs", "ec2/create-key-pair"], ssm: ["ssm/parameters", "ssm/create-parameter"], kinesis: ["kinesis/streams", "kinesis/streams/create"], ecr: ["ecr/repositories", null],
@@ -62,10 +63,11 @@ async function uiCreate(svc, name) {
     for (const ph of [/choose a recipe/i, /choose an infrastructure/i]) { await vis("button", ph).first().click({ timeout: 8000 }); await sleep(400); await page.locator("[role=option]:visible").first().click({ timeout: 8000 }); await sleep(300); }
   }
   const els = svc === "imagebuilder" || svc === "cloudformation" ? page.locator("input[aria-label='__none__']") : page.locator(INP);
-  for (let i = 0; i < await els.count(); i++) { const e = els.nth(i); const v = await e.inputValue().catch(() => "x"); if (!v && /s3\.amazonaws\.com/.test((await e.getAttribute("placeholder")) || "")) { await e.fill("https://s3.amazonaws.com/rt-cfn-templates/t.json").catch(() => {}); continue; } if (!v || /^(my|My|Music|new-|database-|\/vyomi|\/aws|default)/.test(v)) await e.fill(name).catch(() => {}); }
+  for (let i = 0; i < await els.count(); i++) { const e = els.nth(i); if (/optional/i.test((await e.getAttribute("aria-label")) || "")) continue; const v = await e.inputValue().catch(() => "x"); if (!v && /s3\.amazonaws\.com/.test((await e.getAttribute("placeholder")) || "")) { await e.fill("https://s3.amazonaws.com/rt-cfn-templates/t.json").catch(() => {}); continue; } if (!v || /^(my|My|Music|new-|database-|\/vyomi|\/aws|default)/.test(v)) await e.fill(name).catch(() => {}); }
   step = "submit";
-  for (let i = 0; i < (svc === "cloudformation" ? 0 : 8); i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); const e2 = page.locator(INP); for (let j = 0; j < await e2.count(); j++) { const e = e2.nth(j); if (!(await e.inputValue().catch(() => "x"))) await e.fill(name).catch(() => {}); } }
-  await vis("button", /^\s*(create|add|launch|store|save|finish|submit)\b/i).last().click({ timeout: 8000 }); await sleep(3000);
+  for (let i = 0; i < (svc === "cloudformation" ? 0 : 8); i++) { const nx = vis("button", /^\s*next\b/i); if (await nx.count() === 0) break; await nx.last().click(); await sleep(500); const e2 = page.locator(INP); for (let j = 0; j < await e2.count(); j++) { const e = e2.nth(j); if (/optional/i.test((await e.getAttribute("aria-label")) || "")) continue; if (!(await e.inputValue().catch(() => "x"))) await e.fill(name).catch(() => {}); } }
+  // the form's own submit: not the feedback widget and not a (hidden) modal such as DynamoDB's "Create global index"
+  await page.locator("button:not(.vyfb-send):not([role=dialog] *)", { hasText: /^\s*(create|add|launch|store|save|finish|submit)\b/i }).filter({ visible: true }).last().click({ timeout: 8000 }); await sleep(3000);
 }
 async function uiDelete(svc, name) {
   step = "open list"; await go(svc);
@@ -76,7 +78,8 @@ async function uiDelete(svc, name) {
   else { const lnk = row.locator("a").first(); await lnk.click({ timeout: 8000 }); await sleep(2500); step = "select row (opened detail page)"; }
   step = "delete action";
   const DEL = /^\s*(permanently )?(delete|terminate|remove|schedule (key )?deletion)/i;
-  const direct = vis("button, a", DEL);
+  // page-level delete only: the (hidden) confirmation modal and its disabled Delete button are always in the DOM
+  const direct = page.locator("button:not([disabled]):not([role=dialog] *), a:not([role=dialog] *)", { hasText: DEL }).filter({ visible: true });
   if (await direct.count()) await direct.first().click({ timeout: 8000 });
   else { await vis("button", /^\s*(key )?actions\b/i).first().click({ timeout: 8000 }); await sleep(400); await vis("[role=menuitem], li, a, span", DEL).first().click({ timeout: 8000 }); }
   await sleep(1000);
