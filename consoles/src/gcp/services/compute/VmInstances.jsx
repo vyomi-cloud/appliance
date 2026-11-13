@@ -47,7 +47,9 @@ export default function VmInstances() {
     for (const k of sel) {
       const inst = byKey(k);
       if (!inst) continue;
-      try { await api.instanceAction(inst._zoneScope, inst.name, action); }
+      // "Start / Resume": a SUSPENDED VM is resumed (instances.resume); instances.start only accepts a stopped one.
+      const verb = action === "start" && inst.status === "SUSPENDED" ? "resume" : action;
+      try { await api.instanceAction(inst._zoneScope, inst.name, verb); }
       catch (e) { notify.error(`${action} failed for ${inst.name}: ${e.message}`); }
     }
     notify.success(`Requested "${action}" for ${sel.length} instance${sel.length === 1 ? "" : "s"}`);
@@ -147,7 +149,7 @@ export default function VmInstances() {
 
       <Menu anchorEl={menu?.el} open={!!menu} onClose={() => setMenu(null)}>
         {["start", "stop", "suspend", "reset"].map((a) => (
-          <MenuItem key={a} onClick={async () => { const inst = menu.inst; setMenu(null); try { await api.instanceAction(inst._zoneScope, inst.name, a); notify.success(`${a} requested for "${inst.name}"`); reload(); } catch (e) { notify.error(e.message); } }}>
+          <MenuItem key={a} onClick={async () => { const inst = menu.inst; setMenu(null); try { await api.instanceAction(inst._zoneScope, inst.name, a === "start" && inst.status === "SUSPENDED" ? "resume" : a); notify.success(`${a} requested for "${inst.name}"`); reload(); } catch (e) { notify.error(e.message); } }}>
             {{ start: "Start / Resume", stop: "Stop", suspend: "Suspend", reset: "Reset" }[a]}
           </MenuItem>
         ))}

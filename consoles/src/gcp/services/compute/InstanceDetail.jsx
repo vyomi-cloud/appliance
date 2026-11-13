@@ -284,6 +284,19 @@ export default function InstanceDetail({ params }) {
                 </tr></tbody>
               </table>
             </Box>
+            {(inst.disks || []).filter((d) => !d.boot).length > 0 && (<>
+              <Typography variant="body2" sx={{ fontWeight: 500, mt: 2, mb: 0.5 }}>Additional disks</Typography>
+              <Box sx={{ overflowX: "auto", ...SECTION_TABLE_BLEED }}>
+                <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+                  <thead><tr>{["Name", "Interface type", "Size (GB)", "Device name", "Mode", "When deleting instance"].map((h) => <th key={h} style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #ddd" }}>{h}</th>)}</tr></thead>
+                  <tbody>{inst.disks.filter((d) => !d.boot).map((d) => (
+                    <tr key={d.deviceName || d.source}>
+                      <td style={{ padding: 6 }}>{api.last(d.source)}</td><td style={{ padding: 6 }}>{d.interface}</td><td style={{ padding: 6 }}>{d.diskSizeGb}</td>
+                      <td style={{ padding: 6 }}>{d.deviceName}</td><td style={{ padding: 6 }}>{d.mode}</td><td style={{ padding: 6 }}>{d.autoDelete ? "Delete disk" : "Keep disk"}</td>
+                    </tr>))}</tbody>
+                </table>
+              </Box>
+            </>)}
           </Section>
           <Section title="Security and access">
             <KeyValue items={[
