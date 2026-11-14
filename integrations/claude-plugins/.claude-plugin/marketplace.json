@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Claude Code plugins for Vyomi, the local AWS / GCP / Azure simulator.",
-    "version": "4.0.0"
+    "version": "4.1.0"
   },
   "plugins": [
     {
       "name": "vyomi",
       "source": "./plugins/vyomi",
       "description": "Run and test cloud code locally against Vyomi (Nano in the browser, or a Pro/Max mesh): scan a repo for AWS/GCP/Azure usage, see what is emulated where, and wire SDKs to it. Needs vyomi-tunnel 1.3.0+.",
-      "version": "4.0.0",
+      "version": "4.1.0",
       "category": "development",
       "homepage": "https://vyomi.cloud",
       "keywords": ["aws", "gcp", "azure", "local-cloud", "emulator", "localstack-alternative", "testing"]

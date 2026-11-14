@@ -289,6 +289,24 @@ cut off before the fix. `findCodespace` (`mesh-ssh.mjs`, both copies) now says: 
 codespace scope. Run: gh auth refresh -h github.com -s codespace" (and "Run: gh auth login" when logged out), short enough for the
 MCP's 160-char note clip. Test in `test-mesh-ssh-transport.mjs` (fails on the old code); that suite now also runs in CI.
 
+## Plugin sync and capability drift in the release (2026-11-14)
+
+- Found: `release.yml` mirrored `integrations/claude-plugins` into `vyomi-cloud/claude-plugins` on every appliance tag, stamping
+  the appliance version. The v4.0.0 release (12 Nov) therefore published the OLD plugin (one skill, `vyomi mcp`) as "4.0.0".
+  Claude Code updates an installed plugin only on a new version, so the new plugin is **4.1.0**.
+- Owner decision: the sync runs in `tunnel-release.yml` (`plugin-sync`, final releases only, after npm + Homebrew), because the
+  plugin runs `vyomi-tunnel mcp`. `release.yml` no longer syncs. `scripts/sync_claude_plugins.py` mirrors with a guard: unchanged
+  is a no-op; changed content under an already-published version, or a lower version, fails. The mirrored marketplace must pass
+  `claude plugin validate`. Dry runs show the diff and push nothing. Branch CI runs the guard against the public marketplace, so a
+  plugin change without a version bump fails before release.
+- Capabilities: the MCP's knowledge is baked into the binaries in vyomi-tunnel, so new capabilities reach agents only with a tunnel
+  release. `scripts/mcp_knowledge_drift.py` regenerates the knowledge and compares it, per capability, with the tag of npm `latest`
+  vyomi-tunnel (added / removed / level changes / other edits). `release.yml` runs it after each appliance release (job
+  `mcp-knowledge-drift`, informational) and branch CI prints it, so a due tunnel release shows up in the run summary.
+  Verified: 1.2.1 (no bundled MCP), up to date, and a simulated change (one added capability, one level change).
+- Not done (owner left it open): the MCP reading capabilities live from the running simulator (`/api/console/capabilities`)
+  with the baked copy as fallback, which would remove the need for knowledge-only tunnel releases.
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;

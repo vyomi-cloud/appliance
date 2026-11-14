@@ -11,6 +11,8 @@ on:
       - scripts/gen_mcp_matrix.py
       - scripts/mcp_wiring.json
       - scripts/build_tunnel_mcp.sh
+      - scripts/sync_claude_plugins.py
+      - scripts/mcp_knowledge_drift.py
       - core/capabilities/**
       - wasm/docs/**
       - wasm/relay/**
@@ -75,6 +77,14 @@ jobs:
 
       - name: Claude plugin validates
         run: npx -y @anthropic-ai/claude-code plugin validate integrations/claude-plugins
+
+      - name: Plugin changes carry a version bump (vs the public marketplace)
+        run: |
+          git clone -q --depth 1 https://github.com/vyomi-cloud/claude-plugins.git "$RUNNER_TEMP/marketplace"
+          python3 scripts/sync_claude_plugins.py "$RUNNER_TEMP/marketplace"
+
+      - name: MCP knowledge drift report (informational)
+        run: git fetch -q --tags origin && python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY"
 
       - name: prerelease-it.sh lints (bash)
         run: bash -n tools/mcp-eval/prerelease-it.sh && shellcheck -s bash -S warning tools/mcp-eval/prerelease-it.sh

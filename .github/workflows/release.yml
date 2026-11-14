@@ -458,53 +458,26 @@ jobs:
           git commit -m "vyomi ${VER} (vyomi + vyomi-docker)"
           git push
 
-  # ── Claude Code plugin marketplace sync ─────────────────────────────────
-  # integrations/claude-plugins/ is the source of truth for the public
-  # marketplace repo vyomi-cloud/claude-plugins (users run
-  # `/plugin marketplace add vyomi-cloud/claude-plugins`). Kept in its own small
-  # repo because adding a marketplace clones it. Each release stamps the release
-  # version into the manifests and mirrors the folder. Skipped (not failed)
-  # until the CLAUDE_PLUGINS_TOKEN secret exists. Pre-releases are not synced.
-  plugins-sync:
-    needs: [preflight, build]
-    if: needs.preflight.outputs.has_plugins == 'true' && !contains(needs.build.outputs.version, '-')
+  # ── Claude Code plugin marketplace sync — MOVED (2026-11-14) ────────────
+  # The plugin (4.1+) runs `vyomi-tunnel mcp`, so it is synced by tunnel-release.yml after a final vyomi-tunnel
+  # release (npm + Homebrew first), with a version guard (scripts/sync_claude_plugins.py). Syncing it here pushed
+  # whatever main held under the appliance version: v4.0.0 shipped the old plugin as "4.0.0".
+
+  # ── MCP knowledge drift ─────────────────────────────────────────────────
+  # Capability knowledge (core/capabilities -> vyomi_capability / vyomi_services) is baked into the vyomi-mcp binary
+  # inside vyomi-tunnel, so new capabilities in an appliance release reach agents only with a tunnel release.
+  # This compares the release's capabilities with what npm `latest` vyomi-tunnel carries and says when one is due.
+  # Informational: never fails the release.
+  mcp-knowledge-drift:
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main repo
-        uses: actions/checkout@v4
-        with:
-          path: src
-      - name: Checkout plugins repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.GH_OWNER }}/claude-plugins
-          token: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
-          path: plugins
-      - name: Mirror + stamp version
-        run: |
-          VER="${{ needs.build.outputs.version }}"
-          find plugins -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a src/integrations/claude-plugins/. plugins/
-          python3 - "$VER" plugins <<'PY'
-          import json, pathlib, sys
-          ver, root = sys.argv[1], pathlib.Path(sys.argv[2])
-          mp = root / ".claude-plugin" / "marketplace.json"
-          m = json.loads(mp.read_text())
-          m.setdefault("metadata", {})["version"] = ver
-          for p in m["plugins"]:
-              p["version"] = ver
-          mp.write_text(json.dumps(m, indent=2) + "\n")
-          for pj in root.glob("plugins/*/.claude-plugin/plugin.json"):
-              d = json.loads(pj.read_text()); d["version"] = ver
-              pj.write_text(json.dumps(d, indent=2) + "\n")
-          PY
-          cd plugins
-          git config user.email "bot@vyomi.cloud"
-          git config user.name  "Vyomi Release Bot"
-          git add -A
-          if git diff --cached --quiet; then echo "plugins unchanged"; exit 0; fi
-          git commit -m "vyomi plugins ${VER}"
-          git push
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Compare with the knowledge in the latest vyomi-tunnel
+        run: python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY"
 
   # ── Snap Store publish — REMOVED ────────────────────────────────────────
   # Dropped 2026-10-23: the snap-publish job failed on every release (v3.0.x),
