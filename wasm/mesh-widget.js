@@ -458,8 +458,8 @@
     var IB = function (attr, label, tip, svg, dis) { return '<button type="button" class="ib" ' + attr + ' aria-label="' + label + '" title="' + tip + '"' + (dis ? " disabled" : "") + '>' + svg + '</button>'; };
     var btn = v.action ? IB("data-tcr", "Reset tunnel", tcBusy ? "Resetting the tunnel\u2026" : "Reset tunnel: re-pair it with this account", TC_BTN.reset, tcBusy) : "";
     var tog = v.kind === "bad" ? '<label class="ta" title="Reset the tunnel by itself when a problem is detected (at most once every 5 minutes)"><input type="checkbox" role="switch" data-tca ' + (tcAuto() ? "checked" : "") + '><span class="sw" aria-hidden="true"></span>Auto-reset</label>' : "";
-    tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + '</span>' + tog + '<span class="ibs">' + btn
-      + IB("data-tcinst", "Reinstall tunnel", "Reinstall tunnel: get the one-line install command", TC_BTN.install, false) + '</span>';
+    tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + '</span><span class="ctl">' + tog + '<span class="ibs">' + btn
+      + IB("data-tcinst", "Reinstall tunnel", "Reinstall tunnel: get the one-line install command", TC_BTN.install, false) + '</span></span>';
     place();
   }
   function tcBoot() {
@@ -481,7 +481,7 @@
       // Azure Fluent toggle: 40x20, outlined off, filled brand blue on
       + "#vy-tc[data-cloud=azure] .sw{width:40px;height:20px;border-radius:10px;background:transparent;border:1px solid #605e5c;box-sizing:border-box}#vy-tc[data-cloud=azure] .sw::after{left:3px;top:50%;margin-top:-6px;width:12px;height:12px;border-radius:50%;background:#605e5c}"
       + "#vy-tc[data-cloud=azure] input:checked+.sw{background:#0f6cbd;border-color:#0f6cbd}#vy-tc[data-cloud=azure] input:checked+.sw::after{background:#fff;transform:translateX(20px)}"
-      + "#vy-tc .ibs{display:flex;gap:6px;margin-left:auto;flex:none}#vy-tc .ib{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px}#vy-tc .ib[disabled]{opacity:.5;cursor:default}"
+      + "#vy-tc .ibs{display:flex;gap:6px;flex:none}#vy-tc .ib{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px}#vy-tc .ib[disabled]{opacity:.5;cursor:default}"
       // AWS Cloudscape: flat alert, 2px accent bar on the left, normal (outlined) button
       + "#vy-tc[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border-radius:8px;border:1px solid var(--tc-bd);border-left:4px solid var(--tc-ic)}"
       + "#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#f2fcf3;--tc-bd:#037f0c;--tc-ic:#037f0c}#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-bg:#fffce9;--tc-bd:#8d6605;--tc-ic:#8d6605}"
@@ -494,6 +494,13 @@
       + "#vy-tc[data-cloud=azure]{font-family:'Segoe UI',-apple-system,Roboto,sans-serif;border-radius:4px;border-color:transparent;--tc-fg:#323130;--tc-bg:#f3f2f1;--tc-ic:#605e5c}"
       + "#vy-tc[data-cloud=azure][data-k=ok]{--tc-bg:#dff6dd;--tc-ic:#107c10}#vy-tc[data-cloud=azure][data-k=bad],#vy-tc[data-cloud=azure][data-k=old]{--tc-bg:#fff4ce;--tc-ic:#8a6a00}"
       + "#vy-tc[data-cloud=azure] .ib{background:#fff;color:#323130;border:1px solid #8a8886;border-radius:2px}#vy-tc[data-cloud=azure] .ib:hover:not([disabled]){background:#f3f2f1}"
+      // AWS look (design reference): cream alert, thick amber bar on the left, soft shadow, bigger toggle, a divider, round outlined icon buttons
+      + "#vy-tc .ctl{display:flex;align-items:center;gap:10px;margin-left:auto;flex:none}#vy-tc .ibs{padding-left:10px;gap:6px;border-left:1px solid rgba(35,47,62,.22);align-self:stretch;align-items:center}"
+      + "#vy-tc[data-cloud=aws],#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-fg:#232f3e;--tc-bg:#fbf6ea;--tc-bd:#f0c776;--tc-ic:#d9830a;gap:9px;padding:6px 10px 6px 12px;font-size:13.5px;line-height:1.3;border:1px solid var(--tc-bd);border-left:7px solid #e8910c;border-radius:14px;box-shadow:0 3px 8px rgba(35,47,62,.16)}"
+      + "#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#f1faf2;--tc-bd:#a9d6ac;--tc-ic:#1d8102;border-left-color:#1d8102}#vy-tc[data-cloud=aws][data-k=grey]{--tc-bg:#f4f4f6;--tc-bd:#d5dbdb;border-left-color:#7d8998}"
+      + "#vy-tc[data-cloud=aws] .ic{width:20px;height:20px}#vy-tc[data-cloud=aws] .ta{font-size:13.5px;gap:8px}"
+      + "#vy-tc[data-cloud=aws] .sw{width:44px;height:24px;border-radius:12px}#vy-tc[data-cloud=aws] .sw::after{left:3px;top:3px;width:18px;height:18px}#vy-tc[data-cloud=aws] input:checked+.sw{background:#1a6fe0}#vy-tc[data-cloud=aws] input:checked+.sw::after{transform:translateX(20px)}"
+      + "#vy-tc[data-cloud=aws] .ib{width:34px;height:34px;color:#1a6fe0;border:2px solid #1a6fe0;background:transparent}#vy-tc[data-cloud=aws] .ib svg{width:18px;height:18px}#vy-tc[data-cloud=aws] .ib:hover:not([disabled]){background:rgba(26,111,224,.08)}"
       + "@media (prefers-color-scheme:dark){#vy-tc[data-cloud=aws]{--tc-fg:#e9ebed}#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#0a2a10}#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-bg:#2c2610;--tc-ic:#f5c518;--tc-bd:#f5c518}#vy-tc[data-cloud=aws] .ib{background:transparent;color:#89bdee;border-color:#89bdee}"
       + "#vy-tc[data-cloud=gcp]{--tc-fg:#e3e3e3;--tc-bg:#28292a}#vy-tc[data-cloud=gcp][data-k=bad],#vy-tc[data-cloud=gcp][data-k=old]{--tc-bg:#3a3000;--tc-ic:#fdd663}#vy-tc[data-cloud=gcp] .ib{color:#a8c7fa}"
       + "#vy-tc[data-cloud=azure]{--tc-fg:#fff;--tc-bg:#292827}#vy-tc[data-cloud=azure][data-k=bad],#vy-tc[data-cloud=azure][data-k=old]{--tc-bg:#433519;--tc-ic:#fde300}#vy-tc[data-cloud=azure] .ib{background:#3b3a39;color:#fff;border-color:#8a8886}}";
