@@ -105,8 +105,11 @@
     var head = st.finished ? '<p class="fine"><b>Tunnel installed and running.</b> Click <b>Start tunnel</b> in the bar at the bottom of this page, then join the Mesh.</p>'
       : st.expired ? '<p class="fine">This command expired. <a href="#" data-inst-get>Get a new one</a></p>'
       : '<p class="fine">Open <b>Terminal</b>, paste this, and press Enter. This page follows the progress.</p>';
-    return '<div class="inst">' + head + '<div class="cmd"><code>' + esc(inst.cmd) + '</code></div>'
-      + '<button class="go" data-inst-copy>' + (inst.copied ? "Copied" : "Copy command") + '</button><ol class="steps">' + items + '</ol>'
+    var ICON_COPY = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M0 6.75C0 5.78.78 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25z"/><path d="M5 1.75C5 .78 5.78 0 6.75 0h7.5C15.22 0 16 .78 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>';
+    var ICON_OK = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 1 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/></svg>';
+    return '<div class="inst">' + head + '<div class="cmd"><code>' + esc(inst.cmd) + '</code>'
+      + '<button class="cp' + (inst.copied ? " ok" : "") + '" data-vyb-keep data-inst-copy aria-label="' + (inst.copied ? "Copied" : "Copy command") + '" title="' + (inst.copied ? "Copied" : "Copy") + '">' + (inst.copied ? ICON_OK : ICON_COPY) + '</button></div>'
+      + '<ol class="steps">' + items + '</ol>'
       + (st.failed ? '<p class="fine" style="color:#b10e1c">The install stopped' + (st.detail ? ": " + esc(st.detail) : "") + '. Run the command again, or <a href="#" data-inst-get>get a new one</a>.</p>' : "") + '</div>';
   }
 
@@ -120,7 +123,7 @@
       + ".vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}.vy-nano-video>.vy-video-banner{order:1;flex:1 1 340px;min-width:0;margin:0 0 16px!important}.vy-nano-video>#vy-bw{order:2;flex:1 1 340px;min-width:0;margin:0 0 16px}"
       + "#vy-bw .main{min-width:0}"
       + "#vy-tm-root .tm-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(15,20,25,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}"
-      + "#vy-tm-root .tm{box-sizing:border-box;background:#fff;color:#1b2430;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.4);outline:0}"
+      + "#vy-tm-root .tm{box-sizing:border-box;background:#fff;color:#1b2430;width:min(780px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.4);outline:0}"
       + "#vy-tm-root .tm-h{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e3e6e8}#vy-tm-root .tm-h h3{margin:0;font-size:17px;font-weight:650}"
       + "#vy-tm-root .tm-x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:#59636e;padding:0 4px}#vy-tm-root .tm-x:disabled{opacity:.35;cursor:not-allowed}"
       + "#vy-tm-root .tm-b{padding:16px 20px}#vy-tm-root .tm-f{padding:0 20px 18px;text-align:right;min-height:28px}"
@@ -128,7 +131,8 @@
       + "#vy-tm-root .go{display:inline-block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 18px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-tm-root .sub{font-size:12px;color:#6b7280;margin-top:8px}#vy-tm-root .steps{margin:8px 0 0;padding-left:20px;color:#414d5c;font-size:14px}#vy-tm-root .steps li{padding:3px 0}"
       + "#vy-tm-root code{background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:1px 6px;font-size:12px}"
-      + "#vy-tm-root .cmd{margin:10px 0}#vy-tm-root .cmd code{display:block;word-break:break-all;padding:10px 12px;font-size:12.5px;user-select:all}"
+      + "#vy-tm-root .cmd{position:relative;margin:10px 0}#vy-tm-root .cmd code{display:block;word-break:break-all;padding:12px 48px 12px 14px;font-size:13px;line-height:1.45;user-select:all}"
+      + "#vy-tm-root .cp{position:absolute;top:6px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #d0d7de;border-radius:6px;background:#fff;color:#57606a;cursor:pointer;padding:0}#vy-tm-root .cp:hover{background:#f3f4f6}#vy-tm-root .cp.ok{color:#1a7f37;border-color:#1a7f37}"
       + "#vy-bw .cmd{margin:8px 0}#vy-bw .cmd code{display:block;word-break:break-all;background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:8px 10px;font-size:12px;user-select:all}#vy-bw .inst .go{margin:2px 0 6px}"
       + "@media(max-width:560px){#vy-bw{grid-template-columns:minmax(0,1fr)}#vy-bw .act{min-width:0}}"
       + "#vy-bw .foot:empty{display:none}#vy-bw .foot{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 20px;padding-top:8px;border-top:1px solid rgba(128,128,128,.22)}"
