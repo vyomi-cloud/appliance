@@ -36,6 +36,15 @@ class SpaceKinesisStore:
     def seq(self) -> dict:
         return ctx.kinesis_state.setdefault("seq", {"n": 0})
 
+    @property
+    def cw_store(self):
+        from routes import aws_cloudwatch
+        return aws_cloudwatch.get_store()
+
+    @cw_store.setter
+    def cw_store(self, value):
+        pass   # always re-derived from the active space (see the getter)
+
     def persist(self) -> None:
         ctx.persist_state()
 
