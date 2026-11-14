@@ -163,13 +163,14 @@ function ActivityWidget() {
   );
 }
 
-function Snippet({ code, label }) {
+function Snippet({ code, label, before }) {
   return (
     <div style={{ position: "relative" }}>
       <Box variant="code" display="block" padding="s">
-        <pre style={{ margin: 0, whiteSpace: "pre", overflowX: "auto", fontSize: 12, lineHeight: 1.5, paddingRight: 28 }}>{code}</pre>
+        <pre style={{ margin: 0, whiteSpace: "pre", overflowX: "auto", fontSize: 12, lineHeight: 1.5, paddingRight: before ? 64 : 28 }}>{code}</pre>
       </Box>
-      <div style={{ position: "absolute", top: 4, right: 4 }}>
+      <div style={{ position: "absolute", top: 4, right: 4, display: "flex", alignItems: "center", gap: 2 }}>
+        {before}
         <CopyToClipboard variant="icon" textToCopy={code} copyButtonAriaLabel={`Copy ${label}`} copySuccessText="Copied" copyErrorText="Couldn't copy" />
       </div>
     </div>
@@ -199,7 +200,8 @@ async function testAwsCli(url, region) {
   ];
 }
 
-function CliTest({ url, region }) {
+/** The CLI snippet with a Test icon button right beside Copy (same icon-button size and look), and the result lines under the code. */
+function CliSnippet({ code, url, region }) {
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState(null);
   const go = async () => {
@@ -209,7 +211,10 @@ function CliTest({ url, region }) {
   };
   return (
     <SpaceBetween size="xs">
-      <Button onClick={go} loading={busy} iconName="status-positive" ariaLabel="Test these commands against this endpoint">Test</Button>
+      <Snippet code={code} label="AWS CLI commands" before={
+        <span title="Test these commands against this endpoint">
+          <Button variant="icon" iconName="caret-right-filled" loading={busy} onClick={go} ariaLabel="Test these commands against this endpoint" />
+        </span>} />
       {rows && (
         <SpaceBetween size="xxs">
           {rows.map((r) => <StatusIndicator key={r.label} type={r.ok ? "success" : "error"}>{r.label}{r.detail ? ` \u2014 ${r.detail}` : ""}</StatusIndicator>)}
@@ -242,7 +247,7 @@ function ConnectWidget() {
   return (
     <SpaceBetween size="xs">
       <Tabs variant="default" tabs={[
-        { id: "cli", label: "AWS CLI", content: <SpaceBetween size="xs"><Snippet code={cli} label="AWS CLI commands" /><CliTest url={ep.url} region={region} /></SpaceBetween> },
+        { id: "cli", label: "AWS CLI", content: <CliSnippet code={cli} url={ep.url} region={region} /> },
         { id: "sdk", label: "Python (boto3)", content: <Snippet code={sdk} label="Python snippet" /> },
       ]} />
       {ep.note && <Box variant="small" color="text-body-secondary">{ep.note}</Box>}
