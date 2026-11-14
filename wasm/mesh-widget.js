@@ -8,7 +8,7 @@
   "use strict";
   var me = document.currentScript, CLOUD = (me && me.getAttribute("data-cloud")) || "";
   var PRICING = "https://vyomi.cloud/pricing";
-  var card, busy = false, msg = "", view = "main", collapsed = false;
+  var card, wrap, busy = false, msg = "", view = "main", collapsed = false;
 
   // ── one-command tunnel install (macOS, Linux, Windows) ─────────────────────────────────────────────────────────────────────────────────────────
   // POST /api/tunnel/pair/start returns a single-use command bound to THIS signed-in account:  curl -fsSL <portal>/i/<code> | sh
@@ -386,16 +386,16 @@
     return null;
   }
   function place() {
-    if (tc && tcView && tcView.kind !== "hide" && card && card.isConnected && card.nextElementSibling !== tc) card.after(tc);
+    if (tc && tcView && tcView.kind !== "hide" && wrap && tc.parentElement !== wrap) wrap.appendChild(tc);   // the strip lives in the wrapper, under the Mesh card
     var vid = document.querySelector(".vy-nano-video"), h = vid ? null : findHeading();
-    if (!vid && !h) { if (card.isConnected) card.remove(); if (tc && tc.isConnected) tc.remove(); return; }
+    if (!vid && !h) { if (wrap.isConnected) wrap.remove(); return; }
     // The banner wrapper is a React-owned empty div whose children are script-injected: the card joins it, side by side with the video banner.
-    if (vid) { if (card.parentElement !== vid) vid.appendChild(card); }
+    if (vid) { if (wrap.parentElement !== vid) vid.appendChild(wrap); }
     if (vid && CLOUD === "aws") {          // AWS: the "Welcome to the Vyomi AWS console" alert goes first, above the video + Mesh row
       var row = vid.closest('[class*="awsui_child"]'), kids = row && row.parentElement ? row.parentElement.children : [], i;
       for (i = 0; i < kids.length; i++) if (kids[i] !== row && /^\s*Welcome to the/.test(kids[i].textContent) && kids[i].style.order !== "-1") kids[i].style.order = "-1";
     }
-    else if (h) { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (card.nextElementSibling !== tgt || !card.isConnected) tgt.parentElement.insertBefore(card, tgt); }
+    else if (h) { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (wrap.nextElementSibling !== tgt || !wrap.isConnected) tgt.parentElement.insertBefore(wrap, tgt); }
   }
 
 
@@ -455,10 +455,10 @@
   }
   function tcBoot() {
     var st = document.createElement("style");
-    st.textContent = "#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-8px 0 14px;padding:8px 14px;border:1px solid #d5dbdb;border-radius:10px;font:13px/1.4 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;color:#16191f}"
+    st.textContent = "#vy-bwc{display:flex;flex-direction:column;min-width:0}.vy-nano-video>#vy-bwc{order:2;flex:1 1 340px;margin:0 0 16px}.vy-nano-video>#vy-bwc>#vy-bw{margin:0;flex:none}#vy-bwc>#vy-bw{flex:none}#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-10px 0 18px;padding:5px 12px;border:1px solid #d5dbdb;border-radius:10px;font:12.5px/1.35 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;color:#16191f}"
       + "#vy-tc .dot{width:9px;height:9px;border-radius:50%;background:#9ba7b6;flex:none}#vy-tc[data-k=ok] .dot{background:#1d8102}#vy-tc[data-k=bad]{border-color:#d9a400;background:#fffbea}#vy-tc[data-k=bad] .dot,#vy-tc[data-k=old] .dot{background:#d9a400}#vy-tc[data-k=old]{border-color:#d9a400;background:#fffbea}"
-      + "#vy-tc .tt{flex:1 1 220px}#vy-tc .ta{font-size:12px;color:#414d5c;display:flex;align-items:center;gap:5px;cursor:pointer}"
-      + "#vy-tc .tb{cursor:pointer;border:1px solid #0b57d0;background:#0b57d0;color:#fff;border-radius:8px;padding:5px 12px;font:inherit;font-weight:600}#vy-tc .tb[disabled]{opacity:.6;cursor:default}"
+      + "#vy-tc .tt{flex:1 1 160px}.vy-nano-video>#vy-bwc>#vy-tc{margin:8px 0 0}#vy-tc .ta{font-size:12px;color:#414d5c;display:flex;align-items:center;gap:5px;cursor:pointer}"
+      + "#vy-tc .tb{cursor:pointer;border:1px solid #0b57d0;background:#0b57d0;color:#fff;border-radius:8px;padding:3px 10px;font-size:12px;font:inherit;font-weight:600}#vy-tc .tb[disabled]{opacity:.6;cursor:default}"
       + "@media (prefers-color-scheme:dark){#vy-tc{background:#1b232d;color:#e9ebed;border-color:#3b4754}#vy-tc[data-k=bad],#vy-tc[data-k=old]{background:#2c2610}#vy-tc .ta{color:#c6c6cd}}";
     document.head.appendChild(st);
     tc = document.createElement("div"); tc.id = "vy-tc"; tc.setAttribute("data-vyb-keep", "1");
@@ -472,6 +472,7 @@
   function boot() {
     if (document.getElementById("vy-bw")) return;
     css(); card = document.createElement("div"); card.id = "vy-bw"; card.setAttribute("data-cloud", CLOUD); card.setAttribute("data-vyb-keep", "1");
+    wrap = document.createElement("div"); wrap.id = "vy-bwc"; wrap.setAttribute("data-vyb-keep", "1"); wrap.appendChild(card);       // the Mesh card, with the credentials strip stacked under it
     card.addEventListener("click", function (e) {
       var t = e.target;
       if (t.closest("[data-ss]")) startStop();
