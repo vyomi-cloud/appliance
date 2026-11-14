@@ -15,7 +15,7 @@
   // The script installs a private Node + the tunnel, connects the account (so a wrong-account key cannot happen) and starts the tunnel at
   // login. It reports each step; this card polls GET /api/tunnel/pair/status and shows them live. Other systems keep the brew/npm steps.
   var inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }, instTimer = 0;
-  var INST_STEPS = [["node", "Downloading Node.js"], ["tunnel", "Installing the tunnel"], ["pair", "Connecting your account"], ["service", "Starting the tunnel"], ["running", "Tunnel running"]];
+  var INST_STEPS = [["node", "Configuring Tunnel"], ["tunnel", "Installing the tunnel"], ["pair", "Connecting your account"], ["service", "Starting the tunnel"], ["running", "Tunnel running"]];
   function isMac() { return /Mac/i.test(navigator.platform || "") && !/iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
   function instFail(text) { inst = { s: "error", cmd: "", code: "", st: null, err: text, copied: false, t0: 0 }; repaint(); }
   function instGet() {
