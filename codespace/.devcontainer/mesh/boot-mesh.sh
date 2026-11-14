@@ -114,18 +114,20 @@ mesh_verified() {
 # add the Codespace HOST's own DNS/apt check, and post the report to the portal. The console shows it and only lets the user Join when every
 # item is ok; otherwise the portal stops this Codespace. Never blocks readiness. `boot-mesh.sh selfcheck` re-runs it by hand.
 host_item() {
-  local h detail hint ok=false
+  local h detail="" hint="" ok=false      # initialised: under `set -u` (bash 5) printing an unset $hint aborted this function and left an empty report item
   h=$(cat /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null | sed -n 's#^[^\#]*https\{0,1\}://\([A-Za-z0-9.-]*\).*#\1#p' | head -1); h="${h:-archive.ubuntu.com}"
   if getent hosts "$h" >/dev/null 2>&1 && getent hosts github.com >/dev/null 2>&1; then ok=true; detail="resolved github.com and $h"
   else detail="cannot resolve $h or github.com"; hint="Name resolution is failing on the Codespace host, so apt-get and package installs will fail."; fi
   printf '{"id":"host_dns","label":"Codespace host DNS (apt)","ok":%s,"detail":"%s","hint":"%s"}' "$ok" "$detail" "$hint"
 }
 selfcheck_report() {
-  local out rest payload i
+  local out rest payload i hi
+  hi=$(host_item 2>/dev/null) || true
+  [ -n "$hi" ] || hi='{"id":"host_dns","label":"Codespace host DNS (apt)","ok":false,"detail":"host check did not run","hint":"Stop the Mesh and start it again."}'
   out=$(docker compose -f "$COMPOSE" exec -T simulator python3 - < "$HERE/selfcheck.py" 2>/dev/null | tail -n 1)
   case "$out" in
-    \{*\"items\":\ \[*) rest="${out#*\"items\": \[}"; payload="{\"codespace_id\":\"$CODESPACE\",\"items\":[$(host_item), $rest" ;;
-    *) payload="{\"codespace_id\":\"$CODESPACE\",\"items\":[$(host_item), {\"id\":\"selfcheck\",\"label\":\"Health checks\",\"ok\":false,\"detail\":\"could not run inside the simulator container\",\"hint\":\"The checks could not run. Stop the Mesh and start it again.\"}]}" ;;
+    \{*\"items\":\ \[*) rest="${out#*\"items\": \[}"; payload="{\"codespace_id\":\"$CODESPACE\",\"items\":[$hi, $rest" ;;
+    *) payload="{\"codespace_id\":\"$CODESPACE\",\"items\":[$hi, {\"id\":\"selfcheck\",\"label\":\"Health checks\",\"ok\":false,\"detail\":\"could not run inside the simulator container\",\"hint\":\"The checks could not run. Stop the Mesh and start it again.\"}]}" ;;
   esac
   for i in 1 2 3; do
     curl -fsS -m 10 -X POST "$PORTAL/api/mesh/session/selfcheck" -H 'Content-Type: application/json' -d "$payload" >/dev/null 2>&1 && { log "health report posted."; return 0; }
