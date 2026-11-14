@@ -176,6 +176,50 @@ function Snippet({ code, label }) {
   );
 }
 
+/** "Test" for the AWS CLI tab: sends the exact calls the two commands make (S3 ListBuckets, DynamoDB ListTables, signed the way the CLI signs
+ *  them) to the same endpoint and says what is wrong if they would fail. A browser cannot run the real CLI, but the request on the wire is the same. */
+async function testAwsCli(url, region) {
+  const amz = new Date().toISOString().replace(/[-:]|\.\d{3}/g, "");
+  const auth = (svc) => `AWS4-HMAC-SHA256 Credential=test/${amz.slice(0, 8)}/${region}/${svc}/aws4_request, SignedHeaders=host;x-amz-date, Signature=${"0".repeat(64)}`;
+  const run = async (label, svc, init, ok) => {
+    const t0 = performance.now();
+    try {
+      const r = await fetch(url.replace(/\/$/, "") + "/", { signal: AbortSignal.timeout(20000), ...init, headers: { "x-amz-date": amz, authorization: auth(svc), ...init.headers } });
+      const txt = await r.text(), ms = Math.round(performance.now() - t0);
+      if (r.ok && ok(txt)) return { ok: true, label, detail: `HTTP ${r.status}, ${ms} ms` };
+      if (r.status === 503) return { ok: false, label, detail: "the tunnel is running but no Vyomi tab is connected to it. Keep this tab open and reload it." };
+      return { ok: false, label, detail: `HTTP ${r.status}${txt ? " " + txt.replace(/\s+/g, " ").slice(0, 120) : ""}` };
+    } catch (e) {
+      return { ok: false, label, detail: `can't reach ${url}. Is the tunnel running? (Use Setup Tunnel on this page to install or start it.)` };
+    }
+  };
+  return [
+    await run("aws s3 ls", "s3", { method: "GET" }, (x) => /ListAllMyBucketsResult/.test(x)),
+    await run("aws dynamodb list-tables", "dynamodb", { method: "POST", headers: { "content-type": "application/x-amz-json-1.0", "x-amz-target": "DynamoDB_20120810.ListTables" }, body: "{}" }, (x) => /TableNames/.test(x)),
+  ];
+}
+
+function CliTest({ url, region }) {
+  const [busy, setBusy] = useState(false);
+  const [rows, setRows] = useState(null);
+  const go = async () => {
+    setBusy(true); setRows(null);
+    try { setRows(await testAwsCli(url, region)); } catch (e) { setRows([{ ok: false, label: "Test", detail: String((e && e.message) || e) }]); }
+    setBusy(false);
+  };
+  return (
+    <SpaceBetween size="xs">
+      <Button onClick={go} loading={busy} iconName="status-positive" ariaLabel="Test these commands against this endpoint">Test</Button>
+      {rows && (
+        <SpaceBetween size="xxs">
+          {rows.map((r) => <StatusIndicator key={r.label} type={r.ok ? "success" : "error"}>{r.label}{r.detail ? ` \u2014 ${r.detail}` : ""}</StatusIndicator>)}
+          <Box variant="small" color="text-body-secondary">{rows.every((r) => r.ok) ? "These commands work as shown. Paste them in your terminal." : "Fix the item above, then press Test again."}</Box>
+        </SpaceBetween>
+      )}
+    </SpaceBetween>
+  );
+}
+
 function ConnectWidget() {
   const ep = sdkEndpoint();
   const region = getRegion();
@@ -198,7 +242,7 @@ function ConnectWidget() {
   return (
     <SpaceBetween size="xs">
       <Tabs variant="default" tabs={[
-        { id: "cli", label: "AWS CLI", content: <Snippet code={cli} label="AWS CLI commands" /> },
+        { id: "cli", label: "AWS CLI", content: <SpaceBetween size="xs"><Snippet code={cli} label="AWS CLI commands" /><CliTest url={ep.url} region={region} /></SpaceBetween> },
         { id: "sdk", label: "Python (boto3)", content: <Snippet code={sdk} label="Python snippet" /> },
       ]} />
       {ep.note && <Box variant="small" color="text-body-secondary">{ep.note}</Box>}
