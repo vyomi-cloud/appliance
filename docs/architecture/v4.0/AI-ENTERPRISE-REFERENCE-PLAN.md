@@ -157,6 +157,45 @@ Agent Engine (spec-only) and Vector Search; RAG Engine, Memory Bank, Cloud Armor
 Cognitive Services, Entra and Front Door consoles; Foundry agents are partial; Content Safety, Prompt Shields and the AI Search
 semantic ranker are missing.
 
+### 2.2 Backend technology map (Mesh)
+
+Rule (section 3): wire-compatible lightweight engines, one shared backend per capability, exposed through the AWS, GCP and
+Azure wires. Mesh = a headless Codespace (8 GB, 2 cores) running the simulator plus llama.cpp containers (`llm-chat`,
+`llm-embed`) with `VYOMI_COMPUTE_BACKEND=docker`; other backends start on demand next to it (found in
+`codespace/.devcontainer/mesh/docker-compose.mesh.yml`; the on-demand start is not verified here). "Exists" means present in
+the repo today. RAM figures are rough ESTIMATES, not measurements; Phase 0 measures them.
+
+| Component | Backend technology on Mesh | Exists today? | To build / choose | Est. RAM | Rejected |
+|---|---|---|---|---|---|
+| C1 Cognito, Identity Platform, Entra External ID | In-house OIDC/JWT issuer (RS256 + JWKS, users/groups/app clients in Postgres, hosted-login pages) shared by the three wires | No (only IAM Cedar + authorizer references) | Issuer service in the simulator process | ~0 extra | Keycloak/Authentik (1 GB+ JVM/Python stacks) |
+| C1 WAF, Cloud Armor, Front Door WAF | Coraza (Go, OWASP CRS) as a Caddy module in the existing `caddy` gateway, rule model translated from each cloud's rule shape | Caddy gateway exists; Coraza not | Coraza build + rule translators | ~30-60 MB | ModSecurity (heavier), custom regex WAF (no CRS) |
+| C2, C11 guardrails and grounding | Deterministic filters (existing) + small classifier: Llama-Guard-3-1B / ShieldGemma-2B GGUF on llama.cpp for prompt attack and content safety; grounding = embedding-similarity + LLM-judge, PII = regex + Presidio-lite patterns | Regex/keyword guardrails exist (`bedrock_guardrails_core`) | Classifier model + grounding check | model ~1 GB when loaded (load on demand) | Full Presidio/spaCy stack (heavy) |
+| C3 Agent runtime (AgentCore, Agent Engine, Foundry agents) | Docker containers started by the simulator's compute backend (user's Strands/LangGraph/ADK code), cgroup limits, a runtime supervisor for session isolation, budgets, timeouts, kill switch; checkpoints in Postgres | Docker compute backend exists; `agent_spec_core` is the current in-process fallback | Runtime supervisor + harness + checkpoint store | 200-500 MB per agent container | Firecracker/gVisor (not available in Codespaces), in-process only (no real framework code) |
+| C3 Code Interpreter / Browser tools | Resource-limited Docker sandbox (Python); headless Chromium container (Playwright) for Browser | No | Sandbox images + API wires | 100 MB / 500+ MB | Browser in the simulator process |
+| C4 Gateway policy | **Cedar** (existing `core/cedar_engine.py`) for tool-call authorization with a decision log; MCP/OpenAPI/Lambda target adapters in the simulator; throttling via Valkey counters | Cedar engine + Lambda MCP targets exist | Policy schema for tool calls, OBO claims, audit sink, other target types | ~0 extra | OPA (second policy language) |
+| C5 Durable approvals | In-house ASL interpreter (`stepfunctions_core`) with state, task tokens, heartbeats and timers persisted in Postgres; DynamoDB-local (or the in-house DynamoDB core) as the approval ledger with conditional writes | Both exist | Task-token persistence, timers, verification | DynamoDB-local JVM ~300-500 MB if used | Temporal/Camunda (heavy) |
+| C6 Knowledge search (OpenSearch, Vector Search, AI Search, RAG Engine) | **Postgres 16 + pgvector (HNSW) + full-text (tsvector/BM25-style)** with metadata and ACL filters; RRF hybrid (already implemented for Azure AI Search with an exact scan + TF-IDF); reranker = a GGUF cross-encoder (bge-reranker) served by llama.cpp; OpenSearch/AOSS REST, Vertex and Azure wires are shims over this one engine | Postgres image already ships pgvector (`vyomi/postgres:16-alpine-pgvector`); exact-scan hybrid exists; no HNSW use, no rerank | Engine, filters/ACL, rerank model, REST shims | Postgres ~150-300 MB; reranker model ~0.5 GB on demand | Real OpenSearch/Elasticsearch (1 GB+ JVM), Qdrant (evaluate only if pgvector recall/latency fails) |
+| C7 Tools (Lambda, Functions) | Docker-based Lambda/Functions runtimes (existing); telemetry store = VictoriaMetrics (existing container) or Postgres time-series tables | Lambda runtime and VictoriaMetrics exist | Timestream/IoT/Azure IoT shims over one store | VictoriaMetrics ~50 MB | TimescaleDB |
+| C8 AgentOps and observability | Metrics: VictoriaMetrics (exists) behind CloudWatch/Monitor/Cloud Monitoring wires; traces: spans in Postgres behind X-Ray/Cloud Trace/App Insights shims (Jaeger string appears only in capability text); evaluation jobs: in-house runner using the local model as judge + deterministic metrics against golden sets; prompt/agent versions in Postgres | VictoriaMetrics, CloudWatch core, X-Ray core exist | Trace store, eval runner, prompt registry, GenAI metric names | ~0 extra | Full OpenTelemetry/Jaeger stack |
+| C9 Memory | Short-term: **Valkey** with TTL (container exists); long-term: **pgvector** rows with strategies (semantic/summary/preference) built on the embedding model; tenant scoping by key prefix + row filters; provenance + injection screening on write via the guardrail classifier | Valkey + Postgres/pgvector exist; no memory API | Memory engine and the three wires | ~20 MB Valkey | Mem0/Letta servers (extra runtimes) |
+| C10 Foundation models and router | llama.cpp `llama-server` (chat model Qwen2.5-3B Q4; second small model for fast tier; embeddings model nomic/bge) behind `core/mesh_llm_gateway`; router = rules on task, latency and failure with automatic fallback; larger models via the runner pool (mesh LLM mesh, up to 10 GitHub runners at 16 GB, llama.cpp RPC) | llama.cpp containers, gateway, `mesh_ai` admission + ledger exist | 2-model router, real streaming, throttling, cloud-correct errors | chat ~2.5 GB, embed ~0.3 GB, second model ~1 GB | Ollama as primary (kept as a compatible alternative) |
+| C12 Knowledge pipeline | Events on NATS/EventBridge core -> Lambda/Functions or Step Functions -> extraction (`pypdf`/`pdfminer.six`, `python-docx`, `openpyxl`; tesseract OCR optional) -> guardrails scan -> chunk -> embed (llama-embed) -> pgvector; MinIO (`vyomi-minio`, S3), Azurite, fake-gcs hold source docs | NATS, MinIO, Azurite, fake-gcs, EventBridge/Eventarc/Event Grid cores exist | Extraction workers, wired reference pipeline, S3/GCS/Blob event triggers | small | Apache Tika (JVM) |
+| C13 Governance | Audit: append-only event log in Postgres behind CloudTrail, Cloud Audit Logs and Activity Log wires (every simulator call already passes the middleware); KMS: existing KMS cores (Vault container available for key material); IAM: Cedar engine; cost: `mesh_ai` ledger + Cost Explorer core; lineage/quality metadata tables in Postgres only if Phase 0 shows need | Cedar, KMS, Cost Explorer, `mesh_ai` exist; call middleware exists | Audit store + query APIs (LookupEvents, Lake-style queries) | ~0 extra | Separate SIEM/Loki stack |
+
+**Shared backends (build once, three wires):** Postgres + pgvector (retrieval, long-term memory, audit, traces, checkpoints,
+auth store), Valkey (short-term memory, throttling), llama.cpp (chat, embeddings, rerank, classifier), Cedar (policy and IAM),
+Docker compute (agents, tools, sandboxes), VictoriaMetrics (metrics and telemetry), NATS (events), the ASL interpreter
+(approvals).
+
+**8 GB budget (estimates):** chat model ~2.5 GB + embed ~0.3 GB + simulator ~0.4 GB + Postgres ~0.3 GB + Valkey/NATS/VictoriaMetrics
+~0.1 GB leaves roughly 4 GB for agent containers, the reranker/classifier models and tool sandboxes. Browser (500+ MB) and a
+second chat model do not run together with several agents: the AI profile (F7) must admit workloads against the budget and say
+so in plain language when it refuses. Bigger models or heavier agents move to the runner pool.
+
+**Nano (browser) substrate, for reference:** no Docker, so no real agent containers, Coraza, llama.cpp or Postgres server.
+Nano uses the in-browser equivalents already in the project (Pyodide cores, PGlite for pgvector-style search, WebLLM, OPA/Cedar
+in WASM) and stays "Dev Simplified"; this plan targets Mesh, where the real backends run.
+
 ## 3. Constraints that shape the design
 
 - **Mesh = Codespace, 8 GB RAM, 2 cores, no GPU** (decision 2026-11-07). A real OpenSearch, Keycloak, etc. will not fit next to a
