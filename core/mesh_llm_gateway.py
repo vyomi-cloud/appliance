@@ -53,6 +53,10 @@ class Handler(BaseHTTPRequestHandler):
     def _unavailable(self, why: str, code: str = "RemoteLLMUnavailable") -> None:
         self._send_json(503, {"error": {"message": f"remote LLM runner unavailable: {why}", "type": "unavailable", "code": code}}, {"retry-after": 5})
 
+    def _loading(self) -> None:
+        self._send_json(503, {"error": {"message": "Models are still being deployed. Please try again in a minute.",
+                                        "type": "unavailable", "code": "ModelsLoading"}}, {"retry-after": 15})
+
     def _health(self) -> None:
         if self.pool is not None:
             return self._send_json(200, {"status": "pool", "models": {d["id"]: d["state"] for d in self.pool.listing()["data"]}})
@@ -116,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             code = r.status
         except urllib.error.HTTPError as e:
             r, code = e, e.code
+            if e.code in (502, 503, 504) and self.remote is None and self.pool is None:       # llama.cpp answers 503 while it loads the model
+                return self._loading()
             if (self.remote is not None or self.pool is not None) and e.headers.get("x-vyomi-hub"):        # the relay says the runner isn't there / ended
                 try:
                     c = str(json.loads(e.read()).get("error", {}).get("code", "RunnerUnavailable"))[:60]
@@ -125,7 +131,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             if self.remote is not None or self.pool is not None:
                 return self._unavailable("relay not reachable")
-            return self._send_json(503, {"error": {"message": f"model server not reachable: {type(e).__name__}", "type": "unavailable"}})
+            return self._loading()
         ctype = r.headers.get("content-type", "application/json")
         if "text/event-stream" in ctype:
             self.send_response(code)

@@ -473,6 +473,9 @@
     const box = h("div", { style: S.box + ";" + S.ok, "data-nano-mesh-shell": container },
       h("div", { style: S.title }, "Shell", fsBtn),
       status,
+      // SSH from the user's own terminal through vyomi-tunnel: the tunnel fetches this Mesh's VM key and sets the user, so this one line is all it takes.
+      h("div", { style: S.sub + ";margin-top:10px" }, "SSH from your terminal (needs vyomi-tunnel running)"),
+      cmdRow("ssh " + String(container).replace(/^vyomi-i-/, "") + ".vyomi"),
       h("div", { style: S.sub }, "A real terminal inside the Docker VM on your Codespace (" + { aws: "EC2 instance ", gcp: "Compute Engine instance ", azure: "Azure VM " }[cloud] + ref + ", container " + container + "). Not the in-browser VM. Click inside and type."),
       holder, reBtn);
     const fit = () => {

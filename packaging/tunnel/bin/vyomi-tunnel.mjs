@@ -45,19 +45,40 @@ import { createRequire } from "node:module";
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
+function friendlyError(e) {
+  const code = e && e.code;
+  if (code === "EADDRINUSE") return `port ${process.env.RELAY_PORT || 8090} is already in use. A Vyomi tunnel is probably already running (check http://127.0.0.1:${process.env.RELAY_PORT || 8090}/health); stop it first, or set RELAY_PORT to another port.`;
+  if (code === "EACCES") return "permission denied for that port. Use a port above 1024 (RELAY_PORT).";
+  if (code === "ERR_SOCKET_BAD_PORT") return "RELAY_PORT must be a number from 1 to 65535.";
+  return (e && e.message) || String(e);
+}
+process.on("unhandledRejection", (e) => { console.error(`vyomi-tunnel: ${friendlyError(e)}`); if (process.env.VYOMI_DEBUG) console.error(e && e.stack); process.exit(1); });
+
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
 if (["login", "config", "connect", "status", "forward", "keep", "reset", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
-  process.exit(await main(process.argv.slice(2)));
+  try {
+    process.exit(await main(process.argv.slice(2)));
+  } catch (e) {            // a user-facing tool never prints a stack trace (set VYOMI_DEBUG=1 to see it)
+    console.error(`vyomi-tunnel: ${friendlyError(e)}`);
+    if (process.env.VYOMI_DEBUG) console.error(e && e.stack);
+    process.exit(1);
+  }
 }
 
-if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-tunnel: unknown command "${process.argv[2]}". Run \`vyomi-tunnel help\`.`); process.exit(2); }
+// Anything else on the command line is a mistake: running the relay with a stray flag would silently ignore it (or crash if one is already running).
+if (process.argv[2]) {
+  const what = process.argv[2].startsWith("-") ? "option" : "command";
+  console.error(`vyomi-tunnel: unknown ${what} "${process.argv[2]}". Run \`vyomi-tunnel help\`.`);
+  process.exit(2);
+}
 
 // The tunnel keeps running even when its key is missing, revoked or wrong (a service manager would crash-loop it otherwise): the state is
 // shown on /health, re-checked on a timer and when ~/.vyomi/credentials changes, and the Vyomi page can re-pair it (POST /reset).
-const VERSION = "1.2.3";
+const VERSION = "1.2.4";
 const credsSync = createCredsSync({ version: VERSION, log: (m) => console.log("[creds] " + m) });
 const PORT = Number(process.env.RELAY_PORT || 8090);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) { console.error(`vyomi-tunnel: ${friendlyError({ code: "ERR_SOCKET_BAD_PORT" })}`); process.exit(2); }
 // Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own
 // `gh codespace ssh`; opened on first use). No hosted relay, no MESH_RELAY_URL. Needs a Pro/Max key + a running Mesh Codespace.
 const hub = createLazySshHub({ WebSocketServer, WebSocket, openMesh: async (o) => (await import("./mesh-cli.mjs")).openMesh(o), currentCodespace: async (o) => (await import("./mesh-cli.mjs")).currentMeshCodespace(o), log: (m) => console.log("[relay] " + m) });
@@ -343,6 +364,7 @@ const liveness = setInterval(() => {
 }, PING_MS);
 wss.on("close", () => { clearInterval(liveness); clearInterval(vmLiveness); });
 
+server.on("error", (e) => { console.error(`vyomi-tunnel: ${friendlyError(e)}`); if (process.env.VYOMI_DEBUG) console.error(e && e.stack); process.exit(1); });
 credsSync.start();
 server.listen(PORT, HOST, () => {
   const shown = HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST;

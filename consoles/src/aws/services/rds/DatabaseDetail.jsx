@@ -24,6 +24,7 @@ import { DeleteDatabaseModal, ModifyModal, SnapshotModal } from "./DatabaseActio
 import { statusOf } from "./Databases.jsx";
 import { IamRolesPanel, AlarmsPanel } from "./RdsExtras.jsx";
 import DataMigrations from "./DataMigrations.jsx";
+import DbConnect from "../../../common/DbConnect.jsx";
 import * as api from "./api.js";
 
 const RANGE_OPTIONS = [
@@ -436,6 +437,7 @@ export default function DatabaseDetail({ params, query }) {
             id: "connectivity", label: "Connectivity & security", content: (
               <SpaceBetween size="l">
                 <KeyValue title="Endpoint & port" columns={2} items={[["Endpoint", d.Endpoint?.Address], ["Port", d.Endpoint?.Port]]} />
+                <DbConnect cloud="aws" id={d.DBInstanceIdentifier} />
                 <KeyValue title="Networking" columns={3} items={[
                   ["Availability Zone", d.AvailabilityZone], ["VPC", d.DBSubnetGroup?.VpcId || "vpc-default"],
                   ["Subnet group", d.DBSubnetGroup?.DBSubnetGroupName], ["Subnets", "-"], ["Network type", "IPv4"],
