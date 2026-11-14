@@ -386,8 +386,9 @@
     return null;
   }
   function place() {
+    if (tc && tcView && tcView.kind !== "hide" && card && card.isConnected && card.nextElementSibling !== tc) card.after(tc);
     var vid = document.querySelector(".vy-nano-video"), h = vid ? null : findHeading();
-    if (!vid && !h) { if (card.isConnected) card.remove(); return; }
+    if (!vid && !h) { if (card.isConnected) card.remove(); if (tc && tc.isConnected) tc.remove(); return; }
     // The banner wrapper is a React-owned empty div whose children are script-injected: the card joins it, side by side with the video banner.
     if (vid) { if (card.parentElement !== vid) vid.appendChild(card); }
     if (vid && CLOUD === "aws") {          // AWS: the "Welcome to the Vyomi AWS console" alert goes first, above the video + Mesh row
@@ -395,6 +396,77 @@
       for (i = 0; i < kids.length; i++) if (kids[i] !== row && /^\s*Welcome to the/.test(kids[i].textContent) && kids[i].style.order !== "-1") kids[i].style.order = "-1";
     }
     else if (h) { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (card.nextElementSibling !== tgt || !card.isConnected) tgt.parentElement.insertBefore(card, tgt); }
+  }
+
+
+  // ── tunnel credentials sync ─────────────────────────────────────────────────────────────────────────────────────────────────
+  // A slim strip under the Mesh card: does the key the LOCAL tunnel holds (its /health) match an active key of the account signed in here
+  // (portal check)? If not: say so and offer Reset (re-pairs the tunnel with this account), or reset by itself when the toggle is on.
+  var TC_LOCAL = "http://127.0.0.1:8090", tc = null, tcView = null, tcBusy = false, tcAutoAt = 0, tcAutoFails = 0;
+  function tcAuto() { try { return localStorage.getItem("vyomi.tunnelAutoReset") === "1"; } catch (_) { return false; } }
+  function tcSetAuto(on) { try { localStorage.setItem("vyomi.tunnelAutoReset", on ? "1" : "0"); } catch (_) {} }
+  // Pure: what to show. in = {health: tunnel /health JSON or null, check: portal check JSON or null (null = signed out / unreachable)}
+  function tcDecide(h, check) {
+    if (!h || !h.ok) return { kind: "hide" };                                       // no tunnel answering: the Mesh card already says so
+    if (!h.credentials) return { kind: "old", text: "Your tunnel is an older version that cannot check its key.", action: "Update tunnel" };
+    var c = h.credentials, st = c.state;
+    if (st === "unreachable" || st === "unknown") return { kind: "grey", text: "Checking the tunnel’s key…" };
+    if (st === "none") return { kind: "bad", text: "Your tunnel has no access key.", action: "Reset tunnel" };
+    if (st === "revoked") return { kind: "bad", text: "The tunnel’s access key was revoked.", action: "Reset tunnel" };
+    if (st === "invalid") return { kind: "bad", text: "The tunnel’s access key is not valid.", action: "Reset tunnel" };
+    if (!check || !check.state) return { kind: "hide" };
+    if (check.state === "active") return { kind: "ok", text: "Tunnel key matches your account." };
+    if (check.state === "revoked") return { kind: "bad", text: "The tunnel’s access key was revoked on your account.", action: "Reset tunnel" };
+    return { kind: "bad", text: "Your tunnel is signed in to a different account.", action: "Reset tunnel" };
+  }
+  function tcProbe() {
+    var t = function (url, opt) { var c = new AbortController(), id = setTimeout(function () { c.abort(); }, 4000); opt = opt || {}; opt.signal = c.signal; return fetch(url, opt).finally(function () { clearTimeout(id); }); };
+    return t(TC_LOCAL + "/health").then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }).then(function (h) {
+      if (!h || !h.ok || !h.credentials || !h.credentials.key_id) return { h: h, check: null };
+      return t("/api/account/tunnel-keys/check?key_id=" + encodeURIComponent(h.credentials.key_id), { credentials: "same-origin", headers: { accept: "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }).then(function (c) { return { h: h, check: c }; });
+    }, function () { return { h: null, check: null }; });
+  }
+  function tcReset() {
+    if (tcBusy) return Promise.resolve(); tcBusy = true; tcPaint();
+    return fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: osKind() }) })
+      .then(function (r) { if (!r.ok) throw new Error("code"); return r.json(); })
+      .then(function (j) { return fetch(TC_LOCAL + "/reset", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: j.code }) }); })
+      .then(function (r) { if (!r.ok) throw new Error("reset"); tcAutoFails = 0; toast("Tunnel reset. It now uses this account’s key."); })
+      .catch(function () { tcAutoFails++; toast("Could not reset the tunnel. Try again, or use Setup Tunnel."); })
+      .then(function () { tcBusy = false; return tcRefresh(); });
+  }
+  function tcRefresh() {
+    return tcProbe().then(function (p) {
+      tcView = tcDecide(p.h, p.check);
+      if (tcView.kind === "bad" && tcAuto() && !tcBusy && tcAutoFails < 3 && Date.now() - tcAutoAt > 300000) { tcAutoAt = Date.now(); tcReset(); }   // at most once per 5 min, gives up after 3 failures
+      tcPaint();
+    });
+  }
+  function tcPaint() {
+    if (!tc) return;
+    var v = tcView;
+    if (!v || v.kind === "hide") { if (tc.isConnected) tc.remove(); return; }
+    tc.setAttribute("data-k", v.kind);
+    var btn = v.action ? '<button class="tb" data-tcr ' + (tcBusy ? "disabled" : "") + '>' + (tcBusy ? "Resetting…" : v.action) + '</button>' : "";
+    var tog = v.kind === "bad" ? '<label class="ta"><input type="checkbox" data-tca ' + (tcAuto() ? "checked" : "") + '> Reset automatically</label>' : "";
+    tc.innerHTML = '<span class="dot"></span><span class="tt">' + esc(v.text) + '</span>' + tog + btn;
+    place();
+  }
+  function tcBoot() {
+    var st = document.createElement("style");
+    st.textContent = "#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-8px 0 14px;padding:8px 14px;border:1px solid #d5dbdb;border-radius:10px;font:13px/1.4 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;color:#16191f}"
+      + "#vy-tc .dot{width:9px;height:9px;border-radius:50%;background:#9ba7b6;flex:none}#vy-tc[data-k=ok] .dot{background:#1d8102}#vy-tc[data-k=bad]{border-color:#d9a400;background:#fffbea}#vy-tc[data-k=bad] .dot,#vy-tc[data-k=old] .dot{background:#d9a400}#vy-tc[data-k=old]{border-color:#d9a400;background:#fffbea}"
+      + "#vy-tc .tt{flex:1 1 220px}#vy-tc .ta{font-size:12px;color:#414d5c;display:flex;align-items:center;gap:5px;cursor:pointer}"
+      + "#vy-tc .tb{cursor:pointer;border:1px solid #0b57d0;background:#0b57d0;color:#fff;border-radius:8px;padding:5px 12px;font:inherit;font-weight:600}#vy-tc .tb[disabled]{opacity:.6;cursor:default}"
+      + "@media (prefers-color-scheme:dark){#vy-tc{background:#1b232d;color:#e9ebed;border-color:#3b4754}#vy-tc[data-k=bad],#vy-tc[data-k=old]{background:#2c2610}#vy-tc .ta{color:#c6c6cd}}";
+    document.head.appendChild(st);
+    tc = document.createElement("div"); tc.id = "vy-tc"; tc.setAttribute("data-vyb-keep", "1");
+    tc.addEventListener("click", function (e) {
+      if (e.target.closest("[data-tcr]")) { if (tcView && tcView.kind === "old") instOpen(); else tcReset(); }
+    });
+    tc.addEventListener("change", function (e) { if (e.target.matches("[data-tca]")) { tcSetAuto(e.target.checked); if (e.target.checked) { tcAutoFails = 0; tcAutoAt = 0; tcRefresh(); } } });
+    tcRefresh(); setInterval(tcRefresh, 15000); window.addEventListener("vyomi-tunnel", tcRefresh);
   }
 
   function boot() {
@@ -418,9 +490,9 @@
     var pending = false;
     new MutationObserver(function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; place(); }); })
       .observe(document.body, { childList: true, subtree: true });
-    place(); paint();
+    tcBoot(); place(); paint();
     window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint); window.addEventListener("vyomi-tunnel", function () { paint(); paintModal(); }); window.addEventListener("vyomi-mesh-checks", paint);
-    window.VyomiMeshWidget = { agreed: agreed, accept: function () { try { localStorage.setItem(termsKey(), "1"); } catch (_) {} }, show: function (v) { view = v; paint(); place(); if (card.scrollIntoView) card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
+    window.VyomiMeshWidget = { tcDecide: tcDecide, agreed: agreed, accept: function () { try { localStorage.setItem(termsKey(), "1"); } catch (_) {} }, show: function (v) { view = v; paint(); place(); if (card.scrollIntoView) card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
     setInterval(function () { var x = B() && B().session && B().session(); if (x && x.session && (x.session.state === "running" || x.session.state === "starting" || x.session.state === "pending") && view === "main") paint(); }, 1000);
     var tries = 0; (function wait() { if (B() && B().loadAccount) { refresh(); setInterval(refresh, 60000); } else if (tries++ < 40) setTimeout(wait, 250); })();
   }
