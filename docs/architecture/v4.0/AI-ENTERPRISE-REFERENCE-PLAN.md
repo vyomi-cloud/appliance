@@ -21,8 +21,26 @@ Definition (proposed, needs owner sign-off):
    assertions on wire shape, error codes and state transitions, plus the console actions that exist for it.
 4. The same scenario then exists for GCP (Vertex) and Azure (Foundry) equivalents.
 
-Both substrates are in scope (owner, 2026-11-14): Mesh (real Docker backends, llama.cpp) and Nano (browser backends, WebLLM web models,
-section 2.3). A component is "100%" when it passes on both, with Nano's substrate limits declared, not hidden.
+Both substrates are in scope (owner, 2026-11-14), with different bars:
+
+- **Mesh = hard 100% gate** (it will be sold to enterprises). A component is done only when every in-scope operation, error code,
+  state transition and console action passes against the pinned SDK versions. No declared substrate limits except model QUALITY.
+  Anything the owner leaves out is on a written, owner-approved non-goals list, never an unlisted gap.
+- **Nano = 100% with declared limits** (browser backends, WebLLM web models, section 2.3). Accepted Mesh-only items on Nano
+  (owner, 2026-11-14): the Browser tool, long-running approvals/timers, real agent containers. Everything else must pass on Nano
+  with its substrate limit written down.
+
+How "100%" is measured (so it is not a feeling):
+
+1. **In-scope API inventory, generated mechanically** from the official models: botocore service models for Bedrock, Bedrock Agent(+Runtime),
+   AgentCore (+Runtime), Cognito IDP, WAFv2, OpenSearch Serverless, Step Functions, CloudTrail, CloudWatch; Google API discovery docs/protos
+   for Vertex AI / Agent Engine / RAG Engine / Cloud Armor / Identity Platform; Azure OpenAPI specs for Cognitive Services / Foundry / AI Search /
+   Content Safety / Front Door. Each operation is tagged in-scope or non-goal (owner-approved). The repo already counts ops per service (`wasm/docs`).
+2. **Every in-scope operation has a contract test** through the native SDK (pinned versions recorded in the matrix) that checks request validation,
+   response shape, error codes and the state change. Coverage = tested in-scope operations / in-scope operations, per service, and must be 100%.
+3. **No silent-ignore rule:** an unsupported field, option or API is rejected with the cloud's real error. It is never accepted and ignored.
+4. **Console parity:** every in-scope console action works through the UI and is checked against the SDK result (the bi-directional suites used for v4).
+5. **Reference app** passes end to end on Mesh on a real Codespace, on every release.
 
 Explicit non-goal: model QUALITY. Mesh runs a small local model (decision 2026-11-07: Qwen2.5-3B Q4 on native llama.cpp; the
 Codespace is 8 GB RAM, not 32). Conformance means wire/semantic fidelity and correct control flow, not answer quality. Every
@@ -219,11 +237,11 @@ Nano yet. A paired Mesh can already serve AI calls for a Nano tab (`mesh-link.js
 | C1 Auth | in-house JWT issuer, Postgres | same Python issuer in Pyodide, keys via WebCrypto, state in IndexedDB/OPFS | tokens valid only while the tab/SW is alive |
 | C1 WAF | Coraza in Caddy | rule engine (OWASP-lite subset) in the service-worker router | subset of managed rules, Dev Simplified |
 | C2/C11 Guardrails | rules + safety classifier model | rules + embedding similarity + the loaded web LLM as judge | no separate classifier model (browser memory) |
-| C3 Agent runtime | Docker containers with real Strands/LangGraph/ADK | (a) spec agents in a Pyodide worker (needs `agent_spec_core` in the Nano list); (b) the user's REAL agent code runs on their own machine and calls Nano's wires through the local relay/endpoint (`vyomi-tunnel`); (c) pure-Python frameworks in a Pyodide worker, feasibility to test | hosting a container is impossible; real framework code runs outside the tab |
+| C3 Agent runtime | Docker containers with real Strands/LangGraph/ADK | (a) spec agents in a Pyodide worker (needs `agent_spec_core` in the Nano list); (b) the user's REAL agent code runs on their own machine and calls Nano's wires through the local relay/endpoint (`vyomi-tunnel`); (c) pure-Python frameworks in a Pyodide worker, feasibility to test | hosting a container is impossible; real framework code runs outside the tab. **Mesh-only (accepted).** |
 | C3 Code Interpreter | Docker sandbox | Pyodide worker (a natural sandbox) | CPU/memory of the tab, no native libs |
-| C3 Browser tool | headless Chromium | none (declared gap, or an iframe-driven simplified browser) | not available |
+| C3 Browser tool | headless Chromium | none (declared gap, or an iframe-driven simplified browser) | **Mesh-only (accepted)** |
 | C4 Policy | Cedar (`cedar_engine`) | Cedar compiled to WASM (cedar-wasm) in a worker; needs the engine added to the Nano list | verify wasm size/perf |
-| C5 Approvals | ASL interpreter, Postgres timers | same interpreter (already a Nano core), state in OPFS/IndexedDB | timers and waits only run while a tab/worker is alive; long waits need Mesh |
+| C5 Approvals | ASL interpreter, Postgres timers | same interpreter (already a Nano core), state in OPFS/IndexedDB | timers and waits only run while a tab/worker is alive; long-running approvals are **Mesh-only (accepted)** |
 | C6 Retrieval | Postgres + pgvector HNSW + FTS | PGlite (Postgres WASM) with the same SQL schema; pgvector/FTS availability in PGlite to verify; exact-scan fallback exists | corpus size bounded by tab memory/OPFS |
 | C6 Rerank | GGUF cross-encoder | embedding + BM25 blend, or a small ONNX reranker via transformers.js (to evaluate) | lower accuracy, labelled |
 | C7 Tools | Docker Lambda/Functions | Python/JS sandbox in a worker (existing Lambda/Functions cores) | no native deps, no container images |
@@ -263,7 +281,7 @@ Work packages (WP) are the unit of branches and claims (one topic branch per WP)
 ### Phase 0: baseline and reference app (1-1.5 weeks, gates everything)
 | WP | Content | Components |
 |---|---|---|
-| P0 | Reference app (Facilities agent) written only against native SDKs: channels, Strands + LangGraph agents, Lambda tools, Step Functions approval flow, S3 ingestion pipeline, IaC. Run it on Mesh, turn every "read from code" claim in section 2 into a measured pass/fail per SDK call; re-verify tool calling/streaming with real boto3, google-genai and openai SDKs; fix the rubric wording with the owner. | C2, C5, C7, C12 (and the baseline for all) |
+| P0 | **API inventory from the official SDK/API models with in-scope/non-goal tags and per-service coverage numbers (the 100% denominator).** Reference app (Facilities agent) written only against native SDKs: channels, Strands + LangGraph agents, Lambda tools, Step Functions approval flow, S3 ingestion pipeline, IaC. Run it on Mesh, turn every "read from code" claim in section 2 into a measured pass/fail per SDK call; re-verify tool calling/streaming with real boto3, google-genai and openai SDKs; fix the rubric wording with the owner. | C2, C5, C7, C12 (and the baseline for all) |
 
 ### Phase 1: shared foundations (about 2 weeks, before the cloud lanes)
 | WP | Content | Components |
@@ -317,7 +335,7 @@ semantic ranker + agentic retrieval (C6), Entra External ID + Front Door WAF (C1
 for each service (Mesh and Nano), cost/usage view.
 
 ### Phase 6: conformance suite and release gate (continuous, final week)
-Per-component SDK suites plus the end-to-end scenario run on a real Codespace Mesh in CI; the matrix (13 components x clouds)
+Per-component SDK suites (one contract test per in-scope operation, 100% required on Mesh) plus the end-to-end scenario run on a real Codespace Mesh in CI; the matrix (13 components x clouds)
 published; "100%" is that matrix fully green with the declared non-goals.
 
 ### Coverage check (every component has at least one WP)
@@ -357,13 +375,28 @@ is: reference app on Mesh with real Bedrock Converse tool loop, KB RAG with cita
 
 ## 7. Decisions needed from the owner
 
-0. (Answered 2026-11-14) Mesh and Nano both in scope, Nano against WebLLM web models. Still open: is Nano required at "100% with declared limits" for every component in the first release, or may some (Browser tool, long-running approvals, real agent containers) be Mesh-only?
+0. (Answered 2026-11-14) Mesh and Nano both in scope, Nano against WebLLM web models; Nano may keep the Browser tool, long-running approvals and real agent containers Mesh-only; **Mesh must reach a hard 100%** (section 1). Still open: approve the non-goals list (which API operations are out of scope), and the bring-your-own-model switch (section 7A).
 
 1. Approve the conformance definition (section 1) and the "wire-compatible, not real products" rule for OpenSearch/Cognito/WAF.
 2. Order: AWS lane first (matches the diagram) with GCP and Azure lanes starting after Phase 1, or all three at once.
 3. Run the user's agent containers on Mesh (needs RAM budget) or keep spec-based agents only for the first release.
 4. Is the reference app public (marketing + docs) or internal?
 5. Relationship to the v4.0.0/4.0.1 release: these are post-beta work packages, not part of the beta cut.
+
+## 7A. Enterprise readiness (what "sell to enterprises" adds on top of conformance)
+
+Conformance proves the APIs behave like the clouds'. An enterprise purchase also needs these gates; each is a WP candidate to
+confirm with the owner after Phase 0:
+
+| Gate | What it requires |
+|---|---|
+| Honest positioning | Mesh is an environment to build and test enterprise agentic apps with native SDKs; it is not a production host and not a replica of model quality, managed-service SLAs or real classifier-grade guardrails. Marketing, docs and the console say so (existing "Dev Simplified" labels stay). Conformance claims name the pinned SDK versions. |
+| Model quality gap | Local 3B models cannot represent production answers. Offer a **bring-your-own-model** switch: Mesh points `VYOMI_LLM_ENDPOINT` (OpenAI-compatible, already supported by `llm_core`) at the customer's own vLLM/TGI, or proxies to the customer's real Bedrock/Vertex/Azure OpenAI with their credentials. Needs an owner decision on egress, data handling and billing. |
+| Tenant isolation | Per-customer Codespace (enterprise dedicated Codespaces already validated), per-session agent containers with cgroup limits, no cross-tenant state in shared engines (Cedar tenant attributes, key prefixes, row filters), tested. |
+| Security review | Threat model for the new surfaces: agent containers and Code Interpreter/Browser sandboxes (escape, egress), the JWT issuer, the WAF, prompt-injection paths through memory and RAG. Independent review before GA. |
+| Data handling | What leaves the Codespace (model endpoints, telemetry), retention and deletion of memory/audit/traces, encryption at rest with KMS cores, documented in terms. |
+| SSO, audit, admin | Enterprise admin console already exists (portal); add SSO sign-in for Mesh users, exportable audit (the CloudTrail-wire log), usage and cost reporting per tenant. |
+| Support and release | Version pinning (Mesh image tags, never `:latest`), release notes with the conformance matrix, regression gates in CI, a support/runbook path. |
 
 ## 8. Appendix: services to build and console-capture coverage
 
