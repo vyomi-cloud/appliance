@@ -1,4 +1,4 @@
-# Enterprise agentic AI on Mesh: plan to 100% conformance with the reference architecture
+# Enterprise agentic AI on Mesh and Nano: plan to 100% conformance with the reference architecture
 
 Status: PLAN (2026-11-14). Nothing is built by this document. Source of the target: the owner's reference architecture
 "Building Agentic AI Solution on AWS Bedrock" (`~/Desktop/AI_E2E_Flow.jpeg`): 11 numbered blocks + the knowledge processing pipeline + the governance row = 13 components (section 2).
@@ -20,6 +20,9 @@ Definition (proposed, needs owner sign-off):
 3. Every one of the 13 components has a conformance row: the SDK calls the real service offers for that block, with
    assertions on wire shape, error codes and state transitions, plus the console actions that exist for it.
 4. The same scenario then exists for GCP (Vertex) and Azure (Foundry) equivalents.
+
+Both substrates are in scope (owner, 2026-11-14): Mesh (real Docker backends, llama.cpp) and Nano (browser backends, WebLLM web models,
+section 2.3). A component is "100%" when it passes on both, with Nano's substrate limits declared, not hidden.
 
 Explicit non-goal: model QUALITY. Mesh runs a small local model (decision 2026-11-07: Qwen2.5-3B Q4 on native llama.cpp; the
 Codespace is 8 GB RAM, not 32). Conformance means wire/semantic fidelity and correct control flow, not answer quality. Every
@@ -192,9 +195,53 @@ Docker compute (agents, tools, sandboxes), VictoriaMetrics (metrics and telemetr
 second chat model do not run together with several agents: the AI profile (F7) must admit workloads against the budget and say
 so in plain language when it refuses. Bigger models or heavier agents move to the runner pool.
 
-**Nano (browser) substrate, for reference:** no Docker, so no real agent containers, Coraza, llama.cpp or Postgres server.
-Nano uses the in-browser equivalents already in the project (Pyodide cores, PGlite for pgvector-style search, WebLLM, OPA/Cedar
-in WASM) and stays "Dev Simplified"; this plan targets Mesh, where the real backends run.
+**Nano (browser) substrate:** no Docker, so no real agent containers, Coraza, llama.cpp or Postgres server. Nano gets the same
+engines through browser backends (Pyodide, PGlite, WebLLM, Cedar/OPA in WASM); see section 2.3 for the per-component Nano map.
+
+### 2.3 Dual-substrate design: Mesh and Nano (against web LLMs)
+
+Requirement (owner, 2026-11-14): the FULL architecture must work on both Mesh and Nano, with Nano answering from in-browser
+web LLMs (WebLLM). Design rule that makes this possible: **every shared engine (memory, retrieval, policy, approvals, guardrails,
+auth, audit, evals) is written once as substrate-independent, Pyodide-loadable Python behind one interface, with two backends:
+a heavy native one on Mesh and a browser one on Nano.** The cloud wires on top (AWS, GCP, Azure) never know which substrate
+they run on. This is how the existing cores already work (`core/*` is built into `wasm/core` by `build_cores.py` and loaded by
+`wasm/nano-boot.js`); the new engines must follow it and must be added to the Nano core lists.
+
+What Nano has today (read from `wasm/nano-boot.js`, `core/ai_model_catalog.py`; not tested): a WebLLM bridge
+(`vyomiEnableWebLLM`, needs WebGPU) with four models, **SmolLM2 360M, Qwen2.5 0.5B, Llama 3.2 1B, Qwen2.5 1.5B**; `llm_core`
+async backend; no embedding model in the browser (embeddings fall back to the labelled feature-hash); Pyodide cores including
+Step Functions, event bus, CloudWatch, Lambda, Vertex, S3 vectors and Azure AI Search vector; PGlite for RDS. Nano does NOT load
+`agent_spec_core`, `gcp_agentengine_core` or `cedar_engine`, so AgentCore/Agent Engine runtimes and Cedar policy do not run on
+Nano yet. A paired Mesh can already serve AI calls for a Nano tab (`mesh-link.js`); that stays the "big model" option.
+
+| Component | Mesh backend (2.2) | Nano backend (browser) | Nano limit to declare |
+|---|---|---|---|
+| C1 Auth | in-house JWT issuer, Postgres | same Python issuer in Pyodide, keys via WebCrypto, state in IndexedDB/OPFS | tokens valid only while the tab/SW is alive |
+| C1 WAF | Coraza in Caddy | rule engine (OWASP-lite subset) in the service-worker router | subset of managed rules, Dev Simplified |
+| C2/C11 Guardrails | rules + safety classifier model | rules + embedding similarity + the loaded web LLM as judge | no separate classifier model (browser memory) |
+| C3 Agent runtime | Docker containers with real Strands/LangGraph/ADK | (a) spec agents in a Pyodide worker (needs `agent_spec_core` in the Nano list); (b) the user's REAL agent code runs on their own machine and calls Nano's wires through the local relay/endpoint (`vyomi-tunnel`); (c) pure-Python frameworks in a Pyodide worker, feasibility to test | hosting a container is impossible; real framework code runs outside the tab |
+| C3 Code Interpreter | Docker sandbox | Pyodide worker (a natural sandbox) | CPU/memory of the tab, no native libs |
+| C3 Browser tool | headless Chromium | none (declared gap, or an iframe-driven simplified browser) | not available |
+| C4 Policy | Cedar (`cedar_engine`) | Cedar compiled to WASM (cedar-wasm) in a worker; needs the engine added to the Nano list | verify wasm size/perf |
+| C5 Approvals | ASL interpreter, Postgres timers | same interpreter (already a Nano core), state in OPFS/IndexedDB | timers and waits only run while a tab/worker is alive; long waits need Mesh |
+| C6 Retrieval | Postgres + pgvector HNSW + FTS | PGlite (Postgres WASM) with the same SQL schema; pgvector/FTS availability in PGlite to verify; exact-scan fallback exists | corpus size bounded by tab memory/OPFS |
+| C6 Rerank | GGUF cross-encoder | embedding + BM25 blend, or a small ONNX reranker via transformers.js (to evaluate) | lower accuracy, labelled |
+| C7 Tools | Docker Lambda/Functions | Python/JS sandbox in a worker (existing Lambda/Functions cores) | no native deps, no container images |
+| C8 Observability | VictoriaMetrics, Postgres spans | in-memory series + PGlite spans, persisted to OPFS | retention limited to browser storage |
+| C9 Memory | Valkey + pgvector | in-memory TTL map + PGlite vectors, persisted | per-browser, not shared across devices |
+| C10 Models and router | llama.cpp 3B + embed model; runner pool | **WebLLM**: 2-3 web models (0.5B fast, 1.5B default) with a router and fallback, an in-browser embedding model (WebLLM embedding models or transformers.js; to verify) | max ~1.5B, one model in VRAM at a time, small context; or link a Mesh |
+| C12 Pipeline | NATS, MinIO, extraction workers | S3/event-bus cores in-process, pure-Python `pypdf` + docx/xlsx parsers in Pyodide, embeddings in browser | file size/count bounded by tab |
+| C13 Governance | Postgres audit, Cedar, KMS | audit log in PGlite/OPFS, same KMS/IAM cores | not durable across devices |
+
+**Making 0.5B-1.5B web models usable for an enterprise agent:**
+- Constrained decoding for tool calls (WebLLM supports JSON-schema/grammar-constrained output; llama.cpp has GBNF on Mesh) so tool-call arguments are always valid JSON; verify the WebLLM function-calling path.
+- Compact prompts: short tool schemas, retrieved passages trimmed to the context window (small on web models), summarising memory.
+- A **scripted/deterministic backend** (registered through `vyomiRegisterLLM`) so every control-flow assertion (approval routing, tool loops, memory, citations) is testable without model variance. Conformance is about wire, state and control flow, never answer quality.
+- WebGPU is required and not universal; without it the honest `ModelNotReady` error stays (no canned answers), and a linked Mesh or the scripted backend takes over.
+
+**Test strategy for both substrates:**
+- One suite, two runners: Mesh on a Codespace (real llama.cpp), Nano in real Chromium on the localhost portal (:8099, service worker) with (1) the scripted backend for hermetic runs in CI and (2) a WebLLM smoke run on a WebGPU machine (headless CI usually lacks WebGPU, so this run is a local or scheduled gate).
+- The conformance matrix has a Mesh column and a Nano column per component and cloud; a Nano cell is "PASS", "PASS with declared limit" or "N/A (substrate)", never silently skipped.
 
 ## 3. Constraints that shape the design
 
@@ -244,6 +291,16 @@ Work packages (WP) are the unit of branches and claims (one topic branch per WP)
 | A10 | Telemetry store (IoT/Timestream subset) and extraction stubs, only if Phase 0 shows they are needed | C7, C12 |
 | A11 | AgentCore Browser + Code Interpreter on Mesh compute (sandboxed, RAM-budgeted); Evaluations + Optimizations/A-B tests consoles | C3, C8 |
 
+### Nano lane (parallel to Phase 2, 3-4 weeks; WebLLM)
+| WP | Content | Components |
+|---|---|---|
+| N1 | WebLLM seam upgrade: streaming, constrained-decoding tool calls, embeddings model in the browser, 2-3 model router with fallback, small-context prompt budgeting, scripted backend | C10, C3, C9 |
+| N2 | Shared engines in the Nano core lists (memory, retrieval on PGlite with the same SQL, policy via cedar-wasm, guardrails v2, JWT issuer, audit log, eval runner) and `agent_spec_core` / `gcp_agentengine_core` / `cedar_engine` added to `nano-boot.js` | C1, C2, C4, C6, C8, C9, C11, C13 |
+| N3 | Nano agent hosting: spec agents in a Pyodide worker, the user's real agent code via the local relay/endpoint, feasibility spike for pure-Python frameworks in Pyodide; Code Interpreter in a Pyodide worker | C3, C7 |
+| N4 | Nano approvals and pipeline durability (OPFS/IndexedDB state, honest timer limits), PDF/Office extraction in Pyodide | C5, C12 |
+| N5 | Nano packaging: WebGPU detection, model download/caching UX, storage quota handling, Mesh-link fallback | C10 |
+| N6 | Nano conformance runner (scripted backend in CI, WebLLM smoke on WebGPU) and the Nano column of the matrix | all |
+
 ### Phase 3: GCP lane (parallel to Phase 2, 3-4 weeks)
 Vertex Agent Engine running real containers/ADK (C3), Memory Bank (C9), RAG Engine `ragCorpora` + retrieveContexts (C6, C12),
 grounding check + safety settings/ratings (C11, C2), Gemini Developer API alias and function calling depth (C10), Identity
@@ -257,7 +314,7 @@ semantic ranker + agentic retrieval (C6), Entra External ID + Front Door WAF (C1
 
 ### Phase 5: developer experience (1-2 weeks, overlaps)
 "Enterprise Agentic starter" template per cloud (the reference app), one-click Mesh launch, docs per component, console actions
-for each service (Mesh, not Nano), cost/usage view.
+for each service (Mesh and Nano), cost/usage view.
 
 ### Phase 6: conformance suite and release gate (continuous, final week)
 Per-component SDK suites plus the end-to-end scenario run on a real Codespace Mesh in CI; the matrix (13 components x clouds)
@@ -268,27 +325,29 @@ published; "100%" is that matrix fully green with the declared non-goals.
 |---|---|
 | C1 Access and perimeter | A1, A2 |
 | C2 Channels and interface | P0, F6 |
-| C3 AgentCore Runtime | A3, A6a |
+| C3 AgentCore Runtime | A3, A6a, N3 |
 | C4 AgentCore Gateway | F4, A4, F6 |
-| C5 Actions and approval | F5, A9 |
-| C6 Knowledge search (RAG) | F3, A6b, A7 |
+| C5 Actions and approval | F5, A9, N4 |
+| C6 Knowledge search (RAG) | F3, A6b, A7, N2 |
 | C7 Tools (Lambda) | P0, A10 |
 | C8 AgentOps and observability | F1, A5, A6c, A8b |
-| C9 AgentCore Memory | F2, A5 |
-| C10 Foundation models | F1, F7, A6d |
+| C9 AgentCore Memory | F2, A5, N1, N2 |
+| C10 Foundation models | F1, F7, A6d, N1, N5 |
 | C11 Response generation | F6, A6b |
-| C12 Knowledge processing pipeline | P0, F3, A7, A10 |
+| C12 Knowledge processing pipeline | P0, F3, A7, A10, N4 |
 | C13 Governance and security | F1, F4, A1, A5, A8a |
 
 ## 5. Estimate and order (rough, NOT measured)
 
-About 14-18 weeks of single-agent effort; with three parallel lanes after Phase 1, about 8-10 weeks wall clock. Critical path:
-P0 -> F1/F2/F3/F4 -> A3/A4 (real runtime + gateway). If the YC/demo story needs something earlier, the smallest visible slice
+About 17-22 weeks of single-agent effort including the Nano lane; with four parallel lanes (AWS, GCP, Azure, Nano) after Phase 1, about 9-12 weeks wall clock. Critical path:
+P0 -> F1/F2/F3/F4 -> A3/A4 (real runtime + gateway), and in parallel P0 -> N1/N2 (WebLLM seam + shared engines in the Nano core lists). If the YC/demo story needs something earlier, the smallest visible slice
 is: reference app on Mesh with real Bedrock Converse tool loop, KB RAG with citations, Step Functions approval, guardrails
 (most exists), then Memory and the AgentCore container runtime.
 
 ## 6. Risks
 
+- Nano: web models top out at ~1.5B and need WebGPU; tool-call reliability and context size are the weakest point (mitigations in 2.3). Browser memory/storage quotas bound corpus size, and real agent containers are impossible in a tab.
+- Two substrates double the test surface; the shared-engine rule (one Python engine, two backends) and the scripted backend keep it manageable.
 - 8 GB RAM vs real agent containers + model + engines: needs the AI profile and admission control; may force smaller model for tests.
 - 3B model reliability for supervisor routing and multi-step plans: scripted backend for deterministic tests, honest labelling.
 - AgentCore/Bedrock APIs move fast; pin the SDK versions the suite targets and record them in the matrix.
@@ -297,6 +356,8 @@ is: reference app on Mesh with real Bedrock Converse tool loop, KB RAG with cita
   (V4-BRANCH-ARCHITECTURE); lanes need claims in SESSION-CLAIMS.md and one branch per work package.
 
 ## 7. Decisions needed from the owner
+
+0. (Answered 2026-11-14) Mesh and Nano both in scope, Nano against WebLLM web models. Still open: is Nano required at "100% with declared limits" for every component in the first release, or may some (Browser tool, long-running approvals, real agent containers) be Mesh-only?
 
 1. Approve the conformance definition (section 1) and the "wire-compatible, not real products" rule for OpenSearch/Cognito/WAF.
 2. Order: AWS lane first (matches the diagram) with GCP and Azure lanes starting after Phase 1, or all three at once.
