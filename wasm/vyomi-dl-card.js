@@ -32,8 +32,8 @@
     d.querySelector('button').onclick = function (e) { e.stopPropagation(); mode(true); };
     function tog() { if (d.classList.contains('min')) { var nb = document.querySelector('.sim-bar'); if (nb) nb.remove(); mode(false); } else mode(true); }  // one expanded card at a time
     // Start collapsed if the user collapsed it this session, or while the first-visit notice is showing (don't stack).
-    var was = false, seen = false; try { was = sessionStorage.getItem(KEY) === '1'; seen = sessionStorage.getItem('vyomi.simNoticeSeen') === '1'; } catch (_) {}
-    if (was || navigator.webdriver || (!seen && !/\/admin/.test(location.pathname))) d.classList.add('min');   // collapsed under UI tests
+    // Hidden by default on every page load: only the download icon shows; clicking it opens the card (and the choice is not remembered across loads).
+    d.classList.add('min');
     // The download icon lives in the bottom drawer (right end, after the info icon); admin pages have no drawer,
     // so it goes into the header's right cluster there, else floats.
     var ic = document.createElement('button'); ic.type = 'button'; ic.className = 'vy-exp vy-ic'; ic.id = 'vy-dl-ic'; ic.style.order = '3'; ic.title = 'Install Tunnel'; ic.setAttribute('aria-label', 'Install Tunnel');

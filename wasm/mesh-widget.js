@@ -187,7 +187,7 @@
       + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}#vy-bw .act .go{white-space:nowrap}"
       + "#vy-bw .go{display:block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 16px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-bw .go.stop{background:#b42318}#vy-bw .go[disabled]{opacity:.6;cursor:default}"
-      + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}"
+      + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}#vy-bw .main .subt{text-align:left;margin:2px 0 8px}"
       + "#vy-bw .cd{margin-top:6px;text-align:center;font:600 22px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.04em;font-variant-numeric:tabular-nums}#vy-bw .cdl{text-align:center;font-size:11px;color:#6b7280;margin-top:-2px}"
       + "#vy-bw .err{color:#b42318;font-size:13px;margin-top:4px}"
       + "#vy-bw .ka{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#6b7280;cursor:pointer;user-select:none}#vy-bw .ka .sw{position:relative;width:32px;height:18px;border-radius:999px;border:0;padding:0;background:#c3c9d1;cursor:pointer;transition:background .15s}#vy-bw .ka .sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}#vy-bw .ka .sw[aria-checked=true]{background:#2f6fdc}#vy-bw .ka .sw[aria-checked=true]::after{transform:translateX(14px)}#vy-bw .ka .sw[disabled]{opacity:.6;cursor:default}"
@@ -339,8 +339,10 @@
         var kon = ss.keep_alive !== false;
         ka = '<label class="ka" title="' + (kon ? "Your Mesh stays up for the whole 8 hours even if this tab is closed or inactive. Open any Vyomi console to reattach (your local tunnel must be running). If the tunnel is lost, the Mesh still ends at the 8-hour limit." : "Off: the Mesh stops after 30 minutes with no Vyomi tab open.") + '">Keep running when this tab is closed <button type="button" class="sw" role="switch" data-ka aria-checked="' + kon + '" aria-label="Keep the Mesh running when this tab is closed"' + (busy ? " disabled" : "") + '></button></label>';
       }
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p' + (warn ? ' class="warn"' : '') + '>' + esc(line) + '</p>' + stg;
-      act = btn + tunLink + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
+      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4>'
+        + ([sub, hrs].filter(Boolean).length ? '<div class="sub subt">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>' : '')
+        + '<p' + (warn ? ' class="warn"' : '') + '>' + esc(line) + '</p>' + stg;
+      act = btn + tunLink;
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
       main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
