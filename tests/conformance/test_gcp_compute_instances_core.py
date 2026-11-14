@@ -327,6 +327,14 @@ def run() -> int:
     _check("aggregated instances kind", agg["kind"] == "compute#instanceAggregatedList")
     _check("aggregated instances has web-3", any("web-3" in i["name"] for z in agg["items"].values() for i in z.get("instances", [])))
 
+    # 14. a SUSPENDED VM: `start` is refused (it must be resumed) but `stop` is allowed (real GCP) -> TERMINATED
+    _call(st, "POST", "/zones/%s/instances" % ZONE, {"name": "susp-1", "machineType": "e2-medium",
+          "disks": [{"boot": True, "initializeParams": {"sourceImage": "projects/debian-cloud/global/images/family/debian-12", "diskSizeGb": 10}}]})
+    _call(st, "POST", "/zones/%s/instances/susp-1:suspend" % ZONE)
+    _check("start on a SUSPENDED VM -> 400 (use resume)", _call(st, "POST", "/zones/%s/instances/susp-1:start" % ZONE).status == 400)
+    _check("stop on a SUSPENDED VM -> 200", _call(st, "POST", "/zones/%s/instances/susp-1:stop" % ZONE).status == 200)
+    _check("suspended VM, once stopped, is TERMINATED", _jbody(_call(st, "GET", "/zones/%s/instances/susp-1" % ZONE))["status"] == "TERMINATED")
+
     print("\nRESULT: PASS — GCP Compute Engine control-plane core conforms "
           "(native Compute Engine REST v1 wire) on this substrate.")
     return 0

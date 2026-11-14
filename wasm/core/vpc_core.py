@@ -2268,7 +2268,8 @@ def _ensure_default_network(m: dict) -> tuple[str, str, str]:
 
 
 def _seed_amis(m: dict) -> None:
-    if m["seeded_amis"]:
+    # Re-seed if the flag survived but the images did not (a half-restored model made RunInstances raise StopIteration).
+    if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()):
         return
     m["seeded_amis"] = True
     for spec in _QUICKSTART_AMIS:
@@ -2276,6 +2277,8 @@ def _seed_amis(m: dict) -> None:
         # restored without its images) must hand out the SAME ids, or a launch form that listed AMIs earlier gets
         # InvalidAMIID.NotFound on RunInstances.
         ami_id = "ami-" + uuid.uuid5(uuid.NAMESPACE_URL, "vyomi/quickstart-ami/" + spec["name"] + "/" + spec["arch"]).hex[:17]
+        if ami_id in m["images"]:
+            continue
         m["images"][ami_id] = {
             "id": ami_id, "name": spec["name"], "description": spec["name"], "owner_id": "amazon",
             "public": True, "state": "available", "architecture": spec["arch"], "platform": spec["platform"],
@@ -3397,7 +3400,7 @@ def _delete_security_group(store, params):
     if sg.get("is_default"):
         raise VpcError("CannotDelete", "The default security group cannot be deleted.")
     for inst in m["instances"].values():
-        if sg["id"] in inst.get("sg_ids", []):
+        if sg["id"] in inst.get("sg_ids", []) and inst.get("state") != "terminated":   # a terminated instance no longer holds its groups (matches the subnet/VPC checks)
             raise VpcError("DependencyViolation", f"resource {sg['id']} has a dependent object (in use by {inst['id']}).")
     _check_no_active_share(store, "security-group", sg["id"])
     m["sgs"].pop(sg["id"])

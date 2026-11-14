@@ -428,7 +428,7 @@ def set_instance_status(store, project, zone, name, action):
     full, inst = _instance(store, project, zone, name)
     table = {
         "start": ((TERMINATED,), RUNNING), "resume": ((SUSPENDED,), RUNNING),
-        "stop": ((RUNNING, STAGING, PROVISIONING, REPAIRING), TERMINATED),
+        "stop": ((RUNNING, STAGING, PROVISIONING, REPAIRING, SUSPENDED), TERMINATED),
         "suspend": ((RUNNING,), SUSPENDED), "reset": ((RUNNING,), RUNNING),
     }
     allowed, new_status = table[action]

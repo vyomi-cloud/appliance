@@ -9,6 +9,9 @@
  *           plus a job's state and a deployed model seen identically on both sides, and a Studio generate vs native generateContent.
  * Anything the driver cannot do is printed as [SKIP] with the reason and never counted as a pass. */
 import { chromium, sleep } from "../../../wasm/ui-tests/lib.mjs";
+import { nanoStart } from "./lib/nano-gcp.mjs";
+const NANO = !!process.env.NANO;   // NANO=1: genuine Nano (in-browser engines, wasm/ bundle) instead of dev_server
+let NH = null;
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +28,7 @@ const ONLY = (process.env.ONLY || "compute,vertex").split(",");
 const freePort = () => new Promise((res) => { const s = net.createServer().listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => res(p)); }); });
 
 let dev = null, BASE = process.env.BASE || "";
-if (!BASE) {
+if (!BASE && !NANO) {
   const port = await freePort();
   dev = spawn(process.env.PY || "python3", [resolve(HERE, "../../../consoles/dev_server.py"), "--port", String(port), "--tier", "max", "--primary", "gcp"], { stdio: "ignore", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
   BASE = `http://127.0.0.1:${port}`;
@@ -45,10 +48,11 @@ if (SIM) {   // console bundle from BASE, but its /_wire calls go to the real ap
   await new Promise((res) => proxy.listen(0, "127.0.0.1", res));
   BASE = `http://127.0.0.1:${proxy.address().port}`;
 }
-const UI = BASE + "/v4/gcp/index.html";
+let UI = BASE + "/v4/gcp/index.html";
 const WIRE = SIM || BASE + "/_wire";
 
 const rest = async (method, path, body) => {
+  if (NH) return NH.rest(method, path, body);
   const r = await fetch(WIRE + path, { method, headers: { "content-type": "application/json" }, body: body === undefined || method === "GET" || method === "DELETE" ? undefined : JSON.stringify(body) });
   let j = null; try { j = await r.json(); } catch (_) {}
   return { status: r.status, body: j };
@@ -56,7 +60,8 @@ const rest = async (method, path, body) => {
 const tag = () => Date.now().toString(36).slice(-5);
 
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 1500, height: 1100 } });
+if (NANO) { NH = await nanoStart(browser, P); UI = NH.base + "/v4/gcp/index.html"; BASE = NH.base; }
+const ctx = NH ? NH.ctx : await browser.newContext({ viewport: { width: 1500, height: 1100 } });
 await ctx.addInitScript((p) => { try { localStorage.setItem("vyomi.v4.gcp.project", p); } catch (_) {} }, P);
 const page = await ctx.newPage();
 const results = []; let skipped = 0;
@@ -289,6 +294,7 @@ async function vertex() {
       const n = await rest("POST", `${VP}/publishers/${pub}/models/${mid}:generateContent`, { contents: [{ role: "user", parts: [{ text: "Reply with the single word: pong" }] }], generationConfig: { maxOutputTokens: 16 } });
       const txt = n.body?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (n.status === 503 && /not reachable|Mesh/i.test(JSON.stringify(n.body))) { skip(g, "Studio generate vs native generateContent", "no LLM runtime behind this simulator (needs a Mesh runner / local LLM)"); return; }
+      if (n.status === 503 && /No local LLM backend/i.test(JSON.stringify(n.body))) { skip(g, "Studio generate vs native generateContent", `catalog advertises ${mid} as available but this substrate has no LLM backend (503 "No local LLM backend is available on this substrate"); needs the Mesh AI pack / in-browser model. Product note: the publisher-model catalog reports available:true while generateContent is 503`); return; }
       check(g, `native generateContent (${mid}) returns text`, n.status === 200 && !!txt, `${n.status} ${JSON.stringify(n.body).slice(0, 160)}`);
       const c = await rest("POST", `${VP}/publishers/${pub}/models/${mid}:countTokens`, { contents: [{ role: "user", parts: [{ text: "hello world" }] }] });
       check(g, "native countTokens returns totalTokens", c.status === 200 && Number(c.body?.totalTokens) > 0, `${c.status} ${JSON.stringify(c.body)}`);
@@ -304,7 +310,7 @@ for (const grp of ONLY) {
   try { if (grp === "compute") await compute(); else if (grp === "vertex") await vertex(); }
   catch (e) { check(grp, "harness ran to completion", false, String(e).split("\n").slice(0, 2).join(" ")); }
 }
-await browser.close(); if (dev) dev.kill();
+await browser.close(); if (dev) dev.kill(); if (NH) NH.server.close();
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, JSON.stringify({ cloud: "gcp", console: "v4", base: SIM || BASE, project: P, results }, null, 1));
 const done = results.filter((r) => r.ok !== null), pass = done.filter((r) => r.ok).length;
