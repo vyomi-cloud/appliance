@@ -348,3 +348,22 @@ func TestMCPInstructionsSteerAwayFromRealCloud(t *testing.T) {
 		t.Error("server instructions must steer local-dev work away from real-cloud MCP servers")
 	}
 }
+
+// The agent must not treat "set this project up" as approval to write: prerelease eval A01 caught a run that did.
+func TestMCPWriteEnvRequiresExplicitApproval(t *testing.T) {
+	var desc string
+	s := &mcpServer{}
+	for _, tl := range s.buildTools() {
+		if tl.Name == "vyomi_write_env" {
+			desc = tl.Description
+		}
+	}
+	for _, want := range []string{"Call ONLY after the user explicitly approved", "is not approval"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("vyomi_write_env description lacks %q: %s", want, desc)
+		}
+	}
+	if !strings.Contains(mcpInstructions, "is not approval") {
+		t.Errorf("server instructions do not say a general request is not approval")
+	}
+}

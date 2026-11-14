@@ -172,7 +172,7 @@ EOF
       | "$bp" mcp >"$o" 2>/dev/null
     check brew mcp "brew-installed vyomi-tunnel mcp answers" js "$o" 'r[1]["result"]["serverInfo"]["name"]=="vyomi"'
     if brew test vyomi/it/vyomi-tunnel >>"$IT_DIR/log.txt" 2>&1; then rec brew formula-test PASS "brew test"
-    else rec brew formula-test WARN "brew test fails: the formula's test starts the relay with no credentials (gated since 1.2.x); update the test in the tap"; fi
+    else rec brew formula-test FAIL "brew test (formula test block: --version + mcp initialize)"; fi
     brew uninstall --formula vyomi/it/vyomi-tunnel >>"$IT_DIR/log.txt" 2>&1
   fi
   brew untap vyomi/it >>"$IT_DIR/log.txt" 2>&1 && note "removed tap vyomi/it"

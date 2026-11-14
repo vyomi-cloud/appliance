@@ -63,9 +63,14 @@ In v4 the simulator lives in one of these **homes**:
    - a docker compose override or test fixture that sets the variables,
    - code changes only where an SDK cannot be pointed at an endpoint through
      configuration.
-   Show what will change and get the user's OK before writing anything.
-5. **Verify.** Run the project's own tests or a smoke command with the
-   variables loaded, and report what passed and what failed. `vyomi_snippet`
+   Show the exact change (the path and the full `.env.vyomi` contents, or the
+   diff) and then **stop and wait** for the user's explicit yes to that change.
+   A request to "set this up", "run this against Vyomi" or "make it work" is
+   not that approval: it asks you to propose, not to write. Only a reply that
+   approves the change you showed ("yes", "write it") counts.
+5. **Verify.** After the change is approved and written, run the project's own
+   tests or a smoke command with the variables loaded (ask first if that needs
+   installing dependencies), and report what passed and what failed. `vyomi_snippet`
    gives a one-line CLI / SDK / curl call aimed at the home's endpoint for a
    quick check. If a failure looks like a missing API in Vyomi, say so plainly
    rather than working around it.
@@ -74,6 +79,9 @@ In v4 the simulator lives in one of these **homes**:
 
 - Never modify production configuration, deployment manifests or secrets. Add
   local/dev overrides only.
+- Writing `.env.vyomi` (or any file), editing code and installing packages each
+  need the user's explicit OK to that specific change, shown first. A general
+  "set this up" request is not that OK.
 - For local-dev work, do not use MCP tools that act on a real cloud account
   (for example AWS's `aws-mcp`, or Azure / Google Cloud MCP servers) to create,
   read or change resources. Use the Vyomi tools and the local simulator; reach
