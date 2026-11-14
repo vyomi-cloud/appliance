@@ -25,6 +25,9 @@
     if (/Linux|X11/i.test(pl) || /Linux|X11/i.test(ua)) return "linux";
     return "";
   }
+  // "Check again" only makes sense once the tunnel has worked at least once on this browser (installed, or seen answering); before that it does nothing.
+  function tunnelSeen() { try { return localStorage.getItem("vyomi.tunnelSeen") === "1"; } catch (_) { return false; } }
+  function markTunnelSeen() { try { localStorage.setItem("vyomi.tunnelSeen", "1"); } catch (_) {} }
   function isMac() { return osKind() === "mac"; }
   function canInstall() { return !!osKind(); }
   function termName() { var k = osKind(); return k === "windows" ? "PowerShell" : k === "mac" ? "Terminal" : "a terminal"; }
@@ -45,7 +48,7 @@
       .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
       .then(function (j) {
         if (inst.s !== "ready") return;
-        if (j) { inst.st = j; if (j.finished && B() && B().checkTunnel) B().checkTunnel().then(repaint); repaint(); }
+        if (j) { inst.st = j; if (j.finished) markTunnelSeen(); if (j.finished && B() && B().checkTunnel) B().checkTunnel().then(repaint); repaint(); }
         if (!(j && (j.finished || j.expired)) && Date.now() - inst.t0 < 31 * 60 * 1000) instTimer = setTimeout(instPoll, 2000);
       });
   }
@@ -326,8 +329,9 @@
           stg = tst === "notab" ? '<ol class="steps"><li>The tunnel is running. Click <b>Start tunnel</b> in the bar at the bottom of this page.</li></ol>'
             : "";
           btn = tst === "notab" ? '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>' : '<button class="go" data-inst-open>Setup Tunnel</button>';
-          tunLink = '<div class="sub"><a href="#" data-tun>Check again</a></div>';
+          tunLink = tunnelSeen() ? '<div class="sub"><a href="#" data-tun>Check again</a></div>' : "";
         }
+        if (tst === "up" || tst === "notab") markTunnelSeen();
         var lf = B().lastFailure && B().lastFailure();
         if (conn && lf && (tst === "up" || tst === "unknown")) { tunLink = '<div class="sub"><a href="#" data-vc>Last attempt failed. See details</a></div>'; }
         if (offCloud) {                                             // not this cloud's plan: no Join here, say why and where to go
