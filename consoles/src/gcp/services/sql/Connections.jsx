@@ -19,6 +19,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import InstanceNav from "./InstanceNav.jsx";
 import * as api from "./api.js";
+import DbConnect from "../../../common/DbConnect.jsx";
 
 const TABS = [["summary", "Summary"], ["networking", "Networking"], ["security", "Security"]];
 
@@ -44,6 +45,7 @@ export default function Connections({ params, query }) {
             ["Instance connection name", i.connectionName],
             ["Public IP enabled", i.settings?.ipConfiguration?.ipv4Enabled ? "Yes" : "No"],
           ]} />
+          <DbConnect cloud="gcp" id={name} />
         </Section>
       )}
       {i && tab === "networking" && <Networking instance={i} reload={inst.reload} />}

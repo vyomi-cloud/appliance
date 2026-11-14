@@ -62,6 +62,51 @@ def list_endpoints(stores: dict | None = None) -> list[dict]:
     return out
 
 
+_DEFAULT_PORT = {"postgres": 5432, "mysql": 3306}
+
+
+def connection_list(stores: dict | None = None) -> list[dict]:
+    """Everything the console needs to show ONE paste-and-run connection string per database (RDS + Cloud SQL, Postgres and MySQL family):
+    engine, user, password, database and, when the tunnel bridge is already up (Postgres: the store rewrites the record's endpoint to
+    127.0.0.1:<host port>), the real host and port. MySQL ports come from the tunnel's /health `dbs` list (the console joins them by `key`).
+    Read-only; the simulator's own credentials on the user's own sandbox (the loopback bridge does not check them)."""
+    stores = stores if stores is not None else _reg.get()
+    out = []
+    for key in _STORE_KEYS:
+        st = stores.get(key)
+        if st is None:
+            continue
+        for db_id in st.instance_ids():
+            rec = st.get_instance(db_id) or {}
+            if key == "rds":
+                if rec.get("db_instance_status", "available") != "available":
+                    continue
+                fam = _family(rec.get("engine"))
+                user, pw = rec.get("master_username", "admin"), rec.get("master_user_password", "")
+                name, label, cloud = rec.get("db_name") or "", db_id, "aws"
+                host, port = (rec.get("endpoint_address") or ""), rec.get("endpoint_port") or 0
+            else:
+                if str(rec.get("state", "RUNNABLE")).upper() not in ("RUNNABLE", "AVAILABLE"):
+                    continue
+                fam = _family(rec.get("databaseVersion"))
+                users = [u for u in (rec.get("users") or {}).values() if u.get("password")]
+                pick = next((u for u in users if u.get("name") in ("postgres", "root")), users[0] if users else None)
+                user = (pick or {}).get("name") or ("postgres" if fam == "postgres" else "root")
+                pw = (pick or {}).get("password", "")
+                name, label, cloud = "", db_id.rsplit("/", 1)[-1], "gcp"          # store id is cloudsql:<project>/<instance>; the console knows the instance name
+                host, port = (rec.get("endpoint_address") or ""), rec.get("endpoint_port") or 0
+            if not fam:
+                continue
+            bridged = str(host) == "127.0.0.1"          # only a tunnel-published port is a real local address
+            out.append({"key": f"{key}:{db_id}", "cloud": cloud, "id": label, "engine": fam, "user": user, "password": pw, "database": name,
+                        "host": "127.0.0.1", "port": int(port) if bridged and port else 0, "default_port": _DEFAULT_PORT[fam]})
+    return out
+
+
+def connection_json() -> str:
+    return json.dumps(connection_list())
+
+
 def list_json() -> str:
     return json.dumps(list_endpoints())
 

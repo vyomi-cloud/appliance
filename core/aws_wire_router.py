@@ -1866,6 +1866,14 @@ class AwsWireRouter:
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
             r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
             return {"status": r.status, "headers": dict(r.headers), "body": r.body}
+        if p0 == "/_vyomi/db-connect" and method.upper() == "GET":      # one paste-and-run connection string per database (console reads this)
+            import json as _json
+            from core import db_endpoints as _dbe
+            try:
+                rows = _dbe.connection_list({"rds": self.rds, "gcp_sql": self.gcp_sql})
+            except Exception:
+                rows = []
+            return {"status": 200, "headers": {"content-type": "application/json", "cache-control": "no-store"}, "body": _json.dumps({"databases": rows}).encode()}
         lh = _lower_headers(headers)
         bb = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         svc = self.service_of(method, path, lh, bb if isinstance(bb, bytes) else bytes(bb), query)
