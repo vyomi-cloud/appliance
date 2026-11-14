@@ -10,6 +10,7 @@ import Flashbar from "@cloudscape-design/components/flashbar";
 import HelpPanel from "@cloudscape-design/components/help-panel";
 import BackendsSection from "../common/BackendsPanel.jsx";
 import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
+import Icon from "@cloudscape-design/components/icon";
 import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import { applyDensity, applyMode, Density, Mode } from "@cloudscape-design/global-styles";
@@ -31,6 +32,62 @@ const REGIONS = [
 
 const pref = (k, d) => { try { return localStorage.getItem(`vyomi.v4.${k}`) || d; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(`vyomi.v4.${k}`, v); } catch {} };
+
+const HELP_MIN = 320;
+const readHelpW = () => { const n = parseInt(pref("helpW", ""), 10); return Number.isFinite(n) ? n : 420; };
+
+/** Help panel docked to the right edge as an OVERLAY: it floats above the page (the content never reflows),
+ * can be dragged wider from its left edge, and toggled between normal and expanded width. */
+function HelpOverlay({ open, onClose, children }) {
+  const [width, setWidth] = useState(readHelpW);
+  const [expanded, setExpanded] = useState(false);
+  const max = () => Math.max(HELP_MIN, Math.floor(window.innerWidth * 0.8));
+  const clamp = (w) => Math.min(max(), Math.max(HELP_MIN, w));
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  const [topH, setTopH] = useState(56);
+  useEffect(() => { if (open) setTopH(document.getElementById("vyomi-top")?.offsetHeight || 56); }, [open]);
+  if (!open) return null;
+  const shown = clamp(expanded ? Math.floor(window.innerWidth * 0.65) : width);
+  const startDrag = (e) => {
+    e.preventDefault();
+    setExpanded(false);
+    const move = (ev) => setWidth(clamp(window.innerWidth - ev.clientX));
+    const up = (ev) => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      document.body.style.userSelect = "";
+      savePref("helpW", String(clamp(window.innerWidth - ev.clientX)));
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
+  const nudge = (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); setExpanded(false);
+    const w = clamp(shown + (e.key === "ArrowLeft" ? 24 : -24)); setWidth(w); savePref("helpW", String(w));
+  };
+  const btn = { background: "transparent", border: 0, cursor: "pointer", color: "inherit", padding: 6, borderRadius: 4, lineHeight: 0 };
+  return (
+    <aside id="vyomi-help-overlay" aria-label="Help panel"
+      style={{ position: "fixed", top: topH, right: 0, bottom: isNano() ? 0 : 32, width: shown, maxWidth: "100vw", zIndex: 1001,
+        background: "var(--color-background-container-content, #fff)", color: "var(--color-text-body-default, #0f1b2a)",
+        boxShadow: "-8px 0 24px rgba(0,28,36,.28)", borderLeft: "1px solid var(--color-border-divider-default, #d5dbdb)", display: "flex", flexDirection: "column" }}>
+      <div role="separator" aria-orientation="vertical" aria-label="Resize help panel" tabIndex={0} onPointerDown={startDrag} onKeyDown={nudge}
+        style={{ position: "absolute", left: -4, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 2, touchAction: "none" }} />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 2, padding: "6px 8px 0" }}>
+        <button style={btn} aria-label={expanded ? "Collapse help panel" : "Expand help panel"} title={expanded ? "Collapse" : "Expand"} onClick={() => setExpanded((v) => !v)}>
+          <Icon name={expanded ? "angle-right-double" : "angle-left-double"} />
+        </button>
+        <button style={btn} aria-label="Close help panel" title="Close" onClick={onClose}><Icon name="close" /></button>
+      </div>
+      <div style={{ flex: 1, overflow: "auto" }}>{children}</div>
+    </aside>
+  );
+}
 
 /** Resolve the current route against a loaded service module. */
 function resolve(m, route) {
@@ -111,11 +168,12 @@ export default function App() {
           <BreadcrumbGroup items={[{ text: "Console Home", href: "#/" }, { text: svc?.title || (svcId === "services" ? "All services" : svcId), href: `#/${svcId}` }, ...crumbs]} onFollow={follow} ariaLabel="Breadcrumbs" />
         )}
         notifications={<Flashbar items={notify.items} stackItems />}
-        tools={<HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{svc && <BackendsSection cloud="aws" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0972d3" />}{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>}
-        toolsOpen={toolsOpen}
-        onToolsChange={({ detail }) => setToolsOpen(detail.open)}
+        toolsHide
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}
       />
+      <HelpOverlay open={toolsOpen} onClose={() => setToolsOpen(false)}>
+        <HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{svc && <BackendsSection cloud="aws" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0972d3" />}{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>
+      </HelpOverlay>
       {!isNano() && <footer id="vyomi-footer" style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 32, zIndex: 1001, display: "flex", alignItems: "center", gap: 20, padding: "0 16px", background: "#0f141a", color: "#d1d5db", fontSize: 12, fontFamily: '"Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif' }}>
         <a href="#/" style={{ color: "inherit", textDecoration: "none" }}>Console Home</a>
         <a href={classicHref("")} style={{ color: "inherit", textDecoration: "none" }}>Classic console</a>
