@@ -10,17 +10,28 @@
   var PRICING = "https://vyomi.cloud/pricing";
   var card, busy = false, msg = "", view = "main", collapsed = false;
 
-  // ── one-command tunnel install (macOS) ─────────────────────────────────────────────────────────────────────────────────────────
+  // ── one-command tunnel install (macOS, Linux, Windows) ─────────────────────────────────────────────────────────────────────────────────────────
   // POST /api/tunnel/pair/start returns a single-use command bound to THIS signed-in account:  curl -fsSL <portal>/i/<code> | sh
   // The script installs a private Node + the tunnel, connects the account (so a wrong-account key cannot happen) and starts the tunnel at
   // login. It reports each step; this card polls GET /api/tunnel/pair/status and shows them live. Other systems keep the brew/npm steps.
   var inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }, instTimer = 0;
   var INST_STEPS = [["node", "Configuring Tunnel"], ["tunnel", "Installing the tunnel"], ["pair", "Connecting your account"], ["service", "Starting the tunnel"], ["running", "Tunnel running"]];
-  function isMac() { return /Mac/i.test(navigator.platform || "") && !/iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
+  // "mac" | "windows" | "linux" | "" (phones/tablets/ChromeOS/unknown: those keep the package-manager steps). One-command install exists for the first three.
+  function osKind() {
+    var ua = navigator.userAgent || "", pl = navigator.platform || "";
+    if (/iPhone|iPad|iPod|Android|CrOS/i.test(ua)) return "";
+    if (/Mac/i.test(pl)) return "mac";
+    if (/Win/i.test(pl) || /Windows/i.test(ua)) return "windows";
+    if (/Linux|X11/i.test(pl) || /Linux|X11/i.test(ua)) return "linux";
+    return "";
+  }
+  function isMac() { return osKind() === "mac"; }
+  function canInstall() { return !!osKind(); }
+  function termName() { var k = osKind(); return k === "windows" ? "PowerShell" : k === "mac" ? "Terminal" : "a terminal"; }
   function instFail(text) { inst = { s: "error", cmd: "", code: "", st: null, err: text, copied: false, t0: 0 }; repaint(); }
   function instGet() {
     clearTimeout(instTimer); inst = { s: "loading", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; repaint();
-    fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: "mac" }) })
+    fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: osKind() }) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (r) {
         if (!r.ok || !r.j.command) return instFail(r.status === 401 ? "Sign in again, then retry." : (r.j && (r.j.message || r.j.error)) || "Could not create the install command.");
@@ -51,7 +62,7 @@
   function repaint() { paint(); paintModal(); }
   function modalHtml() {
     var done = instDone(), body;
-    if (!isMac()) {
+    if (!canInstall()) {
       body = '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
     } else body = installPanel();
     return '<div class="tm-ov" data-tm-ov><div class="tm" role="dialog" aria-modal="true" aria-labelledby="vy-tm-t" tabindex="-1">'
@@ -81,7 +92,7 @@
   function instOpen() {
     var st = inst.st || {};
     tm.open = true; tm.last = "";
-    if (isMac() && (inst.s === "idle" || inst.s === "error" || st.finished || st.expired || st.failed)) instGet(); else paintModal();
+    if (canInstall() && (inst.s === "idle" || inst.s === "error" || st.finished || st.expired || st.failed)) instGet(); else paintModal();
     paint();
   }
   function instClose() {
@@ -92,7 +103,7 @@
   document.addEventListener("keydown", function (e) { if (tm.open && (e.key === "Escape" || e.key === "Esc")) instClose(); });
   function installPanel() {
     if (inst.s === "idle" || inst.s === "error") {
-      return '<div class="inst"><p class="fine">Install the Vyomi tunnel on this Mac with one command. It connects to <b>your</b> account, so there is nothing to copy or configure.</p>'
+      return '<div class="inst"><p class="fine">Install the Vyomi tunnel on this computer with one command. It connects to <b>your</b> account, so there is nothing to copy or configure.</p>'
         + (inst.err ? '<p class="fine" style="color:#b10e1c">' + esc(inst.err) + '</p>' : '')
         + '<button class="go" data-inst-get>Get install command</button>'
         + '<div class="sub">Prefer a package manager? <code>npm i -g vyomi-tunnel</code>, then run <code>vyomi-tunnel</code></div></div>';
@@ -102,7 +113,7 @@
     var items = INST_STEPS.map(function (s) { return '<li style="list-style:none;margin-left:-18px">' + (done.indexOf(s[0]) >= 0 ? "✓" : "○") + " " + esc(s[1]) + "</li>"; }).join("");
     var head = st.finished ? '<p class="fine"><b>Tunnel installed and running.</b> Click <b>Start tunnel</b> in the bar at the bottom of this page, then join the Mesh.</p>'
       : st.expired ? '<p class="fine">This command expired. <a href="#" data-inst-get>Get a new one</a></p>'
-      : '<p class="fine">Open <b>Terminal</b>, paste this, and press Enter. This page follows the progress.</p>';
+      : '<p class="fine">Open <b>' + termName() + '</b>, paste this, and press Enter. This page follows the progress.</p>';
     var ICON_COPY = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M0 6.75C0 5.78.78 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25z"/><path d="M5 1.75C5 .78 5.78 0 6.75 0h7.5C15.22 0 16 .78 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>';
     var ICON_OK = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 1 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/></svg>';
     return '<div class="inst">' + head + '<div class="cmd"><code>' + esc(inst.cmd) + '</code>'

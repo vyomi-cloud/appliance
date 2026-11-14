@@ -16,3 +16,9 @@
 - Windows (PowerShell) and Linux installers are not built; only macOS shows the dialog's one-command flow.
 - Start/Stop/Restart controls in the drawer (local relay endpoints) are not built.
 - Not yet tested in a real browser on a Mac with no Node/Homebrew; the "stop an already-running tunnel on :8090" branch of the script is untested.
+
+
+## Windows and Linux (added 2026-11-14)
+- Widget `osKind()` picks mac|windows|linux (phones/ChromeOS keep the brew/npm steps); requests `platform` accordingly; dialog says PowerShell / Terminal / a terminal.
+- Portal serves `linux.sh` (systemd user service, nohup fallback) and `win.ps1` (`irm <portal>/i/<code> | iex`; Scheduled Task at logon + hidden run.cmd restart loop; never calls `exit`, since iex would close the window). Refusals are PowerShell-valid when the User-Agent says PowerShell.
+- Verified: Linux e2e in a clean Debian container (nohup path). NOT verified: Linux systemd path, any Windows run (script only reviewed, no PowerShell available here).
