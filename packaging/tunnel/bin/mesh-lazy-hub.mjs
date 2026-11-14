@@ -8,8 +8,8 @@ import { createSshHub } from "./mesh-ssh.mjs";
 
 export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, currentCodespace = null, recheckMs = 30000, log = () => {}, retryMs = 15000, now = Date.now } = {}) {
   let hub = null, pending = null, failed = null;          // failed: {at, err}
-  let hubCs = null, checkedAt = 0;                         // the Codespace this link was opened for; when we last re-checked it
-  const drop = () => { const h = hub; hub = null; hubCs = null; try { h && h.close(); } catch { /* */ } };
+  let hubCs = null, hubTr = null, checkedAt = 0;                         // the Codespace this link was opened for; when we last re-checked it
+  const drop = (why) => { const h = hub; if (h && why) log(`Mesh link dropped: ${why}`); hub = null; hubCs = null; hubTr = null; try { h && h.close(); } catch { /* */ } };
   // A Mesh restart creates a NEW Codespace. A relay that keeps running must not keep talking to the dead one: while there is Mesh traffic,
   // re-read the account's current Codespace (at most every recheckMs, from a fresh signed session) and drop the link when it changed or the
   // Mesh session is over. The next request then opens a fresh link.
@@ -21,8 +21,9 @@ export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, current
       log(r.error ? "your Mesh session has ended." : `Mesh moved to a new Codespace (${r.codespace}); reconnecting.`); drop(); failed = null;
     }
   }
-  const stale = () => { checkedAt = 0; setTimeout(drop, 0); };   // the simulator stream failed: don't keep a possibly dead link
+  const stale = () => { checkedAt = 0; setTimeout(() => drop("simulator stream failed"), 0); };   // the simulator stream failed: don't keep a possibly dead link
   function ensure() {
+    if (hub && hubTr && hubTr.closed === true) { drop("the ssh link to the Codespace closed"); failed = null; }   // a dead link is never reused
     return fresh().then(() => hub ? hub : open());
   }
   function open() {
@@ -33,7 +34,7 @@ export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, current
         if (o.error) { const e = new Error(o.error); e.code = o.code || "MeshUnavailable"; throw e; }
         o.transport.onStop(() => { log("your Mesh session has ended."); drop(); });
         hub = createSshHub({ WebSocketServer, WebSocket, transport: o.transport, log });
-        hubCs = (o.sess && o.sess.codespace) || o.transport.codespace || null; checkedAt = now();
+        hubTr = o.transport; hubCs = (o.sess && o.sess.codespace) || o.transport.codespace || null; checkedAt = now();
         failed = null;
         return hub;
       })().catch((e) => { failed = { at: now(), err: e }; throw e; }).finally(() => { pending = null; });
@@ -49,12 +50,27 @@ export function createLazySshHub({ WebSocketServer, WebSocket, openMesh, current
     /** Mesh plane = HTTP carrying X-Vyomi-Session-Token (the Nano console's compute/AI calls). Anything else is the relay's own business. */
     http(req, res, body) {
       if (req.headers["x-vyomi-session-token"] === undefined) return false;
-      const wh = res.writeHead.bind(res); res.writeHead = (st, ...a) => { if (st === 502) stale(); return wh(st, ...a); };
-      ensure().then((h) => h.http(req, res, body)).catch((e) => {
+      const fail = (e) => {
         if (res.headersSent) return;
         res.writeHead(e.code === "PlanNotAllowed" ? 403 : 503, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: { ok: false, code: e.code || "MeshUnavailable", reason: String(e.message).slice(0, 200) } }));
+      };
+      // A 502 means the link to the simulator died. Drop it, open a fresh link and replay the request ONCE (the body is buffered), so a dead
+      // link heals without the caller seeing an error. A second 502 is passed through and the link is dropped again for the next request.
+      const attempt = (retried) => ensure().then((h) => {
+        const wh = res.writeHead, en = res.end; let held = false;
+        res.writeHead = (st, ...a) => {
+          if (st === 502) { if (!retried && !res.headersSent) { held = true; return res; } stale(); }
+          return wh.call(res, st, ...a);
+        };
+        res.end = (...a) => {
+          res.writeHead = wh; res.end = en;
+          if (held) { held = false; drop("simulator stream failed; reopening"); failed = null; return void attempt(true).catch(fail); }
+          return en.apply(res, a);
+        };
+        h.http(req, res, body);
       });
+      attempt(false).catch(fail);
       return true;
     },
     upgrade: (_q, socket) => { refuse(socket, 410, "MeshLinkNotUsed"); return true; },
