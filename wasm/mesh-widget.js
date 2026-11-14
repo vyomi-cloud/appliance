@@ -457,7 +457,7 @@
     tc.setAttribute("data-k", v.kind); tc.setAttribute("data-cloud", CLOUD);
     var IB = function (attr, label, tip, svg, dis) { return '<button type="button" class="ib" ' + attr + ' aria-label="' + label + '" title="' + tip + '"' + (dis ? " disabled" : "") + '>' + svg + '</button>'; };
     var btn = v.action ? IB("data-tcr", "Reset tunnel", tcBusy ? "Resetting the tunnel\u2026" : "Reset tunnel: re-pair it with this account", TC_BTN.reset, tcBusy) : "";
-    var tog = v.kind === "bad" ? '<label class="ta" title="Reset the tunnel by itself when a problem is detected (at most once every 5 minutes)"><input type="checkbox" data-tca ' + (tcAuto() ? "checked" : "") + '> Auto-reset</label>' : "";
+    var tog = v.kind === "bad" ? '<label class="ta" title="Reset the tunnel by itself when a problem is detected (at most once every 5 minutes)"><input type="checkbox" role="switch" data-tca ' + (tcAuto() ? "checked" : "") + '><span class="sw" aria-hidden="true"></span>Auto-reset</label>' : "";
     tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + '</span>' + tog + '<span class="ibs">' + btn
       + IB("data-tcinst", "Reinstall tunnel", "Reinstall tunnel: get the one-line install command", TC_BTN.install, false) + '</span>';
     place();
@@ -469,6 +469,18 @@
       // shared layout: icon, text, [toggle], button
       + "#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-10px 0 18px;padding:7px 12px;font-size:13px;line-height:1.35;--tc-fg:#16191f;--tc-bg:#fff;--tc-bd:#d5dbdb;--tc-ic:#5f6b7a;background:var(--tc-bg);color:var(--tc-fg);border:1px solid var(--tc-bd)}"
       + "#vy-tc .ic{flex:none;width:16px;height:16px;color:var(--tc-ic)}#vy-tc .tt{flex:1 1 160px}#vy-tc .ta{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--tc-fg)}"
+      // toggle switch (the label's checkbox is visually hidden; .sw is the track, its ::after the knob) in each cloud's native look
+      + "#vy-tc .ta{position:relative;gap:8px}#vy-tc .ta input{position:absolute;opacity:0;width:1px;height:1px;margin:0}#vy-tc .sw{position:relative;flex:none;display:inline-block;transition:background .15s,border-color .15s}#vy-tc .sw::after{content:'';position:absolute;transition:transform .15s,background .15s,width .15s,height .15s}"
+      + "#vy-tc .ta input:focus-visible+.sw{outline:2px solid #0972d3;outline-offset:2px}"
+      // AWS Cloudscape toggle: 36x20 pill, dark-grey knob track off, blue on, white knob
+      + "#vy-tc[data-cloud=aws] .sw{width:36px;height:20px;border-radius:10px;background:#7d8998;border:0}#vy-tc[data-cloud=aws] .sw::after{left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff}"
+      + "#vy-tc[data-cloud=aws] input:checked+.sw{background:#0972d3}#vy-tc[data-cloud=aws] input:checked+.sw::after{transform:translateX(16px)}"
+      // GCP Material 3 switch: 40x24 track, outlined off with a small grey knob, blue on with a larger white knob
+      + "#vy-tc[data-cloud=gcp] .sw{width:40px;height:24px;border-radius:12px;background:#e3e3e3;border:2px solid #747775;box-sizing:border-box}#vy-tc[data-cloud=gcp] .sw::after{left:3px;top:50%;margin-top:-5px;width:10px;height:10px;border-radius:50%;background:#747775}"
+      + "#vy-tc[data-cloud=gcp] input:checked+.sw{background:#0b57d0;border-color:#0b57d0}#vy-tc[data-cloud=gcp] input:checked+.sw::after{width:16px;height:16px;margin-top:-8px;left:3px;background:#fff;transform:translateX(14px)}"
+      // Azure Fluent toggle: 40x20, outlined off, filled brand blue on
+      + "#vy-tc[data-cloud=azure] .sw{width:40px;height:20px;border-radius:10px;background:transparent;border:1px solid #605e5c;box-sizing:border-box}#vy-tc[data-cloud=azure] .sw::after{left:3px;top:50%;margin-top:-6px;width:12px;height:12px;border-radius:50%;background:#605e5c}"
+      + "#vy-tc[data-cloud=azure] input:checked+.sw{background:#0f6cbd;border-color:#0f6cbd}#vy-tc[data-cloud=azure] input:checked+.sw::after{background:#fff;transform:translateX(20px)}"
       + "#vy-tc .ibs{display:flex;gap:6px;margin-left:auto;flex:none}#vy-tc .ib{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px}#vy-tc .ib[disabled]{opacity:.5;cursor:default}"
       // AWS Cloudscape: flat alert, 2px accent bar on the left, normal (outlined) button
       + "#vy-tc[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border-radius:8px;border:1px solid var(--tc-bd);border-left:4px solid var(--tc-ic)}"
