@@ -47,7 +47,7 @@ for (let i = 0; i < 50; i++) { try { await H("/health"); break; } catch { await 
 try {
   let h = await health();
   for (let i = 0; i < 30 && h.credentials.state === "unknown"; i++) { await new Promise((r) => setTimeout(r, 100)); h = await health(); }
-  assert.equal(exited, false); assert.equal(h.credentials.state, "revoked"); assert.equal(h.credentials.key_id, "VYKAGONE"); assert.ok(h.features.includes("creds-sync")); assert.equal(h.version, "1.2.2");
+  assert.equal(exited, false); assert.equal(h.credentials.state, "revoked"); assert.equal(h.credentials.key_id, "VYKAGONE"); assert.ok(h.features.includes("creds-sync")); assert.equal(h.version, "1.2.3");
   assert.ok(!JSON.stringify(h).includes("x\n") && !JSON.stringify(h).includes("secret")); ok("revoked key: tunnel stays up and reports state=revoked (no crash loop, no secret on /health)");
 
   // file replaced -> picked up by /reload
@@ -74,5 +74,15 @@ try {
   // missing file: stays up, state=none
   writeFileSync(join(home, "credentials"), ""); await H("/reload", { method: "POST" }); h = await health();
   assert.equal(h.credentials.state, "none"); assert.equal(exited, false); ok("no credentials: tunnel stays up with state=none");
+
+  // CLI: `vyomi-tunnel reset <code>` (also accepts the install link) re-pairs and tells the running tunnel to reload
+  const cli = (...a) => new Promise((res) => { const c = spawn(process.execPath, [BIN, ...a], { env: { ...process.env, VYOMI_HOME: home, RELAY_PORT: String(RP) } }); let o = "", e = ""; c.stdout.on("data", (d) => (o += d)); c.stderr.on("data", (d) => (e += d)); c.on("close", (code) => res({ code, o, e })); });
+  writeFileSync(join(home, "credentials"), cred("VYKAGONE")); await H("/reload", { method: "POST" }); valid.delete("VYKANEW");
+  let c = await cli("reset"); assert.equal(c.code, 2); assert.match(c.e, /usage: vyomi-tunnel reset <code>/);
+  c = await cli("reset", "short"); assert.equal(c.code, 2);
+  c = await cli("reset", `${PORTAL}/i/GOODCODEGOODCODEGOODCODE?x=1`); assert.equal(c.code, 0, c.e + c.o); assert.match(c.o, /uses access key VYKANEW/); assert.match(c.o, /running tunnel reloaded/);
+  assert.match(readFileSync(join(home, "credentials"), "utf8"), /VYKANEW/); h = await health(); assert.equal(h.credentials.state, "ok"); assert.equal(h.credentials.key_id, "VYKANEW");
+  c = await cli("reset", "BADCODEBADCODEBADCODEXX"); assert.equal(c.code, 1); assert.match(c.e, /refused|invalid/i);
+  ok("CLI: vyomi-tunnel reset <code|link> re-pairs, keeps a backup, reloads the running tunnel; bad usage/codes are refused");
 } finally { child.kill(); portal.close(); }
 console.log("\nall passed");

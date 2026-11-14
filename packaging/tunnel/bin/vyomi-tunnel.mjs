@@ -46,7 +46,7 @@ import { createRequire } from "node:module";
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
-if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "reset", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   process.exit(await main(process.argv.slice(2)));
 }
@@ -55,7 +55,7 @@ if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-
 
 // The tunnel keeps running even when its key is missing, revoked or wrong (a service manager would crash-loop it otherwise): the state is
 // shown on /health, re-checked on a timer and when ~/.vyomi/credentials changes, and the Vyomi page can re-pair it (POST /reset).
-const VERSION = "1.2.2";
+const VERSION = "1.2.3";
 const credsSync = createCredsSync({ version: VERSION, log: (m) => console.log("[creds] " + m) });
 const PORT = Number(process.env.RELAY_PORT || 8090);
 // Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own

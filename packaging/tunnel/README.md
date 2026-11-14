@@ -78,3 +78,10 @@ Port range: `VM_PORT_MIN` / `VM_PORT_MAX`.
   Durable Object; this local build holds one registered tab.
 
 Canonical source: `wasm/relay/local-relay.mjs` in the appliance repo.
+
+## Re-pair the tunnel (`reset`)
+
+If the tunnel's access key was revoked, belongs to another account, or is missing, the Vyomi console shows a strip with **Reset tunnel**.
+From a terminal: `vyomi-tunnel reset <code>` (or paste the install link `https://vyomi.cloud/i/<code>`). Get the one-time code from the
+console: Setup Tunnel > Get install command. It writes a new key to `~/.vyomi/credentials` (mode 600, old file kept as `credentials.bak.<time>`)
+and a running tunnel reloads it by itself.
