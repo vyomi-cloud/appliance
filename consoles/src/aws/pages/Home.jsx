@@ -247,7 +247,7 @@ function TunnelDot() {
   const color = up === null ? "#8d99a3" : up ? "#037f0c" : "#d91515";
   return (
     <span title={up ? "Tunnel running" : up === null ? "Checking the tunnel" : "Tunnel not detected. Start it with Setup Tunnel."}
-      style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 400 }}>
+      style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 400, padding: "3px 12px", border: "1px solid #aab7b8", borderRadius: 16, background: "transparent" }}>
       Tunnel status
       <span role="img" aria-label={up ? "running" : up === null ? "checking" : "not running"} style={{ width: 10, height: 10, borderRadius: "50%", background: color, display: "inline-block" }} />
     </span>
