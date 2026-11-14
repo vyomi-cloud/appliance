@@ -10,6 +10,56 @@
   var PRICING = "https://vyomi.cloud/pricing";
   var card, busy = false, msg = "", view = "main", collapsed = false;
 
+  // ── one-command tunnel install (macOS) ─────────────────────────────────────────────────────────────────────────────────────────
+  // POST /api/tunnel/pair/start returns a single-use command bound to THIS signed-in account:  curl -fsSL <portal>/i/<code> | sh
+  // The script installs a private Node + the tunnel, connects the account (so a wrong-account key cannot happen) and starts the tunnel at
+  // login. It reports each step; this card polls GET /api/tunnel/pair/status and shows them live. Other systems keep the brew/npm steps.
+  var inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }, instTimer = 0;
+  var INST_STEPS = [["node", "Downloading Node.js"], ["tunnel", "Installing the tunnel"], ["pair", "Connecting your account"], ["service", "Starting the tunnel"], ["running", "Tunnel running"]];
+  function isMac() { return /Mac/i.test(navigator.platform || "") && !/iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
+  function instFail(text) { inst = { s: "error", cmd: "", code: "", st: null, err: text, copied: false, t0: 0 }; paint(); }
+  function instGet() {
+    clearTimeout(instTimer); inst = { s: "loading", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; paint();
+    fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: "mac" }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+      .then(function (r) {
+        if (!r.ok || !r.j.command) return instFail(r.status === 401 ? "Sign in again, then retry." : (r.j && (r.j.message || r.j.error)) || "Could not create the install command.");
+        inst = { s: "ready", cmd: r.j.command, code: r.j.code, st: null, err: "", copied: false, t0: Date.now() }; paint(); instPoll();
+      }, function () { instFail("Could not reach Vyomi. Check your connection and retry."); });
+  }
+  function instPoll() {
+    clearTimeout(instTimer);
+    if (inst.s !== "ready") return;
+    fetch("/api/tunnel/pair/status?code=" + encodeURIComponent(inst.code), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
+      .then(function (j) {
+        if (inst.s !== "ready") return;
+        if (j) { inst.st = j; if (j.finished && B() && B().checkTunnel) B().checkTunnel().then(paint); paint(); }
+        if (!(j && (j.finished || j.expired)) && Date.now() - inst.t0 < 31 * 60 * 1000) instTimer = setTimeout(instPoll, 2000);
+      });
+  }
+  function instCopy() {
+    var done = function () { inst.copied = true; paint(); setTimeout(function () { inst.copied = false; paint(); }, 2500); };
+    try { navigator.clipboard.writeText(inst.cmd).then(done, function () { toast("Select the command and copy it."); }); } catch (_) { toast("Select the command and copy it."); }
+  }
+  function installPanel() {
+    if (inst.s === "idle" || inst.s === "error") {
+      return '<div class="inst"><p class="fine">Install the Vyomi tunnel on this Mac with one command. It connects to <b>your</b> account, so there is nothing to copy or configure.</p>'
+        + (inst.err ? '<p class="fine" style="color:#b10e1c">' + esc(inst.err) + '</p>' : '')
+        + '<button class="go" data-inst-get>Get install command</button>'
+        + '<div class="sub">Prefer a package manager? <code>npm i -g vyomi-tunnel</code>, then run <code>vyomi-tunnel</code></div></div>';
+    }
+    if (inst.s === "loading") return '<div class="inst"><p class="fine">Creating your install command…</p></div>';
+    var st = inst.st || {}, done = st.done || [];
+    var items = INST_STEPS.map(function (s) { return '<li style="list-style:none;margin-left:-18px">' + (done.indexOf(s[0]) >= 0 ? "✓" : "○") + " " + esc(s[1]) + "</li>"; }).join("");
+    var head = st.finished ? '<p class="fine"><b>Tunnel installed and running.</b> Click <b>Start tunnel</b> in the bar at the bottom of this page, then join the Mesh.</p>'
+      : st.expired ? '<p class="fine">This command expired. <a href="#" data-inst-get>Get a new one</a></p>'
+      : '<p class="fine">Open <b>Terminal</b>, paste this, and press Enter. This page follows the progress.</p>';
+    return '<div class="inst">' + head + '<div class="cmd"><code>' + esc(inst.cmd) + '</code></div>'
+      + '<button class="go" data-inst-copy>' + (inst.copied ? "Copied" : "Copy command") + '</button><ol class="steps">' + items + '</ol>'
+      + (st.failed ? '<p class="fine" style="color:#b10e1c">The install stopped' + (st.detail ? ": " + esc(st.detail) : "") + '. Run the command again, or <a href="#" data-inst-get>get a new one</a>.</p>' : "") + '</div>';
+  }
+
   function B() { return window.VyomiMesh; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   // Errors are shown as a 5-second toast (shared implementation in mesh-link.js), never inside the Mesh card.
@@ -19,6 +69,7 @@
     st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px}"
       + ".vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}.vy-nano-video>.vy-video-banner{order:1;flex:1 1 340px;min-width:0;margin:0 0 16px!important}.vy-nano-video>#vy-bw{order:2;flex:1 1 340px;min-width:0;margin:0 0 16px}"
       + "#vy-bw .main{min-width:0}"
+      + "#vy-bw .cmd{margin:8px 0}#vy-bw .cmd code{display:block;word-break:break-all;background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:8px 10px;font-size:12px;user-select:all}#vy-bw .inst .go{margin:2px 0 6px}"
       + "@media(max-width:560px){#vy-bw{grid-template-columns:minmax(0,1fr)}#vy-bw .act{min-width:0}}"
       + "#vy-bw .foot:empty{display:none}#vy-bw .foot{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 20px;padding-top:8px;border-top:1px solid rgba(128,128,128,.22)}"
       + "#vy-bw .foot p,#vy-bw .foot .sub{margin:0;text-align:left}#vy-bw .foot .sub a{white-space:nowrap}"
@@ -167,6 +218,7 @@
         } else if (conn && tst !== "up" && tst !== "unknown") {                // Mesh data + control plane run over the local tunnel: no tunnel, no Join
           line = "Join needs your local Vyomi tunnel, because EC2, VMs and AI all travel through it.";
           stg = tst === "notab" ? '<ol class="steps"><li>The tunnel is running. Click <b>Start tunnel</b> in the bar at the bottom of this page.</li></ol>'
+            : isMac() ? installPanel()
             : '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
           btn = '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>';
           tunLink = '<div class="sub"><a href="#" data-tun>Check again</a> \u00b7 <a href="https://www.npmjs.com/package/vyomi-tunnel" target="_blank" rel="noopener">Install the tunnel</a></div>';
@@ -228,6 +280,8 @@
       var t = e.target;
       if (t.closest("[data-ss]")) startStop();
       else if (t.closest("[data-gh]")) { location.href = "/api/mesh/github/connect"; }
+      else if (t.closest("[data-inst-get]")) { e.preventDefault(); instGet(); }
+      else if (t.closest("[data-inst-copy]")) { e.preventDefault(); instCopy(); }
       else if (t.closest("[data-tun]")) { e.preventDefault(); if (B() && B().checkTunnel) B().checkTunnel().then(paint); }
       else if (t.closest("[data-rr]")) { e.preventDefault(); if (B() && B().rerunChecks) B().rerunChecks(); }
       else if (t.closest("[data-vc]")) { e.preventDefault(); if (B() && B().openDetails) B().openDetails(); }
