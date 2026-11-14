@@ -1,7 +1,7 @@
 {
   "name": "vyomi",
-  "version": "4.1.2",
-  "description": "Run and test cloud code locally against Vyomi, the AWS/GCP/Azure simulator (Nano in your browser, or a Pro/Max mesh): find your simulator, scan a repo, see what is emulated where, and wire SDKs to it. Needs vyomi-tunnel 1.3.0 or newer.",
+  "version": "4.2.0",
+  "description": "Run and test cloud code locally against Vyomi, the AWS/GCP/Azure simulator (Nano in your browser, or a Pro/Max mesh): find your simulator, scan a repo, see what is emulated where, wire SDKs to it, and tell every coding agent about it via AGENTS.md. Needs vyomi-tunnel 1.3.0 or newer.",
   "author": {
     "name": "Vyomi",
     "email": "support@vyomi.cloud",
@@ -9,11 +9,12 @@
   },
   "homepage": "https://vyomi.cloud",
   "repository": "https://github.com/vyomi-cloud/claude-plugins",
-  "keywords": ["aws", "gcp", "azure", "local-cloud", "emulator", "testing"],
-  "mcpServers": {
-    "vyomi": {
-      "command": "vyomi-tunnel",
-      "args": ["mcp"]
-    }
-  }
+  "keywords": [
+    "aws",
+    "gcp",
+    "azure",
+    "local-cloud",
+    "emulator",
+    "testing"
+  ]
 }

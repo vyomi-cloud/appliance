@@ -1,0 +1,38 @@
+{
+  "name": "vyomi",
+  "version": "4.2.0",
+  "description": "Run and test cloud code locally against Vyomi, the AWS/GCP/Azure simulator (Nano in your browser, or a Pro/Max mesh): find your simulator, scan a repo, see what is emulated where, wire SDKs to it, and tell every coding agent about it via AGENTS.md. Needs vyomi-tunnel 1.3.0 or newer.",
+  "author": {
+    "name": "Vyomi",
+    "email": "support@vyomi.cloud",
+    "url": "https://vyomi.cloud"
+  },
+  "homepage": "https://vyomi.cloud",
+  "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "keywords": [
+    "aws",
+    "gcp",
+    "azure",
+    "local-cloud",
+    "emulator",
+    "localstack-alternative",
+    "testing"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Vyomi",
+    "shortDescription": "Run AWS, GCP and Azure code locally against the Vyomi simulator",
+    "longDescription": "Scan a repo for AWS / GCP / Azure usage, see which services Vyomi emulates in your Nano tab or Pro/Max mesh, write a dev-only .env.vyomi, and add a Vyomi section to AGENTS.md so every coding agent runs against the simulator instead of the real cloud.",
+    "developerName": "Vyomi",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://vyomi.cloud",
+    "defaultPrompt": [
+      "Set this project up to run against Vyomi."
+    ]
+  }
+}

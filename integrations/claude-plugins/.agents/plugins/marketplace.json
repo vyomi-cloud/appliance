@@ -1,0 +1,20 @@
+{
+  "name": "vyomi",
+  "interface": {
+    "displayName": "Vyomi"
+  },
+  "plugins": [
+    {
+      "name": "vyomi",
+      "source": {
+        "source": "local",
+        "path": "./plugins/vyomi"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

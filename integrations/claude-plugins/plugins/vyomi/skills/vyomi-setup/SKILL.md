@@ -1,6 +1,6 @@
 ---
 name: vyomi-setup
-description: Use when the user wants to run, test or develop cloud code locally instead of against real AWS, GCP or Azure - "run this against Vyomi", "test locally without the cloud", "set up a local cloud", "use Vyomi instead of LocalStack", or asks whether Vyomi supports the services a project uses.
+description: Use when the user wants to run, test or develop cloud code locally instead of against real AWS, GCP or Azure - "run this against Vyomi", "test locally without the cloud", "set up a local cloud", "use Vyomi instead of LocalStack", "add Vyomi to AGENTS.md", "tell my team's agents about Vyomi" - or asks whether Vyomi supports the services a project uses.
 ---
 
 # Set a project up to run against Vyomi
@@ -74,14 +74,35 @@ In v4 the simulator lives in one of these **homes**:
    gives a one-line CLI / SDK / curl call aimed at the home's endpoint for a
    quick check. If a failure looks like a missing API in Vyomi, say so plainly
    rather than working around it.
+6. **Offer the AGENTS.md section.** Once local runs work, offer to add a short
+   "Local cloud: Vyomi" section to the project's `AGENTS.md`, the instructions
+   file Codex, Cursor, Copilot, Gemini CLI and most other coding agents read on
+   their own. Committed, it tells every agent that opens the repo (a teammate's,
+   or a cloud / PR agent with no plugin) to load `.env.vyomi`, leave the
+   simulator for the developer to start, and keep away from the real cloud.
+   - Call `vyomi_write_agents_md` with `dry_run: true`, the project `path` and
+     the `clouds` from the scan. Show the user the returned `section` and the
+     planned action (`created`, `appended` or `updated`; text outside the
+     `<!-- vyomi:start -->` / `<!-- vyomi:end -->` markers is never changed).
+   - If the project has a `CLAUDE.md`, or the team uses Claude Code (which reads
+     `CLAUDE.md`, not `AGENTS.md`), offer `claude_md: true` as well: it adds an
+     `@AGENTS.md` import line to `CLAUDE.md`.
+   - Only after the user approves that exact change, call it again with
+     `dry_run: false`, then suggest they commit the file(s).
+   - If `vyomi_write_agents_md` is not available (an older `vyomi-tunnel`),
+     show the same kind of section, wrapped in those markers, and with the
+     user's OK write it yourself: only between the markers, no endpoints or
+     keys (those stay in `.env.vyomi`).
 
 ## Rules
 
 - Never modify production configuration, deployment manifests or secrets. Add
   local/dev overrides only.
-- Writing `.env.vyomi` (or any file), editing code and installing packages each
-  need the user's explicit OK to that specific change, shown first. A general
-  "set this up" request is not that OK.
+- Writing `.env.vyomi`, `AGENTS.md`, `CLAUDE.md` (or any file), editing code
+  and installing packages each need the user's explicit OK to that specific
+  change, shown first. A general "set this up" request is not that OK.
+- Never put endpoints, access keys or credentials in `AGENTS.md`: it is
+  committed and shared.
 - For local-dev work, do not use MCP tools that act on a real cloud account
   (for example AWS's `aws-mcp`, or Azure / Google Cloud MCP servers) to create,
   read or change resources. Use the Vyomi tools and the local simulator; reach
@@ -97,5 +118,6 @@ In v4 the simulator lives in one of these **homes**:
 - If the `vyomi` MCP tools are unavailable: install or upgrade the tunnel
   (`brew install vyomi-cloud/tap/vyomi-tunnel` or `npm i -g vyomi-tunnel`;
   version 1.3.0 or newer, the first with `vyomi-tunnel mcp`; check with
-  `vyomi-tunnel --version`), then restart Claude Code. v4.0.0 offline users:
+  `vyomi-tunnel --version`), then restart the coding agent (Claude Code, Codex,
+  Cursor, Copilot, ...) so it starts the MCP server. v4.0.0 offline users:
   `vyomi mcp` from the `vyomi-docker` install keeps working.

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vyomi": {
+      "type": "stdio",
+      "command": "vyomi-tunnel",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
