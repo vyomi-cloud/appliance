@@ -21,19 +21,25 @@ const CODESPACE = /^[A-Za-z0-9._-]{1,120}$/;
 const K3S = /^vyomi-k3s-[0-9a-f]{10}$/;
 const HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "content-length", "x-vyomi-session-token"]);
 
-const dockerIp = (rawName) => `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' ${rawName} 2>/dev/null`;
+// What a user may reach: their own VMs and k3s clusters. Vyomi's own containers (simulator, llm*, ...) are never a target.
+// Docs: docs/architecture/v4.0/MESH-SOFTWARE-PROTECTION.md. The same allow-list is enforced on the Codespace by `vyomi-gate`.
+export const USER_CONTAINER = /^(vyomi-i-[A-Za-z0-9][A-Za-z0-9._-]{0,60}|vyomi-k3s-[0-9a-f]{10})$/;
+const GATE = "/usr/local/sbin/vyomi-gate";
+/** Run `verb` through the Codespace's root-owned gate when it is installed; older Codespaces fall back to the plain docker command. */
+const viaGate = (verb, legacy) => `if [ -x ${GATE} ]; then sudo -n ${GATE} ${verb}; else ${legacy}; fi`;
+const dockerIp = (rawName) => viaGate(`ip ${rawName}`, `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' ${rawName} 2>/dev/null`);
 
 /** Turn `docker inspect` rows (name|image|ips|exposed ports) into the targets a user can reach, with the name to type for each. */
 export function classifyTargets(text) {
   const out = [{ name: "host", kind: "host", what: "the Codespace's own sshd", ssh: true, ports: [22] }];
   for (const line of String(text || "").split("\n")) {
-    const [raw, image = "", ips = "", ports = ""] = line.split("|"); const n = (raw || "").replace(/^\//, "").trim();
+    const [raw, , ips = "", ports = ""] = line.split("|"); const n = (raw || "").replace(/^\//, "").trim();
     if (!NAME.test(n)) continue;
     const ps = ports.split(/\s+/).map((x) => Number(x.split("/")[0])).filter(Boolean);
     const ip = ips.trim().split(/\s+/)[0] || "";
-    if (/^vyomi-k3s-[0-9a-f]{10}$/.test(n)) out.push({ name: n, kind: "k3s", what: "Kubernetes API (port 6443)", ip, ports: [6443], image });
-    else if (n.startsWith("vyomi-i-")) out.push({ name: n.slice(8), kind: "instance", what: "Docker instance", ssh: true, ip, ports: ps.length ? ps : [22], image });
-    else out.push({ name: n, kind: /(^|[-_])(llm|embed)/.test(n) ? "llm" : "service", what: "service container", ip, ports: ps, image });
+    if (!USER_CONTAINER.test(n)) continue;                       // Vyomi's own containers are never listed (and no image names are shown)
+    if (n.startsWith("vyomi-k3s-")) out.push({ name: n, kind: "k3s", what: "Kubernetes API (port 6443)", ip, ports: [6443] });
+    else out.push({ name: n.slice(8), kind: "instance", what: "Docker instance", ssh: true, ip, ports: ps.length ? ps : [22] });
   }
   return out;
 }
@@ -114,7 +120,8 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     return collect(sp("ssh", [...sshArgs(c), c.host, cmd], { stdio: ["ignore", "pipe", "pipe"] }));
   }
 
-  async function containerIp(rawName) {
+  async function containerIp(rawName, internal = false) {
+    if (!internal && !USER_CONTAINER.test(rawName)) return null;     // user-facing lookups reach only allow-listed containers
     const hit = ips.get(rawName);
     if (hit && Date.now() - hit.at < ipTtlMs) return hit.ip;
     const out = (await exec(dockerIp(rawName)).catch(() => "")).trim().split(/\s+/)[0];
@@ -123,7 +130,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     return out;
   }
   async function composeContainer(service) {
-    const out = (await exec(`docker ps --filter label=com.docker.compose.service=${service} --format '{{.Names}}' | head -1`).catch(() => "")).trim();
+    const out = (await exec(viaGate(`compose ${service}`, `docker ps --filter label=com.docker.compose.service=${service} --format '{{.Names}}' | head -1`)).catch(() => "")).trim();
     return NAME.test(out) ? out : null;
   }
 
@@ -133,12 +140,12 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     if (n === "host" || n === "codespace") return { host: "127.0.0.1", port: hostSshPort, reserved: "host" };
     if (K3S.test(n)) { const ip = await containerIp(n); return ip ? { host: ip, port: 6443, reserved: "k3s" } : null; }
     if (n === "k3s") {
-      const out = (await exec(`docker ps --filter name=vyomi-k3s- --format '{{.Names}}' | head -1`).catch(() => "")).trim();
+      const out = (await exec(viaGate("k3s", `docker ps --filter name=vyomi-k3s- --format '{{.Names}}' | head -1`)).catch(() => "")).trim();
       const ip = K3S.test(out) ? await containerIp(out) : null;
       return ip ? { host: ip, port: 6443, reserved: "k3s" } : null;
     }
     if (!NAME.test(String(name || ""))) return null;
-    for (const c of [`vyomi-i-${name}`, `vyomi-${name}`, name]) {
+    for (const c of [`vyomi-i-${name}`, name]) {                     // the bare name only works when it is itself a user container (vyomi-i-...)
       const ip = await containerIp(c);
       if (ip) return { host: ip, port: Number(port) || 22 };
     }
@@ -147,7 +154,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
 
   async function simulatorTarget() {
     const c = await composeContainer("simulator");
-    const ip = c ? await containerIp(c) : null;
+    const ip = c ? await containerIp(c, true) : null;            // internal: the console's own API calls, never a user-typed target
     return ip ? { host: ip, port: simulatorPort } : null;
   }
 
@@ -203,7 +210,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
 
   /** Everything reachable in the Mesh Codespace right now. */
   async function list() {
-    const text = await exec(`docker ps -q | xargs -r docker inspect -f '{{.Name}}|{{.Config.Image}}|{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}|{{range $p, $_ := .Config.ExposedPorts}}{{$p}} {{end}}'`);
+    const text = await exec(viaGate("list", `docker ps -q | xargs -r docker inspect -f '{{.Name}}|{{.Config.Image}}|{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}|{{range $p, $_ := .Config.ExposedPorts}}{{$p}} {{end}}'`));
     return classifyTargets(text);
   }
 

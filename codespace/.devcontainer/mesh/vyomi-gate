@@ -1,0 +1,34 @@
+#!/bin/bash
+# vyomi-gate: the ONE privileged door to Docker on a Mesh Codespace (docs/architecture/v4.0/MESH-SOFTWARE-PROTECTION.md).
+# Installed root-owned at /usr/local/sbin/vyomi-gate; the Codespace user may only run it through sudo (see vyomi-sudoers).
+# It answers a fixed set of questions about the user's OWN containers and refuses everything else, so no one can docker-exec,
+# inspect or read Vyomi's own containers (simulator, llm, ...) through it. Every argument is validated before docker sees it.
+set -u
+DOCKER="${VYOMI_GATE_DOCKER:-docker}"
+USER_C='^(vyomi-i-[A-Za-z0-9][A-Za-z0-9._-]{0,60}|vyomi-k3s-[0-9a-f]{10})$'
+deny() { echo "vyomi-gate: not allowed" >&2; exit 2; }
+
+verb="${1:-}"; arg="${2:-}"
+[ "$#" -le 2 ] || deny
+case "$verb" in
+  ip)       # network address of one user container
+    [[ "$arg" =~ $USER_C ]] || deny
+    exec "$DOCKER" inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$arg" ;;
+  list)     # user containers only: name||ips|ports (no image names)
+    [ -z "$arg" ] || deny
+    "$DOCKER" ps --format '{{.Names}}' | while read -r n; do
+      [[ "$n" =~ $USER_C ]] && "$DOCKER" inspect -f '{{.Name}}||{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}|{{range $p, $_ := .Config.ExposedPorts}}{{$p}} {{end}}' "$n"
+    done; exit 0 ;;
+  k3s)      # first k3s container name
+    [ -z "$arg" ] || deny
+    "$DOCKER" ps --format '{{.Names}}' | grep -E '^vyomi-k3s-[0-9a-f]{10}$' | head -1; exit 0 ;;
+  compose)  # the simulator's container name, for the console's own API tunnel; no other service is revealed
+    [ "$arg" = "simulator" ] || deny
+    "$DOCKER" ps --filter label=com.docker.compose.service=simulator --format '{{.Names}}' | head -1; exit 0 ;;
+  instance-key)   # the key that opens the user's own VMs
+    [ -z "$arg" ] || deny
+    sim=$("$DOCKER" ps --filter label=com.docker.compose.service=simulator --format '{{.Names}}' | head -1)
+    [ -n "$sim" ] || deny
+    exec "$DOCKER" exec "$sim" cat /root/.vyomi/instance-keys/id_ed25519 ;;
+  *) deny ;;
+esac

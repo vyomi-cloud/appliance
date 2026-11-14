@@ -56,8 +56,12 @@ await assert.rejects(() => t.open("1.2.3.4; id", 22));         // open() only ta
 
 // list: everything reachable, classified, with the name the user types
 const lt = await t.list();
-assert.deepEqual(lt.map((r) => [r.name, r.kind]), [["host", "host"], ["simulator", "service"], ["llm-chat", "llm"], ["web", "instance"], ["vyomi-k3s-0123456789", "k3s"]]);
-assert.equal(lt.find((r) => r.name === "web").ip, "172.18.0.5"); assert.deepEqual(lt.find((r) => r.name === "simulator").ports, [9000]);
+assert.deepEqual(lt.map((r) => [r.name, r.kind]), [["host", "host"], ["web", "instance"], ["vyomi-k3s-0123456789", "k3s"]]);   // Vyomi's own containers are never listed
+assert.equal(lt.find((r) => r.name === "web").ip, "172.18.0.5");
+assert.ok(lt.every((r) => !("image" in r)), "no image names are shown");
+// Vyomi's own containers are not targets, however they are typed
+for (const n of ["simulator", "llm", "llm-chat", "vyomi-mesh-simulator-1", "vyomi-simulator"]) { const c0 = cmds.length; assert.equal(await t.resolve(n), null, n); assert.ok(!cmds.slice(c0).some((c) => c.includes(" " + n + " 2>") || c.includes("ip " + n + ";")), "never looked up as itself: " + n); }
+assert.deepEqual(await t.resolve("vyomi-i-web", 22), { host: "10.0.0.5", port: 22 });   // the full user-container name works
 // the user's Mesh Codespace is found automatically (newest running vyomi-mesh-*; never someone else's or an unrelated one)
 const lst = (rows) => (b, a) => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(JSON.stringify(rows)); c.emit("close", 0); }); return c; };
 assert.equal(await findCodespace("gh", lst([{ name: "other-app", state: "Available" }, { name: "vyomi-mesh-old", state: "Available", createdAt: "2026-11-01" },
