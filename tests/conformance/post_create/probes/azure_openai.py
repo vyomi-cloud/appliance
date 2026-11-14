@@ -30,6 +30,8 @@ def call(method, url, body=None, headers=None):
 
 call("PUT", f"/subscriptions/{SUB}/resourcegroups/{RG}?api-version=2021-04-01", {"location": "eastus"})
 A = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.CognitiveServices/accounts/{ACC}"
+DEL = f"/subscriptions/{SUB}/providers/Microsoft.CognitiveServices/locations/eastus/resourceGroups/{RG}/deletedAccounts/{ACC}?api-version=2024-10-01"
+call("DELETE", A + "?api-version=2024-10-01"); call("DELETE", DEL)   # leftover from an aborted run (soft-deleted accounts must be purged)
 try:
     s, acc = call("PUT", A + "?api-version=2024-10-01", {"location": "eastus", "kind": "OpenAI", "sku": {"name": "S0"}, "properties": {"customSubDomainName": ACC}})
     check(s in (200, 201), "create OpenAI account", acc)
@@ -50,5 +52,6 @@ try:
     check(s == 401, "a wrong api-key is rejected (401)", s)
 finally:
     call("DELETE", A + "?api-version=2024-10-01")
+    call("DELETE", DEL)   # purge the soft-deleted account so re-runs start clean
     call("DELETE", f"/subscriptions/{SUB}/resourcegroups/{RG}?api-version=2021-04-01")
 sys.exit(1 if fails else 0)

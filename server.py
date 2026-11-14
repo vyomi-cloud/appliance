@@ -2763,12 +2763,20 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("gcp", "vpc", "route", route_id, route)
 
     gcp_iam = _cloudsim_service_state(space, "gcp_iam")
-    for account_id, account in gcp_iam.get("service_accounts", {}).items():
-        if isinstance(account, dict):
-            add("gcp", "iam", "service_account", account_id, account)
-    for policy_id, policy in gcp_iam.get("policies", {}).items():
-        if isinstance(policy, dict):
-            add("gcp", "iam", "policy", policy_id, policy)
+    # service_accounts is {project: {sa_id: record}} (providers/gcp_iam.py) — one node per account,
+    # not one per project, so creating an account moves resource_count and the space savings.
+    for _proj_id, _accts in gcp_iam.get("service_accounts", {}).items():
+        if not isinstance(_accts, dict):
+            continue
+        for account_id, account in _accts.items():
+            if isinstance(account, dict):
+                add("gcp", "iam", "service_account", f"{_proj_id}/{account_id}", account)
+    for _proj_id, _pols in gcp_iam.get("policies", {}).items():
+        if not isinstance(_pols, dict):
+            continue
+        for policy_id, policy in _pols.items():
+            if isinstance(policy, dict):
+                add("gcp", "iam", "policy", f"{_proj_id}/{policy_id}", policy)
 
     # Rail extras (generic create backend): billable AWS/GCP resources that live
     # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].

@@ -7,9 +7,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
-| ✓ aws | 115 | 115 | 100.0% |
-| ✓ azure | 52 | 52 | 100.0% |
-| ✓ gcp | 89 | 89 | 100.0% |
+| ✓ aws | 173 | 173 | 100.0% |
+| ✓ azure | 76 | 76 | 100.0% |
+| ✓ gcp | 132 | 132 | 100.0% |
 
 ## AWS
 
@@ -25,6 +25,21 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `apigateway` | `putMethod` | `PUT` | `/api/apigateway/apis/{name}/resources/{rid}/methods/{verb}` | `200` | ✓ 200 |
 | `apigateway` | `resources` | `GET` | `/api/apigateway/apis/{name}/resources` | `200` | ✓ 200 |
 | `apigateway` | `stages` | `GET` | `/api/apigateway/apis/{name}/stages` | `200` | ✓ 200 |
+| `apigatewayv2` | `authorizers` | `GET` | `/api/apigatewayv2/apis/{name}/authorizers` | `200` | ✓ 200 |
+| `apigatewayv2` | `create` | `POST` | `/api/apigatewayv2/apis` | `200` | ✓ 200 |
+| `apigatewayv2` | `delete` | `DELETE` | `/api/apigatewayv2/apis/{name}` | `200` | ✓ 200 |
+| `apigatewayv2` | `deployments` | `GET` | `/api/apigatewayv2/apis/{name}/deployments` | `200` | ✓ 200 |
+| `apigatewayv2` | `get` | `GET` | `/api/apigatewayv2/apis/{name}` | `200` | ✓ 200 |
+| `apigatewayv2` | `integrations` | `GET` | `/api/apigatewayv2/apis/{name}/integrations` | `200` | ✓ 200 |
+| `apigatewayv2` | `list` | `GET` | `/api/apigatewayv2/apis` | `200` | ✓ 200 |
+| `apigatewayv2` | `models` | `GET` | `/api/apigatewayv2/apis/{name}/models` | `200` | ✓ 200 |
+| `apigatewayv2` | `routes` | `GET` | `/api/apigatewayv2/apis/{name}/routes` | `200` | ✓ 200 |
+| `apigatewayv2` | `stages` | `GET` | `/api/apigatewayv2/apis/{name}/stages` | `200` | ✓ 200 |
+| `cloudwatch` | `alarms` | `GET` | `/api/aws/cloudwatch/alarms` | `200` | ✓ 200 |
+| `cloudwatch` | `create` | `POST` | `/api/aws/cloudwatch/alarms` | `200` | ✓ 200 |
+| `cloudwatch` | `delete` | `DELETE` | `/api/aws/cloudwatch/alarms/{name}` | `200` | ✓ 200 |
+| `cloudwatch` | `get` | `GET` | `/api/aws/cloudwatch/alarms/{name}` | `200` | ✓ 200 |
+| `cloudwatch` | `list` | `GET` | `/api/aws/cloudwatch/alarms` | `200` | ✓ 200 |
 | `dynamodb` | `create` | `POST` | `/api/dynamodb/tables` | `200` | ✓ 200 |
 | `dynamodb` | `delete` | `DELETE` | `/api/dynamodb/tables/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `get` | `GET` | `/api/dynamodb/tables/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
@@ -42,6 +57,13 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `200` | ✓ 200 |
 | `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `200` | ✓ 200 |
 | `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `200` | ✓ 200 |
+| `elbv2` | `create` | `POST` | `/api/aws/elbv2/load-balancers` | `200` | ✓ 200 |
+| `elbv2` | `delete` | `DELETE` | `/api/aws/elbv2/load-balancers/{name}` | `200` | ✓ 200 |
+| `elbv2` | `get` | `GET` | `/api/aws/elbv2/load-balancers/{name}` | `200` | ✓ 200 |
+| `elbv2` | `list` | `GET` | `/api/aws/elbv2/load-balancers` | `200` | ✓ 200 |
+| `elbv2` | `listeners` | `GET` | `/api/aws/elbv2/listeners` | `200` | ✓ 200 |
+| `elbv2` | `loadBalancers` | `GET` | `/api/aws/elbv2/load-balancers` | `200` | ✓ 200 |
+| `elbv2` | `targetGroups` | `GET` | `/api/aws/elbv2/target-groups` | `200` | ✓ 200 |
 | `eventbridge` | `api-destinations` | `GET` | `/api/aws/extras/eventbridge/api-destinations` | `200` | ✓ 200 |
 | `eventbridge` | `archives` | `GET` | `/api/aws/extras/eventbridge/archives` | `200` | ✓ 200 |
 | `eventbridge` | `connections` | `GET` | `/api/aws/extras/eventbridge/connections` | `200` | ✓ 200 |
@@ -62,6 +84,11 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `iam` | `policies` | `GET` | `/api/iam/policies` | `200` | ✓ 200 |
 | `iam` | `roles` | `GET` | `/api/iam/roles` | `200` | ✓ 200 |
 | `iam` | `users` | `GET` | `/api/iam/users` | `200` | ✓ 200 |
+| `kinesis` | `create` | `POST` | `/api/kinesis/streams` | `200` | ✓ 200 |
+| `kinesis` | `delete` | `DELETE` | `/api/kinesis/streams/{name}` | `200` | ✓ 200 |
+| `kinesis` | `get` | `GET` | `/api/kinesis/streams/{name}` | `200` | ✓ 200 |
+| `kinesis` | `list` | `GET` | `/api/kinesis/streams` | `200` | ✓ 200 |
+| `kinesis` | `put` | `POST` | `/api/kinesis/streams/{name}/put` | `200` | ✓ 200 |
 | `kms` | `aliases` | `GET` | `/api/aws/extras/kms/aliases` | `200` | ✓ 200 |
 | `kms` | `aws-managed-keys` | `GET` | `/api/aws/extras/kms/aws-managed-keys` | `200` | ✓ 200 |
 | `kms` | `create` | `POST` | `/api/aws/kms/keys` | `200` | ✓ 200 |
@@ -79,6 +106,14 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `lambda` | `permission` | `POST` | `/api/lambda/functions/{name}/permission` | `200` | ✓ 200 |
 | `lambda` | `updateCode` | `POST` | `/api/lambda/functions/{name}/code` | `200` | ✓ 200 |
 | `lambda` | `updateConfig` | `POST` | `/api/lambda/functions/{name}/configuration` | `200` | ✓ 200 |
+| `logs` | `create` | `POST` | `/api/logs/log-groups` | `201` | ✓ 201 |
+| `logs` | `delete` | `DELETE` | `/api/logs/log-groups/{name}` | `200` | ✓ 200 |
+| `logs` | `events` | `GET` | `/api/logs/log-groups/{name}/events` | `200` | ✓ 200 |
+| `logs` | `get` | `GET` | `/api/logs/log-groups/{name}` | `200` | ✓ 200 |
+| `logs` | `list` | `GET` | `/api/logs/log-groups` | `200` | ✓ 200 |
+| `logs` | `metric-filters` | `GET` | `/api/logs/log-groups/{name}/metric-filters` | `200` | ✓ 200 |
+| `logs` | `streams` | `GET` | `/api/logs/log-groups/{name}/streams` | `200` | ✓ 200 |
+| `logs` | `subscription-filters` | `GET` | `/api/logs/log-groups/{name}/subscription-filters` | `200` | ✓ 200 |
 | `rds` | `create` | `POST` | `/api/rds/databases` | `200` | ✓ 200 |
 | `rds` | `delete` | `DELETE` | `/api/rds/databases/{name}` | `200` | ✓ 200 |
 | `rds` | `get` | `GET` | `/api/rds/databases/{name}` | `200` | ✓ 200 |
@@ -106,6 +141,17 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `secretsmanager` | `replicas` | `GET` | `/api/aws/extras/secretsmanager/replicas` | `200` | ✓ 200 |
 | `secretsmanager` | `rotation` | `GET` | `/api/aws/extras/secretsmanager/rotation` | `200` | ✓ 200 |
 | `secretsmanager` | `secrets` | `GET` | `/api/aws/secrets` | `200` | ✓ 200 |
+| `sns` | `create` | `POST` | `/api/aws/sns/topics` | `200` | ✓ 200 |
+| `sns` | `delete` | `DELETE` | `/api/aws/sns/topics/{name}` | `200` | ✓ 200 |
+| `sns` | `deliveries` | `GET` | `/api/aws/sns/deliveries` | `200` | ✓ 200 |
+| `sns` | `get` | `GET` | `/api/aws/sns/topics/{name}` | `200` | ✓ 200 |
+| `sns` | `list` | `GET` | `/api/aws/sns/topics` | `200` | ✓ 200 |
+| `sns` | `platform-applications` | `GET` | `/api/aws/sns/platform-applications` | `200` | ✓ 200 |
+| `sns` | `publish` | `POST` | `/api/aws/sns/topics/{name}/publish` | `200` | ✓ 200 |
+| `sns` | `sms-sandbox` | `GET` | `/api/aws/sns/sms-sandbox` | `200` | ✓ 200 |
+| `sns` | `subscribe` | `POST` | `/api/aws/sns/topics/{name}/subscriptions` | `200` | ✓ 200 |
+| `sns` | `subscriptions` | `GET` | `/api/aws/sns/subscriptions` | `200` | ✓ 200 |
+| `sns` | `topics` | `GET` | `/api/aws/sns/topics` | `200` | ✓ 200 |
 | `sqs` | `create` | `POST` | `/api/sqs/queues` | `200` | ✓ 200 |
 | `sqs` | `delete` | `DELETE` | `/api/sqs/queues/{name}` | `200` | ✓ 200 |
 | `sqs` | `get` | `GET` | `/api/sqs/queues/{name}` | `200` | ✓ 200 |
@@ -113,6 +159,18 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `sqs` | `purge` | `POST` | `/api/sqs/queues/{name}/purge` | `200` | ✓ 200 |
 | `sqs` | `receive` | `POST` | `/api/sqs/queues/{name}/receive` | `200` | ✓ 200 |
 | `sqs` | `send` | `POST` | `/api/sqs/queues/{name}/send` | `200` | ✓ 200 |
+| `ssm` | `create` | `POST` | `/api/ssm/parameters` | `200` | ✓ 200 |
+| `ssm` | `delete` | `DELETE` | `/api/ssm/parameters/{name}` | `200` | ✓ 200 |
+| `ssm` | `get` | `GET` | `/api/ssm/parameters/{name}` | `200` | ✓ 200 |
+| `ssm` | `history` | `GET` | `/api/ssm/parameters/{name}/history` | `200` | ✓ 200 |
+| `ssm` | `list` | `GET` | `/api/ssm/parameters` | `200` | ✓ 200 |
+| `stepfunctions` | `aliases` | `GET` | `/api/stepfunctions/machines/{name}/aliases` | `200` | ✓ 200 |
+| `stepfunctions` | `create` | `POST` | `/api/stepfunctions/machines` | `200` | ✓ 200 |
+| `stepfunctions` | `delete` | `DELETE` | `/api/stepfunctions/machines/{name}` | `200` | ✓ 200 |
+| `stepfunctions` | `executions` | `GET` | `/api/stepfunctions/machines/{name}/executions` | `200` | ✓ 200 |
+| `stepfunctions` | `get` | `GET` | `/api/stepfunctions/machines/{name}` | `200` | ✓ 200 |
+| `stepfunctions` | `list` | `GET` | `/api/stepfunctions/machines` | `200` | ✓ 200 |
+| `stepfunctions` | `versions` | `GET` | `/api/stepfunctions/machines/{name}/versions` | `200` | ✓ 200 |
 | `vpc` | `addIngress` | `POST` | `/api/vpc/security-groups/{sg}/ingress` | `200` | ✓ 200 |
 | `vpc` | `addRoute` | `POST` | `/api/vpc/route-tables/{rtb}/routes` | `200` | ✓ 200 |
 | `vpc` | `associateSubnet` | `POST` | `/api/vpc/route-tables/{rtb}/associations` | `200` | ✓ 200 |
@@ -135,58 +193,82 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Service | Action | Method | Path | Status | Result |
 |---|---|---|---|---|---|
-| `apim` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/vyomi-conf-apim` | `200` | ✓ 200 |
-| `apim` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/{name}` | `200` | ✓ 200 |
-| `apim` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/{name}` | `200` | ✓ 200 |
-| `apim` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service` | `200` | ✓ 200 |
-| `cosmos` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts/vyomi-conf-cosmos` | `200` | ✓ 200 |
-| `cosmos` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts/{name}` | `200` | ✓ 200 |
-| `cosmos` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts/{name}` | `200` | ✓ 200 |
-| `cosmos` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts` | `200` | ✓ 200 |
-| `eventgrid` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics/vyomi-conf-eventgrid` | `200` | ✓ 200 |
-| `eventgrid` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics/{name}` | `200` | ✓ 200 |
-| `eventgrid` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics/{name}` | `200` | ✓ 200 |
-| `eventgrid` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics` | `200` | ✓ 200 |
-| `functionapp` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites/vyomi-conf-functionapp` | `200` | ✓ 200 |
-| `functionapp` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites/{name}` | `200` | ✓ 200 |
-| `functionapp` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites/{name}` | `200` | ✓ 200 |
-| `functionapp` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites` | `200` | ✓ 200 |
-| `keyvault` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults/vyomi-conf-keyvault` | `200` | ✓ 200 |
-| `keyvault` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults/{name}` | `200` | ✓ 200 |
-| `keyvault` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults/{name}` | `200` | ✓ 200 |
-| `keyvault` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults` | `200` | ✓ 200 |
-| `nsg` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/vyomi-conf-nsg` | `200` | ✓ 200 |
-| `nsg` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/{name}` | `200` | ✓ 200 |
-| `nsg` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/{name}` | `200` | ✓ 200 |
-| `nsg` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups` | `200` | ✓ 200 |
-| `rbac` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments/vyomi-conf-rbac` | `201` | ✓ 201 |
-| `rbac` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments/{name}` | `200` | ✓ 200 |
-| `rbac` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments/{name}` | `200` | ✓ 200 |
-| `rbac` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments` | `200` | ✓ 200 |
-| `role_definition` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions/vyomi-conf-role_definition` | `201` | ✓ 201 |
-| `role_definition` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions/{name}` | `200` | ✓ 200 |
-| `role_definition` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions/{name}` | `200` | ✓ 200 |
-| `role_definition` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions` | `200` | ✓ 200 |
-| `servicebus` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces/vyomi-conf-servicebus` | `200` | ✓ 200 |
-| `servicebus` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces/{name}` | `200` | ✓ 200 |
-| `servicebus` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces/{name}` | `200` | ✓ 200 |
-| `servicebus` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces` | `200` | ✓ 200 |
-| `sql` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers/vyomi-conf-sql` | `200` | ✓ 200 |
-| `sql` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers/{name}` | `200` | ✓ 200 |
-| `sql` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers/{name}` | `200` | ✓ 200 |
-| `sql` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers` | `200` | ✓ 200 |
-| `storage` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/vyomi-conf-storage` | `200` | ✓ 200 |
-| `storage` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
-| `storage` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
-| `storage` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts` | `200` | ✓ 200 |
-| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `200` | ✓ 200 |
-| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
-| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
-| `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `200` | ✓ 200 |
-| `vnet` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vyomi-conf-vnet` | `200` | ✓ 200 |
-| `vnet` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
-| `vnet` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
-| `vnet` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks` | `200` | ✓ 200 |
+| `apim` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/vyomi-conf-apim-ef138156` | `200` | ✓ 200 |
+| `apim` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/{name}` | `200` | ✓ 200 |
+| `apim` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/{name}` | `200` | ✓ 200 |
+| `apim` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service` | `200` | ✓ 200 |
+| `app` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.App/containerApps/vyomi-conf-app-ef138156` | `200` | ✓ 200 |
+| `app` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.App/containerApps/{name}` | `200` | ✓ 200 |
+| `app` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.App/containerApps/{name}` | `200` | ✓ 200 |
+| `app` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.App/containerApps` | `200` | ✓ 200 |
+| `appconfiguration` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.AppConfiguration/configurationStores/vyomi-conf-appconfiguration-ef138156` | `200` | ✓ 200 |
+| `appconfiguration` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.AppConfiguration/configurationStores/{name}` | `200` | ✓ 200 |
+| `appconfiguration` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.AppConfiguration/configurationStores/{name}` | `200` | ✓ 200 |
+| `appconfiguration` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.AppConfiguration/configurationStores` | `200` | ✓ 200 |
+| `cognitiveservices` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.CognitiveServices/accounts/vyomi-conf-cognitiveservices-ef138156` | `200` | ✓ 200 |
+| `cognitiveservices` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.CognitiveServices/accounts/{name}` | `200` | ✓ 200 |
+| `cognitiveservices` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.CognitiveServices/accounts/{name}` | `200` | ✓ 200 |
+| `cognitiveservices` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.CognitiveServices/accounts` | `200` | ✓ 200 |
+| `cosmos` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts/vyomi-conf-cosmos-ef138156` | `200` | ✓ 200 |
+| `cosmos` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts/{name}` | `200` | ✓ 200 |
+| `cosmos` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts/{name}` | `200` | ✓ 200 |
+| `cosmos` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts` | `200` | ✓ 200 |
+| `dns` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/dnsZones/vyomi-conf-dns-ef138156.example.com` | `201` | ✓ 201 |
+| `dns` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/dnsZones/{name}` | `200` | ✓ 200 |
+| `dns` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/dnsZones/{name}` | `200` | ✓ 200 |
+| `dns` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/dnsZones` | `200` | ✓ 200 |
+| `eventgrid` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics/vyomi-conf-eventgrid-ef138156` | `200` | ✓ 200 |
+| `eventgrid` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics/{name}` | `200` | ✓ 200 |
+| `eventgrid` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics/{name}` | `200` | ✓ 200 |
+| `eventgrid` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics` | `200` | ✓ 200 |
+| `functionapp` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites/vyomi-conf-functionapp-ef138156` | `200` | ✓ 200 |
+| `functionapp` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites/{name}` | `200` | ✓ 200 |
+| `functionapp` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites/{name}` | `200` | ✓ 200 |
+| `functionapp` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites` | `200` | ✓ 200 |
+| `keyvault` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults/vyomi-conf-keyvault-ef138156` | `200` | ✓ 200 |
+| `keyvault` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults/{name}` | `200` | ✓ 200 |
+| `keyvault` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults/{name}` | `200` | ✓ 200 |
+| `keyvault` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults` | `200` | ✓ 200 |
+| `monitor` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Insights/metricAlerts/vyomi-conf-monitor-ef138156` | `200` | ✓ 200 |
+| `monitor` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Insights/metricAlerts/{name}` | `200` | ✓ 200 |
+| `monitor` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Insights/metricAlerts/{name}` | `200` | ✓ 200 |
+| `monitor` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Insights/metricAlerts` | `200` | ✓ 200 |
+| `nsg` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/vyomi-conf-nsg-ef138156` | `200` | ✓ 200 |
+| `nsg` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/{name}` | `200` | ✓ 200 |
+| `nsg` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/{name}` | `200` | ✓ 200 |
+| `nsg` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups` | `200` | ✓ 200 |
+| `operationalinsights` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.OperationalInsights/workspaces/vyomi-conf-operationalinsights-ef138156` | `201` | ✓ 201 |
+| `operationalinsights` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.OperationalInsights/workspaces/{name}` | `200` | ✓ 200 |
+| `operationalinsights` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.OperationalInsights/workspaces/{name}` | `200` | ✓ 200 |
+| `operationalinsights` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.OperationalInsights/workspaces` | `200` | ✓ 200 |
+| `rbac` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments/vyomi-conf-rbac-ef138156` | `201` | ✓ 201 |
+| `rbac` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments/{name}` | `200` | ✓ 200 |
+| `rbac` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments/{name}` | `200` | ✓ 200 |
+| `rbac` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments` | `200` | ✓ 200 |
+| `role_definition` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions/vyomi-conf-role_definition-ef138156` | `201` | ✓ 201 |
+| `role_definition` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions/{name}` | `200` | ✓ 200 |
+| `role_definition` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions/{name}` | `200` | ✓ 200 |
+| `role_definition` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions` | `200` | ✓ 200 |
+| `servicebus` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces/vyomi-conf-servicebus-ef138156` | `200` | ✓ 200 |
+| `servicebus` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces/{name}` | `200` | ✓ 200 |
+| `servicebus` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces/{name}` | `200` | ✓ 200 |
+| `servicebus` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces` | `200` | ✓ 200 |
+| `sql` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers/vyomi-conf-sql-ef138156` | `200` | ✓ 200 |
+| `sql` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers/{name}` | `200` | ✓ 200 |
+| `sql` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers/{name}` | `200` | ✓ 200 |
+| `sql` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers` | `200` | ✓ 200 |
+| `storage` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/vyomi-conf-storage-ef138156` | `200` | ✓ 200 |
+| `storage` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
+| `storage` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
+| `storage` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts` | `200` | ✓ 200 |
+| `vm` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm-ef138156` | `200` | ✓ 200 |
+| `vm` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
+| `vm` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
+| `vm` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `200` | ✓ 200 |
+| `vnet` | `create` | `PUT` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vyomi-conf-vnet-ef138156` | `200` | ✓ 200 |
+| `vnet` | `delete` | `DELETE` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
+| `vnet` | `get` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
+| `vnet` | `list` | `GET` | `/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks` | `200` | ✓ 200 |
 
 ## GCP
 
@@ -198,6 +280,24 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `apigateway` | `gateways` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/gateways` | `200` | ✓ 200 |
 | `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `list` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
+| `artifactregistry` | `create` | `POST` | `/api/gcp/artifactregistry/repositories` | `200` | ✓ 200 |
+| `artifactregistry` | `delete` | `DELETE` | `/api/gcp/artifactregistry/repositories/{name}` | `200` | ✓ 200 |
+| `artifactregistry` | `get` | `GET` | `/api/gcp/artifactregistry/repositories/{name}` | `200` | ✓ 200 |
+| `artifactregistry` | `images` | `GET` | `/api/gcp/sub/artifactregistry/listImages/{name}` | `200` | ✓ 200 |
+| `artifactregistry` | `list` | `GET` | `/api/gcp/artifactregistry/repositories` | `200` | ✓ 200 |
+| `artifactregistry` | `packages` | `GET` | `/api/gcp/sub/artifactregistry/listPackages/{name}` | `200` | ✓ 200 |
+| `artifactregistry` | `pushSample` | `POST` | `/api/gcp/sub/artifactregistry/pushSample/{name}` | `200` | ✓ 200 |
+| `artifactregistry` | `repositories` | `GET` | `/api/gcp/artifactregistry/repositories` | `200` | ✓ 200 |
+| `artifactregistry` | `tags` | `GET` | `/api/gcp/sub/artifactregistry/listTags/{name}` | `200` | ✓ 200 |
+| `artifactregistry` | `versions` | `GET` | `/api/gcp/sub/artifactregistry/listVersions/{name}` | `200` | ✓ 200 |
+| `cloudscheduler` | `create` | `POST` | `/api/gcp/cloudscheduler/jobs` | `200` | ✓ 200 |
+| `cloudscheduler` | `delete` | `DELETE` | `/api/gcp/cloudscheduler/jobs/{name}` | `200` | ✓ 200 |
+| `cloudscheduler` | `get` | `GET` | `/api/gcp/cloudscheduler/jobs/{name}` | `200` | ✓ 200 |
+| `cloudscheduler` | `jobs` | `GET` | `/api/gcp/cloudscheduler/jobs` | `200` | ✓ 200 |
+| `cloudscheduler` | `list` | `GET` | `/api/gcp/cloudscheduler/jobs` | `200` | ✓ 200 |
+| `cloudscheduler` | `pause` | `POST` | `/api/gcp/sub/cloudscheduler/pause/{name}` | `200` | ✓ 200 |
+| `cloudscheduler` | `resume` | `POST` | `/api/gcp/sub/cloudscheduler/resume/{name}` | `200` | ✓ 200 |
+| `cloudscheduler` | `run` | `POST` | `/api/gcp/sub/cloudscheduler/run/{name}` | `200` | ✓ 200 |
 | `cloudsql` | `backups` | `GET` | `/api/gcp/rds/databases/{name}/backups` | `200` | ✓ 200 |
 | `cloudsql` | `create` | `POST` | `/api/gcp/rds/databases` | `200` | ✓ 200 |
 | `cloudsql` | `delete` | `DELETE` | `/api/gcp/rds/databases/{name}` | `200` | ✓ 200 |
@@ -218,6 +318,12 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `compute` | `snapshots` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/snapshots` | `200` | ✓ 200 |
 | `compute` | `start` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/start` | `200` | ✓ 200 |
 | `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `200` | ✓ 200 |
+| `container` | `clusters` | `GET` | `/api/gcp/container/clusters` | `200` | ✓ 200 |
+| `container` | `create` | `POST` | `/api/gcp/container/clusters` | `200` | ✓ 200 |
+| `container` | `delete` | `DELETE` | `/api/gcp/container/clusters/{name}` | `200` | ✓ 200 |
+| `container` | `get` | `GET` | `/api/gcp/container/clusters/{name}` | `200` | ✓ 200 |
+| `container` | `list` | `GET` | `/api/gcp/container/clusters` | `200` | ✓ 200 |
+| `container` | `resize` | `POST` | `/api/gcp/sub/container/resize/{name}` | `200` | ✓ 200 |
 | `eventarc` | `channels` | `GET` | `/api/gcp/extras/eventarc/channels` | `200` | ✓ 200 |
 | `eventarc` | `create` | `POST` | `/api/gcp/extras/eventarc/triggers` | `200` | ✓ 200 |
 | `eventarc` | `delete` | `DELETE` | `/api/gcp/extras/eventarc/triggers/{name}` | `200` | ✓ 200 |
@@ -243,6 +349,11 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `iam` | `list` | `GET` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts` | `200` | ✓ 200 |
 | `iam` | `policy` | `GET` | `/api/gcp/iam/v1/projects/{project}:getIamPolicy` | `200` | ✓ 200 |
 | `iam` | `setPolicy` | `POST` | `/api/gcp/iam/v1/projects/{project}:setIamPolicy` | `200` | ✓ 200 |
+| `iamcredentials` | `create` | `POST` | `/api/gcp/iamcredentials/credentials` | `200` | ✓ 200 |
+| `iamcredentials` | `credentials` | `GET` | `/api/gcp/iamcredentials/credentials` | `200` | ✓ 200 |
+| `iamcredentials` | `delete` | `DELETE` | `/api/gcp/iamcredentials/credentials/{name}` | `200` | ✓ 200 |
+| `iamcredentials` | `get` | `GET` | `/api/gcp/iamcredentials/credentials/{name}` | `200` | ✓ 200 |
+| `iamcredentials` | `list` | `GET` | `/api/gcp/iamcredentials/credentials` | `200` | ✓ 200 |
 | `kms` | `create` | `POST` | `/api/gcp/kms/keys` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/gcp/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `ekmConnections` | `GET` | `/api/gcp/extras/kms/ekmConnections` | `200` | ✓ 200 |
@@ -252,12 +363,26 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `keys` | `GET` | `/api/gcp/kms/keys` | `200` | ✓ 200 |
 | `kms` | `keyversions` | `GET` | `/api/gcp/extras/kms/keyversions` | `200` | ✓ 200 |
 | `kms` | `list` | `GET` | `/api/gcp/kms/keys` | `200` | ✓ 200 |
+| `monitoring` | `create` | `POST` | `/api/gcp/monitoring/policies` | `200` | ✓ 200 |
+| `monitoring` | `delete` | `DELETE` | `/api/gcp/monitoring/policies/{name}` | `200` | ✓ 200 |
+| `monitoring` | `disable` | `POST` | `/api/gcp/sub/monitoring/disable/{name}` | `200` | ✓ 200 |
+| `monitoring` | `enable` | `POST` | `/api/gcp/sub/monitoring/enable/{name}` | `200` | ✓ 200 |
+| `monitoring` | `get` | `GET` | `/api/gcp/monitoring/policies/{name}` | `200` | ✓ 200 |
+| `monitoring` | `list` | `GET` | `/api/gcp/monitoring/policies` | `200` | ✓ 200 |
+| `monitoring` | `policies` | `GET` | `/api/gcp/monitoring/policies` | `200` | ✓ 200 |
 | `pubsub` | `create` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `200` | ✓ 200 |
 | `pubsub` | `delete` | `DELETE` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `200` | ✓ 200 |
 | `pubsub` | `get` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `200` | ✓ 200 |
 | `pubsub` | `list` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `200` | ✓ 200 |
 | `pubsub` | `publish` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}:publish` | `200` | ✓ 200 |
 | `pubsub` | `subscriptions` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/subscriptions` | `200` | ✓ 200 |
+| `redis` | `create` | `POST` | `/api/gcp/redis/instances` | `200` | ✓ 200 |
+| `redis` | `delete` | `DELETE` | `/api/gcp/redis/instances/{name}` | `200` | ✓ 200 |
+| `redis` | `failover` | `POST` | `/api/gcp/sub/redis/failover/{name}` | `200` | ✓ 200 |
+| `redis` | `get` | `GET` | `/api/gcp/redis/instances/{name}` | `200` | ✓ 200 |
+| `redis` | `instances` | `GET` | `/api/gcp/redis/instances` | `200` | ✓ 200 |
+| `redis` | `list` | `GET` | `/api/gcp/redis/instances` | `200` | ✓ 200 |
+| `redis` | `resize` | `POST` | `/api/gcp/sub/redis/resize/{name}` | `200` | ✓ 200 |
 | `secretmanager` | `create` | `POST` | `/api/gcp/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `delete` | `DELETE` | `/api/gcp/secrets/{name}` | `200` | ✓ 200 |
 | `secretmanager` | `get` | `GET` | `/api/gcp/secrets/{name}` | `200` | ✓ 200 |

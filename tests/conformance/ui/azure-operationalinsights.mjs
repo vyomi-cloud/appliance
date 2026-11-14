@@ -75,7 +75,7 @@ try {
   await page.locator("#blade .blade-actions button").filter({ hasText: /^create$/i }).first().click({ timeout: 5000 });
   for (let i = 0; i < 30 && createStatus === null; i++) await sleep(500);
   check(createStatus !== null && createStatus < 300, "create with defaults returns 2xx", `HTTP ${createStatus}`);
-  const rowFor = () => page.locator("#main table tr:has(td)").filter({ hasText: name }).first();
+  const rowFor = () => page.locator("#main table tr:has(td)").filter({ has: page.locator("td:first-child", { hasText: new RegExp("^\\s*" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$") }) }).first();
   for (let i = 0; i < 15 && !(await rowFor().count()); i++) await sleep(800);
   check(await rowFor().count() > 0, "new workspace appears in the list", name);
 

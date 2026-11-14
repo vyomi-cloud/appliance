@@ -397,7 +397,8 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   // real last-attempt status ("Failed: … 405" from example.com). A rejection is a message
   // outside the list (form error / toast), so drop the list rows' lines before looking.
   const rowLines = new Set((await page.locator(ROW_SEL).allInnerTexts().catch(() => [])).flatMap((t) => t.split("\n")).map((l) => l.trim()).filter(Boolean));
-  const msg = s.text.slice(0, 800).split("\n").filter((l) => !rowLines.has(l.trim())).join("\n").replace(/[\w-]+(\.[\w-]+)+/g, "");
+  // (a tab-separated line is a table row, e.g. a job that already ran — its timestamps move between the two reads)
+  const msg = s.text.slice(0, 800).split("\n").filter((l) => !rowLines.has(l.trim()) && !l.includes("\t")).join("\n").replace(/[\w-]+(\.[\w-]+)+/g, "");
   if (/\b(error|failed|invalid)\b/i.test(msg)) {
     f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(msg.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
   }
@@ -459,6 +460,9 @@ async function crawlConsole(browser, base, con, needsSW) {
   const drain = () => {
     const f = [];
     for (const n of net.splice(0)) {
+      // The footer's Cloudflare tab probes the public relay's /health; "503 no Nano tab registered" is its
+      // designed idle answer (nobody is tunnelling), not a product error.
+      if (/^https:\/\/relay\.vyomi\.cloud\/health(\?|$)/.test(n.url) && n.status === 503) continue;
       if (n.status === 501) f.push({ type: "HTTP_501", detail: `${n.url} → 501` });
       else if (n.status >= 500) f.push({ type: "HTTP_5XX", detail: `${n.url} → ${n.status}${n.body ? " " + n.body : ""}` });
       else if (n.status === 404) f.push({ type: "HTTP_404", detail: `${n.url} → 404` });
