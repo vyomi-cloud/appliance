@@ -58,10 +58,11 @@ jobs:
           if [ "$DRY" = "true" ]; then npm publish --access public --dry-run; else npm publish --access public; fi
       - name: Bump the Homebrew tap formula
         if: steps.st.outputs.tap == 'false' && env.DRY != 'true'
+        timeout-minutes: 35          # npm's CDN can take many minutes to serve a new tarball; the sha step waits for it (up to 25 min)
         run: |
           [ -n "$TAP_TOKEN" ] || { echo "::error::HOMEBREW_TAP_TOKEN missing"; exit 1; }
           VER="${{ steps.st.outputs.ver }}"
-          SHA=$(python3 scripts/tunnel_sync.py sha "$VER") || { echo "::error::registry tarball for $VER never settled"; exit 1; }
+          SHA=$(python3 scripts/tunnel_sync.py sha "$VER" --wait 1500) || { echo "::error::registry tarball for $VER never settled"; exit 1; }
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/vyomi-cloud/homebrew-tap.git" tap
           cd tap
           sed -i -e "s|vyomi-tunnel-[0-9][^\"]*\.tgz|vyomi-tunnel-${VER}.tgz|" -e "s|sha256 \"[0-9a-f]*\"|sha256 \"${SHA}\"|" Formula/vyomi-tunnel.rb

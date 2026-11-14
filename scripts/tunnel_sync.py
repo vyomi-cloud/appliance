@@ -7,7 +7,7 @@ upgrade to a version that did not exist. Release checks fail on that drift; rele
 
   python3 scripts/tunnel_sync.py status            # human lines + exit 1 on any problem
   python3 scripts/tunnel_sync.py status --json     # machine-readable (used by the workflows)
-  python3 scripts/tunnel_sync.py sha <version>     # settled sha256 of the registry tarball (3 equal fetches)
+  python3 scripts/tunnel_sync.py sha <version> [--wait S]  # settled sha256 of the registry tarball (3 equal fetches; waits up to S s, default 1500)
 
 Env: TAP_FORMULA_URL overrides the tap formula location (default: raw.githubusercontent.com main).
 """
@@ -42,8 +42,10 @@ def settled_sha(version: str, tries: int = 6) -> str | None:
     (A fetch right after `npm publish` can return a different/partial body — a wrong value broke `brew reinstall`.)"""
     url = f"{REG}/-/vyomi-tunnel-{version}.tgz"
     seen: list[str] = []
-    for _ in range(tries * 3):
+    for i in range(tries * 3):
         b = get(url)
+        if not b and i % 12 == 11:
+            print(f"waiting for the registry tarball ({(i + 1) * 5}s): {url} not downloadable yet", file=sys.stderr, flush=True)
         seen = (seen + [hashlib.sha256(b).hexdigest()])[-3:] if b else []
         if len(seen) == 3 and len(set(seen)) == 1:
             return seen[0]
@@ -78,7 +80,9 @@ def status() -> dict:
 def main() -> int:
     a = sys.argv[1:] or ["status"]
     if a[0] == "sha":
-        s = settled_sha(a[1])
+        # npm's CDN can take many minutes to serve a freshly published tarball (404 until then): wait up to --wait seconds (default 1500)
+        wait = int(a[a.index("--wait") + 1]) if "--wait" in a else 1500
+        s = settled_sha(a[1], tries=max(2, wait // 15))
         print(s or "")
         return 0 if s else 1
     st = status()
