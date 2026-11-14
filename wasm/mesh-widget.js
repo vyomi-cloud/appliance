@@ -355,6 +355,7 @@
     }
     // Fixed layout for every state: row 1 = title (left, no wrap) + buttons (right); row 2 spans both columns with the note lines.
     var tm = /^(<h4>[\s\S]*?<\/h4>)([\s\S]*)$/.exec(main), title = tm ? tm[1] : main, notes = tm ? tm[2] : "", subs = "";
+    notes = notes.replace(/<div class="sub subt">[\s\S]*?<\/div>/, function (s) { title += s; return ""; });   // plan / hours line sits right under the title, above the divider
     act = act.replace(/<div class="sub">[\s\S]*?<\/div>/g, function (s) { if (s.replace(/<[^>]*>/g, "").trim()) subs += s; return ""; });
     card.innerHTML = '<div class="main">' + title + '</div><div class="act">' + act + '</div>'
       + '<div class="foot">' + notes + subs + ka + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div>';
