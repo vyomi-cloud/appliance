@@ -83,8 +83,13 @@ jobs:
           git clone -q --depth 1 https://github.com/vyomi-cloud/claude-plugins.git "$RUNNER_TEMP/marketplace"
           python3 scripts/sync_claude_plugins.py "$RUNNER_TEMP/marketplace"
 
-      - name: MCP knowledge drift report (informational)
-        run: git fetch -q --tags origin && python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY"
+      - name: MCP knowledge drift report (informational, never fails the run)
+        continue-on-error: true
+        run: |
+          # --force: in a tag-triggered run the checkout already holds the tag (lightweight), and a plain fetch of the annotated
+          # tag is refused as "would clobber existing tag" (exit 1): that failed the tunnel-v1.3.0-rc.2 release.
+          git fetch -q --force --tags origin || echo "::warning::could not fetch tags; the drift report may be incomplete"
+          python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY" || echo "::warning::drift report failed"
 
       - name: prerelease-it.sh lints (bash)
         run: bash -n tools/mcp-eval/prerelease-it.sh && shellcheck -s bash -S warning tools/mcp-eval/prerelease-it.sh

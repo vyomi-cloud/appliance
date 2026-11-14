@@ -222,7 +222,7 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
 
   function close() { closed = true; clearTimeout(stopTimer); clearInterval(ka.timer); for (const c of live) { try { c.kill(); } catch { /* */ } } live.clear(); if (cfg && dir) sp("ssh", [...sshArgs(cfg), "-O", "exit", cfg.host], { stdio: "ignore" }).on("error", () => {}); }
 
-  return { resolve, open, exec, list, stopAt, onStop: (h) => stopHandlers.push(h), simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, keepalive: () => ({ ...ka, timer: undefined }) };
+  return { resolve, open, exec, list, stopAt, onStop: (h) => stopHandlers.push(h), simulatorTarget, httpToSimulator, close, get codespace() { return codespace; }, get closed() { return closed; }, keepalive: () => ({ ...ka, timer: undefined }) };
 }
 
 /** A drop-in for mesh-hub's createHub() when the link runs over ssh: same surface local-relay.mjs already calls.

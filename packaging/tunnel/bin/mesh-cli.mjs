@@ -202,6 +202,8 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
                           forward a port, e.g. forward k3s 6443:6443
   vyomi-tunnel gateway-backend <https origin>=<local origin>
                           let a Nano API Gateway reach your local backend (see: help gateway-backend)
+  vyomi-tunnel reset <code>
+                          re-pair this tunnel with your Vyomi account (see: help reset)
   vyomi-tunnel            start the local relay for the Nano console
 
 Agents:
@@ -212,6 +214,15 @@ Get one: 'vyomi-tunnel help credentials'.
 Log in to a Mesh VM over SSH: 'vyomi-tunnel help ssh'. Something failing? 'vyomi-tunnel help troubleshoot'.
 `;
 const DETAILS = {
+  reset: `Re-pair this tunnel with your Vyomi account (new access key, same machine)
+
+  vyomi-tunnel reset <code>
+  vyomi-tunnel reset https://vyomi.cloud/i/<code>
+
+Use it when the tunnel's access key was revoked, belongs to another account, or is missing. Get a one-time code by opening the Vyomi
+console, choosing Setup Tunnel > Get install command, and copying the part after /i/ (or the whole link). The code is single use and
+valid for 15 minutes. It is redeemed only at the portal named in ~/.vyomi/credentials (https://vyomi.cloud when there is none), the old
+file is kept as credentials.bak.<time>, the new one is written with mode 600, and a running tunnel reloads it by itself.`,
   "gateway-backend": `Let a Nano API Gateway call a backend that runs on your machine
 
   vyomi-tunnel gateway-backend https://hello-abc123-uc.a.run.app=http://127.0.0.1:3000
@@ -368,6 +379,20 @@ export async function main(argv) {
     cur[m.from] = m.to; g.saveMap(cur);
     console.log(`mapped ${m.from}  ->  ${m.to}\n(${g.mapFile()}; a running relay uses it immediately)`);
     return 0;
+  }
+  if (cmd === "reset") {                                               // re-pair with the account: same code flow as the console's Reset tunnel button
+    const arg = String(rest.find((x) => !x.startsWith("-")) || "");
+    const code = arg.replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop();
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(code)) { console.error("usage: vyomi-tunnel reset <code>   (get a code in the Vyomi console: Setup Tunnel > Get install command; see `vyomi-tunnel help reset`)"); return 2; }
+    const { createCredsSync } = await import("./creds-sync.mjs");
+    try {
+      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.3.0" });
+      const st = await cs.reset(code, os.hostname());
+      console.log(st.state === "ok" ? `Done. The tunnel now uses access key ${st.key_id}.` : `The new key was saved (${st.key_id}) but the portal answered: ${st.error || st.state}.`);
+      try { await fetch(`http://127.0.0.1:${process.env.RELAY_PORT || 8090}/reload`, { method: "POST", signal: AbortSignal.timeout(3000) }); console.log("The running tunnel reloaded it."); }
+      catch { console.log("No tunnel is running here; it will use the new key when it starts."); }
+      return st.state === "ok" ? 0 : 1;
+    } catch (e) { console.error("vyomi-tunnel: " + (e.message || "reset failed")); return e.status === 410 ? 1 : 2; }
   }
   if (cmd === "login" || cmd === "gh-login") {                         // there is no login: credentials live in a file, like ~/.aws/credentials
     console.error("vyomi-tunnel has no login. Save your access key as ~/.vyomi/credentials (console: avatar menu > Access Key). Run `vyomi-tunnel help credentials`.");

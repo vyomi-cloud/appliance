@@ -13,9 +13,14 @@ import { ErrorAlert, KeyValue, Section } from "../../kit/common.jsx";
 import InstanceNav from "./InstanceNav.jsx";
 import * as api from "./api.js";
 
-const TIER_SHAPE = {
-  "db-f1-micro": ["Shared", "0.6 GB"], "db-custom-1-3840": ["1", "3.75 GB"], "db-custom-2-4096": ["2", "4 GB"],
-  "db-custom-4-15360": ["4", "15 GB"], "db-custom-4-26624": ["4", "26 GB"],
+// Shared-core tiers are fixed; every db-custom-<vCPUs>-<MB> tier carries its own shape in its name.
+const SHARED_SHAPE = { "db-f1-micro": ["Shared", "0.6 GB"], "db-g1-small": ["Shared", "1.7 GB"] };
+const tierShape = (tier) => {
+  if (SHARED_SHAPE[tier]) return SHARED_SHAPE[tier];
+  const m = /^db-custom-(\d+)-(\d+)$/.exec(tier || "");
+  if (!m) return ["—", "—"];
+  const gb = Number(m[2]) / 1024;
+  return [m[1], `${Number.isInteger(gb) ? gb : gb.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")} GB`];
 };
 
 export default function InstanceOverview({ params }) {
@@ -25,7 +30,7 @@ export default function InstanceOverview({ params }) {
   const inst = useAsync(() => api.getInstance(name), [name]);
   const ops = useAsync(() => api.listOperations(name), [name]);
   const i = inst.data;
-  const shape = TIER_SHAPE[i?.settings?.tier] || ["—", "—"];
+  const shape = tierShape(i?.settings?.tier);
 
   const act = async (fn, msg) => { try { await fn(name); notify.success(msg); inst.reload(); } catch (e) { notify.error(e); } };
 

@@ -370,7 +370,99 @@ def _ps_err(e):
     return T.TabError(e.code, e.status, e.message)
 
 
+def _pubsub_unified(op: str, name: str, body: dict):
+    """Pub/Sub topic tabs over the shared core (core/gcp_pubsub_core) when the unified ingress owns
+    Pub/Sub: its records are keyed by full resource name, so the pre-v4 short-id tab code can't see them.
+    Same contract as Nano's wasm/providers/gcp_core_adapter.py `_pubsub_tab`."""
+    import base64
+    import json as _json
+    from routes import gcp_pubsub_unified as U
+    s = _server()
+    proj = s._gcp_project_name(_project())
+    topic = "projects/%s/topics/%s" % (proj, T.short(name))
+
+    def raw(method, path, query=None, payload=None):
+        data = b"" if payload is None else _json.dumps(payload).encode()
+        out = U.ps(method, "/v1/" + path, query or {}, data)
+        return out["status"], U._load(out["body"])
+
+    def call(method, path, query=None, payload=None):
+        st, out = raw(method, path, query, payload)
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    t = call("GET", topic)
+    v = T.view_op("pubsub", op)
+    if v:
+        if v == "schema" and (t.get("schemaSettings") or {}).get("schema"):
+            st, sc = raw("GET", t["schemaSettings"]["schema"])
+            t["schema"] = sc if st < 300 else None
+        return {"ok": True, "item": T.view("pubsub", v, t)}
+    patch = T.pubsub_topic_patch(op, body)
+    if patch is not None:
+        _usage("pubsub", op, T.short(name), {"topic": T.short(name), "fields": ",".join(patch)})
+        return {"ok": True, "item": call("PATCH", topic, None, {"topic": patch, "updateMask": ",".join(patch)})}
+    if op == "listSchemas":
+        return {"ok": True, "items": call("GET", "projects/%s/schemas" % proj).get("schemas", [])}
+    if op == "createSchema":
+        call("POST", "projects/%s/schemas" % proj, {"schemaId": body.get("name", "")},
+             {"type": body.get("type"), "definition": body.get("definition")})
+        return {"ok": True, "name": body.get("name")}
+    if op in ("listSubscriptions", "listPullSubscriptions"):
+        items = []
+        for sn in call("GET", topic + "/subscriptions").get("subscriptions", []):
+            st, sub = raw("GET", sn)
+            if st < 300:
+                items.append({"name": T.short(sub["name"]), "ackDeadlineSeconds": sub.get("ackDeadlineSeconds", 10),
+                              "messageRetentionDuration": sub.get("messageRetentionDuration") or "604800s",
+                              "deliveryType": "Push" if (sub.get("pushConfig") or {}).get("pushEndpoint") else "Pull",
+                              "retainAckedMessages": bool(sub.get("retainAckedMessages"))})
+        if op == "listPullSubscriptions":
+            items = [x for x in items if x["deliveryType"] == "Pull"]
+        return {"ok": True, "items": items}
+    if op == "createSubscription":
+        sid = T.validate_pubsub_id(body.get("name"))
+        ack = int(body.get("ackDeadlineSeconds") or 10)
+        if not 10 <= ack <= 600:
+            raise T.TabError(400, "INVALID_ARGUMENT", "The ack deadline must be between 10 and 600 seconds.")
+        call("PUT", "projects/%s/subscriptions/%s" % (proj, sid), None, {"topic": topic, "ackDeadlineSeconds": ack})
+        return {"ok": True, "name": sid}
+    if op == "deleteSubscription":
+        call("DELETE", "projects/%s/subscriptions/%s" % (proj, T.short(body.get("name"))))
+        return {"ok": True, "name": body.get("name")}
+    if op == "publishMessage":
+        data = str(body.get("data") or "")
+        attrs = {str(k): str(x) for k, x in (body.get("attributes") or {}).items()}
+        if not data and not attrs:
+            raise T.TabError(400, "INVALID_ARGUMENT", "A message needs data or at least one attribute.")
+        out = call("POST", topic + ":publish", None,
+                   {"messages": [{"data": base64.b64encode(data.encode()).decode(), "attributes": attrs}]})
+        return {"ok": True, "messageIds": out.get("messageIds", [])}
+    if op == "pullMessages":
+        sub = "projects/%s/subscriptions/%s" % (proj, T.short(body.get("subscription")))
+        got = call("POST", sub + ":pull", None, {"maxMessages": max(1, min(int(body.get("maxMessages") or 10), 100))}).get("receivedMessages", [])
+        if body.get("ack") and got:
+            call("POST", sub + ":acknowledge", None, {"ackIds": [g["ackId"] for g in got]})
+        items = []
+        for g in got:
+            m = g["message"]
+            try:
+                text = base64.b64decode(m.get("data") or "").decode("utf-8")
+            except Exception:
+                text = str(m.get("data") or "")
+            items.append({"messageId": m.get("messageId"), "publishTime": m.get("publishTime"), "data": text,
+                          "attributes": ", ".join("%s=%s" % kv for kv in (m.get("attributes") or {}).items()) or "No attributes",
+                          "acked": bool(body.get("ack"))})
+        return {"ok": True, "items": items}
+    return None
+
+
 def _pubsub(op: str, name: str, body: dict):
+    from core import wire_ingress as _wi
+    if _wi.is_unified("gcp_pubsub"):
+        return _pubsub_unified(op, name, body)
     import base64
     from core import gcp_pubsub_core as psc
     from core import gcp_pubsub_emulator as emu

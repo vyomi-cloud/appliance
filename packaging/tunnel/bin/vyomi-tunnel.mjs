@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // GENERATED — canonical source: wasm/relay/local-relay.mjs
-// Re-sync: this entry file is hand-derived (the packaged CLI always requires a key and has no hosted-relay hubs): port each change of
+// Re-sync: this entry file is hand-derived (no hosted-relay hubs): port each change of
 // local-relay.mjs by hand. The other bin/*.mjs are copies of wasm/relay/<same name>, with only the version stamps changed to package.json's
 // version (mesh-cli.mjs `vyomi-tunnel X.Y.Z`, credentials.mjs `version = "X.Y.Z"`). bin/mcp-launch.mjs is a plain copy. The ../mcp/ binaries
 // are built by scripts/build_tunnel_mcp.sh and never committed.
@@ -38,6 +38,7 @@
 import { egress } from "./egress.mjs";
 import { createLazySshHub } from "./mesh-lazy-hub.mjs";
 import { createLocalGw } from "./gw-egress-node.mjs";
+import { createCredsSync, originAllowed, hostIsLoopback } from "./creds-sync.mjs";
 import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
@@ -56,18 +57,17 @@ if (process.argv[2] === "mcp") {
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
-if (["login", "config", "connect", "status", "forward", "keep", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "reset", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   process.exit(await main(process.argv.slice(2)));
 }
 
 if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-tunnel: unknown command "${process.argv[2]}". Run \`vyomi-tunnel help\`.`); process.exit(2); }
 
-// Nothing is served without a valid Vyomi key (Free is enough for Nano). Same credentials file as the Mesh commands.
-{ const { requireSession } = await import("./credentials.mjs"); const a = await requireSession();
-  if (a.error) { console.error("vyomi-tunnel: " + a.error); process.exit(a.code === "NoCredentials" ? 2 : 1); } }
-
+// The tunnel keeps running even when its key is missing, revoked or wrong (a service manager would crash-loop it otherwise): the state is
+// shown on /health, re-checked on a timer and when ~/.vyomi/credentials changes, and the Vyomi page can re-pair it (POST /reset).
 const VERSION = "1.3.0";
+const credsSync = createCredsSync({ version: VERSION, log: (m) => console.log("[creds] " + m) });
 const PORT = Number(process.env.RELAY_PORT || 8090);
 // Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own
 // `gh codespace ssh`; opened on first use). No hosted relay, no MESH_RELAY_URL. Needs a Pro/Max key + a running Mesh Codespace.
@@ -121,12 +121,30 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(gw.enabled ? ["gw-egress"] : []), "mesh-link", "mesh-shell"],
+      features: ["http", "vm-tcp", "vm-egress", "db-tcp", ...(gw.enabled ? ["gw-egress"] : []), "mesh-link", "mesh-shell", "creds-sync"],
+      credentials: (({ state, key_id, portal, checked_at, error }) => ({ state, key_id, portal, checked_at, error }))(credsSync.state()),
       mesh_sessions: hub.enabled() ? hub.linked().length : 0,
       mesh_streams: hub.streams(),
       vms: [...vmHosts.values()].filter((v) => !v.db).map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
       dbs: [...vmHosts.values()].filter((v) => v.db).map((v) => ({ db: v.vm, engine: v.engine, host_port: v.hostPort })),
     }));
+  }
+  // Credentials: POST /reload re-reads and re-validates the key now; POST /reset {code} re-pairs this tunnel with the signed-in Vyomi account.
+  // Vyomi origins and loopback Host only (see creds-sync.mjs): the relay is CORS "*" and must not let an arbitrary page swap the key.
+  if ((url.pathname === "/reload" || url.pathname === "/reset") && req.method === "POST") {
+    const origin = req.headers.origin;
+    if (!originAllowed(origin) || !hostIsLoopback(req.headers.host)) { cors(res, 403, { "content-type": "application/json" }); return res.end(JSON.stringify({ ok: false, error: "forbidden_origin" })); }
+    const chunks = []; req.on("data", (c) => chunks.length < 64 && chunks.push(c));
+    req.on("end", async () => {
+      const send = (st, o) => { cors(res, st, { "content-type": "application/json", ...(origin ? { "access-control-allow-origin": origin, vary: "origin" } : {}) }); res.end(JSON.stringify(o)); };
+      try {
+        let c;
+        if (url.pathname === "/reload") c = await credsSync.check();
+        else { let b = {}; try { b = JSON.parse(Buffer.concat(chunks).toString() || "{}"); } catch { /* */ } c = await credsSync.reset(b.code, "tunnel reset", origin); }
+        const { state, key_id, portal, checked_at, error } = c; send(200, { ok: true, credentials: { state, key_id, portal, checked_at, error } });
+      } catch (e) { send(e.status || 500, { ok: false, error: String(e.message).slice(0, 160) }); }
+    });
+    return;
   }
   // Nano VM egress: allow-listed package-manager / toolchain fetches for the in-browser VMs (wasm/relay/egress.mjs).
   if (url.pathname === "/egress") {
@@ -336,6 +354,7 @@ const liveness = setInterval(() => {
 }, PING_MS);
 wss.on("close", () => { clearInterval(liveness); clearInterval(vmLiveness); });
 
+credsSync.start();
 server.listen(PORT, HOST, () => {
   const shown = HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST;
   console.log(`Vyomi-Nano local tunnel v${VERSION}`);

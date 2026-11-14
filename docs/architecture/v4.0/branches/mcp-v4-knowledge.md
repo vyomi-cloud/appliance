@@ -329,6 +329,22 @@ no answer = not serving, with the reason. `home=mesh` on a locked Codespace warn
 says the Codespace may be waking (30-60 s) and to ask again; `connect`/`forward` "not found" says the mesh may still be
 starting. `TestMCPHomesCodespace` covers serving, 401 and a dead forward (fails without the probe); Go 64/64, `-race`.
 
+## Trunk merged in: tunnel 1.2.2 / 1.2.3 (2026-11-14)
+
+While this branch was open, the trunk shipped vyomi-tunnel 1.2.2 / 1.2.3 (npm `latest` 1.2.3, released by vyomi-admin from
+`tunnel-v1.2.3`; its Homebrew bump failed): the tunnel stays up on a bad key, `/reload` + `/reset`, `vyomi-tunnel reset <code>`,
+`creds-sync.mjs`, the console credentials strip, and `tunnel_sync.py sha --wait`. Merged `origin/v4-on-main` into this branch
+(49 commits; no force-push). Conflicts were all in `packaging/tunnel/**` version stamps and `tunnel-release.yml`: kept 1.3.0 and
+the trunk's code (the old "requires a key" gate is gone, `mcp` still dispatches first); the gated workflow keeps its shape and
+takes the trunk's `--wait 1500` + 35 min brew timeout; the RC stamp step also stamps `creds-sync.mjs` and mesh-cli's
+`VYOMI_TUNNEL_VERSION_NUM` fallback. Note: on the trunk, `packaging/tunnel/bin/mesh-cli.mjs` has `reset` and help lines that
+`wasm/relay/mesh-cli.mjs` lacks (pre-existing divergence, left as is).
+
+The tunnel-v1.3.0-rc.2 run failed only in the drift report step: in a tag-triggered checkout, `git fetch --tags` is refused
+("would clobber existing tag"). Now `--force`, `continue-on-error`, and never fails a run. Verified after the merge: Go 64/64
+(`-race`), launcher + list tests 15/15, relay suites incl. the trunk's creds-widget / reset-portal tests, generator `--check`,
+plugin validate, shellcheck.
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;

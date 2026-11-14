@@ -1166,9 +1166,14 @@ function vyCodeTabs(o){
     + "background:var(--code-bg,#fafafa);border:1px solid var(--line,#e5e7eb);border-radius:6px"});
   const copyIc = el("span",{class:"material-symbols-outlined",style:"font-size:17px"}, "content_copy");
   const copy = el("button",{type:"button",title:"Copy","aria-label":"Copy",
-    style:"margin-left:auto;align-self:center;display:flex;align-items:center;justify-content:center;width:28px;height:28px;"
+    style:"align-self:center;display:flex;align-items:center;justify-content:center;width:28px;height:28px;"
       + "border:none;border-radius:4px;background:transparent;color:var(--sub);cursor:pointer"}, copyIc);
-  root.append(strip, el("div",{style:"margin-top:12px"}, code));
+  // Optional "Test" (a tab with a `test` function): runs what the commands do against this endpoint and says whether they will work as-is.
+  const testBtn = el("button",{type:"button",title:"Check that these commands work with this endpoint",
+    style:"display:none;align-self:center;padding:3px 14px;border:1px solid "+o.accent+";border-radius:16px;background:transparent;"
+      + "color:"+o.accent+";font:inherit;font-size:12px;font-weight:700;cursor:pointer"}, "Test");
+  const result = el("div",{"aria-live":"polite",style:"margin-top:8px;font-size:12px;line-height:1.6"});
+  root.append(strip, el("div",{style:"margin-top:12px"}, code), result);
   // Run the tab underline edge to edge of the card: pull the strip out by the nearest padded ancestor's inset.
   requestAnimationFrame(function bleed(){
     let p = root.parentElement;
@@ -1184,7 +1189,7 @@ function vyCodeTabs(o){
     style:"border:none;background:none;padding:8px 2px 9px;font:inherit;font-size:13px;font-weight:600;cursor:pointer",
     onclick:() => show(i)}, t.label));
   btns.forEach(b => strip.append(b));
-  strip.append(copy);   // right end of the tab row, clear of the code
+  strip.append(el("div",{style:"margin-left:auto;display:flex;align-items:center;gap:8px"}, testBtn, copy));   // right end of the tab row, clear of the code
   function show(i){
     cur = i;
     btns.forEach((b, j) => {
@@ -1193,7 +1198,22 @@ function vyCodeTabs(o){
       b.style.boxShadow = j === i ? "inset 0 -3px 0 " + o.accent : "none";
     });
     code.textContent = o.tabs[i].code;
+    testBtn.style.display = o.tabs[i].test ? "" : "none";
+    result.textContent = "";
   }
+  testBtn.onclick = async () => {
+    const tab = o.tabs[cur]; if (!tab.test) return;
+    testBtn.disabled = true; testBtn.textContent = "Testing…"; testBtn.style.opacity = ".6"; result.textContent = "";
+    let rows;
+    try { rows = await tab.test(); } catch (e) { rows = [{ok:false, label:"Test", detail:String((e && e.message) || e)}]; }
+    if (o.tabs[cur] !== tab) return;
+    rows.forEach(r => result.append(el("div",{style:"color:"+(r.ok ? "#037f0c" : "#d91515")},
+      (r.ok ? "✓ " : "✗ ") + r.label + (r.detail ? " — " + r.detail : ""))));
+    result.append(el("div",{style:"color:var(--sub)"}, rows.every(r => r.ok)
+      ? "These commands work as shown — paste them in your terminal."
+      : "Fix the item above, then press Test again."));
+    testBtn.disabled = false; testBtn.textContent = "Test"; testBtn.style.opacity = "";
+  };
   copy.onclick = async () => {
     try { await navigator.clipboard.writeText(o.tabs[cur].code); }
     catch (_) { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy"); s.removeAllRanges(); }
@@ -1214,6 +1234,28 @@ function nanoTunnelEp(){
   if(/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(location.origin)) return "http://127.0.0.1:8090";
   return "https://relay.vyomi.cloud/" + encodeURIComponent(ls("nano_session") || "nano");
 }
+// "Test" for the AWS CLI tab: sends the exact calls those two commands make (S3 ListBuckets, DynamoDB ListTables, signed the way the CLI signs them)
+// to the same endpoint, and says what is wrong when they would fail. The real CLI can't run inside a browser, but the request on the wire is the same.
+async function vyTestAwsCli(ep, region){
+  const amz = new Date().toISOString().replace(/[-:]|\.\d{3}/g, "");
+  const auth = (svc) => "AWS4-HMAC-SHA256 Credential=test/" + amz.slice(0,8) + "/" + region + "/" + svc + "/aws4_request, SignedHeaders=host;x-amz-date, Signature=" + "0".repeat(64);
+  const run = async (label, svc, init, ok) => {
+    const t0 = performance.now();
+    try {
+      const r = await fetch(ep + "/", Object.assign({signal: AbortSignal.timeout(20000)}, init, {headers: Object.assign({"x-amz-date": amz, authorization: auth(svc)}, init.headers)}));
+      const txt = await r.text(), ms = Math.round(performance.now() - t0);
+      if (r.ok && ok(txt)) return {ok:true, label, detail:"HTTP " + r.status + ", " + ms + " ms"};
+      if (r.status === 503) return {ok:false, label, detail:"the tunnel is running but no Vyomi tab is connected to it. Keep this tab open and reload it."};
+      return {ok:false, label, detail:"HTTP " + r.status + (txt ? " " + txt.replace(/\s+/g, " ").slice(0, 120) : "")};
+    } catch (e) {
+      return {ok:false, label, detail:"can't reach " + ep + ". Is the tunnel running? (Install or start it from the Setup Tunnel button on this page.)"};
+    }
+  };
+  const rows = [];
+  rows.push(await run("aws s3 ls", "s3", {method:"GET"}, (x) => /ListAllMyBucketsResult/.test(x)));
+  rows.push(await run("aws dynamodb list-tables", "dynamodb", {method:"POST", headers:{"content-type":"application/x-amz-json-1.0", "x-amz-target":"DynamoDB_20120810.ListTables"}, body:"{}"}, (x) => /TableNames/.test(x)));
+  return rows;
+}
 function vyConnectTabs(c){
   const ep = c.ep;
   const pre = "", pyPre = "";
@@ -1222,7 +1264,8 @@ function vyConnectTabs(c){
       "export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test\n" +
       "export AWS_DEFAULT_REGION=" + c.region + "\n" +
       "aws --endpoint-url " + ep + " s3 ls\n" +
-      "aws --endpoint-url " + ep + " dynamodb list-tables"},
+      "aws --endpoint-url " + ep + " dynamodb list-tables",
+     test: () => vyTestAwsCli(ep, c.region)},
     {label: "Python (boto3)", code: pyPre +
       "import boto3\n" +
       "s3 = boto3.client(\"s3\", endpoint_url=\"" + ep + "\",\n" +

@@ -471,13 +471,14 @@ jobs:
   mcp-knowledge-drift:
     needs: build
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Compare with the knowledge in the latest vyomi-tunnel
-        run: python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY"
+        run: python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY" || echo "::warning::drift report failed"
 
   # ── Snap Store publish — REMOVED ────────────────────────────────────────
   # Dropped 2026-10-23: the snap-publish job failed on every release (v3.0.x),

@@ -74,7 +74,9 @@ jobs:
           old, new = sys.argv[1:]
           for f, pat in [("packaging/tunnel/bin/vyomi-tunnel.mjs", 'const VERSION = "{}";'),
                          ("packaging/tunnel/bin/mesh-cli.mjs", 'vyomi-tunnel {}"'),
-                         ("packaging/tunnel/bin/credentials.mjs", 'version = "{}"')]:
+                         ("packaging/tunnel/bin/mesh-cli.mjs", 'VYOMI_TUNNEL_VERSION_NUM || "{}"'),
+                         ("packaging/tunnel/bin/credentials.mjs", 'version = "{}"'),
+                         ("packaging/tunnel/bin/creds-sync.mjs", 'version = "{}"')]:
               p = pathlib.Path(f); s = p.read_text(); a = pat.format(old)
               assert s.count(a) == 1, (f, a)
               p.write_text(s.replace(a, pat.format(new)))
@@ -211,10 +213,11 @@ jobs:
           else npm publish "$TGZ" --access public --tag "$CH"; fi
       - name: Bump the Homebrew tap (final releases only; formula rendered from packaging/brew/vyomi-tunnel.rb)
         if: env.CH == 'latest' && env.DRY != 'true'
+        timeout-minutes: 35          # npm's CDN can take many minutes to serve a new tarball; the sha step waits for it (up to 25 min)
         run: |
           set -euo pipefail
           [ -n "$TAP_TOKEN" ] || { echo "::error::HOMEBREW_TAP_TOKEN missing"; exit 1; }
-          SHA=$(python3 scripts/tunnel_sync.py sha "$VER") || { echo "::error::registry tarball for $VER never settled"; exit 1; }
+          SHA=$(python3 scripts/tunnel_sync.py sha "$VER" --wait 1500) || { echo "::error::registry tarball for $VER never settled"; exit 1; }
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/vyomi-cloud/homebrew-tap.git" tap
           python3 - packaging/brew/vyomi-tunnel.rb tap/Formula/vyomi-tunnel.rb "$VER" "$SHA" <<'EOF'
           import re, sys

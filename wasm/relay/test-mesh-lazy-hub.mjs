@@ -46,8 +46,13 @@ const mk = (openMesh) => createLazySshHub({ WebSocketServer: class {}, WebSocket
   cur = { error: "SessionEnded" }; t += 2000; r = await send(h); check2("Mesh session ended: the old link is dropped (no stale answers)", made[1].closed === true);
   // simulator stream failure drops the link so the next request reopens
   n = 0; made.length = 0; cur = { codespace: "cs-c" }; let mode = "fail"; const h2 = mk2(() => mode); t += 5000;
-  r = await send(h2); check2("simulator stream failure answers 502", r.status === 502 && n === 1);
+  r = await send(h2); check2("a persistent simulator failure answers 502 after ONE automatic retry on a fresh link", r.status === 502 && n === 2 && made[0].closed === true);
   await new Promise((f) => setTimeout(f, 10)); mode = "ok"; r = await send(h2);
-  check2("next request after a failure opens a fresh link", r.status === 200 && n === 2 && made[0].closed === true); }
+  check2("next request after a failure opens a fresh link", r.status === 200 && n === 3 && made[1].closed === true);
+  // a link that dies mid-life heals transparently: first attempt fails, the replay on a fresh link succeeds, the caller never sees the 502
+  n = 0; made.length = 0; let first = true; t += 5000; const h3 = mk2(() => { const m = first ? "fail" : "ok"; first = false; return m; });
+  r = await send(h3); check2("dead link heals: the request is replayed on a fresh link and succeeds", r.status === 200 && r.body === "ok:cs-c" && n === 2 && made[0].closed === true);
+  // a link whose ssh transport closed on its own is never reused
+  t += 5000; made[1].closed = true; r = await send(h3); check2("a closed transport is replaced before the next request", r.status === 200 && n === 3); }
 
 console.log("\nall passed");

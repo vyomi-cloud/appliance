@@ -516,6 +516,34 @@ def _patch_subnet(store: ComputeStore, project: str, region: str, name: str, bod
                                   _self_link("regions", project, f"{region}/subnetworks/{name}"), store))
 
 
+def _subnet_verb(store: ComputeStore, project: str, region: str, name: str, verb: str, body: dict) -> ComputeResponse:
+    """subnetworks.expandIpCidrRange (the new range must be a superset of the current one and must not collide with a
+    sibling subnet of the same network) and subnetworks.setPrivateIpGoogleAccess."""
+    rec = store.subnetworks.get(_sub_key(project, region, name))
+    if not rec:
+        return _not_found(f"The resource 'projects/{project}/regions/{region}/subnetworks/{name}' was not found")
+    if verb == "setPrivateIpGoogleAccess":
+        rec["privateIpGoogleAccess"] = bool((body or {}).get("privateIpGoogleAccess", False))
+    else:
+        new = str((body or {}).get("ipCidrRange", "")).strip()
+        try:
+            new_net = ipaddress.ip_network(new, strict=False)
+            old_net = ipaddress.ip_network(rec["ipCidrRange"], strict=False)
+        except ValueError:
+            return _err(400, "INVALID_ARGUMENT", f"Invalid IPv4 range: {new}")
+        if new_net.version != 4 or not old_net.subnet_of(new_net) or new_net == old_net:
+            return _err(400, "INVALID_ARGUMENT", f"Invalid value for field 'ipCidrRange': '{new}'. The new IP range must be a strict superset of the current range {rec['ipCidrRange']}.")
+        for k, o in store.subnetworks.items():
+            if o is rec or o["project"] != project or o["networkName"] != rec["networkName"]:
+                continue
+            if ipaddress.ip_network(o["ipCidrRange"], strict=False).overlaps(new_net):
+                return _err(400, "INVALID_ARGUMENT", f"Invalid value for field 'ipCidrRange': '{new}'. Requested range conflicts with subnetwork '{o['name']}' ({o['ipCidrRange']}).")
+        rec["ipCidrRange"] = str(new_net)
+        rec["gatewayAddress"] = str(new_net.network_address + 1)
+    return _json(200, _operation(project, "regional", region, verb,
+                                  _self_link("regions", project, f"{region}/subnetworks/{name}"), store))
+
+
 def _send_flows(store: ComputeStore, vm_store, project: str, payload: dict) -> ComputeResponse:
     """(Vyomi) POST /compute/v1/projects/{p}/global/vyomiFlows:send -- evaluate ONE flow through the logical netsim
     evaluator (firewalls, routes, NAT, peering) and, when it is delivered, emit the VPC Flow Log records the subnets'
@@ -1899,6 +1927,8 @@ def _dispatch(store: ComputeStore, method: str, path: str,
                         return _delete_subnet(store, project, region, name)
                     if method == "PATCH":
                         return _patch_subnet(store, project, region, name, payload)
+                elif len(segs) == 7 and method == "POST" and segs[6] in ("expandIpCidrRange", "setPrivateIpGoogleAccess"):
+                    return _subnet_verb(store, project, region, segs[5], segs[6], payload)
             elif kind == "addresses":
                 if len(segs) == 5:
                     if method == "POST":

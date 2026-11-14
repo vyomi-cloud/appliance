@@ -258,7 +258,10 @@
               clearTimeout(tm);
               if (r.ok) return res();
               if (r.status >= 500) return again("HTTP " + r.status);          // the Mesh is not serving yet
-              rej(new Error("HTTP " + r.status));                              // 401/403/404: retrying will not help
+              // 401/403/404: retrying will not help. Name the reason the Mesh gave (e.g. MeshSessionBadSignature) so a failure can be diagnosed.
+              r.json().then(function (j) { var e = j && j.error; return (e && (e.code || e.Code || (typeof e === "string" ? e : ""))) || (j && (j.code || j.Code || j.message)) || ""; }, function () { return ""; }).then(function (code) {
+                rej(new Error("HTTP " + r.status + (code && typeof code === "string" ? " (" + code.slice(0, 60) + ")" : "")));
+              });
             }, function (e) { clearTimeout(tm); again(e && e.name === "AbortError" ? "timeout" : String(e && e.message || e)); });
           }
           go();
@@ -273,7 +276,9 @@
           if (!r.ok) throw new Error("HTTP " + r.status);
           return r.json().then(function (j) { (j.items || []).forEach(put); });
         });
-      }, function (e) { put({ id: "reach", ok: false, detail: String(e && e.message || e), hint: "The tunnel is up but the Mesh does not answer through it. Wait a minute and re-run the checks." }); }).then(finish, function (e) { put({ id: "selfcheck", label: "Health checks", ok: false, detail: String(e && e.message || e), hint: "The Mesh did not answer its health checks." }); return finish(); });
+      }, function (e) { var m = String(e && e.message || e); put({ id: "reach", ok: false, detail: m, hint: /HTTP 50[23]/.test(m)
+        ? "The tunnel on your computer is running but is not linked to this Mesh. Usually its access key belongs to a different Vyomi account than the one you are signed in with. Run `vyomi-tunnel list mesh` (it must show vyomi-mesh-simulator-1); if not, create a key at vyomi.cloud/account/tunnel-credentials while signed in as THIS account, save it as ~/.vyomi/credentials, restart vyomi-tunnel and re-run the checks."
+        : "The tunnel is up but the Mesh does not answer through it. Wait a minute and re-run the checks." }); }).then(finish, function (e) { put({ id: "selfcheck", label: "Health checks", ok: false, detail: String(e && e.message || e), hint: "The Mesh did not answer its health checks." }); return finish(); });
     });
   }
   function joinMesh() {

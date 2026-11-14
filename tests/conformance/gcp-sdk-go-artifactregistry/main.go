@@ -134,7 +134,10 @@ func main() {
 	}
 	chk("DeleteVersion completes", err == nil, fmt.Sprint(err))
 	_, err = c.ListTags(ctx, &pb.ListTagsRequest{Parent: pk.GetName()}).Next()
-	chk("deleting the version removes its tags", err == iterator.Done, fmt.Sprint(err))
+	// Real Artifact Registry drops a package with its last version, so listing its tags is
+	// NOT_FOUND (core/gcp_artifactregistry_core.py); an empty list is the other faithful outcome only
+	// while the package still exists. Either way no tag may survive the version.
+	chk("deleting the version removes its tags (package gone with its last version -> NOT_FOUND)", err == iterator.Done || (err != nil && (strings.Contains(err.Error(), "NotFound") || strings.Contains(err.Error(), "404"))), fmt.Sprint(err))
 
 	_, err = c.GetRepository(ctx, &pb.GetRepositoryRequest{Name: parent + "/repositories/does-not-exist"})
 	chk("GetRepository of a missing repository is NOT_FOUND", err != nil && (strings.Contains(err.Error(), "NotFound") || strings.Contains(err.Error(), "404")), fmt.Sprint(err))

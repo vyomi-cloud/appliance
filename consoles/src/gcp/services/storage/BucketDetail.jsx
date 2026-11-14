@@ -40,7 +40,8 @@ export default function BucketDetail({ params, query }) {
   const tab = TABS.some(([t]) => t === query.tab) ? query.tab : "objects";
   const b = useAsync(() => api.getBucket(bucket), [bucket]);
   const pol = useAsync(() => api.getIamPolicy(bucket).catch(() => null), [bucket]);
-  const reloadAll = () => { b.reload(); pol.reload(); };
+  const [tick, setTick] = useState(0);   // header Refresh also re-lists the objects
+  const reloadAll = () => { b.reload(); pol.reload(); setTick((n) => n + 1); };
 
   return (
     <>
@@ -64,7 +65,7 @@ export default function BucketDetail({ params, query }) {
         variant="scrollable" scrollButtons="auto" sx={{ borderBottom: 1, borderColor: "divider", mb: 2.5 }} aria-label="Bucket tabs">
         {TABS.map(([id, label]) => <Tab key={id} value={id} label={label} />)}
       </Tabs>
-      {tab === "objects" && <Objects bucket={bucket} prefix={query.prefix || ""} meta={b.data} policy={pol.data} />}
+      {tab === "objects" && <Objects bucket={bucket} prefix={query.prefix || ""} meta={b.data} policy={pol.data} tick={tick} />}
       {tab !== "objects" && !b.data && !b.error && <CircularProgress size={24} />}
       {tab === "configuration" && b.data && <Configuration bucket={b.data} reload={b.reload} />}
       {tab === "permissions" && b.data && <Permissions bucket={b.data} policy={pol} reload={reloadAll} />}
@@ -132,14 +133,14 @@ function Operations({ bucket }) {
 }
 
 // ── Objects ─────────────────────────────────────────────────────────────────────────────
-function Objects({ bucket, prefix, meta, policy }) {
+function Objects({ bucket, prefix, meta, policy, tick = 0 }) {
   const notify = useNotify();
   const file = useRef(null);
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
   const [folder, setFolder] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { data, loading, error, reload } = useAsync(() => api.listLevel(bucket, prefix), [bucket, prefix]);
+  const { data, loading, error, reload } = useAsync(() => api.listLevel(bucket, prefix), [bucket, prefix, tick]);
   const items = data ? [...data.folders, ...data.objects] : [];
   const crumbs = prefix.split("/").filter(Boolean);
   const retention = Number(meta?.retentionPolicy?.retentionPeriod || 0);

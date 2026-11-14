@@ -8,7 +8,123 @@
   "use strict";
   var me = document.currentScript, CLOUD = (me && me.getAttribute("data-cloud")) || "";
   var PRICING = "https://vyomi.cloud/pricing";
-  var card, busy = false, msg = "", view = "main", collapsed = false;
+  var card, wrap, busy = false, msg = "", view = "main", collapsed = false;
+
+  // ── one-command tunnel install (macOS, Linux, Windows) ─────────────────────────────────────────────────────────────────────────────────────────
+  // POST /api/tunnel/pair/start returns a single-use command bound to THIS signed-in account:  curl -fsSL <portal>/i/<code> | sh
+  // The script installs a private Node + the tunnel, connects the account (so a wrong-account key cannot happen) and starts the tunnel at
+  // login. It reports each step; this card polls GET /api/tunnel/pair/status and shows them live. Other systems keep the brew/npm steps.
+  var inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }, instTimer = 0;
+  var INST_STEPS = [["node", "Configuring Tunnel"], ["tunnel", "Installing the tunnel"], ["pair", "Connecting your account"], ["service", "Starting the tunnel"], ["running", "Tunnel running"]];
+  // "mac" | "windows" | "linux" | "" (phones/tablets/ChromeOS/unknown: those keep the package-manager steps). One-command install exists for the first three.
+  function osKind() {
+    var ua = navigator.userAgent || "", pl = navigator.platform || "";
+    if (/iPhone|iPad|iPod|Android|CrOS/i.test(ua)) return "";
+    if (/Mac/i.test(pl)) return "mac";
+    if (/Win/i.test(pl) || /Windows/i.test(ua)) return "windows";
+    if (/Linux|X11/i.test(pl) || /Linux|X11/i.test(ua)) return "linux";
+    return "";
+  }
+  // "Check again" only makes sense once the tunnel has worked at least once on this browser (installed, or seen answering); before that it does nothing.
+  function tunnelSeen() { try { return localStorage.getItem("vyomi.tunnelSeen") === "1"; } catch (_) { return false; } }
+  function markTunnelSeen() { try { localStorage.setItem("vyomi.tunnelSeen", "1"); } catch (_) {} }
+  var BOLT = '<svg class="bolt" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+  function isMac() { return osKind() === "mac"; }
+  function canInstall() { return !!osKind(); }
+  function termName() { var k = osKind(); return k === "windows" ? "PowerShell" : k === "mac" ? "Terminal" : "a terminal"; }
+  function instFail(text) { inst = { s: "error", cmd: "", code: "", st: null, err: text, copied: false, t0: 0 }; repaint(); }
+  function instGet() {
+    clearTimeout(instTimer); inst = { s: "loading", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; repaint();
+    fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: osKind() }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+      .then(function (r) {
+        if (!r.ok || !r.j.command) return instFail(r.status === 401 ? "Sign in again, then retry." : (r.j && (r.j.message || r.j.error)) || "Could not create the install command.");
+        inst = { s: "ready", cmd: r.j.command, code: r.j.code, st: null, err: "", copied: false, t0: Date.now() }; repaint(); instPoll();
+      }, function () { instFail("Could not reach Vyomi. Check your connection and retry."); });
+  }
+  function instPoll() {
+    clearTimeout(instTimer);
+    if (inst.s !== "ready") return;
+    fetch("/api/tunnel/pair/status?code=" + encodeURIComponent(inst.code), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
+      .then(function (j) {
+        if (inst.s !== "ready") return;
+        if (j) { inst.st = j; if (j.finished) markTunnelSeen(); if (j.finished && B() && B().checkTunnel) B().checkTunnel().then(repaint); repaint(); }
+        if (!(j && (j.finished || j.expired)) && Date.now() - inst.t0 < 31 * 60 * 1000) instTimer = setTimeout(instPoll, 2000);
+      });
+  }
+  function instCopy() {
+    var done = function () { inst.copied = true; repaint(); setTimeout(function () { inst.copied = false; repaint(); }, 2500); };
+    try { navigator.clipboard.writeText(inst.cmd).then(done, function () { toast("Select the command and copy it."); }); } catch (_) { toast("Select the command and copy it."); }
+  }
+  // ── the Setup Tunnel dialog ──────────────────────────────────────────────────────────────────────────────────────────────────
+  // The card only shows a "Setup Tunnel" button; the command, copy button, live steps and the package-manager fallback live in this
+  // dialog. It can be closed at any time; closing mid-install keeps the install (and its progress polling) going, and reopening resumes it.
+  var tm = { open: false, last: "" };
+  function instDone() { var st = inst.st || {}, ts = tunnelState(); return !!(st.finished || ts === "up" || ts === "notab"); }
+  function instTerminal() { var st = inst.st || {}; return !!(st.finished || st.failed || st.expired); }
+  function repaint() { paint(); paintModal(); }
+  function modalHtml() {
+    var done = instDone(), body;
+    if (!canInstall()) {
+      body = '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
+    } else body = installPanel();
+    return '<div class="tm-ov" data-tm-ov><div class="tm" role="dialog" aria-modal="true" aria-labelledby="vy-tm-t" tabindex="-1">'
+      + '<div class="tm-h"><h3 id="vy-tm-t">' + (done ? "Tunnel ready" : "Set up the Vyomi tunnel") + '</h3>'
+      + '<button class="tm-x" data-vyb-keep data-tm-close aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M3.22 3.22a.75.75 0 0 1 1.06 0L8 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L9.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L8 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L6.94 8 3.22 4.28a.75.75 0 0 1 0-1.06z"/></svg></button></div>'
+      + '<div class="tm-b">' + body + '</div>'
+      + '<div class="tm-f"><button class="go' + (done ? "" : " sec") + '" data-vyb-keep data-tm-close>' + (done ? "Done" : "Close") + '</button></div></div></div>';
+  }
+  function paintModal() {
+    var el = document.getElementById("vy-tm-root");
+    if (!tm.open) { if (el) el.parentNode.removeChild(el); tm.last = ""; return; }
+    var created = false;
+    if (!el) {
+      created = true; el = document.createElement("div"); el.id = "vy-tm-root"; el.setAttribute("data-vyb-keep", "1"); el.setAttribute("data-cloud", CLOUD); document.body.appendChild(el);
+      el.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t.closest && t.closest("[data-inst-get]")) { e.preventDefault(); instGet(); }
+        else if (t.closest && t.closest("[data-inst-copy]")) { e.preventDefault(); instCopy(); }
+        else if (t.closest && t.closest("[data-tm-close]")) { e.preventDefault(); instClose(); }
+        else if (t.hasAttribute && t.hasAttribute("data-tm-ov")) instClose();                     // click outside the dialog
+      });
+    }
+    var html = modalHtml();
+    if (html !== tm.last) { el.innerHTML = html; tm.last = html; }
+    if (created) { var d = el.querySelector(".tm"); if (d && d.focus) d.focus(); }
+  }
+  function instOpen() {
+    var st = inst.st || {};
+    tm.open = true; tm.last = "";
+    if (canInstall() && (inst.s === "idle" || inst.s === "error" || st.finished || st.expired || st.failed)) instGet(); else paintModal();
+    paint();
+  }
+  function instClose() {
+    tm.open = false; tm.last = "";
+    if (instTerminal()) { clearTimeout(instTimer); inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; }   // a running install keeps polling in the background
+    paintModal(); paint();
+  }
+  document.addEventListener("keydown", function (e) { if (tm.open && (e.key === "Escape" || e.key === "Esc")) instClose(); });
+  function installPanel() {
+    if (inst.s === "idle" || inst.s === "error") {
+      return '<div class="inst"><p class="fine">Install the Vyomi tunnel on this computer with one command. It connects to <b>your</b> account, so there is nothing to copy or configure.</p>'
+        + (inst.err ? '<p class="fine" style="color:#b10e1c">' + esc(inst.err) + '</p>' : '')
+        + '<button class="go" data-inst-get>Get install command</button>'
+        + '<div class="sub">Prefer a package manager? <code>npm i -g vyomi-tunnel</code>, then run <code>vyomi-tunnel</code></div></div>';
+    }
+    if (inst.s === "loading") return '<div class="inst"><p class="fine">Creating your install command…</p></div>';
+    var st = inst.st || {}, done = st.done || [];
+    var items = INST_STEPS.map(function (s) { return '<li style="list-style:none;margin-left:-18px">' + (done.indexOf(s[0]) >= 0 ? "✓" : "○") + " " + esc(s[1]) + "</li>"; }).join("");
+    var head = st.finished ? '<p class="fine"><b>Tunnel installed and running.</b> Click <b>Start tunnel</b> in the bar at the bottom of this page, then join the Mesh.</p>'
+      : st.expired ? '<p class="fine">This command expired. <a href="#" data-inst-get>Get a new one</a></p>'
+      : '<p class="fine">Open <b>' + termName() + '</b>, paste this, and press Enter. This page follows the progress.</p>';
+    var ICON_COPY = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M0 6.75C0 5.78.78 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25z"/><path d="M5 1.75C5 .78 5.78 0 6.75 0h7.5C15.22 0 16 .78 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25z"/></svg>';
+    var ICON_OK = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 1 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/></svg>';
+    return '<div class="inst">' + head + '<div class="cmd"><code>' + esc(inst.cmd) + '</code>'
+      + '<button class="cp' + (inst.copied ? " ok" : "") + '" data-vyb-keep data-inst-copy aria-label="' + (inst.copied ? "Copied" : "Copy command") + '" title="' + (inst.copied ? "Copied" : "Copy") + '">' + (inst.copied ? ICON_OK : ICON_COPY) + '</button></div>'
+      + '<ol class="steps">' + items + '</ol>'
+      + (st.failed ? '<p class="fine" style="color:#b10e1c">The install stopped' + (st.detail ? ": " + esc(st.detail) : "") + '. Run the command again, or <a href="#" data-inst-get>get a new one</a>.</p>' : "") + '</div>';
+  }
 
   function B() { return window.VyomiMesh; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -19,6 +135,51 @@
     st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px}"
       + ".vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}.vy-nano-video>.vy-video-banner{order:1;flex:1 1 340px;min-width:0;margin:0 0 16px!important}.vy-nano-video>#vy-bw{order:2;flex:1 1 340px;min-width:0;margin:0 0 16px}"
       + "#vy-bw .main{min-width:0}"
+      + "#vy-tm-root .tm-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(15,20,25,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}"
+      + "#vy-tm-root .tm{box-sizing:border-box;background:#fff;color:#1b2430;width:min(780px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.4);outline:0}"
+      + "#vy-tm-root .tm-h{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e3e6e8}#vy-tm-root .tm-h h3{margin:0;font-size:17px;font-weight:650}"
+      + "#vy-tm-root .tm-x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:#59636e;padding:0 4px}"
+      + "#vy-tm-root .tm-b{padding:16px 20px}#vy-tm-root .tm-f{padding:0 20px 18px;text-align:right;min-height:28px}"
+      + "#vy-tm-root .fine{font-size:12px;color:#6b7280}#vy-tm-root a{color:#1a56c4}#vy-tm-root p{margin:0 0 10px;line-height:1.5;font-size:14px}#vy-tm-root p.fine{font-size:13px}"
+      + "#vy-tm-root .go{display:inline-block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 18px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
+      + "#vy-tm-root .sub{font-size:12px;color:#6b7280;margin-top:8px}#vy-tm-root .steps{margin:8px 0 0;padding-left:20px;color:#414d5c;font-size:14px}#vy-tm-root .steps li{padding:3px 0}"
+      + "#vy-tm-root code{background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:1px 6px;font-size:12px}"
+      + "#vy-tm-root[data-cloud=aws] .tm-ov{background:rgba(15,20,26,.7);font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=aws] .tm{border-radius:8px;color:#0f141a;box-shadow:0 4px 20px 1px rgba(0,28,36,.5);font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=aws] .tm-h{padding:20px 20px 16px;border-bottom:1px solid #e9ebed}.tm-h h3{font-size:20px;font-weight:700;line-height:24px;letter-spacing:.005em}"
+      + "#vy-tm-root[data-cloud=aws] .tm-x{color:#5f6b7a;border-radius:4px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;padding:0}.tm-x:hover{color:#0f141a;background:#f2f3f3}"
+      + "#vy-tm-root[data-cloud=aws] .tm-b{padding:20px}.tm-b p,.tm-b .steps{color:#414d5c}.fine{color:#5f6b7a}"
+      + "#vy-tm-root[data-cloud=aws] .tm-f{padding:16px 20px;border-top:1px solid #e9ebed}"
+      + "#vy-tm-root[data-cloud=aws] .go{border-radius:20px;background:#ff9900;color:#0f141a!important;font-weight:700;padding:6px 20px;border:2px solid #ff9900}.go:hover{background:#ec7211;border-color:#ec7211}"
+      + "#vy-tm-root[data-cloud=aws] .go.sec{background:#fff;color:#0972d3!important;border:2px solid #0972d3}.go.sec:hover{background:#f2f8fd}"
+      + "#vy-tm-root[data-cloud=aws] a{color:#0972d3}code{font-family:Monaco,Menlo,Consolas,'Courier New',monospace}.cmd code{background:#f9fafa;border:1px solid #e9ebed;border-radius:8px}"
+      + "#vy-tm-root[data-cloud=aws] .cp{border:2px solid #0972d3;border-radius:50%;color:#0972d3;background:#fff;top:7px;right:7px}.cp:hover{background:#f2f8fd}.cp.ok{color:#037f0c;border-color:#037f0c}"
+      + "#vy-tm-root[data-cloud=aws] button:focus-visible{outline:2px solid #0972d3;outline-offset:2px}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-ov{background:rgba(0,0,0,.32);font-family:'Google Sans',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=gcp] .tm{border-radius:28px;color:#202124;box-shadow:0 8px 12px 6px rgba(0,0,0,.15),0 4px 4px rgba(0,0,0,.3);font-family:'Google Sans',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-h{padding:24px 24px 8px}.tm-h h3{font-size:24px;font-weight:400;line-height:32px}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-x{color:#5f6368;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;padding:0}.tm-x:hover{background:rgba(60,64,67,.08)}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-b{padding:8px 24px}.tm-b p,.tm-b .steps{color:#5f6368}.fine{color:#5f6368}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-f{padding:16px 24px 24px}"
+      + "#vy-tm-root[data-cloud=gcp] .go{border-radius:20px;background:#0b57d0;font-weight:500;padding:9px 24px;border:0;letter-spacing:.01em}.go:hover{background:#0842a0;box-shadow:0 1px 2px rgba(60,64,67,.3),0 1px 3px 1px rgba(60,64,67,.15)}"
+      + "#vy-tm-root[data-cloud=gcp] .go.sec{background:transparent;color:#0b57d0!important;padding:9px 12px;box-shadow:none}.go.sec:hover{background:rgba(11,87,208,.08)}"
+      + "#vy-tm-root[data-cloud=gcp] a{color:#0b57d0}code{font-family:'Roboto Mono',Menlo,Consolas,monospace}.cmd code{background:#f1f3f4;border:0;border-radius:12px}"
+      + "#vy-tm-root[data-cloud=gcp] .cp{border:0;background:transparent;border-radius:50%;width:36px;height:36px;color:#5f6368;top:4px;right:4px}.cp:hover{background:rgba(60,64,67,.08)}.cp.ok{color:#188038}"
+      + "#vy-tm-root[data-cloud=gcp] button:focus-visible{outline:2px solid #0b57d0;outline-offset:2px}"
+      + "#vy-tm-root[data-cloud=azure] .tm-ov{background:rgba(0,0,0,.4);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif}"
+      + "#vy-tm-root[data-cloud=azure] .tm{border-radius:8px;color:#242424;box-shadow:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif}"
+      + "#vy-tm-root[data-cloud=azure] .tm-h{padding:24px 24px 0;border:0}.tm-h h3{font-size:20px;font-weight:600;line-height:28px}"
+      + "#vy-tm-root[data-cloud=azure] .tm-x{color:#424242;border-radius:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;padding:0}.tm-x:hover{background:#f5f5f5}"
+      + "#vy-tm-root[data-cloud=azure] .tm-b{padding:12px 24px}.tm-b p,.tm-b .steps{color:#616161}.fine{color:#616161}"
+      + "#vy-tm-root[data-cloud=azure] .tm-f{padding:12px 24px 24px}"
+      + "#vy-tm-root[data-cloud=azure] .go{border-radius:4px;background:#0f6cbd;font-weight:600;padding:5px 16px;border:1px solid #0f6cbd;line-height:22px}.go:hover{background:#115ea3;border-color:#115ea3}"
+      + "#vy-tm-root[data-cloud=azure] .go.sec{background:#fff;color:#242424!important;border:1px solid #d1d1d1}.go.sec:hover{background:#f5f5f5;border-color:#c7c7c7}"
+      + "#vy-tm-root[data-cloud=azure] a{color:#0f6cbd}code{font-family:Consolas,'Courier New',monospace}.cmd code{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px}"
+      + "#vy-tm-root[data-cloud=azure] .cp{border:0;background:transparent;border-radius:4px;width:28px;height:28px;color:#424242;top:7px;right:7px}.cp:hover{background:#e0e0e0}.cp.ok{color:#107c10}"
+      + "#vy-tm-root[data-cloud=azure] button:focus-visible{outline:2px solid #242424;outline-offset:1px}"
+      + "#vy-tm-root .cmd{position:relative;margin:10px 0}#vy-tm-root .cmd code{display:block;word-break:break-all;padding:12px 48px 12px 14px;font-size:13px;line-height:1.45;user-select:all}"
+      + "#vy-tm-root .cp{position:absolute;top:6px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #d0d7de;border-radius:6px;background:#fff;color:#57606a;cursor:pointer;padding:0}#vy-tm-root .cp:hover{background:#f3f4f6}#vy-tm-root .cp.ok{color:#1a7f37;border-color:#1a7f37}"
+      + "#vy-bw .cmd{margin:8px 0}#vy-bw .cmd code{display:block;word-break:break-all;background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:8px 10px;font-size:12px;user-select:all}#vy-bw .inst .go{margin:2px 0 6px}"
       + "@media(max-width:560px){#vy-bw{grid-template-columns:minmax(0,1fr)}#vy-bw .act{min-width:0}}"
       + "#vy-bw .foot:empty{display:none}#vy-bw .foot{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 20px;padding-top:8px;border-top:1px solid rgba(128,128,128,.22)}"
       + "#vy-bw .foot p,#vy-bw .foot .sub{margin:0;text-align:left}#vy-bw .foot .sub a{white-space:nowrap}"
@@ -30,7 +191,7 @@
       + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}#vy-bw .act .go{white-space:nowrap}"
       + "#vy-bw .go{display:block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 16px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-bw .go.stop{background:#b42318}#vy-bw .go[disabled]{opacity:.6;cursor:default}"
-      + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}"
+      + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}#vy-bw .main .subt{text-align:left;margin:3px 0 0;font-size:13px;color:#414d5c}"
       + "#vy-bw .cd{margin-top:6px;text-align:center;font:600 22px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.04em;font-variant-numeric:tabular-nums}#vy-bw .cdl{text-align:center;font-size:11px;color:#6b7280;margin-top:-2px}"
       + "#vy-bw .err{color:#b42318;font-size:13px;margin-top:4px}"
       + "#vy-bw .ka{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#6b7280;cursor:pointer;user-select:none}#vy-bw .ka .sw{position:relative;width:32px;height:18px;border-radius:999px;border:0;padding:0;background:#c3c9d1;cursor:pointer;transition:background .15s}#vy-bw .ka .sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}#vy-bw .ka .sw[aria-checked=true]{background:#2f6fdc}#vy-bw .ka .sw[aria-checked=true]::after{transform:translateX(14px)}#vy-bw .ka .sw[disabled]{opacity:.6;cursor:default}"
@@ -60,7 +221,18 @@
       + "#vy-bw[data-cloud=azure] .tag{border-radius:2px;background:#ebf3fc;color:#0f6cbd;font-weight:600}#vy-bw[data-cloud=azure] .tag.free{background:#f0f0f0;color:#424242}"
       + "#vy-bw[data-cloud=azure] .go{border-radius:4px;background:#0f6cbd;font-weight:600;padding:7px 14px}"
       + "#vy-bw[data-cloud=azure] .go.stop{background:#fff;color:#b10e1c!important;border:1px solid #d1d1d1}"
-      + "#vy-bw[data-cloud=azure] a{color:#0f6cbd}";
+      + "#vy-bw[data-cloud=azure] a{color:#0f6cbd}"
+      // Card layout (accent bar | title + plan line | divider | action; message row under a rule). Accent / radius follow each cloud's own look.
+      + "#vy-bw{--vy-accent:#ff9900;padding:0;gap:0;overflow:hidden;background:#fafafa;border-radius:12px;align-items:stretch}"
+      + "#vy-bw::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--vy-accent)}"
+      + "#vy-bw .bolt{color:var(--vy-accent);flex:none}"
+      + "#vy-bw .main{padding:14px 20px 14px 26px;align-self:center}"
+      + "#vy-bw .act{padding:14px 22px;border-left:1px solid rgba(128,128,128,.25);justify-content:center;align-self:stretch}"
+      + "#vy-bw .foot{padding:12px 22px 12px 26px;gap:6px 20px}"
+      + "@media(max-width:560px){#vy-bw .act{border-left:0;border-top:1px solid rgba(128,128,128,.25)}}"
+      + "#vy-bw[data-cloud=aws]{--vy-accent:#ff9900;border-radius:12px;border-color:#c6c6cd}"
+      + "#vy-bw[data-cloud=gcp]{--vy-accent:#0b57d0;border-radius:16px;background:#f8fafd}"
+      + "#vy-bw[data-cloud=azure]{--vy-accent:#0f6cbd;border-radius:6px;background:#fafafa}";
     document.head.appendChild(st);
   }
   function api(path, body) {
@@ -118,10 +290,10 @@
     var b = B(), a = b && b.account && b.account(), x = b && b.session && b.session(), main, act = "", ka = "";
     card.className = "";
     if (!a) {                                                       // not signed in / account unavailable
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Your Free plan runs everything in the browser. Pro and Max add the Vyomi Global Mesh: real compute and AI on your own free GitHub quota.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Your Free plan runs everything in the browser. Pro and Max add the Vyomi Global Mesh: real compute and AI on your own free GitHub quota.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">See plans</a>';
     } else if (view === "connect") {                                // inline GitHub connect
-      main = '<h4>\u26A1 Connect your GitHub account</h4><p>The Mesh runs on the free quota of <b>your own GitHub account</b>. Your Vyomi sign-in (Google, LinkedIn or any other) stays the same; we just link GitHub to it.</p><p class="fine">No GitHub account? <a href="https://github.com/signup" target="_blank" rel="noopener">Create a free one</a> (about 2 minutes), then come back and click Connect GitHub.</p>';
+      main = '<h4>' + BOLT + 'Connect your GitHub account</h4><p>The Mesh runs on the free quota of <b>your own GitHub account</b>. Your Vyomi sign-in (Google, LinkedIn or any other) stays the same; we just link GitHub to it.</p><p class="fine">No GitHub account? <a href="https://github.com/signup" target="_blank" rel="noopener">Create a free one</a> (about 2 minutes), then come back and click Connect GitHub.</p>';
       act = '<button class="go" data-gh>Connect GitHub</button><div class="sub"><a href="#" data-back>Cancel</a></div>';
     } else if (a.effective) {                                       // Pro / Max / active trial, switched on
       var ss = x && x.session, stt = ss && ss.state, conn = !!(x && x.github && x.github.connected);
@@ -167,10 +339,11 @@
         } else if (conn && tst !== "up" && tst !== "unknown") {                // Mesh data + control plane run over the local tunnel: no tunnel, no Join
           line = "Join needs your local Vyomi tunnel, because EC2, VMs and AI all travel through it.";
           stg = tst === "notab" ? '<ol class="steps"><li>The tunnel is running. Click <b>Start tunnel</b> in the bar at the bottom of this page.</li></ol>'
-            : '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
-          btn = '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>';
-          tunLink = '<div class="sub"><a href="#" data-tun>Check again</a> \u00b7 <a href="https://www.npmjs.com/package/vyomi-tunnel" target="_blank" rel="noopener">Install the tunnel</a></div>';
+            : "";
+          btn = tst === "notab" ? '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>' : '<button class="go" data-inst-open>Setup Tunnel</button>';
+          tunLink = tunnelSeen() ? '<div class="sub"><a href="#" data-tun>Check again</a></div>' : "";
         }
+        if (tst === "up" || tst === "notab") markTunnelSeen();
         var lf = B().lastFailure && B().lastFailure();
         if (conn && lf && (tst === "up" || tst === "unknown")) { tunLink = '<div class="sub"><a href="#" data-vc>Last attempt failed. See details</a></div>'; }
         if (offCloud) {                                             // not this cloud's plan: no Join here, say why and where to go
@@ -182,20 +355,23 @@
         var kon = ss.keep_alive !== false;
         ka = '<label class="ka" title="' + (kon ? "Your Mesh stays up for the whole 8 hours even if this tab is closed or inactive. Open any Vyomi console to reattach (your local tunnel must be running). If the tunnel is lost, the Mesh still ends at the 8-hour limit." : "Off: the Mesh stops after 30 minutes with no Vyomi tab open.") + '">Keep running when this tab is closed <button type="button" class="sw" role="switch" data-ka aria-checked="' + kon + '" aria-label="Keep the Mesh running when this tab is closed"' + (busy ? " disabled" : "") + '></button></label>';
       }
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4><p' + (warn ? ' class="warn"' : '') + '>' + esc(line) + '</p>' + stg;
-      act = btn + tunLink + '<div class="sub">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4>'
+        + ([sub, hrs].filter(Boolean).length ? '<div class="sub subt">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>' : '')
+        + '<p' + (warn ? ' class="warn"' : '') + '>' + esc(line) + '</p>' + stg;
+      act = btn + tunLink;
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
     } else if (!a.trial_used) {                                     // Free, the account's one 30-day trial not started yet
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Try the Mesh with a free 30-day Pro trial (one cloud): real compute and AI on your own free GitHub quota. One trial per account.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Try the Mesh with a free 30-day Pro trial (one cloud): real compute and AI on your own free GitHub quota. One trial per account.</p>';
       act = '<button class="go" data-tr ' + (busy ? "disabled" : "") + '>' + (busy ? "Starting trial\u2026" : "Start 30-day Pro trial") + '</button><div class="sub">or <a href="' + PRICING + '" target="_blank" rel="noopener">compare plans</a></div>';
     } else {                                                        // trial used / expired
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">Upgrade to Pro / Max</a>';
     }
     // Fixed layout for every state: row 1 = title (left, no wrap) + buttons (right); row 2 spans both columns with the note lines.
     var tm = /^(<h4>[\s\S]*?<\/h4>)([\s\S]*)$/.exec(main), title = tm ? tm[1] : main, notes = tm ? tm[2] : "", subs = "";
+    notes = notes.replace(/<div class="sub subt">[\s\S]*?<\/div>/, function (s) { title += s; return ""; });   // plan / hours line sits right under the title, above the divider
     act = act.replace(/<div class="sub">[\s\S]*?<\/div>/g, function (s) { if (s.replace(/<[^>]*>/g, "").trim()) subs += s; return ""; });
     card.innerHTML = '<div class="main">' + title + '</div><div class="act">' + act + '</div>'
       + '<div class="foot">' + notes + subs + ka + (msg ? '<div class="err">' + esc(msg) + '</div>' : "") + '</div>';
@@ -210,24 +386,143 @@
     return null;
   }
   function place() {
+    if (tc && tcView && tcView.kind !== "hide" && wrap && tc.parentElement !== wrap) wrap.appendChild(tc);   // the strip lives in the wrapper, under the Mesh card
     var vid = document.querySelector(".vy-nano-video"), h = vid ? null : findHeading();
-    if (!vid && !h) { if (card.isConnected) card.remove(); return; }
+    if (!vid && !h) { if (wrap.isConnected) wrap.remove(); return; }
     // The banner wrapper is a React-owned empty div whose children are script-injected: the card joins it, side by side with the video banner.
-    if (vid) { if (card.parentElement !== vid) vid.appendChild(card); }
+    if (vid) { if (wrap.parentElement !== vid) vid.appendChild(wrap); }
     if (vid && CLOUD === "aws") {          // AWS: the "Welcome to the Vyomi AWS console" alert goes first, above the video + Mesh row
       var row = vid.closest('[class*="awsui_child"]'), kids = row && row.parentElement ? row.parentElement.children : [], i;
       for (i = 0; i < kids.length; i++) if (kids[i] !== row && /^\s*Welcome to the/.test(kids[i].textContent) && kids[i].style.order !== "-1") kids[i].style.order = "-1";
     }
-    else if (h) { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (card.nextElementSibling !== tgt || !card.isConnected) tgt.parentElement.insertBefore(card, tgt); }
+    else if (h) { var tgt = h.closest('[class*="awsui_child"]') || h.parentElement; if (wrap.nextElementSibling !== tgt || !wrap.isConnected) tgt.parentElement.insertBefore(wrap, tgt); }
+  }
+
+
+  // ── tunnel credentials sync ─────────────────────────────────────────────────────────────────────────────────────────────────
+  // A slim strip under the Mesh card: does the key the LOCAL tunnel holds (its /health) match an active key of the account signed in here
+  // (portal check)? If not: say so and offer Reset (re-pairs the tunnel with this account), or reset by itself when the toggle is on.
+  var TC_LOCAL = "http://127.0.0.1:8090", tc = null, tcView = null, tcBusy = false, tcAutoAt = 0, tcAutoFails = 0;
+  function tcAuto() { try { return localStorage.getItem("vyomi.tunnelAutoReset") === "1"; } catch (_) { return false; } }
+  function tcSetAuto(on) { try { localStorage.setItem("vyomi.tunnelAutoReset", on ? "1" : "0"); } catch (_) {} }
+  // Pure: what to show. in = {health: tunnel /health JSON or null, check: portal check JSON or null (null = signed out / unreachable)}
+  function tcDecide(h, check) {
+    if (!h || !h.ok) return { kind: "hide" };                                       // no tunnel answering: the Mesh card already says so
+    if (!h.credentials) return { kind: "old", text: "Access Key revocation detected. Reset the tunnel.", action: "Reset tunnel" };
+    var c = h.credentials, st = c.state;
+    if (st === "unreachable" || st === "unknown") return { kind: "grey", text: "Checking the tunnel’s key…" };
+    if (st === "none") return { kind: "bad", text: "Your tunnel has no access key.", action: "Reset tunnel" };
+    if (st === "revoked") return { kind: "bad", text: "The tunnel’s access key was revoked.", action: "Reset tunnel" };
+    if (st === "invalid") return { kind: "bad", text: "The tunnel’s access key is not valid.", action: "Reset tunnel" };
+    if (!check || !check.state) return { kind: "hide" };
+    if (check.state === "active") return { kind: "ok", text: "Tunnel key matches your account." };
+    if (check.state === "revoked") return { kind: "bad", text: "The tunnel’s access key was revoked on your account.", action: "Reset tunnel" };
+    return { kind: "bad", text: "Your tunnel is signed in to a different account.", action: "Reset tunnel" };
+  }
+  function tcProbe() {
+    var t = function (url, opt) { var c = new AbortController(), id = setTimeout(function () { c.abort(); }, 4000); opt = opt || {}; opt.signal = c.signal; return fetch(url, opt).finally(function () { clearTimeout(id); }); };
+    return t(TC_LOCAL + "/health").then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }).then(function (h) {
+      if (!h || !h.ok || !h.credentials || !h.credentials.key_id) return { h: h, check: null };
+      return t("/api/account/tunnel-keys/check?key_id=" + encodeURIComponent(h.credentials.key_id), { credentials: "same-origin", headers: { accept: "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }).then(function (c) { return { h: h, check: c }; });
+    }, function () { return { h: null, check: null }; });
+  }
+  function tcReset() {
+    if (tcBusy) return Promise.resolve(); tcBusy = true; tcPaint();
+    return fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: osKind() }) })
+      .then(function (r) { if (!r.ok) throw new Error("code"); return r.json(); })
+      .then(function (j) { return fetch(TC_LOCAL + "/reset", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: j.code }) }); })
+      .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error("reset: " + ((j && j.error) || "HTTP " + r.status)); }); tcAutoFails = 0; toast("Tunnel reset. It now uses this account’s key."); })
+      .catch(function (e) { tcAutoFails++; var m = String((e && e.message) || ""); toast("Could not reset the tunnel" + (m.indexOf("reset: ") === 0 ? " (" + m.slice(7, 90) + ")" : "") + ". Try again, or use Setup Tunnel."); })
+      .then(function () { tcBusy = false; return tcRefresh(); });
+  }
+  function tcRefresh() {
+    return tcProbe().then(function (p) {
+      tcView = tcDecide(p.h, p.check);
+      if (tcView.kind === "bad" && tcAuto() && !tcBusy && tcAutoFails < 3 && Date.now() - tcAutoAt > 300000) { tcAutoAt = Date.now(); tcReset(); }   // at most once per 5 min, gives up after 3 failures
+      tcPaint();
+    });
+  }
+  var TC_ICON = {
+    ok: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 8.3l2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    warn: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l6.6 11.6H1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.2v3.4M8 11.3v.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    grey: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4M8 4.7v.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>' };
+  var TC_BTN = {
+    reset: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.2 8A5.2 5.2 0 1 1 11.7 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.4 1.8v3.2H9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    install: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2v8M4.8 7.2L8 10.4l3.2-3.2M2.8 13.2h10.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' };
+  function tcPaint() {
+    if (!tc) return;
+    var v = tcView;
+    if (!v || v.kind === "hide") { if (tc.isConnected) tc.remove(); return; }
+    tc.setAttribute("data-k", v.kind); tc.setAttribute("data-cloud", CLOUD);
+    var IB = function (attr, label, tip, svg, dis) { return '<button type="button" class="ib" ' + attr + ' aria-label="' + label + '" title="' + tip + '"' + (dis ? " disabled" : "") + '>' + svg + '</button>'; };
+    var btn = v.action ? IB("data-tcr", "Reset tunnel", tcBusy ? "Resetting the tunnel\u2026" : "Reset tunnel: re-pair it with this account", TC_BTN.reset, tcBusy) : "";
+    var tog = v.kind === "bad" ? '<label class="ta" title="Reset the tunnel by itself when a problem is detected (at most once every 5 minutes)"><input type="checkbox" role="switch" data-tca ' + (tcAuto() ? "checked" : "") + '><span class="sw" aria-hidden="true"></span>Auto-reset</label>' : "";
+    tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + '</span><span class="ctl">' + tog + '<span class="ibs">' + btn
+      + IB("data-tcinst", "Reinstall tunnel", "Reinstall tunnel: get the one-line install command", TC_BTN.install, false) + '</span></span>';
+    place();
+  }
+  function tcBoot() {
+    var st = document.createElement("style");
+    st.textContent = "#vy-bwc{display:flex;flex-direction:column;min-width:0}.vy-nano-video>#vy-bwc{order:2;flex:1 1 340px;margin:0 0 16px}.vy-nano-video>#vy-bwc>#vy-bw{margin:0;flex:none}#vy-bwc>#vy-bw{flex:none}"
+      + ".vy-nano-video>#vy-bwc>#vy-tc{margin:8px 0 0}"
+      // shared layout: icon, text, [toggle], button
+      + "#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-10px 0 18px;padding:7px 12px;font-size:13px;line-height:1.35;--tc-fg:#16191f;--tc-bg:#fff;--tc-bd:#d5dbdb;--tc-ic:#5f6b7a;background:var(--tc-bg);color:var(--tc-fg);border:1px solid var(--tc-bd)}"
+      + "#vy-tc .ic{flex:none;width:16px;height:16px;color:var(--tc-ic)}#vy-tc .tt{flex:1 1 160px}#vy-tc .ta{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--tc-fg)}"
+      // toggle switch (the label's checkbox is visually hidden; .sw is the track, its ::after the knob) in each cloud's native look
+      + "#vy-tc .ta{position:relative;gap:8px}#vy-tc .ta input{position:absolute;opacity:0;width:1px;height:1px;margin:0}#vy-tc .sw{position:relative;flex:none;display:inline-block;transition:background .15s,border-color .15s}#vy-tc .sw::after{content:'';position:absolute;transition:transform .15s,background .15s,width .15s,height .15s}"
+      + "#vy-tc .ta input:focus-visible+.sw{outline:2px solid #0972d3;outline-offset:2px}"
+      // AWS Cloudscape toggle: 36x20 pill, dark-grey knob track off, blue on, white knob
+      + "#vy-tc[data-cloud=aws] .sw{width:36px;height:20px;border-radius:10px;background:#7d8998;border:0}#vy-tc[data-cloud=aws] .sw::after{left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff}"
+      + "#vy-tc[data-cloud=aws] input:checked+.sw{background:#0972d3}#vy-tc[data-cloud=aws] input:checked+.sw::after{transform:translateX(16px)}"
+      // GCP Material 3 switch: 40x24 track, outlined off with a small grey knob, blue on with a larger white knob
+      + "#vy-tc[data-cloud=gcp] .sw{width:40px;height:24px;border-radius:12px;background:#e3e3e3;border:2px solid #747775;box-sizing:border-box}#vy-tc[data-cloud=gcp] .sw::after{left:3px;top:50%;margin-top:-5px;width:10px;height:10px;border-radius:50%;background:#747775}"
+      + "#vy-tc[data-cloud=gcp] input:checked+.sw{background:#0b57d0;border-color:#0b57d0}#vy-tc[data-cloud=gcp] input:checked+.sw::after{width:16px;height:16px;margin-top:-8px;left:3px;background:#fff;transform:translateX(14px)}"
+      // Azure Fluent toggle: 40x20, outlined off, filled brand blue on
+      + "#vy-tc[data-cloud=azure] .sw{width:40px;height:20px;border-radius:10px;background:transparent;border:1px solid #605e5c;box-sizing:border-box}#vy-tc[data-cloud=azure] .sw::after{left:3px;top:50%;margin-top:-6px;width:12px;height:12px;border-radius:50%;background:#605e5c}"
+      + "#vy-tc[data-cloud=azure] input:checked+.sw{background:#0f6cbd;border-color:#0f6cbd}#vy-tc[data-cloud=azure] input:checked+.sw::after{background:#fff;transform:translateX(20px)}"
+      + "#vy-tc .ibs{display:flex;gap:6px;flex:none}#vy-tc .ib{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px}#vy-tc .ib[disabled]{opacity:.5;cursor:default}"
+      // AWS Cloudscape: flat alert, 2px accent bar on the left, normal (outlined) button
+      + "#vy-tc[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border-radius:8px;border:1px solid var(--tc-bd);border-left:4px solid var(--tc-ic)}"
+      + "#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#f2fcf3;--tc-bd:#037f0c;--tc-ic:#037f0c}#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-bg:#fffce9;--tc-bd:#8d6605;--tc-ic:#8d6605}"
+      + "#vy-tc[data-cloud=aws] .ib{color:#0972d3;border:2px solid #0972d3;border-radius:50%;width:28px;height:28px;background:#fff}#vy-tc[data-cloud=aws] .ib:hover:not([disabled]){background:#f2f8fd}"
+      // GCP Material: tonal banner, rounded, text-style button
+      + "#vy-tc[data-cloud=gcp]{font-family:'Google Sans',Roboto,Arial,sans-serif;border-radius:12px;border-color:transparent;--tc-fg:#1f1f1f;--tc-bg:#f0f4f9;--tc-ic:#5f6368}"
+      + "#vy-tc[data-cloud=gcp][data-k=ok]{--tc-bg:#e6f4ea;--tc-ic:#188038}#vy-tc[data-cloud=gcp][data-k=bad],#vy-tc[data-cloud=gcp][data-k=old]{--tc-bg:#fef7e0;--tc-ic:#b06000}"
+      + "#vy-tc[data-cloud=gcp] .ib{color:#0b57d0;border:0;border-radius:50%}#vy-tc[data-cloud=gcp] .ib:hover:not([disabled]){background:rgba(11,87,208,.1)}"
+      // Azure Fluent: message bar, 4px radius, default (grey-outlined) button
+      + "#vy-tc[data-cloud=azure]{font-family:'Segoe UI',-apple-system,Roboto,sans-serif;border-radius:4px;border-color:transparent;--tc-fg:#323130;--tc-bg:#f3f2f1;--tc-ic:#605e5c}"
+      + "#vy-tc[data-cloud=azure][data-k=ok]{--tc-bg:#dff6dd;--tc-ic:#107c10}#vy-tc[data-cloud=azure][data-k=bad],#vy-tc[data-cloud=azure][data-k=old]{--tc-bg:#fff4ce;--tc-ic:#8a6a00}"
+      + "#vy-tc[data-cloud=azure] .ib{background:#fff;color:#323130;border:1px solid #8a8886;border-radius:2px}#vy-tc[data-cloud=azure] .ib:hover:not([disabled]){background:#f3f2f1}"
+      // AWS look (design reference): cream alert, thick amber bar on the left, soft shadow, bigger toggle, a divider, round outlined icon buttons
+      + "#vy-tc .ctl{display:flex;align-items:center;gap:10px;margin-left:auto;flex:none}#vy-tc .ibs{padding-left:10px;gap:6px;border-left:1px solid rgba(35,47,62,.22);align-self:stretch;align-items:center}"
+      + "#vy-tc[data-cloud=aws],#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-fg:#232f3e;--tc-bg:#fbf6ea;--tc-bd:#f0c776;--tc-ic:#d9830a;gap:9px;padding:6px 10px 6px 12px;font-size:13.5px;line-height:1.3;border:1px solid var(--tc-bd);border-left:7px solid #e8910c;border-radius:14px;box-shadow:0 3px 8px rgba(35,47,62,.16)}"
+      + "#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#f1faf2;--tc-bd:#a9d6ac;--tc-ic:#1d8102;border-left-color:#1d8102}#vy-tc[data-cloud=aws][data-k=grey]{--tc-bg:#f4f4f6;--tc-bd:#d5dbdb;border-left-color:#7d8998}"
+      + "#vy-tc[data-cloud=aws] .ic{width:20px;height:20px}#vy-tc[data-cloud=aws] .ta{font-size:13.5px;gap:8px}"
+      + "#vy-tc[data-cloud=aws] .sw{width:44px;height:24px;border-radius:12px}#vy-tc[data-cloud=aws] .sw::after{left:3px;top:3px;width:18px;height:18px}#vy-tc[data-cloud=aws] input:checked+.sw{background:#1a6fe0}#vy-tc[data-cloud=aws] input:checked+.sw::after{transform:translateX(20px)}"
+      + "#vy-tc[data-cloud=aws] .ib{width:34px;height:34px;color:#1a6fe0;border:2px solid #1a6fe0;background:transparent}#vy-tc[data-cloud=aws] .ib svg{width:18px;height:18px}#vy-tc[data-cloud=aws] .ib:hover:not([disabled]){background:rgba(26,111,224,.08)}"
+      + "@media (prefers-color-scheme:dark){#vy-tc[data-cloud=aws]{--tc-fg:#e9ebed}#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#0a2a10}#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-bg:#2c2610;--tc-ic:#f5c518;--tc-bd:#f5c518}#vy-tc[data-cloud=aws] .ib{background:transparent;color:#89bdee;border-color:#89bdee}"
+      + "#vy-tc[data-cloud=gcp]{--tc-fg:#e3e3e3;--tc-bg:#28292a}#vy-tc[data-cloud=gcp][data-k=bad],#vy-tc[data-cloud=gcp][data-k=old]{--tc-bg:#3a3000;--tc-ic:#fdd663}#vy-tc[data-cloud=gcp] .ib{color:#a8c7fa}"
+      + "#vy-tc[data-cloud=azure]{--tc-fg:#fff;--tc-bg:#292827}#vy-tc[data-cloud=azure][data-k=bad],#vy-tc[data-cloud=azure][data-k=old]{--tc-bg:#433519;--tc-ic:#fde300}#vy-tc[data-cloud=azure] .ib{background:#3b3a39;color:#fff;border-color:#8a8886}}";
+    document.head.appendChild(st);
+    tc = document.createElement("div"); tc.id = "vy-tc"; tc.setAttribute("data-vyb-keep", "1");
+    tc.addEventListener("click", function (e) {
+      if (e.target.closest("[data-tcinst]")) { e.preventDefault(); instOpen(); return; }
+      if (e.target.closest("[data-tcr]")) { if (tcView && tcView.kind === "old") instOpen(); else tcReset(); }
+    });
+    tc.addEventListener("change", function (e) { if (e.target.matches("[data-tca]")) { tcSetAuto(e.target.checked); if (e.target.checked) { tcAutoFails = 0; tcAutoAt = 0; tcRefresh(); } } });
+    tcRefresh(); setInterval(tcRefresh, 15000); window.addEventListener("vyomi-tunnel", tcRefresh);
   }
 
   function boot() {
     if (document.getElementById("vy-bw")) return;
     css(); card = document.createElement("div"); card.id = "vy-bw"; card.setAttribute("data-cloud", CLOUD); card.setAttribute("data-vyb-keep", "1");
+    wrap = document.createElement("div"); wrap.id = "vy-bwc"; wrap.setAttribute("data-vyb-keep", "1"); wrap.appendChild(card);       // the Mesh card, with the credentials strip stacked under it
     card.addEventListener("click", function (e) {
       var t = e.target;
       if (t.closest("[data-ss]")) startStop();
       else if (t.closest("[data-gh]")) { location.href = "/api/mesh/github/connect"; }
+      else if (t.closest("[data-inst-open]")) { e.preventDefault(); instOpen(); }
       else if (t.closest("[data-tun]")) { e.preventDefault(); if (B() && B().checkTunnel) B().checkTunnel().then(paint); }
       else if (t.closest("[data-rr]")) { e.preventDefault(); if (B() && B().rerunChecks) B().rerunChecks(); }
       else if (t.closest("[data-vc]")) { e.preventDefault(); if (B() && B().openDetails) B().openDetails(); }
@@ -241,9 +536,9 @@
     var pending = false;
     new MutationObserver(function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; place(); }); })
       .observe(document.body, { childList: true, subtree: true });
-    place(); paint();
-    window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint); window.addEventListener("vyomi-tunnel", paint); window.addEventListener("vyomi-mesh-checks", paint);
-    window.VyomiMeshWidget = { agreed: agreed, accept: function () { try { localStorage.setItem(termsKey(), "1"); } catch (_) {} }, show: function (v) { view = v; paint(); place(); if (card.scrollIntoView) card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
+    tcBoot(); place(); paint();
+    window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint); window.addEventListener("vyomi-tunnel", function () { paint(); paintModal(); }); window.addEventListener("vyomi-mesh-checks", paint);
+    window.VyomiMeshWidget = { tcDecide: tcDecide, agreed: agreed, accept: function () { try { localStorage.setItem(termsKey(), "1"); } catch (_) {} }, show: function (v) { view = v; paint(); place(); if (card.scrollIntoView) card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
     setInterval(function () { var x = B() && B().session && B().session(); if (x && x.session && (x.session.state === "running" || x.session.state === "starting" || x.session.state === "pending") && view === "main") paint(); }, 1000);
     var tries = 0; (function wait() { if (B() && B().loadAccount) { refresh(); setInterval(refresh, 60000); } else if (tries++ < 40) setTimeout(wait, 250); })();
   }

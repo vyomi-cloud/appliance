@@ -53,7 +53,11 @@ const run = (args, env = {}) => new Promise((res) => {                       // 
 for (const a of [["list"], ["list", "nano"], ["list", "nano", "vm"], ["list", "mesh"], ["connect", "host"], ["forward", "k3s", "6443:6443"]]) {
   const r = await run(a); assert.equal(r.status, 2, a.join(" ")); assert.match(r.stderr, /No Vyomi credentials/); assert.equal(r.stdout.trim(), "", "no details without a key: " + a.join(" "));
 }
-const rl = await run([], { RELAY_PORT: "8998" }); assert.equal(rl.status, 2); assert.match(rl.stderr, /No Vyomi credentials/);               // the relay refuses to start
+{ // since 1.2.2 the relay does NOT exit without a key (a service manager would crash-loop it): it stays up and /health says state=none
+  const c = spawn(process.execPath, [bin], { env: { ...process.env, VYOMI_HOME: home, VYOMI_PORTAL_URL: portal.url, RELAY_PORT: "8998", HOME: home } });
+  let j = null; for (let i = 0; i < 50 && !j; i++) { try { j = await (await fetch("http://127.0.0.1:8998/health")).json(); } catch { await new Promise((r) => setTimeout(r, 100)); } }
+  for (let i = 0; i < 30 && j && j.credentials.state === "unknown"; i++) { await new Promise((r) => setTimeout(r, 100)); j = await (await fetch("http://127.0.0.1:8998/health")).json(); }
+  assert.ok(j && j.credentials.state === "none" && c.exitCode === null, "relay stays up without a key"); c.kill(); }
 const lg = await run(["login"]); assert.equal(lg.status, 2); assert.match(lg.stderr, /no login/);
 const free = { VYOMI_ACCESS_KEY_ID: "VYKAFREE", VYOMI_SECRET_ACCESS_KEY: "free-secret" };
 const fn = await run(["list", "nano", "--json"], free); assert.equal(fn.status, 1);                                                                      // valid key; just nothing running -> no targets
