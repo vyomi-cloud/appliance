@@ -336,7 +336,7 @@ export async function main(argv) {
   if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { const topic = cmd === "help" ? rest[0] : (["-h", "--help", "-help", "-?"].includes(cmd) ? undefined : cmd); const t = topic && DETAILS[topic];
     if (topic && !t) { console.error(`vyomi-tunnel: no help for "${topic}".`); process.stdout.write(HELP); return 2; }
     process.stdout.write((t || HELP) + (t ? "\n" : "")); return cmd ? 0 : 2; }
-  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.2.3"); return 0; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.2.4"); return 0; }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
@@ -393,7 +393,7 @@ export async function main(argv) {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(code)) { console.error("usage: vyomi-tunnel reset <code>   (get a code in the Vyomi console: Setup Tunnel > Get install command; see `vyomi-tunnel help reset`)"); return 2; }
     const { createCredsSync } = await import("./creds-sync.mjs");
     try {
-      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.2.3" });
+      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.2.4" });
       const st = await cs.reset(code, os.hostname());
       console.log(st.state === "ok" ? `Done. The tunnel now uses access key ${st.key_id}.` : `The new key was saved (${st.key_id}) but the portal answered: ${st.error || st.state}.`);
       try { await fetch(`http://127.0.0.1:${process.env.RELAY_PORT || 8090}/reload`, { method: "POST", signal: AbortSignal.timeout(3000) }); console.log("The running tunnel reloaded it."); }
