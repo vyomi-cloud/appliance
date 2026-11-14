@@ -1247,13 +1247,21 @@ def _register_unified_s3(app: FastAPI) -> None:
             # pre-v4 parity: a GCS XML-API style download (`/<gcs-bucket>/<object>`) of a
             # bucket that is not an S3 bucket is answered from the GCS state.
             r = _wi.appliance_router()
-            if not r.s3.bucket_exists(bucket) and r.gcs.bucket_exists(bucket):
-                key = path.lstrip("/").split("/", 1)[1]
-                ent = r.gcs.bucket_objects(bucket).get(key)
-                if ent is not None:
-                    from core.gcp_storage_core import _entry_bytes
-                    return Response(content=_entry_bytes(r.gcs, bucket, key, ent),
-                                    media_type=ent.get("contentType") or "application/octet-stream")
+            if not r.s3.bucket_exists(bucket):
+                # GCS state is provider-scoped: a bare request resolves the (AWS) default space,
+                # so look the bucket up in the GCP space (else the Go SDK's reader 404s).
+                from core import app_context as _ctx
+                _tok = _ctx.REQUEST_PROVIDER.set("gcp")
+                try:
+                    if r.gcs.bucket_exists(bucket):
+                        key = path.lstrip("/").split("/", 1)[1]
+                        ent = r.gcs.bucket_objects(bucket).get(key)
+                        if ent is not None:
+                            from core.gcp_storage_core import _entry_bytes
+                            return Response(content=_entry_bytes(r.gcs, bucket, key, ent),
+                                            media_type=ent.get("contentType") or "application/octet-stream")
+                finally:
+                    _ctx.REQUEST_PROVIDER.reset(_tok)
         return await _wi.serve_service("s3", request, path=path)
 
     @app.api_route("/{bucket}", methods=methods, include_in_schema=False)
