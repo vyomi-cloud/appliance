@@ -1,7 +1,7 @@
 # Enterprise agentic AI on Mesh: plan to 100% conformance with the reference architecture
 
 Status: PLAN (2026-11-14). Nothing is built by this document. Source of the target: the owner's reference architecture
-"Building Agentic AI Solution on AWS Bedrock" (`~/Desktop/AI_E2E_Flow.jpeg`, 11 numbered blocks + governance row).
+"Building Agentic AI Solution on AWS Bedrock" (`~/Desktop/AI_E2E_Flow.jpeg`): 11 numbered blocks + the knowledge processing pipeline + the governance row = 13 components (section 2).
 Current-state facts below were read from code at `origin/v4-on-main` (c0504fbce / 96b140bf7); they are NOT verified with real
 SDK round trips. Phase 0 exists to replace every "read from code" claim with a measured one.
 
@@ -17,7 +17,7 @@ Definition (proposed, needs owner sign-off):
    SAM for Lambdas), a Strands and a LangGraph agent, Lambda tools, Step Functions approval workflow, a RAG ingestion pipeline,
    a web/API channel. It is written ONLY against native SDKs/APIs (no Vyomi-specific calls).
 2. It deploys and runs end to end on a Mesh session by changing only endpoint/credentials configuration.
-3. Every one of the 11 blocks (+ governance) has a conformance row: the SDK calls the real service offers for that block, with
+3. Every one of the 13 components has a conformance row: the SDK calls the real service offers for that block, with
    assertions on wire shape, error codes and state transitions, plus the console actions that exist for it.
 4. The same scenario then exists for GCP (Vertex) and Azure (Foundry) equivalents.
 
@@ -27,29 +27,105 @@ page and test must say so (see `llm_core.HONEST_LIMIT`). Where a block needs a c
 (supervisor routing, multi-tool plans), the harness offers a deterministic/scripted backend so the application logic is still
 testable.
 
-## 2. Reference architecture mapped to Mesh services
+## 2. The 13 components
 
-State: SERVED = code exists and is routed (unverified with SDK), PARTIAL, MISSING. Cloud analogues in the last column.
+The diagram has 11 numbered blocks (1-11) plus two unnumbered ones, the event-driven Knowledge Processing Pipeline (**C12**)
+and the cross-cutting Governance and Security row (**C13**). Each component below lists its parts (from the diagram), what
+exists on Mesh today (read from code at `origin/v4-on-main`, NOT verified with SDK calls), what "100%" means for it, the work
+packages (WP) that deliver it, and the GCP/Azure analogues. WP ids are scheduled in section 4.
 
-| # | Block | AWS pieces | State today | GCP / Azure analogue |
-|---|---|---|---|---|
-| 1 | Access and perimeter security | Cognito (user pools, JWT), API Gateway (+Cognito/JWT authorizer), WAF | API GW SERVED (apigateway*_core, gateway data plane); Cognito only as an authorizer reference, **no user-pool service**; **no WAFv2** | GCP: Identity Platform + API Gateway + Cloud Armor; Azure: Entra External ID + APIM + Front Door WAF |
-| 2 | Channels and interface | Web/mobile/chatbot/API, input guardrails, approver inbox | App side (reference app). Guardrails SERVED (`bedrock_guardrails_core`, Dev Simplified); SNS/SES for notifications SERVED | Vertex safety settings, Azure Content Safety / Prompt Shields (MISSING) |
-| 3 | AgentCore Runtime (supervisor + sub-agents, harness, Strands/LangGraph) | AgentCore Runtime | Control plane SERVED; InvokeAgentRuntime runs a declarative **agent spec** in-process (`agent_spec_core`), **no real container/framework code runs**; no multi-agent collaboration; harness limits (step/token/cost budgets, checkpoints, kill switch) MISSING | Vertex Agent Engine (reasoningEngines: spec-based, `gcp_agentengine_core`); Azure Foundry Agent Service (`azure_openai_agents_core`, assistants-style, PARTIAL) |
-| 4 | AgentCore Gateway | OBO identity, central policy on every tool call, tool catalog, schema validation, throttling, audit | Gateway control plane + MCP tools/list/call for Lambda targets SERVED; openApi/smithy/mcpServer targets registered but not callable; **no identity propagation, no policy engine, no audit trail** | GCP: Apigee/API Gateway + MCP; Azure: APIM AI gateway |
-| 5 | Actions and approval | Risk classification, preview, durable approval (Step Functions), DynamoDB ledger, idempotency, rollback | Step Functions SERVED (`stepfunctions_core`), DynamoDB SERVED; `.waitForTaskToken`/SendTaskSuccess, Map/Choice depth, SLA timers: **unverified**; two-approver and compensation patterns are application code | Workflows (GCP), Logic Apps/Durable Functions (Azure) |
-| 6 | Knowledge search layer (RAG) | OpenSearch (Serverless) vector + BM25 hybrid, metadata + access-aware filtering, Bedrock reranker | KB ingestion, Retrieve, RetrieveAndGenerate SERVED with an in-account exact-cosine index; **no OpenSearch/AOSS API, no BM25/hybrid, no Rerank API**; PDF/Office not ingested | GCP: Vertex Vector Search SERVED (brute force), RAG Engine **MISSING** (`ragCorpora`); Azure: AI Search vector SERVED, semantic ranker MISSING |
-| 7 | Tools (Lambda) | Read-only search tools, approval-gated write tools, IoT/asset telemetry | Lambda SERVED (real invocation), DynamoDB SERVED; telemetry store (IoT Core/Timestream) MISSING | Cloud Functions/Run, Azure Functions |
-| 8 | AgentOps and observability | Lifecycle (evals, CI gates, versioning, pinning, canary), traces/metrics/logs | CloudWatch + X-Ray SERVED (not checked for GenAI metrics); `mesh_ai` usage ledger exists; Bedrock evaluation jobs, model invocation logging, prompt management/versions, AgentCore Observability MISSING | Vertex evaluation, Cloud Trace; Azure Foundry evaluations, App Insights |
-| 9 | AgentCore Memory | Short-term (session events), long-term (strategies), TTL, tenant scoping, poisoning checks | **MISSING** (no Memory API at all) | Vertex Agent Engine Memory Bank; Foundry thread/agent memory |
-| 10 | Foundation models via Bedrock | Claude/Nova, model router, fallback | Catalog + Converse/Invoke/Stream SERVED; tool use added (`toolConfig`/`toolUse` handled in `ai_models_core`); ONE local model answers every model id; inference-profile list/get, prompt router, fallback routing MISSING | Vertex model garden, Azure deployments (SERVED control plane) |
-| 11 | Response generation | Grounded answer + citations, grounding check, PII redaction, policy filter | Citations from RetrieveAndGenerate SERVED; PII/word/topic filters SERVED; **contextual grounding rejected today** | Vertex grounding check; Azure groundedness detection |
-| KP | Knowledge processing pipeline (event driven) | S3 -> extraction + guardrails scan -> chunk -> embed -> vector DB | S3, EventBridge/SQS/SNS, Lambda, embeddings SERVED individually; the **wired pipeline** (S3 event -> Lambda/Step Functions -> KB ingest -> index) is untested; Textract-style extraction MISSING | GCS + Eventarc + Document AI; Blob + Event Grid + Document Intelligence |
-| G | Governance (IAM, KMS, CloudTrail, guardrails, data governance, policy, cost) | | IAM, KMS, Guardrails, Cost Explorer, `mesh_ai` ledger SERVED; **CloudTrail API (trails, LookupEvents) MISSING**; data lineage/quality MISSING; Cedar-style policy engine MISSING | Cloud Audit Logs, Azure Activity Log/Purview |
+State words: SERVED (code exists and is routed), PARTIAL, MISSING.
 
-Net: model invocation, KB/RAG basics, guardrails, Lambda/Step Functions/DynamoDB, API Gateway already exist. The big absences are
-(a) real agent runtime execution, (b) Memory, (c) Cognito + WAF, (d) OpenSearch-compatible vector/hybrid/rerank, (e) gateway
-policy/identity/audit, (f) CloudTrail, (g) AgentOps (evals, prompt management, routing).
+### C1. Access and perimeter security
+- **Parts:** Amazon Cognito (user authentication), Amazon API Gateway, AWS WAF; facilities users (managers, engineers, ops) arriving by web/mobile/chat; user identity and token flow to the runtime.
+- **Today:** API Gateway SERVED (v1/v2 control + data plane). Cognito only appears as an authorizer reference: **no user-pool service** (pools, users, groups, app clients, JWKS, token endpoints). **No WAFv2.**
+- **100% means:** a user signs in with Cognito, the JWT passes the API Gateway authorizer, WAF rules (managed, custom, rate-based) block/allow in front of the gateway, and the verified identity reaches C3/C4.
+- **Work:** WP-A1 Cognito user pools + JWT/JWKS + authorizer; WP-A2 WAFv2 (web ACLs, rules, associations, evaluation in the gateway data plane).
+- **Other clouds:** GCP Identity Platform + API Gateway + Cloud Armor; Azure Entra External ID + APIM + Front Door WAF (all MISSING).
+
+### C2. Channels and interface
+- **Parts:** Web UI, mobile app, chatbot, API; input guardrails (prompt filtering, threat protection); approver inbox (notifications for pending approvals).
+- **Today:** channels are application code (reference app). Bedrock Guardrails SERVED as Dev Simplified (word, topic, PII regex, keyword content filters; no contextual grounding). SNS/SES SERVED for notifications.
+- **100% means:** the reference app's channels run on Mesh, inputs pass through guardrails with the native `guardrailConfig`/`ApplyGuardrail` shapes, approvals reach an inbox through SNS/SES.
+- **Work:** WP-P0 reference app channels; WP-F6 guardrails v2 (stronger prompt-attack detection, shared by all clouds).
+- **Other clouds:** Vertex safety settings, Azure Content Safety / Prompt Shields (MISSING).
+
+### C3. AgentCore Runtime (session-isolated)
+- **Parts:** supervisor agent (plan, route, synthesize) with sub-agents (Facilities, Maintenance, Analytics); agent harness (step/token/cost budgets, checkpoints, timeouts and kill switch); agent framework (Strands, LangGraph).
+- **Today:** runtime control plane SERVED; `InvokeAgentRuntime` executes a **declarative agent spec in-process** (`agent_spec_core`), never a container. No multi-agent collaboration, no harness limits, no checkpoints.
+- **100% means:** the user's real Strands/LangGraph agent container runs on Mesh compute with session isolation; supervisor/sub-agent collaboration works; budgets, timeouts, checkpoints and kill switch are enforced and observable.
+- **Work:** WP-A3 container runtime on Mesh compute + harness; WP-A6a multi-agent collaboration / `InvokeInlineAgent` / `returnControl`.
+- **Other clouds:** Vertex Agent Engine (spec-based today, `gcp_agentengine_core`), Azure Foundry Agent Service (assistants-style, PARTIAL).
+
+### C4. AgentCore Gateway
+- **Parts:** on-behalf-of identity propagation; central policy check on every tool call (identity, RBAC, ABAC); tool catalog + shared knowledge tools; schema validation; access control policies; request routing and throttling; audit and tracing with user identity; tool and RAG output guardrails (Bedrock guardrails, prompt-injection scan, PII and schema checks).
+- **Today:** gateway control plane and MCP `tools/list`/`tools/call` for **Lambda targets only** (SERVED); openApiSchema/smithyModel/mcpServer targets are registered but not callable. **No identity propagation, no policy engine, no audit trail, no output guardrails.**
+- **100% means:** every target type is callable; each call carries the caller identity, is authorised by a policy engine, validated, throttled, guardrail-scanned on output, and written to an audit log.
+- **Work:** WP-F4 policy engine (Cedar-lite) shared; WP-A4 gateway targets + OBO + audit + output guardrails.
+- **Other clouds:** Apigee/API Gateway + MCP (GCP), APIM AI gateway (Azure).
+
+### C5. Actions and approval
+- **Parts:** classify operation and risk (low/medium/high); preview proposed change; auto-approval for low risk, human approval for medium/high writes, two approvers + auto-undo for irreversible; durable approval state (Step Functions: pending action, SLA timeout, apply and resume after approval); DynamoDB action and approval ledger (system of record); idempotency keys and per-tool permission contracts; execute approved action; validate result; rollback/compensation.
+- **Today:** Step Functions SERVED (`stepfunctions_core`), DynamoDB SERVED. `.waitForTaskToken`, SendTaskSuccess/Failure, heartbeats, Choice/Map depth and SLA timers are **unverified**. The risk-tier, two-approver and compensation patterns are application code.
+- **100% means:** the reference approval state machine (risk Choice, human-approval task token with timeout, execute, validate, compensate) runs on Mesh, with the ledger and idempotency semantics enforced by DynamoDB conditional writes.
+- **Work:** WP-A9 Step Functions durable-approval verification and fixes; WP-F5 reference definitions + tests.
+- **Other clouds:** GCP Workflows, Azure Logic Apps / Durable Functions.
+
+### C6. Knowledge search layer (RAG)
+- **Parts:** Amazon OpenSearch Service (semantic vector search for SOPs, policies, manuals, vendor docs; hybrid vector + BM25; metadata filtering; access-aware search by user identity); Bedrock reranker for relevance and accuracy.
+- **Today:** Bedrock Knowledge Bases: ingestion, `Retrieve`, `RetrieveAndGenerate` SERVED over an **in-account exact-cosine index** (text files only; PDF/Office counted as failed). **No OpenSearch/Serverless API, no BM25/hybrid, no ACL filtering, no Rerank API.**
+- **100% means:** an OpenSearch (Serverless) wire for collections, policies, index/knn/hybrid queries and filters; Knowledge Bases can use it as the store; `Rerank` works; results honour per-user access filters.
+- **Work:** WP-F3 retrieval engine (HNSW + BM25, filters, ACL, rerank); WP-A7 OpenSearch wire; WP-A6b KB store types + Rerank API.
+- **Other clouds:** Vertex Vector Search SERVED (brute force) + **RAG Engine MISSING** (`ragCorpora`); Azure AI Search vector SERVED, semantic ranker and agentic retrieval MISSING.
+
+### C7. Tools (AWS Lambda)
+- **Parts:** read-only knowledge search tools (enterprise knowledge, document source retrieval, policy/procedure, maintenance manual, knowledge reference); approval-gated write-capable tools (Maintenance Management, ITSM, ERP); read-only operational data (IoT / asset telemetry).
+- **Today:** Lambda SERVED with real invocation, DynamoDB SERVED. No telemetry store (IoT Core / Timestream).
+- **100% means:** the reference tools deploy as Lambdas behind the gateway, write tools are reachable only through the approval path, telemetry queries answer from a time-series store.
+- **Work:** WP-P0 reference tools; WP-A10 telemetry store (DynamoDB-backed Timestream/IoT subset), decided after Phase 0.
+- **Other clouds:** Cloud Functions/Run, Azure Functions.
+
+### C8. AgentOps and observability
+- **Parts:** AgentOps lifecycle (ratings and corrections feeding an eval set, offline evals on golden datasets, CI gates, version registry, model pinning, canary with automatic rollback, runtime executes only pinned versions); AgentOps observability (traces, logs, metrics, evaluations and quality, CloudWatch dashboards and alarms; send agentic traces, metrics and logs to a central place).
+- **Today:** CloudWatch and X-Ray SERVED (GenAI-specific metrics unchecked); a `mesh_ai` usage ledger exists. **No** Bedrock evaluation jobs, model-invocation logging, prompt management/versions, AgentCore Observability.
+- **100% means:** every agent/model/tool call emits traces and metrics; evaluation jobs run on a golden set; prompt and agent versions are pinned and a canary alias can roll back automatically.
+- **Work:** WP-A5c AgentCore Observability; WP-A6c prompt management + versions, invocation logging, evaluation jobs; WP-A8b CloudWatch GenAI metrics/dashboards/alarms; WP-F1 usage events -> metrics.
+- **Other clouds:** Vertex evaluation + Cloud Trace; Azure Foundry evaluations + Application Insights.
+
+### C9. AgentCore Memory
+- **Parts:** short-term memory (session events and context, user/tenant scoped, TTL and automatic expiry); long-term memory (user/tenant scoped, retention and deletion, prompt-injection/poisoning checks).
+- **Today:** **MISSING entirely.** No Memory API.
+- **100% means:** AgentCore Memory control plane + data plane (memories, events, sessions, retrieval, long-term strategies such as semantic/summary/user-preference), TTL and deletion honoured, tenant isolation, writes validated for injection/poisoning.
+- **Work:** WP-F2 memory engine (shared); WP-A5a AgentCore Memory (+ Identity) wire.
+- **Other clouds:** Vertex Agent Engine Memory Bank; Foundry thread/agent memory.
+
+### C10. Foundation models via Bedrock
+- **Parts:** Claude, Amazon Nova; model router (task, cost and latency-aware routing, quality and availability-based routing, automatic fallback).
+- **Today:** model catalog, Converse/ConverseStream, InvokeModel (+stream), embeddings, CountTokens routed; tool use handled (`toolConfig`/`toolUse` in `ai_models_core`). **One local model answers every model id.** Streaming is cosmetic. No inference-profile list/get, no prompt router, no fallback.
+- **100% means:** the same SDK calls and error codes as Bedrock; at least two local models (small/fast, default) with the router choosing by task/latency and falling back on failure; real streaming; throttling and context-overflow errors match Bedrock.
+- **Work:** WP-F1 seam (streaming, queue + throttle, 2-model router, prompt-cache reuse, usage events); WP-A6d inference profiles + prompt router; WP-F7 Mesh packaging/RAM admission.
+- **Other clouds:** Vertex model garden + Gemini (SERVED control plane, tool calling PARTIAL), Azure OpenAI deployments (two implementations disagree; the canned path must go).
+
+### C11. Response generation
+- **Parts:** grounded response with citations (grounding and citation check, PII redaction, policy filter).
+- **Today:** citations from `RetrieveAndGenerate` SERVED; PII/word/topic filters SERVED; **contextual grounding is rejected** by the guardrails.
+- **100% means:** answers carry citations to retrieved passages, a grounding check can flag/blocks ungrounded text, PII is redacted, policy filters apply, all through native `guardrailConfig`.
+- **Work:** WP-F6 guardrails v2 (contextual grounding); WP-A6b citations in all response paths.
+- **Other clouds:** Vertex grounding check, Azure groundedness detection (MISSING).
+
+### C12. Knowledge processing pipeline (event-driven)
+- **Parts:** Amazon S3 (source docs) -> extraction + guardrails scan -> chunking and parsing -> embedding generation -> vector DB (OpenSearch).
+- **Today:** S3, EventBridge/SQS/SNS, Lambda and Bedrock embeddings exist individually. The **wired pipeline is untested**. Extraction of PDF/Office is MISSING; vector DB is the in-account index (see C6).
+- **100% means:** dropping a document in S3 triggers the pipeline automatically (S3 event -> Lambda/Step Functions -> extract + scan -> chunk -> embed -> index) and the document becomes retrievable with correct metadata and ACL.
+- **Work:** WP-P0 reference pipeline; WP-F3 extraction (PDF/Office) + indexing; WP-A10 extraction stubs only if needed.
+- **Other clouds:** GCS + Eventarc + Document AI; Blob + Event Grid + Document Intelligence.
+
+### C13. Governance and security (cross-cutting)
+- **Parts:** IAM and Cognito (identity and access); KMS (encryption); CloudTrail (audit logs); Bedrock Guardrails (safety and policy); data governance (lineage, quality, retention); policy controls and access reviews; cost tracking and optimization.
+- **Today:** IAM, KMS, Guardrails (Dev Simplified), Cost Explorer and the `mesh_ai` ledger SERVED. **CloudTrail API (trails, LookupEvents) MISSING**; Cognito MISSING (C1); lineage/quality MISSING; no policy engine (C4).
+- **100% means:** all actions are recorded and queryable in CloudTrail; KMS keys protect memory/KB/S3 data; policy and access-review data are available; token/cost usage is attributed per session/space.
+- **Work:** WP-A8a CloudTrail; WP-F4 policy engine; WP-A1 Cognito; WP-F1 usage/cost attribution; data lineage/quality decided after Phase 0.
+- **Other clouds:** Cloud Audit Logs, Azure Activity Log/Purview.
 
 ## 3. Constraints that shape the design
 
@@ -63,59 +139,76 @@ policy/identity/audit, (f) CloudTrail, (g) AgentOps (evals, prompt management, r
 - "One shared engine, per-cloud wires" (playbook): build each capability once (memory, policy, RAG, approvals, evals) and expose
   it through the AWS, GCP and Azure wires in parallel lanes.
 
-## 4. Work packages
+## 4. Work packages and phases
+
+Work packages (WP) are the unit of branches and claims (one topic branch per WP). The "Components" column shows which of the
+13 components each WP delivers; section 2 gives the detail.
 
 ### Phase 0: baseline and reference app (1-1.5 weeks, gates everything)
-- P0.1 Write the reference app (AWS flavour first) against native SDKs; keep it in `examples/enterprise-agent/`.
-- P0.2 Run it on a Mesh session; record every failure; turn the matrix in section 2 into measured pass/fail per SDK call.
-- P0.3 Re-verify the AI-PACK-AUDIT items (tool calls, streaming) with real boto3 / google-genai / openai SDKs.
-- P0.4 Fix the conformance rubric and the "honest limit" wording with the owner.
+| WP | Content | Components |
+|---|---|---|
+| P0 | Reference app (Facilities agent) written only against native SDKs: channels, Strands + LangGraph agents, Lambda tools, Step Functions approval flow, S3 ingestion pipeline, IaC. Run it on Mesh, turn every "read from code" claim in section 2 into a measured pass/fail per SDK call; re-verify tool calling/streaming with real boto3, google-genai and openai SDKs; fix the rubric wording with the owner. | C2, C5, C7, C12 (and the baseline for all) |
 
-### Phase 1: shared foundations (2 weeks)
-- F1 Seam: real upstream streaming, request queue + per-cloud 429/ThrottlingException, context-overflow errors, 2-model router
-  (small/fast vs default) with fallback, prompt-cache reuse, usage events -> `mesh_ai` ledger -> CloudWatch/Monitor metrics.
-- F2 **Memory engine** (new, shared): short-term event log per session/actor, long-term strategies (semantic, summary, user
-  preference) using the embedding model, TTL, tenant scoping, poisoning checks (provenance + write validation).
-- F3 **Retrieval engine** (shared): HNSW + BM25 hybrid, metadata filters, ACL-aware filtering, reranker (cross-encoder small
-  model or lexical+embedding blend, labelled), PDF/Office extraction.
-- F4 **Policy engine** (shared): Cedar-lite evaluation for gateway tool calls (identity, RBAC/ABAC attributes), decision log.
-- F5 **Approval/ledger library** patterns (idempotency keys, rollback, two-approver) as tested Step Functions + DynamoDB
-  reference definitions (application code, but proven on the simulator).
-- F6 Guardrails v2: contextual grounding check, stronger prompt-attack detection (still labelled Dev Simplified), shared by all clouds.
-- F7 Mesh packaging: AI profile (which backends start), RAM admission via `mesh.allocate("ai")`, model download/boot UX, status chip.
+### Phase 1: shared foundations (about 2 weeks, before the cloud lanes)
+| WP | Content | Components |
+|---|---|---|
+| F1 | LLM seam: real upstream streaming, request queue + cloud-correct throttling, context-overflow errors, 2-model router with fallback, prompt-cache reuse, usage events -> ledger -> metrics | C10, C8, C13 |
+| F2 | Memory engine (short-term events, long-term strategies, TTL, tenant scope, poisoning checks) | C9 |
+| F3 | Retrieval engine (HNSW + BM25 hybrid, metadata + ACL filters, reranker, PDF/Office extraction, indexing) | C6, C12 |
+| F4 | Policy engine (Cedar-lite) + decision log | C4, C13 |
+| F5 | Approval/ledger reference definitions (risk Choice, task-token approval, idempotency, compensation) with tests | C5 |
+| F6 | Guardrails v2 (contextual grounding, stronger prompt-attack detection, shared across clouds) | C2, C4, C11 |
+| F7 | Mesh packaging: AI profile (which backends start), RAM admission via `mesh.allocate("ai")`, model download/boot UX, status chip | C10 (all, as a constraint) |
 
 ### Phase 2: AWS lane (4-5 weeks, after F1-F4)
-- A1 Cognito user pools (users, groups, app clients, JWKS, token endpoints, hosted flows minimal) + API GW Cognito/JWT authorizer.
-- A2 WAFv2 (web ACLs, managed + custom + rate-based rules, associations, evaluated in front of the gateway data plane).
-- A3 AgentCore Runtime: run the user's agent container on Mesh compute (Strands/LangGraph), session isolation, harness limits
-  (step/token/cost budgets, timeouts, kill switch), checkpoints.
-- A4 AgentCore Gateway: openApi/smithy/mcpServer/Lambda targets all callable, OBO identity propagation, policy check on every
-  call (F4), schema validation, throttling, audit events.
-- A5 AgentCore Memory + Identity + Observability APIs on F2.
-- A6 Bedrock: Rerank API, KB with OpenSearch-Serverless store type, multi-agent collaboration, returnControl, InvokeInlineAgent,
-  inference profiles list/get, prompt router, prompt management + versions, model invocation logging, evaluation jobs.
-- A7 OpenSearch Serverless / OpenSearch Service wire (collections, policies, index/query/knn/hybrid) over F3.
-- A8 CloudTrail (trails, LookupEvents, event history of all simulator calls) and CloudWatch GenAI metrics/dashboards/alarms.
-- A9 Step Functions durable approvals verification and fixes (`waitForTaskToken`, heartbeat, Map, SLA timers).
-- A10 Textract/Comprehend-class extraction stubs only if the pipeline needs them (decide after P0).
+| WP | Content | Components |
+|---|---|---|
+| A1 | Cognito user pools, JWT/JWKS, API Gateway authorizer | C1, C13 |
+| A2 | WAFv2 (web ACLs, managed/custom/rate rules, associations) in front of the gateway data plane | C1 |
+| A3 | AgentCore Runtime on Mesh compute: run the user's agent container, session isolation, harness limits, checkpoints | C3 |
+| A4 | AgentCore Gateway: all target types callable, OBO identity, policy check, validation, throttling, audit, output guardrails | C4 |
+| A5 | AgentCore Memory + Identity + Observability APIs over F2 | C9, C8, C13 |
+| A6 | Bedrock: multi-agent collaboration + `InvokeInlineAgent` + `returnControl` (a), Rerank API + KB store types + citations (b), prompt management + versions + invocation logging + evaluation jobs (c), inference profiles + prompt router (d) | C3, C6, C11, C8, C10 |
+| A7 | OpenSearch Serverless / OpenSearch Service wire over F3 | C6, C12 |
+| A8 | CloudTrail (a); CloudWatch GenAI metrics, dashboards, alarms (b) | C13, C8 |
+| A9 | Step Functions durable-approval verification and fixes (`waitForTaskToken`, heartbeat, Map, SLA timers) | C5 |
+| A10 | Telemetry store (IoT/Timestream subset) and extraction stubs, only if Phase 0 shows they are needed | C7, C12 |
 
 ### Phase 3: GCP lane (parallel to Phase 2, 3-4 weeks)
-Vertex: Agent Engine running real containers/ADK, Memory Bank, RAG Engine (`ragCorpora`, import, retrieveContexts), grounding
-check, safety settings/ratings, Gemini Developer API alias, Identity Platform, Cloud Armor, Cloud Audit Logs, evaluation, Eventarc
-pipeline.
+Vertex Agent Engine running real containers/ADK (C3), Memory Bank (C9), RAG Engine `ragCorpora` + retrieveContexts (C6, C12),
+grounding check + safety settings/ratings (C11, C2), Gemini Developer API alias and function calling depth (C10), Identity
+Platform + Cloud Armor (C1), Cloud Audit Logs (C13), evaluation + Cloud Trace (C8), Eventarc pipeline (C12), Workflows approvals (C5).
 
 ### Phase 4: Azure lane (parallel, 3-4 weeks)
-Foundry Agent Service + Assistants + `/responses` + threads/runs/tool outputs, unify the two Azure OpenAI implementations (the
-canned `[SIMULATED]` path must go), Content Safety / Prompt Shields, AI Search semantic ranker + agentic retrieval, Entra
-External ID, Front Door WAF, Activity Log, evaluations, Event Grid pipeline.
+Foundry Agent Service + Assistants + `/responses` + threads/runs/tool outputs (C3, C9), unify the two Azure OpenAI
+implementations and remove the canned `[SIMULATED]` path (C10), Content Safety / Prompt Shields + groundedness (C2, C11), AI Search
+semantic ranker + agentic retrieval (C6), Entra External ID + Front Door WAF (C1), Activity Log (C13), evaluations + App Insights
+(C8), Event Grid pipeline (C12), Logic Apps/Durable approvals (C5).
 
 ### Phase 5: developer experience (1-2 weeks, overlaps)
-"Enterprise Agentic starter" template per cloud (the reference app), one-click Mesh launch, docs per block, console actions for
-each service (Nano is out of scope: this is Mesh), cost/usage view.
+"Enterprise Agentic starter" template per cloud (the reference app), one-click Mesh launch, docs per component, console actions
+for each service (Mesh, not Nano), cost/usage view.
 
-### Phase 6: conformance suite and release gate (continuous, final 1 week)
-Per-block SDK suites plus the end-to-end scenario run on a real Codespace Mesh in CI; matrix published; "100%" is the matrix
-turning fully green, with explicit declared non-goals.
+### Phase 6: conformance suite and release gate (continuous, final week)
+Per-component SDK suites plus the end-to-end scenario run on a real Codespace Mesh in CI; the matrix (13 components x clouds)
+published; "100%" is that matrix fully green with the declared non-goals.
+
+### Coverage check (every component has at least one WP)
+| Component | WPs |
+|---|---|
+| C1 Access and perimeter | A1, A2 |
+| C2 Channels and interface | P0, F6 |
+| C3 AgentCore Runtime | A3, A6a |
+| C4 AgentCore Gateway | F4, A4, F6 |
+| C5 Actions and approval | F5, A9 |
+| C6 Knowledge search (RAG) | F3, A6b, A7 |
+| C7 Tools (Lambda) | P0, A10 |
+| C8 AgentOps and observability | F1, A5, A6c, A8b |
+| C9 AgentCore Memory | F2, A5 |
+| C10 Foundation models | F1, F7, A6d |
+| C11 Response generation | F6, A6b |
+| C12 Knowledge processing pipeline | P0, F3, A7, A10 |
+| C13 Governance and security | F1, F4, A1, A5, A8a |
 
 ## 5. Estimate and order (rough, NOT measured)
 
