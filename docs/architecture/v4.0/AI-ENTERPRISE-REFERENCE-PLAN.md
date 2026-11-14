@@ -375,7 +375,7 @@ is: reference app on Mesh with real Bedrock Converse tool loop, KB RAG with cita
 
 ## 7. Decisions needed from the owner
 
-0. (Answered 2026-11-14) Mesh and Nano both in scope, Nano against WebLLM web models; Nano may keep the Browser tool, long-running approvals and real agent containers Mesh-only; **Mesh must reach a hard 100%** (section 1). Still open: approve the non-goals list (which API operations are out of scope), and the bring-your-own-model switch (section 7A).
+0. (Answered 2026-11-14) Mesh and Nano both in scope, Nano against WebLLM web models; Nano may keep the Browser tool, long-running approvals and real agent containers Mesh-only; **Mesh must reach a hard 100%** (section 1). Approved 2026-11-14: Phase 0 builds the in-scope vs non-goals operation inventory and brings it back for owner sign-off. Bring-your-own-model is NOT in the first launch (deferred; stays documented in 7A as a later option).
 
 1. Approve the conformance definition (section 1) and the "wire-compatible, not real products" rule for OpenSearch/Cognito/WAF.
 2. Order: AWS lane first (matches the diagram) with GCP and Azure lanes starting after Phase 1, or all three at once.
@@ -391,7 +391,7 @@ confirm with the owner after Phase 0:
 | Gate | What it requires |
 |---|---|
 | Honest positioning | Mesh is an environment to build and test enterprise agentic apps with native SDKs; it is not a production host and not a replica of model quality, managed-service SLAs or real classifier-grade guardrails. Marketing, docs and the console say so (existing "Dev Simplified" labels stay). Conformance claims name the pinned SDK versions. |
-| Model quality gap | Local 3B models cannot represent production answers. Offer a **bring-your-own-model** switch: Mesh points `VYOMI_LLM_ENDPOINT` (OpenAI-compatible, already supported by `llm_core`) at the customer's own vLLM/TGI, or proxies to the customer's real Bedrock/Vertex/Azure OpenAI with their credentials. Needs an owner decision on egress, data handling and billing. |
+| Model quality gap | Local 3B models cannot represent production answers. **Deferred, not in the first launch (owner, 2026-11-14).** Later option: a **bring-your-own-model** switch: Mesh points `VYOMI_LLM_ENDPOINT` (OpenAI-compatible, already supported by `llm_core`) at the customer's own vLLM/TGI, or proxies to the customer's real Bedrock/Vertex/Azure OpenAI with their credentials. Needs an owner decision on egress, data handling and billing. |
 | Tenant isolation | Per-customer Codespace (enterprise dedicated Codespaces already validated), per-session agent containers with cgroup limits, no cross-tenant state in shared engines (Cedar tenant attributes, key prefixes, row filters), tested. |
 | Security review | Threat model for the new surfaces: agent containers and Code Interpreter/Browser sandboxes (escape, egress), the JWT issuer, the WAF, prompt-injection paths through memory and RAG. Independent review before GA. |
 | Data handling | What leaves the Codespace (model endpoints, telemetry), retention and deletion of memory/audit/traces, encryption at rest with KMS cores, documented in terms. |
