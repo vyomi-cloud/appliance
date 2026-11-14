@@ -17,14 +17,14 @@
   var inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }, instTimer = 0;
   var INST_STEPS = [["node", "Downloading Node.js"], ["tunnel", "Installing the tunnel"], ["pair", "Connecting your account"], ["service", "Starting the tunnel"], ["running", "Tunnel running"]];
   function isMac() { return /Mac/i.test(navigator.platform || "") && !/iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
-  function instFail(text) { inst = { s: "error", cmd: "", code: "", st: null, err: text, copied: false, t0: 0 }; paint(); }
+  function instFail(text) { inst = { s: "error", cmd: "", code: "", st: null, err: text, copied: false, t0: 0 }; repaint(); }
   function instGet() {
-    clearTimeout(instTimer); inst = { s: "loading", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; paint();
+    clearTimeout(instTimer); inst = { s: "loading", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; repaint();
     fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: "mac" }) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (r) {
         if (!r.ok || !r.j.command) return instFail(r.status === 401 ? "Sign in again, then retry." : (r.j && (r.j.message || r.j.error)) || "Could not create the install command.");
-        inst = { s: "ready", cmd: r.j.command, code: r.j.code, st: null, err: "", copied: false, t0: Date.now() }; paint(); instPoll();
+        inst = { s: "ready", cmd: r.j.command, code: r.j.code, st: null, err: "", copied: false, t0: Date.now() }; repaint(); instPoll();
       }, function () { instFail("Could not reach Vyomi. Check your connection and retry."); });
   }
   function instPoll() {
@@ -34,14 +34,64 @@
       .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
       .then(function (j) {
         if (inst.s !== "ready") return;
-        if (j) { inst.st = j; if (j.finished && B() && B().checkTunnel) B().checkTunnel().then(paint); paint(); }
+        if (j) { inst.st = j; if (j.finished && B() && B().checkTunnel) B().checkTunnel().then(repaint); repaint(); }
         if (!(j && (j.finished || j.expired)) && Date.now() - inst.t0 < 31 * 60 * 1000) instTimer = setTimeout(instPoll, 2000);
       });
   }
   function instCopy() {
-    var done = function () { inst.copied = true; paint(); setTimeout(function () { inst.copied = false; paint(); }, 2500); };
+    var done = function () { inst.copied = true; repaint(); setTimeout(function () { inst.copied = false; repaint(); }, 2500); };
     try { navigator.clipboard.writeText(inst.cmd).then(done, function () { toast("Select the command and copy it."); }); } catch (_) { toast("Select the command and copy it."); }
   }
+  // ── the Setup Tunnel dialog ──────────────────────────────────────────────────────────────────────────────────────────────────
+  // The card only shows a "Setup Tunnel" button; the command, copy button, live steps and the package-manager fallback live in this
+  // dialog. It can be closed once setup is done (or has failed / expired / errored, so nobody is ever stuck behind it).
+  var tm = { open: false, last: "" };
+  function instDone() { var st = inst.st || {}, ts = tunnelState(); return !!(st.finished || ts === "up" || ts === "notab"); }
+  function instClosable() { var st = inst.st || {}; return !isMac() || instDone() || inst.s === "idle" || inst.s === "error" || !!st.failed || !!st.expired; }
+  function repaint() { paint(); paintModal(); }
+  function modalHtml() {
+    var done = instDone(), closable = instClosable(), body;
+    if (!isMac()) {
+      body = '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
+    } else body = installPanel();
+    return '<div class="tm-ov" data-tm-ov><div class="tm" role="dialog" aria-modal="true" aria-labelledby="vy-tm-t" tabindex="-1">'
+      + '<div class="tm-h"><h3 id="vy-tm-t">' + (done ? "Tunnel ready" : "Set up the Vyomi tunnel") + '</h3>'
+      + (closable ? '<button class="tm-x" data-vyb-keep data-tm-close aria-label="Close">×</button>'
+        : '<button class="tm-x" data-vyb-keep disabled title="You can close this when setup finishes" aria-label="Close (available when setup finishes)">×</button>') + '</div>'
+      + '<div class="tm-b">' + body + '</div>'
+      + '<div class="tm-f">' + (closable ? '<button class="go" data-vyb-keep data-tm-close>' + (done ? "Done" : "Close") + '</button>' : '<span class="fine">You can close this when setup finishes.</span>') + '</div></div></div>';
+  }
+  function paintModal() {
+    var el = document.getElementById("vy-tm-root");
+    if (!tm.open) { if (el) el.parentNode.removeChild(el); tm.last = ""; return; }
+    var created = false;
+    if (!el) {
+      created = true; el = document.createElement("div"); el.id = "vy-tm-root"; el.setAttribute("data-vyb-keep", "1"); document.body.appendChild(el);
+      el.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t.closest && t.closest("[data-inst-get]")) { e.preventDefault(); instGet(); }
+        else if (t.closest && t.closest("[data-inst-copy]")) { e.preventDefault(); instCopy(); }
+        else if (t.closest && t.closest("[data-tm-close]")) { e.preventDefault(); instClose(); }
+        else if (t.hasAttribute && t.hasAttribute("data-tm-ov")) instClose();                     // click outside the dialog (only when closable)
+      });
+    }
+    var html = modalHtml();
+    if (html !== tm.last) { el.innerHTML = html; tm.last = html; }
+    if (created) { var d = el.querySelector(".tm"); if (d && d.focus) d.focus(); }
+  }
+  function instOpen() {
+    var st = inst.st || {};
+    tm.open = true; tm.last = "";
+    if (isMac() && (inst.s === "idle" || inst.s === "error" || st.finished || st.expired || st.failed)) instGet(); else paintModal();
+    paint();
+  }
+  function instClose() {
+    if (!instClosable()) return;
+    tm.open = false; tm.last = ""; clearTimeout(instTimer);
+    var st = inst.st || {}; if (st.finished || st.failed || st.expired) inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 };
+    paintModal(); paint();
+  }
+  document.addEventListener("keydown", function (e) { if (tm.open && (e.key === "Escape" || e.key === "Esc") && instClosable()) instClose(); });
   function installPanel() {
     if (inst.s === "idle" || inst.s === "error") {
       return '<div class="inst"><p class="fine">Install the Vyomi tunnel on this Mac with one command. It connects to <b>your</b> account, so there is nothing to copy or configure.</p>'
@@ -69,6 +119,16 @@
     st.textContent = "#vy-bw{position:relative;z-index:2;box-sizing:border-box;margin:14px 0 18px;padding:14px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fff;color:#16191f;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px}"
       + ".vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}.vy-nano-video>.vy-video-banner{order:1;flex:1 1 340px;min-width:0;margin:0 0 16px!important}.vy-nano-video>#vy-bw{order:2;flex:1 1 340px;min-width:0;margin:0 0 16px}"
       + "#vy-bw .main{min-width:0}"
+      + "#vy-tm-root .tm-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(15,20,25,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}"
+      + "#vy-tm-root .tm{box-sizing:border-box;background:#fff;color:#1b2430;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.4);outline:0}"
+      + "#vy-tm-root .tm-h{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e3e6e8}#vy-tm-root .tm-h h3{margin:0;font-size:17px;font-weight:650}"
+      + "#vy-tm-root .tm-x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:#59636e;padding:0 4px}#vy-tm-root .tm-x:disabled{opacity:.35;cursor:not-allowed}"
+      + "#vy-tm-root .tm-b{padding:16px 20px}#vy-tm-root .tm-f{padding:0 20px 18px;text-align:right;min-height:28px}"
+      + "#vy-tm-root .fine{font-size:12px;color:#6b7280}#vy-tm-root a{color:#1a56c4}#vy-tm-root p{margin:0 0 10px;line-height:1.5;font-size:14px}#vy-tm-root p.fine{font-size:13px}"
+      + "#vy-tm-root .go{display:inline-block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 18px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
+      + "#vy-tm-root .sub{font-size:12px;color:#6b7280;margin-top:8px}#vy-tm-root .steps{margin:8px 0 0;padding-left:20px;color:#414d5c;font-size:14px}#vy-tm-root .steps li{padding:3px 0}"
+      + "#vy-tm-root code{background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:1px 6px;font-size:12px}"
+      + "#vy-tm-root .cmd{margin:10px 0}#vy-tm-root .cmd code{display:block;word-break:break-all;padding:10px 12px;font-size:12.5px;user-select:all}"
       + "#vy-bw .cmd{margin:8px 0}#vy-bw .cmd code{display:block;word-break:break-all;background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:8px 10px;font-size:12px;user-select:all}#vy-bw .inst .go{margin:2px 0 6px}"
       + "@media(max-width:560px){#vy-bw{grid-template-columns:minmax(0,1fr)}#vy-bw .act{min-width:0}}"
       + "#vy-bw .foot:empty{display:none}#vy-bw .foot{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 20px;padding-top:8px;border-top:1px solid rgba(128,128,128,.22)}"
@@ -218,10 +278,9 @@
         } else if (conn && tst !== "up" && tst !== "unknown") {                // Mesh data + control plane run over the local tunnel: no tunnel, no Join
           line = "Join needs your local Vyomi tunnel, because EC2, VMs and AI all travel through it.";
           stg = tst === "notab" ? '<ol class="steps"><li>The tunnel is running. Click <b>Start tunnel</b> in the bar at the bottom of this page.</li></ol>'
-            : isMac() ? installPanel()
-            : '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
-          btn = '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>';
-          tunLink = '<div class="sub"><a href="#" data-tun>Check again</a> \u00b7 <a href="https://www.npmjs.com/package/vyomi-tunnel" target="_blank" rel="noopener">Install the tunnel</a></div>';
+            : "";
+          btn = tst === "notab" ? '<button class="go" disabled title="Start the tunnel first">Join the Mesh</button>' : '<button class="go" data-inst-open>Setup Tunnel</button>';
+          tunLink = '<div class="sub"><a href="#" data-tun>Check again</a></div>';
         }
         var lf = B().lastFailure && B().lastFailure();
         if (conn && lf && (tst === "up" || tst === "unknown")) { tunLink = '<div class="sub"><a href="#" data-vc>Last attempt failed. See details</a></div>'; }
@@ -280,8 +339,7 @@
       var t = e.target;
       if (t.closest("[data-ss]")) startStop();
       else if (t.closest("[data-gh]")) { location.href = "/api/mesh/github/connect"; }
-      else if (t.closest("[data-inst-get]")) { e.preventDefault(); instGet(); }
-      else if (t.closest("[data-inst-copy]")) { e.preventDefault(); instCopy(); }
+      else if (t.closest("[data-inst-open]")) { e.preventDefault(); instOpen(); }
       else if (t.closest("[data-tun]")) { e.preventDefault(); if (B() && B().checkTunnel) B().checkTunnel().then(paint); }
       else if (t.closest("[data-rr]")) { e.preventDefault(); if (B() && B().rerunChecks) B().rerunChecks(); }
       else if (t.closest("[data-vc]")) { e.preventDefault(); if (B() && B().openDetails) B().openDetails(); }
@@ -296,7 +354,7 @@
     new MutationObserver(function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; place(); }); })
       .observe(document.body, { childList: true, subtree: true });
     place(); paint();
-    window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint); window.addEventListener("vyomi-tunnel", paint); window.addEventListener("vyomi-mesh-checks", paint);
+    window.addEventListener("vyomi-mesh-session", paint); window.addEventListener("vyomi-mesh-account", paint); window.addEventListener("vyomi-tunnel", function () { paint(); paintModal(); }); window.addEventListener("vyomi-mesh-checks", paint);
     window.VyomiMeshWidget = { agreed: agreed, accept: function () { try { localStorage.setItem(termsKey(), "1"); } catch (_) {} }, show: function (v) { view = v; paint(); place(); if (card.scrollIntoView) card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
     setInterval(function () { var x = B() && B().session && B().session(); if (x && x.session && (x.session.state === "running" || x.session.state === "starting" || x.session.state === "pending") && view === "main") paint(); }, 1000);
     var tries = 0; (function wait() { if (B() && B().loadAccount) { refresh(); setInterval(refresh, 60000); } else if (tries++ < 40) setTimeout(wait, 250); })();
