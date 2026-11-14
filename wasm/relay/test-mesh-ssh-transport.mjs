@@ -7,7 +7,7 @@ import net from "node:net";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
-import { createSshTransport, createSshHub, connectSsh, forwardSsh, findCodespace } from "./mesh-ssh.mjs";
+import { createSshTransport, createSshHub, connectSsh, forwardSsh, findCodespace, localPortBusy, freeLocalPort } from "./mesh-ssh.mjs";
 
 const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 const { WebSocketServer } = WS;
@@ -64,6 +64,12 @@ assert.equal(await findCodespace("gh", lst([{ name: "other-app", state: "Availab
   { name: "vyomi-mesh-new", state: "Available", createdAt: "2026-11-09" }, { name: "vyomi-mesh-off", state: "Shutdown", createdAt: "2026-11-10" }])), "vyomi-mesh-new");
 await assert.rejects(() => findCodespace("gh", lst([{ name: "vyomi-mesh-off", state: "Shutdown" }])), /stopped/);
 await assert.rejects(() => findCodespace("gh", lst([{ name: "other", state: "Available" }])), /no Mesh Codespace/);
+// gh failures name the fix: the scope-less token's misleading 403, and not logged in (the note `list` / vyomi_status show)
+const ghFail = (stderr) => () => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(); c.stderr.end(stderr); setImmediate(() => c.emit("close", 1)); }); return c; };
+await assert.rejects(() => findCodespace("gh", ghFail("error getting codespaces: HTTP 403: Must have admin rights to Repository. (https://api.github.com/user/codespaces?per_page=30)\nThis API operation needs the \"codespace\" scope. To request it, run:  gh auth refresh -h github.com -s codespace\n")),
+  (e) => e.message.includes("gh auth refresh -h github.com -s codespace") && ("mesh: " + e.message).length <= 157);
+await assert.rejects(() => findCodespace("gh", ghFail("To get started with GitHub CLI, please run:  gh auth login\n")), /Run: gh auth login/);
+await assert.rejects(() => findCodespace("gh", ghFail("something else broke\n")), /^Error: something else broke$/);
 
 // keepalive: starts by itself on first use, sends real ssh traffic on a schedule, stops on close
 const kaCmds = []; const kt = createSshTransport({ codespace: "cs-ka", config: { file: "/dev/null", host: "h" }, keepaliveMs: 40,
@@ -85,6 +91,16 @@ assert.equal(await connectSsh("ghost", { transport: t, stdin: new PassThrough(),
 const f = await forwardSsh("host", { local: 0, remote: 22, transport: t, net });
 const echo = await new Promise((res) => { const c = net.connect(f.port, "127.0.0.1", () => c.write("ping")); c.on("data", (d) => { res(String(d)); c.destroy(); }); });
 assert.equal(echo, "ping"); f.close(); assert.equal(await f.done, 0);
+// a local port that something already answers on is refused, naming a free one (macOS: Docker's *:9000 does not block a
+// 127.0.0.1 bind, so without the connect probe `forward ... 9000:9000` shadowed the offline appliance; seen on the owner's Mac)
+const busySrv = net.createServer(); await new Promise((r) => busySrv.listen(0, "0.0.0.0", r)); const busyPort = busySrv.address().port;
+assert.equal(await localPortBusy(busyPort, net), true);
+let fwdErr = ""; const fwdErrOut = new PassThrough(); fwdErrOut.on("data", (d) => { fwdErr += d; });
+const fb = await forwardSsh("host", { local: busyPort, remote: 22, transport: t, net, stderr: fwdErrOut });
+assert.equal(await fb.done, 1); assert.match(fwdErr, /127\.0\.0\.1:\d+ is already in use/); assert.match(fwdErr, /vyomi-tunnel forward host \d+:22/);
+await new Promise((r) => busySrv.close(r));
+assert.equal(await localPortBusy(busyPort, net), false);
+assert.equal(await freeLocalPort(busyPort, net), busyPort);
 
 // hub over a real http server + ws
 const hub = createSshHub({ WebSocketServer, transport: t, origins: ["https://vyomi.cloud"] });

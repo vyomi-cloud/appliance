@@ -6,118 +6,286 @@
     "Primary sources: README.md 'Using your existing cloud SDKs', samples/java/cloud-probe/.../ProbeEnv.java,",
     "providers/azure_services.py (Service Bus REST-only), docker-compose.appliance.yml (host ports).",
     "Placeholders rendered by the Go server: {sim} = http://<host>:<sim_port>, {sim_hostport} = <host>:<sim_port>,",
-    "{host} = <host>, {tls_hostport} = <host>:<tls_port>, {account} = Azure storage/cosmos account name."
+    "{host} = <host>, {tls_hostport} = <host>:<tls_port>, {account} = Azure storage/cosmos account name.",
+    "Since knowledge v2 the wiring is per home: homes.offline is the v3/v4.0.0 appliance (:9000, TLS :9443), homes.nano the browser tab via",
+    "the local tunnel (D0), homes.mesh a Pro/Max mesh (same surface as offline). capability_aliases maps services/registry.json keys to",
+    "core/capabilities/<cloud>/<stem>.json ('<stem>' or '<stem>#<capability id prefix>')."
   ],
-  "clouds": {
-    "aws": {
-      "env": [
-        {
-          "name": "AWS_ENDPOINT_URL",
-          "value": "{sim}",
-          "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code."
+  "homes": {
+    "offline": {
+      "_comment": "The v3 and v4.0.0 offline appliance: simulator :9000, caddy TLS :9443, separate gRPC emulators.",
+      "clouds": {
+        "aws": {
+          "env": [
+            {
+              "name": "AWS_ENDPOINT_URL",
+              "value": "{sim}",
+              "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code."
+            },
+            {
+              "name": "AWS_ACCESS_KEY_ID",
+              "value": "test"
+            },
+            {
+              "name": "AWS_SECRET_ACCESS_KEY",
+              "value": "test"
+            },
+            {
+              "name": "AWS_DEFAULT_REGION",
+              "value": "us-east-1"
+            },
+            {
+              "name": "AWS_REGION",
+              "value": "us-east-1"
+            },
+            {
+              "name": "AWS_PAGER",
+              "value": "",
+              "note": "Stops AWS CLI v2's pager swallowing short output."
+            }
+          ],
+          "notes": [
+            "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
+            "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+            "SNS->SQS fan-out works natively (shared MessagingStore)."
+          ],
+          "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}"
         },
-        {
-          "name": "AWS_ACCESS_KEY_ID",
-          "value": "test"
+        "gcp": {
+          "env": [
+            {
+              "name": "STORAGE_EMULATOR_HOST",
+              "value": "{sim}",
+              "note": "GCS rides the simulator endpoint."
+            },
+            {
+              "name": "PUBSUB_EMULATOR_HOST",
+              "value": "{host}:8085",
+              "note": "Separate gRPC emulator container, NOT the simulator port."
+            },
+            {
+              "name": "FIRESTORE_EMULATOR_HOST",
+              "value": "{host}:8080",
+              "note": "Separate gRPC emulator container, NOT the simulator port."
+            },
+            {
+              "name": "GOOGLE_CLOUD_PROJECT",
+              "value": "cloudlearn",
+              "note": "Use your active space's project id if it differs."
+            }
+          ],
+          "notes": [
+            "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
+            "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://{tls_hostport} (caddy) and trust its certificate.",
+            "gcloud command adapters are partial; prefer client libraries."
+          ],
+          "terraform": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+          "terraform_note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
         },
-        {
-          "name": "AWS_SECRET_ACCESS_KEY",
-          "value": "test"
-        },
-        {
-          "name": "AWS_DEFAULT_REGION",
-          "value": "us-east-1"
-        },
-        {
-          "name": "AWS_REGION",
-          "value": "us-east-1"
-        },
-        {
-          "name": "AWS_PAGER",
-          "value": "",
-          "note": "Stops AWS CLI v2's pager swallowing short output."
+        "azure": {
+          "env": [
+            {
+              "name": "AZURE_STORAGE_CONNECTION_STRING",
+              "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};",
+              "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1."
+            },
+            {
+              "name": "AZURE_STORAGE_ACCOUNT",
+              "value": "{account}"
+            },
+            {
+              "name": "AZURE_SUBSCRIPTION_ID",
+              "value": "00000000-0000-0000-0000-cloudlearn01",
+              "note": "The only subscription a space has; any other id returns SubscriptionNotFound."
+            },
+            {
+              "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+              "value": "{sim}",
+              "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted."
+            },
+            {
+              "name": "AZURE_COSMOS_ENDPOINT",
+              "value": "https://{tls_hostport}/azure-data/cosmos/{account}",
+              "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate."
+            },
+            {
+              "name": "AZURE_COSMOS_KEY",
+              "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+            },
+            {
+              "name": "AZURE_KEYVAULT_URL",
+              "value": "https://cloudlearn.vault.localtest.me:{tls_port}",
+              "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form."
+            }
+          ],
+          "notes": [
+            "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
+            "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
+          ],
+          "terraform": "",
+          "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
         }
-      ],
-      "notes": [
-        "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
-        "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
-        "SNS->SQS fan-out works natively (shared MessagingStore)."
-      ],
-      "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}"
+      }
     },
-    "gcp": {
-      "env": [
-        {
-          "name": "STORAGE_EMULATOR_HOST",
-          "value": "{sim}",
-          "note": "GCS rides the simulator endpoint."
+    "nano": {
+      "_comment": [
+        "Nano: the simulator runs in a browser tab; local SDKs reach it through the local tunnel (vyomi-tunnel, http://127.0.0.1:8090) or the cloud relay URL from the Nano footer.",
+        "Every value comes from D0 (docs/architecture/v4.0/MCP-V4-DISCOVERY.md section 1); 'verified': false marks a value D0 did not exercise on Nano.",
+        "'unavailable' lists settings an SDK cannot use through the Nano tunnel: the MCP drops them and returns the warning instead.",
+        "'scan_warnings' replaces scan.warnings for this home (the offline ones talk about :9443 and separate emulators)."
+      ],
+      "source": "docs/architecture/v4.0/MCP-V4-DISCOVERY.md",
+      "clouds": {
+        "aws": {
+          "env": [
+            {
+              "name": "AWS_ENDPOINT_URL",
+              "value": "{sim}",
+              "note": "The local tunnel forwards to the Nano tab; keep the tab open. Older SDKs need endpoint_url / endpointOverride in code.",
+              "verified": true
+            },
+            {
+              "name": "AWS_ACCESS_KEY_ID",
+              "value": "test",
+              "verified": true
+            },
+            {
+              "name": "AWS_SECRET_ACCESS_KEY",
+              "value": "test",
+              "verified": true
+            },
+            {
+              "name": "AWS_DEFAULT_REGION",
+              "value": "us-east-1",
+              "verified": true
+            },
+            {
+              "name": "AWS_REGION",
+              "value": "us-east-1",
+              "verified": true
+            },
+            {
+              "name": "AWS_PAGER",
+              "value": "",
+              "note": "Stops AWS CLI v2's pager swallowing short output.",
+              "verified": false
+            }
+          ],
+          "notes": [
+            "One endpoint serves every AWS service; plain HTTP only (there is no TLS endpoint on Nano).",
+            "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+            "SNS->SQS fan-out works on Nano (verified with boto3).",
+            "RDS Data API on Nano: single statements answer, but a table created in one ExecuteStatement call is not visible to the next one today (D0 row 7)."
+          ],
+          "terraform": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"{sim}\"\n    sqs      = \"{sim}\"\n    dynamodb = \"{sim}\"\n    lambda   = \"{sim}\"\n    iam      = \"{sim}\"\n    ec2      = \"{sim}\"\n    rds      = \"{sim}\"\n    kms      = \"{sim}\"\n    sns      = \"{sim}\"\n    secretsmanager = \"{sim}\"\n  }\n}",
+          "terraform_note": "UNVERIFIED on Nano: D0 did not run Terraform through the tunnel."
         },
-        {
-          "name": "PUBSUB_EMULATOR_HOST",
-          "value": "{host}:8085",
-          "note": "Separate gRPC emulator container, NOT the simulator port."
+        "gcp": {
+          "env": [
+            {
+              "name": "STORAGE_EMULATOR_HOST",
+              "value": "{sim}",
+              "note": "GCS rides the tunnel endpoint (plain HTTP).",
+              "verified": true
+            },
+            {
+              "name": "GOOGLE_CLOUD_PROJECT",
+              "value": "vyomi-project",
+              "note": "Nano's project id (alias of nano-project); 'cloudlearn' is rejected with 403/404.",
+              "verified": true
+            }
+          ],
+          "unavailable": [
+            {
+              "name": "PUBSUB_EMULATOR_HOST",
+              "sdk": "google-cloud-pubsub (gRPC)",
+              "warning": "google-cloud-pubsub speaks gRPC (HTTP/2) and the Nano tunnel is HTTP/1.1 only, so the client hangs. Use the Pub/Sub REST API at {sim}/v1/projects/vyomi-project/... (works on Nano), or a Pro/Max mesh for the gRPC emulator."
+            },
+            {
+              "name": "FIRESTORE_EMULATOR_HOST",
+              "sdk": "google-cloud-firestore (gRPC)",
+              "warning": "google-cloud-firestore speaks gRPC (HTTP/2) and the Nano tunnel is HTTP/1.1 only, so the client hangs. Use the Firestore REST API at {sim}/v1/projects/vyomi-project/databases/(default)/documents (works on Nano), or a Pro/Max mesh for the gRPC emulator."
+            }
+          ],
+          "notes": [
+            "Pub/Sub and Firestore: REST (JSON) only on Nano, at {sim}/v1/projects/vyomi-project/...; the gRPC client libraries do not work through the tunnel.",
+            "Secret Manager and Cloud KMS: REST against {sim} over plain HTTP (unverified on Nano).",
+            "gcloud command adapters are partial; prefer client libraries."
+          ],
+          "terraform": "provider \"google\" {\n  project                 = \"vyomi-project\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
+          "terraform_note": "UNVERIFIED on Nano: D0 did not run Terraform through the tunnel."
         },
-        {
-          "name": "FIRESTORE_EMULATOR_HOST",
-          "value": "{host}:8080",
-          "note": "Separate gRPC emulator container, NOT the simulator port."
-        },
-        {
-          "name": "GOOGLE_CLOUD_PROJECT",
-          "value": "cloudlearn",
-          "note": "Use your active space's project id if it differs."
+        "azure": {
+          "env": [
+            {
+              "name": "AZURE_STORAGE_CONNECTION_STRING",
+              "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};",
+              "note": "Well-known Azurite key; path-style Blob and host-style Queue endpoints both work through the tunnel. *.localtest.me resolves to 127.0.0.1.",
+              "verified": true
+            },
+            {
+              "name": "AZURE_STORAGE_ACCOUNT",
+              "value": "{account}",
+              "verified": true
+            },
+            {
+              "name": "AZURE_SUBSCRIPTION_ID",
+              "value": "00000000-0000-0000-0000-cloudlearn01",
+              "note": "The only subscription a space has (unverified on Nano).",
+              "verified": false
+            },
+            {
+              "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
+              "value": "{sim}",
+              "note": "ARM base_url for the management SDKs; any credential is accepted (unverified on Nano).",
+              "verified": false
+            },
+            {
+              "name": "AZURE_COSMOS_ENDPOINT",
+              "value": "{sim}",
+              "note": "Plain HTTP, root endpoint (not /azure-data/cosmos/<account>). Verified with Python azure-cosmos; other-language SDKs may insist on https.",
+              "verified": true
+            },
+            {
+              "name": "AZURE_COSMOS_KEY",
+              "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+              "verified": true
+            },
+            {
+              "name": "AZURE_SERVICEBUS_CONNECTION_STRING",
+              "value": "Endpoint=sb://{host};SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
+              "note": "AMQP on {host}:5672 through the tunnel's amqp feature. Create the queue/topic first (Nano console, or REST PUT {sim}/<name> with an atom+xml TopicDescription); ServiceBusAdministrationClient needs HTTPS and fails.",
+              "verified": true
+            }
+          ],
+          "unavailable": [
+            {
+              "name": "AZURE_KEYVAULT_URL",
+              "sdk": "azure-keyvault-*",
+              "warning": "Key Vault needs TLS; not available through the Nano tunnel (the SDKs refuse bearer tokens on plain-HTTP URLs). Use a Pro/Max mesh (https :9443), or see vyomi_capability."
+            }
+          ],
+          "notes": [
+            "Service Bus: AMQP works through the Nano tunnel (UseDevelopmentEmulator=true, port 5672); entities must exist before the first send.",
+            "Blob and Queue share the endpoint; keep the account as the first path segment, or use the host form <account>.blob.localtest.me:<port>."
+          ],
+          "terraform": "",
+          "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
         }
-      ],
-      "notes": [
-        "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
-        "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://{tls_hostport} (caddy) and trust its certificate.",
-        "gcloud command adapters are partial; prefer client libraries."
-      ],
-      "terraform": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"{sim}/storage/v1/\"\n}",
-      "terraform_note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
+      },
+      "scan_warnings": {
+        "azure/cosmos": "Cosmos on Nano: plain HTTP at the root endpoint (AZURE_COSMOS_ENDPOINT={sim}); verified with Python azure-cosmos, other SDKs may insist on https (then use a Pro/Max mesh).",
+        "azure/keyvault": "Key Vault needs TLS; not available through the Nano tunnel (the SDKs refuse bearer tokens on plain-HTTP URLs). Use a Pro/Max mesh (https :9443), or keep Key Vault on the real cloud for now.",
+        "azure/servicebus": "Service Bus on Nano: AMQP works through the local tunnel (Endpoint=sb://{host};...;UseDevelopmentEmulator=true, port 5672). Create queues/topics first (Nano console, or REST PUT {sim}/<name>); ServiceBusAdministrationClient needs HTTPS and fails.",
+        "gcp/pubsub": "Pub/Sub on Nano: the gRPC client libraries do not work through the HTTP/1.1 tunnel; use the REST API at {sim}/v1/projects/vyomi-project/... or a Pro/Max mesh.",
+        "gcp/firestore": "Firestore on Nano: the gRPC client libraries do not work through the HTTP/1.1 tunnel; use the REST API at {sim}/v1/projects/vyomi-project/databases/(default)/documents or a Pro/Max mesh.",
+        "gcp/secretmanager": "Secret Manager on Nano: REST against {sim} over plain HTTP (unverified).",
+        "gcp/kms": "Cloud KMS on Nano: REST against {sim} over plain HTTP (unverified)."
+      }
     },
-    "azure": {
-      "env": [
-        {
-          "name": "AZURE_STORAGE_CONNECTION_STRING",
-          "value": "DefaultEndpointsProtocol=http;AccountName={account};AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={sim}/{account};QueueEndpoint=http://{account}.queue.localtest.me:{sim_port};",
-          "note": "Well-known Azurite key; the simulator ignores SharedKey signatures. *.localtest.me resolves to 127.0.0.1."
-        },
-        {
-          "name": "AZURE_STORAGE_ACCOUNT",
-          "value": "{account}"
-        },
-        {
-          "name": "AZURE_SUBSCRIPTION_ID",
-          "value": "00000000-0000-0000-0000-cloudlearn01",
-          "note": "The only subscription a space has; any other id returns SubscriptionNotFound."
-        },
-        {
-          "name": "AZURE_RESOURCE_MANAGER_ENDPOINT",
-          "value": "{sim}",
-          "note": "Pass as the ARM base_url / $host / cloud.Configuration ResourceManager endpoint; any credential is accepted."
-        },
-        {
-          "name": "AZURE_COSMOS_ENDPOINT",
-          "value": "https://{tls_hostport}/azure-data/cosmos/{account}",
-          "note": "Cosmos SDKs require TLS: goes through caddy :9443, trust its certificate."
-        },
-        {
-          "name": "AZURE_COSMOS_KEY",
-          "value": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
-        },
-        {
-          "name": "AZURE_KEYVAULT_URL",
-          "value": "https://cloudlearn.vault.localtest.me:{tls_port}",
-          "note": "Key Vault SDKs require TLS and rebuild paths from the host, so use the host-based form."
-        }
-      ],
-      "notes": [
-        "Service Bus: the simulator speaks the Service Bus REST protocol only. AMQP (the default transport of azure-servicebus / @azure/service-bus / azure-messaging-servicebus) is NOT supported; use REST send/receive under {sim}/azure-data/servicebus, or Azure Storage Queues for point-to-point.",
-        "Blob requests share :9000 with S3; the simulator routes them by the x-ms-version header, so keep the account as the first path segment."
-      ],
-      "terraform": "",
-      "terraform_note": "Vyomi's Terraform workflow (core/terraform_export.py) covers the aws and google providers only. Provision Azure resources with az CLI / the ARM SDKs pointed at {sim}."
+    "mesh": {
+      "_comment": "A Pro/Max mesh serves the same :9000/:9443 surface as the offline appliance (spec section 2); not re-verified by D0.",
+      "same_as": "offline"
     }
   },
   "scan": {
@@ -477,7 +645,10 @@
         "communication.email": "communication",
         "communication-email": "communication",
         "communication.sms": "communication",
-        "communication-sms": "communication"
+        "communication-sms": "communication",
+        "containerservice": "aks",
+        "armcontainerservice": "aks",
+        "kubernetes": "aks"
       }
     },
     "warnings": {
@@ -496,5 +667,33 @@
       "sql": "cloudsql"
     }
   },
-  "_id_aliases_comment": "capabilities.py / pack ids that differ from the services/registry.json key."
+  "_id_aliases_comment": "capabilities.py / pack ids that differ from the services/registry.json key.",
+  "capability_aliases": {
+    "aws": {
+      "apigatewayv2": "apigateway",
+      "elbv2": "ec2#ec2.load-",
+      "logs": "cloudwatch",
+      "stepfunctions": "states"
+    },
+    "gcp": {
+      "artifactregistry": "artifacts",
+      "cloudsql": "sql",
+      "container": "kubernetes",
+      "iam": "iam-admin",
+      "iamcredentials": "iam-admin",
+      "redis": "memorystore",
+      "secretmanager": "secret-manager",
+      "vpc": "networking"
+    },
+    "azure": {
+      "app": "appservices",
+      "keyvault": "keyvaults",
+      "nsg": "nsgs",
+      "operationalinsights": "loganalytics",
+      "rbac": "subscriptions#azure.subscriptions.access_control_iam",
+      "vm": "vms",
+      "vnet": "vnets"
+    }
+  },
+  "_capability_aliases_comment": "services/registry.json key -> core/capabilities stem ('<stem>' or '<stem>#<id prefix>'), where they differ."
 }

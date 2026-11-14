@@ -16,7 +16,7 @@ export const ALLOWED_ORIGINS = [/^https:\/\/(www\.)?vyomi\.cloud$/, /^https?:\/\
 export const originAllowed = (origin) => !origin || ALLOWED_ORIGINS.some((re) => re.test(origin));
 export const hostIsLoopback = (host) => /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(String(host || ""));
 
-export function createCredsSync({ env = process.env, fetchFn = globalThis.fetch, version = "1.2.3", log = () => {}, intervalMs = 300000, now = () => Date.now() } = {}) {
+export function createCredsSync({ env = process.env, fetchFn = globalThis.fetch, version = "1.3.0", log = () => {}, intervalMs = 300000, now = () => Date.now() } = {}) {
   const home = env.VYOMI_HOME || join(homedir(), ".vyomi");
   const file = env.VYOMI_CREDENTIALS_FILE || join(home, "credentials");
   let st = { state: "unknown", key_id: "", portal: "", checked_at: 0, error: "" };

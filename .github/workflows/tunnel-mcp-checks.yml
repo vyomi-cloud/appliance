@@ -1,0 +1,95 @@
+# vyomi-tunnel + vyomi MCP + Claude plugin: the fast checks. Runs on every push / PR that touches them on the v4 trunk
+# and topic branches (ci.yml only covers `main`), and is called by tunnel-release.yml as its first gate.
+# Locally: tools/mcp-eval/prerelease-it.sh covers these plus the install / homes / agent stages.
+name: Tunnel + MCP checks
+
+on:
+  push:
+    branches: [v4-on-main, 'v4/**']
+    paths:
+      - cmd/vyomi/**
+      - scripts/gen_mcp_matrix.py
+      - scripts/mcp_wiring.json
+      - scripts/build_tunnel_mcp.sh
+      - scripts/sync_claude_plugins.py
+      - scripts/mcp_knowledge_drift.py
+      - core/capabilities/**
+      - wasm/docs/**
+      - wasm/relay/**
+      - packaging/tunnel/**
+      - packaging/brew/vyomi-tunnel.rb
+      - integrations/claude-plugins/**
+      - tools/mcp-eval/**
+      - .github/workflows/tunnel-*.yml
+  pull_request:
+    branches: [v4-on-main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: MCP knowledge is up to date (fails when stale)
+        run: python3 scripts/gen_mcp_matrix.py --check
+
+      - name: vyomi CLI + MCP server (go vet, go test -race)
+        run: go -C cmd/vyomi vet ./... && go -C cmd/vyomi test -race -count=1 ./...
+
+      - name: Test dependencies (ws for the relay tests, fastapi/uvicorn for the fake mesh simulator)
+        run: |
+          mkdir -p "$RUNNER_TEMP/np" && npm i --prefix "$RUNNER_TEMP/np" --no-save ws@8 >/dev/null
+          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q fastapi 'uvicorn[standard]'
+
+      - name: Tunnel launcher + list contract (node --test)
+        env:
+          WS_PKG: ${{ runner.temp }}/np/node_modules/ws
+        run: node --test wasm/relay/test-mcp-launch.mjs wasm/relay/test-list-json.mjs
+
+      - name: Relay suites required by CLAUDE.md for wasm/relay changes
+        env:
+          WS_PKG: ${{ runner.temp }}/np/node_modules/ws
+          NODE_PATH: ${{ runner.temp }}/np/node_modules
+          PY: ${{ runner.temp }}/venv/bin/python
+        run: |
+          set -e
+          cd wasm/relay
+          RELAY_PORT=8792 node test-mesh-link.mjs
+          RELAY_PORT=8802 node test-mesh-shell.mjs
+          node test-mesh-session-derived.mjs
+          node test-mesh-ssh.mjs
+          node test-mesh-ssh-transport.mjs
+          node test-tunnel-credentials.mjs
+
+      - name: Claude plugin validates
+        run: npx -y @anthropic-ai/claude-code plugin validate integrations/claude-plugins
+
+      - name: Plugin changes carry a version bump (vs the public marketplace)
+        run: |
+          git clone -q --depth 1 https://github.com/vyomi-cloud/claude-plugins.git "$RUNNER_TEMP/marketplace"
+          python3 scripts/sync_claude_plugins.py "$RUNNER_TEMP/marketplace"
+
+      - name: MCP knowledge drift report (informational, never fails the run)
+        continue-on-error: true
+        run: |
+          # --force: in a tag-triggered run the checkout already holds the tag (lightweight), and a plain fetch of the annotated
+          # tag is refused as "would clobber existing tag" (exit 1): that failed the tunnel-v1.3.0-rc.2 release.
+          git fetch -q --force --tags origin || echo "::warning::could not fetch tags; the drift report may be incomplete"
+          python3 scripts/mcp_knowledge_drift.py >> "$GITHUB_STEP_SUMMARY" || echo "::warning::drift report failed"
+
+      - name: prerelease-it.sh lints (bash)
+        run: bash -n tools/mcp-eval/prerelease-it.sh && shellcheck -s bash -S warning tools/mcp-eval/prerelease-it.sh

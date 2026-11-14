@@ -48,7 +48,7 @@ const friendly = (portal) => ({
   Throttled: "too many requests; wait a moment and retry.",
 });
 
-export async function fetchSession({ creds, fetchFn = globalThis.fetch, now = () => new Date(), version = "1.2.3" }) {
+export async function fetchSession({ creds, fetchFn = globalThis.fetch, now = () => new Date(), version = "1.3.0" }) {
   const path = "/api/tunnel/session", body = JSON.stringify({ client: "vyomi-tunnel/" + version });
   const date = now().toISOString().replace(/\.\d+Z$/, "Z");
   let r;

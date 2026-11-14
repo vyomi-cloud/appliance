@@ -61,8 +61,8 @@ for (const a of [["list"], ["list", "nano"], ["list", "nano", "vm"], ["list", "m
 const lg = await run(["login"]); assert.equal(lg.status, 2); assert.match(lg.stderr, /no login/);
 const free = { VYOMI_ACCESS_KEY_ID: "VYKAFREE", VYOMI_SECRET_ACCESS_KEY: "free-secret" };
 const fn = await run(["list", "nano", "--json"], free); assert.equal(fn.status, 1);                                                                      // valid key; just nothing running -> no targets
-assert.ok(Array.isArray(JSON.parse(fn.stdout).targets));
-for (const a of [["nano", "vm"], ["nano", "vms"], ["nano", "db"], ["nano", "dbs"], ["nano", "api"], ["vms"], ["all"], ["mesh", "k3s"]]) assert.ok(Array.isArray(JSON.parse((await run(["list", ...a, "--json"], free)).stdout).targets), "list " + a.join(" "));
+assert.ok(Array.isArray(JSON.parse(fn.stdout).rows)); assert.equal(JSON.parse(fn.stdout).schema, 1);
+for (const a of [["nano", "vm"], ["nano", "vms"], ["nano", "db"], ["nano", "dbs"], ["nano", "api"], ["vms"], ["all"], ["mesh", "k3s"]]) assert.ok(Array.isArray(JSON.parse((await run(["list", ...a, "--json"], free)).stdout).rows), "list " + a.join(" "));
 for (const a of [["nano", "k3s"], ["mesh", "vm"], ["all", "vm"], ["bogus"]]) assert.equal((await run(["list", ...a], free)).status, 2, "list " + a.join(" "));      // wrong type for the scope
 const fm = await run(["list", "mesh", "--json"], free); assert.match(JSON.parse(fm.stdout).notes.join(" "), /Pro or Max/);               // free key: Mesh refused
 const ff = await run(["forward", "k3s", "6443:6443"], free); assert.equal(ff.status, 1); assert.match(ff.stderr, /Pro or Max/);

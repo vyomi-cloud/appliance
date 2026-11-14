@@ -41,6 +41,14 @@ import http from "node:http";
 import net from "node:net";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+
+// `vyomi-tunnel mcp`: the Vyomi MCP server for agents, on stdin/stdout (mcp-launch.mjs). First, before the credentials gate: it needs no key,
+// and stdout is the protocol channel, so nothing may be printed before it.
+if (process.argv[2] === "mcp") {
+  const { launchMcp } = await import("./mcp-launch.mjs");
+  process.exit(await launchMcp(process.argv.slice(3), { entryUrl: import.meta.url }));
+}
+
 // CommonJS require honors NODE_PATH (unlike ESM import), so the `ws` package
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");

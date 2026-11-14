@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // GENERATED — canonical source: wasm/relay/local-relay.mjs
-// Re-sync: see packaging/tunnel/bin/vyomi-tunnel.mjs header
+// Re-sync: this entry file is hand-derived (no hosted-relay hubs): port each change of
+// local-relay.mjs by hand. The other bin/*.mjs are copies of wasm/relay/<same name>, with only the version stamps changed to package.json's
+// version (mesh-cli.mjs `vyomi-tunnel X.Y.Z`, credentials.mjs `version = "X.Y.Z"`). bin/mcp-launch.mjs is a plain copy. The ../mcp/ binaries
+// are built by scripts/build_tunnel_mcp.sh and never committed.
 /* Vyomi-Nano local relay — the local, zero-cloud reverse-tunnel. The
  * install-once counterpart to the Cloudflare Worker (worker.js): same WS
  * protocol, same external HTTP surface, but everything stays on your machine
@@ -41,6 +44,14 @@ import http from "node:http";
 import net from "node:net";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+
+// `vyomi-tunnel mcp`: the Vyomi MCP server for agents, on stdin/stdout (mcp-launch.mjs). First, before the credentials gate: it needs no key,
+// and stdout is the protocol channel, so nothing may be printed before it.
+if (process.argv[2] === "mcp") {
+  const { launchMcp } = await import("./mcp-launch.mjs");
+  process.exit(await launchMcp(process.argv.slice(3), { entryUrl: import.meta.url }));
+}
+
 // CommonJS require honors NODE_PATH (unlike ESM import), so the `ws` package
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer, WebSocket } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
@@ -55,7 +66,7 @@ if (process.argv[2] && !process.argv[2].startsWith("-")) { console.error(`vyomi-
 
 // The tunnel keeps running even when its key is missing, revoked or wrong (a service manager would crash-loop it otherwise): the state is
 // shown on /health, re-checked on a timer and when ~/.vyomi/credentials changes, and the Vyomi page can re-pair it (POST /reset).
-const VERSION = "1.2.3";
+const VERSION = "1.3.0";
 const credsSync = createCredsSync({ version: VERSION, log: (m) => console.log("[creds] " + m) });
 const PORT = Number(process.env.RELAY_PORT || 8090);
 // Mesh plane: the Nano console reaches the user's Mesh Codespace THROUGH this relay (the link runs on the laptop, over their own

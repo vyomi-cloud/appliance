@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
+import nodeNet from "node:net";
 import { ensureGh, ghAuthOk } from "./gh-manager.mjs";
 
 const NAME = /^[A-Za-z0-9._-]{1,80}$/;
@@ -38,13 +39,22 @@ export function classifyTargets(text) {
   return out;
 }
 
+/** `gh codespace list` failed: say what to do. GitHub answers a token without the `codespace` scope with a 403 "Must have admin
+ *  rights to Repository", which reads like a permissions problem on some repo; the fix is one command. Short: callers prefix it. */
+export function ghListError(stderr) {
+  const e = String(stderr || "").trim();
+  if (/codespace"? scope|admin rights|HTTP 403/i.test(e)) return "gh cannot list your Codespaces: its login lacks the codespace scope. Run: gh auth refresh -h github.com -s codespace";
+  if (/not logged in|gh auth login|HTTP 401|authentication required/i.test(e)) return "gh is not logged in to GitHub. Run: gh auth login";
+  return (e || "gh codespace list failed").slice(0, 200);
+}
+
 /** Find the user's Mesh Codespace on their own account: the newest running (or starting) one named vyomi-mesh-* / vyomi-mesh-*. */
 export async function findCodespace(ghBin, spawn = nodeSpawn) {
   const text = await new Promise((resolve, reject) => {
     let out = "", err = "";
     const c = spawn(ghBin, ["codespace", "list", "--json", "name,state,createdAt"], { stdio: ["ignore", "pipe", "pipe"] });
     c.stdout.on("data", (d) => { out += d; }); c.stderr?.on("data", (d) => { err += d; });
-    c.on("error", reject); c.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error((err || "gh codespace list failed").trim().slice(0, 200)))));
+    c.on("error", reject); c.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(ghListError(err)))));
   });
   let list; try { list = JSON.parse(text); } catch { list = []; }
   const mine = list.filter((c) => /^vyomi-mesh-/.test(c.name || ""));
@@ -323,7 +333,7 @@ export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, tran
 /** `connect`: pipe stdin/stdout to <name>:<port> in the Codespace. Resolves with the exit code (0 clean, 1 failed, 3 not found). */
 export async function connectSsh(name, { port = 22, transport, stdin = process.stdin, stdout = process.stdout, stderr = process.stderr } = {}) {
   let t; try { t = await transport.resolve(name, port); } catch (e) { stderr.write(`vyomi-tunnel: ${e.message}\n`); return 1; }
-  if (!t) { stderr.write(`vyomi-tunnel: ${name}: not found in the Codespace\n`); return 3; }
+  if (!t) { stderr.write(`vyomi-tunnel: ${name}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.\n`); return 3; }
   let up; try { up = await transport.open(t.host, t.port); } catch (e) { stderr.write(`vyomi-tunnel: ${e.message}\n`); return 1; }
   return new Promise((resolve) => {
     let done = false; const fin = (c) => { if (done) return; done = true; try { up.destroy(); } catch { /* */ } try { stdin.pause(); } catch { /* */ } resolve(c); };
@@ -333,10 +343,35 @@ export async function connectSsh(name, { port = 22, transport, stdin = process.s
   });
 }
 
+/** Is 127.0.0.1:<port> taken? Something answers a connect, or it cannot be bound. The connect matters on macOS, where a
+ *  socket on *:<port> (Docker Desktop publishing the offline appliance on :9000) does not stop a bind to 127.0.0.1:<port>:
+ *  a bind-only test calls it free and the forward then shadows that service for every 127.0.0.1 client. */
+export async function localPortBusy(port, net = nodeNet) {
+  const answers = await new Promise((r) => {
+    const s = net.connect({ host: "127.0.0.1", port }); const t = setTimeout(() => { s.destroy(); r(false); }, 300);
+    s.on("connect", () => { clearTimeout(t); s.destroy(); r(true); }); s.on("error", () => { clearTimeout(t); r(false); });
+  });
+  if (answers) return true;
+  return new Promise((r) => { const srv = net.createServer(); srv.once("error", () => r(true)); srv.listen(port, "127.0.0.1", () => srv.close(() => r(false))); });
+}
+
+/** The local port to suggest for forwarding <remote>: <remote> itself when free here, else the first free one of <remote>+100..+199
+ *  (9000 -> 9100+, 9443 -> 9543+, the same rule as the vyomi MCP's forward hint). */
+export async function freeLocalPort(remote, net = nodeNet) {
+  if (!(await localPortBusy(remote, net))) return remote;
+  for (let p = remote + 100; p < remote + 200; p++) if (!(await localPortBusy(p, net))) return p;
+  return remote;
+}
+
 /** `forward`: listen on 127.0.0.1:<local>; each accepted socket is one ssh stream to <target>:<remote> inside the Codespace. */
 export async function forwardSsh(target, { local, remote, transport, net, stderr = process.stderr } = {}) {
   const t = await transport.resolve(target, remote);
-  if (!t) { stderr.write(`vyomi-tunnel: ${target}: not found in the Codespace\n`); return { close() {}, done: Promise.resolve(3), port: 0 }; }
+  if (!t) { stderr.write(`vyomi-tunnel: ${target}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.\n`); return { close() {}, done: Promise.resolve(3), port: 0 }; }
+  if (local > 0 && await localPortBusy(local, net)) {
+    const alt = await freeLocalPort(remote, net);
+    stderr.write(`vyomi-tunnel: 127.0.0.1:${local} is already in use on this machine (another Vyomi or Docker stack?). Use another local port: vyomi-tunnel forward ${target} ${alt}:${remote}\n`);
+    return { close() {}, done: Promise.resolve(1), port: 0 };
+  }
   const socks = new Set(); let finish; const done = new Promise((r) => { finish = r; });
   const srv = net.createServer(async (sock) => {
     socks.add(sock); sock.setNoDelay(true);
