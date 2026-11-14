@@ -56,16 +56,16 @@
     } else body = installPanel();
     return '<div class="tm-ov" data-tm-ov><div class="tm" role="dialog" aria-modal="true" aria-labelledby="vy-tm-t" tabindex="-1">'
       + '<div class="tm-h"><h3 id="vy-tm-t">' + (done ? "Tunnel ready" : "Set up the Vyomi tunnel") + '</h3>'
-      + '<button class="tm-x" data-vyb-keep data-tm-close aria-label="Close">\u00d7</button></div>'
+      + '<button class="tm-x" data-vyb-keep data-tm-close aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M3.22 3.22a.75.75 0 0 1 1.06 0L8 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L9.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L8 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L6.94 8 3.22 4.28a.75.75 0 0 1 0-1.06z"/></svg></button></div>'
       + '<div class="tm-b">' + body + '</div>'
-      + '<div class="tm-f"><button class="go" data-vyb-keep data-tm-close>' + (done ? "Done" : "Close") + '</button></div></div></div>';
+      + '<div class="tm-f"><button class="go' + (done ? "" : " sec") + '" data-vyb-keep data-tm-close>' + (done ? "Done" : "Close") + '</button></div></div></div>';
   }
   function paintModal() {
     var el = document.getElementById("vy-tm-root");
     if (!tm.open) { if (el) el.parentNode.removeChild(el); tm.last = ""; return; }
     var created = false;
     if (!el) {
-      created = true; el = document.createElement("div"); el.id = "vy-tm-root"; el.setAttribute("data-vyb-keep", "1"); document.body.appendChild(el);
+      created = true; el = document.createElement("div"); el.id = "vy-tm-root"; el.setAttribute("data-vyb-keep", "1"); el.setAttribute("data-cloud", CLOUD); document.body.appendChild(el);
       el.addEventListener("click", function (e) {
         var t = e.target;
         if (t.closest && t.closest("[data-inst-get]")) { e.preventDefault(); instGet(); }
@@ -129,6 +129,39 @@
       + "#vy-tm-root .go{display:inline-block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 18px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-tm-root .sub{font-size:12px;color:#6b7280;margin-top:8px}#vy-tm-root .steps{margin:8px 0 0;padding-left:20px;color:#414d5c;font-size:14px}#vy-tm-root .steps li{padding:3px 0}"
       + "#vy-tm-root code{background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:1px 6px;font-size:12px}"
+      + "#vy-tm-root[data-cloud=aws] .tm-ov{background:rgba(15,20,26,.7);font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=aws] .tm{border-radius:8px;color:#0f141a;box-shadow:0 4px 20px 1px rgba(0,28,36,.5);font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=aws] .tm-h{padding:20px 20px 16px;border-bottom:1px solid #e9ebed}.tm-h h3{font-size:20px;font-weight:700;line-height:24px;letter-spacing:.005em}"
+      + "#vy-tm-root[data-cloud=aws] .tm-x{color:#5f6b7a;border-radius:4px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;padding:0}.tm-x:hover{color:#0f141a;background:#f2f3f3}"
+      + "#vy-tm-root[data-cloud=aws] .tm-b{padding:20px}.tm-b p,.tm-b .steps{color:#414d5c}.fine{color:#5f6b7a}"
+      + "#vy-tm-root[data-cloud=aws] .tm-f{padding:16px 20px;border-top:1px solid #e9ebed}"
+      + "#vy-tm-root[data-cloud=aws] .go{border-radius:20px;background:#ff9900;color:#0f141a!important;font-weight:700;padding:6px 20px;border:2px solid #ff9900}.go:hover{background:#ec7211;border-color:#ec7211}"
+      + "#vy-tm-root[data-cloud=aws] .go.sec{background:#fff;color:#0972d3!important;border:2px solid #0972d3}.go.sec:hover{background:#f2f8fd}"
+      + "#vy-tm-root[data-cloud=aws] a{color:#0972d3}code{font-family:Monaco,Menlo,Consolas,'Courier New',monospace}.cmd code{background:#f9fafa;border:1px solid #e9ebed;border-radius:8px}"
+      + "#vy-tm-root[data-cloud=aws] .cp{border:2px solid #0972d3;border-radius:50%;color:#0972d3;background:#fff;top:7px;right:7px}.cp:hover{background:#f2f8fd}.cp.ok{color:#037f0c;border-color:#037f0c}"
+      + "#vy-tm-root[data-cloud=aws] button:focus-visible{outline:2px solid #0972d3;outline-offset:2px}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-ov{background:rgba(0,0,0,.32);font-family:'Google Sans',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=gcp] .tm{border-radius:28px;color:#202124;box-shadow:0 8px 12px 6px rgba(0,0,0,.15),0 4px 4px rgba(0,0,0,.3);font-family:'Google Sans',Roboto,Arial,sans-serif}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-h{padding:24px 24px 8px}.tm-h h3{font-size:24px;font-weight:400;line-height:32px}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-x{color:#5f6368;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;padding:0}.tm-x:hover{background:rgba(60,64,67,.08)}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-b{padding:8px 24px}.tm-b p,.tm-b .steps{color:#5f6368}.fine{color:#5f6368}"
+      + "#vy-tm-root[data-cloud=gcp] .tm-f{padding:16px 24px 24px}"
+      + "#vy-tm-root[data-cloud=gcp] .go{border-radius:20px;background:#0b57d0;font-weight:500;padding:9px 24px;border:0;letter-spacing:.01em}.go:hover{background:#0842a0;box-shadow:0 1px 2px rgba(60,64,67,.3),0 1px 3px 1px rgba(60,64,67,.15)}"
+      + "#vy-tm-root[data-cloud=gcp] .go.sec{background:transparent;color:#0b57d0!important;padding:9px 12px;box-shadow:none}.go.sec:hover{background:rgba(11,87,208,.08)}"
+      + "#vy-tm-root[data-cloud=gcp] a{color:#0b57d0}code{font-family:'Roboto Mono',Menlo,Consolas,monospace}.cmd code{background:#f1f3f4;border:0;border-radius:12px}"
+      + "#vy-tm-root[data-cloud=gcp] .cp{border:0;background:transparent;border-radius:50%;width:36px;height:36px;color:#5f6368;top:4px;right:4px}.cp:hover{background:rgba(60,64,67,.08)}.cp.ok{color:#188038}"
+      + "#vy-tm-root[data-cloud=gcp] button:focus-visible{outline:2px solid #0b57d0;outline-offset:2px}"
+      + "#vy-tm-root[data-cloud=azure] .tm-ov{background:rgba(0,0,0,.4);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif}"
+      + "#vy-tm-root[data-cloud=azure] .tm{border-radius:8px;color:#242424;box-shadow:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif}"
+      + "#vy-tm-root[data-cloud=azure] .tm-h{padding:24px 24px 0;border:0}.tm-h h3{font-size:20px;font-weight:600;line-height:28px}"
+      + "#vy-tm-root[data-cloud=azure] .tm-x{color:#424242;border-radius:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;padding:0}.tm-x:hover{background:#f5f5f5}"
+      + "#vy-tm-root[data-cloud=azure] .tm-b{padding:12px 24px}.tm-b p,.tm-b .steps{color:#616161}.fine{color:#616161}"
+      + "#vy-tm-root[data-cloud=azure] .tm-f{padding:12px 24px 24px}"
+      + "#vy-tm-root[data-cloud=azure] .go{border-radius:4px;background:#0f6cbd;font-weight:600;padding:5px 16px;border:1px solid #0f6cbd;line-height:22px}.go:hover{background:#115ea3;border-color:#115ea3}"
+      + "#vy-tm-root[data-cloud=azure] .go.sec{background:#fff;color:#242424!important;border:1px solid #d1d1d1}.go.sec:hover{background:#f5f5f5;border-color:#c7c7c7}"
+      + "#vy-tm-root[data-cloud=azure] a{color:#0f6cbd}code{font-family:Consolas,'Courier New',monospace}.cmd code{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px}"
+      + "#vy-tm-root[data-cloud=azure] .cp{border:0;background:transparent;border-radius:4px;width:28px;height:28px;color:#424242;top:7px;right:7px}.cp:hover{background:#e0e0e0}.cp.ok{color:#107c10}"
+      + "#vy-tm-root[data-cloud=azure] button:focus-visible{outline:2px solid #242424;outline-offset:1px}"
       + "#vy-tm-root .cmd{position:relative;margin:10px 0}#vy-tm-root .cmd code{display:block;word-break:break-all;padding:12px 48px 12px 14px;font-size:13px;line-height:1.45;user-select:all}"
       + "#vy-tm-root .cp{position:absolute;top:6px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #d0d7de;border-radius:6px;background:#fff;color:#57606a;cursor:pointer;padding:0}#vy-tm-root .cp:hover{background:#f3f4f6}#vy-tm-root .cp.ok{color:#1a7f37;border-color:#1a7f37}"
       + "#vy-bw .cmd{margin:8px 0}#vy-bw .cmd code{display:block;word-break:break-all;background:#f2f3f3;border:1px solid #e3e6e8;border-radius:4px;padding:8px 10px;font-size:12px;user-select:all}#vy-bw .inst .go{margin:2px 0 6px}"
