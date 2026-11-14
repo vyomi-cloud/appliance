@@ -200,35 +200,57 @@ async function testAwsCli(url, region) {
   ];
 }
 
-/** The CLI snippet with a Test icon button right beside Copy (same icon-button size and look), and the result lines under the code. */
+/** The CLI snippet with a Test icon button right beside Copy (same icon-button size and look). The results open in a dialog. */
 function CliSnippet({ code, url, region }) {
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState(null);
-  const [ran, setRan] = useState(false);          // the "Test run" bubble, like Copy's "Copied"
+  const [open, setOpen] = useState(false);
   const go = async () => {
-    setRan(true); setTimeout(() => setRan(false), 2000);
-    setBusy(true); setRows(null);
+    setOpen(true); setBusy(true); setRows(null);
     try { setRows(await testAwsCli(url, region)); } catch (e) { setRows([{ ok: false, label: "Test", detail: String((e && e.message) || e) }]); }
     setBusy(false);
   };
   return (
-    <SpaceBetween size="xs">
+    <>
       <Snippet code={code} label="AWS CLI commands" before={
-        <span title="Test these commands against this endpoint" style={{ position: "relative", display: "inline-flex" }}>
+        <span title="Test these commands against this endpoint">
           <Button variant="icon" iconName="caret-right-filled" loading={busy} onClick={go} ariaLabel="Test these commands against this endpoint" />
-          {ran && (
-            <span role="status" style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, zIndex: 20, whiteSpace: "nowrap", pointerEvents: "none",
-              padding: "4px 12px", borderRadius: 8, background: "var(--color-background-popover, #fff)", boxShadow: "0 1px 1px 1px rgba(0,28,36,.3), 1px 1px 1px 0 rgba(0,28,36,.15), -1px 1px 1px 0 rgba(0,28,36,.15)" }}>
-              <StatusIndicator type="success">Test run</StatusIndicator>
-            </span>)}
         </span>} />
-      {rows && (
-        <SpaceBetween size="xxs">
-          {rows.map((r) => <StatusIndicator key={r.label} type={r.ok ? "success" : "error"}>{r.label}{r.detail ? ` \u2014 ${r.detail}` : ""}</StatusIndicator>)}
-          <Box variant="small" color="text-body-secondary">{rows.every((r) => r.ok) ? "These commands work as shown. Paste them in your terminal." : "Fix the item above, then press Test again."}</Box>
+      <Modal visible={open} onDismiss={() => setOpen(false)} header="Test AWS CLI commands" size="medium"
+        footer={<Box float="right"><Button variant="primary" onClick={() => setOpen(false)}>Close</Button></Box>}>
+        <SpaceBetween size="s">
+          <Box variant="small" color="text-body-secondary">Sends the same requests as the commands to <Box variant="code" display="inline">{url}</Box>.</Box>
+          {busy && <StatusIndicator type="loading">Running the commands…</StatusIndicator>}
+          {rows && (
+            <SpaceBetween size="xs">
+              {rows.map((r) => <StatusIndicator key={r.label} type={r.ok ? "success" : "error"}><Box variant="code" display="inline">{r.label}</Box>{r.detail ? ` \u2014 ${r.detail}` : ""}</StatusIndicator>)}
+              <Box color="text-body-secondary">{rows.every((r) => r.ok) ? "These commands work as shown. Paste them in your terminal." : "Fix the item above, then press Test again."}</Box>
+            </SpaceBetween>
+          )}
         </SpaceBetween>
-      )}
-    </SpaceBetween>
+      </Modal>
+    </>
+  );
+}
+
+/** Green dot = the local tunnel answers (checked every 5 s); red = it does not; grey while the first check runs. */
+function TunnelDot() {
+  const url = sdkEndpoint().url;
+  const [up, setUp] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const check = () => fetch(url.replace(/\/$/, "") + "/health", { cache: "no-store", signal: AbortSignal.timeout(2500) })
+      .then((r) => r.json()).then((j) => alive && setUp(!!(j && j.ok !== false)), () => alive && setUp(false));
+    check(); const h = setInterval(check, 5000);
+    return () => { alive = false; clearInterval(h); };
+  }, [url]);
+  const color = up === null ? "#8d99a3" : up ? "#037f0c" : "#d91515";
+  return (
+    <span title={up ? "Tunnel running" : up === null ? "Checking the tunnel" : "Tunnel not detected. Start it with Setup Tunnel."}
+      style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 400 }}>
+      Tunnel status
+      <span role="img" aria-label={up ? "running" : up === null ? "checking" : "not running"} style={{ width: 10, height: 10, borderRadius: "50%", background: color, display: "inline-block" }} />
+    </span>
   );
 }
 
@@ -257,7 +279,6 @@ function ConnectWidget() {
         { id: "cli", label: "AWS CLI", content: <CliSnippet code={cli} url={ep.url} region={region} /> },
         { id: "sdk", label: "Python (boto3)", content: <Snippet code={sdk} label="Python snippet" /> },
       ]} />
-      {ep.note && <Box variant="small" color="text-body-secondary">{ep.note}</Box>}
     </SpaceBetween>
   );
 }
@@ -407,7 +428,7 @@ export default function Home() {
     health: <Box textAlign="center"><Link href="#/" onFollow={(e) => { e.preventDefault(); probes.reload(); }}>Refresh health</Link></Box>,
     cost: <Box textAlign="center" color="text-body-secondary" variant="small">Billing and Cost Management is not simulated</Box>,
   };
-  const actions = { recent: <Button href="#/services" onFollow={follow}>All services</Button> };
+  const actions = { recent: <Button href="#/services" onFollow={follow}>All services</Button>, connect: sdkEndpoint().nano ? <TunnelDot /> : undefined };
   const renderItem = (item, a) => {
     const id = item.data.id;
     return (
