@@ -2207,7 +2207,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <div id="usage-cards"></div>
 
     <p style="text-align:center;margin:2px 0 34px">
-      <a class="kc-open" id="u-fulldoc" href="/docs/aws/usage?nano=1" target="_blank" rel="noopener">Full per-service reference <span class="material-icons" style="font-size:16px;vertical-align:-3px">open_in_new</span></a>
     </p>
     </div>
   </div>
@@ -2726,7 +2725,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       }
       var epc = document.getElementById('u-ep-copy');
       if(epc) epc.onclick = function(){ if(navigator.clipboard) navigator.clipboard.writeText(endpoint).then(function(){ epc.textContent='Copied'; setTimeout(function(){ epc.textContent='Copy'; },1200); }); };
-      var fd = document.getElementById('u-fulldoc'); if(fd && !isNano) fd.setAttribute('href','/docs/aws/usage');
       if(isNano){ try{ var chn = new BroadcastChannel('nano-relay');
         chn.onmessage = function(ev){ var m = ev.data || {};
           if(m.type==='status' && m.state==='connected' && m.external){ endpoint = m.external; live = true; try{ localStorage.setItem('nano_relay_external', endpoint); }catch(_){} render(); } };
