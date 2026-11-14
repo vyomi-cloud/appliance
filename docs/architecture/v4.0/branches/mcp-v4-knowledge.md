@@ -277,7 +277,9 @@ Not covered by CI: the `nano` and `agent` stages (a real browser tab, a Claude l
 
 Verified here: actionlint + shellcheck clean; the version step on `tunnel-v1.3.0-rc.1` (stamps 4 files, channel `next`) and on a
 mismatched tag (fails); the pack guard on the current tree; the plugin validates; relay tests pass. Not run here: Go (this sandbox cannot
-download the Go 1.26 toolchain) and the workflow itself, which needs the dry run on GitHub.
+download the Go 1.26 toolchain); GitHub ran both: `Tunnel + MCP checks` green on the push, and the release dry run passed every gate
+(package 8, linux 2, homes 10 + offline SKIP incl. the mesh image build and S3 on it, macOS package + brew, Windows); its first dry-run
+publish failed because npm reads `dist/x.tgz` as a GitHub `user/repo`, fixed with `./dist/…` (verified with a local `--dry-run`).
 
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,

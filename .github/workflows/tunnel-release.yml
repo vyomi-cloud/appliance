@@ -200,7 +200,7 @@ jobs:
         run: |
           set -euo pipefail
           if npm view "vyomi-tunnel@$VER" version >/dev/null 2>&1; then echo "vyomi-tunnel@$VER is already on npm; nothing to publish"; exit 0; fi
-          TGZ=$(ls dist/vyomi-tunnel-*.tgz)
+          TGZ=$(ls ./dist/vyomi-tunnel-*.tgz)   # the ./ matters: npm reads "dist/x.tgz" as a GitHub user/repo
           test "$(tar xzOf "$TGZ" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')" = "$VER"
           # The exact bytes the gates installed and tested (npm publish of a .tgz does not re-pack).
           if [ "$DRY" = "true" ]; then npm publish "$TGZ" --access public --tag "$CH" --dry-run
