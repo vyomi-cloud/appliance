@@ -127,6 +127,36 @@ State words: SERVED (code exists and is routed), PARTIAL, MISSING.
 - **Work:** WP-A8a CloudTrail; WP-F4 policy engine; WP-A1 Cognito; WP-F1 usage/cost attribution; data lineage/quality decided after Phase 0.
 - **Other clouds:** Cloud Audit Logs, Azure Activity Log/Purview.
 
+### 2.1 Cross-cloud applicability
+
+The 13 components are a pattern every cloud can implement; the diagram's products are AWS. The equivalents below are the
+planning mapping (from product knowledge, NOT read from our code) and decide what each cloud lane builds.
+
+| Component | AWS | GCP | Azure | Applies to all three? |
+|---|---|---|---|---|
+| C1 Access and perimeter | Cognito, API Gateway, WAF | Identity Platform, API Gateway, Cloud Armor | Entra External ID, API Management, Front Door WAF | Yes |
+| C2 Channels, input guardrails | Bedrock Guardrails | Safety filters, Model Armor | Content Safety, Prompt Shields | Yes; guardrail products differ |
+| C3 Agent runtime | AgentCore Runtime | Vertex Agent Engine | Foundry Agent Service | Yes; Strands/LangGraph run on all |
+| C4 Agent gateway + policy | AgentCore Gateway + AgentCore Policy (Cedar) | Apigee or API Gateway, MCP | API Management AI gateway | **Different:** the Cedar policy layer and tool-catalog gateway are AWS-specific; other clouds are built from generic gateway + policy pieces (F4 serves all) |
+| C5 Durable approvals | Step Functions | Workflows | Logic Apps, Durable Functions | Yes |
+| C6 Knowledge search (RAG) | OpenSearch, Bedrock reranker | Vertex Vector Search, RAG Engine | AI Search + semantic ranker | Yes |
+| C7 Tools and telemetry | Lambda, IoT/Timestream | Cloud Functions/Run, Pub/Sub + BigQuery | Functions, IoT Hub | Mostly; Google retired IoT Core, so GCP telemetry is built from Pub/Sub + a store |
+| C8 AgentOps and observability | CloudWatch, AgentCore Observability + Evaluations | Cloud Trace, Vertex evaluation | App Insights, Foundry evaluations | Yes |
+| C9 Memory | AgentCore Memory | Agent Engine Memory Bank | Foundry thread/agent memory | Yes; newer, less uniform products |
+| C10 Foundation models + router | Bedrock (Claude, Nova), prompt router | Vertex model garden (Gemini) | Azure OpenAI / Foundry models, model router | Yes; router support differs per cloud |
+| C11 Response generation | Guardrails grounding check | Vertex grounding check | Groundedness detection | Yes |
+| C12 Knowledge pipeline | S3, Lambda, Bedrock embeddings, vector DB | GCS, Eventarc, Document AI | Blob, Event Grid, Document Intelligence | Yes |
+| C13 Governance | CloudTrail, KMS, IAM, Cognito | Cloud Audit Logs, KMS, IAM | Activity Log, Key Vault, Entra | Yes |
+
+AWS-only features (no one-to-one product elsewhere): AgentCore Policy (Cedar), Bedrock prompt routers, AgentCore Browser, Code
+Interpreter, Payments and Capacity providers. For GCP and Azure each lane delivers the component's BEHAVIOUR with that cloud's
+own native services and wire shapes; it does not clone AWS names.
+
+State per cloud today (read from code): AWS has most engines and consoles (gaps in each component above). GCP has Vertex AI,
+Agent Engine (spec-only) and Vector Search; RAG Engine, Memory Bank, Cloud Armor and Identity Platform are missing. Azure has
+Cognitive Services, Entra and Front Door consoles; Foundry agents are partial; Content Safety, Prompt Shields and the AI Search
+semantic ranker are missing.
+
 ## 3. Constraints that shape the design
 
 - **Mesh = Codespace, 8 GB RAM, 2 cores, no GPU** (decision 2026-11-07). A real OpenSearch, Keycloak, etc. will not fit next to a
@@ -173,6 +203,7 @@ Work packages (WP) are the unit of branches and claims (one topic branch per WP)
 | A8 | CloudTrail (a); CloudWatch GenAI metrics, dashboards, alarms (b) | C13, C8 |
 | A9 | Step Functions durable-approval verification and fixes (`waitForTaskToken`, heartbeat, Map, SLA timers) | C5 |
 | A10 | Telemetry store (IoT/Timestream subset) and extraction stubs, only if Phase 0 shows they are needed | C7, C12 |
+| A11 | AgentCore Browser + Code Interpreter on Mesh compute (sandboxed, RAM-budgeted); Evaluations + Optimizations/A-B tests consoles | C3, C8 |
 
 ### Phase 3: GCP lane (parallel to Phase 2, 3-4 weeks)
 Vertex Agent Engine running real containers/ADK (C3), Memory Bank (C9), RAG Engine `ragCorpora` + retrieveContexts (C6, C12),
@@ -233,3 +264,46 @@ is: reference app on Mesh with real Bedrock Converse tool loop, KB RAG with cita
 3. Run the user's agent containers on Mesh (needs RAM budget) or keep spec-based agents only for the first release.
 4. Is the reference app public (marketing + docs) or internal?
 5. Relationship to the v4.0.0/4.0.1 release: these are post-beta work packages, not part of the beta cut.
+
+## 8. Appendix: services to build and console-capture coverage
+
+Console fidelity ("match the native console, offered as individual services") depends on the screenshot library at
+`~/Applications/simulator/console-captures` (separate repo, about 1.0 GB, the part that survived the 2026-11-01 deletion of
+`appliance/console_captures`): 239 AWS, 123 GCP, 30 Azure captures, each a PNG plus a text dump. They cover landing pages
+and second-level pages/tabs; most do NOT include create wizards or resource detail pages, and several services have only a
+landing shot. Counts below were taken on 2026-11-14.
+
+| Cloud | Service to build | Components | Captures we have | Enough to match the native console? |
+|---|---|---|---|---|
+| AWS | AgentCore (Runtime, Gateway, Memory, Identity, Policy, Observability, Evaluations, Browser, Code Interpreter, Optimizations/A-B tests, Payments, Capacity providers) | C3, C4, C8, C9 | 24 pages incl. sessions/traces/spans, evaluators, gateways, policy, memory | Good |
+| AWS | CloudTrail | C13 | 20 (event history, trails, Lake query, insights) | Good |
+| AWS | Bedrock: Guardrails, Knowledge Bases, prompt management, evaluations, inference profiles, Mantle | C2, C6, C8, C10, C11 | 19 + 13 (inference profiles, batch inference, quotas visible; guardrails/evaluations pages not checked) | Good, gap check needed |
+| AWS | Cognito | C1 | landing only | No |
+| AWS | WAFv2 | C1 | landing only (+1 Pro variant) | No |
+| AWS | OpenSearch Service / Serverless | C6, C12 | none | No |
+| AWS | Timestream, IoT, Textract, Comprehend, Step Functions approvals | C7, C12, C5 | landing only each (Step Functions already has a console) | No |
+| GCP | Agent Platform (Vertex Studio, Agents, Models) | C3, C10 | 11 | Partial |
+| GCP | Identity Platform | C1 | 6, but marketing tabs (pricing/docs), not the console | No |
+| GCP | Cloud Armor | C1 | landing and docs only | No |
+| GCP | RAG Engine, Memory Bank | C6, C9 | none | No |
+| GCP | Cloud Logging, Security Command Center | C13 | 20 and 12 | Good |
+| Azure | Foundry hub (OpenAI, AI Search, Content Safety tiles) | C2, C6, C10, C11 | 14, mostly the hub listing, not each service's blades | Partial |
+| Azure | Entra, Monitor | C1, C8, C13 | 43 and 48 | Good |
+| Azure | Front Door WAF, Purview | C1, C13 | none | No |
+
+Existing consoles in our source: AWS Bedrock (with an AgentCore page), CloudWatch, Step Functions; GCP Vertex AI; Azure Cognitive
+Services, Entra, Front Door.
+
+**AgentCore scope addition.** The AgentCore captures show areas the first draft did not list: Browser, Code Interpreter,
+Evaluations, Optimizations/A-B tests, Payments, Capacity providers, Knowledge bases and Policy. Policy (Cedar) belongs with C4
+(F4/A4); Evaluations and Optimizations with C8 (A6c/A5); Browser and Code Interpreter are new WP-A11 (AgentCore tools:
+sandboxed code execution and headless browser on Mesh compute, sized against the 8 GB budget); Payments and Capacity providers
+are declared non-goals unless Phase 0 shows the reference app needs them.
+
+**Offering each as an individual service** goes through the service-expansion pipeline: an engine, a capability manifest, a
+console page matching its captures, and the gates (API, SDK, CLI, UI, Playwright). A service without good captures can ship
+API/SDK first, but its console cannot match the native one until it is captured from the real console.
+
+**Capture backlog (needs the owner's cloud logins):** Cognito, WAFv2, OpenSearch (Serverless collections), Timestream/IoT,
+Textract/Comprehend detail pages, Bedrock Guardrails/evaluations if missing; GCP Cloud Armor, Identity Platform console, RAG
+Engine, Memory Bank; Azure Content Safety, AI Search, Front Door WAF, Purview, and the Foundry service blades.
