@@ -283,6 +283,11 @@ publish failed because npm reads `dist/x.tgz` as a GitHub `user/repo`, fixed wit
 First real run: tag `tunnel-v1.3.0-rc.1` on `6ac9bc2` (pushed by the owner) -> all gates green -> `vyomi-tunnel@1.3.0-rc.1` on npm `next`
 via trusted publishing with SLSA provenance; `latest` stays 1.2.1, Homebrew untouched. Installed from npm here: `--version` = 1.3.0-rc.1,
 `vyomi-tunnel mcp` answers (server `vyomi` 4.0.0, 8 tools) with an empty HOME and writes nothing to it.
+Owner's Mac with the RC: `vyomi_status` correct (offline selected as the only serving home; Nano tunnel up, no tab; :9000 not a mesh).
+Its Codespace probe showed GitHub's misleading 403 "Must have admin rights to Repository" (a `gh` login without the `codespace` scope),
+cut off before the fix. `findCodespace` (`mesh-ssh.mjs`, both copies) now says: "gh cannot list your Codespaces: its login lacks the
+codespace scope. Run: gh auth refresh -h github.com -s codespace" (and "Run: gh auth login" when logged out), short enough for the
+MCP's 160-char note clip. Test in `test-mesh-ssh-transport.mjs` (fails on the old code); that suite now also runs in CI.
 
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,

@@ -38,13 +38,22 @@ export function classifyTargets(text) {
   return out;
 }
 
+/** `gh codespace list` failed: say what to do. GitHub answers a token without the `codespace` scope with a 403 "Must have admin
+ *  rights to Repository", which reads like a permissions problem on some repo; the fix is one command. Short: callers prefix it. */
+export function ghListError(stderr) {
+  const e = String(stderr || "").trim();
+  if (/codespace"? scope|admin rights|HTTP 403/i.test(e)) return "gh cannot list your Codespaces: its login lacks the codespace scope. Run: gh auth refresh -h github.com -s codespace";
+  if (/not logged in|gh auth login|HTTP 401|authentication required/i.test(e)) return "gh is not logged in to GitHub. Run: gh auth login";
+  return (e || "gh codespace list failed").slice(0, 200);
+}
+
 /** Find the user's Mesh Codespace on their own account: the newest running (or starting) one named vyomi-mesh-* / vyomi-mesh-*. */
 export async function findCodespace(ghBin, spawn = nodeSpawn) {
   const text = await new Promise((resolve, reject) => {
     let out = "", err = "";
     const c = spawn(ghBin, ["codespace", "list", "--json", "name,state,createdAt"], { stdio: ["ignore", "pipe", "pipe"] });
     c.stdout.on("data", (d) => { out += d; }); c.stderr?.on("data", (d) => { err += d; });
-    c.on("error", reject); c.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error((err || "gh codespace list failed").trim().slice(0, 200)))));
+    c.on("error", reject); c.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(ghListError(err)))));
   });
   let list; try { list = JSON.parse(text); } catch { list = []; }
   const mine = list.filter((c) => /^vyomi-mesh-/.test(c.name || ""));

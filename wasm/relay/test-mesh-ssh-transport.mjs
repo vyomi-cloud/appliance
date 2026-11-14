@@ -64,6 +64,12 @@ assert.equal(await findCodespace("gh", lst([{ name: "other-app", state: "Availab
   { name: "vyomi-mesh-new", state: "Available", createdAt: "2026-11-09" }, { name: "vyomi-mesh-off", state: "Shutdown", createdAt: "2026-11-10" }])), "vyomi-mesh-new");
 await assert.rejects(() => findCodespace("gh", lst([{ name: "vyomi-mesh-off", state: "Shutdown" }])), /stopped/);
 await assert.rejects(() => findCodespace("gh", lst([{ name: "other", state: "Available" }])), /no Mesh Codespace/);
+// gh failures name the fix: the scope-less token's misleading 403, and not logged in (the note `list` / vyomi_status show)
+const ghFail = (stderr) => () => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(); c.stderr.end(stderr); setImmediate(() => c.emit("close", 1)); }); return c; };
+await assert.rejects(() => findCodespace("gh", ghFail("error getting codespaces: HTTP 403: Must have admin rights to Repository. (https://api.github.com/user/codespaces?per_page=30)\nThis API operation needs the \"codespace\" scope. To request it, run:  gh auth refresh -h github.com -s codespace\n")),
+  (e) => e.message.includes("gh auth refresh -h github.com -s codespace") && ("mesh: " + e.message).length <= 157);
+await assert.rejects(() => findCodespace("gh", ghFail("To get started with GitHub CLI, please run:  gh auth login\n")), /Run: gh auth login/);
+await assert.rejects(() => findCodespace("gh", ghFail("something else broke\n")), /^Error: something else broke$/);
 
 // keepalive: starts by itself on first use, sends real ssh traffic on a schedule, stops on close
 const kaCmds = []; const kt = createSshTransport({ codespace: "cs-ka", config: { file: "/dev/null", host: "h" }, keepaliveMs: 40,
