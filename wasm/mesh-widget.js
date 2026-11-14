@@ -432,8 +432,8 @@
     return fetch("/api/tunnel/pair/start", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ platform: osKind() }) })
       .then(function (r) { if (!r.ok) throw new Error("code"); return r.json(); })
       .then(function (j) { return fetch(TC_LOCAL + "/reset", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: j.code }) }); })
-      .then(function (r) { if (!r.ok) throw new Error("reset"); tcAutoFails = 0; toast("Tunnel reset. It now uses this account’s key."); })
-      .catch(function () { tcAutoFails++; toast("Could not reset the tunnel. Try again, or use Setup Tunnel."); })
+      .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error("reset: " + ((j && j.error) || "HTTP " + r.status)); }); tcAutoFails = 0; toast("Tunnel reset. It now uses this account’s key."); })
+      .catch(function (e) { tcAutoFails++; var m = String((e && e.message) || ""); toast("Could not reset the tunnel" + (m.indexOf("reset: ") === 0 ? " (" + m.slice(7, 90) + ")" : "") + ". Try again, or use Setup Tunnel."); })
       .then(function () { tcBusy = false; return tcRefresh(); });
   }
   function tcRefresh() {

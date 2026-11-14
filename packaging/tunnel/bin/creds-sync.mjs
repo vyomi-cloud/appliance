@@ -42,9 +42,12 @@ export function createCredsSync({ env = process.env, fetchFn = globalThis.fetch,
   }
 
   /** Redeem a pairing code at the PINNED portal and replace the credentials file (mode 600, previous file kept as .bak). */
-  async function reset(code, host = "tunnel reset") {
+  async function reset(code, host = "tunnel reset", origin = "") {
     if (!CODE_RE.test(String(code || ""))) { const e = new Error("bad code"); e.status = 400; throw e; }
-    const portal = (loadCredentials({ env })?.portal || env.VYOMI_PORTAL_URL || DEFAULT_PORTAL).replace(/\/$/, "");
+    // The portal is pinned to the one in the credentials file, EXCEPT that a request coming from the real https://vyomi.cloud page may re-point
+    // a tunnel that was paired elsewhere (e.g. a dev portal) at vyomi.cloud: that origin is the genuine portal and cannot be spoofed by a page.
+    const home = /^https:\/\/(www\.)?vyomi\.cloud$/.test(origin || "") ? DEFAULT_PORTAL : "";
+    const portal = (home || loadCredentials({ env })?.portal || env.VYOMI_PORTAL_URL || DEFAULT_PORTAL).replace(/\/$/, "");
     let r;
     try { r = await fetchFn(portal + "/api/tunnel/pair/redeem", { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(20000),
       body: JSON.stringify({ code, host: String(host).replace(/[^A-Za-z0-9._ -]/g, "").slice(0, 40) }) }); }

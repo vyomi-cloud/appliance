@@ -129,7 +129,7 @@ const server = http.createServer((req, res) => {
       try {
         let c;
         if (url.pathname === "/reload") c = await credsSync.check();
-        else { let b = {}; try { b = JSON.parse(Buffer.concat(chunks).toString() || "{}"); } catch { /* */ } c = await credsSync.reset(b.code, "tunnel reset"); }
+        else { let b = {}; try { b = JSON.parse(Buffer.concat(chunks).toString() || "{}"); } catch { /* */ } c = await credsSync.reset(b.code, "tunnel reset", origin); }
         const { state, key_id, portal, checked_at, error } = c; send(200, { ok: true, credentials: { state, key_id, portal, checked_at, error } });
       } catch (e) { send(e.status || 500, { ok: false, error: String(e.message).slice(0, 160) }); }
     });

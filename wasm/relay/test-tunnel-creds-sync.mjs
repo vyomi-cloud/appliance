@@ -63,10 +63,10 @@ try {
   assert.equal(r.statusCode, 403); ok("/reset refuses a non-loopback Host header (DNS rebinding)");
 
   // reset: bad code, then good code swaps the file (600) and the tunnel is ok with the new key
-  r = await H("/reset", { method: "POST", headers: { origin: "https://vyomi.cloud" }, body: JSON.stringify({ code: "nope" }) }); assert.equal(r.status, 400);
-  r = await H("/reset", { method: "POST", headers: { origin: "https://vyomi.cloud" }, body: JSON.stringify({ code: "BADCODEBADCODEBADCODEXX" }) }); assert.equal(r.status, 410);
+  r = await H("/reset", { method: "POST", headers: { origin: "http://localhost:5173" }, body: JSON.stringify({ code: "nope" }) }); assert.equal(r.status, 400);
+  r = await H("/reset", { method: "POST", headers: { origin: "http://localhost:5173" }, body: JSON.stringify({ code: "BADCODEBADCODEBADCODEXX" }) }); assert.equal(r.status, 410);
   valid.delete("VYKAOLD");
-  r = await H("/reset", { method: "POST", headers: { origin: "https://vyomi.cloud" }, body: JSON.stringify({ code: "GOODCODEGOODCODEGOODCODE" }) }); j = await r.json();
+  r = await H("/reset", { method: "POST", headers: { origin: "http://localhost:5173" }, body: JSON.stringify({ code: "GOODCODEGOODCODEGOODCODE" }) }); j = await r.json();
   assert.equal(r.status, 200); assert.equal(j.credentials.state, "ok"); assert.equal(j.credentials.key_id, "VYKANEW");
   assert.match(readFileSync(join(home, "credentials"), "utf8"), /VYKANEW/); assert.equal(statSync(join(home, "credentials")).mode & 0o777, 0o600);
   assert.ok(readdirSync(home).some((f) => f.startsWith("credentials.bak."))); ok("POST /reset with a valid pairing code swaps the credentials (mode 600, backup kept) and re-validates");
