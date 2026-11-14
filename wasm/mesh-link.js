@@ -258,7 +258,10 @@
               clearTimeout(tm);
               if (r.ok) return res();
               if (r.status >= 500) return again("HTTP " + r.status);          // the Mesh is not serving yet
-              rej(new Error("HTTP " + r.status));                              // 401/403/404: retrying will not help
+              // 401/403/404: retrying will not help. Name the reason the Mesh gave (e.g. MeshSessionBadSignature) so a failure can be diagnosed.
+              r.json().then(function (j) { var e = j && j.error; return (e && (e.code || e.Code || (typeof e === "string" ? e : ""))) || (j && (j.code || j.Code || j.message)) || ""; }, function () { return ""; }).then(function (code) {
+                rej(new Error("HTTP " + r.status + (code && typeof code === "string" ? " (" + code.slice(0, 60) + ")" : "")));
+              });
             }, function (e) { clearTimeout(tm); again(e && e.name === "AbortError" ? "timeout" : String(e && e.message || e)); });
           }
           go();
