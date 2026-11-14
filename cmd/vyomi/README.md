@@ -45,6 +45,7 @@ claude mcp add vyomi -- vyomi mcp                      # Claude Code
 | `vyomi_env` | Env vars + SDK config + Terraform block for one cloud, with gotchas | no |
 | `vyomi_scan_repo` | Finds SDK / Terraform usage in a project, maps it to Vyomi coverage + warnings | no |
 | `vyomi_write_env` | Writes `.env.vyomi` (never overwrites unless asked) | yes |
+| `vyomi_agents_md` | Proposes a marker-delimited "Local cloud: Vyomi" section for the project's `AGENTS.md` (plus an `@AGENTS.md` import when a `CLAUDE.md` would hide it); read-only, the agent applies it | no |
 
 Resources: `vyomi://services/{aws,gcp,azure}`, `vyomi://env/{aws,gcp,azure}`, `vyomi://settings`.
 

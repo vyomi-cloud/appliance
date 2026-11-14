@@ -22,7 +22,7 @@ request handling, the network, and the portal. The MCP is treated as one more un
 | | Threat A: an agent misuses the MCP | Threat B: a customer tampers with the licensed core |
 |---|---|---|
 | Who | A prompt-injected or over-eager coding agent | The person who owns the machine |
-| Control | Narrow tool surface: 7 read-only tools + `vyomi_write_env` (refuses paths outside the project and names other than `.env.vyomi*`); the raw licence block never reaches the model | Server-side checks, host lockdown, integrity checks reported to the portal |
+| Control | Narrow tool surface: 8 read-only tools (incl. `vyomi_agents_md`, which only proposes AGENTS.md text) + `vyomi_write_env` (refuses paths outside the project and names other than `.env.vyomi*`); the raw licence block never reaches the model | Server-side checks, host lockdown, integrity checks reported to the portal |
 | Can it be prevented? | Yes | Partly. On hardware the user owns, much of it can only be detected |
 | State | Done (tool surface pinned, #676) | In progress (§3) |
 

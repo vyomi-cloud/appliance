@@ -157,6 +157,7 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			}, "path", "clouds"),
 			handler: s.toolWriteEnv,
 		},
+		s.agentsMDTool(),
 	}
 }
 

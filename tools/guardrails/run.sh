@@ -40,11 +40,13 @@ go_tests() {
 }
 skip() { rows+=("| $1 | $2 | SKIP: $3 |"); echo "SKIP  [$1] $2 ($3)"; }
 
-# Threat A: an agent misusing the MCP. The tool surface is pinned (7 read-only tools + 1 writer).
-run "A" "MCP tool surface pinned (7 read-only + 1 writer); the writer carries destructiveHint on the wire" \
+# Threat A: an agent misusing the MCP. The tool surface is pinned (8 read-only tools + 1 writer).
+run "A" "MCP tool surface pinned (8 read-only + 1 writer); the writer carries destructiveHint on the wire" \
   go_tests TestMCPToolSurfaceIsPinned TestMCPToolAnnotationsOnTheWire
 run "A" "vyomi_write_env refuses paths outside the project and non-.env.vyomi names" \
   go_tests TestMCPWriteEnv TestMCPWriteEnvRequiresExplicitApproval
+run "A" "vyomi_agents_md only proposes AGENTS.md text: it writes nothing and refuses symlinks and bad input" \
+  go_tests TestAgentsMDNeverWrites
 
 # Threat B: tampering with the core. Enforced on the Mesh host and in the tunnel, for every caller.
 run "1, 8" "vyomi-gate: core containers, injection strings and unknown verbs never reach docker" "$NODE" wasm/relay/test-mesh-gate.mjs
