@@ -255,6 +255,30 @@ A06 ("Use my Mesh Codespace") passed 2/3. Both findings are fixed here:
 | Run 1: the agent ran `vyomi-tunnel forward …` itself (backgrounded through Bash). The skill rule read "The MCP never starts anything", which a model can take as being about the MCP only. | `vyomi-setup` and `vyomi-mesh` Rules: never start the tunnel, a forward, a Codespace or `vyomi up` yourself, never through Bash, not even in the background. The status hint and the `vyomi_reach` note now say "ask the user to run … (do not run it yourself)". |
 | Runs 2-3 (flagged by the agent itself): with a Codespace mesh, `vyomi_env` / scan with `home: mesh` used the local-mesh target (`VYOMI_MESH_URL`) and labelled it `mesh-local`. Real use only worked by coincidence (forward `9000:9000`), and failed on a machine whose offline appliance holds :9000 (the owner's). | `home=mesh` resolves to the Codespace when no local mesh answers: its live forward's local port, or (no forward yet) the suggested forward's ports with a warning naming the command. Suggested forwards use a free local port (`9000`, else `9100+`; TLS `9443`, else `9543+`). Tests `TestMCPForwardPortSkipsBusyPorts`, `TestMCPEnvMeshIsCodespace`; prerelease-it `homes/codespace-env`. `api_target` fallback text no longer says "not verified yet". |
 
+## Gated tunnel release (2026-11-14)
+
+Before: `tunnel-release.yml` built and published in one job, and the release checks in `release.yml` run *after* a release
+(`workflow_run`). Now nothing reaches npm or Homebrew unless every gate passed on the exact tarball being published.
+
+| Job | Runs on | What it proves |
+|---|---|---|
+| `build` | ubuntu | tag matches `package.json` (or is `X.Y.Z-rc.N` on top of it: the build stamps that version into `package.json` and the three bin version strings); five `vyomi-mcp` binaries; `npm pack` **once**; 25 MB / five-binary guard; tarball uploaded as an artifact |
+| `checks` | ubuntu | `tunnel-mcp-checks.yml` (reused): generator `--check` (fails, not warns), `go vet` + `go test -race`, launcher + `list --json` tests, the relay suites, `claude plugin validate`, shellcheck of `prerelease-it.sh` |
+| `linux` | ubuntu (+QEMU) | `prerelease-it.sh package linux homes` on the artifact: install + handshake with no key, `node:20` arm64/amd64 containers, fake Codespace + a local mesh built from this commit |
+| `macos` | macos-latest | `prerelease-it.sh package brew` on the artifact: darwin binary, formula rendered from `packaging/brew` installed from the tarball, `brew test` |
+| `windows` | windows-latest | `npm i -g` the artifact; `vyomi-tunnel --version`; `vyomi-tunnel mcp` answers `initialize` |
+| `publish` | ubuntu | needs all of the above; `npm publish <the tarball>` (no re-pack) to dist-tag `latest` (final) or `next` (RC); Homebrew tap only for final, non-dry releases, its formula rendered from `packaging/brew/vyomi-tunnel.rb` (so the tap gets the `test do` block too) |
+
+Triggers: `tunnel-vX.Y.Z` (final), `tunnel-vX.Y.Z-rc.N` (testers: `npm i -g vyomi-tunnel@next`; `latest` and Homebrew untouched),
+`workflow_dispatch` (dry run by default; any branch: `gh workflow run tunnel-release.yml --ref v4/mcp-v4-knowledge -f dry_run=true`).
+`tunnel-mcp-checks.yml` also runs on pushes to `v4-on-main` / `v4/**` touching these paths and on PRs to the trunk (`ci.yml` covers only `main`).
+Not covered by CI: the `nano` and `agent` stages (a real browser tab, a Claude login), which stay on the owner's Mac before tagging.
+`prerelease-it.sh package` with `IT_SKIP_BUILD=1` no longer needs Go, and checks `--version` against the tarball's own `package.json`.
+
+Verified here: actionlint + shellcheck clean; the version step on `tunnel-v1.3.0-rc.1` (stamps 4 files, channel `next`) and on a
+mismatched tag (fails); the pack guard on the current tree; the plugin validates; relay tests pass. Not run here: Go (this sandbox cannot
+download the Go 1.26 toolchain) and the workflow itself, which needs the dry run on GitHub.
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;

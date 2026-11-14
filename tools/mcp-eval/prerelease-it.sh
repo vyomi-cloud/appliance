@@ -97,11 +97,12 @@ EOF
 # ---------- stages ----------
 stage_package() {
   say "package: build what tunnel-release.yml publishes, install it in $PREFIX"
-  need package go node npm python3 || return 0
   local tgz
   if [ "${IT_SKIP_BUILD:-}" = "1" ] && ls "$IT_DIR"/vyomi-tunnel-*.tgz >/dev/null 2>&1; then
+    need package node npm python3 || return 0
     note "IT_SKIP_BUILD=1: reusing $(ls "$IT_DIR"/vyomi-tunnel-*.tgz)"
   else
+    need package go node npm python3 || return 0
     rm -f "$IT_DIR"/vyomi-tunnel-*.tgz
     check package build "scripts/build_tunnel_mcp.sh (5 binaries)" bash "$ROOT/scripts/build_tunnel_mcp.sh" || return 0
     check package pack "npm pack" sh -c "cd '$ROOT/packaging/tunnel' && npm pack --pack-destination '$IT_DIR' --json > '$IT_DIR/pack.json'" || return 0
@@ -115,8 +116,8 @@ stage_package() {
   else rec package size FAIL "$((bytes/1024/1024)) MiB > 25 MiB guard"; fi
   rm -rf "$PREFIX"
   check package install "npm i -g --prefix $PREFIX" npm i -g --prefix "$PREFIX" "$tgz" || return 0
-  check package version "vyomi-tunnel --version = package.json" sh -c \
-    "'$PREFIX/bin/vyomi-tunnel' --version | grep -q \"\$(node -p \"require('$ROOT/packaging/tunnel/package.json').version\")\""
+  check package version "vyomi-tunnel --version = the tarball's package.json" sh -c \
+    "'$PREFIX/bin/vyomi-tunnel' --version | grep -qF \"vyomi-tunnel \$(node -p \"require('$PREFIX/lib/node_modules/vyomi-tunnel/package.json').version\")\""
   local plat; plat="$(node -p 'process.platform+"-"+process.arch')"
   check package exec-bit "bundled mcp/$plat binary is executable" sh -c \
     "test -x \"\$(ls -d '$PREFIX'/lib/node_modules/vyomi-tunnel/mcp/$plat/vyomi-mcp*)\""
