@@ -28,6 +28,7 @@
   // "Check again" only makes sense once the tunnel has worked at least once on this browser (installed, or seen answering); before that it does nothing.
   function tunnelSeen() { try { return localStorage.getItem("vyomi.tunnelSeen") === "1"; } catch (_) { return false; } }
   function markTunnelSeen() { try { localStorage.setItem("vyomi.tunnelSeen", "1"); } catch (_) {} }
+  var BOLT = '<svg class="bolt" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
   function isMac() { return osKind() === "mac"; }
   function canInstall() { return !!osKind(); }
   function termName() { var k = osKind(); return k === "windows" ? "PowerShell" : k === "mac" ? "Terminal" : "a terminal"; }
@@ -190,7 +191,7 @@
       + "#vy-bw .act{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:170px}#vy-bw .act .go{white-space:nowrap}"
       + "#vy-bw .go{display:block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 16px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
       + "#vy-bw .go.stop{background:#b42318}#vy-bw .go[disabled]{opacity:.6;cursor:default}"
-      + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}#vy-bw .main{padding:8px 12px;border:1px solid rgba(110,120,130,.45);border-radius:12px;align-self:start}#vy-bw .main .subt{text-align:left;margin:2px 0 0}"
+      + "#vy-bw .sub{font-size:12px;color:#6b7280;text-align:center}#vy-bw .main .subt{text-align:left;margin:3px 0 0;font-size:13px;color:#414d5c}"
       + "#vy-bw .cd{margin-top:6px;text-align:center;font:600 22px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.04em;font-variant-numeric:tabular-nums}#vy-bw .cdl{text-align:center;font-size:11px;color:#6b7280;margin-top:-2px}"
       + "#vy-bw .err{color:#b42318;font-size:13px;margin-top:4px}"
       + "#vy-bw .ka{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#6b7280;cursor:pointer;user-select:none}#vy-bw .ka .sw{position:relative;width:32px;height:18px;border-radius:999px;border:0;padding:0;background:#c3c9d1;cursor:pointer;transition:background .15s}#vy-bw .ka .sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}#vy-bw .ka .sw[aria-checked=true]{background:#2f6fdc}#vy-bw .ka .sw[aria-checked=true]::after{transform:translateX(14px)}#vy-bw .ka .sw[disabled]{opacity:.6;cursor:default}"
@@ -220,7 +221,18 @@
       + "#vy-bw[data-cloud=azure] .tag{border-radius:2px;background:#ebf3fc;color:#0f6cbd;font-weight:600}#vy-bw[data-cloud=azure] .tag.free{background:#f0f0f0;color:#424242}"
       + "#vy-bw[data-cloud=azure] .go{border-radius:4px;background:#0f6cbd;font-weight:600;padding:7px 14px}"
       + "#vy-bw[data-cloud=azure] .go.stop{background:#fff;color:#b10e1c!important;border:1px solid #d1d1d1}"
-      + "#vy-bw[data-cloud=azure] a{color:#0f6cbd}";
+      + "#vy-bw[data-cloud=azure] a{color:#0f6cbd}"
+      // Card layout (accent bar | title + plan line | divider | action; message row under a rule). Accent / radius follow each cloud's own look.
+      + "#vy-bw{--vy-accent:#ff9900;padding:0;gap:0;overflow:hidden;background:#fafafa;border-radius:12px;align-items:stretch}"
+      + "#vy-bw::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--vy-accent)}"
+      + "#vy-bw .bolt{color:var(--vy-accent);flex:none}"
+      + "#vy-bw .main{padding:14px 20px 14px 26px;align-self:center}"
+      + "#vy-bw .act{padding:14px 22px;border-left:1px solid rgba(128,128,128,.25);justify-content:center;align-self:stretch}"
+      + "#vy-bw .foot{padding:12px 22px 12px 26px;gap:6px 20px}"
+      + "@media(max-width:560px){#vy-bw .act{border-left:0;border-top:1px solid rgba(128,128,128,.25)}}"
+      + "#vy-bw[data-cloud=aws]{--vy-accent:#ff9900;border-radius:12px;border-color:#c6c6cd}"
+      + "#vy-bw[data-cloud=gcp]{--vy-accent:#0b57d0;border-radius:16px;background:#f8fafd}"
+      + "#vy-bw[data-cloud=azure]{--vy-accent:#0f6cbd;border-radius:6px;background:#fafafa}";
     document.head.appendChild(st);
   }
   function api(path, body) {
@@ -278,10 +290,10 @@
     var b = B(), a = b && b.account && b.account(), x = b && b.session && b.session(), main, act = "", ka = "";
     card.className = "";
     if (!a) {                                                       // not signed in / account unavailable
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Your Free plan runs everything in the browser. Pro and Max add the Vyomi Global Mesh: real compute and AI on your own free GitHub quota.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Your Free plan runs everything in the browser. Pro and Max add the Vyomi Global Mesh: real compute and AI on your own free GitHub quota.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">See plans</a>';
     } else if (view === "connect") {                                // inline GitHub connect
-      main = '<h4>\u26A1 Connect your GitHub account</h4><p>The Mesh runs on the free quota of <b>your own GitHub account</b>. Your Vyomi sign-in (Google, LinkedIn or any other) stays the same; we just link GitHub to it.</p><p class="fine">No GitHub account? <a href="https://github.com/signup" target="_blank" rel="noopener">Create a free one</a> (about 2 minutes), then come back and click Connect GitHub.</p>';
+      main = '<h4>' + BOLT + 'Connect your GitHub account</h4><p>The Mesh runs on the free quota of <b>your own GitHub account</b>. Your Vyomi sign-in (Google, LinkedIn or any other) stays the same; we just link GitHub to it.</p><p class="fine">No GitHub account? <a href="https://github.com/signup" target="_blank" rel="noopener">Create a free one</a> (about 2 minutes), then come back and click Connect GitHub.</p>';
       act = '<button class="go" data-gh>Connect GitHub</button><div class="sub"><a href="#" data-back>Cancel</a></div>';
     } else if (a.effective) {                                       // Pro / Max / active trial, switched on
       var ss = x && x.session, stt = ss && ss.state, conn = !!(x && x.github && x.github.connected);
@@ -343,18 +355,18 @@
         var kon = ss.keep_alive !== false;
         ka = '<label class="ka" title="' + (kon ? "Your Mesh stays up for the whole 8 hours even if this tab is closed or inactive. Open any Vyomi console to reattach (your local tunnel must be running). If the tunnel is lost, the Mesh still ends at the 8-hour limit." : "Off: the Mesh stops after 30 minutes with no Vyomi tab open.") + '">Keep running when this tab is closed <button type="button" class="sw" role="switch" data-ka aria-checked="' + kon + '" aria-label="Keep the Mesh running when this tab is closed"' + (busy ? " disabled" : "") + '></button></label>';
       }
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4>'
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag">' + esc(a.source === "trial" ? tierName + " trial" : tierName) + '</span></h4>'
         + ([sub, hrs].filter(Boolean).length ? '<div class="sub subt">' + esc([sub, hrs].filter(Boolean).join(" \u00b7 ")) + '</div>' : '')
         + '<p' + (warn ? ' class="warn"' : '') + '>' + esc(line) + '</p>' + stg;
       act = btn + tunLink;
     } else if (a.status === "active" || a.status === "trial") {      // entitled but switched off
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag">' + esc(a.tier || "pro") + '</span></h4><p>Your plan includes the Mesh. It is switched off.</p>';
       act = '<button class="go" data-en ' + (busy ? "disabled" : "") + '>' + (busy ? "Turning on\u2026" : "Turn on the Mesh") + '</button>';
     } else if (!a.trial_used) {                                     // Free, the account's one 30-day trial not started yet
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Try the Mesh with a free 30-day Pro trial (one cloud): real compute and AI on your own free GitHub quota. One trial per account.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag free">Free</span></h4><p>Try the Mesh with a free 30-day Pro trial (one cloud): real compute and AI on your own free GitHub quota. One trial per account.</p>';
       act = '<button class="go" data-tr ' + (busy ? "disabled" : "") + '>' + (busy ? "Starting trial\u2026" : "Start 30-day Pro trial") + '</button><div class="sub">or <a href="' + PRICING + '" target="_blank" rel="noopener">compare plans</a></div>';
     } else {                                                        // trial used / expired
-      main = '<h4>\u26A1 Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
+      main = '<h4>' + BOLT + 'Vyomi Global Mesh <span class="tag free">Free</span></h4><p>The Mesh is included with Pro and Max. Upgrade to use it.</p>';
       act = '<a class="go" href="' + PRICING + '" target="_blank" rel="noopener">Upgrade to Pro / Max</a>';
     }
     // Fixed layout for every state: row 1 = title (left, no wrap) + buttons (right); row 2 spans both columns with the note lines.
