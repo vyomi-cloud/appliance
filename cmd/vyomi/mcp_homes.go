@@ -356,9 +356,17 @@ func runTunnelList(ctx context.Context, bin, scope string) (*tunnelList, string)
 
 var forwardTo9000 = regexp.MustCompile(`->\s*(\S+):9000\b`)
 
-// portFree reports whether 127.0.0.1:p can be bound right now (a variable so tests are independent of the host).
+// portFree reports whether a forward could own 127.0.0.1:p right now (a variable so tests are independent of the host).
+// Busy = something answers a connect, or 127.0.0.1:p cannot be bound. The connect matters on macOS: there a socket on
+// *:9000 (Docker Desktop publishing the offline appliance) does not stop a bind to 127.0.0.1:9000, so a bind-only test
+// called :9000 free and the forward would have shadowed the appliance for 127.0.0.1 clients.
 var portFree = func(p int) bool {
-	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(p))
+	if c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond); err == nil {
+		_ = c.Close()
+		return false
+	}
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return false
 	}

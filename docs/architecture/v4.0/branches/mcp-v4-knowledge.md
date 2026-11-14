@@ -307,6 +307,18 @@ MCP's 160-char note clip. Test in `test-mesh-ssh-transport.mjs` (fails on the ol
 - Not done (owner left it open): the MCP reading capabilities live from the running simulator (`/api/console/capabilities`)
   with the baked copy as fallback, which would remove the need for knowledge-only tunnel releases.
 
+## First real Codespace (owner's Mac, 2026-11-14)
+
+A hand-made Mesh Codespace from `vyomi-cloud/sandbox` (`.devcontainer/mesh`; the appliance copy under `codespace/` is not a path
+GitHub accepts) with `VYOMI_MESH_CODESPACE` set: `list mesh --json` listed `host` and `vyomi-mesh-simulator-1`, and `vyomi_status`
+reported `mesh-codespace` reachable. Bug found: both suggested `forward ... 9000:9000` although the offline appliance held :9000.
+On macOS a socket on `*:9000` (Docker Desktop) does not stop a bind to `127.0.0.1:9000`, so the bind-only check called it free,
+and the forward would have shadowed the appliance for 127.0.0.1 clients. Fixed: the MCP's `portFree` and the tunnel's new
+`localPortBusy` also try a connect; `list` suggests a free local port (`+100`, as the MCP does); `forward` refuses a port that
+something answers on and names a free one. Tests: `TestMCPPortFreeSeesAWildcardListener` (Go, 64/64, `-race`), and the forward
+refusal in `test-mesh-ssh-transport.mjs`. On Linux a wildcard listener already blocks the bind, so the Go test only has teeth on
+macOS; the JS test fails on the old code (its message differs).
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;

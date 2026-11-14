@@ -542,6 +542,27 @@ func stillRunning(pid int) bool {
 
 // Prerelease eval A06: a suggested forward must use a free local port (an offline appliance often holds :9000
 // and :9443 on the user's machine).
+// realPortFree is the host check, captured before any test stubs portFree (isolateHomes does).
+var realPortFree = portFree
+
+// On macOS a socket on *:9000 (Docker Desktop publishing the offline appliance) does not stop a bind to 127.0.0.1:9000,
+// so a bind-only check suggested `forward ... 9000:9000` next to a running appliance (seen live on the owner's Mac).
+// The check must also see a port that merely answers.
+func TestMCPPortFreeSeesAWildcardListener(t *testing.T) {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	if realPortFree(port) {
+		t.Fatalf("port %d has a listener on all addresses but portFree says free", port)
+	}
+	_ = l.Close()
+	if !realPortFree(port) {
+		t.Fatalf("port %d is closed again but portFree says busy", port)
+	}
+}
+
 func TestMCPForwardPortSkipsBusyPorts(t *testing.T) {
 	isolateHomes(t)
 	busy := map[int]bool{9000: true, 9100: true, 9443: true}

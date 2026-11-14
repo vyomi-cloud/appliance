@@ -400,6 +400,7 @@ export async function main(argv) {
       if (o.error) meshP = Promise.resolve({ err: o.error });
       else { transport = o.transport; meshP = transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })); }
     }
+    const ssh = await import("./mesh-ssh.mjs");
     const port = process.env.RELAY_PORT || 8090;
     if (kinds.some((k) => ["api", "vm", "db"].includes(k))) try {
       const h = await (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) })).json();
@@ -410,7 +411,9 @@ export async function main(argv) {
     const m = await meshP;
     if (m && m.err) notes.push("mesh: " + m.err);
     else if (m) for (const t of m.ts) {
-      const how = t.kind === "k3s" ? `vyomi-tunnel forward ${t.name} 6443:6443` : t.ssh ? `ssh ${t.name}${SUFFIX}` : t.ports.length ? `vyomi-tunnel forward ${t.name} ${t.ports[0]}:${t.ports[0]}` : "";
+      // a free local port, as the MCP does: the offline appliance or another stack often holds :9000 / :6443 here
+      const fwd = async (r) => `vyomi-tunnel forward ${t.name} ${await ssh.freeLocalPort(r)}:${r}`;
+      const how = t.kind === "k3s" ? await fwd(6443) : t.ssh ? `ssh ${t.name}${SUFFIX}` : t.ports.length ? await fwd(t.ports[0]) : "";
       rows.push({ where: "mesh", name: t.name, type: t.kind, address: t.ip ? t.ip + (t.ports[0] ? ":" + t.ports[0] : "") : "", connect: how });
     }
     transport?.close();

@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
+import nodeNet from "node:net";
 import { ensureGh, ghAuthOk } from "./gh-manager.mjs";
 
 const NAME = /^[A-Za-z0-9._-]{1,80}$/;
@@ -342,10 +343,35 @@ export async function connectSsh(name, { port = 22, transport, stdin = process.s
   });
 }
 
+/** Is 127.0.0.1:<port> taken? Something answers a connect, or it cannot be bound. The connect matters on macOS, where a
+ *  socket on *:<port> (Docker Desktop publishing the offline appliance on :9000) does not stop a bind to 127.0.0.1:<port>:
+ *  a bind-only test calls it free and the forward then shadows that service for every 127.0.0.1 client. */
+export async function localPortBusy(port, net = nodeNet) {
+  const answers = await new Promise((r) => {
+    const s = net.connect({ host: "127.0.0.1", port }); const t = setTimeout(() => { s.destroy(); r(false); }, 300);
+    s.on("connect", () => { clearTimeout(t); s.destroy(); r(true); }); s.on("error", () => { clearTimeout(t); r(false); });
+  });
+  if (answers) return true;
+  return new Promise((r) => { const srv = net.createServer(); srv.once("error", () => r(true)); srv.listen(port, "127.0.0.1", () => srv.close(() => r(false))); });
+}
+
+/** The local port to suggest for forwarding <remote>: <remote> itself when free here, else the first free one of <remote>+100..+199
+ *  (9000 -> 9100+, 9443 -> 9543+, the same rule as the vyomi MCP's forward hint). */
+export async function freeLocalPort(remote, net = nodeNet) {
+  if (!(await localPortBusy(remote, net))) return remote;
+  for (let p = remote + 100; p < remote + 200; p++) if (!(await localPortBusy(p, net))) return p;
+  return remote;
+}
+
 /** `forward`: listen on 127.0.0.1:<local>; each accepted socket is one ssh stream to <target>:<remote> inside the Codespace. */
 export async function forwardSsh(target, { local, remote, transport, net, stderr = process.stderr } = {}) {
   const t = await transport.resolve(target, remote);
   if (!t) { stderr.write(`vyomi-tunnel: ${target}: not found in the Codespace\n`); return { close() {}, done: Promise.resolve(3), port: 0 }; }
+  if (local > 0 && await localPortBusy(local, net)) {
+    const alt = await freeLocalPort(remote, net);
+    stderr.write(`vyomi-tunnel: 127.0.0.1:${local} is already in use on this machine (another Vyomi or Docker stack?). Use another local port: vyomi-tunnel forward ${target} ${alt}:${remote}\n`);
+    return { close() {}, done: Promise.resolve(1), port: 0 };
+  }
   const socks = new Set(); let finish; const done = new Promise((r) => { finish = r; });
   const srv = net.createServer(async (sock) => {
     socks.add(sock); sock.setNoDelay(true);
