@@ -1,18 +1,7 @@
 {
- "at": "2026-11-14T00:10:24+00:00",
+ "at": "2026-11-14T01:10:26+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:1b0af6c3eaef",
-   "title": "Amazon OpenSearch Serverless supports intelligent ingestion for time series collection",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-serverless-nextgen-time-series-intelligent-ingestion",
-   "detail": "The next generation of Amazon OpenSearch Serverless now supports intelligent ingestion for time series collections. You can bring logs and event data from Amazon S3 into a time series collection without operating an ingestion pipeline. With intelligent ingestion, you can now complete the setup and get data ingested with a few clicks in the AWS Management Console or with a single API call. Intelligent ingestion detects the data type, parses each record, and indexes it into your collection. It works with observability logs in JSON, NDJSON, and JSON arrays. Use an ingestion job for one-time loads",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": [
   "maven/software.amazon.awssdk:s3: The read operation timed out",
   "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
