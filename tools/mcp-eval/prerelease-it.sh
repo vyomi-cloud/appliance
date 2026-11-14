@@ -384,7 +384,12 @@ stage_clean() {
 
 # ---------- main ----------
 cmd="${1:-all}"
-[ "$cmd" = "clean" ] || : > "$RESULTS"
+# `all` starts a fresh results file; a single stage replaces only its own rows, so stages run one by one add up.
+case "$cmd" in
+  all) : > "$RESULTS" ;;
+  package|linux|brew|homes|nano|agent)
+    if [ -f "$RESULTS" ]; then grep -v "^$cmd"$'\t' "$RESULTS" > "$RESULTS.tmp" || true; mv "$RESULTS.tmp" "$RESULTS"; fi ;;
+esac
 case "$cmd" in
   package) stage_package ;;
   linux)   stage_linux ;;
