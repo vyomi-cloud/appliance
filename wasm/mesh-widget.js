@@ -443,23 +443,43 @@
       tcPaint();
     });
   }
+  var TC_ICON = {
+    ok: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 8.3l2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    warn: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l6.6 11.6H1.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.2v3.4M8 11.3v.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    grey: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4M8 4.7v.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>' };
   function tcPaint() {
     if (!tc) return;
     var v = tcView;
     if (!v || v.kind === "hide") { if (tc.isConnected) tc.remove(); return; }
-    tc.setAttribute("data-k", v.kind);
+    tc.setAttribute("data-k", v.kind); tc.setAttribute("data-cloud", CLOUD);
     var btn = v.action ? '<button class="tb" data-tcr ' + (tcBusy ? "disabled" : "") + '>' + (tcBusy ? "Resetting…" : v.action) + '</button>' : "";
     var tog = v.kind === "bad" ? '<label class="ta"><input type="checkbox" data-tca ' + (tcAuto() ? "checked" : "") + '> Reset automatically</label>' : "";
-    tc.innerHTML = '<span class="dot"></span><span class="tt">' + esc(v.text) + '</span>' + tog + btn;
+    tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + '</span>' + tog + btn;
     place();
   }
   function tcBoot() {
     var st = document.createElement("style");
-    st.textContent = "#vy-bwc{display:flex;flex-direction:column;min-width:0}.vy-nano-video>#vy-bwc{order:2;flex:1 1 340px;margin:0 0 16px}.vy-nano-video>#vy-bwc>#vy-bw{margin:0;flex:none}#vy-bwc>#vy-bw{flex:none}#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-10px 0 18px;padding:5px 12px;border:1px solid #d5dbdb;border-radius:10px;font:12.5px/1.35 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;color:#16191f}"
-      + "#vy-tc .dot{width:9px;height:9px;border-radius:50%;background:#9ba7b6;flex:none}#vy-tc[data-k=ok] .dot{background:#1d8102}#vy-tc[data-k=bad]{border-color:#d9a400;background:#fffbea}#vy-tc[data-k=bad] .dot,#vy-tc[data-k=old] .dot{background:#d9a400}#vy-tc[data-k=old]{border-color:#d9a400;background:#fffbea}"
-      + "#vy-tc .tt{flex:1 1 160px}.vy-nano-video>#vy-bwc>#vy-tc{margin:8px 0 0}#vy-tc .ta{font-size:12px;color:#414d5c;display:flex;align-items:center;gap:5px;cursor:pointer}"
-      + "#vy-tc .tb{cursor:pointer;border:1px solid #0b57d0;background:#0b57d0;color:#fff;border-radius:8px;padding:3px 10px;font-size:12px;font:inherit;font-weight:600}#vy-tc .tb[disabled]{opacity:.6;cursor:default}"
-      + "@media (prefers-color-scheme:dark){#vy-tc{background:#1b232d;color:#e9ebed;border-color:#3b4754}#vy-tc[data-k=bad],#vy-tc[data-k=old]{background:#2c2610}#vy-tc .ta{color:#c6c6cd}}";
+    st.textContent = "#vy-bwc{display:flex;flex-direction:column;min-width:0}.vy-nano-video>#vy-bwc{order:2;flex:1 1 340px;margin:0 0 16px}.vy-nano-video>#vy-bwc>#vy-bw{margin:0;flex:none}#vy-bwc>#vy-bw{flex:none}"
+      + ".vy-nano-video>#vy-bwc>#vy-tc{margin:8px 0 0}"
+      // shared layout: icon, text, [toggle], button
+      + "#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-10px 0 18px;padding:7px 12px;font-size:13px;line-height:1.35;--tc-fg:#16191f;--tc-bg:#fff;--tc-bd:#d5dbdb;--tc-ic:#5f6b7a;background:var(--tc-bg);color:var(--tc-fg);border:1px solid var(--tc-bd)}"
+      + "#vy-tc .ic{flex:none;width:16px;height:16px;color:var(--tc-ic)}#vy-tc .tt{flex:1 1 160px}#vy-tc .ta{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--tc-fg)}"
+      + "#vy-tc .tb{cursor:pointer;font:inherit;font-weight:600;white-space:nowrap}#vy-tc .tb[disabled]{opacity:.55;cursor:default}"
+      // AWS Cloudscape: flat alert, 2px accent bar on the left, normal (outlined) button
+      + "#vy-tc[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border-radius:8px;border:1px solid var(--tc-bd);border-left:4px solid var(--tc-ic)}"
+      + "#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#f2fcf3;--tc-bd:#037f0c;--tc-ic:#037f0c}#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-bg:#fffce9;--tc-bd:#8d6605;--tc-ic:#8d6605}"
+      + "#vy-tc[data-cloud=aws] .tb{background:#fff;color:#0972d3;border:2px solid #0972d3;border-radius:20px;padding:2px 14px;font-size:13px}#vy-tc[data-cloud=aws] .tb:hover:not([disabled]){background:#f2f8fd}"
+      // GCP Material: tonal banner, rounded, text-style button
+      + "#vy-tc[data-cloud=gcp]{font-family:'Google Sans',Roboto,Arial,sans-serif;border-radius:12px;border-color:transparent;--tc-fg:#1f1f1f;--tc-bg:#f0f4f9;--tc-ic:#5f6368}"
+      + "#vy-tc[data-cloud=gcp][data-k=ok]{--tc-bg:#e6f4ea;--tc-ic:#188038}#vy-tc[data-cloud=gcp][data-k=bad],#vy-tc[data-cloud=gcp][data-k=old]{--tc-bg:#fef7e0;--tc-ic:#b06000}"
+      + "#vy-tc[data-cloud=gcp] .tb{background:transparent;color:#0b57d0;border:0;border-radius:100px;padding:6px 12px}#vy-tc[data-cloud=gcp] .tb:hover:not([disabled]){background:rgba(11,87,208,.08)}"
+      // Azure Fluent: message bar, 4px radius, default (grey-outlined) button
+      + "#vy-tc[data-cloud=azure]{font-family:'Segoe UI',-apple-system,Roboto,sans-serif;border-radius:4px;border-color:transparent;--tc-fg:#323130;--tc-bg:#f3f2f1;--tc-ic:#605e5c}"
+      + "#vy-tc[data-cloud=azure][data-k=ok]{--tc-bg:#dff6dd;--tc-ic:#107c10}#vy-tc[data-cloud=azure][data-k=bad],#vy-tc[data-cloud=azure][data-k=old]{--tc-bg:#fff4ce;--tc-ic:#8a6a00}"
+      + "#vy-tc[data-cloud=azure] .tb{background:#fff;color:#323130;border:1px solid #8a8886;border-radius:2px;padding:3px 12px;font-weight:600}#vy-tc[data-cloud=azure] .tb:hover:not([disabled]){background:#f3f2f1}"
+      + "@media (prefers-color-scheme:dark){#vy-tc[data-cloud=aws]{--tc-fg:#e9ebed}#vy-tc[data-cloud=aws][data-k=ok]{--tc-bg:#0a2a10}#vy-tc[data-cloud=aws][data-k=bad],#vy-tc[data-cloud=aws][data-k=old]{--tc-bg:#2c2610;--tc-ic:#f5c518;--tc-bd:#f5c518}#vy-tc[data-cloud=aws] .tb{background:transparent;color:#89bdee;border-color:#89bdee}"
+      + "#vy-tc[data-cloud=gcp]{--tc-fg:#e3e3e3;--tc-bg:#28292a}#vy-tc[data-cloud=gcp][data-k=bad],#vy-tc[data-cloud=gcp][data-k=old]{--tc-bg:#3a3000;--tc-ic:#fdd663}#vy-tc[data-cloud=gcp] .tb{color:#a8c7fa}"
+      + "#vy-tc[data-cloud=azure]{--tc-fg:#fff;--tc-bg:#292827}#vy-tc[data-cloud=azure][data-k=bad],#vy-tc[data-cloud=azure][data-k=old]{--tc-bg:#433519;--tc-ic:#fde300}#vy-tc[data-cloud=azure] .tb{background:#3b3a39;color:#fff;border-color:#8a8886}}";
     document.head.appendChild(st);
     tc = document.createElement("div"); tc.id = "vy-tc"; tc.setAttribute("data-vyb-keep", "1");
     tc.addEventListener("click", function (e) {

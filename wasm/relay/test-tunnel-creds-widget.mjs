@@ -8,7 +8,7 @@ const calls = []; let script = []; const toasts = []; const store = {};
 const fetch = (url, opt) => { calls.push([url, (opt && opt.method) || "GET", opt && opt.body]); const r = script.shift() || { status: 200, j: {} };
   if (r.fail) return Promise.reject(new Error("net")); return Promise.resolve({ ok: r.status < 300, status: r.status, json: () => Promise.resolve(r.j) }); };
 const tcEl = { isConnected: false, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, remove() { this.isConnected = false; }, set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; } };
-const ctx = { fetch, toast: (t) => toasts.push(t), esc: (s) => String(s), osKind: () => "mac", instOpen: () => (ctx.opened = true), place: () => {}, setInterval: () => 0, setTimeout, clearTimeout, Date, JSON, Promise, encodeURIComponent,
+const ctx = { CLOUD: "aws", fetch, toast: (t) => toasts.push(t), esc: (s) => String(s), osKind: () => "mac", instOpen: () => (ctx.opened = true), place: () => {}, setInterval: () => 0, setTimeout, clearTimeout, Date, JSON, Promise, encodeURIComponent,
   AbortController, localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => (store[k] = v) } };
 vm.createContext(ctx);
 vm.runInContext(src.slice(a, b) + "\nthis.t = { decide: tcDecide, reset: tcReset, refresh: tcRefresh, view: () => tcView, setEl: (e) => { tc = e; }, busy: () => tcBusy };", ctx);
