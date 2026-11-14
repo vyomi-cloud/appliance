@@ -273,7 +273,9 @@
           if (!r.ok) throw new Error("HTTP " + r.status);
           return r.json().then(function (j) { (j.items || []).forEach(put); });
         });
-      }, function (e) { put({ id: "reach", ok: false, detail: String(e && e.message || e), hint: "The tunnel is up but the Mesh does not answer through it. Wait a minute and re-run the checks." }); }).then(finish, function (e) { put({ id: "selfcheck", label: "Health checks", ok: false, detail: String(e && e.message || e), hint: "The Mesh did not answer its health checks." }); return finish(); });
+      }, function (e) { var m = String(e && e.message || e); put({ id: "reach", ok: false, detail: m, hint: /HTTP 50[23]/.test(m)
+        ? "The tunnel on your computer is running but is not linked to this Mesh. Usually its access key belongs to a different Vyomi account than the one you are signed in with. Run `vyomi-tunnel list mesh` (it must show vyomi-mesh-simulator-1); if not, create a key at vyomi.cloud/account/tunnel-credentials while signed in as THIS account, save it as ~/.vyomi/credentials, restart vyomi-tunnel and re-run the checks."
+        : "The tunnel is up but the Mesh does not answer through it. Wait a minute and re-run the checks." }); }).then(finish, function (e) { put({ id: "selfcheck", label: "Health checks", ok: false, detail: String(e && e.message || e), hint: "The Mesh did not answer its health checks." }); return finish(); });
     });
   }
   function joinMesh() {
