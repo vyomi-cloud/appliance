@@ -40,6 +40,6 @@ assert.ok(calls.some((c) => c[0].endsWith("/reset")), "auto reset ran");
 const n1 = calls.filter((c) => c[0].endsWith("/reset")).length; script = [{ status: 200, j: H("revoked") }]; await T.refresh(); await new Promise((r) => setTimeout(r, 20));
 assert.equal(calls.filter((c) => c[0].endsWith("/reset")).length, n1, "not again within 5 minutes"); ok("auto-reset toggle: resets once, then rate-limited");
 // "Reinstall tunnel": a link in every visible state (the strip is the only entry point while the tunnel is running)
-for (const [h, c] of [[H("ok"), { state: "active" }], [H("revoked"), null], [{ ok: true }, null]]) { T.setView(T.decide(h, c)); T.paint(); assert.match(tcEl.innerHTML, /data-tcinst[^>]*>Reinstall tunnel</); }
+for (const [h, c] of [[H("ok"), { state: "active" }], [H("revoked"), null], [{ ok: true }, null]]) { T.setView(T.decide(h, c)); T.paint(); assert.match(tcEl.innerHTML, /data-tcinst[^>]*aria-label="Reinstall tunnel" title="Reinstall tunnel: /); }
 ok("every visible state offers 'Reinstall tunnel' (opens the install dialog)");
 console.log("\nall passed");
