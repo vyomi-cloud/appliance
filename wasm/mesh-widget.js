@@ -44,22 +44,21 @@
   }
   // ── the Setup Tunnel dialog ──────────────────────────────────────────────────────────────────────────────────────────────────
   // The card only shows a "Setup Tunnel" button; the command, copy button, live steps and the package-manager fallback live in this
-  // dialog. It can be closed once setup is done (or has failed / expired / errored, so nobody is ever stuck behind it).
+  // dialog. It can be closed at any time; closing mid-install keeps the install (and its progress polling) going, and reopening resumes it.
   var tm = { open: false, last: "" };
   function instDone() { var st = inst.st || {}, ts = tunnelState(); return !!(st.finished || ts === "up" || ts === "notab"); }
-  function instClosable() { var st = inst.st || {}; return !isMac() || instDone() || inst.s === "idle" || inst.s === "error" || !!st.failed || !!st.expired; }
+  function instTerminal() { var st = inst.st || {}; return !!(st.finished || st.failed || st.expired); }
   function repaint() { paint(); paintModal(); }
   function modalHtml() {
-    var done = instDone(), closable = instClosable(), body;
+    var done = instDone(), body;
     if (!isMac()) {
       body = '<ol class="steps"><li>Install: <code>brew install vyomi-cloud/tap/vyomi-tunnel</code> (or <code>npm i -g vyomi-tunnel</code>)</li><li>Run <code>vyomi-tunnel</code></li><li>Click <b>Start tunnel</b> in the bar at the bottom of this page</li></ol>';
     } else body = installPanel();
     return '<div class="tm-ov" data-tm-ov><div class="tm" role="dialog" aria-modal="true" aria-labelledby="vy-tm-t" tabindex="-1">'
       + '<div class="tm-h"><h3 id="vy-tm-t">' + (done ? "Tunnel ready" : "Set up the Vyomi tunnel") + '</h3>'
-      + (closable ? '<button class="tm-x" data-vyb-keep data-tm-close aria-label="Close">×</button>'
-        : '<button class="tm-x" data-vyb-keep disabled title="You can close this when setup finishes" aria-label="Close (available when setup finishes)">×</button>') + '</div>'
+      + '<button class="tm-x" data-vyb-keep data-tm-close aria-label="Close">\u00d7</button></div>'
       + '<div class="tm-b">' + body + '</div>'
-      + '<div class="tm-f">' + (closable ? '<button class="go" data-vyb-keep data-tm-close>' + (done ? "Done" : "Close") + '</button>' : '<span class="fine">You can close this when setup finishes.</span>') + '</div></div></div>';
+      + '<div class="tm-f"><button class="go" data-vyb-keep data-tm-close>' + (done ? "Done" : "Close") + '</button></div></div></div>';
   }
   function paintModal() {
     var el = document.getElementById("vy-tm-root");
@@ -72,7 +71,7 @@
         if (t.closest && t.closest("[data-inst-get]")) { e.preventDefault(); instGet(); }
         else if (t.closest && t.closest("[data-inst-copy]")) { e.preventDefault(); instCopy(); }
         else if (t.closest && t.closest("[data-tm-close]")) { e.preventDefault(); instClose(); }
-        else if (t.hasAttribute && t.hasAttribute("data-tm-ov")) instClose();                     // click outside the dialog (only when closable)
+        else if (t.hasAttribute && t.hasAttribute("data-tm-ov")) instClose();                     // click outside the dialog
       });
     }
     var html = modalHtml();
@@ -86,12 +85,11 @@
     paint();
   }
   function instClose() {
-    if (!instClosable()) return;
-    tm.open = false; tm.last = ""; clearTimeout(instTimer);
-    var st = inst.st || {}; if (st.finished || st.failed || st.expired) inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 };
+    tm.open = false; tm.last = "";
+    if (instTerminal()) { clearTimeout(instTimer); inst = { s: "idle", cmd: "", code: "", st: null, err: "", copied: false, t0: 0 }; }   // a running install keeps polling in the background
     paintModal(); paint();
   }
-  document.addEventListener("keydown", function (e) { if (tm.open && (e.key === "Escape" || e.key === "Esc") && instClosable()) instClose(); });
+  document.addEventListener("keydown", function (e) { if (tm.open && (e.key === "Escape" || e.key === "Esc")) instClose(); });
   function installPanel() {
     if (inst.s === "idle" || inst.s === "error") {
       return '<div class="inst"><p class="fine">Install the Vyomi tunnel on this Mac with one command. It connects to <b>your</b> account, so there is nothing to copy or configure.</p>'
@@ -125,7 +123,7 @@
       + "#vy-tm-root .tm-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(15,20,25,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}"
       + "#vy-tm-root .tm{box-sizing:border-box;background:#fff;color:#1b2430;width:min(780px,100%);max-height:calc(100vh - 32px);overflow:auto;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.4);outline:0}"
       + "#vy-tm-root .tm-h{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e3e6e8}#vy-tm-root .tm-h h3{margin:0;font-size:17px;font-weight:650}"
-      + "#vy-tm-root .tm-x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:#59636e;padding:0 4px}#vy-tm-root .tm-x:disabled{opacity:.35;cursor:not-allowed}"
+      + "#vy-tm-root .tm-x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:#59636e;padding:0 4px}"
       + "#vy-tm-root .tm-b{padding:16px 20px}#vy-tm-root .tm-f{padding:0 20px 18px;text-align:right;min-height:28px}"
       + "#vy-tm-root .fine{font-size:12px;color:#6b7280}#vy-tm-root a{color:#1a56c4}#vy-tm-root p{margin:0 0 10px;line-height:1.5;font-size:14px}#vy-tm-root p.fine{font-size:13px}"
       + "#vy-tm-root .go{display:inline-block;box-sizing:border-box;text-align:center;text-decoration:none;padding:9px 18px;border-radius:8px;border:0;background:#2f6fdc;color:#fff!important;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}"
