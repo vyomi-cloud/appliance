@@ -1880,7 +1880,19 @@ class AwsWireRouter:
 
         if svc == "az-openai":
             from core import ai_models_core
-            return ai_models_core.azure_openai_dispatch(self.az_arm.state, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            try:
+                from core import app_context as _ctx
+            except ImportError:      # Nano's flat layout has no space-scoped app_context: its az_arm.state is the one real state
+                _ctx = None
+            # The account + deployment records live in the AZURE space. /openai/... carries no provider marker, so the request runs
+            # as the default (AWS) provider and the space-scoped ARM state resolved to the empty AWS space -> DeploymentNotFound
+            # for a deployment that exists (the console chat playground's account-less call).
+            tok = _ctx.REQUEST_PROVIDER.set("azure") if _ctx is not None else None
+            try:
+                return ai_models_core.azure_openai_dispatch(self.az_arm.state, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            finally:
+                if tok is not None:
+                    _ctx.REQUEST_PROVIDER.reset(tok)
 
         if svc == "backup":
             from core import backup_core

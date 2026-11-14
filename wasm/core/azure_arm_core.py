@@ -1471,6 +1471,9 @@ class AzureArm:
         if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "resources" and len(rest_segs) == idx + 1:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Use GET to list resources in a resource group.")
+            # real ARM: listing a group that does not exist is 404, not an empty 200
+            if rg.lower() not in {g["name"].lower() for g in list_resource_groups(self.state)}:
+                return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
             items = [_view(r) for r in self.state.values()
                      if r.get("_sub") == sub and (r.get("_rg") or "").lower() == rg.lower()
                      and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)
