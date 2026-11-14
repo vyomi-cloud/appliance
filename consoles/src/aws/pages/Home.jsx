@@ -204,7 +204,9 @@ async function testAwsCli(url, region) {
 function CliSnippet({ code, url, region }) {
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState(null);
+  const [ran, setRan] = useState(false);          // the "Test run" bubble, like Copy's "Copied"
   const go = async () => {
+    setRan(true); setTimeout(() => setRan(false), 2000);
     setBusy(true); setRows(null);
     try { setRows(await testAwsCli(url, region)); } catch (e) { setRows([{ ok: false, label: "Test", detail: String((e && e.message) || e) }]); }
     setBusy(false);
@@ -212,8 +214,13 @@ function CliSnippet({ code, url, region }) {
   return (
     <SpaceBetween size="xs">
       <Snippet code={code} label="AWS CLI commands" before={
-        <span title="Test these commands against this endpoint">
+        <span title="Test these commands against this endpoint" style={{ position: "relative", display: "inline-flex" }}>
           <Button variant="icon" iconName="caret-right-filled" loading={busy} onClick={go} ariaLabel="Test these commands against this endpoint" />
+          {ran && (
+            <span role="status" style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, zIndex: 20, whiteSpace: "nowrap", pointerEvents: "none",
+              padding: "4px 12px", borderRadius: 8, background: "var(--color-background-popover, #fff)", boxShadow: "0 1px 1px 1px rgba(0,28,36,.3), 1px 1px 1px 0 rgba(0,28,36,.15), -1px 1px 1px 0 rgba(0,28,36,.15)" }}>
+              <StatusIndicator type="success">Test run</StatusIndicator>
+            </span>)}
         </span>} />
       {rows && (
         <SpaceBetween size="xxs">
