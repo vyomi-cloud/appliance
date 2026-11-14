@@ -23,7 +23,9 @@
   "remoteEnv": {
     "VYOMI_SANDBOX_TTL": "8h",
     "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud",
-    "VYOMI_BILLING": "free_personal_quota"
+    "VYOMI_BILLING": "free_personal_quota",
+    "//VYOMI_PORT_VISIBILITY": "private = owner-only (detached default). 'org' is legacy (org-owned sandboxes only).",
+    "VYOMI_PORT_VISIBILITY": "private"
   },
 
   "//hostRequirements": "All-clouds runs ~11 backends incl. the gcloud emulators — needs a bigger machine.",

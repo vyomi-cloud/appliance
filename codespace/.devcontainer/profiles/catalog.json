@@ -15,6 +15,10 @@
     { "id": "aws-core", "name": "AWS Core (conformance)", "clouds": ["aws"], "compose_profiles": "aws",
       "devcontainer_path": ".devcontainer/aws/devcontainer.json", "compute": "none",
       "services": ["s3","dynamodb","sqs","sns","iam","kms","secretsmanager","rds"],
-      "note": "The lean, relay-proven conformance set — WASM-realizable (Nano) too." }
+      "note": "The lean, relay-proven conformance set — WASM-realizable (Nano) too." },
+    { "id": "headless", "name": "Headless (API / CI)", "clouds": ["aws"], "compose_profiles": "aws",
+      "devcontainer_path": ".devcontainer/headless/devcontainer.json", "compute": "none",
+      "services": ["s3","dynamodb","sqs","sns","iam","kms","secretsmanager","rds"],
+      "note": "For API clients and CI — no browser session. idle_timeout_minutes=240 (GitHub max), TTL capped at 4h by the portal." }
   ]
 }

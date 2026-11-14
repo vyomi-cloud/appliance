@@ -439,6 +439,11 @@ def claims_to_tier_payload(claims: dict) -> dict:
         # v4 mesh trial: end of the 14-day mesh trial (portal-signed claim).
         "mesh_trial_expires": claims.get("mesh_trial_expires"),
         "issued_via": "license_remote_jwt",
+        # Enterprise access (enterprise-access-spec.md §3.5): present only on
+        # JWTs minted for a membership; tier=enterprise is minted only with ent.
+        "ent": claims.get("ent"),
+        "ent_role": claims.get("ent_role"),
+        "gh_uid": claims.get("gh_uid"),
     }
 
 

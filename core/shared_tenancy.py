@@ -84,8 +84,19 @@ def shared_mode_status() -> dict:
             "source": "state_override" if ov is not None else "env"}
 
 
+_DEFAULT_SECRET = "cloudlearn-dev-secret"
+
+
 def _secret() -> bytes:
-    return os.environ.get("CLOUDLEARN_LICENSE_SECRET", "cloudlearn-dev-secret").encode("utf-8")
+    return os.environ.get("CLOUDLEARN_LICENSE_SECRET", _DEFAULT_SECRET).encode("utf-8")
+
+
+def secret_is_default() -> bool:
+    """True when CLOUDLEARN_LICENSE_SECRET is unset or still the bundled
+    default — signing dev-token cookies with it would let anyone who reads
+    the appliance source mint a valid tenant-join token."""
+    secret = os.environ.get("CLOUDLEARN_LICENSE_SECRET", "").strip()
+    return not secret or secret == _DEFAULT_SECRET
 
 
 def _sign(msg: str) -> str:

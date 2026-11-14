@@ -20,9 +20,10 @@ cp -v "$SRC/.devcontainer/devcontainer.json"          "$DEST/.devcontainer/"
 cp -v "$SRC/.devcontainer/docker-compose.sandbox.yml" "$DEST/.devcontainer/"
 cp -v "$SRC/.devcontainer/boot.sh"                     "$DEST/.devcontainer/"
 cp -v "$SRC/.devcontainer/profiles/"*.json            "$DEST/.devcontainer/profiles/"
-# Per-profile devcontainers (aws/gcp/azure) — the dedicated launch selects one of
-# these (e.g. aws-core → .devcontainer/aws/devcontainer.json), so they MUST ship too.
-for prof in aws gcp azure; do
+# Per-profile devcontainers (aws/gcp/azure/headless) — the dedicated launch
+# selects one of these (e.g. aws-core → .devcontainer/aws/devcontainer.json),
+# so they MUST ship too.
+for prof in aws gcp azure headless; do
   if [ -d "$SRC/.devcontainer/$prof" ]; then
     mkdir -p "$DEST/.devcontainer/$prof"
     cp -v "$SRC/.devcontainer/$prof/devcontainer.json" "$DEST/.devcontainer/$prof/"

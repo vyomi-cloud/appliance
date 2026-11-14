@@ -11,6 +11,6 @@
   "postCreateCommand": "bash .devcontainer/boot.sh up",
   "postStartCommand": "bash .devcontainer/boot.sh heartbeat",
   "containerEnv": { "COMPOSE_PROFILES": "azure", "VYOMI_PROFILE": "azure-full" },
-  "remoteEnv": { "VYOMI_SANDBOX_TTL": "8h", "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud", "VYOMI_BILLING": "free_personal_quota" },
+  "remoteEnv": { "VYOMI_SANDBOX_TTL": "8h", "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud", "VYOMI_BILLING": "free_personal_quota", "VYOMI_PORT_VISIBILITY": "private" },
   "hostRequirements": { "cpus": 4, "memory": "8gb", "storage": "32gb" }
 }
