@@ -75,7 +75,7 @@ if (process.argv[2]) {
 
 // The tunnel keeps running even when its key is missing, revoked or wrong (a service manager would crash-loop it otherwise): the state is
 // shown on /health, re-checked on a timer and when ~/.vyomi/credentials changes, and the Vyomi page can re-pair it (POST /reset).
-const VERSION = "1.2.4";
+const VERSION = "1.2.5";
 const credsSync = createCredsSync({ version: VERSION, log: (m) => console.log("[creds] " + m) });
 const PORT = Number(process.env.RELAY_PORT || 8090);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) { console.error(`vyomi-tunnel: ${friendlyError({ code: "ERR_SOCKET_BAD_PORT" })}`); process.exit(2); }

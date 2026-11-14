@@ -1,0 +1,24 @@
+#!/bin/bash
+# vyomi-lockdown: take Docker and general root away from the Codespace user so the vyomi-gate is the only door.
+# Run as root. NOT run automatically yet: it needs a real-Codespace test first (see MESH-SOFTWARE-PROTECTION.md, "Rollout").
+#   vyomi-lockdown plan    print what would change (default, changes nothing)
+#   vyomi-lockdown apply   do it (skipped when VYOMI_ADMIN=1: admin Codespaces keep full access)
+set -eu
+U="${VYOMI_LOCKDOWN_USER:-vscode}"; ROOT="${VYOMI_LOCKDOWN_ROOT:-}"        # ROOT only for tests
+mode="${1:-plan}"
+steps=(
+  "remove $U from group docker"
+  "delete ${ROOT}/etc/sudoers.d/$U (general passwordless sudo)"
+  "install ${ROOT}/etc/sudoers.d/vyomi-gate: $U may run only /usr/local/sbin/vyomi-gate"
+  "chown root:root, chmod 0700 /opt/vyomi (config and compose files)"
+)
+[ "$mode" = "plan" ] && { printf '%s\n' "${steps[@]}"; exit 0; }
+[ "$mode" = "apply" ] || { echo "usage: vyomi-lockdown plan|apply" >&2; exit 2; }
+[ "${VYOMI_ADMIN:-}" = "1" ] && { echo "vyomi-lockdown: admin Codespace, nothing changed"; exit 0; }
+[ -n "$ROOT" ] || gpasswd -d "$U" docker 2>/dev/null || true
+rm -f "${ROOT}/etc/sudoers.d/$U"
+mkdir -p "${ROOT}/etc/sudoers.d"
+printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/vyomi-gate\n' "$U" > "${ROOT}/etc/sudoers.d/vyomi-gate"
+chmod 0440 "${ROOT}/etc/sudoers.d/vyomi-gate"
+[ -n "$ROOT" ] || { [ -d /opt/vyomi ] && chown -R root:root /opt/vyomi && chmod -R go-rwx /opt/vyomi; } || true
+echo "vyomi-lockdown: applied"
