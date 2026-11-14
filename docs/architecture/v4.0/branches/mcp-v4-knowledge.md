@@ -319,6 +319,16 @@ something answers on and names a free one. Tests: `TestMCPPortFreeSeesAWildcardL
 refusal in `test-mesh-ssh-transport.mjs`. On Linux a wildcard listener already blocks the bind, so the Go test only has teeth on
 macOS; the JS test fails on the old code (its message differs).
 
+Same session, later: the Codespace went idle (30 min idle timeout). The MCP's `list mesh` probe hit its 8 s limit while gh
+woke it (35.6 s measured) and reported a bare "timeout"; right after waking, the simulator was not up yet, so `forward` said
+"not found". The mesh then came up **locked**: a hand-made Codespace has no portal session, so `/mesh/status` (and its Docker
+health check) answer 401. The MCP marked a Codespace serving as soon as a forward existed, without asking the mesh behind it.
+Fixed: `checkCodespaceForward` probes `/mesh/status` through the forward; an unlocked mesh merges its fields as for a local
+mesh; 401/403 = locked with `session: none` and a hint ("no valid Mesh session ... start Mesh from the Vyomi dashboard");
+no answer = not serving, with the reason. `home=mesh` on a locked Codespace warns that calls will be refused. The timeout note
+says the Codespace may be waking (30-60 s) and to ask again; `connect`/`forward` "not found" says the mesh may still be
+starting. `TestMCPHomesCodespace` covers serving, 401 and a dead forward (fails without the probe); Go 64/64, `-race`.
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;

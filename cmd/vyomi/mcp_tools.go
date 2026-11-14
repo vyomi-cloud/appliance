@@ -408,11 +408,31 @@ const (
 	hintRelayDown     = "The Nano relay URL in VYOMI_ENDPOINT did not answer. Check that the Nano tab is open and copy the current URL from the Nano footer (relay sessions are short-lived), or run `vyomi-tunnel` for the local tunnel."
 )
 
+func anyServing(p *homeProbe) bool {
+	for _, h := range p.Homes {
+		if h.Serving {
+			return true
+		}
+	}
+	return false
+}
+
+// codespaceLockedText says why a Codespace mesh refuses requests and what the user can do.
+func codespaceLockedText(h *home) string {
+	if h.Detail["session"] == "none" {
+		return "The Codespace mesh refuses requests: it has no valid Mesh session (a Codespace created by hand, outside the Vyomi dashboard, gets none; a session also ends after its time limit). Ask the user to start Mesh from the Vyomi dashboard. Nano and the offline appliance are not affected."
+	}
+	return hintMeshLocked
+}
+
 func (s *mcpServer) homeHint(p *homeProbe) string {
 	h := p.Selected
 	if h == nil {
 		if strings.HasPrefix(p.Why, "several") {
 			return hintAmbiguous
+		}
+		if cs := p.find(homeMeshCodespace); cs != nil && cs.Detail["locked"] == true && !anyServing(p) {
+			return codespaceLockedText(cs)
 		}
 		if n := p.find(homeNanoLocal); n != nil && n.Reachable { // several reachable, none serving
 			return hintNanoOpenTab
@@ -438,6 +458,9 @@ func (s *mcpServer) homeHint(p *homeProbe) string {
 			return hintRelayDown
 		}
 	case homeMeshLocal, homeMeshCodespace:
+		if h.ID == homeMeshCodespace && h.Detail["locked"] == true {
+			return codespaceLockedText(h)
+		}
 		if h.Detail["locked"] == true {
 			return hintMeshLocked
 		}

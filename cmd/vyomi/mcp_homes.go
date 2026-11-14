@@ -332,7 +332,8 @@ func runTunnelList(ctx context.Context, bin, scope string) (*tunnelList, string)
 	err := cmd.Run()
 	probeReap(cmd)
 	if ctx.Err() == context.DeadlineExceeded {
-		return nil, "timeout"
+		return nil, "timeout: `vyomi-tunnel list " + scope + "` took over " + tunnelProbeTimeout.String() +
+			". A Codespace that was idle takes 30-60 s to wake (`gh codespace list` shows Starting); ask again in a minute."
 	}
 	if stdout.over {
 		return nil, "vyomi-tunnel list output exceeded 1 MB"
@@ -603,9 +604,38 @@ func (s *mcpServer) probeHomes(ctx context.Context) *homeProbe {
 		ml.Reachable, ml.Serving = false, false
 		ml.Detail = map[string]any{"probe": ml.Detail["probe"], "error": "this port is the Codespace forward (see mesh-codespace)"}
 	}
+	if cs.Serving && cs.Detail["mesh"] == nil {
+		// A forward existing is not a mesh answering: check it, as for a local mesh. Seen live: a Codespace started by
+		// hand (no portal session) answers every request with 401, and a forward to it looked ready to use.
+		s.checkCodespaceForward(ctx, cs)
+	}
 	p.Homes = append(p.Homes, cs)
 	s.selectHome(p)
 	return p
+}
+
+// checkCodespaceForward asks the mesh behind a live Codespace forward for /mesh/status and keeps the Codespace
+// serving only when it answers as an unlocked mesh.
+func (s *mcpServer) checkCodespaceForward(ctx context.Context, cs *home) {
+	a := s.probeGET(ctx, cs.Endpoint+"/mesh/status")
+	cs.Detail["probe"] = "GET " + cs.Endpoint + "/mesh/status (through the forward)"
+	switch {
+	case a.ok && a.body != nil && a.body["mesh"] == true:
+		for k, v := range pickMesh(a.body) {
+			cs.Detail[k] = v
+		}
+		if cs.Detail["locked"] == true {
+			cs.Serving = false
+		}
+	case a.status == http.StatusUnauthorized || a.status == http.StatusForbidden:
+		cs.Serving = false
+		cs.Detail["locked"] = true
+		cs.Detail["session"] = "none"
+		cs.Detail["error"] = fmt.Sprintf("the Codespace mesh refuses requests (HTTP %d): it has no valid Mesh session", a.status)
+	default:
+		cs.Serving = false
+		cs.Detail["error"] = "the forward on " + cs.Endpoint + " did not answer as a mesh: " + firstNonEmpty(a.err, "mesh:false")
+	}
 }
 
 func mergeDetail(a, b map[string]any) map[string]any {
@@ -739,6 +769,10 @@ func (s *mcpServer) meshHome() homeSel {
 	}
 	if cs != nil && cs.Serving {
 		return homeSel{ID: homeMeshCodespace, Why: "home=mesh requested: the Codespace mesh through its vyomi-tunnel forward", target: cs.target}
+	}
+	if cs != nil && cs.Reachable && cs.Detail["locked"] == true {
+		return homeSel{ID: homeMeshCodespace, Why: "home=mesh requested: the Codespace mesh, which is locked", target: cs.target,
+			Warning: codespaceLockedText(cs) + " Calls with these values will be refused until then."}
 	}
 	if cs != nil && cs.Reachable {
 		fwd, _ := cs.Detail["forward_command"].(string)

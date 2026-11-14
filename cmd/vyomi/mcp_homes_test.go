@@ -216,15 +216,45 @@ func TestMCPHomesCodespace(t *testing.T) {
 	if res["selected"] != homeMeshCodespace || !strings.Contains(res["why"].(string), "no forward") {
 		t.Errorf("selected=%v why=%v", res["selected"], res["why"])
 	}
-	// schema 1 under "rows" (the T1 contract) with a forward to the API: serving at the forward's local port.
-	fakeTunnel(t, `cat <<'EOF'
+	// schema 1 under "rows" (the T1 contract) with a forward to the API: serving at the forward's local port,
+	// but only while the mesh behind it answers /mesh/status as an unlocked mesh.
+	meshCode := http.StatusOK
+	fwd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if meshCode != http.StatusOK {
+			w.WriteHeader(meshCode)
+			return
+		}
+		_, _ = w.Write([]byte(`{"mesh":true,"mesh_id":"m-cs","version":"4.0.0","tier":"pro","locked":false}`))
+	}))
+	defer fwd.Close()
+	fwdAddr := strings.TrimPrefix(fwd.URL, "http://")
+	forwarded := func(addr string) {
+		fakeTunnel(t, `cat <<'EOF'
 {"schema":1,"rows":[{"where":"mesh","name":"vyomi-appliance","type":"service","address":"10.0.0.3:9000","connect":"vyomi-tunnel forward vyomi-appliance 9000:9000"},
- {"where":"local","name":"vyomi-appliance","type":"forward","address":"127.0.0.1:19000","connect":"-> vyomi-appliance:9000 (pid 4242)"}],"notes":[]}
+ {"where":"local","name":"vyomi-appliance","type":"forward","address":"`+addr+`","connect":"-> vyomi-appliance:9000 (pid 4242)"}],"notes":[]}
 EOF`)
+	}
+	forwarded(fwdAddr)
 	res, homes = statusOf(t, s)
 	cs = homes[homeMeshCodespace]
-	if cs["serving"] != true || cs["endpoint"] != "http://127.0.0.1:19000" || res["selected"] != homeMeshCodespace {
+	if cs["serving"] != true || cs["endpoint"] != fwd.URL || res["selected"] != homeMeshCodespace || cs["detail"].(map[string]any)["mesh_id"] != "m-cs" {
 		t.Errorf("forwarded codespace: %v (selected %v)", cs, res["selected"])
+	}
+	// Seen live: a Codespace created by hand has no Mesh session and answers 401. The forward exists, but the
+	// Codespace is not usable: not serving, locked, and the hint says why and what to do.
+	meshCode = http.StatusUnauthorized
+	res, homes = statusOf(t, s)
+	cs = homes[homeMeshCodespace]
+	d = cs["detail"].(map[string]any)
+	if cs["serving"] != false || d["locked"] != true || !strings.Contains(fmt.Sprint(res["hint"]), "no valid Mesh session") {
+		t.Errorf("401 codespace must be locked, not serving: %v (selected %v, hint %v)", cs, res["selected"], res["hint"])
+	}
+	// A forward that nothing answers on (the forward process died): not serving, with the reason.
+	forwarded("127.0.0.1:1")
+	_, homes = statusOf(t, s)
+	cs = homes[homeMeshCodespace]
+	if cs["serving"] != false || !strings.Contains(fmt.Sprint(cs["detail"].(map[string]any)["error"]), "did not answer") {
+		t.Errorf("dead forward: %v", cs)
 	}
 	// Any other schema: not reachable, with a note.
 	fakeTunnel(t, `echo '{"schema":2,"rows":[{"where":"mesh","name":"x","type":"host"}],"notes":[]}'`)
@@ -260,7 +290,7 @@ func TestMCPHomesCodespaceTimeout(t *testing.T) {
 		t.Errorf("status took %v (> 9 s)", el)
 	}
 	cs := homes[homeMeshCodespace]
-	if cs["reachable"] != false || cs["detail"].(map[string]any)["note"] != "timeout" {
+	if n, _ := cs["detail"].(map[string]any)["note"].(string); cs["reachable"] != false || !strings.HasPrefix(n, "timeout") || !strings.Contains(n, "idle") {
 		t.Errorf("codespace after timeout: %v", cs)
 	}
 	time.Sleep(200 * time.Millisecond)

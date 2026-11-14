@@ -333,7 +333,7 @@ export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, tran
 /** `connect`: pipe stdin/stdout to <name>:<port> in the Codespace. Resolves with the exit code (0 clean, 1 failed, 3 not found). */
 export async function connectSsh(name, { port = 22, transport, stdin = process.stdin, stdout = process.stdout, stderr = process.stderr } = {}) {
   let t; try { t = await transport.resolve(name, port); } catch (e) { stderr.write(`vyomi-tunnel: ${e.message}\n`); return 1; }
-  if (!t) { stderr.write(`vyomi-tunnel: ${name}: not found in the Codespace\n`); return 3; }
+  if (!t) { stderr.write(`vyomi-tunnel: ${name}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.\n`); return 3; }
   let up; try { up = await transport.open(t.host, t.port); } catch (e) { stderr.write(`vyomi-tunnel: ${e.message}\n`); return 1; }
   return new Promise((resolve) => {
     let done = false; const fin = (c) => { if (done) return; done = true; try { up.destroy(); } catch { /* */ } try { stdin.pause(); } catch { /* */ } resolve(c); };
@@ -366,7 +366,7 @@ export async function freeLocalPort(remote, net = nodeNet) {
 /** `forward`: listen on 127.0.0.1:<local>; each accepted socket is one ssh stream to <target>:<remote> inside the Codespace. */
 export async function forwardSsh(target, { local, remote, transport, net, stderr = process.stderr } = {}) {
   const t = await transport.resolve(target, remote);
-  if (!t) { stderr.write(`vyomi-tunnel: ${target}: not found in the Codespace\n`); return { close() {}, done: Promise.resolve(3), port: 0 }; }
+  if (!t) { stderr.write(`vyomi-tunnel: ${target}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.\n`); return { close() {}, done: Promise.resolve(3), port: 0 }; }
   if (local > 0 && await localPortBusy(local, net)) {
     const alt = await freeLocalPort(remote, net);
     stderr.write(`vyomi-tunnel: 127.0.0.1:${local} is already in use on this machine (another Vyomi or Docker stack?). Use another local port: vyomi-tunnel forward ${target} ${alt}:${remote}\n`);
