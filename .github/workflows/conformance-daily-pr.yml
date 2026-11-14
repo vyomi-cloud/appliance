@@ -90,7 +90,8 @@ jobs:
           PY
           if [ ! -s /tmp/bundle-files.txt ]; then echo "No Nano bundle changes today: no portal PR."; exit 0; fi
           echo "Nano bundle files changed today:"; cat /tmp/bundle-files.txt
-          git diff --binary "origin/main...origin/$B" -- $(cat /tmp/bundle-files.txt) \
+          mapfile -t BUNDLE_FILES < /tmp/bundle-files.txt
+          git diff --binary "origin/main...origin/$B" -- "${BUNDLE_FILES[@]}" \
             | sed -e 's#^\(diff --git a/\)wasm/#\1app/nano/#' -e 's# b/wasm/# b/app/nano/#' \
                   -e 's#^--- a/wasm/#--- a/app/nano/#' -e 's#^+++ b/wasm/#+++ b/app/nano/#' \
                   -e 's#^\(rename\|copy\) \(from\|to\) wasm/#\1 \2 app/nano/#' > /tmp/nano.patch
@@ -130,7 +131,9 @@ jobs:
             CONFLICT="${{ steps.portal.outputs.conflict }}"
             if [ -n "$CONFLICT" ]; then
               echo; echo "⚠️ **Nano changes need a manual portal sync.** They don't apply cleanly to \`portal/app/nano\` (the portal copy has diverged), so no portal PR was opened:"
-              echo; printf '%s\n' "$CONFLICT" | sed 's/^/- `/; s/$/`/'
+              echo
+              # shellcheck disable=SC2016  # literal backticks (markdown code)
+              printf '%s\n' "$CONFLICT" | sed 's/^/- `/; s/$/`/'
             fi
             echo
             echo "Report: https://github.com/${{ github.repository }}/tree/conformance-report"

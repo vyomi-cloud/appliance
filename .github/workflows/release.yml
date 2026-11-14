@@ -306,7 +306,7 @@ jobs:
             echo "---"
             echo "## Artifacts"
             echo
-            ls dist | sed 's/^/- /'
+            for f in dist/*; do echo "- ${f#dist/}"; done
             echo
             echo "**Docker image:** \`docker pull vyomi/appliance:${VER}\`"
             echo "**Install:** \`curl -fsSL https://raw.githubusercontent.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/main/install.sh | bash\`"

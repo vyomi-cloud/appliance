@@ -91,7 +91,7 @@ jobs:
               simulator vyomi-pubsub vyomi-firestore \
               vyomi-sql-postgres vyomi-minio vyomi-nats \
               vyomi-dynamodb vyomi-elasticmq vyomi-vault vyomi-azurite
-          for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+          for _ in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
           curl -f "$VYOMI_BASE_URL/healthz"
 
       - name: Apply test license
@@ -108,7 +108,7 @@ jobs:
       - name: Start Nano relay
         run: |
           nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
-          for i in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
+          for _ in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
 
       - name: Fetch previous history + feature inventory
         run: |

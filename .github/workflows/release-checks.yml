@@ -120,7 +120,7 @@ jobs:
           mkdir -p ext
           collect() {  # collect <workflow file> <artifact name> <label>
             local wf="$1" art="$2" label="$3" id="" st="" concl=""
-            for i in $(seq 1 100); do
+            for _ in $(seq 1 100); do
               read -r id st concl < <(gh run list -R "$R" --workflow "$wf" -L 30 --json databaseId,status,conclusion,headBranch,displayTitle \
                 -q "[.[] | select(.displayTitle|test(\"(^| |v)$VER( |$)\"))][0] | \"\(.databaseId) \(.status) \(.conclusion)\"" 2>/dev/null)
               [ -n "$id" ] && [ "$st" = completed ] && break
@@ -149,7 +149,7 @@ jobs:
 
       - name: Write RELEASE-CHECKS.md
         run: |
-          res() { [ "$1" = success ] && echo "✅ passed" || { [ "$1" = skipped ] || [ -z "$1" ] && echo "— not run" || echo "❌ $1"; }; }
+          res() { case "$1" in success) echo "✅ passed" ;; skipped|"") echo "— not run" ;; *) echo "❌ $1" ;; esac; }
           count() { f="$1"; [ -f "$f" ] && grep -oE '[0-9]+/[0-9]+ (checks )?passed' "$f" | head -1 || echo ""; }
           url="${{ github.server_url }}/$R/actions/runs/${{ github.run_id }}"
           {
@@ -162,7 +162,7 @@ jobs:
             echo "| DEB: cloud-learn + vyomi-docker | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
             echo "| RPM: cloud-learn + vyomi-docker | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
             echo "| Homebrew: vyomi + vyomi-docker | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
-            while IFS='|' read -r label wf id concl; do
+            while IFS='|' read -r label _ id concl; do
               case "$label" in
                 msi) name="MSI: install, upgrade, uninstall (+ signing)"; plat="Windows (GitHub)"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;
                 startup) name="Startup: all services + UI status"; plat="Linux, release images"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;
@@ -188,7 +188,10 @@ jobs:
           if git ls-remote --exit-code origin "refs/heads/$B" >/dev/null; then git fetch -q origin "$B"; git checkout -q -B "$B" FETCH_HEAD
           else git checkout -q -B "$B" "$TAG"; fi
           cp /tmp/RELEASE-CHECKS.md RELEASE-CHECKS.md
-          git add RELEASE-CHECKS.md
+          # The release branch's front page IS the checks report (main's README
+          # is unaffected; the tag and published artifacts don't change).
+          { cat /tmp/RELEASE-CHECKS.md; echo; echo "---"; echo "Project README: ${{ github.server_url }}/$R#readme"; } > README.md
+          git add RELEASE-CHECKS.md README.md
           git commit -q -m "docs(release): checks report for v$VER" || { echo "No change"; exit 0; }
           git push -q origin "HEAD:refs/heads/$B"
-          echo "Report: ${{ github.server_url }}/$R/blob/$B/RELEASE-CHECKS.md" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Report: ${{ github.server_url }}/$R/tree/$B (README) · ${{ github.server_url }}/$R/blob/$B/RELEASE-CHECKS.md" | tee -a "$GITHUB_STEP_SUMMARY"

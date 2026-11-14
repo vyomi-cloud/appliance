@@ -205,7 +205,7 @@ jobs:
             echo "---"
             echo "## Artifacts"
             echo
-            ls dist | sed 's/^/- /'
+            for f in dist/*; do echo "- ${f#dist/}"; done
             echo
             echo "**Docker image (no \`:latest\` update):** \`docker pull vyomi/appliance:${VER}\`"
             echo "**SHA256 checksums:** see \`SHA256SUMS\` in attached artifacts."
