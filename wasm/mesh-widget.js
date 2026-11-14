@@ -454,7 +454,7 @@
     tc.setAttribute("data-k", v.kind); tc.setAttribute("data-cloud", CLOUD);
     var btn = v.action ? '<button class="tb" data-tcr ' + (tcBusy ? "disabled" : "") + '>' + (tcBusy ? "Resetting…" : v.action) + '</button>' : "";
     var tog = v.kind === "bad" ? '<label class="ta"><input type="checkbox" data-tca ' + (tcAuto() ? "checked" : "") + '> Reset automatically</label>' : "";
-    tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + '</span>' + tog + btn;
+    tc.innerHTML = TC_ICON[v.kind === "ok" ? "ok" : v.kind === "grey" ? "grey" : "warn"] + '<span class="tt">' + esc(v.text) + ' <a href="#" class="tl" data-tcinst>Reinstall tunnel</a></span>' + tog + btn;
     place();
   }
   function tcBoot() {
@@ -464,6 +464,7 @@
       // shared layout: icon, text, [toggle], button
       + "#vy-tc{box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-10px 0 18px;padding:7px 12px;font-size:13px;line-height:1.35;--tc-fg:#16191f;--tc-bg:#fff;--tc-bd:#d5dbdb;--tc-ic:#5f6b7a;background:var(--tc-bg);color:var(--tc-fg);border:1px solid var(--tc-bd)}"
       + "#vy-tc .ic{flex:none;width:16px;height:16px;color:var(--tc-ic)}#vy-tc .tt{flex:1 1 160px}#vy-tc .ta{font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--tc-fg)}"
+      + "#vy-tc .tl{font-size:12px;white-space:nowrap;margin-left:4px;color:inherit;opacity:.8;text-decoration:underline}#vy-tc .tl:hover{opacity:1}"
       + "#vy-tc .tb{cursor:pointer;font:inherit;font-weight:600;white-space:nowrap}#vy-tc .tb[disabled]{opacity:.55;cursor:default}"
       // AWS Cloudscape: flat alert, 2px accent bar on the left, normal (outlined) button
       + "#vy-tc[data-cloud=aws]{font-family:'Amazon Ember','Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;border-radius:8px;border:1px solid var(--tc-bd);border-left:4px solid var(--tc-ic)}"
@@ -483,6 +484,7 @@
     document.head.appendChild(st);
     tc = document.createElement("div"); tc.id = "vy-tc"; tc.setAttribute("data-vyb-keep", "1");
     tc.addEventListener("click", function (e) {
+      if (e.target.closest("[data-tcinst]")) { e.preventDefault(); instOpen(); return; }
       if (e.target.closest("[data-tcr]")) { if (tcView && tcView.kind === "old") instOpen(); else tcReset(); }
     });
     tc.addEventListener("change", function (e) { if (e.target.matches("[data-tca]")) { tcSetAuto(e.target.checked); if (e.target.checked) { tcAutoFails = 0; tcAutoAt = 0; tcRefresh(); } } });

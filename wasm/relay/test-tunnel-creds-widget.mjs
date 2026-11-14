@@ -11,7 +11,7 @@ const tcEl = { isConnected: false, attrs: {}, setAttribute(k, v) { this.attrs[k]
 const ctx = { CLOUD: "aws", fetch, toast: (t) => toasts.push(t), esc: (s) => String(s), osKind: () => "mac", instOpen: () => (ctx.opened = true), place: () => {}, setInterval: () => 0, setTimeout, clearTimeout, Date, JSON, Promise, encodeURIComponent,
   AbortController, localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => (store[k] = v) } };
 vm.createContext(ctx);
-vm.runInContext(src.slice(a, b) + "\nthis.t = { decide: tcDecide, reset: tcReset, refresh: tcRefresh, view: () => tcView, setEl: (e) => { tc = e; }, busy: () => tcBusy };", ctx);
+vm.runInContext(src.slice(a, b) + "\nthis.t = { decide: tcDecide, reset: tcReset, refresh: tcRefresh, view: () => tcView, setEl: (e) => { tc = e; }, setView: (v) => { tcView = v; }, paint: tcPaint, busy: () => tcBusy };", ctx);
 const T = ctx.t; T.setEl(tcEl);
 const H = (state, key_id = "VYKAX") => ({ ok: true, version: "1.2.2", credentials: { state, key_id } });
 const ok = (n) => console.log("PASS " + n);
@@ -39,4 +39,7 @@ await T.refresh(); await new Promise((r) => setTimeout(r, 40));
 assert.ok(calls.some((c) => c[0].endsWith("/reset")), "auto reset ran");
 const n1 = calls.filter((c) => c[0].endsWith("/reset")).length; script = [{ status: 200, j: H("revoked") }]; await T.refresh(); await new Promise((r) => setTimeout(r, 20));
 assert.equal(calls.filter((c) => c[0].endsWith("/reset")).length, n1, "not again within 5 minutes"); ok("auto-reset toggle: resets once, then rate-limited");
+// "Reinstall tunnel": a link in every visible state (the strip is the only entry point while the tunnel is running)
+for (const [h, c] of [[H("ok"), { state: "active" }], [H("revoked"), null], [{ ok: true }, null]]) { T.setView(T.decide(h, c)); T.paint(); assert.match(tcEl.innerHTML, /data-tcinst[^>]*>Reinstall tunnel</); }
+ok("every visible state offers 'Reinstall tunnel' (opens the install dialog)");
 console.log("\nall passed");
