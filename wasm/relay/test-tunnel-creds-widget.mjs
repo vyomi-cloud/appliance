@@ -16,7 +16,7 @@ const T = ctx.t; T.setEl(tcEl);
 const H = (state, key_id = "VYKAX") => ({ ok: true, version: "1.2.2", credentials: { state, key_id } });
 const ok = (n) => console.log("PASS " + n);
 
-assert.equal(T.decide(null, null).kind, "hide"); assert.equal(T.decide({ ok: true, version: "1.2.1" }, null).kind, "old"); ok("no tunnel: hidden; old tunnel (no credentials field): 'Update tunnel'");
+assert.equal(T.decide(null, null).kind, "hide"); assert.equal(T.decide({ ok: true, version: "1.2.1" }, null).kind, "old"); assert.match(T.decide({ ok: true }, null).text, /^Access Key revocation detected\. Reset the tunnel\.$/); ok("no tunnel: hidden; old tunnel (no credentials field): 'Access Key revocation detected. Reset the tunnel.'");
 assert.equal(T.decide(H("ok"), { state: "active" }).kind, "ok"); ok("same account + active key: green");
 assert.equal(T.decide(H("ok"), { state: "not_yours" }).action, "Reset tunnel"); assert.match(T.decide(H("ok"), { state: "not_yours" }).text, /different account/); ok("key of another account: alert + Reset");
 assert.equal(T.decide(H("ok"), { state: "revoked" }).kind, "bad"); assert.equal(T.decide(H("revoked"), null).kind, "bad"); assert.equal(T.decide(H("invalid"), null).kind, "bad"); assert.equal(T.decide(H("none", ""), null).kind, "bad"); ok("revoked / invalid / missing key: alert");

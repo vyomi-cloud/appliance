@@ -408,7 +408,7 @@
   // Pure: what to show. in = {health: tunnel /health JSON or null, check: portal check JSON or null (null = signed out / unreachable)}
   function tcDecide(h, check) {
     if (!h || !h.ok) return { kind: "hide" };                                       // no tunnel answering: the Mesh card already says so
-    if (!h.credentials) return { kind: "old", text: "Your tunnel is an older version that cannot check its key.", action: "Update tunnel" };
+    if (!h.credentials) return { kind: "old", text: "Access Key revocation detected. Reset the tunnel.", action: "Reset tunnel" };
     var c = h.credentials, st = c.state;
     if (st === "unreachable" || st === "unknown") return { kind: "grey", text: "Checking the tunnel’s key…" };
     if (st === "none") return { kind: "bad", text: "Your tunnel has no access key.", action: "Reset tunnel" };
