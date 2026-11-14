@@ -32,6 +32,7 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import TasksPanel from "../../kit/TasksPanel.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
+import VmConnect from "../../../common/VmConnect.jsx";
 import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -842,11 +843,8 @@ function Connect({ a }) {
   const nicId = nicIdOf(a);
   const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
   const pip = usePublicIp(nic.data);
-  const privateIp = nic.data?.properties?.ipConfigurations?.[0]?.properties?.privateIPAddress;
   const publicIp = pip.data?.properties?.ipAddress;
   const user = a.properties?.osProfile?.adminUsername;
-  const cmd = `ssh ${user}@${publicIp || privateIp || "<no public ip>"}`;
-  const cap = capability("azure.vms.connect");
   if (isNano()) {
     return (
       <>
@@ -878,10 +876,7 @@ function Connect({ a }) {
               {gap === "Connect via Bastion" ? (
                 <>Use the Bastion blade (left menu) to open a browser session through a Bastion host in this VM's virtual network.</>
               ) : (
-                <>
-                  <p style={{ fontFamily: "monospace", background: "var(--colorNeutralBackground3)", padding: 8, borderRadius: 4 }}>{cmd}</p>
-                  <NotSimulated feature="Opening a real SSH session" note={cap?.limitations?.join(" ")} />
-                </>
+                <VmConnect cloud="azure" id={a.name} />
               )}
             </DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>

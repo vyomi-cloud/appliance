@@ -17,6 +17,7 @@ import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDu
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import VmConnect from "../../../common/VmConnect.jsx";
 import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 import { RecommendationsTable } from "./Ext.jsx";
 import OpsAgentMetrics from "./OpsAgentMetrics.jsx";
@@ -230,7 +231,7 @@ export default function InstanceDetail({ params }) {
       <Box sx={{ mb: 2 }}>
         {isNano()
           ? <CapabilityContainer id="gcp.compute.instances.nano_vm" title="SSH"><NanoVmPanel cloud="gcp" vmRef={name} /></CapabilityContainer>
-          : <CapabilityContainer id="gcp.compute.instances.data_plane" title="SSH" />}
+          : <Section title="SSH"><VmConnect cloud="gcp" id={name} /></Section>}
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
