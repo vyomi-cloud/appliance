@@ -50,7 +50,8 @@ export function launchMcp(args = [], { entryUrl, dir = here, env = process.env, 
   const r = resolveMcp(args, { dir, env });
   if (r.error) { stderr.write(r.error + "\n"); return Promise.resolve(127); }
   const childEnv = { ...env };
-  if (entryUrl) childEnv.VYOMI_TUNNEL_BIN = fileURLToPath(entryUrl);
+  // An explicit VYOMI_TUNNEL_BIN (a test harness, a pinned install) wins, like every other VYOMI_* override.
+  if (entryUrl && !env.VYOMI_TUNNEL_BIN) childEnv.VYOMI_TUNNEL_BIN = fileURLToPath(entryUrl);
   // The MCP runs `node <VYOMI_TUNNEL_BIN> list ...`: make sure the node running us is findable even if PATH lacks it (appended, so it never shadows).
   const nodeDir = path.dirname(process.execPath);
   if (!String(childEnv.PATH || "").split(path.delimiter).includes(nodeDir)) childEnv.PATH = [childEnv.PATH, nodeDir].filter(Boolean).join(path.delimiter);

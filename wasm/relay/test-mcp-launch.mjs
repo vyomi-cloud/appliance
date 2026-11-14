@@ -57,6 +57,14 @@ test("L1-27a: no bundled binary -> vyomi-mcp on PATH, with VYOMI_TUNNEL_BIN = th
   assert.match(r.stderr, /argv=--x/); assert.ok(r.stderr.includes("bin=" + p.entry), r.stderr); assert.doesNotMatch(r.stderr, /WRONG/);
 });
 
+test("L1-27c: an explicit VYOMI_TUNNEL_BIN is passed through unchanged (not replaced by this install's entry)", { skip: !posix && "sh fakes" }, () => {
+  const p = pkg(); const fake = path.join(p.dir, "pathbin");
+  script(path.join(fake, "vyomi-mcp"), `echo "bin=$VYOMI_TUNNEL_BIN" >&2; /bin/cat >/dev/null`);
+  const pinned = path.join(p.dir, "pinned-tunnel.sh");
+  const r = run(p, ["mcp"], { ...env(p, { PATH: [fake, path.dirname(process.execPath)].join(path.delimiter) }), VYOMI_TUNNEL_BIN: pinned });
+  assert.equal(r.status, 0, r.stderr); assert.ok(r.stderr.includes("bin=" + pinned), r.stderr); assert.ok(!r.stderr.includes("bin=" + p.entry), r.stderr);
+});
+
 test("L1-27a': no bundled binary and no vyomi-mcp -> `vyomi mcp` on PATH", { skip: !posix && "sh fakes" }, () => {
   const p = pkg(); const fake = path.join(p.dir, "pathbin");
   script(path.join(fake, "vyomi"), `echo "vyomi-argv=$*" >&2`);

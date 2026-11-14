@@ -223,6 +223,19 @@ Found by re-running the branch on Linux (the overnight runs tested on macOS only
 | 2 | `vyomi-tunnel mcp` logged `endpoint http://127.0.0.1:9000` at startup even when the selected home was the Nano tab. | The banner names what is probed (Nano tunnel port, mesh/appliance URL, Codespace via vyomi-tunnel) and points to `vyomi_status`. `--help` now lists `vyomi_reach`. |
 | 3 | `gen_mcp_matrix.py` (and so `build_tunnel_mcp.sh`) rewrote `mcp_caps.json.gz` / `mcp_docs.json.gz` on every run; gzip bytes differ between zlib builds, so on any other machine the tracked files showed as modified with identical content. | A `.gz` output is rewritten only when its decompressed content changed. Verified: a content-identical file recompressed differently is left alone; a stale file still fails `--check` and is rewritten. |
 
+## Pre-release integration test (2026-11-14)
+
+`tools/mcp-eval/prerelease-it.sh` tests the release candidate on the owner's Mac without publishing anything:
+`package` (build_tunnel_mcp.sh, npm pack, install into a temp prefix, MCP handshake with no key), `linux` (the same tarball in
+node:20 arm64/amd64 containers), `brew` (a throwaway tap whose formula points at the local tarball), `homes` (offline on :9000,
+a local mesh on :9100 from the branch image, Codespace via a fake tunnel), `nano` (the real tab through the tunnel on :8090),
+`agent` (`claude -p --plugin-dir` evals A01/A01b/A02/A03/A05/A06 with checks on tool calls, answer text and `.env.vyomi`).
+It removes only what it created (compose project vyomi-it-mesh, image vyomi-it-mesh:local, tap vyomi/it, $IT_DIR).
+
+Writing it found one launcher bug, fixed here: `vyomi-tunnel mcp` always overwrote `VYOMI_TUNNEL_BIN` with its own entry, so an
+explicit value (a pinned install, a test harness) was ignored. It now keeps an explicit value and only defaults it when unset.
+Regression test L1-27c in `wasm/relay/test-mcp-launch.mjs` (fails on the previous launcher, passes now; launcher suite 7/7).
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;
