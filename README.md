@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-13 23:52 UTC · refreshes after every pipeline run_
+_Updated 2026-11-14 00:22 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -26,7 +26,7 @@ _Updated 2026-11-13 23:52 UTC · refreshes after every pipeline run_
 
 | Service | Cloud | Stage | Checks | Real backend | Backend in the code | Still missing |
 |---|---|---|---|---|---|---|
-| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #199](https://github.com/vyomi-cloud/appliance/pull/199)) | 17/17 | in-process | in-process | — |
+| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #199](https://github.com/vyomi-cloud/appliance/pull/199)) | 18/18 | in-process | in-process | — |
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #201](https://github.com/vyomi-cloud/appliance/pull/201)) | 19/19 | docker · Pro · + caddy gateway | docker · Pro ✅ | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #200](https://github.com/vyomi-cloud/appliance/pull/200)) | 20/20 | registry · Lite | registry · 10 MB · Lite ✅ | — |
 | Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #202](https://github.com/vyomi-cloud/appliance/pull/202)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite ✅ | — |
@@ -335,6 +335,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | ✅ | upstream id tracked by the hourly upstream watcher | cognito-idp |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
 
