@@ -30,6 +30,10 @@ func isolateHomes(t *testing.T) {
 	t.Setenv("VYOMI_HOME", dir)
 	t.Setenv("VYOMI_CREDENTIALS_FILE", filepath.Join(dir, "no-credentials"))
 	t.Setenv("PATH", "/usr/bin:/bin") // no vyomi-tunnel from the developer's PATH
+	// Suggested forward ports must not depend on what the developer's machine has bound (e.g. an appliance on :9000).
+	oldFree := portFree
+	portFree = func(int) bool { return true }
+	t.Cleanup(func() { portFree = oldFree })
 }
 
 // deadHomes (probing tests) points every probe at a dead port, so the resolver only sees the fakes a test starts

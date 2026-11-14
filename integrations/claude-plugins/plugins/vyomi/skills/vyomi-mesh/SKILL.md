@@ -31,8 +31,9 @@ ask the user, never read the file.
    (the same rows as `vyomi-tunnel list mesh`). It lists the host, instances,
    k3s, LLM and services, each with the command to connect. Then propose, for the user to run **in another terminal** (forwards
    are long-running; never start one yourself):
-   - the API: `vyomi-tunnel forward <appliance target> 9000:9000` (the
-     `vyomi_status` hint names the target),
+   - the API: the exact `vyomi-tunnel forward …` command from the
+     `vyomi_status` hint (it names the target and picks a free local port,
+     e.g. `9100:9000` when an offline appliance already holds :9000),
    - Kubernetes, when the project uses it: `vyomi-tunnel forward <k3s target> 6443:6443`,
      then `kubectl --server https://127.0.0.1:6443` with the kubeconfig the
      console gives,
@@ -65,6 +66,7 @@ ask the user, never read the file.
 - Respect the scan and env warnings; they describe real protocol limits.
 - Tell the user to run `vyomi up` only when `vyomi_status` reports the
   `offline` or `mesh-local` home.
-- Never start forwards, tunnels, Codespaces or `vyomi up` yourself; give the
-  exact command and let the user run it.
+- Never start forwards, tunnels, Codespaces or `vyomi up` yourself, and never
+  through Bash, not even in the background; give the exact command and let the
+  user run it in their own terminal.
 - Never read `~/.vyomi/credentials` or any key file; ask the user instead.

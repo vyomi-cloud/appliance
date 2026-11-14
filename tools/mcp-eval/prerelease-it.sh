@@ -210,11 +210,15 @@ stage_homes() {
   # Codespace mesh, via a fake tunnel (real Codespace only after Mesh go-live)
   local ft; ft="$(fake_tunnel)"; o="$IT_DIR/mcp-codespace.jsonl"
   mcp_session "$o" RELAY_PORT=$DEAD_PORT VYOMI_SIMULATOR_PORT=$DEAD_PORT VYOMI_MESH_URL=http://127.0.0.1:$DEAD_PORT VYOMI_TUNNEL_BIN="$ft" \
-    VYOMI_ACCESS_KEY_ID=it-dummy-presence-only -- vyomi_status '{}' vyomi_reach '{"scope":"mesh"}'
+    VYOMI_ACCESS_KEY_ID=it-dummy-presence-only -- vyomi_status '{}' vyomi_reach '{"scope":"mesh"}' \
+    vyomi_env '{"cloud":"aws","lang":"python","home":"mesh"}'
   check homes codespace-detected "Codespace home reachable via the tunnel's list" js "$o" \
     'any(h["id"]=="mesh-codespace" and h["reachable"] for h in t(10)["homes"])'
   check homes codespace-reach "vyomi_reach lists the appliance row" js "$o" '"vyomi-mesh-simulator-1" in json.dumps(t(11))'
-  check homes codespace-forward-hint "hint gives the exact forward command" js "$o" '"vyomi-tunnel forward vyomi-mesh-simulator-1 9000:9000" in json.dumps(t(10))'
+  check homes codespace-forward-hint "hint gives the forward command on a free local port, for the user to run" js "$o" \
+    '__import__("re").search(r"vyomi-tunnel forward vyomi-mesh-simulator-1 \d+:9000", json.dumps(t(10))) and "do not run it yourself" in json.dumps(t(10))'
+  check homes codespace-env "home=mesh env is the Codespace (not mesh-local, not the dead VYOMI_MESH_URL)" js "$o" \
+    '"mesh-codespace" in json.dumps(t(12)) and "mesh-local" not in json.dumps(t(12)) and "127.0.0.1:9\"" not in json.dumps(t(12)) and "never starts forwards" in json.dumps(t(12))'
 
   # local mesh: the branch's image, run as a mesh on :$MESH_PORT
   if ! have docker || ! docker info >/dev/null 2>&1; then rec homes mesh SKIP "docker not available"; return 0; fi

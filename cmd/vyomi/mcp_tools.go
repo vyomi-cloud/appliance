@@ -442,11 +442,8 @@ func (s *mcpServer) homeHint(p *homeProbe) string {
 			return hintMeshLocked
 		}
 		if h.ID == homeMeshCodespace && !h.Serving {
-			target, _ := h.Detail["api_target"].(string)
-			if target == "" || strings.HasPrefix(target, "unknown") {
-				target = "<appliance target from vyomi_reach mesh>"
-			}
-			return "Run `vyomi-tunnel forward " + target + " 9000:9000` in another terminal and keep it open; then call vyomi_status again."
+			fwd, _ := h.Detail["forward_command"].(string)
+			return "Ask the user to run `" + fwd + "` in another terminal and keep it open (do not run it yourself); then call vyomi_status again."
 		}
 		if h.ID == homeMeshLocal && !h.Reachable {
 			return "No mesh answered at " + meshURL() + ". Start the local mesh with `vyomi up` (Pro/Max), or set VYOMI_MESH_URL if it runs elsewhere."
@@ -522,7 +519,8 @@ func (s *mcpServer) toolReach(raw json.RawMessage) (any, error) {
 				notes = append(notes, "mesh: "+n)
 			}
 			if cs.Reachable && !cs.Serving {
-				notes = append(notes, "No forward to the Codespace mesh API yet: the user runs the `vyomi-tunnel forward <target> 9000:9000` connect line in another terminal (the MCP never starts forwards).")
+				fwd, _ := cs.Detail["forward_command"].(string)
+				notes = append(notes, "No forward to the Codespace mesh API yet: ask the user to run `"+fwd+"` in another terminal (a free local port is chosen; never run forwards yourself).")
 			}
 		}
 	}

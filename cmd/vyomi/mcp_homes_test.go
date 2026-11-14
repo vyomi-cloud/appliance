@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -387,7 +388,7 @@ func TestMCPStatusOtherHints(t *testing.T) {
 	deadHomes(t)
 	fakeTunnel(t, "cat <<'EOF'\n"+listMeshJSON+"\nEOF")
 	res, _ = statusOf(t, s)
-	if !strings.Contains(fmt_(res["hint"]), "vyomi-tunnel forward vyomi-appliance 9000:9000") {
+	if h := fmt_(res["hint"]); !strings.Contains(h, "vyomi-tunnel forward vyomi-appliance 9000:9000") || !strings.Contains(h, "do not run it yourself") {
 		t.Errorf("codespace hint: %v", res["hint"])
 	}
 
@@ -536,5 +537,56 @@ func stillRunning(pid int) bool {
 			return true
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// Prerelease eval A06: a suggested forward must use a free local port (an offline appliance often holds :9000
+// and :9443 on the user's machine).
+func TestMCPForwardPortSkipsBusyPorts(t *testing.T) {
+	isolateHomes(t)
+	busy := map[int]bool{9000: true, 9100: true, 9443: true}
+	portFree = func(p int) bool { return !busy[p] }
+	if got := forwardPort(9000, 9100); got != 9101 {
+		t.Errorf("forwardPort(9000) with 9000+9100 busy = %d, want 9101", got)
+	}
+	if got := forwardPort(9443, 9543); got != 9543 {
+		t.Errorf("forwardPort(9443) with 9443 busy = %d, want 9543", got)
+	}
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	portFree = func(p int) bool { return !busy[p] }
+	fakeTunnel(t, "cat <<'EOF'\n"+listMeshJSON+"\nEOF")
+	res, _ := statusOf(t, s)
+	if h := fmt_(res["hint"]); !strings.Contains(h, "vyomi-tunnel forward vyomi-appliance 9101:9000") {
+		t.Errorf("hint must suggest the free port 9101: %v", h)
+	}
+}
+
+// Prerelease eval A06: home=mesh is the Codespace mesh when that is the only mesh. Before, vyomi_env used the
+// local-mesh URL (VYOMI_MESH_URL) and labelled the home mesh-local.
+func TestMCPEnvMeshIsCodespace(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	fakeTunnel(t, "cat <<'EOF'\n"+listMeshJSON+"\nEOF")
+	res, isErr := callTool(t, s, "vyomi_env", map[string]any{"cloud": "aws", "lang": "python", "home": "mesh"})
+	if isErr {
+		t.Fatalf("vyomi_env error: %v", res)
+	}
+	js := fmt.Sprint(res)
+	if !strings.Contains(js, "127.0.0.1:9000") || !strings.Contains(js, homeMeshCodespace) || strings.Contains(js, homeMeshLocal) {
+		t.Errorf("no forward: want the suggested forward port, labelled %s: %s", homeMeshCodespace, js)
+	}
+	if !strings.Contains(js, "vyomi-tunnel forward vyomi-appliance 9000:9000") || !strings.Contains(js, "never starts forwards") {
+		t.Errorf("no forward: want a warning naming the forward to start: %s", js)
+	}
+	// With a live forward the env uses the forward's local port.
+	fakeTunnel(t, `cat <<'EOF'
+{"schema":1,"rows":[{"where":"mesh","name":"vyomi-appliance","type":"service","address":"10.0.0.3:9000","connect":"vyomi-tunnel forward vyomi-appliance 9000:9000"},
+ {"where":"local","name":"vyomi-appliance","type":"forward","address":"127.0.0.1:19000","connect":"-> vyomi-appliance:9000 (pid 4242)"}],"notes":[]}
+EOF`)
+	s.homeCache = homeCache{}
+	res, _ = callTool(t, s, "vyomi_env", map[string]any{"cloud": "aws", "lang": "python", "home": "mesh"})
+	if js := fmt.Sprint(res); !strings.Contains(js, "127.0.0.1:19000") || !strings.Contains(js, homeMeshCodespace) {
+		t.Errorf("live forward: want 127.0.0.1:19000 labelled %s: %s", homeMeshCodespace, js)
 	}
 }

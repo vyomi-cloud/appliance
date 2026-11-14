@@ -246,6 +246,15 @@ Regression test L1-27c in `wasm/relay/test-mcp-launch.mjs` (fails on the previou
 | A01: on "Set this project up to run against Vyomi, using the Nano tab." the agent wrote `.env.vyomi` without asking ("The user asked me to set it up … so I'll write"), then installed a venv and ran the app. The skill already said to get the user's OK. | Owner decision: keep ask-first. `vyomi-setup` step 4 and Rules now say a general "set this up" request is not approval; show the path + contents and stop. `vyomi_write_env` description and the server instructions say the same. Regression test `TestMCPWriteEnvRequiresExplicitApproval` (fails on the old wording). Re-run A01 with IT_RUNS=3. |
 | brew: the formula's `test do` started the relay, which refuses to start without a key since 1.2.x, so `brew test` always failed. | `packaging/brew/vyomi-tunnel.rb` tests `--version` and an MCP `initialize` through `vyomi-tunnel mcp` (no key needed). The same block must go into `vyomi-cloud/homebrew-tap` (owner). prerelease-it now reports a failing `brew test` as FAIL. |
 
+## Second pre-release run: A06 with IT_RUNS=3 (2026-11-14)
+
+A06 ("Use my Mesh Codespace") passed 2/3. Both findings are fixed here:
+
+| Finding | Fix |
+|---|---|
+| Run 1: the agent ran `vyomi-tunnel forward …` itself (backgrounded through Bash). The skill rule read "The MCP never starts anything", which a model can take as being about the MCP only. | `vyomi-setup` and `vyomi-mesh` Rules: never start the tunnel, a forward, a Codespace or `vyomi up` yourself, never through Bash, not even in the background. The status hint and the `vyomi_reach` note now say "ask the user to run … (do not run it yourself)". |
+| Runs 2-3 (flagged by the agent itself): with a Codespace mesh, `vyomi_env` / scan with `home: mesh` used the local-mesh target (`VYOMI_MESH_URL`) and labelled it `mesh-local`. Real use only worked by coincidence (forward `9000:9000`), and failed on a machine whose offline appliance holds :9000 (the owner's). | `home=mesh` resolves to the Codespace when no local mesh answers: its live forward's local port, or (no forward yet) the suggested forward's ports with a warning naming the command. Suggested forwards use a free local port (`9000`, else `9100+`; TLS `9443`, else `9543+`). Tests `TestMCPForwardPortSkipsBusyPorts`, `TestMCPEnvMeshIsCodespace`; prerelease-it `homes/codespace-env`. `api_target` fallback text no longer says "not verified yet". |
+
 ## Testing
 - Run 3 (local mesh, D0 items 2 and 4): step 0 fast-forward to `8708cfe83`, `go test ./...` and `--check` green. Image built from the worktree,
   mesh `vyomi-mesh` up, `/mesh/status` `mesh:true` (tier max); `classifyTargets` row `vyomi-mesh-simulator-1` / `service` / `172.23.0.2:9000`;

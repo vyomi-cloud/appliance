@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -355,6 +356,30 @@ func runTunnelList(ctx context.Context, bin, scope string) (*tunnelList, string)
 
 var forwardTo9000 = regexp.MustCompile(`->\s*(\S+):9000\b`)
 
+// portFree reports whether 127.0.0.1:p can be bound right now (a variable so tests are independent of the host).
+var portFree = func(p int) bool {
+	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+	if err != nil {
+		return false
+	}
+	_ = l.Close()
+	return true
+}
+
+// forwardPort suggests the local port for a Codespace forward: the remote port itself when it is free here,
+// else the first free port in [alt, alt+100). An offline appliance or another stack often holds :9000 / :9443.
+func forwardPort(remote, alt int) int {
+	if portFree(remote) {
+		return remote
+	}
+	for p := alt; p < alt+100; p++ {
+		if portFree(p) {
+			return p
+		}
+	}
+	return remote
+}
+
 // codespaceHome classifies `vyomi-tunnel list mesh --json`. Reachable: the Codespace answered with mesh rows.
 // Serving: a live `vyomi-tunnel forward <api> <local>:9000` exists, so 127.0.0.1:<local> is the mesh API.
 func (s *mcpServer) codespaceHome(l *tunnelList, note string) *home {
@@ -408,7 +433,19 @@ func (s *mcpServer) codespaceHome(l *tunnelList, note string) *home {
 	if apiTarget != "" {
 		h.Detail["api_target"] = apiTarget
 	} else if h.Reachable {
-		h.Detail["api_target"] = "unknown: the appliance API target name is not verified yet (D0 item 2); look for a service row on port 9000"
+		h.Detail["api_target"] = "unknown: no service row on port 9000 in `vyomi-tunnel list mesh` (on a Codespace it is vyomi-mesh-simulator-1)"
+	}
+	if h.Reachable && !h.Serving {
+		target := apiTarget
+		if target == "" {
+			target = "<the service row on port 9000 from vyomi_reach mesh>"
+		}
+		api, tls := forwardPort(9000, 9100), forwardPort(9443, 9543)
+		h.Detail["forward_command"] = fmt.Sprintf("vyomi-tunnel forward %s %d:9000", target, api)
+		h.Detail["forward_tls_command"] = fmt.Sprintf("vyomi-tunnel forward %s %d:9443", target, tls)
+		t := s.meshTarget()
+		t.Scheme, t.Host, t.SimPort, t.TLSPort = "http", "127.0.0.1", api, tls
+		h.target = t
 	}
 	return h
 }
@@ -675,13 +712,34 @@ func (s *mcpServer) resolveHome(arg string) (homeSel, error) {
 		t, id := s.nanoTarget()
 		return homeSel{ID: id, Why: "home=nano requested", target: t}, nil
 	case "mesh":
-		return homeSel{ID: homeMeshLocal, Why: "home=mesh requested", target: s.meshTarget()}, nil
+		return s.meshHome(), nil
 	case "offline":
 		return homeSel{ID: homeOffline, Why: "home=offline requested", target: s.target(nil)}, nil
 	case "", "auto":
 		return s.autoHome(), nil
 	}
 	return homeSel{}, fmt.Errorf("home must be one of auto, nano, mesh, offline (got %q)", arg)
+}
+
+// meshHome resolves home=mesh. A local mesh that answers wins; otherwise a reachable Codespace mesh is the mesh:
+// through its live forward, or (no forward yet) at the suggested forward's local ports with a warning to start it.
+func (s *mcpServer) meshHome() homeSel {
+	p := s.homes()
+	ml, cs := p.find(homeMeshLocal), p.find(homeMeshCodespace)
+	if ml != nil && ml.Reachable {
+		return homeSel{ID: homeMeshLocal, Why: "home=mesh requested", target: s.meshTarget()}
+	}
+	if cs != nil && cs.Serving {
+		return homeSel{ID: homeMeshCodespace, Why: "home=mesh requested: the Codespace mesh through its vyomi-tunnel forward", target: cs.target}
+	}
+	if cs != nil && cs.Reachable {
+		fwd, _ := cs.Detail["forward_command"].(string)
+		tls, _ := cs.Detail["forward_tls_command"].(string)
+		return homeSel{ID: homeMeshCodespace, Why: "home=mesh requested: the Codespace mesh (no forward yet)", target: cs.target,
+			Warning: "No forward to the Codespace mesh API yet. These values assume the user runs `" + fwd + "` in another terminal and keeps it open" +
+				" (TLS services such as Cosmos DB and Key Vault also need `" + tls + "`). The MCP never starts forwards."}
+	}
+	return homeSel{ID: homeMeshLocal, Why: "home=mesh requested", target: s.meshTarget()}
 }
 
 func (s *mcpServer) autoHome() homeSel {

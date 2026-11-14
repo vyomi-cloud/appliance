@@ -90,9 +90,10 @@ In v4 the simulator lives in one of these **homes**:
 - Respect the scan and env warnings; they describe real protocol limits.
 - Tell the user to run `vyomi up` only when `vyomi_status` reports the
   `offline` or `mesh-local` home.
-- The MCP never starts anything (tunnel, forwards, Codespaces, `vyomi up`). Give
-  the user the exact command and let them run it, long-running ones in their own
-  terminal.
+- Never start the tunnel, a forward, a Codespace or `vyomi up` yourself, and
+  never through Bash, not even in the background. The MCP never starts them
+  either. Give the user the exact command (use the one `vyomi_status` gives:
+  it picks a free local port) and let them run it in their own terminal.
 - If the `vyomi` MCP tools are unavailable: install or upgrade the tunnel
   (`brew install vyomi-cloud/tap/vyomi-tunnel` or `npm i -g vyomi-tunnel`;
   version 1.3.0 or newer, the first with `vyomi-tunnel mcp`; check with
