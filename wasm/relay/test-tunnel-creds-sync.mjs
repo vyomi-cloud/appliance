@@ -47,7 +47,7 @@ for (let i = 0; i < 50; i++) { try { await H("/health"); break; } catch { await 
 try {
   let h = await health();
   for (let i = 0; i < 30 && h.credentials.state === "unknown"; i++) { await new Promise((r) => setTimeout(r, 100)); h = await health(); }
-  assert.equal(exited, false); assert.equal(h.credentials.state, "revoked"); assert.equal(h.credentials.key_id, "VYKAGONE"); assert.ok(h.features.includes("creds-sync")); assert.equal(h.version, "1.2.4");
+  assert.equal(exited, false); assert.equal(h.credentials.state, "revoked"); assert.equal(h.credentials.key_id, "VYKAGONE"); assert.ok(h.features.includes("creds-sync")); assert.equal(h.version, "1.2.5");
   assert.ok(!JSON.stringify(h).includes("x\n") && !JSON.stringify(h).includes("secret")); ok("revoked key: tunnel stays up and reports state=revoked (no crash loop, no secret on /health)");
 
   // file replaced -> picked up by /reload

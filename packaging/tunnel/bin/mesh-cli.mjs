@@ -114,7 +114,8 @@ export function forward(target, { local, remote, relay, token, WS, allowPrivileg
 }
 
 export const INSTANCE_KEY = path.join(HOME, "mesh-instance-key");
-const KEY_CMD = "docker exec vyomi-mesh-simulator-1 cat /root/.vyomi/instance-keys/id_ed25519";
+// Through the Codespace's root-owned gate when it has one (the user needs no docker access); older Codespaces fall back to docker.
+const KEY_CMD = "if [ -x /usr/local/sbin/vyomi-gate ]; then sudo -n /usr/local/sbin/vyomi-gate instance-key; else docker exec vyomi-mesh-simulator-1 cat /root/.vyomi/instance-keys/id_ed25519; fi";
 
 /** Each Mesh makes its own VM login key. Fetch it from the Mesh on the first `connect` of a Codespace (and after a new Mesh), so
  *  `ssh <instance>.vyomi` needs no manual step. Best effort: a failure leaves ssh to report its usual error. Returns true when it wrote the key. */
@@ -336,7 +337,7 @@ export async function main(argv) {
   if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { const topic = cmd === "help" ? rest[0] : (["-h", "--help", "-help", "-?"].includes(cmd) ? undefined : cmd); const t = topic && DETAILS[topic];
     if (topic && !t) { console.error(`vyomi-tunnel: no help for "${topic}".`); process.stdout.write(HELP); return 2; }
     process.stdout.write((t || HELP) + (t ? "\n" : "")); return cmd ? 0 : 2; }
-  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.2.4"); return 0; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.2.5"); return 0; }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
@@ -393,7 +394,7 @@ export async function main(argv) {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(code)) { console.error("usage: vyomi-tunnel reset <code>   (get a code in the Vyomi console: Setup Tunnel > Get install command; see `vyomi-tunnel help reset`)"); return 2; }
     const { createCredsSync } = await import("./creds-sync.mjs");
     try {
-      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.2.4" });
+      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.2.5" });
       const st = await cs.reset(code, os.hostname());
       console.log(st.state === "ok" ? `Done. The tunnel now uses access key ${st.key_id}.` : `The new key was saved (${st.key_id}) but the portal answered: ${st.error || st.state}.`);
       try { await fetch(`http://127.0.0.1:${process.env.RELAY_PORT || 8090}/reload`, { method: "POST", signal: AbortSignal.timeout(3000) }); console.log("The running tunnel reloaded it."); }
