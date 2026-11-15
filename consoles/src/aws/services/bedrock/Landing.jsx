@@ -18,7 +18,7 @@ import { LocalModel } from "./Overview.jsx";
 
 const go = (h) => (e) => { e?.preventDefault?.(); location.hash = h; };
 const Lnk = ({ to, children }) => <Link href={`#/bedrock/${to}`} onFollow={go(`#/bedrock/${to}`)}>{children}</Link>;
-const NewB = () => <Badge color="blue">New</Badge>;
+const NewB = () => null; // no "New" pills
 const Item = ({ title, isNew, to, link, children }) => (
   <SpaceBetween size="xs">
     <Box variant="h4">{title} {isNew && <NewB />}</Box>
