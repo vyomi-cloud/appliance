@@ -21,6 +21,8 @@ import { SubscriptionCtx } from "./kit/subscription.js";
 import { SERVICES, byId, classicHref } from "./services/registry.js";
 import { useK8sLock, K8sLocked } from "../common/k8sTier.jsx";
 import BackendsSection from "../common/BackendsPanel.jsx";
+import ScopeSection from "../common/ScopeSection.jsx";
+import { scopeFor } from "../common/scopeHelp.js";
 import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
 import Home from "./pages/Home.jsx";
 import AllServices from "./pages/AllServices.jsx";
@@ -174,6 +176,7 @@ export default function App() {
               )}
               {drawer === "help" && (
                 <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  <ScopeSection entry={scopeFor("azure", route.path)} />
                   {svc && <BackendsSection cloud="azure" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0f6cbd" />}
                   <p>Vyomi simulates this portal against local backends. Storage accounts are created over native Azure Resource Manager (ARM) and blobs over the native Blob REST API — the same endpoints your azure-* SDKs and the az CLI use, so both always see the same state.</p>
                   <p>Services without a Vyomi v4 page open in the <a href={classicHref()}>classic Vyomi console</a>.</p>

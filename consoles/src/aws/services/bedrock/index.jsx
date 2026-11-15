@@ -12,9 +12,14 @@ import { Agents, AgentDetail } from "./Agents.jsx";
 import { AgentCore, GatewayDetail } from "./AgentCore.jsx";
 import Studio from "./studio/Studio.jsx";
 import { INFER_TUNE_ROUTES } from "./inferTune/routes.jsx";
+import ScopeSection from "../../../common/ScopeSection.jsx";
+import { scopeFor } from "../../../common/scopeHelp.js";
 
 const top = [{ text: "Amazon Bedrock", href: "#/bedrock" }];
 const c = (text, h) => ({ text, href: h });
+
+// Right-hand help pane: "Scope and limits" for the page (common/scopeHelp.js, from the ai-*.md branch docs).
+const withHelp = (r) => { const e = scopeFor("aws", r.pattern); return e ? { ...r, help: { title: e.title.replace(/: scope and limits$/, ""), body: <ScopeSection entry={e} showTitle={false} /> } } : r; };
 
 export default {
   nav: bedrockNav,
@@ -35,5 +40,5 @@ export default {
     { pattern: "/bedrock/agents/:id", component: AgentDetail, crumbs: (p) => [...top, c("Agents", "#/bedrock/agents"), c(p.id, `#/bedrock/agents/${p.id}`)] },
     { pattern: "/bedrock/agentcore", component: AgentCore, crumbs: () => [...top, c("AgentCore", "#/bedrock/agentcore")] },
     { pattern: "/bedrock/agentcore/gateways/:id", component: GatewayDetail, crumbs: (p) => [...top, c("AgentCore", "#/bedrock/agentcore"), c(p.id, `#/bedrock/agentcore/gateways/${p.id}`)] },
-  ],
+  ].map(withHelp),
 };

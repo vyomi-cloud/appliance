@@ -26,6 +26,8 @@ import ChevronRightIcon from "@mui/icons-material/esm/ChevronRight.js";
 import ChevronLeftIcon from "@mui/icons-material/esm/ChevronLeft.js";
 import MenuOpenIcon from "@mui/icons-material/esm/Menu.js";
 import { match, useRoute } from "../common/router.js";
+import ScopeSection from "../common/ScopeSection.jsx";
+import { scopeFor } from "../common/scopeHelp.js";
 import { useNotify } from "../common/notify.jsx";
 import { makeTheme } from "./theme.js";
 import { PRODUCTS, classicHref, productFor } from "./services/registry.js";
@@ -118,6 +120,7 @@ export default function App() {
                 <Typography variant="h6" sx={{ flex: 1, fontSize: 18 }}>{prod?.title || "Vyomi"}</Typography>
                 <IconButton size="small" aria-label="Close panel" onClick={() => setInfoOpen(false)}><CloseIcon fontSize="small" /></IconButton>
               </Stack>
+              <ScopeSection entry={scopeFor("gcp", route.path)} />
               {prod && <BackendsSection cloud="gcp" data={BACKENDS_DATA} serviceId={SERVICE_FILE[prod.id] || prod.id} registryFile={registryFileFor(SERVICE_FILE[prod.id] || prod.id)} substrate={SUBSTRATE} accent="#1a73e8" />}
               <Typography variant="body2" color="text.secondary">Vyomi simulates this console against local backends. Everything you do here is visible to your SDKs and CLI.</Typography>
             </Box>
