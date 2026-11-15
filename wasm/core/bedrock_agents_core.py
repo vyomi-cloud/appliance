@@ -991,7 +991,7 @@ def _tool_schema(cfg):
     return ts
 
 
-def _create_target(st, gw, p):
+def _create_target(st, gw, p, s3=None):
     name = p.get("name")
     if not name or not _AC_NAME.match(name):
         raise _bad("1 validation error detected: Value at 'name' failed to satisfy constraint: Member must satisfy regular expression pattern: ([0-9a-zA-Z][-]?){1,100}")
@@ -1007,6 +1007,15 @@ def _create_target(st, gw, p):
     else:
         if not p.get("credentialProviderConfigurations"):
             raise _bad(f"credentialProviderConfigurations is required for {kinds[0]} targets")
+    gt = _gt()
+    gt.check_target_providers(st, p)
+    extra = {}
+    if kinds[0] == "openApiSchema":
+        spec = gt.validate_openapi(mcp, s3)
+        extra = {"_base": spec["servers"][0]["url"], "_ops": gt.openapi_operations(spec)}
+    elif kinds[0] == "mcpServer":
+        if not str((mcp["mcpServer"] or {}).get("endpoint", "")).startswith(("http://", "https://")):
+            raise _bad("targetConfiguration.mcp.mcpServer.endpoint must be an http(s) URL")
     if any(t["name"] == name for t in gw["targets"].values()):
         raise _conflict(f"A target named {name} already exists in this gateway")
     tid = _rid(10)
@@ -1014,19 +1023,41 @@ def _create_target(st, gw, p):
     t = {"gatewayArn": gw["gatewayArn"], "targetId": tid, "createdAt": now, "updatedAt": now, "status": "CREATING", "name": name,
          "description": p.get("description", ""), "targetConfiguration": cfg,
          "credentialProviderConfigurations": p.get("credentialProviderConfigurations") or [{"credentialProviderType": "GATEWAY_IAM_ROLE"}],
-         "_readyAt": time.time() + 1.0, "_kind": kinds[0]}
+         "_readyAt": time.time() + 1.0, "_kind": kinds[0], **extra}
     gw["targets"][tid] = t
     gw["updatedAt"] = now
     return _j(202, {k: v for k, v in t.items() if not k.startswith("_")})
 
 
-def _mcp_tools(gw):
+def _gt():
+    try:
+        from core import agentcore_gateway_targets as m
+    except ImportError:
+        import agentcore_gateway_targets as m  # type: ignore
+    return m
+
+
+def _mcp_tools(gw, st=None, headers=None):
     out = []
     for t in gw["targets"].values():
-        if t["_kind"] != "lambda":
-            continue
-        for tool in _tool_schema(t["targetConfiguration"]):
-            out.append((f"{t['name']}___{tool['name']}", t, tool))
+        if t["_kind"] == "lambda":
+            for tool in _tool_schema(t["targetConfiguration"]):
+                out.append((f"{t['name']}___{tool['name']}", t, tool))
+        elif t["_kind"] == "openApiSchema":
+            for o in t.get("_ops") or []:
+                out.append((f"{t['name']}___{o['tool']}", t, {"name": o["tool"], "description": o["description"], "inputSchema": o["inputSchema"]}))
+        elif t["_kind"] == "mcpServer" and st is not None:
+            c = t.get("_up")
+            if not c or c[0] < time.time():   # upstream catalog cached 30 s
+                try:
+                    c = (time.time() + 30, _gt().mcp_upstream(st, t, "tools/list", {}, headers).get("tools") or [])
+                    t["_upErr"] = None
+                except Exception as e:  # noqa: BLE001 - a dead upstream hides its tools, never fails the whole catalog
+                    c = (time.time() + 5, [])
+                    t["_upErr"] = f"{type(e).__name__}: {e}"
+                t["_up"] = c
+            for tool in c[1]:
+                out.append((f"{t['name']}___{tool['name']}", t, {"name": tool["name"], "description": tool.get("description", ""), "inputSchema": tool.get("inputSchema") or {"type": "object"}}))
     return out
 
 
@@ -1043,10 +1074,14 @@ def _mcp(st, lam, gid, p, headers):
     _ac_ready(gw)
     if gw["status"] != "READY":
         return _j(503, {"message": "Gateway is not READY"})
-    if gw["authorizerType"] != "NONE":
+    if gw["authorizerType"] == "CUSTOM_JWT":
+        _claims, deny = _gt().validate_inbound(gw, headers)
+        if deny:
+            return deny
+    elif gw["authorizerType"] != "NONE":
         h = {str(k).lower(): v for k, v in (headers or {}).items()}
         if not (h.get("authorization") or "").strip():
-            return _j(401, {"message": "Missing Authentication Token" if gw["authorizerType"] == "AWS_IAM" else "Unauthorized"})
+            return _j(401, {"message": "Missing Authentication Token"})
     rid, method = p.get("id"), p.get("method")
 
     def ok(result):
@@ -1060,7 +1095,7 @@ def _mcp(st, lam, gid, p, headers):
         return ok({}) if method == "ping" else _j(202, None)
     ext = _ext()
     claims = ext.jwt_claims(headers)
-    visible = [(n, t, tool) for n, t, tool in _mcp_tools(gw) if ext.authorize(st, gw, claims, n, {}, probe=True)[0]]   # list is filtered by policy
+    visible = [(n, t, tool) for n, t, tool in _mcp_tools(gw, st, headers) if ext.authorize(st, gw, claims, n, {}, probe=True)[0]]   # list is filtered by policy
     searchable = ((gw.get("protocolConfiguration") or {}).get("mcp") or {}).get("searchType") == "SEMANTIC"
     if method == "tools/list":
         tl = [{"name": n, "description": tool["description"], "inputSchema": tool["inputSchema"]} for n, _t, tool in visible]
@@ -1074,11 +1109,19 @@ def _mcp(st, lam, gid, p, headers):
         allowed, why = ext.authorize(st, gw, claims, prm.get("name") or "", prm.get("arguments") or {})
         if not allowed:
             return fail(-32002, f"Tool call not allowed due to policy enforcement [{why}]")
-        hit = next(((t, tool) for n, t, tool in _mcp_tools(gw) if n == prm.get("name")), None)
+        hit = next(((t, tool) for n, t, tool in _mcp_tools(gw, st, headers) if n == prm.get("name")), None)
         if not hit:
             return fail(-32602, f"Unknown tool: {prm.get('name')}")
         t, tool = hit
         _ac_ready(t)
+        if t["_kind"] in ("openApiSchema", "mcpServer"):
+            gt = _gt()
+            try:
+                if t["_kind"] == "openApiSchema":
+                    return ok(gt.call_openapi(st, t, t["_ops"], t["_base"], tool["name"], prm.get("arguments") or {}, headers))
+                return ok(gt.mcp_upstream(st, t, "tools/call", {"name": tool["name"], "arguments": prm.get("arguments") or {}}, headers))
+            except Exception as e:  # noqa: BLE001 - upstream / credential failure surfaces as a tool error
+                return ok({"isError": True, "content": [{"type": "text", "text": f"Target call failed: {e}"}]})
         arn = t["targetConfiguration"]["mcp"]["lambda"]["lambdaArn"]
         fname = arn.split(":function:")[1].split(":")[0]
         if lam is None:
@@ -1314,6 +1357,9 @@ def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
         spec = ag.parse_spec(raw_spec)
     except ag.SpecError as e:
         return _rt_client_err(f"Invalid Vyomi agent spec: {e}")
+    proto = (rt.get("protocolConfiguration") or {}).get("serverProtocol")
+    if proto in ("MCP", "A2A"):
+        return _invoke_protocol(rt, proto, spec, ag, h, body, st, lam)
     sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
     if len(sid) < 33:
         raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
@@ -1368,6 +1414,38 @@ def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
                     "usage": r["usage"], "model": r["model"], "truncated": r["truncated"]}, hdrs)
 
 
+def _invoke_protocol(rt, proto, spec, ag, h, body, st, lam):
+    """serverProtocol MCP / A2A runtimes: the payload is a JSON-RPC 2.0 request (as the real service forwards it to the container)."""
+    gt = _gt()
+    try:
+        req = json.loads((body or b"").decode("utf-8", "replace"))
+        if not isinstance(req, dict) or req.get("jsonrpc") != "2.0":
+            raise ValueError("not a JSON-RPC 2.0 request")
+    except ValueError as e:
+        return _j(200, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"Invalid request: {e}"}})
+    hdrs = {_SESS_HDR: h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))}
+    if proto == "MCP":
+        r = gt.runtime_mcp(spec, req, ag, rt["agentRuntimeName"])
+        return _j(202, None, hdrs) if r is None else _j(200, r, hdrs)
+    ext = _ext()
+    claims = ext.jwt_claims(h)
+    jwt = next((h[k][7:].strip() for k in ("authorization", "x-amzn-bedrock-agentcore-runtime-custom-authorization") if (h.get(k) or "").lower().startswith("bearer ")), "")
+    actor = str(claims.get("sub") or h.get("x-amzn-bedrock-agentcore-runtime-user-id") or "anonymous")
+
+    def run_agent(text, ctx):
+        text2, mem_after = ext.memory_hooks(ext._x(st), spec, actor, ctx, text)
+        sess = rt["_sessions"].setdefault(ctx, {"history": [], "created": _iso()})
+        r = ext.run_context(st, lam, jwt, actor, lambda: ag.run(spec, text2, sess["history"]))
+        mem_after(r["text"])
+        sess["history"].extend(r["messages"])
+        return r["text"]
+    try:
+        out = gt.runtime_a2a(rt, spec, req, run_agent, rt.setdefault("_a2a_tasks", {}))
+    except llm.LlmUnavailable as e:
+        return {"status": 503, "headers": {"content-type": "application/json", "x-amzn-errortype": "ServiceUnavailableException"}, "body": json.dumps({"message": f"{e}"}).encode()}
+    return _j(200, out, hdrs)
+
+
 def agentcore_dispatch(s3, lam, method, path, query, headers, body):
     method = method.upper()
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
@@ -1376,6 +1454,10 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
         st = _state(s3)
         if segs[0] == "runtimes":
             return _runtimes(st, method, path, query, headers, body, lam, s3)
+        if segs[0] == "identities":
+            r = _gt().dispatch(st, method, segs, body)
+            if r is not None:
+                return r
         if segs[0] in ("memories", "policy-engines"):
             try:
                 from core import agentcore_ext_core as ext
@@ -1415,7 +1497,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                 elif segs[2] == "targets":
                     if len(segs) == 3:
                         if method == "POST":
-                            return _create_target(st, gw, p)
+                            return _create_target(st, gw, p, s3)
                         if method == "GET":
                             for t in gw["targets"].values():
                                 _ac_ready(t)
@@ -1433,6 +1515,9 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                                     cfg = p["targetConfiguration"]
                                     if "lambda" in (cfg.get("mcp") or {}):
                                         _tool_schema(cfg)
+                                    if "openApiSchema" in (cfg.get("mcp") or {}):
+                                        _sp = _gt().validate_openapi(cfg["mcp"], s3)
+                                        t["_base"], t["_ops"] = _sp["servers"][0]["url"], _gt().openapi_operations(_sp)
                                     t["targetConfiguration"] = cfg
                                 for f in ("name", "description", "credentialProviderConfigurations"):
                                     if f in p:

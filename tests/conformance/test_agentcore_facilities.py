@@ -29,9 +29,12 @@ def check(name, cond, extra=""):
         print(f"  FAIL {name} {str(extra)[:700]}")
 
 
+from jwt_issuer import Issuer  # noqa: E402
+ISS = Issuer()
+
+
 def jwt(sub, groups):
-    b = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()  # noqa: E731
-    return f"{b({'alg': 'none'})}.{b({'sub': sub, 'cognito:groups': groups, 'username': sub})}.sig"
+    return ISS.mint(sub, extra={"cognito:groups": groups, "username": sub})
 
 
 def script(body):
@@ -125,7 +128,7 @@ def main():
     except ctl.exceptions.ValidationException:
         check("invalid Cedar -> ValidationException", True)
     gw = ctl.create_gateway(name="facilities-gateway", roleArn=ROLE, authorizerType="CUSTOM_JWT",
-                            authorizerConfiguration={"customJWTAuthorizer": {"discoveryUrl": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_x/.well-known/openid-configuration"}},
+                            authorizerConfiguration={"customJWTAuthorizer": {"discoveryUrl": ISS.discovery_url}},
                             protocolConfiguration={"mcp": {"searchType": "SEMANTIC"}}, policyEngineConfiguration={"arn": pe["policyEngineArn"], "mode": "ENFORCE"})
     gid = gw["gatewayId"]
     ts = lambda n, d: {"mcp": {"lambda": {"lambdaArn": kb_arn if n == "search_knowledge" else wo_arn, "toolSchema": {"inlinePayload": [
