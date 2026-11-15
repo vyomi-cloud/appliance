@@ -11,9 +11,15 @@ Phase 0 of `docs/architecture/v4.0/AI-ENTERPRISE-REFERENCE-PLAN.md` (branch `v4/
 - `tools/ai_probe/gcp_inventory.py|csv`: 2298 REST methods from Google discovery documents (aiplatform 1144, discoveryengine 278, logging 254, iam 137, cloudkms 87, run 59, monitoring 56, identitytoolkit 50, eventarc 66, pubsub 46, documentai 42, apigateway 30, cloudfunctions 21, modelarmor 15, workflows 11, cloudtrace 2).
 - `tools/ai_probe/azure_inventory.py|csv`: 1611 operations from azure-rest-api-specs (APIM 672, ML 217, Event Grid 170, Cognitive Services 146, Logic 106, ...).
 
+## GCP probe result (2026-11-15, `tools/ai_probe/gcp_probe.py`, `gcp_probe.csv`)
+REST-level probe of the 2298 inventory methods against the offline wire path as the simulator's active project: **56.3% routed** (216 ok, 1077 modeled error, 1005 unimplemented).
+Per service routed: pubsub 100%, logging 98%, cloudfunctions 95%, iam 88%, monitoring 82%, run 80%, apigateway 67%, cloudkms 64%, eventarc 52%, aiplatform 51% (1144 methods, the biggest block), workflows 45%, documentai 40%, discoveryengine 14%, modelarmor 13%, identitytoolkit 6%.
+Caveat: GCP APIs are resolved by PATH, so APIs sharing a path shape can be answered by the wrong engine, and generic JSON catch-alls overstate coverage (logging 98% looks high). Read per-service numbers as an upper bound.
+**Bug found and fixed:** `core/gcp_agentengine_core.py` crashed with an unhandled AttributeError (HTTP 500) on 62 requests that reached the engine but missed its path regex (reasoningEngines sub-resources: runtimeRevisions, sandboxEnvironmentTemplates, ...). Now a modeled 404 NOT_FOUND (core + wasm mirror). Test: `tests/conformance/test_gcp_agentengine_unmatched_path.py` (fails before, passes after). Routed 53.6% -> 56.3%.
+
 ## Known gaps
 - Azure: `openai-v1-data` returned 0 operations (TypeSpec-generated layout; needs the emitted swagger path) and Azure OpenAI/Foundry are thin. Foundry agents data-plane has 42 ops, projects 29.
-- GCP and Azure have an INVENTORY only, not a probe yet: probing needs each cloud's real SDK against the offline wire path.
+- GCP has a REST probe (not the real SDK). Azure has an INVENTORY only, not a probe yet.
 - The AWS probe measures "routed and answered with the right wire format", not semantics.
 
 ## Run
