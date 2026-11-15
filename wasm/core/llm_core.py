@@ -519,7 +519,7 @@ def _fn_extras(fn, o):
         return {}
     allp = any(p.kind == p.VAR_KEYWORD for p in params.values())
     cand = {"model": o.get("model"), "top_p": o.get("top_p"), "seed": o.get("seed"), "response_format": o.get("response_format"),
-            "tools": o.get("tools"), "tool_choice": o.get("tool_choice")}
+            "tools": o.get("tools"), "tool_choice": o.get("tool_choice"), "lora": o.get("lora")}
     return {k: v for k, v in cand.items() if v is not None and (allp or k in params)}
 
 
@@ -551,6 +551,40 @@ def _oa_rf(rf):
     return {"type": "json_object"}
 
 
+# ── LoRA adapters (chat-model fine-tunes trained by core/training_core, served by llama-server) ──
+# llama-server loads adapters at START (``--lora x.gguf --lora-init-without-apply``) and then takes a per-request
+# ``"lora": [{"id": <index>, "scale": s}]``; GET /lora-adapters lists {id, path, scale}. ``lora`` here is
+# {"name": adapter id, "path": host file, "scale": 1.0}; the id is resolved by file basename against /lora-adapters.
+def lora_dir() -> str:
+    return os.environ.get("VYOMI_LLM_ADAPTER_DIR") or os.path.join(os.environ.get("CLOUDLEARN_DATA_DIR", "/data"), "llm-adapters")
+
+
+def lora_prepare(name: str, blob: bytes) -> str:
+    """Write the adapter GGUF where the llama-server container mounts it (idempotent); returns the host path."""
+    d = lora_dir()
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f"{name}.gguf")
+    if not os.path.exists(path) or os.path.getsize(path) != len(blob):
+        with open(path + ".tmp", "wb") as f:
+            f.write(blob)
+        os.replace(path + ".tmp", path)
+    return path
+
+
+def _lora_request(lora) -> list:
+    base = os.path.basename(str(lora.get("path") or lora.get("name") or ""))
+    base = base if base.endswith(".gguf") else base + ".gguf"
+    try:
+        loaded = _http("/lora-adapters", None) or []
+    except LlmUnavailable:
+        raise
+    for a in loaded if isinstance(loaded, list) else []:
+        if os.path.basename(str(a.get("path", ""))) == base:
+            return [{"id": a["id"], "scale": float(lora.get("scale", 1.0))}]
+    raise LlmUnavailable(f"The LoRA adapter {base} is not loaded in the llama-server (it loads adapters at start). Restart the local LLM with "
+                         f"`--lora-init-without-apply --lora <dir>/{base}` (core/llm_runtime.lora_args); loaded now: {[os.path.basename(str(a.get('path', ''))) for a in loaded] if isinstance(loaded, list) else 'unknown'}.")
+
+
 def _http_body(msgs, o, stream, native_tools):
     body = {"model": resolve_model(o.get("model")), "messages": _oa_messages(msgs), "max_tokens": o["max_tokens"],
             "temperature": float(o["temperature"]), "stream": stream}
@@ -567,6 +601,8 @@ def _http_body(msgs, o, stream, native_tools):
                          for t in o["tools"]]
         ch = o.get("tool_choice") or "auto"
         body["tool_choice"] = ch if isinstance(ch, str) else {"type": "function", "function": {"name": ch["name"]}}
+    if o.get("lora"):
+        body["lora"] = _lora_request(o["lora"])
     if stream:
         body["stream_options"] = {"include_usage": True}
     return body
@@ -727,7 +763,7 @@ def _tools_native(msgs, o) -> dict:
 
 
 def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, model=None, tools=None, tool_choice=None,
-         response_format=None, top_p=None, seed=None) -> dict:
+         response_format=None, top_p=None, seed=None, lora=None) -> dict:
     msgs = _norm_messages(messages, system)
     if not any(m["role"] == "user" for m in msgs):
         raise ValueError("at least one user message is required")
@@ -737,7 +773,7 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
         tools = []
     o = {"max_tokens": max(1, int(max_tokens or 256)), "temperature": temperature, "stop": list(stop) if stop else None, "model": model,
          "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None,
-         "response_format": response_format or None}
+         "response_format": response_format or None, "lora": lora or None}
     if tools:
         r = _tools_native(msgs, o) if _backend_native_tools() else _tools_prompted(msgs, o)
         if response_format and not r["tool_calls"]:

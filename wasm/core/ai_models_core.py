@@ -658,6 +658,8 @@ def _invoke_trained(cid, op, p):
     if op.endswith("stream") or op == "invoke-with-response-stream":
         return _b_err("ValidationException", "This trained model doesn't support streaming operations.", 400)
     t0 = time.time()
+    if t.is_chat_model(cid):
+        return _invoke_trained_chat(t, cid, op, p, t0)
     try:
         if op == "converse":
             msgs = p.get("messages") or []
@@ -672,6 +674,37 @@ def _invoke_trained(cid, op, p):
         return _j(200, t.invoke(cid, p), {"x-vyomi-trained": "true"})
     except t.TrainError as e:
         return _b_err("ResourceNotFoundException" if e.kind == "notfound" else "ValidationException", str(e), 404 if e.kind == "notfound" else 400)
+
+
+def _invoke_trained_chat(t, cid, op, p, t0):
+    """InvokeModel / Converse on a chat-model LoRA custom model: the base open model + this adapter on the local llama.cpp server.
+    InvokeModel bodies: Nova-style {"messages":[{"role","content":[{"text"}]}],"inferenceConfig"} or Llama-style {"prompt","max_gen_len","temperature"}."""
+    hdr = {"x-vyomi-trained": "true", "x-vyomi-adapter": cid}
+    if op == "converse" or isinstance(p.get("messages"), list):
+        req = _converse_request(p, cid)
+        if isinstance(req, str):
+            return _b_err("ValidationException", req, 400)
+        msgs, system, mx, temp, stop, _ = req
+    else:
+        pr = p.get("prompt")
+        if not isinstance(pr, str) or not pr.strip():
+            return _b_err("ValidationException", "Malformed input request: provide messages (Converse/Nova style) or prompt (Llama style).", 400)
+        msgs, system, mx, temp, stop = [{"role": "user", "content": pr}], None, int(p.get("max_gen_len") or p.get("max_tokens") or 256), float(p.get("temperature", 0.7)), None
+    try:
+        r = t.invoke_chat(cid, msgs, system, mx, temp, stop)
+    except t.TrainError as e:
+        return _b_err("ResourceNotFoundException" if e.kind == "notfound" else "ValidationException", str(e), 404 if e.kind == "notfound" else 400)
+    except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
+        return _ll_err(e)
+    usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+    extra = {"vyomiTrained": True, "adapterId": cid, "baseModel": r["baseModel"]}
+    if op == "converse":
+        return _j(200, {"output": {"message": {"role": "assistant", "content": [{"text": r["text"]}]}}, "stopReason": _stop_reason(r["finish_reason"]), "usage": usage,
+                        "metrics": {"latencyMs": int((time.time() - t0) * 1000)}, "additionalModelResponseFields": extra}, hdr)
+    if isinstance(p.get("messages"), list):
+        return _j(200, {"output": {"message": {"role": "assistant", "content": [{"text": r["text"]}]}}, "stopReason": _stop_reason(r["finish_reason"]), "usage": usage, **extra}, hdr)
+    return _j(200, {"generation": r["text"], "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
+                    "stop_reason": "length" if r["finish_reason"] == "length" else "stop", **extra}, hdr)
 
 
 def bedrock_dispatch(method, path, query, headers, body):
@@ -1314,7 +1347,10 @@ def _ft_events(j):
     v = _ft_view(j)
     ev, base = [], j["created_at"]
     ev.append({"object": "fine_tuning.job.event", "id": "ftevent-0", "created_at": base, "level": "info", "message": "Job enqueued. Waiting for jobs ahead to complete.", "data": None, "type": "message"})
-    for m in (v["vyomiTraining"].get("metrics") or []):
+    for st in (v["vyomiTraining"].get("steps") or []):      # chat LoRA: one event per optimiser step like the real service
+        ev.append({"object": "fine_tuning.job.event", "id": f"ftevent-s{st['step']}", "created_at": base + st["step"], "level": "info",
+                   "message": f"Step {st['step']}: training loss={st['loss']}", "type": "metrics", "data": {"step": st["step"], "train_loss": st["loss"]}})
+    for m in ([] if v["vyomiTraining"].get("steps") else (v["vyomiTraining"].get("metrics") or [])):
         ev.append({"object": "fine_tuning.job.event", "id": f"ftevent-{m['epoch']}", "created_at": base + m["epoch"], "level": "info",
                    "message": f"Epoch {m['epoch']}/{v['vyomiTraining'].get('epochs')}: loss={m['loss']} accuracy={m['accuracy']}", "type": "metrics",
                    "data": {"step": m["epoch"], "train_loss": m["loss"], "train_mean_token_accuracy": m["accuracy"], "valid_mean_token_accuracy": m.get("valAccuracy")}})
@@ -1383,8 +1419,8 @@ def _azure_files_ft(method, path, query, lh, body):
         jid = "ftjob-" + uuid.uuid4().hex[:24]
         hpr = dict(p.get("hyperparameters") or {})
         try:
-            t.start("azft-" + jid[6:], "azft-" + jid[6:], t.get_file(tf) or b"", {"epochs": hpr.get("n_epochs", 10) if hpr.get("n_epochs") != "auto" else 10, "batchSize": hpr.get("batch_size") if hpr.get("batch_size") != "auto" else None,
-                                                                    "learningRateMultiplier": hpr.get("learning_rate_multiplier") if hpr.get("learning_rate_multiplier") != "auto" else None}, None, model, p.get("suffix") or "")
+            _hy = {"epochs": hpr.get("n_epochs"), "batchSize": hpr.get("batch_size"), "learningRateMultiplier": hpr.get("learning_rate_multiplier")}
+            t.start("azft-" + jid[6:], "azft-" + jid[6:], t.get_file(tf) or b"", {k: v for k, v in _hy.items() if v not in (None, "auto")}, None, model, p.get("suffix") or "")
         except t.TrainError as e:
             return bad(str(e), "training_file")
         j = {"id": jid, "object": "fine_tuning.job", "model": model, "created_at": now, "finished_at": None, "fine_tuned_model": None, "organization_id": "org-vyomi",
@@ -1414,12 +1450,35 @@ def _azure_files_ft(method, path, query, lh, body):
     return _a_err(404, "404", "Resource not found")
 
 
+def _azure_lora_chat(t, mid, model, p):
+    """chat/completions on a deployment of a LoRA-tuned chat model (ft:): base open model + adapter on the local llama.cpp server."""
+    if p.get("stream"):
+        return _a_err(400, "BadRequest", "This fine-tuned model does not support streaming in Vyomi.", "stream")
+    req = _az_chat_request(p)
+    if isinstance(req[0], str) and not isinstance(req[0], list):
+        return _a_err(400, "BadRequest", req[1], req[0])
+    msgs, system, mx, temp, stop = req[:5]
+    try:
+        r = t.invoke_chat(mid, msgs, system, mx, temp, stop)
+    except t.TrainError as e:
+        return _a_err(404 if e.kind == "notfound" else 400, "NotFound" if e.kind == "notfound" else "BadRequest", str(e))
+    except llm.LlmUnavailable as e:
+        return _a_err(503, "ServiceUnavailable", f"{e}")
+    u = {"prompt_tokens": r["input_tokens"], "completion_tokens": r["output_tokens"], "total_tokens": r["input_tokens"] + r["output_tokens"]}
+    return _j(200, {"id": "chatcmpl-" + uuid.uuid4().hex[:29], "object": "chat.completion", "created": int(time.time()), "model": model,
+                    "choices": [{"index": 0, "finish_reason": "length" if r["finish_reason"] == "length" else "stop", "message": {"role": "assistant", "content": r["text"]}}],
+                    "usage": u, "vyomiTrained": True, "vyomiAdapter": mid, "vyomiBaseModel": r["baseModel"],
+                    "vyomiNote": "Vyomi extension: the open base model plus your LoRA adapter answered; this is not a vendor model."}, {"x-vyomi-trained": "true"})
+
+
 def _azure_trained_chat(model, p):
     """chat/completions on a deployment of a fine-tuned head (Vyomi extension: the head classifies the last user message)."""
     t = _trained()
     mid = "azft-" + model.rsplit(":", 1)[-1]
     if not t.has_model(mid):
         return None
+    if t.is_chat_model(mid):
+        return _azure_lora_chat(t, mid, model, p)
     msgs = p.get("messages") or []
     last = next((m for m in reversed(msgs) if isinstance(m, dict) and m.get("role") == "user"), None)
     c = (last or {}).get("content")

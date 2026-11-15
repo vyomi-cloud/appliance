@@ -30,6 +30,7 @@ import contextvars
 import base64
 import json
 import math
+import os
 import random
 import re
 import threading
@@ -46,7 +47,8 @@ TRAINABLE_EMBEDDERS = ("all-minilm-l6-v2", "nomic-embed-text")
 HEAD_PREFIX = "vyomi.head."
 MODELS_BUCKET = "vyomi-models"
 ACTIVE = ("Queued", "Embedding", "Training", "Evaluating")
-_PUBLIC = ("engine", "taskType", "status", "progress", "epoch", "epochs", "metrics", "heldOut", "rows", "artifact", "startedAt", "endedAt", "note")
+_PUBLIC = ("engine", "taskType", "status", "progress", "epoch", "epochs", "metrics", "heldOut", "rows", "artifact", "startedAt", "endedAt", "note",
+           "steps", "adapterId", "baseModel")
 
 
 class TrainError(Exception):
@@ -71,7 +73,7 @@ def _now():
 def is_trainable(base_id: str) -> bool:
     b = re.sub(r"^arn:.*foundation-model/", "", str(base_id or "")).strip().lower()
     b = re.sub(r"^(us|eu|apac)\.", "", b)
-    return b in TRAINABLE_EMBEDDERS or b.startswith(HEAD_PREFIX)
+    return b in TRAINABLE_EMBEDDERS or b.startswith(HEAD_PREFIX) or chat_base(base_id) is not None
 
 
 def bind_s3(store):
@@ -356,6 +358,8 @@ def active(job_id):
 
 def start(job_id, model_id, data: bytes, hyper: dict | None, out_uri: str | None = None, base_id: str = "", name: str = "") -> dict:
     """Validate and launch a training job. Raises TrainError on bad base/data/hyperparameters (nothing is created in that case)."""
+    if chat_base(base_id) is not None:
+        return start_chat(job_id, model_id, data, hyper, out_uri, base_id, name)
     if not is_trainable(base_id):
         raise TrainError(f"{base_id} is not trainable by Vyomi (trainable: {', '.join(TRAINABLE_EMBEDDERS)} or {HEAD_PREFIX}*).")
     hp = _hp(hyper)
@@ -558,14 +562,15 @@ def load_head(model_id):
 
 def delete_model(model_id):
     _HEADS.pop(model_id, None)
+    _CHAT.pop(model_id, None)
     st = _STORE_OF.pop(model_id, None) or _ST["s3"]
     if st is not None and st.bucket_exists(MODELS_BUCKET):
-        for k in ("head.json", "meta.json"):
+        for k in ("head.json", "adapter.gguf", "meta.json"):
             _s3().delete_object(st, MODELS_BUCKET, f"models/{model_id}/{k}", {}, {})
 
 
 def has_model(model_id):
-    return load_head(model_id) is not None
+    return load_head(model_id) is not None or load_chat(model_id) is not None
 
 
 def persisted_models():
@@ -590,6 +595,8 @@ def invoke(model_id, body: dict) -> dict:
     """Run a trained head: {"task":"classify","text"} -> {label, scores}; {"task":"score","query","document"} -> {score}."""
     h = load_head(model_id)
     if h is None:
+        if load_chat(model_id) is not None:
+            raise TrainError(f"{model_id} is a chat-model LoRA (task 'chat'), not a classifier head: send messages, not a classify/score body.")
         raise TrainError(f"Trained model {model_id} not found.", "notfound")
     task = (body or {}).get("task") or ("score" if h["kind"] == "reranker" else "classify")
     if (task == "classify") == (h["kind"] == "reranker"):
@@ -612,3 +619,280 @@ def invoke(model_id, body: dict) -> dict:
         return {"label": max(sc, key=sc.get), "scores": sc, "vyomiTrained": True, "embedder": h["embedder"]}
     s = _forward(h, _pair_feat(e["vectors"][0], e["vectors"][1]))[0]
     return {"score": round(s, 6), "vyomiTrained": True, "embedder": h["embedder"]}
+
+
+# ═════════════ chat-model LoRA (engine "lora-peft": offline / Mesh only; trainer/lora_train.py in a container or venv subprocess) ═════════════
+# base id (Mesh open-source pool, docker/mesh-runner-llm/models.json) -> HF repo the trainer fine-tunes. ``fits`` = fits a 4 vCPU / 16 GB Codespace.
+CHAT_BASES = {
+    "smollm2-135m-instruct": {"hf": "HuggingFaceTB/SmolLM2-135M-Instruct", "dtype": "float32", "fits": True},
+    "smollm2-360m-instruct": {"hf": "HuggingFaceTB/SmolLM2-360M-Instruct", "dtype": "float32", "fits": True},
+    "qwen2.5-0.5b": {"hf": "Qwen/Qwen2.5-0.5B-Instruct", "dtype": "float32", "fits": True},
+    "qwen2.5-1.5b": {"hf": "Qwen/Qwen2.5-1.5B-Instruct", "dtype": "float32", "fits": True},
+    "qwen2.5-3b": {"hf": "Qwen/Qwen2.5-3B-Instruct", "dtype": "bfloat16", "fits": True},
+    "llama3.1-8b": {"hf": "meta-llama/Llama-3.1-8B-Instruct", "fits": False}, "qwen2.5-7b": {"hf": "Qwen/Qwen2.5-7B-Instruct", "fits": False},
+    "qwen2.5-coder-7b": {"hf": "Qwen/Qwen2.5-Coder-7B-Instruct", "fits": False}, "mistral-7b": {"hf": "mistralai/Mistral-7B-Instruct-v0.3", "fits": False},
+    "gemma2-9b": {"hf": "google/gemma-2-9b-it", "fits": False}, "qwen3-8b": {"hf": "Qwen/Qwen3-8B", "fits": False},
+    "deepseek-r1-8b": {"hf": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B", "fits": False}, "qwen3-30b": {"hf": "Qwen/Qwen3-30B-A3B", "fits": False},
+}
+CHAT_CAPS = {"epochs": (1, 10, 3), "batch": (1, 16, 4), "rank": (1, 64, 8), "seq": (32, 1024, 256)}
+_CHAT: dict[str, dict] = {}         # model id -> meta.json of a trained chat adapter (the object store is the source of truth)
+TRAINER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "trainer")
+
+
+def chat_base(base_id):
+    """Canonical pool id of a chat base (or None). Accepts the pool id, ``vyomi.<id>`` / ``ollama.<id>`` / ``<id>:<tag>`` forms (NOT vendor ids such as amazon.nova-*: those stay metadata-only)."""
+    b = re.sub(r"^arn:.*foundation-model/", "", str(base_id or "")).strip().lower()
+    b = re.sub(r"^(us|eu|apac)\.", "", b)
+    b = re.sub(r"^(vyomi|ollama)\.", "", b)
+    b = re.sub(r"-v\d+(:\d+)?$", "", b)
+    if ":" in b:        # ollama tag form: qwen2.5:3b-instruct-q4_K_M -> qwen2.5-3b
+        name, tag = b.split(":", 1)
+        sz = re.match(r"(\d+(?:\.\d+)?b)", tag)
+        b = f"{name}-{sz.group(1)}" if sz else name
+    for k in CHAT_BASES:
+        if b == k or b == k.replace("-instruct", ""):
+            return k
+    return None
+
+
+def parse_chat_rows(data: bytes):
+    """-> list of message lists (last turn = assistant). Caps like the head contract: 2000 rows, 5 MB."""
+    if len(data) > MAX_BYTES:
+        raise TrainError(f"Training data is {len(data)} bytes; the limit is {MAX_BYTES} bytes (5 MB).")
+    out = []
+    for i, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            raise TrainError(f"Training data line {i} is not valid JSON.")
+        if isinstance(r, dict) and isinstance(r.get("messages"), list) and r["messages"]:
+            m = r["messages"]
+            if not all(isinstance(x, dict) and x.get("role") in ("system", "user", "assistant") and isinstance(x.get("content"), str) and x["content"].strip() for x in m):
+                raise TrainError(f"Row {i}: messages need a role (system|user|assistant) and non-empty string content.")
+            if m[-1]["role"] != "assistant" or not any(x["role"] == "user" for x in m):
+                raise TrainError(f"Row {i}: messages must contain a user turn and end with the assistant turn to learn.")
+        elif isinstance(r, dict) and isinstance(r.get("prompt"), str) and isinstance(r.get("completion"), str) and r["prompt"].strip() and r["completion"].strip():
+            m = [{"role": "user", "content": r["prompt"]}, {"role": "assistant", "content": r["completion"]}]
+        else:
+            raise TrainError(f'Row {i}: chat fine-tuning rows must be {{"messages":[...]}} or {{"prompt","completion"}}.')
+        out.append(m)
+        if len(out) > MAX_ROWS:
+            raise TrainError(f"Training data has more than {MAX_ROWS} rows; the limit is {MAX_ROWS}.")
+    if len(out) < MIN_ROWS:
+        raise TrainError(f"Training data has {len(out)} rows; at least {MIN_ROWS} are required.")
+    return out
+
+
+def _chat_hp(hyper):
+    h = {str(k): v for k, v in (hyper or {}).items()}
+
+    def num(names, key, cast=int, lo=None, hi=None, d=None):
+        v = next((h[n] for n in names if h.get(n) not in (None, "", "auto")), d)
+        try:
+            v = cast(v)
+        except (TypeError, ValueError):
+            raise TrainError(f"Hyperparameter {names[0]} must be a number.")
+        if lo is not None and not lo <= v <= hi:
+            raise TrainError(f"Hyperparameter {names[0]} must be between {lo} and {hi}.")
+        return v
+    e, b, r, q = CHAT_CAPS["epochs"], CHAT_CAPS["batch"], CHAT_CAPS["rank"], CHAT_CAPS["seq"]
+    out = {"epochs": num(("epochCount", "n_epochs", "epochs"), "epochs", int, e[0], e[1], e[2]), "bs": num(("batchSize", "batch_size"), "bs", int, b[0], b[1], b[2]),
+           "rank": num(("loraRank", "lora_rank", "rank"), "rank", int, r[0], r[1], r[2]), "seq": num(("maxSequenceLength", "max_seq_length"), "seq", int, q[0], q[1], q[2]),
+           "lr": num(("learningRate", "learning_rate"), "lr", float, 1e-6, 1e-2, 2e-4)}
+    out["alpha"] = num(("loraAlpha", "lora_alpha"), "alpha", int, 1, 256, 2 * out["rank"])
+    mult = h.get("learningRateMultiplier", h.get("learning_rate_multiplier"))
+    if mult not in (None, "", "auto"):
+        out["lr"] = min(1e-2, out["lr"] * num(("learningRateMultiplier", "learning_rate_multiplier"), "m", float, 0.01, 10.0, 1.0))
+    return out
+
+
+def trainer_mode():
+    """-> ("docker", image) | ("venv", python) | (None, why). VYOMI_TRAINER=docker|venv|auto (default auto: docker image if present, else venv python)."""
+    import shutil
+    import subprocess
+    want = os.environ.get("VYOMI_TRAINER", "auto")
+    image = os.environ.get("VYOMI_TRAINER_IMAGE", "vyomi-trainer:lora1")
+    py = os.environ.get("VYOMI_TRAINER_PYTHON") or os.path.join(TRAINER_DIR, ".venv", "bin", "python")
+    if want in ("docker", "auto") and shutil.which("docker"):
+        try:
+            if subprocess.run(["docker", "image", "inspect", image], capture_output=True, timeout=20).returncode == 0:
+                return "docker", image
+        except Exception:  # noqa: BLE001
+            pass
+        if want == "docker":
+            return None, f"trainer image {image} not found (build it: docker build -t {image} trainer/)"
+    if want in ("venv", "auto") and os.path.exists(py):
+        return "venv", py
+    return None, ("no trainer available: build the image (docker build -t vyomi-trainer:lora1 trainer/) or create the venv "
+                  f"(python -m venv trainer/.venv && trainer/.venv/bin/pip install -r trainer/requirements.txt; set VYOMI_TRAINER_PYTHON)")
+
+
+def start_chat(job_id, model_id, data, hyper, out_uri, base_id, name):
+    cb = chat_base(base_id)
+    spec = CHAT_BASES[cb]
+    if _ST["bridge"]:
+        raise TrainError("Chat-model LoRA training runs on the Mesh / offline appliance, not in the Nano tab: train there and import the GGUF adapter (see ai-nano-training-scope.md section 10).")
+    if not spec["fits"]:
+        raise TrainError(f"{cb} is too large to LoRA-train on a 4 vCPU / 16 GB Codespace on CPU (fp32/bf16 training state). Trainable chat bases: "
+                         f"{', '.join(k for k, v in CHAT_BASES.items() if v['fits'])}.")
+    rows = parse_chat_rows(data)
+    hp = _chat_hp(hyper)
+    mode, how = trainer_mode()
+    if mode is None:
+        raise TrainError(how, "unavailable")
+    import tempfile
+    work = tempfile.mkdtemp(prefix=f"vyomi-lora-{job_id}-")
+    with open(os.path.join(work, "train.jsonl"), "w") as f:
+        for m in rows:
+            f.write(json.dumps({"messages": m}) + "\n")
+    j = {"id": job_id, "model_id": model_id, "engine": "lora-peft", "taskType": "chat-lora", "status": "Queued", "progress": 0.0, "epoch": 0, "epochs": hp["epochs"],
+         "metrics": [], "steps": [], "heldOut": None, "rows": len(rows), "startedAt": _now(), "baseModel": cb, "adapterId": model_id, "_cancel": False, "_out": out_uri,
+         "_hp": hp, "_base": base_id, "_cb": cb, "_name": name, "_s3": _ST["s3"], "_work": work, "_mode": (mode, how), "_proc": None,
+         "note": (f"LoRA adapter (rank {hp['rank']}) on the open model {cb} ({spec['hf']}), trained by PEFT on CPU. It is not a vendor model; quality = the held-out check below.")}
+    _JOBS[job_id] = j
+    try:
+        ctx = contextvars.copy_context()
+        threading.Thread(target=ctx.run, args=(_run_lora, j), daemon=True, name=f"vyomi-lora-{job_id}").start()
+    except RuntimeError:
+        _finish(j, "Failed", "This substrate cannot run training: no thread support.")
+    return _view(j)
+
+
+def _trainer_argv(j):
+    mode, how = j["_mode"]
+    hp, spec, work = j["_hp"], CHAT_BASES[j["_cb"]], j["_work"]
+    args = ["--base", spec["hf"], "--data", "{w}/train.jsonl", "--out", "{w}/out", "--epochs", str(hp["epochs"]), "--rank", str(hp["rank"]), "--alpha", str(hp["alpha"]),
+            "--lr", str(hp["lr"]), "--max-seq", str(hp["seq"]), "--batch", str(hp["bs"]), "--dtype", spec["dtype"], "--events", "{w}/events.jsonl", "--cancel-file", "{w}/cancel"]
+    if mode == "docker":
+        name = f"vyomi-trainer-{j['id']}"
+        j["_cname"] = name
+        cache = os.environ.get("VYOMI_TRAINER_HF_CACHE", "vyomi-trainer-hf")
+        return ["docker", "run", "--rm", "--name", name, "--memory", os.environ.get("VYOMI_TRAINER_MEMORY", "12g"), "-v", f"{work}:/work", "-v", f"{cache}:/root/.cache/huggingface",
+                how, "python", "/opt/trainer/lora_train.py", *[a.replace("{w}", "/work") for a in args], "--llamacpp", "/opt/llama.cpp"]
+    llcpp = os.environ.get("VYOMI_LLAMACPP_DIR", os.path.join(TRAINER_DIR, "llama.cpp"))
+    return [how, os.path.join(TRAINER_DIR, "lora_train.py"), *[a.replace("{w}", work) for a in args], "--llamacpp", llcpp]
+
+
+def _run_lora(j):
+    import shutil
+    import subprocess
+    work = j["_work"]
+    try:
+        argv = _trainer_argv(j)
+        j["status"] = "Embedding"          # loading base weights + tokenising (the shared lifecycle vocabulary)
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        j["_proc"] = p
+        err_tail, done = [], None
+        for line in p.stdout:
+            line = line.strip()
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                err_tail = (err_tail + [line])[-8:]
+                continue
+            kind = ev.get("event")
+            if kind == "status":
+                if ev["status"] in ACTIVE:
+                    j["status"] = ev["status"]
+                if ev.get("note"):
+                    j["trainerNote"] = ev["note"]
+            elif kind == "step":
+                j["steps"] = (j["steps"] + [{"step": ev["step"], "epoch": ev["epoch"], "loss": ev["loss"]}])[-1000:]
+                j["progress"] = round(0.05 + 0.85 * ev["step"] / max(1, ev["steps"]), 3)
+            elif kind == "epoch":
+                j["metrics"].append({"epoch": ev["epoch"], "loss": ev["loss"], "accuracy": ev["accuracy"], "valLoss": ev["valLoss"]})
+                j["epoch"] = ev["epoch"]
+            elif kind == "done":
+                done = ev
+            elif kind == "error":
+                err_tail.append(ev.get("error", ""))
+            if j["_cancel"]:
+                break
+        if j["_cancel"]:
+            _kill(j)
+            _finish(j, "Stopped")
+            return
+        rc = p.wait()
+        if rc != 0 or not done:
+            _finish(j, "Failed", "Trainer failed: " + (" | ".join(err_tail)[-500:] or f"exit code {rc}"))
+            return
+        j["heldOut"], j["status"], j["progress"] = done["heldOut"], "Evaluating", 0.95
+        with open(os.path.join(work, "out", "adapter.gguf"), "rb") as f:
+            blob = f.read()
+        _publish_chat(j, blob, done)
+        _finish(j, "Completed")
+    except Exception as e:  # noqa: BLE001
+        _finish(j, "Failed", f"{e.__class__.__name__}: {e}")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _kill(j):
+    import subprocess
+    try:
+        open(os.path.join(j["_work"], "cancel"), "w").close()
+    except OSError:
+        pass
+    if j.get("_cname"):
+        subprocess.run(["docker", "kill", j["_cname"]], capture_output=True, timeout=30)
+    p = j.get("_proc")
+    if p and p.poll() is None:
+        p.terminate()
+        try:
+            p.wait(10)
+        except Exception:  # noqa: BLE001
+            p.kill()
+
+
+def _publish_chat(j, blob, done):
+    mid, st = j["model_id"], j.get("_s3")
+    meta = {"modelId": mid, "jobId": j["id"], "task": "chat-lora", "kind": "chat-lora", "name": j.get("_name"), "base": j["_base"], "baseModelId": j["_cb"],
+            "hf": CHAT_BASES[j["_cb"]]["hf"], "rank": done["rank"], "alpha": done["alpha"], "rows": done["rows"], "steps": done["steps"], "heldOut": done["heldOut"],
+            "adapterBytes": len(blob), "meanStepS": done["meanStepS"], "peakRssMB": done["peakRssMB"], "createdAt": _now(), "format": "gguf-lora-f16", "engine": "lora-peft"}
+    if not store_put(MODELS_BUCKET, f"models/{mid}/adapter.gguf", blob, "application/octet-stream", st=st):
+        raise RuntimeError("could not write the adapter to the object store")
+    store_put(MODELS_BUCKET, f"models/{mid}/meta.json", json.dumps(meta).encode(), st=st)
+    j["artifact"] = f"s3://{MODELS_BUCKET}/models/{mid}/adapter.gguf"
+    _STORE_OF[mid], _CHAT[mid] = st, meta
+    out = j.get("_out")
+    m = re.match(r"^s3://([^/]+)/?(.*)$", out or "")
+    if m:
+        store_put(m.group(1), f"{m.group(2).rstrip('/') + '/' if m.group(2) else ''}{mid}/adapter.gguf", blob, "application/octet-stream", st=st)
+
+
+def load_chat(model_id):
+    m = _CHAT.get(model_id)
+    if m is None:
+        raw = store_get(MODELS_BUCKET, f"models/{model_id}/meta.json", _STORE_OF.get(model_id))
+        if raw:
+            try:
+                d = json.loads(raw)
+            except ValueError:
+                return None
+            if d.get("kind") == "chat-lora":
+                m = _CHAT[model_id] = d
+    return m
+
+
+def is_chat_model(model_id):
+    return load_chat(model_id) is not None
+
+
+def invoke_chat(model_id, messages, system=None, max_tokens=256, temperature=0.7, stop=None) -> dict:
+    """Generate with the custom chat model: the BASE open model on the local llama.cpp server with this adapter applied (``lora`` seam in
+    core/llm_core). -> llm chat() dict + vyomiTrained / adapterId / baseModel. Raises llm.LlmUnavailable when no backend / adapter is loaded."""
+    m = load_chat(model_id)
+    if m is None:
+        raise TrainError(f"Trained model {model_id} not found.", "notfound")
+    blob = store_get(MODELS_BUCKET, f"models/{model_id}/adapter.gguf", _STORE_OF.get(model_id))
+    if blob is None:
+        raise TrainError(f"The adapter of {model_id} is missing from the object store.", "notfound")
+    try:
+        path = llm.lora_prepare(model_id, blob)
+    except OSError:
+        path = f"{model_id}.gguf"          # no writable adapter dir (read-only substrate): resolution by name still works if the server loaded it
+    r = llm.chat(messages, system=system, max_tokens=max_tokens, temperature=temperature, stop=stop, model=m["baseModelId"],
+                 lora={"name": model_id, "path": path, "scale": 1.0})
+    return dict(r, vyomiTrained=True, adapterId=model_id, baseModel=m["baseModelId"])

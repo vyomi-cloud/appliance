@@ -458,8 +458,8 @@ def _rehydrate():
             arn = f"arn:aws:bedrock:{_REG}:{_ACCT}:custom-model/{cid}"
             _CUSTOM[cid] = {"modelArn": arn, "modelName": m.get("name") or cid, "creationTime": _iso(time.time()), "baseModelArn": _fm(m.get("base") or "all-minilm-l6-v2"),
                             "baseModelName": m.get("base") or "all-minilm-l6-v2", "customizationType": "FINE_TUNING", "ownerAccountId": _ACCT,
-                            "modelStatus": "Active", "vyomiTraining": {"engine": "head-py", "taskType": m.get("task"), "status": "Completed", "heldOut": m.get("heldOut"),
-                                                                       "artifact": f"s3://{tc.MODELS_BUCKET}/models/{cid}/head.json"}}
+                            "modelStatus": "Active", "vyomiTraining": {"engine": m.get("engine", "head-py"), "taskType": m.get("task"), "status": "Completed", "heldOut": m.get("heldOut"),
+                                                                       "artifact": f"s3://{tc.MODELS_BUCKET}/models/{cid}/{'adapter.gguf' if m.get('kind') == 'chat-lora' else 'head.json'}"}}
     except Exception:  # noqa: BLE001 - rehydration is best effort
         pass
 
@@ -481,7 +481,9 @@ def _job_get(j):
                            "vyomiNote": "Metadata only: Vyomi does not train; the job completes with a custom-model record."}
     if j.get("_train"):
         v = j.get("vyomiTraining") or {}
-        d["vyomiNote"] = "Trained for real: a small head on frozen embeddings (not an LLM fine-tune). See vyomiTraining for per-epoch metrics."
+        d["vyomiNote"] = ("Trained for real: a LoRA adapter on an open chat model (not a vendor model); invoke the custom model ARN to use it. See vyomiTraining for per-step loss and held-out numbers."
+                          if v.get("engine") == "lora-peft" else
+                          "Trained for real: a small head on frozen embeddings (not an LLM fine-tune). See vyomiTraining for per-epoch metrics.")
         d["vyomiTraining"] = v
         if v.get("metrics"):
             d["trainingMetrics"] = {"trainingLoss": v["metrics"][-1]["loss"]}

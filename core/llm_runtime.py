@@ -32,6 +32,19 @@ def _run(args, run=None):
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
+def lora_args(adapter_dir: str | None = None, mount: str = "/adapters") -> list[str]:
+    """llama-server flags that load every ``*.gguf`` LoRA adapter in ``adapter_dir`` (default core.llm_core.lora_dir()) at start, UNAPPLIED
+    (requests opt in per call with ``lora: [{id, scale}]``). The directory must be mounted at ``mount``. Empty when there are none."""
+    d = adapter_dir or os.environ.get("VYOMI_LLM_ADAPTER_DIR") or os.path.join(os.environ.get("CLOUDLEARN_DATA_DIR", "/data"), "llm-adapters")
+    files = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else []) if f.endswith(".gguf"))
+    if not files:
+        return []
+    out = ["--lora-init-without-apply"]
+    for f in files:
+        out += ["--lora", f"{mount}/{f}"]
+    return out
+
+
 def free_disk_gb(path="/") -> float:
     return round(shutil.disk_usage(path).free / 1e9, 1)
 
@@ -55,7 +68,11 @@ def start(run=None, disk=free_disk_gb, network: str | None = None) -> dict:
         args = ["run", "-d", "--name", NAME, "--restart", "unless-stopped", "-v", f"{VOLUME}:/root/.cache", "-p", "127.0.0.1:18080:8080"]
         if network:
             args += ["--network", network]
-        args += [IMAGE, "-hf", HF_MODEL, "--host", "0.0.0.0", "--port", "8080", "-c", "4096", "--embeddings", "--jinja"]
+        la = lora_args()
+        if la:      # trained chat-LoRA adapters (core/training_core): mount the adapter dir read-only and load them unapplied
+            d = os.environ.get("VYOMI_LLM_ADAPTER_DIR") or os.path.join(os.environ.get("CLOUDLEARN_DATA_DIR", "/data"), "llm-adapters")
+            args += ["-v", f"{d}:/adapters:ro"]
+        args += [IMAGE, "-hf", HF_MODEL, "--host", "0.0.0.0", "--port", "8080", "-c", "4096", "--embeddings", "--jinja", *la]
         rc, _, err = _run(args, run)
     if rc != 0:
         raise RuntimeError_(f"docker could not start {NAME}: {err}")

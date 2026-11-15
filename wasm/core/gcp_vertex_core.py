@@ -71,7 +71,7 @@ SPEC = {
 COLL_VERBS = {"models": {"upload", "copy"}, "datasets": set()}
 # resource-level custom verbs
 ITEM_VERBS = {
-    "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "mutateDeployedModel"},
+    "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "generateContent", "mutateDeployedModel"},
     "trainingPipelines": {"cancel"}, "customJobs": {"cancel"}, "hyperparameterTuningJobs": {"cancel"},
     "batchPredictionJobs": {"cancel"}, "pipelineJobs": {"cancel"}, "tuningJobs": {"cancel"},
     "notebookRuntimes": {"start", "stop", "upgrade"}, "instances": {"start", "stop", "reset"},
@@ -597,11 +597,59 @@ def _list(store, project, loc, coll, parent_prefix, query):
     return _j(200, out)
 
 
+def _chat_llm():
+    try:
+        from core import ai_models_core as am, llm_core as llm
+    except ImportError:  # Pyodide flat layout
+        import ai_models_core as am  # type: ignore
+        import llm_core as llm  # type: ignore
+    return am, llm
+
+
+def _chat_answer(mid, msgs, system, mx, temp, stop):
+    """-> (result dict, None) | (None, error response). One chat-LoRA generation on the tuned model."""
+    am, llm = _chat_llm()
+    try:
+        return tc.invoke_chat(mid, msgs, system, mx, temp, stop), None
+    except tc.TrainError as e:
+        return None, _err(404 if e.kind == "notfound" else 400, "NOT_FOUND" if e.kind == "notfound" else "INVALID_ARGUMENT", str(e))
+    except llm.LlmUnavailable as e:
+        return None, _err(503, "UNAVAILABLE", str(e))
+
+
+def _generate_trained(mrec, p):
+    """endpoints:generateContent on a tuned chat model (Gemini-style body) -> candidates + usageMetadata, vyomiTrained."""
+    am, _ = _chat_llm()
+    if not isinstance(p.get("contents"), list) or not p["contents"]:
+        return _err(400, "INVALID_ARGUMENT", "Unable to submit request because at least one contents field is required.")
+    req = am._gem_request(p)
+    if isinstance(req, str):
+        return _err(400, "INVALID_ARGUMENT", req)
+    r, e = _chat_answer(mrec["_vyomiHead"], req[0], req[1], req[2], req[3], req[4])
+    if e:
+        return e
+    return _j(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": r["text"]}]}, "index": 0, "finishReason": "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"}],
+                    "usageMetadata": {"promptTokenCount": r["input_tokens"], "candidatesTokenCount": r["output_tokens"], "totalTokenCount": r["input_tokens"] + r["output_tokens"]},
+                    "modelVersion": mrec.get("displayName") or mrec["name"], "vyomiTrained": True, "vyomiAdapter": mrec["_vyomiHead"], "vyomiBaseModel": r["baseModel"]})
+
+
 def _predict_trained(mrec, dm, p):
-    """endpoints:predict on a tuned head: instances [{"text"}] -> classifier labels; [{"query","document"}] -> reranker score."""
+    """endpoints:predict on a tuned head: instances [{"text"}] -> classifier labels; [{"query","document"}] -> reranker score.
+    On a tuned CHAT model: instances [{"prompt"} | {"messages":[{role,content}]}] -> predictions [{"content"}]."""
     inst = p.get("instances")
     if not isinstance(inst, list) or not inst or not all(isinstance(i, dict) for i in inst):
         return _err(400, "INVALID_ARGUMENT", "instances: a non-empty list of objects is required.")
+    if tc.is_chat_model(mrec["_vyomiHead"]):
+        pr, out = p.get("parameters") or {}, []
+        for i in inst:
+            msgs = i.get("messages") if isinstance(i.get("messages"), list) else ([{"role": "user", "content": i["prompt"]}] if isinstance(i.get("prompt"), str) and i["prompt"].strip() else None)
+            if not msgs:
+                return _err(400, "INVALID_ARGUMENT", "Each instance needs a prompt string or a messages list.")
+            r, e = _chat_answer(mrec["_vyomiHead"], msgs, None, int(pr.get("maxOutputTokens") or pr.get("max_tokens") or 256), float(pr.get("temperature", 0.7)), None)
+            if e:
+                return e
+            out.append({"content": r["text"], "vyomiAdapter": r["adapterId"], "vyomiBaseModel": r["baseModel"]})
+        return _j(200, {"predictions": out, "deployedModelId": dm.get("id"), "model": mrec["name"], "modelDisplayName": mrec.get("displayName"), "vyomiTrained": True})
     out = []
     try:
         for i in inst:
@@ -664,6 +712,11 @@ def _verb(store, project, loc, coll, full, rec, verb, p):
                 mrec["deployedModels"] = [d for d in mrec.get("deployedModels", []) if d.get("deployedModelId") != did]
             rec["updateTime"] = t
             return _j(200, _op(store, project, loc, coll, {}, verb="UndeployModel", rname=full))
+        if verb == "generateContent" and rec.get("deployedModels"):
+            dm = next((d for d in rec["deployedModels"] if (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiHead")), None)
+            if dm and tc.is_chat_model(store.res[dm["model"].split("@")[0]]["_vyomiHead"]):
+                return _generate_trained(store.res[dm["model"].split("@")[0]], p)
+            return _err(400, "FAILED_PRECONDITION", "generateContent is served only for models Vyomi tuned from a chat base.")
         if verb in ("predict", "rawPredict"):
             if not rec.get("deployedModels"):
                 return _err(400, "FAILED_PRECONDITION", "Endpoint has no deployed model.")
