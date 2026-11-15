@@ -254,8 +254,8 @@ def _service_graph(store, b):
                 st["ErrorStatistics"]["TotalCount"] += 1
             else:
                 st["OkCount"] += 1
-            for sub in d.get("subsegments") or []:
-                if sub.get("namespace") in ("aws", "remote"):
+            for sub in _walk(d):      # nested subsegments too (agent -> tool / model calls)
+                if sub is not d and sub.get("namespace") in ("aws", "remote"):
                     node(sub["name"], "remote")
                     n["_e"][sub["name"]] = n["_e"].get(sub["name"], 0) + 1
     out = []
@@ -270,12 +270,22 @@ def _service_graph(store, b):
 
 _ROUTES = {"/TraceSegments": _put_segments, "/Traces": _batch_get, "/TraceSummaries": _summaries,
            "/ServiceGraph": _service_graph, "/TelemetryRecords": lambda s, b: _resp(200, {}),
-           "/GetSamplingRules": lambda s, b: _resp(200, {"SamplingRuleRecords": []}),
            "/SamplingTargets": lambda s, b: _resp(200, {"SamplingTargetDocuments": [], "UnprocessedStatistics": []})}
 
 
 def dispatch(store, method: str, path: str, query, headers, body: bytes) -> dict:
     fn = _ROUTES.get(path.rstrip("/") or "/")
+    if fn is None:       # groups, sampling rules, encryption, tags, policies, destination, trace graph (core/xray_admin_core)
+        from core import xray_admin_core
+        try:
+            doc = json.loads(body or b"{}") if method == "POST" else {}
+        except Exception:
+            return _err(400, "InvalidRequestException", "Invalid JSON body")
+        out = xray_admin_core.call(store, path.rstrip("/") or "/", doc)
+        if out is not None:
+            if "__error" in out[1]:
+                return _err(out[0], *out[1]["__error"])
+            return _resp(out[0], out[1])
     if fn is None:
         return _err(404, "UnknownOperationException", f"{method} {path} is not an X-Ray operation")
     try:
