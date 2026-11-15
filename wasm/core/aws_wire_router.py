@@ -366,7 +366,7 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
-    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|files|fine_tuning)(/|$)", p0):
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|files|fine_tuning|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0):
         return "az-graph"
@@ -766,6 +766,7 @@ class AwsWireRouter:
         self.msg = s.get("msg") or InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
         # GCP services — each its own store instance (namespaced from AWS).
         self.gcs = s.get("gcs") or InMemoryObjectStore()
+        _tc.bind_gcs(self.gcs)     # gs:// model data (training, chat-model import) reads the simulated GCS store first
         self.gcp_fs = s.get("gcp_fs") or FirestoreStore()
         self.gcp_kms = s.get("gcp_kms") or InMemoryKeyStore()
         self.gcp_sec = s.get("gcp_sec") or InMemoryKvStore()
@@ -1576,7 +1577,7 @@ class AwsWireRouter:
             r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
             return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
-        if svc in ("bedrock", "gcp-aiplatform", "gcp-agentengine", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
+        if svc in ("bedrock", "gcp-aiplatform", "gcp-vertex", "gcp-agentengine", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
                 r"/providers/microsoft\.cognitiveservices/accounts/[^/]+/openai/", path.lower())):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
             from core import llm_core
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))

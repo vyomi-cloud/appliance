@@ -459,6 +459,13 @@ def _openai_ops(rec, rest, method, payload, state=None, query=None):
 # ── deployments / commitment plans / RAI policies ────────────────────────────
 def _find_model(fmt, name, version):
     nm = str(name or "").lower()
+    if nm.startswith("vyomi.import."):      # an imported LoRA chat model (core/import_core, Vyomi extension): deployable, served by wllama on Nano
+        try:
+            from core import import_core as _ic
+        except ImportError:  # Pyodide flat layout
+            import import_core as _ic  # type: ignore
+        if _ic.has_model(str(name)):
+            return ("Vyomi", str(name), str(version or "1"), 1000, _CHAT_CAPS)
     if nm.startswith("ft:"):        # a head fine-tuned through /openai/fine_tuning/jobs (core/training_core): deployable, answers via the head
         return ("OpenAI", str(name), str(version or "1"), 1000, _CHAT_CAPS)
     for m in MODELS:

@@ -148,6 +148,9 @@ def _resolve_model(mid):
     except ImportError:  # Pyodide flat layout
         import bedrock_ctl_core as _ctl  # type: ignore
     mid = _ctl.app_profile_model(mid) or mid    # application inference profile / prompt router ARN -> its model
+    imp = _ctl.imported_model_id(mid)            # Custom Model Import (core/import_core): base GGUF + LoRA adapter, served by wllama on Nano
+    if imp:
+        return (imp, "Vyomi (imported)", _ctl._IMPORTED[imp]["modelName"], ["TEXT"], ["TEXT"], True, CAT.DEFAULT_CHAT, "vyomi.import")
     mid = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:(foundation-model|inference-profile)/", "", mid)
     base = re.sub(r"^(us|eu|apac|us-gov|global)\.", "", mid)
     if base in _BM:
@@ -166,6 +169,8 @@ def _resolve_model(mid):
 def _ll_err(e):
     if isinstance(e, llm.LlmStructuredError):
         return _b_err("ModelErrorException", str(e), 424)
+    if "mported chat model" in str(e):
+        return _b_err("ModelNotReadyException", f"{e}", 429)
     return _b_err("ModelNotReadyException", f"{e} (the local model has not been started)", 429)
 
 
@@ -370,6 +375,16 @@ def _fam(m):
 def _bedrock_text_request(m, p):
     """-> (messages, system, max_tokens, temperature, stop, extras) from the family-specific InvokeModel body, or an error string."""
     mid, fam = m[0], _fam(m)
+    if fam == "vyomi.import":        # Llama-style {"prompt"} (as real imported Llama models take) or OpenAI-style {"messages":[{"role","content"}]}
+        msgs = p.get("messages")
+        if isinstance(msgs, list) and msgs:
+            if not all(isinstance(x, dict) and x.get("role") in ("system", "user", "assistant") and isinstance(x.get("content"), str) for x in msgs):
+                return "messages: each item needs a role (system|user|assistant) and a string content"
+        elif p.get("prompt"):
+            msgs = [{"role": "user", "content": p["prompt"]}]
+        else:
+            return "Malformed input request: required key [prompt] (or [messages]) not found, please reformat your input and try again."
+        return msgs, None, p.get("max_gen_len") or p.get("max_tokens") or 512, p.get("temperature", 0.5), p.get("stop"), {"model": mid}
     if fam.startswith("vyomi.") or fam == "vyomi-prompt":
         txt = p.get("prompt") or p.get("inputText")
         if not txt:
@@ -425,6 +440,9 @@ def _bedrock_response(m, p, r):
         return {"output": {"message": {"role": "assistant", "content": _converse_content(r)}}, "stopReason": _stop_reason(r["finish_reason"]),
                 "usage": {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"],
                           "totalTokens": r["input_tokens"] + r["output_tokens"]}}
+    if fam == "vyomi.import":
+        return {"generation": txt, "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
+                "stop_reason": "length" if r["finish_reason"] == "length" else "stop", "vyomiImported": True, "vyomiTrained": True}
     if fam.startswith("meta.") or fam == "vyomi-prompt":
         return {"generation": txt, "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
                 "stop_reason": "length" if r["finish_reason"] == "length" else "stop"}
@@ -773,7 +791,9 @@ def bedrock_dispatch(method, path, query, headers, body):
             usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
             return _j(200, {"output": {"message": {"role": "assistant", "content": _converse_content(r)}},
                             "stopReason": _stop_reason(r["finish_reason"]), "usage": usage,
-                            "metrics": {"latencyMs": int((time.time() - t0) * 1000)}}, {"x-vyomi-local-model": r["model"]})
+                            "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
+                            **({"additionalModelResponseFields": {"vyomiImported": True, "vyomiTrained": True}} if _fam(m) == "vyomi.import" else {})},
+                      {"x-vyomi-local-model": r["model"]})
         return _stream_out(200, {}, _converse_frames(it, t0), "application/vnd.amazon.eventstream")
     # InvokeModel[WithResponseStream]
     if m[6] == CAT.DEFAULT_EMBED and m[0] in CAT._BYNAME:      # native ids: 768-d nomic-style embedding, Titan-free body
@@ -1137,6 +1157,49 @@ def vertex_dispatch(method, path, query, headers, body):
     return _g_err(404, "NOT_FOUND", f"Unsupported Vertex AI method :{op}")
 
 
+def vertex_imported_call(model_id, op, p, query=None):
+    """Endpoint :generateContent / :streamGenerateContent / :predict on a deployed IMPORTED chat model (core/import_core; wllama on Nano)."""
+    ic = _imported()
+    if not ic.has_model(model_id):
+        return _g_err(404, "NOT_FOUND", f"Imported model {model_id} not found.")
+    if op == "predict":      # vLLM-style custom-container instances: {"prompt" | "messages", "max_tokens", "temperature"}
+        inst = p.get("instances")
+        if not isinstance(inst, list) or not inst or not all(isinstance(i, dict) for i in inst):
+            return _g_err(400, "INVALID_ARGUMENT", "instances: a non-empty list of objects is required.")
+        preds = []
+        for i in inst:
+            msgs = i.get("messages") if isinstance(i.get("messages"), list) else ([{"role": "user", "content": i["prompt"]}] if isinstance(i.get("prompt"), str) and i["prompt"] else None)
+            if not msgs or not all(isinstance(x, dict) and isinstance(x.get("content"), str) and x.get("role") in ("system", "user", "assistant") for x in msgs):
+                return _g_err(400, "INVALID_ARGUMENT", "each instance needs a prompt string or messages [{role, content}].")
+            try:
+                r = llm.chat(msgs, None, i.get("max_tokens") or 256, i.get("temperature", 0.0), i.get("stop"), model=model_id)
+            except llm.LlmUnavailable as e:
+                return _g_err(503, "UNAVAILABLE", f"{e}")
+            preds.append({"content": r["text"], "finishReason": "length" if r["finish_reason"] == "length" else "stop",
+                          "usage": {"promptTokens": r["input_tokens"], "completionTokens": r["output_tokens"]}, "vyomiImported": True, "vyomiTrained": True})
+        return _j(200, {"predictions": preds, "model": model_id, "vyomiImported": True, "vyomiTrained": True})
+    req = _gem_request(p)
+    if isinstance(req, str):
+        return _g_err(400, "INVALID_ARGUMENT", req)
+    req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model_id))
+    try:
+        r = _llm_chat(req)
+    except llm.LlmStructuredError as e:
+        return _g_err(500, "INTERNAL", str(e))
+    except llm.LlmUnavailable as e:
+        return _g_err(503, "UNAVAILABLE", f"{e}")
+    except ValueError as e:
+        return _g_err(400, "INVALID_ARGUMENT", str(e))
+    out = {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"])}, "index": 0,
+                           "finishReason": "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"}],
+           "usageMetadata": _gem_usage(r), "modelVersion": model_id, "responseId": uuid.uuid4().hex[:20], "vyomiImported": True, "vyomiTrained": True}
+    if op == "streamGenerateContent":      # buffered: one chunk with the finished answer (the wllama path answers whole)
+        sse = (query or {}).get("alt") == "sse"
+        return _stream_out(200, {}, iter([("data: " + json.dumps(out) + "\n\n") if sse else json.dumps([out])]), "text/event-stream" if sse else "application/json")
+    return _j(200, out, {"x-vyomi-local-model": r["model"]})
+
+
+
 # ───────────────────────────── Azure OpenAI ─────────────────────────────
 def _a_err(status, code, msg, param=None):
     return _j(status, {"error": {"code": code, "message": msg, "param": param, "type": None, "inner_error": None}})
@@ -1436,9 +1499,83 @@ def _azure_trained_chat(model, p):
                     "vyomiNote": "Vyomi extension: a trained classifier head answered (label as assistant content); this is not an LLM."})
 
 
+# ───────── Imported chat models (LoRA adapter GGUF + base, served by wllama on Nano): Azure registration is a VYOMI EXTENSION (no real API fits) ─────────
+def _imported():
+    try:
+        from core import import_core as m
+    except ImportError:  # Pyodide flat layout
+        import import_core as m  # type: ignore
+    return m
+
+
+def _az_cm_view(r):
+    return {"id": r["modelId"], "object": "vyomi.custom_model", "name": r["name"], "status": "succeeded", "created_at": r["createdAt"], "base_model": r["base"],
+            "vyomiImported": True, "vyomiTrained": True,
+            "vyomiImport": {"engine": r.get("engine"), "rank": r.get("rank"), "alpha": r.get("alpha"), "adapterBytes": r.get("adapterBytes"), "adapterSha256": r.get("adapterSha256")},
+            "vyomiNote": "Vyomi extension (no real Azure API registers a custom LoRA model this way): base GGUF + your adapter, served in the browser. Deploy it with an ARM "
+                         "deployment whose model.name is this id (format Vyomi)."}
+
+
+def _azure_custom_models(method, path, lh, body):
+    """POST /openai/vyomi/custom-models (multipart: name, adapter, meta  |  JSON: {name, adapter_file, meta_file} with ids from /openai/files); GET list/one; DELETE."""
+    ic, t = _imported(), _trained()
+    if not (lh.get("api-key") or lh.get("authorization")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    path = re.sub(r"^/openai(/v1)?/vyomi/custom-models", "", path).rstrip("/")
+    method = method.upper()
+
+    def bad(msg, param=None, code="invalid_request_error", status=400):
+        return _j(status, {"error": {"code": code, "message": msg, "param": param, "type": "invalid_request_error"}})
+    mine = lambda: [r for r in ic.persisted_models() if r.get("cloud") == "azure"]
+    if path == "" and method == "GET":
+        return _j(200, {"object": "list", "data": [_az_cm_view(r) for r in mine()], "has_more": False})
+    if path == "" and method == "POST":
+        try:
+            if "multipart/form-data" in lh.get("content-type", ""):
+                parts = _multipart(lh, body)
+                name = (parts.get("name") or (None, b""))[1].decode() or None
+                if "adapter" not in parts or "meta" not in parts:
+                    return bad("Both 'adapter' (adapter.gguf) and 'meta' (adapter_meta.json) files are required.", "adapter")
+                adapter, meta, src = parts["adapter"][1], parts["meta"][1], "upload"
+            else:
+                p = _body(body)
+                if p is None:
+                    return bad("Invalid JSON body.")
+                name = p.get("name")
+                fa, fm = p.get("adapter_file"), p.get("meta_file")
+                if not fa or not fm:
+                    return bad("Missing 'adapter_file' and 'meta_file' (ids from POST /openai/files holding adapter.gguf and adapter_meta.json), or upload both files as multipart.", "adapter_file")
+                adapter, meta, src = t.get_file(fa), t.get_file(fm), f"files:{fa},{fm}"
+                if adapter is None or meta is None:
+                    return bad(f"No such File object: {fa if adapter is None else fm}", "adapter_file", "invalid_request_error", 404)
+            if not name or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._~-]{0,63}$", name):
+                return bad("'name' is required (letters, digits, . _ ~ -).", "name")
+            if any(r["name"] == name for r in mine()):
+                return bad(f"A custom model named {name} already exists.", "name", "Conflict", 409)
+            mid = ic.ID_PREFIX + uuid.uuid4().hex[:8]
+            r = ic.register(mid, name, adapter, meta, src, extra={"cloud": "azure"})
+        except ic.ImportErr as e:
+            return bad(str(e), "adapter")
+        return _j(200, _az_cm_view(r))
+    mm = re.match(r"^/([^/]+)$", path)
+    if mm:
+        r = next((x for x in mine() if x["modelId"] == mm.group(1) or x["name"] == mm.group(1)), None)
+        if not r:
+            return bad(f"Custom model {mm.group(1)} not found.", None, "NotFound", 404)
+        if method == "GET":
+            return _j(200, _az_cm_view(r))
+        if method == "DELETE":
+            ic.delete_model(r["modelId"])
+            return _j(200, {"object": "vyomi.custom_model", "id": r["modelId"], "deleted": True})
+    return _a_err(404, "404", "Resource not found")
+
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
     if re.match(r"^/openai(/v1)?/(files|fine_tuning)(/|$)", path):
         return _azure_files_ft(method, path, query, {k.lower(): v for k, v in (headers or {}).items()}, body)
+    if re.match(r"^/openai(/v1)?/vyomi/custom-models(/|$)", path):
+        return _azure_custom_models(method, path, {k.lower(): v for k, v in (headers or {}).items()}, body)
     ag = _azure_agents()
     mt = re.match(r"^/openai/(?:deployments/([^/]+)/)?(chat/completions|completions|embeddings)$", path) \
         or re.match(r"^/openai/(?:v1/)?()(chat/completions|completions|embeddings|responses)$", path)
@@ -1551,4 +1688,5 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
                         "choices": [{"text": r["text"], "index": 0, "finish_reason": fin, "logprobs": None}], "usage": usage}, hh)
     return _j(200, {"id": cid, "object": "chat.completion", "created": now, "model": model,
                     "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": _az_msg(r)}],
-                    "usage": usage, "system_fingerprint": "fp_vyomi_local"}, hh)
+                    "usage": usage, "system_fingerprint": "fp_vyomi_local",
+                    **({"vyomiImported": True, "vyomiTrained": True} if _imported().is_import_id(model) else {})}, hh)

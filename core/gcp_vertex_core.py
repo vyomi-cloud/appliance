@@ -23,6 +23,7 @@ embedding publisher models are served, by core/ai_models_core).
 from __future__ import annotations
 
 import json
+import uuid
 import math
 import re
 import time
@@ -32,6 +33,10 @@ try:
     from core import training_core as tc
 except ImportError:  # Pyodide flat layout
     import training_core as tc  # type: ignore
+try:
+    from core import import_core as ic
+except ImportError:  # Pyodide flat layout
+    import import_core as ic  # type: ignore
 from datetime import datetime, timezone
 
 LOCATIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west4", "europe-west1", "europe-west2", "europe-west4",
@@ -69,7 +74,7 @@ SPEC = {
 COLL_VERBS = {"models": {"upload", "copy"}, "datasets": set()}
 # resource-level custom verbs
 ITEM_VERBS = {
-    "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "mutateDeployedModel"},
+    "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "mutateDeployedModel", "generateContent", "streamGenerateContent"},
     "trainingPipelines": {"cancel"}, "customJobs": {"cancel"}, "hyperparameterTuningJobs": {"cancel"},
     "batchPredictionJobs": {"cancel"}, "pipelineJobs": {"cancel"}, "tuningJobs": {"cancel"},
     "notebookRuntimes": {"start", "stop", "upgrade"}, "instances": {"start", "stop", "reset"},
@@ -405,6 +410,11 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
                 return _err(404, "NOT_FOUND", f"Method {verb} is not supported on {coll}.")
             if coll == "models" and verb == "upload":
                 model = payload.get("model") or {}
+                imp = _maybe_import(project, loc, model)
+                if imp is not None and not isinstance(imp, str):
+                    return imp
+                if isinstance(imp, str):
+                    model = dict(model, _vyomiImport=imp, labels={**(model.get("labels") or {}), "vyomi-imported": "true", "vyomi-trained": "true"})
                 return _create(store, project, loc, chain, model, {"modelId": payload.get("modelId") or ""}, verb="Upload")
             return _err(501, "UNIMPLEMENTED", f"{coll}:{verb} is not simulated.")
         if method == "GET":
@@ -432,6 +442,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
     if method == "DELETE":
         if rec is None:
             return _err(404, "NOT_FOUND", f"The {spec['type']} {full} is not found.")
+        if rec.get("_vyomiImport"):
+            ic.delete_model(rec["_vyomiImport"])
         for k in [k for k in store.res if k.startswith(full + "/")]:   # cascade children
             store.res.pop(k, None)
         store.res.pop(full, None)
@@ -460,6 +472,25 @@ def _ensure_default_store(store, project, loc):
         t = _now()
         store.res[name] = {"name": name, "createTime": t, "updateTime": t, "description": "Default metadata store", "state": {}}
     return store.res[name]
+
+
+
+def _maybe_import(project, loc, model):
+    """models:upload whose artifactUri holds adapter.gguf (+ adapter_meta.json) is a chat-LoRA import (core/import_core). -> response | model id | None."""
+    uri = str(model.get("artifactUri") or "")
+    if not uri.startswith("gs://"):
+        return None
+    flagged = (model.get("labels") or {}).get("vyomi-import") in ("chat-lora", "true")
+    mid = ic.ID_PREFIX + uuid.uuid4().hex[:8]
+    try:
+        ic.import_from_uri(mid, model.get("displayName") or mid, uri, source=uri, extra={"cloud": "gcp", "project": project, "location": loc})
+    except ic.ImportErr as e:
+        if e.kind == "notfound":
+            if not flagged:
+                return None      # a plain artifact upload (no adapter there): the usual metadata-only Model Registry upload
+            return _err(404, "NOT_FOUND", str(e))
+        return _err(400, "INVALID_ARGUMENT", f"model.artifactUri: {e}")
+    return mid
 
 
 def _validate(coll, body, rid):
@@ -662,6 +693,23 @@ def _verb(store, project, loc, coll, full, rec, verb, p):
                 mrec["deployedModels"] = [d for d in mrec.get("deployedModels", []) if d.get("deployedModelId") != did]
             rec["updateTime"] = t
             return _j(200, _op(store, project, loc, coll, {}, verb="UndeployModel", rname=full))
+        if verb in ("generateContent", "streamGenerateContent") or (verb in ("predict", "rawPredict") and any(
+                (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiImport") for d in rec.get("deployedModels") or [])):
+            if not rec.get("deployedModels"):
+                return _err(400, "FAILED_PRECONDITION", "Endpoint has no deployed model.")
+            dm = next((d for d in rec["deployedModels"] if (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiImport")), None)
+            if dm is None:
+                return _err(400, "FAILED_PRECONDITION", f"endpoints:{verb} is served only for imported chat models (and Gemini publisher models via the publisher path).")
+            try:
+                from core import ai_models_core as _am
+            except ImportError:  # Pyodide flat layout
+                import ai_models_core as _am  # type: ignore
+            d = _am.vertex_imported_call(store.res[dm["model"].split("@")[0]]["_vyomiImport"], "predict" if verb in ("predict", "rawPredict") else verb, p)
+            r = _R(d["status"], d["body"] if isinstance(d["body"], (bytes, bytearray)) else b"")
+            r.headers, r.media_type = {k: v for k, v in d["headers"].items() if k.lower() != "content-type"}, d["headers"].get("content-type", "application/json")
+            if "stream" in d:       # streamGenerateContent: drain the single buffered chunk
+                r.body = b"".join(x if isinstance(x, bytes) else x.encode() for x in d["stream"])
+            return r
         if verb in ("predict", "rawPredict"):
             if not rec.get("deployedModels"):
                 return _err(400, "FAILED_PRECONDITION", "Endpoint has no deployed model.")

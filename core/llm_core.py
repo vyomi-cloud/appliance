@@ -43,7 +43,7 @@ class LlmUnavailable(Exception):
 
 
 _state = {"fn": None, "embed_fn": None, "endpoint": None, "model": None, "afn": None, "acache": {}, "in_arun": False,
-          "stream_fn": None, "no_rf": False, "no_native": False, "aembed": None, "aembed_model": None}
+          "stream_fn": None, "no_rf": False, "no_native": False, "aembed": None, "aembed_model": None, "custom_is": None, "custom_afn": None}
 
 
 class NeedAsync(BaseException):
@@ -71,11 +71,26 @@ def set_async_embed(afn=None, model: str | None = None) -> None:
     _state["acache"] = {}
 
 
+def set_custom_backend(is_fn=None, afn=None) -> None:
+    """Imported custom chat models (core/import_core: base GGUF + LoRA adapter). ``is_fn(model) -> bool`` says whether a requested model id is one;
+    ``afn(model, messages, system, max_tokens, temperature, stop) -> dict|str`` serves it (Nano: wllama in the page, awaited through ``arun``).
+    A custom model is NEVER answered by the default backend: with no ``afn`` (or outside ``arun``) the call fails as unavailable."""
+    _state["custom_is"], _state["custom_afn"], _state["acache"] = is_fn, afn, {}
+
+
+def _is_custom(model) -> bool:
+    f = _state["custom_is"]
+    try:
+        return bool(model and f and f(model))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 async def arun(handler, max_rounds: int = 16):
     """Run the synchronous ``handler()`` (a whole wire request); every chat() it makes is answered by the async backend
     (awaited here, cached, request replayed) so cores stay synchronous. A request that makes several model calls (tool
     retries) replays once per call. Without an async backend this is just handler()."""
-    if not _state["afn"] and not _state["aembed"]:
+    if not _state["afn"] and not _state["aembed"] and not _state["custom_afn"]:
         return handler()
     _state["acache"] = {}
     try:
@@ -89,6 +104,14 @@ async def arun(handler, max_rounds: int = 16):
                         _state["acache"][n.key] = {"vectors": await _state["aembed"](list(n.args_))}
                     except Exception as e:
                         _state["acache"][n.key] = e
+                    continue
+                if n.kind == "custom":
+                    try:
+                        r = await _state["custom_afn"](*n.args_)
+                    except Exception as e:
+                        _state["acache"][n.key] = e
+                    else:
+                        _state["acache"][n.key] = r if isinstance(r, dict) else {"text": str(r)}
                     continue
                 msgs, system, max_tokens, temperature, stop = n.args_
                 try:
@@ -579,6 +602,22 @@ def _generate(msgs, o, native_tools=False) -> dict:
     """One model call. ``msgs``: neutral messages (native_tools) or plain turns. Returns the chat() dict (tool_calls only when native)."""
     prompt_text = "\n".join(m["content"] for m in msgs)
     fin = lambda f: "length" if f == "length" else ("tool_calls" if f in ("tool_calls", "tool_use", "function_call") else "stop")
+    if _is_custom(o.get("model")):      # imported LoRA chat model: only its own engine may answer (never the default model)
+        if not _state["custom_afn"]:
+            raise LlmUnavailable("Imported chat models are served in the browser (Nano, wllama); this runtime has no engine for them.")
+        args = (o["model"], msgs, None, o["max_tokens"], o["temperature"], list(o["stop"]) if o.get("stop") else None)
+        key = "c" + _akey(args)
+        hit = _state["acache"].get(key)
+        if hit is None:
+            if not _state["in_arun"]:
+                raise LlmUnavailable("The imported chat model is only reachable through the async request path.")
+            raise NeedAsync(key, args, "custom")
+        if isinstance(hit, Exception):
+            raise LlmUnavailable(f"Imported chat model failed ({type(hit).__name__}: {hit}).") from hit
+        text = hit.get("text", "")
+        return {"text": text, "tool_calls": [], "input_tokens": hit.get("input_tokens") or estimate_tokens(prompt_text),
+                "output_tokens": hit.get("output_tokens") or estimate_tokens(text), "finish_reason": fin(hit.get("finish_reason")),
+                "backend": hit.get("backend") or "wllama", "model": o["model"]}
     if _state["fn"]:
         fn = _state["fn"]
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
@@ -737,7 +776,7 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
          "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None,
          "response_format": response_format or None}
     if tools:
-        r = _tools_native(msgs, o) if _backend_native_tools() else _tools_prompted(msgs, o)
+        r = _tools_native(msgs, o) if (_backend_native_tools() and not _is_custom(model)) else _tools_prompted(msgs, o)
         if response_format and not r["tool_calls"]:
             r = _add(r, _structured(msgs, dict(o, tools=None, tool_choice=None)))
         return r
@@ -832,7 +871,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
          "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None, "response_format": response_format or None}
     kw = dict(system=None, max_tokens=o["max_tokens"], temperature=temperature, stop=stop, model=model, tools=tools or None,
               tool_choice=choice if tools else None, response_format=response_format, top_p=top_p, seed=seed)
-    if _state["fn"] and _state["stream_fn"] and not tools and not response_format:
+    if _state["fn"] and _state["stream_fn"] and not tools and not response_format and not _is_custom(model):
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
         parts, ptxt = [], "\n".join(m["content"] for m in msgs)
         for piece in _state["stream_fn"](_flatten_for_prompt(msgs, None, "none"), sysm, o["max_tokens"], temperature, o["stop"]):
@@ -844,7 +883,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
         yield {"type": "done", "text": full, "tool_calls": [], "finish_reason": "stop", "input_tokens": estimate_tokens(ptxt),
                "output_tokens": estimate_tokens(full), "backend": "registered", "model": model_name()}
         return
-    http = not _state["fn"] and not _state["afn"] and _endpoint()
+    http = not _state["fn"] and not _state["afn"] and not _is_custom(model) and _endpoint()
     if http and not response_format and (not tools or (_backend_native_tools() and choice == "auto")):
         try:
             yield from _http_stream(msgs if tools else _flatten_for_prompt(msgs, None, "none"), o, bool(tools))
