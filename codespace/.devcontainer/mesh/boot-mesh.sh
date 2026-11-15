@@ -53,17 +53,26 @@ expire() {
 # codespace is Available for the owning user). Retries while the portal learns the codespace is up. Needs no secret on this box.
 fetch_session() {
   [ -n "${VYOMI_MESH_SESSION_TOKEN:-}" ] && [ -n "${VYOMI_MESH_SESSION_KEY:-}" ] && return 0
-  local out tok key end i
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    out=$(curl -fsS -m 10 -G "$PORTAL/api/mesh/session/token" --data-urlencode "codespace_id=$CODESPACE" 2>/dev/null) && {
-      tok=$(printf '%s' "$out" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
-      key=$(printf '%s' "$out" | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
-      end=$(printf '%s' "$out" | sed -n 's/.*"session_end":\([0-9]*\).*/\1/p')
+  local out tok key end i body code tries="${VYOMI_MESH_TOKEN_TRIES:-40}"
+  log "fetching the session token (codespace_id=$CODESPACE, portal=$PORTAL)."
+  # Early in a boot the network is not always usable yet (2026-11-15: 10 instant failures in ~60 s, never reached the portal, and the
+  # error was thrown away). So: retry for ~4 min, force IPv4 (the Codespace has no IPv6 route), and LOG why each try failed.
+  for i in $(seq 1 "$tries"); do
+    out=$(curl -sS -4 -m 10 -G "$PORTAL/api/mesh/session/token" --data-urlencode "codespace_id=$CODESPACE" -w $'\n%{http_code}' 2>&1); code="${out##*$'\n'}"; body="${out%$'\n'*}"
+    if [ "$code" = "200" ]; then
+      tok=$(printf '%s' "$body" | sed -n 's/.*"token" *: *"\([^"]*\)".*/\1/p')
+      key=$(printf '%s' "$body" | sed -n 's/.*"key" *: *"\([^"]*\)".*/\1/p')
+      end=$(printf '%s' "$body" | sed -n 's/.*"session_end" *: *\([0-9]*\).*/\1/p')
       if [ -n "$tok" ] && [ -n "$key" ]; then
         export VYOMI_MESH_SESSION_TOKEN="$tok" VYOMI_MESH_SESSION_KEY="$key"
         [ -n "$end" ] && export VYOMI_MESH_SESSION_END="$end"
-        log "session token fetched."; return 0
-      fi; }
+        log "session token fetched (try $i)."; return 0
+      fi
+      log "token try $i: HTTP 200 but no token/key in the answer."
+    else
+      # a 404/403 is the portal still learning the codespace is up; anything else (000, curl error text) is a network problem
+      log "token try $i/$tries: HTTP ${code:-none} $(printf '%s' "$body" | tr '\n' ' ' | cut -c1-160)"
+    fi
     sleep 6
   done
   log "WARNING: could not fetch a session token - the mesh will refuse requests (fails closed)."; return 1
