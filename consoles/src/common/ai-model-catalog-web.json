@@ -1,0 +1,69 @@
+{
+ "_comment": "GENERATED from core/ai_model_catalog.py by scripts/gen_ai_model_catalog_json.py - do not edit.",
+ "default_chat": "smollm2-360m",
+ "default_embed": "all-minilm-l6-v2",
+ "local_id": "smollm2-360m",
+ "needs_mesh": "Needs Mesh (Pro/Max)",
+ "models": [
+  {
+   "id": "smollm2-360m",
+   "name": "SmolLM2 360M",
+   "vendor": "Hugging Face",
+   "publisher": "huggingface",
+   "kind": "chat",
+   "size": "Tiny (360M)",
+   "role": "Fast chat",
+   "blurb": "Runs in your browser, nothing to install",
+   "tag": "SmolLM2-360M-Instruct-q4f16_1-MLC",
+   "pooled": false
+  },
+  {
+   "id": "qwen2.5-0.5b",
+   "name": "Qwen2.5 0.5B",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Tiny (0.5B)",
+   "role": "General",
+   "blurb": "Small general assistant in your browser",
+   "tag": "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
+   "pooled": false
+  },
+  {
+   "id": "llama3.2-1b",
+   "name": "Llama 3.2 1B",
+   "vendor": "Meta",
+   "publisher": "meta",
+   "kind": "chat",
+   "size": "Small (1B)",
+   "role": "Tool use / agents",
+   "blurb": "Compact instruction model in your browser",
+   "tag": "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+   "pooled": false
+  },
+  {
+   "id": "qwen2.5-1.5b",
+   "name": "Qwen2.5 1.5B",
+   "vendor": "Alibaba",
+   "publisher": "qwen",
+   "kind": "chat",
+   "size": "Small (1.5B)",
+   "role": "Better answers",
+   "blurb": "Largest web LLM; needs a WebGPU laptop",
+   "tag": "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
+   "pooled": false
+  },
+  {
+   "id": "all-minilm-l6-v2",
+   "name": "all-MiniLM-L6-v2",
+   "vendor": "Sentence Transformers",
+   "publisher": "sentence-transformers",
+   "kind": "embed",
+   "size": "Embedding (23 MB)",
+   "role": "Embeddings",
+   "blurb": "Vector search and retrieval (RAG) in your browser",
+   "tag": "Xenova/all-MiniLM-L6-v2",
+   "pooled": false
+  }
+ ]
+}

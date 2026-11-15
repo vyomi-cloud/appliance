@@ -1,6 +1,10 @@
 /* The ten mesh-llm models every AI console shows (generated catalogue: core/ai_model_catalog.py -> ai-model-catalog.json).
  * Availability is live from each cloud's own list API (vyomiAvailability); with no Mesh only the local small model is available. */
-import CAT from "./ai-model-catalog.json";
+import MESH from "./ai-model-catalog.json";
+import WEB from "./ai-model-catalog-web.json";
+/* Nano (browser) serves only the small WebLLM models; the offline appliance / Mesh serves the ten open-source models. */
+const IS_NANO = typeof location !== "undefined" && /(^|\/)nano(\/|$)/.test(location.pathname);
+const CAT = IS_NANO ? WEB : MESH;
 
 export const AI_MODELS = CAT.models;
 export const AI_CHAT = CAT.models.filter((m) => m.kind === "chat");

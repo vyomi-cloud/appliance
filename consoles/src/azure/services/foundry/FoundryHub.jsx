@@ -2,6 +2,7 @@
  * Layout from the capture: title "Microsoft Foundry | <page>", a chip row, the left menu (Overview, All resources and the
  * collapsible All models agents & tools / Single-capability / Earlier-generation / Help groups), Overview with Overview+Dashboard
  * tabs. Every list page shows what the ARM wire really holds for that kind. */
+import { AI_CHAT } from "../../../common/aiModels.js";
 import { useState } from "react";
 import { Button, Link, Tab, TabList } from "@fluentui/react-components";
 import { ArrowClockwise20Regular } from "@fluentui/react-icons";
@@ -40,7 +41,7 @@ const MENU = [
   { group: "Earlier-generation", items: [{ id: "anomaly", label: PAGES.anomaly.label }] },
   { group: "Help", items: [{ id: "docs", label: "Documentation" }] },
 ];
-const MODELS = [["GPT", "OpenAI"], ["Claude", "Anthropic"], ["MAI", "Microsoft"], ["DeepSeek", "DeepSeek"], ["Qwen", "Alibaba Cloud"], ["Grok", "xAI"], ["Kimi", "Moonshot"], ["Mistral", "Mistral AI"], ["FLUX", "Black Forest Labs"]];
+const MODELS = AI_CHAT.slice(0, 9).map((m) => [m.name, m.vendor]);  // only the models this simulator actually serves
 
 function Overview({ total }) {
   const [tab, setTab] = useState("overview");

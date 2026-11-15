@@ -10,7 +10,6 @@ export const splitSentences = (t) => String(t || "").replace(/\s+/g, " ").match(
 
 // ── models (context windows in tokens) ──
 export const EMBED_MODELS = {
-  "amazon.titan-embed-text-v2:0": { label: "Titan Text Embeddings V2", window: 8192, dims: 1024 },
   "vyomi.nomic-embed-text": { label: "Nomic Embed Text (local)", window: 2048, dims: 768 },
   "vyomi.minilm-l6": { label: "MiniLM L6 (local, small)", window: 256, dims: 384 },
 };

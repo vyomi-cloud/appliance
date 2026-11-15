@@ -30,7 +30,7 @@ import CodeIcon from "@mui/icons-material/esm/Code.js";
 import { Endpoints, EndpointDetail, Models, Datasets, Training, Pipelines, Batch, Workbench, VectorSearch, FeatureStore, Experiments } from "./Pages.jsx";
 
 const B = "#/vertex-ai";
-const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray", "/vertex-ai/claude-models"];
+const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray"];
 const AGENT_PATHS = ["/vertex-ai/agent-garden", "/vertex-ai/adk", "/vertex-ai/mcp-servers", "/vertex-ai/rag-engine", "/vertex-ai/vector-search", "/vertex-ai/search", "/vertex-ai/agent-retrieval", "/vertex-ai/deployments", "/vertex-ai/memory-bank", "/vertex-ai/sessions", "/vertex-ai/agent-registry", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security", "/vertex-ai/topology"];
 const under = (path, list) => list.some((p) => path === p || path.startsWith(p + "/"));
 const TUTORIALS = { text: "Tutorials", href: `${B}/tutorials`, icon: SchoolIcon, pinned: true };
@@ -52,7 +52,6 @@ const MODELS = [
   { text: "Endpoints", href: `${B}/endpoints`, icon: CableIcon, match: [`${B}/endpoints/`] },
   { text: "Batch Inference", href: `${B}/batch`, icon: PlaylistPlayIcon },
   { text: "Provisioned Throughput", href: `${B}/provisioned-throughput`, icon: MemoryIcon },
-  { section: "Partner services", collapsible: true, items: [{ text: "Claude models", href: `${B}/claude-models`, icon: AutoAwesomeIcon }] },
   { section: "More services", collapsible: true, items: [
     { text: "Datasets", href: `${B}/datasets`, icon: StorageIcon }, { text: "Feature Store", href: `${B}/feature-store`, icon: StorageIcon },
     { text: "Experiments", href: `${B}/experiments`, icon: ScienceIcon }, { text: "Training", href: `${B}/training`, icon: ModelTrainingIcon },

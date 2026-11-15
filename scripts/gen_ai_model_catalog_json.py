@@ -17,7 +17,8 @@ def doc():
 
 
 if __name__ == "__main__":
-    out = os.path.join(ROOT, "consoles", "src", "common", "ai-model-catalog.json")
+    # `--web` writes the Nano (browser WebLLM) variant: run with VYOMI_CATALOG=web
+    out = os.path.join(ROOT, "consoles", "src", "common", "ai-model-catalog-web.json" if "--web" in sys.argv else "ai-model-catalog.json")
     with open(out, "w") as f:
         json.dump(doc(), f, indent=1)
         f.write("\n")

@@ -1,5 +1,6 @@
 /* Amazon Bedrock > Overview: the real console's landing (captures B-bedrock 001/002): Quickstart banner, Model catalog +
  * Model spotlight carousel, API keys banner, then Labs / Test / Infer / Tune / Build / Assess sections of link cards. */
+import { AI_CHAT } from "../../../common/aiModels.js";
 import { useState } from "react";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
@@ -30,12 +31,8 @@ const Section = ({ title, cols = 2, children, desc }) => (
     <ColumnLayout columns={cols} borders="vertical">{children}</ColumnLayout>
   </Container>
 );
-// Spotlight copy is AWS's own text for models that the local pool aliases (see /foundation-models); "Open in playground" runs the local alias.
-const SPOT = [
-  { name: "OpenAI's gpt-oss", text: "Use OpenAI open-weight models for natural language understanding and generation capabilities, enabling a wide range of advanced AI applications across industries." },
-  { name: "Minimax M2", text: "MiniMax-M2 is a large instruction-tuned model from MiniMax optimized for multilingual dialogue, reasoning, and tool-calling, intended as a general-purpose assistant model for both consumer and enterprise use cases." },
-  { name: "Qwen3-Coder-480B", text: "Qwen3-Coder-480B-A35B-Instruct is Qwen's flagship frontier coding model, delivering state-of-the-art performance in software engineering, reasoning, and math." },
-];
+// Spotlight = models this simulator actually serves (Nano: WebLLM, Mesh: open-source pool).
+const SPOT = AI_CHAT.slice(0, 3).map((m) => ({ name: m.name, text: m.blurb || `${m.name} (${m.vendor}), served locally.` }));
 
 export default function Landing() {
   const [i, setI] = useState(0);
