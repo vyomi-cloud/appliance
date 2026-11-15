@@ -68,6 +68,20 @@ def derive(svc, method, path, action, body):
     return f"{src}.amazonaws.com", name, res
 
 
+_KMS_SKIP = {"Plaintext", "CiphertextBlob", "Message", "Mac", "Signature"}   # real CloudTrail never logs payload bytes
+
+
+def _request_parameters(source, body):
+    """requestParameters as CloudTrail shows them; for KMS the encryptionContext is the audit-relevant part."""
+    try:
+        doc = json.loads(body) if body else {}
+    except Exception:
+        return None
+    if not isinstance(doc, dict) or source != "kms.amazonaws.com":
+        return None
+    return {k[0].lower() + k[1:]: v for k, v in doc.items() if k not in _KMS_SKIP} or None
+
+
 def record(store: list, svc, method, path, action, body, akid, user, query_params=None):
     d = derive(svc, method, path, action, body)
     if d is None:
@@ -93,6 +107,11 @@ def record(store: list, svc, method, path, action, body, akid, user, query_param
         "userIdentity": {"type": "IAMUser", "accessKeyId": akid or "", "userName": ev["Username"], "accountId": _ACCOUNT},
         "requestID": eid, "recipientAccountId": _ACCOUNT,
         "resources": [{"type": t, "ARN": n} for t, n in res]})
+    rp = _request_parameters(source, body)
+    if rp is not None:
+        d2 = json.loads(ev["CloudTrailEvent"])
+        d2["requestParameters"] = rp
+        ev["CloudTrailEvent"] = json.dumps(d2)
     store.append(ev)
     if len(store) > CAP:
         del store[: len(store) - CAP]
