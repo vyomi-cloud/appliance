@@ -4,6 +4,7 @@ import Models from "./Models.jsx";
 import { KnowledgeBases, KnowledgeBaseDetail } from "./KnowledgeBases.jsx";
 import { Agents, AgentDetail } from "./Agents.jsx";
 import { AgentCore, GatewayDetail } from "./AgentCore.jsx";
+import Studio from "./studio/Studio.jsx";
 
 const top = [{ text: "Amazon Bedrock", href: "#/bedrock" }];
 const c = (text, h) => ({ text, href: h });
@@ -19,6 +20,7 @@ export default {
     ] },
     { type: "section", text: "Build", items: [
       { type: "link", text: "Knowledge bases", href: "#/bedrock/knowledge-bases" },
+      { type: "link", text: "RAG Studio", href: "#/bedrock/knowledge-bases/studio" },
       { type: "link", text: "Agents", href: "#/bedrock/agents" },
     ] },
     { type: "section", text: "AgentCore", items: [
@@ -30,6 +32,7 @@ export default {
     { pattern: "/bedrock/playground", component: Playground, crumbs: () => [...top, c("Playground", "#/bedrock/playground")] },
     { pattern: "/bedrock/models", component: Models, crumbs: () => [...top, c("Model catalog", "#/bedrock/models")] },
     { pattern: "/bedrock/knowledge-bases", component: KnowledgeBases, crumbs: () => [...top, c("Knowledge bases", "#/bedrock/knowledge-bases")] },
+    { pattern: "/bedrock/knowledge-bases/studio", component: Studio, crumbs: () => [...top, c("Knowledge bases", "#/bedrock/knowledge-bases"), c("RAG Studio", "#/bedrock/knowledge-bases/studio")] },
     { pattern: "/bedrock/knowledge-bases/:id", component: KnowledgeBaseDetail, crumbs: (p) => [...top, c("Knowledge bases", "#/bedrock/knowledge-bases"), c(p.id, `#/bedrock/knowledge-bases/${p.id}`)] },
     { pattern: "/bedrock/agents", component: Agents, crumbs: () => [...top, c("Agents", "#/bedrock/agents")] },
     { pattern: "/bedrock/agents/:id", component: AgentDetail, crumbs: (p) => [...top, c("Agents", "#/bedrock/agents"), c(p.id, `#/bedrock/agents/${p.id}`)] },
