@@ -1,0 +1,5 @@
+[
+ {"work_order_id":"WO-000101","asset_id":"AHU-7","title":"Replace AHU-7 filter","priority":"P3","status":"CLOSED","requester":"seed"},
+ {"work_order_id":"WO-000102","asset_id":"B-12","title":"Quarterly PRV inspection","priority":"P2","status":"OPEN","requester":"seed"},
+ {"work_order_id":"WO-000103","asset_id":"EL-3","title":"Door-zone sensor check","priority":"P2","status":"OPEN","requester":"seed"}
+]

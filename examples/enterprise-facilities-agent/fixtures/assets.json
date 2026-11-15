@@ -1,0 +1,5 @@
+[
+ {"asset_id":"B-12","name":"Boiler B-12","site":"HQ-1","type":"boiler","status":"RUNNING","pressure_psi":34,"last_inspection":"2026-08-02"},
+ {"asset_id":"AHU-7","name":"Air handling unit 7","site":"HQ-1","type":"hvac","status":"DEGRADED","supply_temp_drift_c":3.8,"last_inspection":"2026-09-12"},
+ {"asset_id":"EL-3","name":"Elevator 3","site":"HQ-2","type":"elevator","status":"RUNNING","last_inspection":"2026-10-01"}
+]
