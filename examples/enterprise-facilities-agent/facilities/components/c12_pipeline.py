@@ -75,6 +75,8 @@ def run(ctx):
 
     def event_driven():
         arn = deploy.deploy_lambda(ctx, "facilities-ingest-docs", "ingest_docs", dict(KB_ID=kid, DS_ID=ctx.state["ds_id"]))
+        ctx.client("lambda").add_permission(FunctionName="facilities-ingest-docs", StatementId="s3-invoke", Action="lambda:InvokeFunction",
+                                            Principal="s3.amazonaws.com", SourceArn=f"arn:aws:s3:::{bucket}", SourceAccount="123456789012")   # what real S3 requires
         before = len(ag.list_ingestion_jobs(knowledgeBaseId=kid, dataSourceId=ctx.state["ds_id"])["ingestionJobSummaries"])
         s3.put_bucket_notification_configuration(Bucket=bucket, NotificationConfiguration={"LambdaFunctionConfigurations": [
             {"LambdaFunctionArn": arn, "Events": ["s3:ObjectCreated:*"], "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": "docs/"}]}}}]})
