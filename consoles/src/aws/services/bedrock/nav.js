@@ -1,7 +1,6 @@
 /* Amazon Bedrock side navigation in the order/grouping of the real console (captures B-bedrock 001/004). */
 import { createElement as h } from "react";
-import Badge from "@cloudscape-design/components/badge";
-const NEW = { info: h(Badge, { color: "blue" }, "New") };
+const NEW = {}; // no "New" badges in the side nav
 const l = (text, href, extra = {}) => ({ type: "link", text, href, ...extra });
 export const bedrockNav = [
   { type: "section", text: "Discover", defaultExpanded: true, items: [
