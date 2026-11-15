@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-15T19:11:24+00:00
+
+Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-15T18:11:20+00:00
 
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3006,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **2 change(s), 0 actionable.**
 - · `spec-commit` Azure compute: [Compute] Clarify Auto zone placement and Any-only disk alignment documentation (#47457) ([link](https://github.com/Azure/azure-rest-api-specs/commit/05ff20f36d7d4de3a774e5c6b37e1e58a66eaadf))
-- · `release` go:github.com/Azure/azure-sdk-for-go/sdk/storage/azblob: v1.8.2 → v1.8.3
-
-Sources that failed this run (1): maven/com.google.cloud:google-cloud-storage: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-02T17:28:03+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
