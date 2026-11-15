@@ -27,8 +27,8 @@ product is 100% capability coverage. The AI plan is owned by another session; th
 | Registry duplicates kept as one row, recorded | Fail the build | Not this branch's job to fix the registry; visible in manifest.json |
 
 ## Open issues
-- [ ] Azure: azurerm has weak custom-endpoint support; spike needed (Phase 0).
-- [ ] Terraform/OpenTofu binary not installed on the dev machine; CI installs a pinned version.
+- [x] Azure: azurerm CAN run against the simulator (spike passed 2026-11-15, tests/endurance/spikes/azure-tf). Remaining: move the HTTPS/metadata/token front into the Mesh image; RG create/delete take ~20 s.
+- [x] OpenTofu installed (brew, v1.13.9); CI uses a pinned image. AWS and GCP smoke still to do (a GCP precedent exists in tests/conformance/terraform-gate).
 - [ ] Registry duplicate id `azure.aks.backup` (in aks.json and panels.json).
 - [ ] 925 capabilities are `limited`: the estate must verify what each limitation claims, not just that the call returns.
 - [ ] Nano headless run needs a test token for the /nano login gate (owner approved).
