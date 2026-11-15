@@ -247,8 +247,8 @@ function ProductNav({ prod, nav, route, collapsed, onToggle }) {
           </IconButton>
         </Tooltip>
       </Stack>
-      <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 112px)" }}>
-        <List dense disablePadding sx={{ flex: 1, overflowY: "auto" }}>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 112px - 84px)" }}>
+        <List dense disablePadding sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
           {nav.filter((n) => !n.pinned).map((n) => n.back ? (
             <ListItemButton key="back" component="a" href={n.back.href} sx={{ minHeight: 44, mb: 0.5 }}>
               <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36 }}><ArrowBackIcon fontSize="small" /></ListItemIcon>
@@ -260,7 +260,7 @@ function ProductNav({ prod, nav, route, collapsed, onToggle }) {
             <NavSection key={n.section} n={n} collapsed={collapsed} item={item} />
           ) : item(n))}
         </List>
-        {nav.filter((n) => n.pinned).map(item)}
+        <Box sx={{ flex: "0 0 auto" }}>{nav.filter((n) => n.pinned).map(item)}</Box>
       </Box>
     </Box>
   );
