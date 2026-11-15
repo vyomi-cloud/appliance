@@ -27,10 +27,11 @@ import ChatIcon from "@mui/icons-material/esm/ForumOutlined.js";
 import ExtensionIcon from "@mui/icons-material/esm/ExtensionOutlined.js";
 import DescriptionIcon from "@mui/icons-material/esm/DescriptionOutlined.js";
 import CodeIcon from "@mui/icons-material/esm/Code.js";
+import { TuningJobs, TuningDetail } from "./Tuning.jsx";
 import { Endpoints, EndpointDetail, Models, Datasets, Training, Pipelines, Batch, Workbench, VectorSearch, FeatureStore, Experiments } from "./Pages.jsx";
 
 const B = "#/vertex-ai";
-const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray"];
+const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/tuning", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray"];
 const AGENT_PATHS = ["/vertex-ai/agent-garden", "/vertex-ai/adk", "/vertex-ai/mcp-servers", "/vertex-ai/rag-engine", "/vertex-ai/vector-search", "/vertex-ai/search", "/vertex-ai/agent-retrieval", "/vertex-ai/deployments", "/vertex-ai/memory-bank", "/vertex-ai/sessions", "/vertex-ai/agent-registry", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security", "/vertex-ai/topology"];
 const under = (path, list) => list.some((p) => path === p || path.startsWith(p + "/"));
 const TUTORIALS = { text: "Tutorials", href: `${B}/tutorials`, icon: SchoolIcon, pinned: true };
@@ -46,7 +47,7 @@ const TOP = [
 const MODELS = [
   { back: { text: "Models", href: B } },
   { text: "Model Garden", href: `${B}/model-garden`, icon: WidgetsIcon, match: [`${B}/model-garden/`] },
-  { text: "Tuning", href: `${B}/training?tab=tuning`, icon: TuneIcon },
+  { text: "Tuning", href: `${B}/tuning`, icon: TuneIcon, match: [`${B}/tuning/`] },
   { text: "Evaluation", href: `${B}/evaluation`, icon: BarChartIcon },
   { text: "Model Registry", href: `${B}/models`, icon: LightbulbIcon },
   { text: "Endpoints", href: `${B}/endpoints`, icon: CableIcon, match: [`${B}/endpoints/`] },
@@ -102,6 +103,8 @@ export default {
     { pattern: "/vertex-ai/models", component: Models },
     { pattern: "/vertex-ai/datasets", component: Datasets },
     { pattern: "/vertex-ai/training", component: Training },
+    { pattern: "/vertex-ai/tuning", component: TuningJobs },
+    { pattern: "/vertex-ai/tuning/:location/:id", component: TuningDetail },
     { pattern: "/vertex-ai/pipelines", component: Pipelines },
     { pattern: "/vertex-ai/batch", component: Batch },
     { pattern: "/vertex-ai/workbench", component: Workbench },

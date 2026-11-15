@@ -26,9 +26,13 @@ export const deleteProvisioned = (arn) => B("DELETE", `/provisioned-model-throug
 export const listCustomModels = () => B("GET", "/custom-models", { query: { maxResults: "1000" } }).then((r) => r.modelSummaries || []);
 export const deleteCustomModel = (arn) => B("DELETE", `/custom-models/${enc(arn)}`);
 export const listCustomizationJobs = () => B("GET", "/model-customization-jobs", { query: { maxResults: "1000" } }).then((r) => r.modelCustomizationJobSummaries || []);
-export const createCustomizationJob = (jobName, customModelName, base, trainUri, outUri, epochs) => B("POST", "/model-customization-jobs", { body: {
+export const createCustomizationJob = (jobName, customModelName, base, trainUri, outUri, epochs, taskType) => B("POST", "/model-customization-jobs", { body: {
   jobName, customModelName, roleArn: roleArn(), baseModelIdentifier: base, customizationType: "FINE_TUNING",
-  trainingDataConfig: { s3Uri: trainUri }, outputDataConfig: { s3Uri: outUri }, hyperParameters: { epochCount: String(epochs || 1) } } });
+  trainingDataConfig: { s3Uri: trainUri }, outputDataConfig: { s3Uri: outUri }, hyperParameters: { epochCount: String(epochs || 1), ...(taskType ? { taskType } : {}) } } });
+/** GetModelCustomizationJob: for a trainable base the record carries the Vyomi `vyomiTraining` extension (status, progress, per-epoch metrics, held-out accuracy). */
+export const getCustomizationJob = (id) => B("GET", `/model-customization-jobs/${enc(id)}`);
+/** InvokeModel on a custom-model ARN: {"task":"classify","text"} -> {label,scores}; {"task":"score","query","document"} -> {score}. Always carries vyomiTrained:true. */
+export const invokeCustomModel = (modelArnOrId, body) => B("POST", `/model/${enc(modelArnOrId)}/invoke`, { body });
 export const stopCustomizationJob = (arn) => B("POST", `/model-customization-jobs/${enc(arn)}/stop`);
 
 // prompt routers

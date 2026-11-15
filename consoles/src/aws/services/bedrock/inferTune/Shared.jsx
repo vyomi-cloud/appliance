@@ -60,7 +60,7 @@ export function useModelOptions() {
   return { options: opts, loading: t.loading };
 }
 export const ModelSelect = ({ value, onChange, ariaLabel = "Model", options, loading }) => (
-  <Select selectedOption={options.find((o) => o.value === value) || null} onChange={({ detail }) => onChange(detail.selectedOption.value)} options={options}
+  <Select selectedOption={options.flatMap((o) => o.options || [o]).find((o) => o.value === value) || null} onChange={({ detail }) => onChange(detail.selectedOption.value)} options={options}
     statusType={loading ? "loading" : "finished"} placeholder="Choose a model" ariaLabel={ariaLabel} filteringType="auto" />
 );
 

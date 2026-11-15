@@ -14,6 +14,7 @@ import { Glyph } from "../../kit/common.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { FineTuningDetail, FineTuningList } from "./FineTuning.jsx";
 
 const CHIPS = ["Browse all resources in this subscription", "Are any resources impacted by outages", "Filter resources by region"];
 const KIND_LABEL = { AIServices: "Foundry", OpenAI: "Azure OpenAI", SpeechServices: "Speech service", TextAnalytics: "Language service",
@@ -23,6 +24,7 @@ const KIND_LABEL = { AIServices: "Foundry", OpenAI: "Azure OpenAI", SpeechServic
 const PAGES = {
   foundry: { label: "Microsoft Foundry", kinds: ["AIServices"], glyph: "cognitiveservices" },
   openai: { label: "Azure OpenAI", kinds: ["OpenAI"], glyph: "cognitiveservices" },
+  finetuning: { label: "Fine-tuning", custom: true },
   search: { label: "AI Search", search: true, glyph: "cognitiveservices" },
   ml: { label: "Machine Learning", none: "Machine Learning workspaces", chips: ["Get workload templates for ML workspaces"] },
   speech: { label: "Speech service", kinds: ["SpeechServices"] },
@@ -36,7 +38,7 @@ export const PAGE_LABEL = { ...Object.fromEntries(Object.entries(PAGES).map(([k,
 const MENU = [
   { id: "overview", label: "Overview" },
   { id: "all", label: "All resources" },
-  { group: "All models, agents & tools", items: ["foundry", "openai", "search", "ml"].map((id) => ({ id, label: PAGES[id].label })) },
+  { group: "All models, agents & tools", items: ["foundry", "openai", "finetuning", "search", "ml"].map((id) => ({ id, label: PAGES[id].label })) },
   { group: "Single-capability", items: ["speech", "language", "translator", "safety", "vision"].map((id) => ({ id, label: PAGES[id].label })) },
   { group: "Earlier-generation", items: [{ id: "anomaly", label: PAGES.anomaly.label }] },
   { group: "Help", items: [{ id: "docs", label: "Documentation" }] },
@@ -114,11 +116,11 @@ function ResourceList({ id }) {
 }
 
 export default function FoundryHub({ params = {} }) {
-  const panel = params.panel || "overview";
+  const panel = params.jobId ? "finetuning" : params.panel || "overview";
   const sub = useSubscription();
   const { data } = useAsync(() => api.listAccounts().catch(() => []), [sub.id]);
   const page = panel === "overview" ? null : panel === "all" ? { label: "All resources" } : PAGES[panel] || { label: panel };
-  const chips = page?.chips || (panel === "overview" ? [] : CHIPS);
+  const chips = panel === "finetuning" ? [] : page?.chips || (panel === "overview" ? [] : CHIPS);
   const title = page ? `Microsoft Foundry | ${page.label}` : "Microsoft Foundry";
   return (
     <ResourceBlade
@@ -128,6 +130,7 @@ export default function FoundryHub({ params = {} }) {
       {chips.length > 0 && <div className="vy-fdy-chips">{chips.map((c) => <button key={c} type="button">{c}</button>)}</div>}
       {panel === "overview" ? <Overview total={(data || []).length} />
         : panel === "docs" ? <div className="vy-page"><p>Foundry documentation lives on learn.microsoft.com.</p></div>
+        : panel === "finetuning" ? (params.jobId ? <FineTuningDetail id={decodeURIComponent(params.jobId)} /> : <FineTuningList />)
         : <ResourceList id={panel} />}
     </ResourceBlade>
   );
