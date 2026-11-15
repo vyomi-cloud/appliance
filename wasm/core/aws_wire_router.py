@@ -2083,7 +2083,7 @@ class AwsWireRouter:
             if bedrock_ctl_core.handles(path.split("?", 1)[0]):   # Infer + Tune control plane (profiles, batch, provisioned, customization, routers, marketplace)
                 return bedrock_ctl_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
             if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
-                return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+                return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), self.lam)
             return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
 
         if svc == "opensearch":
