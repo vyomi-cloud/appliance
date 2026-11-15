@@ -24,6 +24,7 @@ returns RuntimeClientError); runtime endpoints/versions/sessions are modelled; g
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import random
@@ -583,7 +584,7 @@ def _resolve_fm(arn_or_id):
 
 
 def _agent_view(a):
-    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups")}
+    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups", "sessions", "memories", "snapshots")}
 
 
 def _find_agent(st, aid):
@@ -604,6 +605,7 @@ def _create_agent(st, p):
         raise _bad("1 validation error detected: Value null at 'agentResourceRoleArn' failed to satisfy constraint: Member must not be null")
     if p.get("instruction") is not None and not 40 <= len(p["instruction"]) <= 20000:
         raise _bad("1 validation error detected: Value at 'instruction' failed to satisfy constraint: Member must have length greater than or equal to 40")
+    _check_agent_cfg(p)
     ttl = int(p.get("idleSessionTTLInSeconds", 600))
     if not 60 <= ttl <= 3600:
         raise _bad("idleSessionTTLInSeconds must be between 60 and 3600")
@@ -615,6 +617,9 @@ def _create_agent(st, p):
          "agentStatus": "NOT_PREPARED", "foundationModel": fm or "", "instruction": p.get("instruction", ""), "description": p.get("description", ""),
          "idleSessionTTLInSeconds": ttl, "agentResourceRoleArn": p["agentResourceRoleArn"], "createdAt": now, "updatedAt": now,
          "aliases": {}, "kbs": {}, "actionGroups": {}, "_version": 0}
+    for f in ("guardrailConfiguration", "memoryConfiguration"):
+        if p.get(f):
+            a[f] = p[f]
     st["agents"][aid] = a
     return _j(202, {"agent": _agent_view(a)})
 
@@ -645,7 +650,9 @@ def _create_alias(a, p):
         a["_version"] += 1
         ver = str(a["_version"])
         a.setdefault("snapshots", {})[ver] = {"instruction": a["instruction"], "foundationModel": a["foundationModel"],
-                                              "kbs": [dict(k) for k in a["kbs"].values()]}
+                                              "kbs": [dict(k) for k in a["kbs"].values()],
+                                              "actionGroups": json.loads(json.dumps(list(a["actionGroups"].values()))),
+                                              "guardrailConfiguration": a.get("guardrailConfiguration"), "memoryConfiguration": a.get("memoryConfiguration")}
         rc = [{"agentVersion": ver}]
     alid = _rid()
     now = _iso()
@@ -656,52 +663,534 @@ def _create_alias(a, p):
     return _j(202, {"agentAlias": al})
 
 
-def _invoke_agent(st, s3, aid, alias_id, sid, p):
+# ── action groups -> model tools ──
+_MAX_STEPS = 6
+_REPLAY: dict = {}      # Lambda results of the request in flight: Nano replays the whole handler per awaited model call (llm.arun)
+_TYPES = {"string": "string", "number": "number", "integer": "integer", "boolean": "boolean", "array": "array"}
+
+
+def _gr():
+    try:
+        from core import bedrock_guardrails_core as m
+    except ImportError:
+        import bedrock_guardrails_core as m  # type: ignore
+    return m
+
+
+def _safe(s):
+    return re.sub(r"[^A-Za-z0-9_-]", "_", s)[:60]
+
+
+def _load_openapi(g):
+    sch = g.get("apiSchema") or {}
+    txt = sch.get("payload")
+    if txt is None:
+        raise _bad("apiSchema.s3 is not supported: pass the OpenAPI document inline as apiSchema.payload")
+    try:
+        doc = json.loads(txt)
+    except (TypeError, ValueError):
+        try:
+            import yaml  # type: ignore
+            doc = yaml.safe_load(txt)
+        except ImportError:
+            raise _bad("apiSchema.payload is not JSON and PyYAML is not available on this substrate; send the OpenAPI document as JSON")
+        except Exception as e:  # noqa: BLE001
+            raise _bad(f"apiSchema.payload is not valid OpenAPI JSON/YAML: {e}")
+    if not isinstance(doc, dict) or not isinstance(doc.get("paths"), dict) or not str(doc.get("openapi", "")).startswith("3"):
+        raise _bad("apiSchema.payload must be an OpenAPI 3 document with a paths object")
+    return doc
+
+
+def _deref(doc, node):
+    if isinstance(node, dict) and "$ref" in node and str(node["$ref"]).startswith("#/"):
+        cur = doc
+        for part in node["$ref"][2:].split("/"):
+            cur = (cur or {}).get(part, {})
+        return cur or {}
+    return node or {}
+
+
+def _jschema(spec, desc=""):
+    spec = spec or {}
+    t = _TYPES.get(spec.get("type", "string"), "string")
+    out = {"type": t}
+    d = spec.get("description") or desc
+    if d:
+        out["description"] = d
+    if t == "array":
+        out["items"] = {}
+    return out
+
+
+def _group_tools(g):
+    """-> list of {name, description, parameters (JSON schema), kind, group, meta, executor} for one ENABLED action group."""
+    if g.get("actionGroupState", "ENABLED") != "ENABLED":
+        return []
+    ex = g.get("actionGroupExecutor") or {}
+    out = []
+    gname = g["actionGroupName"]
+    for fn in ((g.get("functionSchema") or {}).get("functions") or []):
+        props, req = {}, []
+        for pn, ps in (fn.get("parameters") or {}).items():
+            props[pn] = _jschema(ps)
+            if ps.get("required"):
+                req.append(pn)
+        out.append({"name": f"{_safe(gname)}__{_safe(fn['name'])}", "description": fn.get("description") or fn["name"],
+                    "parameters": {"type": "object", "properties": props, "required": req}, "kind": "function", "group": gname,
+                    "meta": {"function": fn["name"]}, "executor": ex})
+    if g.get("apiSchema"):
+        doc = _load_openapi(g)
+        for path, item in doc["paths"].items():
+            for verb, op in (item or {}).items():
+                if verb.lower() not in ("get", "post", "put", "delete", "patch") or not isinstance(op, dict):
+                    continue
+                props, req, inbody = {}, [], []
+                for prm in op.get("parameters") or []:
+                    prm = _deref(doc, prm)
+                    props[prm["name"]] = _jschema(_deref(doc, prm.get("schema")), prm.get("description", ""))
+                    if prm.get("required"):
+                        req.append(prm["name"])
+                rb = _deref(doc, (((op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema"))
+                for pn, ps in (rb.get("properties") or {}).items():
+                    props[pn] = _jschema(_deref(doc, ps))
+                    inbody.append(pn)
+                    if pn in (rb.get("required") or []):
+                        req.append(pn)
+                oid = op.get("operationId") or f"{verb}_{path}"
+                out.append({"name": f"{_safe(gname)}__{_safe(oid)}", "description": op.get("description") or op.get("summary") or oid,
+                            "parameters": {"type": "object", "properties": props, "required": req}, "kind": "api", "group": gname,
+                            "meta": {"apiPath": path, "httpMethod": verb.upper(), "inbody": inbody}, "executor": ex})
+    return out
+
+
+def _arg_text(v):
+    return v if isinstance(v, str) else json.dumps(v)
+
+
+def _arg_params(t, args):
+    """Arguments -> Bedrock Parameter lists [{name,type,value}] (values are strings, as the real agent sends them): (plain, in request body)."""
+    props = t["parameters"]["properties"]
+    inb = set(t["meta"].get("inbody") or [])
+    plain = [{"name": k, "type": props.get(k, {}).get("type", "string"), "value": _arg_text(v)} for k, v in args.items() if k not in inb]
+    body = [{"name": k, "type": props.get(k, {}).get("type", "string"), "value": _arg_text(v)} for k, v in args.items() if k in inb]
+    return plain, body
+
+
+def _lambda_name(arn):
+    return arn.split(":function:")[1].split(":")[0] if ":function:" in arn else arn
+
+
+def _run_lambda(lam, t, args, ctx):
+    """Invoke the action-group Lambda with the Bedrock Agents event; -> (result text, sessionAttributes|None, is_error)."""
+    plain, body = _arg_params(t, args)
+    ev = {"messageVersion": "1.0", "agent": {"name": ctx["agent"]["agentName"], "id": ctx["agent"]["agentId"], "alias": ctx["alias"], "version": ctx["version"]},
+          "inputText": ctx["text"], "sessionId": ctx["sid"], "actionGroup": t["group"], "parameters": plain,
+          "sessionAttributes": ctx["sess"].get("attrs") or {}, "promptSessionAttributes": ctx["prompt_attrs"]}
+    if t["kind"] == "function":
+        ev["function"] = t["meta"]["function"]
+    else:
+        ev["apiPath"], ev["httpMethod"] = t["meta"]["apiPath"], t["meta"]["httpMethod"]
+        ev["requestBody"] = {"content": {"application/json": {"properties": body}}}
+    key = json.dumps([ctx["sid"], ctx["req"], t["name"], args], sort_keys=True, default=str)
+    if key in _REPLAY:
+        return _REPLAY[key]
+    if lam is None:
+        res = ("Lambda is unavailable on this substrate", None, True)
+    else:
+        try:
+            from core import lambda_core
+        except ImportError:
+            import lambda_core  # type: ignore
+        r = lambda_core._invoke(lam, _lambda_name(t["executor"]["lambda"]), json.dumps(ev).encode())
+        raw = (r.body or b"").decode("utf-8", "replace")
+        hdrs = {str(k).lower() for k in (r.headers or {})}
+        if r.status >= 400 or "x-amz-function-error" in hdrs:
+            res = (raw[:2000], None, True)
+        else:
+            try:
+                doc = json.loads(raw)
+            except ValueError:
+                doc = None
+            resp = doc.get("response") if isinstance(doc, dict) else None
+            if not isinstance(resp, dict):
+                res = (raw[:4000], None, False)       # not the agent response contract: hand the model what the function returned
+            else:
+                rb = (resp.get("functionResponse") or {}).get("responseBody") if t["kind"] == "function" else resp.get("responseBody")
+                txt = next((v.get("body", "") for v in (rb or {}).values() if isinstance(v, dict)), "")
+                bad = t["kind"] == "api" and int(resp.get("httpStatusCode", 200)) >= 400
+                res = (txt if isinstance(txt, str) else json.dumps(txt), doc.get("sessionAttributes"), bad)
+    _REPLAY[key] = res
+    return res
+
+
+def _rc_inputs(t, args):
+    plain, body = _arg_params(t, args)
+    if t["kind"] == "function":
+        return {"functionInvocationInput": {"actionGroup": t["group"], "actionInvocationType": "RESULT", "function": t["meta"]["function"], "parameters": plain}}
+    d = {"actionGroup": t["group"], "actionInvocationType": "RESULT", "apiPath": t["meta"]["apiPath"], "httpMethod": t["meta"]["httpMethod"], "parameters": plain}
+    if body:
+        d["requestBody"] = {"content": {"application/json": body}}
+    return {"apiInvocationInput": d}
+
+
+def _rc_match(t, res):
+    if t["kind"] == "function":
+        f = res.get("functionResult")
+        return bool(f) and f.get("actionGroup") == t["group"] and f.get("function") == t["meta"]["function"]
+    x = res.get("apiResult")
+    return bool(x) and x.get("actionGroup") == t["group"] and x.get("apiPath") == t["meta"]["apiPath"] and str(x.get("httpMethod", "")).upper() == t["meta"]["httpMethod"]
+
+
+def _rc_text(res):
+    body = (res.get("functionResult") or res.get("apiResult") or {}).get("responseBody") or {}
+    return next((v.get("body", "") for v in body.values() if isinstance(v, dict)), "")
+
+
+# ── session memory (SESSION_SUMMARY) ──
+def _mem_cfg(snap):
+    mc = snap.get("memoryConfiguration") or {}
+    return mc if "SESSION_SUMMARY" in (mc.get("enabledMemoryTypes") or []) else None
+
+
+def _memories(a, alias_id, mid):
+    return a.setdefault("memories", {}).setdefault(alias_id, {}).setdefault(mid, [])
+
+
+def _live_memories(a, alias_id, mid):
+    now = time.time()
+    return [m for m in (a.get("memories") or {}).get(alias_id, {}).get(mid, []) if m["_expires"] > now]
+
+
+def _summarise(transcript):
+    r = llm.chat([{"role": "user", "content": "Summarise this conversation in two or three sentences, keeping names, preferences and open requests:\n\n" + transcript}],
+                 system="You write short factual conversation summaries.", max_tokens=200, temperature=0.2)
+    return r["text"].strip()
+
+
+def _memory_op(a, alias_id, method, query):
+    if alias_id != "TSTALIASID" and alias_id not in a["aliases"]:
+        raise _nf(f"Could not find resource: Alias {alias_id} of agent {a['agentId']}")
+    q = query or {}
+    mid = q.get("memoryId")
+    if method == "GET":
+        if q.get("memoryType") != "SESSION_SUMMARY":
+            raise _bad("1 validation error detected: Value at 'memoryType' failed to satisfy constraint: Member must satisfy enum value set: [SESSION_SUMMARY]")
+        if not mid:
+            raise _bad("memoryId is required")
+        items = sorted(_live_memories(a, alias_id, mid), key=lambda m: m["sessionSummary"]["sessionStartTime"], reverse=True)
+        n = int(q.get("maxItems") or 100)
+        off = int(q["nextToken"]) if str(q.get("nextToken") or "").isdigit() else 0
+        doc = {"memoryContents": [{"sessionSummary": m["sessionSummary"]} for m in items[off:off + n]]}
+        if off + n < len(items):
+            doc["nextToken"] = str(off + n)
+        return _j(200, doc)
+    mem = (a.get("memories") or {}).get(alias_id, {})
+    sid = q.get("sessionId")
+    for k in ([mid] if mid else list(mem)):
+        if k in mem:
+            mem[k] = [m for m in mem[k] if m["sessionSummary"]["sessionId"] != sid] if sid else []
+    return _j(202, {})
+
+
+# ── guardrail / memory config validation (CreateAgent / UpdateAgent) ──
+def _check_agent_cfg(p):
+    g = p.get("guardrailConfiguration")
+    if g is not None:
+        if not g.get("guardrailIdentifier") or not g.get("guardrailVersion"):
+            raise _bad("guardrailConfiguration requires guardrailIdentifier and guardrailVersion")
+        gr = _gr()
+        try:
+            gr.resolve_policy(g["guardrailIdentifier"], str(g["guardrailVersion"]))
+        except gr.GErr as e:
+            raise _Err(e.code, e.msg, e.status)
+    m = p.get("memoryConfiguration")
+    if m is not None:
+        types = m.get("enabledMemoryTypes")
+        if not isinstance(types, list) or not types or any(t != "SESSION_SUMMARY" for t in types):
+            raise _bad("memoryConfiguration.enabledMemoryTypes must be [SESSION_SUMMARY]")
+        if not 0 <= int(m.get("storageDays", 30)) <= 365:
+            raise _bad("memoryConfiguration.storageDays must be between 0 and 365")
+
+
+def _check_action_group(p, update=False):
+    if not update and not p.get("actionGroupName"):
+        raise _bad("actionGroupName is required")
+    if p.get("apiSchema") and p.get("functionSchema"):
+        raise _bad("Provide either apiSchema or functionSchema, not both")
+    ex = p.get("actionGroupExecutor")
+    if ex is not None:
+        if ex.get("customControl") is not None:
+            if ex["customControl"] != "RETURN_CONTROL":
+                raise _bad("actionGroupExecutor.customControl must be RETURN_CONTROL")
+        elif not re.match(r"^arn:aws(-[a-z]+)*:lambda:[a-z0-9-]+:\d{12}:function:[A-Za-z0-9_-]+(:[A-Za-z0-9_$-]+)?$", str(ex.get("lambda") or "")):
+            raise _bad("actionGroupExecutor.lambda must be a Lambda function ARN (or use customControl RETURN_CONTROL)")
+    if p.get("apiSchema"):
+        _load_openapi(p)
+    fs = (p.get("functionSchema") or {}).get("functions")
+    if p.get("functionSchema") is not None and (not isinstance(fs, list) or not fs):
+        raise _bad("functionSchema.functions must list at least one function")
+    for fn in fs or []:
+        if not fn.get("name"):
+            raise _bad("each function needs a name")
+        for pn, ps in (fn.get("parameters") or {}).items():
+            if ps.get("type") not in _TYPES:
+                raise _bad(f"parameter {pn} of {fn['name']}: type must be one of {sorted(_TYPES)}")
+
+
+def _action_group(a, p, gid=None):
+    _check_action_group(p)
+    now = _iso()
+    g = {"agentId": a["agentId"], "agentVersion": "DRAFT", "actionGroupId": gid or _rid(), "actionGroupName": p["actionGroupName"], "description": p.get("description", ""),
+         "actionGroupState": p.get("actionGroupState", "ENABLED"), "actionGroupExecutor": p.get("actionGroupExecutor"),
+         "apiSchema": p.get("apiSchema"), "functionSchema": p.get("functionSchema"), "createdAt": now, "updatedAt": now}
+    if p.get("parentActionGroupSignature"):
+        g["parentActionGroupSignature"] = p["parentActionGroupSignature"]
+    return g
+
+
+# ── the orchestration loop ──
+def _evt(kind, payload):
+    try:
+        from core import ai_models_core as am
+    except ImportError:
+        import ai_models_core as am  # type: ignore
+    return am.eventstream_frame(kind, payload)
+
+
+def _tid(n=0):
+    return f"{_rid(8, string.ascii_lowercase + string.digits)}-{_rid(4, string.ascii_lowercase + string.digits)}-{n}"
+
+
+def _unavailable(e):
+    return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "DependencyFailedException"},
+            "body": json.dumps({"message": f"{e} (the local model has not been started)"}).encode()}
+
+
+def _invoke_agent(st, s3, aid, alias_id, sid, p, lam=None):
+    try:
+        out = _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam)
+    except llm.NeedAsync:
+        raise                                         # the request will be replayed: keep the memoised Lambda results
+    except BaseException:
+        _REPLAY.clear()
+        raise
+    _REPLAY.clear()
+    return out
+
+
+def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
     a = _find_agent(st, aid)
+    sstate = p.get("sessionState") or {}
+    results = sstate.get("returnControlInvocationResults")
     text = (p.get("inputText") or "").strip()
-    if not text:
+    if not text and not results:
         raise _bad("inputText is required")
     if alias_id == "TSTALIASID":     # the built-in test alias runs the DRAFT version
-        snap = {"instruction": a["instruction"], "foundationModel": a["foundationModel"], "kbs": list(a["kbs"].values())}
+        snap = {"instruction": a["instruction"], "foundationModel": a["foundationModel"], "kbs": list(a["kbs"].values()),
+                "actionGroups": [dict(g) for g in a["actionGroups"].values()], "guardrailConfiguration": a.get("guardrailConfiguration"),
+                "memoryConfiguration": a.get("memoryConfiguration")}
+        version = "DRAFT"
         if a["agentStatus"] != "PREPARED":
             raise _conflict("The agent is not in PREPARED state; call PrepareAgent first")
     else:
         al = a["aliases"].get(alias_id)
         if not al:
             raise _nf(f"Could not find resource: Alias {alias_id} of agent {aid}")
-        snap = (a.get("snapshots") or {}).get(str(al["routingConfiguration"][0]["agentVersion"]))
+        version = str(al["routingConfiguration"][0]["agentVersion"])
+        snap = (a.get("snapshots") or {}).get(version)
         if not snap:
             raise _nf("Agent version not found")
-    refs, ctx = [], ""
-    for k in snap["kbs"]:
-        if k.get("knowledgeBaseState", "ENABLED") != "ENABLED" or k["knowledgeBaseId"] not in st["kbs"]:
-            continue
-        res = _retrieve(st["kbs"][k["knowledgeBaseId"]], text, 3)
-        refs += res
-        ctx += "\n".join(r["content"]["text"] for r in res) + "\n"
-    sysm = snap["instruction"]
-    if ctx.strip():
-        sysm += "\n\nUse these knowledge base passages when relevant:\n" + ctx
-    hist = (a.setdefault("sessions", {}).setdefault(sid, []))
-    msgs = hist + [{"role": "user", "content": text}]
+    mid = p.get("memoryId")
+    if mid is not None and not 1 <= len(mid) <= 100:
+        raise _bad("memoryId must be between 1 and 100 characters")
+    sess = a.setdefault("sessions", {}).get(sid)
+    if isinstance(sess, list):
+        sess = {"history": sess}
+    sess = json.loads(json.dumps(sess)) if sess else {}          # work on a copy: committed only when the request completes (replay-safe)
+    sess.setdefault("history", [])
+    sess.setdefault("started", time.time())
+    if sstate.get("sessionAttributes"):
+        sess["attrs"] = dict(sstate["sessionAttributes"])
+    ctx = {"agent": a, "alias": alias_id, "version": version, "sid": sid, "sess": sess, "text": text, "prompt_attrs": dict(sstate.get("promptSessionAttributes") or {}),
+           "req": hashlib.md5(json.dumps(p, sort_keys=True, default=str).encode()).hexdigest()[:12]}
+    trace_on = bool(p.get("enableTrace"))
+    frames: list = []
+    base = {"agentId": aid, "agentAliasId": alias_id, "agentVersion": version, "sessionId": sid}
+
+    def tr(part, body):
+        if trace_on:
+            frames.append(_evt("trace", dict(base, eventTime=_iso(), trace={part: body})))
+
+    tools = []
+    for g in snap.get("actionGroups") or []:
+        tools += _group_tools(g)
+    reg = {t["name"]: t for t in tools}
+    gcfg = snap.get("guardrailConfiguration")
+    gr = _gr() if gcfg else None
+    fm = snap["foundationModel"]
+    infer = {"maximumLength": 400, "stopSequences": [], "temperature": 0.4, "topK": 250, "topP": 1.0}
+    blocked_in = [False]
+
+    def guard(txt, source):
+        try:
+            r = gr.evaluate(gr.resolve_policy(gcfg["guardrailIdentifier"], str(gcfg["guardrailVersion"])), txt, source)
+        except gr.GErr as e:
+            raise _Err(e.code, e.msg, e.status)
+        tr("guardrailTrace", {"traceId": _tid(), "action": "INTERVENED" if r["action"] != "NONE" else "NONE",
+                              ("inputAssessments" if source == "INPUT" else "outputAssessments"): [r["assessment"]] if r["assessment"] else []})
+        return r
+
+    def commit():
+        hdr = {"content-type": "application/vnd.amazon.eventstream", "x-amz-bedrock-agent-session-id": sid, "x-amzn-bedrock-agent-content-type": "application/json"}
+        if mid:
+            hdr["x-amz-bedrock-agent-memory-id"] = mid
+        return {"status": 200, "headers": hdr, "body": b"".join(frames)}
+
+    def finish(final, refs=None):
+        refs = refs or []
+        tr("postProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "POST_PROCESSING", "foundationModel": fm,
+                                                           "text": "Vyomi post-processing: deterministic finalisation of the orchestration answer (no model call)."}})
+        tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"text": final}, "rawResponse": {"content": final}}})
+        if gcfg and final and not blocked_in[0]:
+            r = guard(final, "OUTPUT")
+            final = r["text"] if r["action"] != "NONE" else final
+        part = {"bytes": base64.b64encode(final.encode()).decode()}
+        if refs:
+            part["attribution"] = {"citations": [{"generatedResponsePart": {"textResponsePart": {"text": final, "span": {"start": 0, "end": len(final)}}},
+                                                  "retrievedReferences": [{k: v for k, v in x.items() if k != "score"} for x in refs[:3]]}]}
+        frames.append(_evt("chunk", part))
+        sess["history"] += [{"role": "user", "content": ctx["text"]}, {"role": "assistant", "content": final}]
+        del sess["history"][:-20]
+        sess["pending"] = None
+        mc = _mem_cfg(snap)
+        if p.get("endSession"):
+            if mid and mc:
+                days = int(mc.get("storageDays", 30))
+                tx = "\n".join(f"{m['role']}: {m['content']}" for m in sess["history"])
+                ent = {"sessionId": sid, "memoryId": mid, "sessionStartTime": _iso(sess["started"]), "sessionExpiryTime": _iso(time.time() + days * 86400),
+                       "summaryText": _summarise(tx)}
+                lst = _memories(a, alias_id, mid)
+                lst[:] = [m for m in lst if m["sessionSummary"]["sessionId"] != sid] + [{"sessionSummary": ent, "_expires": time.time() + days * 86400}]
+                keep = int((mc.get("sessionSummaryConfiguration") or {}).get("maxRecentSessions", 20))
+                lst[:] = sorted(lst, key=lambda m: m["sessionSummary"]["sessionStartTime"])[-keep:]
+            a["sessions"].pop(sid, None)
+        else:
+            a["sessions"][sid] = sess
+        return commit()
+
+    refs, kbctx = [], ""
+    pend = sess.get("pending")
+    if results:                                      # ── continuation of a RETURN_CONTROL turn
+        if not pend or pend.get("invocationId") != sstate.get("invocationId"):
+            raise _bad("sessionState.invocationId does not match a pending RETURN_CONTROL invocation of this session")
+        msgs = list(pend["msgs"])
+        text = ctx["text"] = pend["text"]
+        for call in pend["calls"]:
+            t = reg.get(call["name"])
+            res = next((r for r in results if t and _rc_match(t, r)), None)
+            if res is None:
+                raise _bad(f"returnControlInvocationResults is missing a result for {call['name']}")
+            out = ("ERROR: " if (res.get("functionResult") or res.get("apiResult") or {}).get("responseState") == "FAILURE" else "") + _rc_text(res)
+            msgs.append({"role": "tool", "tool_call_id": call["id"], "name": call["name"], "content": out})
+            tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": _rc_text(res)}}})
+        msgs += pend.get("done", [])
+        refs = pend.get("refs") or []
+        system = pend["system"]
+        step0 = pend.get("step", 1)
+    else:
+        sess["pending"] = None                        # a new user turn abandons an unanswered RETURN_CONTROL request
+        if gcfg:
+            r = guard(text, "INPUT")
+            if r["blocked"]:
+                blocked_in[0] = True
+                return finish(r["text"])
+            text = ctx["text"] = r["text"] if r["action"] != "NONE" else text
+        nkb = sum(1 for k in snap["kbs"] if k.get("knowledgeBaseState", "ENABLED") == "ENABLED")
+        tr("preProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "PRE_PROCESSING", "foundationModel": fm, "inferenceConfiguration": infer,
+                                                           "text": "Vyomi pre-processing: input checks only (no model call)."}})
+        tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"isValid": True, "rationale": (
+            f"Input accepted ({len(text)} chars); guardrail {'applied' if gcfg else 'not configured'}; {len(tools)} action tool(s) and {nkb} knowledge base(s) available.")}}})
+        for k in snap["kbs"]:
+            if k.get("knowledgeBaseState", "ENABLED") != "ENABLED" or k["knowledgeBaseId"] not in st["kbs"]:
+                continue
+            tr("orchestrationTrace", {"invocationInput": {"traceId": _tid(), "invocationType": "KNOWLEDGE_BASE",
+                                                          "knowledgeBaseLookupInput": {"knowledgeBaseId": k["knowledgeBaseId"], "text": text}}})
+            res = _retrieve(st["kbs"][k["knowledgeBaseId"]], text, 3)
+            tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "KNOWLEDGE_BASE", "knowledgeBaseLookupOutput": {"retrievedReferences": [
+                {kk: vv for kk, vv in r2.items() if kk != "score"} for r2 in res]}}})
+            refs += res
+            kbctx += "\n".join(r2["content"]["text"] for r2 in res) + "\n"
+        system = snap["instruction"]
+        if kbctx.strip():
+            system += "\n\nUse these knowledge base passages when relevant:\n" + kbctx
+        if mid and _mem_cfg(snap):
+            ms = sorted(_live_memories(a, alias_id, mid), key=lambda m: m["sessionSummary"]["sessionStartTime"])
+            if ms:
+                system += "\n\nSummaries of this user's previous sessions:\n" + "\n".join("- " + m["sessionSummary"]["summaryText"] for m in ms)
+        if ctx["prompt_attrs"]:
+            system += "\n\nPrompt session attributes: " + json.dumps(ctx["prompt_attrs"])
+        msgs = list(sess["history"]) + [{"role": "user", "content": text}]
+        step0 = 1
     try:
-        r = llm.chat(msgs, system=sysm, max_tokens=400, temperature=0.4)
+        final = None
+        ltools = [{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools] or None
+        for step in range(step0, _MAX_STEPS + 1):
+            tid = _tid(step)
+            tr("orchestrationTrace", {"modelInvocationInput": {"traceId": tid, "type": "ORCHESTRATION", "foundationModel": fm, "inferenceConfiguration": infer,
+                                                               "text": json.dumps({"system": system, "messages": msgs, "tools": [t["name"] for t in tools]})}})
+            r = llm.chat(msgs, system=system, max_tokens=400, temperature=0.4, tools=ltools, tool_choice="auto" if ltools else None)
+            calls = r.get("tool_calls") or []
+            tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": r["text"] or json.dumps({"tool_calls": calls})},
+                                                                "metadata": {"usage": {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"]}}}})
+            if not calls:
+                final = r["text"]
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "FINISH", "finalResponse": {"text": final}}})
+                break
+            for c in calls:      # llm_core already constrained + validated the call; re-check against OUR schema before anything is invoked
+                t = reg.get(c["name"])
+                errs = ["unknown tool"] if not t else llm.validate(t["parameters"], c["arguments"])
+                if errs:
+                    raise llm.LlmStructuredError(f"tool call {c['name']} is invalid: {'; '.join(errs[:3])}")
+            msgs.append({"role": "assistant", "content": r["text"] or "", "tool_calls": calls})
+            tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": (r["text"] or "").strip() or
+                                                    "Selected " + ", ".join(f"{c['name']}({json.dumps(c['arguments'])})" for c in calls) + " via schema-constrained tool-call output."}})
+            rc, done = [], []
+            for c in calls:
+                t = reg[c["name"]]
+                plain, body = _arg_params(t, c["arguments"])
+                is_rc = t["executor"].get("customControl") == "RETURN_CONTROL"
+                agi = {"actionGroupName": t["group"], "parameters": plain, "executionType": "RETURN_CONTROL" if is_rc else "LAMBDA"}
+                agi.update({"function": t["meta"]["function"]} if t["kind"] == "function" else {"apiPath": t["meta"]["apiPath"], "verb": t["meta"]["httpMethod"]})
+                if body:
+                    agi["requestBody"] = {"content": {"application/json": body}}
+                tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ACTION_GROUP", "actionGroupInvocationInput": agi}})
+                if is_rc:
+                    rc.append((c, t))
+                    continue
+                if not t["executor"].get("lambda"):
+                    raise _bad(f"Action group {t['group']} has no executor: set a Lambda ARN or customControl RETURN_CONTROL")
+                out, sattrs, is_err = _run_lambda(lam, t, c["arguments"], ctx)
+                if sattrs:
+                    sess["attrs"] = sattrs
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": out}}})
+                done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"], "content": ("ERROR: " if is_err else "") + out})
+            if rc:
+                invid = _rid(16, string.ascii_lowercase + string.digits)
+                sess["pending"] = {"invocationId": invid, "msgs": msgs, "text": text, "system": system, "refs": refs, "step": step + 1,
+                                   "calls": [{"id": c["id"], "name": c["name"]} for c, _t in rc], "done": done}
+                a["sessions"][sid] = sess
+                frames.append(_evt("returnControl", {"invocationId": invid, "invocationInputs": [_rc_inputs(t, c["arguments"]) for c, t in rc]}))
+                return commit()
+            msgs += done
+        if final is None:
+            final = "Sorry, I am unable to assist you with this request."
+            tr("failureTrace", {"traceId": _tid(), "failureReason": f"The agent did not reach a final answer within {_MAX_STEPS} orchestration steps."})
+        return finish(final, refs)
+    except llm.LlmStructuredError as e:
+        tr("failureTrace", {"traceId": _tid(), "failureReason": str(e)})
+        return finish("Sorry, I am unable to assist you with this request.", refs)
     except llm.LlmUnavailable as e:
-        return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "DependencyFailedException"},
-                "body": json.dumps({"message": f"{e} (the local model has not been started)"}).encode()}
-    hist += [{"role": "user", "content": text}, {"role": "assistant", "content": r["text"]}]
-    del hist[:-20]
-    try:
-        from core import ai_models_core as am
-    except ImportError:
-        import ai_models_core as am  # type: ignore
-    part = {"bytes": base64.b64encode(r["text"].encode()).decode()}
-    if refs:
-        part["attribution"] = {"citations": [{"generatedResponsePart": {"textResponsePart": {"text": r["text"], "span": {"start": 0, "end": len(r["text"])}}},
-                                              "retrievedReferences": [{k: v for k, v in x.items() if k != "score"} for x in refs[:3]]}]}
-    body = am.eventstream_frame("chunk", part)
-    return {"status": 200, "headers": {"content-type": "application/vnd.amazon.eventstream", "x-amz-bedrock-agent-session-id": sid,
-                                        "x-amzn-bedrock-agent-content-type": "application/json"}, "body": body}
+        return _unavailable(e)
 
 
 # ═══════════════════════════ dispatch: bedrock-agent / agent-runtime ═══════════════════════════
@@ -710,7 +1199,7 @@ def handles(path: str) -> bool:
     return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate|rerank|_vyomi/kb)(/|$)", p))
 
 
-def dispatch(s3, method, path, query, headers, body):
+def dispatch(s3, method, path, query, headers, body, lam=None):
     method = method.upper()
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
@@ -728,7 +1217,7 @@ def dispatch(s3, method, path, query, headers, body):
         if low[0] == "knowledgebases" and len(low) == 3 and low[2] == "retrieve" and method == "POST":
             return _retrieve_op(st, segs[1], p)
         if low[0] == "agents" and len(low) == 7 and low[2] == "agentaliases" and low[4] == "sessions" and low[6] == "text" and method == "POST":
-            return _invoke_agent(st, s3, segs[1], segs[3], segs[5], p)
+            return _invoke_agent(st, s3, segs[1], segs[3], segs[5], p, lam)
         # ── knowledge bases ──
         if low[0] == "knowledgebases":
             if len(low) == 1:
@@ -802,8 +1291,9 @@ def dispatch(s3, method, path, query, headers, body):
                             raise _bad("agentName and agentResourceRoleArn are required")
                         if p.get("foundationModel") and not _resolve_fm(p["foundationModel"]):
                             raise _bad(f"The provided foundation model {p['foundationModel']} is invalid or unsupported")
+                        _check_agent_cfg(p)
                         a.update(agentName=p["agentName"], agentResourceRoleArn=p["agentResourceRoleArn"], updatedAt=_iso(), agentStatus="NOT_PREPARED")
-                        for f in ("foundationModel", "instruction", "description", "idleSessionTTLInSeconds"):
+                        for f in ("foundationModel", "instruction", "description", "idleSessionTTLInSeconds", "guardrailConfiguration", "memoryConfiguration"):
                             if f in p:
                                 a[f] = p[f]
                         return _j(202, {"agent": _agent_view(a)})
@@ -812,6 +1302,8 @@ def dispatch(s3, method, path, query, headers, body):
                             raise _conflict("Agent has aliases; delete them first or set skipResourceInUseCheck")
                         del st["agents"][a["agentId"]]
                         return _j(202, {"agentId": a["agentId"], "agentStatus": "DELETING"})
+                elif low[2] == "agentaliases" and len(low) == 5 and low[4] == "memories" and method in ("GET", "DELETE"):
+                    return _memory_op(a, segs[3], method, query)
                 elif low[2] == "agentaliases":
                     if len(low) == 3:
                         if method == "PUT":
@@ -850,19 +1342,28 @@ def dispatch(s3, method, path, query, headers, body):
                             del a["kbs"][segs[5]]
                             a["agentStatus"] = "NOT_PREPARED"
                             return _j(204, None)
-                    elif low[4] == "agentactiongroups":
+                    elif low[4] in ("actiongroups", "agentactiongroups"):   # the real SDK path is .../actiongroups/; the old spelling is kept
                         if len(low) == 5 and method == "PUT":
-                            nm = p.get("actionGroupName")
-                            if not nm:
-                                raise _bad("actionGroupName is required")
-                            gid = _rid()
-                            now = _iso()
-                            g = {"agentId": a["agentId"], "agentVersion": "DRAFT", "actionGroupId": gid, "actionGroupName": nm, "description": p.get("description", ""),
-                                 "actionGroupState": p.get("actionGroupState", "ENABLED"), "actionGroupExecutor": p.get("actionGroupExecutor"),
-                                 "apiSchema": p.get("apiSchema"), "functionSchema": p.get("functionSchema"), "createdAt": now, "updatedAt": now}
-                            a["actionGroups"][gid] = g
+                            g = _action_group(a, p)
+                            a["actionGroups"][g["actionGroupId"]] = g
                             a["agentStatus"] = "NOT_PREPARED"
                             return _j(200, {"agentActionGroup": g})
+                        if len(low) == 6:
+                            g = a["actionGroups"].get(segs[5])
+                            if not g:
+                                raise _nf(f"Could not find resource: ActionGroup {segs[5]}")
+                            if method == "GET":
+                                return _j(200, {"agentActionGroup": g})
+                            if method == "PUT":
+                                n = _action_group(a, p, g["actionGroupId"])
+                                n["createdAt"] = g["createdAt"]
+                                a["actionGroups"][g["actionGroupId"]] = n
+                                a["agentStatus"] = "NOT_PREPARED"
+                                return _j(200, {"agentActionGroup": n})
+                            if method == "DELETE":
+                                del a["actionGroups"][g["actionGroupId"]]
+                                a["agentStatus"] = "NOT_PREPARED"
+                                return _j(204, None)
                         if len(low) == 5 and method == "POST":
                             return _j(200, _paginate([{k: g[k] for k in ("actionGroupId", "actionGroupName", "actionGroupState", "description", "updatedAt")} for g in a["actionGroups"].values()], query, "actionGroupSummaries"))
     except _Err as e:

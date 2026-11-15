@@ -37,10 +37,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Agent versions/aliases snapshot the prepared agent; InvokeAgent prompts the local model with the instruction, session history and retrieved knowledge-base passages and returns citations. Action groups are stored but never invoked (a <1 GB model does not emit reliable tool calls); no orchestration trace, guardrails, memory or multi-agent collaboration. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+   "Agent versions/aliases snapshot the prepared agent; InvokeAgent prompts the local model with the instruction, session history and retrieved knowledge-base passages and returns citations. Function-schema and OpenAPI (JSON, or YAML when PyYAML is available) action groups with a Lambda executor are really invoked through the Lambda engine with the Bedrock Agents event, and the result is fed back to the model; RETURN_CONTROL groups return the returnControl event and accept returnControlInvocationResults on the next InvokeAgent. Tool selection uses schema-constrained JSON output, validated against the action schema with bounded retries (after which the agent answers it is unable to assist, with a failureTrace) - a <1 GB model still chooses tools far less reliably than a production model. enableTrace emits preProcessing/orchestration/postProcessing/guardrail/failure trace parts from the real loop (pre/post-processing are deterministic steps, not model calls). guardrailConfiguration applies the guardrails engine to input and output; memoryConfiguration SESSION_SUMMARY summarises a session at endSession (memoryId) and feeds it to later sessions, with GetAgentMemory/DeleteAgentMemory (no summary on idle-timeout expiry). Not implemented: multi-agent collaboration, built-in AMAZON.UserInput/CodeInterpreter groups, apiSchema from S3, requireConfirmation prompts, custom prompt templates/parsers, enhanced (non-text) inputs. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
   ],
   "tests": [
-   "tests/conformance/test_bedrock_agents_core.py"
+   "tests/conformance/test_bedrock_agents_core.py",
+   "tests/conformance/test_bedrock_agents_capabilities.py"
   ]
  },
  "bedrock.agentcore.gateway": {
