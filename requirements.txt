@@ -19,3 +19,5 @@ docker>=7.0.0        # Lazy backend provisioner (core/backend_provisioner.py) �
 pyarrow>=22.0.0      # Apache Parquet writer for RDS StartExportTask (snapshot → .gz.parquet in the
                      #   simulator's own S3 — core/parquet_pyarrow.py; Nano uses vendored parquet-wasm)
 cryptography>=42.0.0  # RS256/JWKS verification in the shared gateway engine (core/gateway_common.py); also a transitive dep of azure-storage-blob
+moto[cognitoidp,server]>=5.1.0  # Cognito/WAFv2/Cognito-Identity engines (core/identity_core.py)
+PyJWT>=2.8.0  # standard JWT lib (RS256 verify in tests / sample apps)

@@ -1264,6 +1264,10 @@ class AwsWireRouter:
             return "azure-sql"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
             return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
+        from core import identity_core as _idc   # Cognito user pools / Cognito Identity / WAFv2 (moto engines) + the pool JWKS GET
+        _isvc = _idc.service_for(path, lheaders)
+        if _isvc:
+            return _isvc
         target = lheaders.get("x-amz-target", "") or ""
         if target.startswith(cw.TARGET_PREFIX + "."):
             return "cloudwatch"            # CloudWatch JSON 1.0
@@ -2008,6 +2012,10 @@ class AwsWireRouter:
             r = s3files_core.fsx_dispatch(self.s3, self.vpc, lheaders.get("x-amz-target", ""), bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
+        if svc in ("cognito-idp", "cognito-identity", "wafv2"):   # moto cognitoidp/cognitoidentity/wafv2 engines (core/identity_core)
+            from core import identity_core
+            return identity_core.dispatch(svc, method, path, query or {}, lheaders, bytes(body))
+
         if svc == "bedrock":
             from core import ai_models_core
             from core import bedrock_agents_core
@@ -2133,6 +2141,11 @@ class AwsWireRouter:
                 # a REST (v1) API's invoke URL ({id}.execute-api.* or /apigw/{id}/{stage}/…) → v1 data plane
                 # (stage throttle, authorizers, API key + usage plan, integrations; core/apigateway_gateway)
                 from core import gateway_common as _gc
+                from core import identity_core as _idc
+                _w = _idc.waf_check(api_id, rest.strip("/").split("/", 1)[0], method, "/" + (rest.strip("/").split("/", 1)[1] if "/" in rest.strip("/") else ""),
+                                    query, lheaders, bytes(body), lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+                if _w:
+                    return _w
                 r = apigw.invoke(self.apigw, api_id, rest.strip("/").split("/", 1)[0], method,
                                  "/" + rest.strip("/").split("/", 1)[1] if "/" in rest.strip("/") else "/", lheaders,
                                  {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
@@ -2147,6 +2160,10 @@ class AwsWireRouter:
             stage = first if first and first != "$default" and first in (api.get("stages") or {}) else "$default"
             if stage != "$default":
                 rest = rest.strip("/")[len(stage):]
+            from core import identity_core as _idc
+            _w = _idc.waf_check(api_id, stage, method, rest or "/", query, lheaders, bytes(body), lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+            if _w:
+                return _w
             fstore = self.lam
 
             def invoker(fn, event):   # the Lambda store this router serves (shared with the console)
@@ -2193,6 +2210,11 @@ class AwsWireRouter:
             _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
             if _m:
                 from core import gateway_common as _gwc   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
+                from core import identity_core as _idc
+                _w = _idc.waf_check(_m.group(1), _m.group(2), method, _m.group(3) or "/", query, lheaders, bytes(body),
+                                    lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+                if _w:
+                    return _w
                 r = apigw.invoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders,
                                  {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
                                  bytes(body), lambda_store=self.lam, http_fetch=_gwc.default_http_fetch(),
