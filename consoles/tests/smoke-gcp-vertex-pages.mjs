@@ -33,10 +33,10 @@ const rowMenu = async (name, item) => { await page.getByRole("button", { name: `
 const confirmDelete = async (name) => { await page.getByLabel("Confirm deletion").fill(name); await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click(); await page.getByRole("dialog").waitFor({ state: "detached", timeout: 15000 }); };
 
 // Nav lists every section
-await go("#/vertex-ai", "Vertex AI dashboard");
+await go("#/vertex-ai", "Welcome to Agent Platform");
 const nav = await page.locator("nav, #rail, body").first().innerText();
-for (const t of ["Model Garden", "Vertex AI Studio", "Endpoints", "Model Registry", "Datasets", "Training", "Pipelines", "Batch predictions", "Workbench", "Vector Search", "Feature Store", "Experiments"])
-  check(`nav has ${t}`, new RegExp(t).test(await page.locator("body").innerText()));
+for (const t of ["Overview", "Studio", "Models", "Agents", "Notebooks", "Tutorials"])
+  check(`nav has ${t}`, new RegExp(t).test(await page.locator("nav").first().innerText()));
 await shot("01-dashboard");
 
 // Model Garden -> Deploy
@@ -45,11 +45,17 @@ await page.getByTestId("garden-card").first().waitFor({ timeout: 15000 });
 check("Model Garden shows publisher models", (await page.getByTestId("garden-card").count()) >= 10);
 await shot("02-model-garden");
 const gemma = page.getByTestId("garden-card").filter({ hasText: "Gemma 2 9B" });
-await gemma.getByRole("button", { name: "Deploy" }).click();
-await submit("Deploy");
-await page.getByRole("dialog").waitFor({ state: "detached", timeout: 15000 });
-const eps = await J("GET", `${L}/-/endpoints`);
-check("Model Garden deploy created an endpoint with a deployed model", (eps.endpoints || []).some((e) => e.deployedModels?.length === 1), JSON.stringify(eps).slice(0, 120));
+check("Model Garden drill-in nav (Tuning, Model Registry, Provisioned Throughput)", /Tuning[\s\S]*Model Registry[\s\S]*Provisioned Throughput/.test(await page.locator("nav").first().innerText()));
+await gemma.click();
+await page.getByRole("heading", { name: "Gemma 2 9B", level: 1 }).first().waitFor({ timeout: 15000 });
+check("model detail has Latest/Overview/Documentation tabs", (await page.getByRole("tab").allInnerTexts()).join() === "Latest,Overview,Documentation");
+// (the ten-model catalogue offers generate/embed only, no deploy action; deploy-from-garden is not exercised)
+await shot("02b-model-detail");
+{ // seed the deployed endpoint through the wire (what Model Garden deploy did before the catalogue dropped deploy actions)
+  const up = await J("POST", `${L}/us-central1/models:upload`, { model: { displayName: "gemma-2-9b-it", artifactUri: "gs://vertex-model-garden/gemma", containerSpec: { imageUri: "us-docker.pkg.dev/vertex-ai/x/gemma" } } });
+  const ep = await J("POST", `${L}/us-central1/endpoints`, { displayName: "gemma-2-9b-it-endpoint" });
+  await J("POST", `/v1/${ep.response.name}:deployModel`, { deployedModel: { model: up.response.name, dedicatedResources: { minReplicaCount: 1, machineSpec: { machineType: "n1-standard-4" } } } });
+}
 
 // Endpoints: create in UI, appears via API, detail, delete
 await go("#/vertex-ai/endpoints", "Online prediction: Endpoints");
@@ -167,13 +173,19 @@ check("experiment visible via API", ((await J("GET", `${L}/us-central1/metadataS
 await shot("14-experiments");
 
 // Dashboard counts reflect reality
-await go("#/vertex-ai", "Vertex AI dashboard");
+await go("#/vertex-ai", "Welcome to Agent Platform");
 await page.waitForTimeout(1500);
 check("dashboard counts endpoints", (await page.getByTestId("count-endpoints").innerText()).startsWith("1"), await page.getByTestId("count-endpoints").innerText());
 await shot("15-dashboard-final");
 
 // Studio still works at its new route
-await go("#/vertex-ai/studio", "Vertex AI Studio");
+await go("#/vertex-ai/studio", "Start building with Agent Studio");
+check("Agent Studio landing has prompt box and rail", (await page.getByTestId("studio-rail").count()) === 1 && (await page.getByPlaceholder("Type a prompt to see what our models can do").count()) === 1);
+await go("#/vertex-ai/agent-garden", "Agent Garden");
+check("Agent Garden has 11 blueprints; Finance filter narrows", (await page.getByTestId("agent-card").count()) === 11 && (await (async () => { await page.getByRole("checkbox", { name: "Finance" }).click(); return page.getByTestId("agent-card").count(); })()) === 2);
+await go("#/vertex-ai/tutorials", "Tutorials");
+await go("#/vertex-ai/deployments", "Deployments");
+await go("#/vertex-ai/studio/prompt", "Vertex AI Studio");
 check("Studio page renders", await page.getByRole("button", { name: "Submit" }).isVisible());
 check("no page errors", errs.length === 0, errs[0]);
 await browser.close();

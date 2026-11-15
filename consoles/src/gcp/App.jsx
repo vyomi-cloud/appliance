@@ -17,6 +17,12 @@ import MoreVertIcon from "@mui/icons-material/esm/MoreVert.js";
 import { Badge, Menu, MenuItem, Divider as MDivider } from "@mui/material";
 import AccountTreeIcon from "@mui/icons-material/esm/AccountTree.js";
 import KeyboardArrowDownIcon from "@mui/icons-material/esm/KeyboardArrowDown.js";
+import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
+import AddIcon from "@mui/icons-material/esm/Add.js";
+import ArrowDropDownIcon from "@mui/icons-material/esm/ArrowDropDown.js";
+import ExpandLessIcon from "@mui/icons-material/esm/ExpandLess.js";
+import ExpandMoreIcon from "@mui/icons-material/esm/ExpandMore.js";
+import ChevronRightIcon from "@mui/icons-material/esm/ChevronRight.js";
 import ChevronLeftIcon from "@mui/icons-material/esm/ChevronLeft.js";
 import MenuOpenIcon from "@mui/icons-material/esm/Menu.js";
 import { match, useRoute } from "../common/router.js";
@@ -92,7 +98,7 @@ export default function App() {
   else if (k8sBlocked) content = <K8sLocked cloud="gcp" v={k8sLock} />;
   else if (loadErr) content = <Alert severity="error">Failed to load {prod.title}: {String(loadErr.message || loadErr)}</Alert>;
   else if (!loaded[prod.id]) content = <Box sx={{ textAlign: "center", py: 8 }}><CircularProgress /></Box>;
-  else { content = resolve(loaded[prod.id], route); nav = loaded[prod.id].nav; }
+  else { content = resolve(loaded[prod.id], route); const n = loaded[prod.id].nav; nav = typeof n === "function" ? n(route.path) : n; }
 
   return (
     <ThemeProvider theme={theme}>
@@ -205,6 +211,18 @@ function TopBarActions({ mode, onMode, infoOpen, onInfo }) {
   );
 }
 
+function NavSection({ n, collapsed, item }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Box>
+      {!collapsed && (n.collapsible
+        ? <ListItemButton onClick={() => setOpen((v) => !v)} aria-expanded={open} sx={{ minHeight: 36, py: 0 }}><ListItemText primary={n.section} primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }} />{open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}</ListItemButton>
+        : <ListSubheader disableSticky sx={{ bgcolor: "transparent", lineHeight: "36px", fontWeight: 500, color: "text.primary" }}>{n.section}</ListSubheader>)}
+      {(open || !n.collapsible || collapsed) && n.items.map(item)}
+    </Box>
+  );
+}
+
 function ProductNav({ prod, nav, route, collapsed, onToggle }) {
   const here = "#" + route.path;
   const isActive = (h) => here === h || (h !== `#/${prod.id}` && here.startsWith(h + "/"));
@@ -214,6 +232,7 @@ function ProductNav({ prod, nav, route, collapsed, onToggle }) {
         sx={{ borderRadius: "0 20px 20px 0", mr: 1, minHeight: 36, py: 0.25, "&.Mui-selected": { bgcolor: "chrome.active", fontWeight: 500 } }}>
         {it.icon && <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36 }}><it.icon fontSize="small" /></ListItemIcon>}
         {!collapsed && <ListItemText primary={it.text} primaryTypographyProps={{ fontSize: 14, noWrap: true }} />}
+        {!collapsed && it.chevron && <ChevronRightIcon fontSize="small" sx={{ color: "text.secondary" }} />}
       </ListItemButton>
     </Tooltip>
   );
@@ -228,14 +247,21 @@ function ProductNav({ prod, nav, route, collapsed, onToggle }) {
           </IconButton>
         </Tooltip>
       </Stack>
-      <List dense disablePadding>
-        {nav.map((n) => n.section ? (
-          <Box key={n.section}>
-            {!collapsed && <ListSubheader disableSticky sx={{ bgcolor: "transparent", lineHeight: "36px", fontWeight: 500, color: "text.primary" }}>{n.section}</ListSubheader>}
-            {n.items.map(item)}
-          </Box>
-        ) : item(n))}
-      </List>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 112px)" }}>
+        <List dense disablePadding sx={{ flex: 1, overflowY: "auto" }}>
+          {nav.filter((n) => !n.pinned).map((n) => n.back ? (
+            <ListItemButton key="back" component="a" href={n.back.href} sx={{ minHeight: 44, mb: 0.5 }}>
+              <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36 }}><ArrowBackIcon fontSize="small" /></ListItemIcon>
+              {!collapsed && <ListItemText primary={n.back.text} primaryTypographyProps={{ fontSize: 18 }} />}
+            </ListItemButton>
+          ) : n.button ? (
+            !collapsed && <Box key="btn" sx={{ px: 1.5, py: 1 }}><Button variant="outlined" size="small" href={n.button.href} startIcon={<AddIcon fontSize="small" />} endIcon={<ArrowDropDownIcon fontSize="small" />} sx={{ textTransform: "none" }}>{n.button.text}</Button></Box>
+          ) : n.section ? (
+            <NavSection key={n.section} n={n} collapsed={collapsed} item={item} />
+          ) : item(n))}
+        </List>
+        {nav.filter((n) => n.pinned).map(item)}
+      </Box>
     </Box>
   );
 }
