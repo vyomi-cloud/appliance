@@ -373,9 +373,14 @@ def _converse_messages(msgs_in):
                 continue
             if "reasoningContent" in keys:
                 return "reasoningContent blocks are not supported: no served local model emits reasoning"
-            if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult", "document", "image"}:
-                return "Only text, document, image, toolUse and toolResult content blocks are supported by the local model (video is not)"
-            if "document" in blk:
+            if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult", "document", "image", "guardContent"}:
+                return "Only text, document, image, guardContent, toolUse and toolResult content blocks are supported by the local model (video is not)"
+            if "guardContent" in blk:       # Bedrock guardrails content block: the text reaches the model; qualifiers steer the guardrail
+                gt = (blk["guardContent"] or {}).get("text")
+                if not isinstance(gt, dict) or not isinstance(gt.get("text"), str):
+                    return "Invalid guardContent block: needs text.text (guardContent images are not supported)"
+                texts.append(gt["text"])
+            elif "document" in blk:
                 d = blk["document"] or {}
                 src = d.get("source") or {}
                 dt = _document_text(d.get("name"), d.get("format"), src.get("bytes")) if "bytes" in src else (
@@ -594,7 +599,7 @@ def _bedrock_text_request(m, p):
 
 
 def _stop_reason(fr):
-    return "max_tokens" if fr == "length" else ("tool_use" if fr == "tool_calls" else "end_turn")
+    return "max_tokens" if fr == "length" else ("tool_use" if fr == "tool_calls" else ("guardrail_intervened" if fr == "guardrail_intervened" else "end_turn"))
 
 
 def _usage(r, ca=None):
@@ -698,7 +703,8 @@ def _converse_events(it, t0, F, cache_fn=None):
                     yield F("contentBlockStop", {"contentBlockIndex": 0})
                 yield F("messageStop", {"stopReason": _stop_reason(ev["finish_reason"])})
                 yield F("metadata", {"usage": _usage(ev, cache_fn(ev["input_tokens"]) if cache_fn else None),
-                                                      "metrics": {"latencyMs": int((time.time() - t0) * 1000)}})
+                                                      "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
+                                      **({"trace": ev["guardrail_trace"]} if ev.get("guardrail_trace") else {})})
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
         yield F("modelStreamErrorException", {"message": str(e)}, message_type="exception")
 
@@ -717,18 +723,31 @@ def _invoke_frames(m, it, t0):
     mid, fam = m[0], _fam(m)
     first = [None]
 
+    def ga(ev):     # guardrail action/trace ride on the final chunk, as on real InvokeModelWithResponseStream
+        return dict(({"amazon-bedrock-guardrailAction": ev["guardrail_action"]} if ev.get("guardrail_action") else {}),
+                    **({"amazon-bedrock-trace": ev["guardrail_trace"]} if ev.get("guardrail_trace") else {}))
+
     def metrics(ev):
         return {"inputTokenCount": ev["input_tokens"], "outputTokenCount": ev["output_tokens"],
                 "invocationLatency": int((time.time() - t0) * 1000), "firstByteLatency": int(((first[0] or time.time()) - t0) * 1000)}
     try:
         if fam.startswith("amazon.nova"):
+            last = {}
+
+            def tap(it2):
+                for e in it2:
+                    if e["type"] == "done":
+                        last.update(ga(e))
+                    yield e
+            it = tap(it)
+
             def F(name, payload, message_type="event"):
                 if message_type != "event":
                     return eventstream_frame(name, payload, message_type=message_type)
                 if name == "metadata":
                     return b""
                 if name == "messageStop":
-                    payload = dict(payload, **{"amazon-bedrock-invocationMetrics": {"invocationLatency": int((time.time() - t0) * 1000)}})
+                    payload = dict(payload, **{"amazon-bedrock-invocationMetrics": {"invocationLatency": int((time.time() - t0) * 1000)}}, **last)
                 return _chunk_frame({name: payload})
             for fr in _converse_events(it, t0, F):
                 if fr:
@@ -764,7 +783,7 @@ def _invoke_frames(m, it, t0):
                     yield _chunk_frame({"type": "message_delta", "delta": {"stop_reason": "tool_use" if ev["tool_calls"] else
                                                                         ("max_tokens" if ev["finish_reason"] == "length" else "end_turn"), "stop_sequence": None},
                                         "usage": {"output_tokens": ev["output_tokens"]}})
-                    yield _chunk_frame({"type": "message_stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
+                    yield _chunk_frame({"type": "message_stop", "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
             return
         n_out = 0
         for ev in it:
@@ -781,21 +800,34 @@ def _invoke_frames(m, it, t0):
                 lim = ev["finish_reason"] == "length"
                 if fam.startswith("amazon.titan-text"):
                     yield _chunk_frame({"outputText": "", "index": 0, "totalOutputTextTokenCount": ev["output_tokens"], "completionReason": "LENGTH" if lim else "FINISH",
-                                        "inputTextTokenCount": ev["input_tokens"], "amazon-bedrock-invocationMetrics": metrics(ev)})
+                                        "inputTextTokenCount": ev["input_tokens"], "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
                 elif fam.startswith("meta.") or fam == "vyomi-prompt":
                     yield _chunk_frame({"generation": "", "prompt_token_count": ev["input_tokens"], "generation_token_count": ev["output_tokens"],
-                                        "stop_reason": "length" if lim else "stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
+                                        "stop_reason": "length" if lim else "stop", "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
                 else:
-                    yield _chunk_frame({"outputs": [{"text": "", "stop_reason": "length" if lim else "stop"}], "amazon-bedrock-invocationMetrics": metrics(ev)})
+                    yield _chunk_frame({"outputs": [{"text": "", "stop_reason": "length" if lim else "stop"}], "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
         yield eventstream_frame("modelStreamErrorException", {"message": str(e)}, message_type="exception")
 
 
 
-def _guard_input(gcfg, msgs):
+def _guard_blocks(p):
+    """guardContent blocks of the last user message -> [(text, qualifiers)] (empty when the caller sent none)."""
+    users = [m for m in (p.get("messages") or []) if isinstance(m, dict) and m.get("role") == "user"]
+    out = []
+    for b in (users[-1].get("content") or []) if users else []:
+        gt = ((b or {}).get("guardContent") or {}).get("text") if isinstance(b, dict) else None
+        if isinstance(gt, dict) and isinstance(gt.get("text"), str):
+            out.append((gt["text"], list(gt.get("qualifiers") or [])))
+    return out
+
+
+def _guard_input(gcfg, msgs, ctx=None):
     gr = _guardrails()
     user = [m for m in msgs if m["role"] == "user"]
     text = llm._ctext(user[-1]["content"]) if user else ""
+    if ctx:    # guardContent present: only guard_content (or unqualified) text is judged, like real Converse; source/query are grounding context
+        text = " ".join(t for t, q in ctx if not ({"grounding_source", "query"} & set(q)))
     try:
         r = gr.converse_check(gcfg, text if isinstance(text, str) else json.dumps(text), "INPUT")
     except gr.GErr as e:
@@ -829,18 +861,47 @@ def _guard_blocked(op, gi, gcfg, t0, usage=None):
     return _bytes(200, b"".join(frames), "application/vnd.amazon.eventstream")
 
 
-def _guard_output(gcfg, r):
+def _guard_output(gcfg, r, ctx=None):
     gr = _guardrails()
     if not r.get("text"):
         return None
     try:
-        res = gr.converse_check(gcfg, r["text"], "OUTPUT")
+        res = gr.converse_check(gcfg, r["text"], "OUTPUT", ctx)
     except gr.GErr as e:
         return _b_err(e.code, e.msg, e.status)
     if res is None:
         return None
     usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
     return _guard_blocked("converse", (res["text"], res["assessment"], "OUTPUT"), gcfg, time.time(), usage)
+
+
+def _invoke_guard_cfg(headers):
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    gid = h.get("x-amzn-bedrock-guardrailidentifier")
+    if not gid:
+        return None
+    return {"guardrailIdentifier": gid, "guardrailVersion": h.get("x-amzn-bedrock-guardrailversion") or "",
+            "trace": "enabled" if str(h.get("x-amzn-bedrock-trace", "")).upper() == "ENABLED" else "disabled"}
+
+
+def _invoke_blocked(m, p, op, gi, gcfg, t0):
+    """InvokeModel[WithResponseStream] intervened: the family's own response shape carrying the blocked message + guardrail action/trace."""
+    text, assessment, kind = gi
+    r = {"text": text, "finish_reason": "stop", "input_tokens": 0, "output_tokens": 0, "tool_calls": [], "model": llm.resolve_model(m[0])}
+    tr = _guard_trace(gcfg, assessment, kind)
+    if op == "invoke-with-response-stream":
+        done = {"type": "done", "finish_reason": "stop", "input_tokens": 0, "output_tokens": 0, "tool_calls": [], "guardrail_action": "INTERVENED"}
+        if tr:
+            done["guardrail_trace"] = tr
+        return _stream_out(200, {"x-amzn-bedrock-content-type": "application/json"},
+                           _invoke_frames(m, iter([{"type": "text", "text": text}, done]), t0), "application/vnd.amazon.eventstream")
+    resp = _bedrock_response(m, p, r)
+    resp["amazon-bedrock-guardrailAction"] = "INTERVENED"
+    if tr:
+        resp["amazon-bedrock-trace"] = tr
+    if op == "invoke":
+        return _j(200, resp)
+    return _bytes(200, eventstream_frame("chunk", {"bytes": base64.b64encode(json.dumps(resp).encode()).decode()}), "application/vnd.amazon.eventstream")
 
 
 def _trained():
@@ -987,8 +1048,9 @@ def bedrock_dispatch(method, path, query, headers, body):
         if isinstance(req, str):
             return _b_err("ValidationException", req, 400)
         gcfg = p.get("guardrailConfig")
+        gctx = _guard_blocks(p) if gcfg else []
         if gcfg:
-            gi = _guard_input(gcfg, req[0])
+            gi = _guard_input(gcfg, req[0], gctx)
             if isinstance(gi, tuple):
                 return _guard_blocked(op, gi, gcfg, t0)
             if gi is not None:
@@ -996,14 +1058,20 @@ def bedrock_dispatch(method, path, query, headers, body):
         try:
             if op == "converse-stream":
                 it = _prime(llm.chat_stream(*req[:5], **req[5]))
+                if gcfg:       # output guarding in buffered windows (streamProcessingMode sync|async)
+                    gr = _guardrails()
+                    it = gr.guard_events(it, gr.policy_of(gcfg), gcfg.get("streamProcessingMode") or "sync", gctx,
+                                         gcfg["guardrailIdentifier"], (gcfg.get("trace") or "disabled") != "disabled")
             else:
                 r = _llm_chat(req)
         except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
             return _ll_err(e)
         except ValueError as e:
             return _b_err("ValidationException", str(e), 400)
+        except _guardrails().GErr as e:
+            return _b_err(e.code, e.msg, e.status)
         if op == "converse" and gcfg:
-            go = _guard_output(gcfg, r)
+            go = _guard_output(gcfg, r, gctx)
             if go is not None:
                 return go
         if op == "converse":
@@ -1039,13 +1107,24 @@ def bedrock_dispatch(method, path, query, headers, body):
     req = _bedrock_text_request(m, p)
     if isinstance(req, str):
         return _b_err("ValidationException", req, 400)
+    gcfg, gr = _invoke_guard_cfg(headers), _guardrails()
+    if gcfg:     # X-Amzn-Bedrock-Guardrail* headers: input is judged first, output after (windowed for streams)
+        gi = _guard_input(gcfg, req[0])
+        if isinstance(gi, tuple):
+            return _invoke_blocked(m, p, op, gi, gcfg, t0)
+        if gi is not None:
+            return gi
     if op == "invoke-with-response-stream":
         try:
             it = _prime(llm.chat_stream(*req[:5], **req[5]))
+            if gcfg:
+                it = gr.guard_events(it, gr.policy_of(gcfg), "sync", None, gcfg["guardrailIdentifier"], (gcfg.get("trace") or "disabled") != "disabled")
         except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
             return _ll_err(e)
         except ValueError as e:
             return _b_err("ValidationException", str(e), 400)
+        except gr.GErr as e:
+            return _b_err(e.code, e.msg, e.status)
         return _stream_out(200, {"x-amzn-bedrock-content-type": "application/json", "x-vyomi-local-model": llm.resolve_model(m[0])},
                            _invoke_frames(m, it, t0), "application/vnd.amazon.eventstream")
     try:
@@ -1054,12 +1133,21 @@ def bedrock_dispatch(method, path, query, headers, body):
         return _ll_err(e)
     except ValueError as e:
         return _b_err("ValidationException", str(e), 400)
+    if gcfg:
+        try:
+            res = gr.converse_check(gcfg, r["text"], "OUTPUT") if r.get("text") else None
+        except gr.GErr as e:
+            return _b_err(e.code, e.msg, e.status)
+        if res is not None:
+            return _invoke_blocked(m, p, op, (res["text"], res["assessment"], "OUTPUT"), gcfg, t0)
     resp = _bedrock_response(m, p, r)
     if _fam(m).startswith("anthropic."):
         ca = _cache_account(p, "claude", r["input_tokens"])
         if ca:
             resp["usage"] = {"input_tokens": ca["uncached"], "output_tokens": r["output_tokens"],
                              "cache_read_input_tokens": ca["read"], "cache_creation_input_tokens": ca["write"]}
+    if gcfg:
+        resp["amazon-bedrock-guardrailAction"] = "NONE"
     hh = {"x-amzn-bedrock-input-token-count": str(r["input_tokens"]), "x-amzn-bedrock-output-token-count": str(r["output_tokens"]),
           "x-amzn-bedrock-invocation-latency": str(int((time.time() - t0) * 1000)), "x-vyomi-local-model": r["model"]}
     if op == "invoke":
