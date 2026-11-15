@@ -18,17 +18,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 VERIFY = {"sdk", "cli", "ui"}
 
 
+def token(cap_id):
+    p = cap_id.split(".")
+    return p[1] if p[0] in ("aws", "gcp", "azure") else p[0]
+
+
 def main():
     manifest = json.load(open(os.path.join(HERE, "manifest.json")))
     mp = os.path.join(HERE, "estate", "coverage-map.json")
     cmap = json.load(open(mp)) if os.path.exists(mp) else {}
     ids = {r["id"] for r in manifest["rows"]}
     problems = [f"stale map entry (not in manifest): {k}" for k in cmap if k not in ids]
+    stages = json.load(open(os.path.join(HERE, "estate", "stages.json")))["stages"]
+    stage_of = {t: st for st, ts in stages.items() for t in ts}
+    for r in manifest["rows"]:
+        if token(r["id"]) not in stage_of:
+            problems.append(f"no estate stage for service token '{token(r['id'])}' ({r['id']})")
+    by_stage = collections.defaultdict(collections.Counter)
     stat = collections.defaultdict(lambda: collections.Counter())
     unc = []
     for r in manifest["rows"]:
         e = cmap.get(r["id"])
         key = (r["cloud"], r["service"])
+        st = stage_of.get(token(r["id"]), "unstaged")
+        by_stage[st][r["cloud"]] += 1
         if not e:
             stat[key]["uncovered"] += 1; unc.append(r["id"]); continue
         if "excuse" in e:
@@ -52,7 +65,11 @@ def main():
     n = sum(tot.values())
     pct = 100.0 * (tot["covered"] + tot["excused"]) / n if n else 0
     print(f"\nENDURANCE COVERAGE: {tot['covered']} covered + {tot['excused']} excused of {n} = {pct:.1f}%  (uncovered {tot['uncovered']})")
-    for p in problems: print("PROBLEM:", p)
+    print("\nBY STAGE (capabilities to wrap: aws / gcp / azure)")
+    for st in sorted(by_stage):
+        b = by_stage[st]
+        print(f"  {st:22} {b['aws']:4} / {b['gcp']:4} / {b['azure']:4}")
+    for p in sorted(set(problems)): print("PROBLEM:", p)
     if "--gate" in sys.argv:
         allow = int(sys.argv[sys.argv.index("--ratchet") + 1]) if "--ratchet" in sys.argv else 0
         if tot["uncovered"] > allow or problems:
