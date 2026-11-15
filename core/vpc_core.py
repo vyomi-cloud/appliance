@@ -240,6 +240,8 @@ def _modify_vpc_attribute(store, params):
         v["enable_dns_hostnames"] = str(params["EnableDnsHostnames.Value"]).lower() == "true"
     if "EnableDnsSupport.Value" in params:
         v["enable_dns_support"] = str(params["EnableDnsSupport.Value"]).lower() == "true"
+    if "EnableNetworkAddressUsageMetrics.Value" in params:
+        v["enable_network_address_usage_metrics"] = str(params["EnableNetworkAddressUsageMetrics.Value"]).lower() == "true"
     return _envelope("ModifyVpcAttribute", "<return>true</return>")
 
 
@@ -250,10 +252,14 @@ def _describe_vpc_attribute(store, params):
     if v is None:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     attr = str(params.get("Attribute", ""))
-    key = "enable_dns_hostnames" if attr == "enableDnsHostnames" else "enable_dns_support"
-    tag = "enableDnsHostnames" if attr == "enableDnsHostnames" else "enableDnsSupport"
+    # attribute -> (stored key, default). DNS support defaults true like AWS; the other two default false.
+    known = {"enableDnsHostnames": ("enable_dns_hostnames", False), "enableDnsSupport": ("enable_dns_support", True),
+             "enableNetworkAddressUsageMetrics": ("enable_network_address_usage_metrics", False)}
+    if attr not in known:
+        raise VpcError("InvalidParameterValue", f"Invalid value '{attr}' for attribute. Allowed: {', '.join(sorted(known))}.")
+    key, default = known[attr]
     return _envelope("DescribeVpcAttribute", f"<vpcId>{_xml_escape(vpc_id)}</vpcId>"
-                                             f"<{tag}><value>{str(v.get(key, False)).lower()}</value></{tag}>")
+                                             f"<{attr}><value>{str(v.get(key, default)).lower()}</value></{attr}>")
 
 
 def delete_vpc_cascade(store, vpc_id: str) -> bool:
