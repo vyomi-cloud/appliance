@@ -52,11 +52,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Gateways expose a real MCP JSON-RPC endpoint (initialize, tools/list, tools/call) at POST /gateways/{id}/mcp on the Vyomi wire, not at the *.gateway.bedrock-agentcore hostname. Lambda targets are really invoked. openApiSchema/smithyModel/mcpServer targets are registered but their tools are not callable; CUSTOM_JWT tokens are not validated (only presence of an Authorization header is checked); no semantic tool search or credential-provider (OAuth/API key) flows."
+   "Gateways expose a real MCP JSON-RPC endpoint (initialize, tools/list, tools/call) at POST /gateways/{id}/mcp on the Vyomi wire, not at the *.gateway.bedrock-agentcore hostname. Lambda targets are really invoked. CUSTOM_JWT is really validated (RS256 signature against the JWKS of the discoveryUrl issuer - this simulator's Cognito pools in-process, any other issuer by OIDC discovery - plus issuer, expiry, allowedAudience, allowedClients, allowedScopes; 401 for bad/missing/expired tokens, 403 for audience/client/scope mismatch; RS256 only, needs `cryptography`, so it fails closed where that is unavailable). openApiSchema targets (JSON or YAML) become callable tools named <target>___<operationId> (path/query/header params and JSON body, $ref resolved) and mcpServer targets are proxied over MCP streamable HTTP; both need outbound network, so they work on the Mesh/appliance and return an isError result inside Nano's browser sandbox. API-key and OAuth2 client-credentials credential providers (CreateApiKeyCredentialProvider / CreateOauth2CredentialProvider, GetResourceApiKey / GetResourceOauth2Token M2M) feed the target's outbound auth; the OAuth USER_FEDERATION (browser consent) flow, vendor-specific discovery and workload-identity token verification are not implemented. smithyModel targets are registered but not callable; AWS_IAM gateways only check that an Authorization header is present."
   ],
   "tests": [
-   "tests/conformance/test_bedrock_agents_core.py"
-  ]
+   "tests/conformance/test_bedrock_agents_core.py",
+  "tests/conformance/test_agentcore_gateway_targets.py"
+ ]
  },
  "bedrock.agentcore.runtime": {
   "mesh": true,
@@ -66,12 +67,13 @@
    "offline": "limited"
   },
   "limitations": [
-   "Dev Simplified: runtimes are control-plane records (CreateAgentRuntime/Get/List/Update/Delete, versions, runtime endpoints with DEFAULT, CREATING->READY) and InvokeAgentRuntime really runs an agent - but NOT your container. A runtime whose environmentVariables carry VYOMI_AGENT_SPEC (JSON: instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) is executed in-process as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano; payload {\"prompt\": ...}, runtimeSessionId keeps multi-turn history, Accept: text/event-stream streams steps). A container-only runtime returns RuntimeClientError (424); no model running -> 503 ServiceUnavailableException, never a canned answer. Quality is toy-grade; no container/ECR pull, A2A/MCP-protocol runtimes, InvokeAgentRuntimeCommand, Memory, Identity or Observability. Webhook tools need network egress (not available in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. State is in the persisted account bag."
+   "Dev Simplified: runtimes are control-plane records (CreateAgentRuntime/Get/List/Update/Delete, versions, runtime endpoints with DEFAULT, CREATING->READY) and InvokeAgentRuntime really runs an agent - but NOT your container. A runtime whose environmentVariables carry VYOMI_AGENT_SPEC (JSON: instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) is executed in-process as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano; payload {\"prompt\": ...}, runtimeSessionId keeps multi-turn history, Accept: text/event-stream streams steps). A container-only runtime returns RuntimeClientError (424); no model running -> 503 ServiceUnavailableException, never a canned answer. Quality is toy-grade; no container/ECR pull or InvokeAgentRuntimeCommand. Runtimes with protocolConfiguration.serverProtocol MCP (spec tools served as an MCP server: initialize, tools/list, tools/call) or A2A (JSON-RPC message/send, tasks/get, agent card; agent runs the spec over the local model) answer JSON-RPC payloads; the A2A card is served as an RPC method, not at /.well-known/agent-card.json, and there is no streaming or push notification. AgentCore Memory (events + long-term records) is hooked in through the spec's memory block; Identity covers API-key / OAuth2 credential providers only, and runtime inbound JWT is decoded, not signature-verified. Webhook tools need network egress (not available in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. State is in the persisted account bag."
   ],
   "tests": [
    "tests/conformance/test_ai_agent_runtimes.py",
-   "tests/conformance/test_bedrock_agents_core.py"
-  ]
+   "tests/conformance/test_bedrock_agents_core.py",
+  "tests/conformance/test_agentcore_gateway_targets.py"
+ ]
  },
  "bedrock.guardrails": {
   "title": "Guardrails (CreateGuardrail, versions, ApplyGuardrail, Converse guardrailConfig) - Dev Simplified",
