@@ -31,6 +31,21 @@ _PII = {
     "IP_ADDRESS": r"(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)",
     "AWS_ACCESS_KEY": r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b",
     "URL": r"https?://[^\s]+",
+    # ai-approvals lane: more regex-detectable entity types (context-anchored where a bare pattern would over-match)
+    "AWS_SECRET_KEY": r"(?<![A-Za-z0-9/+=])[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])(?<=[/+=0-9])",
+    "MAC_ADDRESS": r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b",
+    "CREDIT_DEBIT_CARD_CVV": r"(?i)(?<=cvv )\d{3,4}|(?<=cvc )\d{3,4}|(?<=cvv: )\d{3,4}|(?<=cvv:)\d{3,4}",
+    "CREDIT_DEBIT_CARD_EXPIRY": r"(?<!\d)(?:0[1-9]|1[0-2])/(?:\d{2}|\d{4})(?!\d)",
+    "US_BANK_ROUTING_NUMBER": r"(?i)(?<=routing number )\d{9}|(?<=routing: )\d{9}|(?<=routing )\d{9}",
+    "US_BANK_ACCOUNT_NUMBER": r"(?i)(?<=account number )\d{8,17}|(?<=account: )\d{8,17}|(?<=acct )\d{8,17}",
+    "US_PASSPORT_NUMBER": r"(?i)(?<=passport )[A-Z]?\d{8,9}|(?<=passport: )[A-Z]?\d{8,9}",
+    "PASSWORD": r"(?i)(?<=password is )\S+|(?<=password: )\S+|(?<=password=)\S+",
+    "USERNAME": r"(?i)(?<=username is )\S+|(?<=username: )\S+|(?<=username=)\S+",
+    "PIN": r"(?i)(?<=pin is )\d{4,8}|(?<=pin: )\d{4,8}",
+    "VEHICLE_IDENTIFICATION_NUMBER": r"\b(?=[A-HJ-NPR-Z0-9]*\d)[A-HJ-NPR-Z0-9]{17}\b",
+    "AGE": r"(?i)\b\d{1,3}(?= years? old\b)|(?<=age )\d{1,3}\b|(?<=aged )\d{1,3}\b",
+    "ADDRESS": r"\b\d{1,6}\s+(?:[A-Z][a-z]+\s){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way)\b\.?",
+    "NAME": r"(?:\b(?:Mr|Mrs|Ms|Miss|Dr)\.?\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)|(?<=my name is )[A-Z][a-z]+(?:\s[A-Z][a-z]+)?|(?<=I am )[A-Z][a-z]+\s[A-Z][a-z]+",
 }
 _CONTENT = {
     "HATE": ("i hate all", "subhuman", "racial slur", "inferior race"),
@@ -40,7 +55,7 @@ _CONTENT = {
     "MISCONDUCT": ("launder money", "steal", "hack into", "counterfeit", "fraud"),
     "PROMPT_ATTACK": ("ignore previous instructions", "ignore all previous", "disregard your instructions", "reveal your system prompt", "you are now dan"),
 }
-_UNSUPPORTED = ("contextualGroundingPolicyConfig", "automatedReasoningPolicyConfig", "crossRegionConfig")
+_UNSUPPORTED = ("automatedReasoningPolicyConfig", "crossRegionConfig")
 _RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
 
 
@@ -59,6 +74,7 @@ def _err(e):
 
 
 def _validate(p):
+    _validate_grounding(p)
     for k in _UNSUPPORTED:
         if p.get(k):
             raise GErr("ValidationException", f"{k} is not supported by the Dev Simplified guardrail", 400)
@@ -81,6 +97,90 @@ def _validate(p):
             raise GErr("ValidationException", f"Invalid regex pattern in {r.get('name')!r}", 400)
 
 
+def _validate_grounding(p):
+    for f in (p.get("contextualGroundingPolicyConfig") or {}).get("filtersConfig") or []:
+        if f.get("type") not in ("GROUNDING", "RELEVANCE"):
+            raise GErr("ValidationException", f"Unknown contextual grounding filter type {f.get('type')!r} (GROUNDING or RELEVANCE)", 400)
+        t = f.get("threshold")
+        if not isinstance(t, (int, float)) or not 0 <= t <= 0.99:
+            raise GErr("ValidationException", "contextualGroundingPolicyConfig threshold must be a number in [0, 0.99]", 400)
+
+
+# ── contextual grounding (ai-approvals lane) ─────────────────────────────────────────────────────────────
+# Scores in [0,1]. GROUNDING = how much of the answer (guard_content) is supported by grounding_source; RELEVANCE = how well the answer
+# addresses the query. Method: content-word coverage per sentence (+ numbers must appear in the source) blended with embedding cosine
+# through the llm seam (core/llm_core.embed: the real embedding model when the AI pack is up, the deterministic hash embedding otherwise).
+# It is a deterministic scorer, not Bedrock's trained classifier: thresholds behave the same shape, absolute scores will differ.
+_STOP = frozenset("a an the and or of to in on at for from by with is are was were be been being it its this that these those as if then than "
+                  "so do does did has have had will would can could should may might not no yes i you he she we they them his her our your their "
+                  "there here what which who whom when where why how about into over under per via also very just more most some any all".split())
+
+
+def _words(t):
+    return [w for w in re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", t.lower()) if w not in _STOP and len(w) > 1]
+
+
+def _stem(w):
+    for suf in ("ing", "ed", "es", "s"):
+        if w.endswith(suf) and len(w) > len(suf) + 2:
+            return w[:-len(suf)]
+    return w
+
+
+def _cos(a, b):
+    try:
+        from core import llm_core
+        v = llm_core.embed([a, b])["vectors"]
+        x, y = v[0], v[1]
+        return max(0.0, sum(i * j for i, j in zip(x, y)) / ((sum(i * i for i in x) ** .5) * (sum(j * j for j in y) ** .5) or 1))
+    except Exception:
+        return 0.0
+
+
+def grounding_score(answer, source):
+    src = {_stem(w) for w in _words(source)}
+    src_nums = set(re.findall(r"\d+(?:\.\d+)?", source))
+    sents = [x for x in re.split(r"(?<=[.!?])\s+|\n+", answer) if _words(x)] or [answer]
+    scores = []
+    for sent in sents:
+        ws = [_stem(w) for w in _words(sent)]
+        cov = sum(1 for w in ws if w in src) / (len(ws) or 1)
+        nums = set(re.findall(r"\d+(?:\.\d+)?", sent))
+        if nums and not nums <= src_nums:       # a figure the source never states: ungrounded however many other words match
+            cov *= 0.3
+        scores.append(cov)
+    lex = sum(scores) / len(scores)
+    return round(max(0.0, min(1.0, lex if lex < 0.5 else 0.5 * lex + 0.5 * max(lex, _cos(answer, source)))), 2)
+
+
+def relevance_score(answer, query):
+    qw = {_stem(w) for w in _words(query)}
+    aw = {_stem(w) for w in _words(answer)}
+    ov = len(qw & aw) / (len(qw) or 1)
+    return round(max(0.0, min(1.0, max(ov, _cos(answer, query)))), 2)
+
+
+def evaluate_grounding(policy, blocks):
+    """blocks: [(text, qualifiers)]. -> (assessment or None, blocked)."""
+    cfg = (policy.get("contextualGroundingPolicyConfig") or {}).get("filtersConfig") or []
+    q = lambda name: " ".join(t for t, quals in blocks if name in quals)   # noqa: E731
+    src, qry, ans = q("grounding_source"), q("query"), q("guard_content")
+    if not cfg or not ans:
+        return None, False
+    out, blocked = [], False
+    for f in cfg:
+        if f["type"] == "GROUNDING" and src:
+            sc = grounding_score(ans, src)
+        elif f["type"] == "RELEVANCE" and qry:
+            sc = relevance_score(ans, qry)
+        else:
+            continue
+        hit = sc < f["threshold"]
+        blocked = blocked or hit
+        out.append({"type": f["type"], "threshold": f["threshold"], "score": sc, "action": "BLOCKED" if hit else "NONE", "detected": hit})
+    return ({"contextualGroundingPolicy": {"filters": out}} if out else None), blocked
+
+
 def _view(g, version):
     p = g["draft"] if version == "DRAFT" else g["versions"][version]
     out = {"name": p["name"], "description": p.get("description", ""), "guardrailId": g["id"], "guardrailArn": g["arn"], "version": version,
@@ -92,6 +192,8 @@ def _view(g, version):
         out["contentPolicy"] = {"filters": p["contentPolicyConfig"].get("filtersConfig", [])}
     if p.get("wordPolicyConfig"):
         out["wordPolicy"] = {"words": p["wordPolicyConfig"].get("wordsConfig", []), "managedWordLists": p["wordPolicyConfig"].get("managedWordListsConfig", [])}
+    if p.get("contextualGroundingPolicyConfig"):
+        out["contextualGroundingPolicy"] = {"filters": p["contextualGroundingPolicyConfig"].get("filtersConfig", [])}
     if p.get("sensitiveInformationPolicyConfig"):
         s = p["sensitiveInformationPolicyConfig"]
         out["sensitiveInformationPolicy"] = {"piiEntities": s.get("piiEntitiesConfig", []), "regexes": s.get("regexesConfig", [])}
@@ -185,16 +287,29 @@ def apply_guardrail(gid, version, p):
     if not isinstance(cont, list) or not cont:
         raise GErr("ValidationException", "content: at least one block is required", 400)
     pol = resolve_policy(gid, version)
-    texts = []
+    texts, blocks = [], []
     for b in cont:
         if "image" in b:
             raise GErr("ValidationException", "image content is not supported by the Dev Simplified guardrail", 400)
         t = (b.get("text") or {}).get("text")
         if not isinstance(t, str):
             raise GErr("ValidationException", "each content block needs text.text", 400)
+        quals = (b.get("text") or {}).get("qualifiers") or []
+        blocks.append((t, quals))
+        if "grounding_source" in quals or "query" in quals:   # grounding inputs are context, not content to filter
+            continue
         texts.append(t)
     outputs, assessments, action, blocked = [], [], "NONE", False
+    if p["source"] == "OUTPUT":
+        ga, gb = evaluate_grounding(pol, blocks)
+        if ga:
+            assessments.append(ga)
+        if gb:
+            action, blocked = "GUARDRAIL_INTERVENED", True
+            outputs.append({"text": pol["blockedOutputsMessaging"]})
     for t in texts:
+        if blocked and outputs:
+            break
         r = evaluate(pol, t, p["source"])
         if r["action"] != "NONE":
             action = "GUARDRAIL_INTERVENED"
@@ -206,7 +321,7 @@ def apply_guardrail(gid, version, p):
     doc = {"usage": {"topicPolicyUnits": n if pol.get("topicPolicyConfig") else 0, "contentPolicyUnits": n if pol.get("contentPolicyConfig") else 0,
                      "wordPolicyUnits": n if pol.get("wordPolicyConfig") else 0,
                      "sensitiveInformationPolicyUnits": n if pol.get("sensitiveInformationPolicyConfig") else 0,
-                     "sensitiveInformationPolicyFreeUnits": 0, "contextualGroundingPolicyUnits": 0},
+                     "sensitiveInformationPolicyFreeUnits": 0, "contextualGroundingPolicyUnits": n if pol.get("contextualGroundingPolicyConfig") else 0},
            "action": action, "outputs": outputs, "assessments": assessments}
     if action != "NONE":
         doc["actionReason"] = "Guardrail blocked." if blocked else "Guardrail modified the content."

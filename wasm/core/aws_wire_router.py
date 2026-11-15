@@ -319,6 +319,7 @@ from core import apigatewayv2_core as apigw2
 from core import apigatewayv2_gateway as apigw2_gw
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
+from core import cloudtrail_events_core as cte
 from core import vpc_core as vpc
 from core import autoscaling_core as asg
 from core import ram_core as ram
@@ -915,9 +916,39 @@ class AwsWireRouter:
         self.vpc.elbv2_store = self.elbv2  # VPC encryption-control audit reads the load balancers
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
         self.elbv2.s3_store = self.s3      # trust-store CA bundles are read from Vyomi's own S3
+        self.trail_events = []   # CloudTrail LookupEvents ring (never persisted)
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
         self.sfn.logs_store = self.logs           # Step Functions loggingConfiguration -> CloudWatch Logs
+        self.sfn.service_invoker = self._sfn_service_call   # optimised integrations (sns:publish, dynamodb:putItem ...) -> the sibling engines
         self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)
+
+    def _sfn_service_call(self, service, action, params):
+        """Step Functions optimised service integration -> the same wire path a real SDK call takes (ai-approvals lane)."""
+        from urllib.parse import urlencode
+        cred = "AWS4-HMAC-SHA256 Credential=vyomi-sfn/20260101/us-east-1/%s/aws4_request, SignedHeaders=host, Signature=0"
+        if service == "dynamodb":
+            tgt = "DynamoDB_20120810." + action[0].upper() + action[1:]
+            r = self.handle("POST", "/", {}, {"x-amz-target": tgt, "content-type": "application/x-amz-json-1.0",
+                                              "authorization": cred % "dynamodb"}, json.dumps(params).encode())
+            doc = json.loads(r["body"] or b"{}")
+            if r["status"] >= 400:
+                raise sfn.ServiceCallError(str(doc.get("__type", "Unknown")).split("#")[-1], doc.get("message") or doc.get("Message") or "")
+            return doc
+        if service == "sns":
+            msg = params.get("Message")
+            form = {"Action": "Publish", "Version": "2010-03-31", "TopicArn": params.get("TopicArn", ""),
+                    "Message": msg if isinstance(msg, str) else json.dumps(msg)}
+            if params.get("Subject"):
+                form["Subject"] = params["Subject"]
+            r = self.handle("POST", "/", {}, {"content-type": "application/x-www-form-urlencoded", "authorization": cred % "sns"},
+                            urlencode(form).encode())
+            txt = (r["body"] or b"").decode("utf-8", "replace")
+            if r["status"] >= 400:
+                m = re.search(r"<Code>([^<]+)</Code>.*?<Message>([^<]*)</Message>", txt, re.S)
+                raise sfn.ServiceCallError(m.group(1) if m else "Unknown", m.group(2) if m else txt[:200])
+            m = re.search(r"<MessageId>([^<]+)</MessageId>", txt)
+            return {"MessageId": m.group(1) if m else "", "SdkHttpMetadata": {"HttpStatusCode": 200}}
+        raise sfn.ServiceCallError("UnsupportedIntegration", f"{service}:{action}")
 
     def _iamc_resolve(self, ident):
         """IAM Credentials: service-account email / uniqueId -> email, or None if unknown
@@ -1506,8 +1537,16 @@ class AwsWireRouter:
             return self._query_params(query, body).get("Action") or None
         return None
 
-    def _track_activity(self, svc, lheaders, query, body):
+    def _track_activity(self, svc, lheaders, query, body, method_='', path_=''):
         akid_m = _AKID_RE.search(lheaders.get("authorization", "") or "")
+        try:   # CloudTrail LookupEvents audit ring (core/cloudtrail_events_core)
+            if svc != "cloudtrail":
+                _k = self.iam.access_keys.get(akid_m.group(1)) if akid_m else None
+                cte.record(self.trail_events, svc, method_, path_, self._action_name(svc, lheaders, query, body), body,
+                           akid_m.group(1) if akid_m else "", (_k or {}).get("user_name", ""),
+                           self._query_params(query, body) if svc in ("sns", "sqs") else None)
+        except Exception:
+            pass
         if not akid_m:
             return
         key = self.iam.access_keys.get(akid_m.group(1))
@@ -1952,7 +1991,7 @@ class AwsWireRouter:
         svc = self.service_of(method, path, lheaders, body, query)
         if queue_alias and svc == "az-blob":
             svc = "az-queue"
-        self._track_activity(svc, lheaders, query, body)
+        self._track_activity(svc, lheaders, query, body, method, path)
 
         if svc == "rds-data":  # async-only — guard the sync path
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
@@ -1964,6 +2003,9 @@ class AwsWireRouter:
                     "body": r.body or b""}
 
         if svc == "cloudtrail":
+            if (lheaders.get("x-amz-target", "") or "").endswith(".LookupEvents"):
+                _st, _doc = cte.dispatch_lookup(self.trail_events, bytes(body))
+                return {"status": _st, "headers": {"content-type": "application/x-amz-json-1.1"}, "body": json.dumps(_doc).encode()}
             r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
 

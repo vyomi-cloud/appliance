@@ -111,6 +111,7 @@ CORES = [
     "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
     "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
     "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
+    "cloudtrail_events_core.py",                   # CloudTrail LookupEvents audit ring (ai-approvals lane)
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
     "cloudformation_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)

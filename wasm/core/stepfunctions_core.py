@@ -40,6 +40,9 @@ class StepFunctionsStore:
         self.xray_traces: dict = {}   # trace id -> {"segments": {...}} - X-Ray traces (core/xray_core), recorded for tracing-enabled machines
 
     logs_store = None   # runtime link to the CloudWatch Logs store (set by the wire router / Nano) — never persisted
+    # runtime hook for optimised service integrations (sns:publish, dynamodb:putItem ...): fn(service, action, params) -> dict;
+    # raises ServiceCallError(code, message) on a modeled service error. Set by the wire router; never persisted.
+    service_invoker = None
 
 
 _SHARED: StepFunctionsStore | None = None
@@ -416,6 +419,34 @@ def _eval_choice(rule, data, ctx):
 
 
 # ═══════════════════════════ execution interpreter ═══════════════════════════
+class ServiceCallError(Exception):
+    """Raised by a store.service_invoker for a modeled service error (e.g. DynamoDB ConditionalCheckFailedException)."""
+    def __init__(self, code, message=""):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+_SVC_LABEL = {"dynamodb": "DynamoDb", "sns": "Sns", "sqs": "Sqs"}
+_SVC_ACTIONS = {"dynamodb": ("putItem", "getItem", "updateItem", "deleteItem"), "sns": ("publish",), "sqs": ("sendMessage",)}
+
+
+def _sweep_timeouts(store):
+    """Lazy timer for parked task tokens: TimeoutSeconds / HeartbeatSeconds. Runs on every API call (no threads: Nano-safe)."""
+    now = _now()
+    for tok, t in list(store.tokens.items()):
+        err = None
+        if t.get("deadline") and now >= t["deadline"]:
+            err = "States.Timeout"
+        elif t.get("heartbeat") and now >= t.get("lastBeat", 0) + t["heartbeat"]:
+            err = "States.HeartbeatTimeout"
+        if err is None:
+            continue
+        ex = store.executions.get(t["executionArn"])
+        store.tokens.pop(tok, None)
+        if ex is not None and ex["status"] == "RUNNING" and _RUNNING.get(ex["executionArn"]) is not None:
+            _step(store, ex, _RUNNING.get(ex["executionArn"]), throw=_Fail(err, "Task timed out"))
+
+
 class _Fail(Exception):
     def __init__(self, error, cause=""):
         super().__init__(error)
@@ -553,25 +584,35 @@ class _Run:
     # -- Task --------------------------------------------------------------
     def _task(self, name, st, data, entered):
         res = st["Resource"]
-        d = self._io_in(st, data)
-        sched = self.event("TaskScheduled", entered, taskScheduledEventDetails={
-            "resourceType": "lambda" if "lambda" in res else "activity", "resource": res,
-            "region": REGION, "parameters": _dumps(d)})
-        self.event("TaskStarted", sched, taskStartedEventDetails={
-            "resourceType": "lambda" if "lambda" in res else "activity", "resource": res})
         wait_token = res.endswith(".waitForTaskToken")
+        token = None
+        if wait_token:   # the token exists before the Parameters are evaluated so $$.Task.Token resolves
+            token = self._new_token(timeout=st.get("TimeoutSeconds"), heartbeat=st.get("HeartbeatSeconds"))
+            self.ctx["Task"] = {"Token": token}
+        d = self._io_in(st, data)
+        if token:
+            self.store.tokens[token]["input"] = _dumps(d)
+        svc_act = None
+        if res.startswith("arn:aws:states:::") and not res.startswith("arn:aws:states:::lambda:"):
+            m = re.match(r"^arn:aws:states:::([a-z0-9]+):([A-Za-z]+)(?:\.waitForTaskToken|\.sync)?$", res)
+            if m and m.group(2) in _SVC_ACTIONS.get(m.group(1), ()):
+                svc_act = (m.group(1), m.group(2))
+        rtype = "lambda" if "lambda" in res else (svc_act[0] if svc_act else "activity")
+        sched = self.event("TaskScheduled", entered, taskScheduledEventDetails={
+            "resourceType": rtype, "resource": res.split(".waitForTaskToken")[0] if svc_act else res,
+            "region": REGION, "parameters": _dumps(d)})
+        self.event("TaskStarted", sched, taskStartedEventDetails={"resourceType": rtype, "resource": res})
         result = None
         try:
             if res.startswith("arn:aws:states:") and ":activity:" in res:
                 if res not in self.store.activities:
                     raise _Fail("States.Runtime", f"Activity does not exist: {res}")
-                token = self._new_token(activity=res, payload=d)
+                token = self._new_token(activity=res, payload=d, timeout=st.get("TimeoutSeconds"), heartbeat=st.get("HeartbeatSeconds"))
                 result = yield ("token", token)
             elif res.startswith("arn:aws:states:::lambda:invoke"):
                 fn_name = d.get("FunctionName", "")
                 payload = d.get("Payload", {})
                 if wait_token:
-                    token = self._new_token(payload=payload)
                     if isinstance(payload, dict):
                         payload = dict(payload)
                     self._invoke_lambda(fn_name, payload, token)
@@ -580,25 +621,41 @@ class _Run:
                     out = self._invoke_lambda(fn_name, payload)
                     result = {"ExecutedVersion": "$LATEST", "Payload": out, "SdkHttpMetadata": {"HttpStatusCode": 200},
                               "SdkResponseMetadata": {"RequestId": uuid.uuid4().hex}, "StatusCode": 200}
+            elif svc_act:
+                inv = getattr(self.store, "service_invoker", None)
+                if inv is None:
+                    raise _Fail("States.TaskFailed", f"Service integration '{res}' needs the appliance service bridge (not available here)")
+                try:
+                    result = inv(svc_act[0], svc_act[1], d)
+                except ServiceCallError as e:
+                    raise _Fail(f"{_SVC_LABEL.get(svc_act[0], svc_act[0].title())}.{e.code}", e.message)
+                if wait_token:
+                    result = yield ("token", token)
             elif res.startswith("arn:aws:lambda:"):
                 result = self._invoke_lambda(res.split(":function:")[-1].split(":")[0], d)
             elif res.startswith("arn:aws:states:::"):
                 raise _Fail("States.TaskFailed", f"Service integration '{res}' is not simulated by this appliance "
-                            "(supported: lambda:invoke, lambda:invoke.waitForTaskToken, activities)")
+                            "(supported: lambda:invoke[.waitForTaskToken], sns:publish[.waitForTaskToken], "
+                            "dynamodb:put/get/update/deleteItem, activities)")
             else:
                 raise _Fail("States.Runtime", f"Invalid resource ARN: {res}")
         except _Fail as f:
-            self.event("TaskFailed", sched, taskFailedEventDetails={
-                "resourceType": "lambda", "resource": res, "error": f.error, "cause": f.cause})
+            timed = f.error in ("States.Timeout", "States.HeartbeatTimeout")
+            self.event("TaskTimedOut" if timed else "TaskFailed", sched, **{
+                "taskTimedOutEventDetails" if timed else "taskFailedEventDetails": {
+                    "resourceType": rtype, "resource": res, "error": f.error, "cause": f.cause}})
             raise
         self.event("TaskSucceeded", sched, taskSucceededEventDetails={
-            "resourceType": "lambda", "resource": res, "output": _dumps(result)})
+            "resourceType": rtype, "resource": res, "output": _dumps(result)})
         return self._io_out(st, data, result)
 
-    def _new_token(self, activity=None, payload=None):
+    def _new_token(self, activity=None, payload=None, timeout=None, heartbeat=None):
         token = uuid.uuid4().hex + uuid.uuid4().hex
+        now = _now()
         self.store.tokens[token] = {"executionArn": self.ex["executionArn"], "activityArn": activity,
-                                    "input": _dumps(payload), "delivered": False}
+                                    "input": _dumps(payload), "delivered": False, "lastBeat": now,
+                                    "deadline": now + float(timeout) if timeout else None,
+                                    "heartbeat": float(heartbeat) if heartbeat else None}
         return token
 
     def _invoke_lambda(self, fn_name, payload, token=None):
@@ -1211,7 +1268,8 @@ def op_send_failure(store, b):
 
 
 def op_send_heartbeat(store, b):
-    _token(store, b.get("taskToken"))
+    t = _token(store, b.get("taskToken"))
+    t["lastBeat"] = _now()
     return {}
 
 
@@ -1336,6 +1394,7 @@ def dispatch(store, target: str, payload: dict | None = None, lambda_store=None)
         _LAMBDA_STORE = lambda_store
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
+    _sweep_timeouts(store)
     op = _OPS.get(action)
     if op is None:
         return SfnResponse(status=400, body={"__type": "com.amazon.coral.service#UnknownOperationException",
