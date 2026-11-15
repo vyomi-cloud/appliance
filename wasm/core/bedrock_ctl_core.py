@@ -38,6 +38,11 @@ try:
 except ImportError:  # Pyodide flat layout
     import training_core as tc  # type: ignore
 
+try:
+    from core import import_core as ic
+except ImportError:  # Pyodide flat layout
+    import import_core as ic  # type: ignore
+
 _ACCT, _REG = "123456789012", "us-east-1"
 _REH = {"done": False}
 _APP: dict[str, dict] = {}      # application inference profiles
@@ -54,7 +59,7 @@ _REGIONS = {
     "apac": ["ap-northeast-1", "ap-northeast-2", "ap-south-1", "ap-southeast-1", "ap-southeast-2"],
 }
 _NO_PROFILE = ("amazon.titan", "cohere", "meta.llama3-2-3b")
-_PATHS = re.compile(r"^/(inference-profiles?|model-invocation-jobs?|provisioned-model-throughputs?|model-customization-jobs?|custom-models?|prompt-routers?|marketplace-model)(/|$)")
+_PATHS = re.compile(r"^/(inference-profiles?|model-invocation-jobs?|provisioned-model-throughputs?|model-customization-jobs?|custom-models?|model-import-jobs?|imported-models?|prompt-routers?|marketplace-model)(/|$)")
 
 
 class CErr(Exception):
@@ -575,6 +580,143 @@ def _custom(method, path, query, p):
     raise CErr("UnknownOperationException", f"Unsupported Bedrock operation: {method} {path}", 404)
 
 
+
+# ───────────── Custom Model Import (chat LoRA adapters served by wllama on Nano; core/import_core) ─────────────
+_IMPJOBS: dict[str, dict] = {}
+_IMPORTED: dict[str, dict] = {}     # model id -> record (the adapter itself lives in core/import_core + the object store)
+_IMP_REH = {"done": None}
+
+
+def imported_arn(mid):
+    return f"arn:aws:bedrock:{_REG}:{_ACCT}:imported-model/{mid}"
+
+
+def imported_model_id(ident):
+    """Model id / ARN / name of an imported model -> its id (or None). Used by InvokeModel/Converse."""
+    _imp_rehydrate()
+    ident = unquote(str(ident or ""))
+    short = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:imported-model/", "", ident)
+    if short in _IMPORTED:
+        return short
+    return next((k for k, v in _IMPORTED.items() if v["modelName"] == ident), None)
+
+
+def _imp_rehydrate():
+    """After a reload the adapters are still in the object store: rebuild the imported-model records and their (completed) jobs."""
+    st = tc._ST["s3"]
+    if st is None or _IMP_REH["done"] == id(st):
+        return
+    _IMP_REH["done"] = id(st)
+    for m in ic.persisted_models():
+        if m.get("cloud") != "aws" or m["modelId"] in _IMPORTED:
+            continue
+        mid = m["modelId"]
+        _IMPORTED[mid] = {"modelArn": imported_arn(mid), "modelName": m.get("name") or mid, "creationTime": m.get("createdAt"), "jobName": m.get("jobName"),
+                          "jobArn": m.get("jobArn"), "modelDataSource": {"s3DataSource": {"s3Uri": m.get("source")}}}
+        if m.get("jobArn") and m["jobArn"].split("/")[-1] not in _IMPJOBS:
+            jid = m["jobArn"].split("/")[-1]
+            _IMPJOBS[jid] = {"jobArn": m["jobArn"], "jobName": m.get("jobName"), "importedModelName": m.get("name"), "importedModelArn": imported_arn(mid),
+                             "roleArn": m.get("roleArn") or "", "modelDataSource": {"s3DataSource": {"s3Uri": m.get("source")}}, "status": "Completed",
+                             "creationTime": m.get("createdAt"), "lastModifiedTime": m.get("createdAt"), "endTime": m.get("createdAt"), "_mid": mid}
+
+
+def _imp_job_view(j, full=True):
+    d = {"jobArn": j["jobArn"], "jobName": j["jobName"], "status": j["status"], "lastModifiedTime": j["lastModifiedTime"], "creationTime": j["creationTime"],
+         "importedModelName": j["importedModelName"]}
+    if j.get("endTime"):
+        d["endTime"] = j["endTime"]
+    if j.get("importedModelArn"):
+        d["importedModelArn"] = j["importedModelArn"]
+    if full:
+        d.update(roleArn=j["roleArn"], modelDataSource=j["modelDataSource"])
+        if j.get("failureMessage"):
+            d["failureMessage"] = j["failureMessage"]
+        d["vyomiNote"] = ("Vyomi extension: model artifacts are a LoRA adapter GGUF (adapter.gguf + adapter_meta.json) trained elsewhere, not Hugging Face weights; "
+                          "the model is served as base GGUF + adapter in the browser (Nano, wllama).")
+    return d
+
+
+def _imp_model_view(m, full=True):
+    d = {"modelArn": m["modelArn"], "modelName": m["modelName"], "creationTime": m["creationTime"]}
+    if full:
+        r = ic.get(m["modelArn"].rsplit("/", 1)[-1]) or {}
+        d.update(jobName=m.get("jobName"), jobArn=m.get("jobArn"), modelDataSource=m["modelDataSource"], modelArchitecture=r.get("arch", "llama"),
+                 instructSupported=True, customModelUnits={"customModelUnitsPerModelCopy": 1, "customModelUnitsVersion": 1},
+                 vyomiImported=True, vyomiTrained=True,
+                 vyomiImport={"engine": r.get("engine"), "base": r.get("base"), "rank": r.get("rank"), "alpha": r.get("alpha"), "adapterBytes": r.get("adapterBytes"),
+                              "adapterSha256": r.get("adapterSha256")},
+                 vyomiNote="A small open base model plus your LoRA adapter, served in the browser. Not a vendor model.")
+    return d
+
+
+def _imports(method, path, query, p):
+    _imp_rehydrate()
+    if path == "/model-import-jobs" and method == "POST":
+        for k in ("jobName", "importedModelName", "roleArn", "modelDataSource"):
+            if not p.get(k):
+                raise _bad(f"1 validation error detected: Value null at '{k}' failed to satisfy constraint: Member must not be null")
+        uri = ((p["modelDataSource"] or {}).get("s3DataSource") or {}).get("s3Uri")
+        if not uri:
+            raise _bad("1 validation error detected: Value null at 'modelDataSource.s3DataSource.s3Uri' failed to satisfy constraint: Member must not be null")
+        if not re.match(r"^s3://[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9](/.*)?$", uri):
+            raise _bad("S3 URI must be of the form s3://bucket/prefix")
+        if not re.match(r"^[a-zA-Z0-9](-*[a-zA-Z0-9\+\-\.])*$", p["importedModelName"]):
+            raise _bad(f"Value '{p['importedModelName']}' at 'importedModelName' failed to satisfy constraint: Member must satisfy regular expression pattern: [a-zA-Z0-9](-*[a-zA-Z0-9\\+\\-\\.])*")
+        if any(x["jobName"] == p["jobName"] for x in _IMPJOBS.values()):
+            raise CErr("ConflictException", f"Job {p['jobName']} already exists.", 409)
+        if any(m["modelName"] == p["importedModelName"] for m in _IMPORTED.values()):
+            raise CErr("ConflictException", f"Imported model {p['importedModelName']} already exists.", 409)
+        jid, mid = uuid.uuid4().hex[:12], ic.ID_PREFIX + uuid.uuid4().hex[:8]
+        now = _iso(time.time())
+        j = {"jobArn": f"arn:aws:bedrock:{_REG}:{_ACCT}:model-import-job/{jid}", "jobName": p["jobName"], "importedModelName": p["importedModelName"], "roleArn": p["roleArn"],
+             "modelDataSource": p["modelDataSource"], "status": "InProgress", "creationTime": now, "lastModifiedTime": now, "_mid": mid}
+        _IMPJOBS[jid] = j
+        try:       # the artifacts are small: validate + import inside the request, report like the async API (job Failed + failureMessage)
+            ic.import_from_uri(mid, p["importedModelName"], uri, source=uri, st=tc._ST["s3"],
+                               extra={"cloud": "aws", "jobName": p["jobName"], "jobArn": j["jobArn"], "roleArn": p["roleArn"]})
+            j["status"], j["importedModelArn"] = "Completed", imported_arn(mid)
+            _IMPORTED[mid] = {"modelArn": imported_arn(mid), "modelName": p["importedModelName"], "creationTime": now, "jobName": p["jobName"], "jobArn": j["jobArn"],
+                              "modelDataSource": p["modelDataSource"]}
+        except ic.ImportErr as e:
+            j["status"], j["failureMessage"] = "Failed", str(e)
+        j["lastModifiedTime"] = j["endTime"] = _iso(time.time())
+        return _j(201, {"jobArn": j["jobArn"]})
+    if path == "/model-import-jobs" and method == "GET":
+        items = list(_IMPJOBS.values())
+        if query.get("statusEquals"):
+            items = [x for x in items if x["status"] == query["statusEquals"]]
+        if query.get("nameContains"):
+            items = [x for x in items if query["nameContains"] in x["jobName"]]
+        items = _sort(items, query, "creationTime")
+        return _j(200, _page([_imp_job_view(x, False) for x in items], query, "modelImportJobSummaries"))
+    m = re.match(r"^/model-import-jobs/(.+)$", path)
+    if m and method == "GET":
+        ident = unquote(m.group(1))
+        j = _IMPJOBS.get(re.sub(r"^arn:.*/", "", ident)) or next((x for x in _IMPJOBS.values() if x["jobName"] == ident), None)
+        if not j:
+            raise _nf("Could not find the model import job.")
+        return _j(200, _imp_job_view(j))
+    if path == "/imported-models" and method == "GET":
+        items = list(_IMPORTED.values())
+        if query.get("nameContains"):
+            items = [x for x in items if query["nameContains"] in x["modelName"]]
+        items = _sort(items, query, "creationTime")
+        return _j(200, _page([_imp_model_view(x, False) for x in items], query, "modelSummaries"))
+    m = re.match(r"^/imported-models/(.+)$", path)
+    if m:
+        mid = imported_model_id(m.group(1))
+        if not mid:
+            raise _nf("Could not find the imported model.")
+        if method == "GET":
+            return _j(200, _imp_model_view(_IMPORTED[mid]))
+        if method == "DELETE":
+            if any(x["foundationModelArn"] == _IMPORTED[mid]["modelArn"] for x in _PT.values()):
+                raise CErr("ConflictException", "The imported model is in use by a provisioned throughput.", 409)
+            del _IMPORTED[mid]
+            ic.delete_model(mid)
+            return _j(200, {})
+    raise CErr("UnknownOperationException", f"Unsupported Bedrock operation: {method} {path}", 404)
+
 # ───────────── prompt routers ─────────────
 def _default_routers():
     if not am.list_aliases():
@@ -726,6 +868,8 @@ def dispatch(s3, method, path, query, body):
             return _pt(method, path, query, p)
         if path.startswith(("/model-customization-job", "/custom-model")):
             return _custom(method, path, query, p)
+        if path.startswith(("/model-import-job", "/imported-model")):
+            return _imports(method, path, query, p)
         if path.startswith("/prompt-router"):
             return _routers(method, path, query, p)
         return _mkt(method, path, query, p)

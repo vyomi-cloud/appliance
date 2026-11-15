@@ -87,7 +87,7 @@ const MODULES = [
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
-  "llm_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "training_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "training_core.py", "import_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -574,6 +574,8 @@ builtins._embed_bridge_set = _embed_bridge_set
     if (ev.data && ev.data.type === "vyomi-ready-ping") { ev.source && ev.source.postMessage({ type: "pyodide-ready" }); return; }
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
+    // wllama (imported chat models) may download/load a base GGUF or generate for longer than the SW's 15 s window: tell the SW we are alive.
+    const ka = setInterval(() => { try { const w = globalThis.vyomiWllama && globalThis.vyomiWllama.status(); if (w && (w.busy || w.phase === "downloading" || w.phase === "loading")) port.postMessage({ keepalive: true }); } catch (_) {} }, 4000);
     try {
       // Rehydrate from the SHARED snapshot before serving, so this op sees resources
       // created in the OTHER context (the SDK/relay worker) even if a boot-time
@@ -616,7 +618,7 @@ builtins._embed_bridge_set = _embed_bridge_set
           status: 500, message: String(e && e.message || e), stack: String(e && e.stack || e) });
       } catch (_) {}
       port.postMessage({ ok: false, error: String(e) });
-    }
+    } finally { clearInterval(ka); }
   });
 
   // In-browser VM compute: the host is ~15 KB and inert unless the nano_vm_compute
@@ -656,6 +658,8 @@ builtins._embed_bridge_set = _embed_bridge_set
   try { import("./gw-bridge.js").then((m) => m.installGatewayBridge()).catch((e) => console.warn("[nano] gateway bridge skipped:", e)); } catch (_) {}
   // Real head training behind Bedrock/Vertex/Azure model customization (core/training_core.py): in-tab MiniLM embeddings + a typed-array Web Worker.
   try { import("./train-bridge.js").then((m) => m.installTrainBridge(py)).catch((e) => console.warn("[nano] training bridge skipped:", e)); } catch (_) {}
+  // Imported chat models (LoRA adapter GGUF): wllama (llama.cpp WASM) serves base + adapter in this tab (core/import_core.py, wllama-bridge.js).
+  try { import("./wllama-bridge.js").then((m) => m.installWllamaBridge(py)).catch((e) => console.warn("[nano] wllama bridge skipped:", e)); } catch (_) {}
   try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
   window.__vyomiNanoReady = true;
   try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}

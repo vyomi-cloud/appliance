@@ -60,7 +60,7 @@ class TrainError(Exception):
 _JOBS: dict[str, dict] = {}
 _HEADS: dict[str, dict] = {}        # model id -> head doc (cache; the object store is the source of truth)
 _FILES: dict[str, bytes] = {}       # uploaded training files (Azure /openai/files), mirrored to the object store
-_ST = {"bridge": None, "cancel": None, "s3": None}
+_ST = {"bridge": None, "cancel": None, "s3": None, "gcs": None}
 _STORE_OF: dict[str, object] = {}   # model id -> the object store that holds its head (each cloud space has its own store)
 
 
@@ -78,6 +78,12 @@ def bind_s3(store):
     """The shared simulated object store (the AWS wire router binds it; heads and uploaded files live there)."""
     if store is not None:
         _ST["s3"] = store
+
+
+def bind_gcs(store):
+    """The simulated GCS store (gs:// URIs read from it first; falls back to the S3 store, as before)."""
+    if store is not None:
+        _ST["gcs"] = store
 
 
 def set_bridge(start_fn=None, cancel_fn=None):
@@ -133,6 +139,8 @@ def read_uri(uri) -> bytes:
                 data = g.download(b, k)[0]
         except Exception:  # noqa: BLE001
             data = None
+    if data is None and uri.startswith("gs://") and _ST["gcs"] is not None:
+        data = store_get(b, k, _ST["gcs"])
     if data is None:
         data = store_get(b, k)
     if data is None:
