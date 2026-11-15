@@ -34,8 +34,10 @@ from datetime import datetime, timezone
 
 try:
     from core import llm_core as llm
+    from core import knowledge_core as kc
 except ImportError:  # Pyodide flat layout
     import llm_core as llm  # type: ignore
+    import knowledge_core as kc  # type: ignore
 
 _ACCT = "123456789012"
 _REGION = "us-east-1"
@@ -179,12 +181,20 @@ def _create_ds(st, kb, p):
 
 
 def _chunk_cfg(ds):
+    """-> (max_tokens|None, overlap_pct, strategy) from the standard chunkingConfiguration."""
     c = (ds.get("vectorIngestionConfiguration") or {}).get("chunkingConfiguration") or {}
     strat = c.get("chunkingStrategy", "FIXED_SIZE")
     if strat == "NONE":
-        return None, 0
+        return None, 0, "NONE"
+    if strat == "HIERARCHICAL":
+        lv = (c.get("hierarchicalChunkingConfiguration") or {}).get("levelConfigurations") or [{"maxTokens": 300}]
+        mx = int(lv[-1].get("maxTokens", 300))
+        ov = int((c.get("hierarchicalChunkingConfiguration") or {}).get("overlapTokens", 60))
+        return mx, min(90, int(100 * ov / max(mx, 1))), strat
+    if strat == "SEMANTIC":
+        return int((c.get("semanticChunkingConfiguration") or {}).get("maxTokens", 300)), 0, strat
     f = c.get("fixedSizeChunkingConfiguration") or {}
-    return int(f.get("maxTokens", 300)), int(f.get("overlapPercentage", 20))
+    return int(f.get("maxTokens", 300)), int(f.get("overlapPercentage", 20)), "FIXED_SIZE"
 
 
 def _chunk_text(text, max_tokens, overlap_pct):
@@ -223,38 +233,51 @@ def _list_keys(s3, bucket, prefix):
             return keys
 
 
+def _pipeline_cfg(s3c, s3, bucket):
+    """Optional Vyomi sidecar `.vyomi-pipeline.json` in the bucket root: {"guardrailIdentifier","guardrailVersion"} -> PII/guardrail scan per document."""
+    r = s3c.get_object(s3, bucket, ".vyomi-pipeline.json", {}, {})
+    try:
+        return json.loads(r.body) if r.status == 200 else {}
+    except ValueError:
+        return {}
+
+
 def _ingest(s3, kb, ds):
     conf = ds["dataSourceConfiguration"]["s3Configuration"]
     bucket = conf["bucketArn"].rsplit(":", 1)[-1]
     prefixes = conf.get("inclusionPrefixes") or [""]
-    mx, ov = _chunk_cfg(ds)
+    mx, ov, strat = _chunk_cfg(ds)
     s3c = _s3c()
-    # drop this data source's previous chunks (a re-sync replaces them)
-    kb["chunks"] = [c for c in kb["chunks"] if c["ds"] != ds["dataSourceId"]]
+    pipe = _pipeline_cfg(s3c, s3, bucket)
+    gid, gver = pipe.get("guardrailIdentifier"), str(pipe.get("guardrailVersion", "DRAFT"))
+    kb["chunks"] = [c for c in kb["chunks"] if c["ds"] != ds["dataSourceId"]]       # a re-sync replaces this data source's chunks
     scanned = failed = indexed = 0
     reasons, texts, metas = [], [], []
     seen = set()
+    redacted = 0
     for pfx in prefixes:
         for key in _list_keys(s3, bucket, pfx):
-            if key in seen or key.endswith("/") or key.endswith(".metadata.json"):
+            if key in seen or key.endswith("/") or key.endswith(".metadata.json") or key == ".vyomi-pipeline.json":
                 continue
             seen.add(key)
             scanned += 1
-            if not key.lower().endswith(_TEXT_EXT):
-                failed += 1
-                reasons.append(f"s3://{bucket}/{key}: unsupported document type (the simulator ingests text documents only)")
-                continue
             r = s3c.get_object(s3, bucket, key, {}, {})
             if r.status != 200:
                 failed += 1
                 reasons.append(f"s3://{bucket}/{key}: could not read object")
                 continue
             try:
-                txt = r.body.decode("utf-8")
-            except UnicodeDecodeError:
+                txt = kc.parse_document(key, r.body)
+            except kc.ParseError as e:
                 failed += 1
-                reasons.append(f"s3://{bucket}/{key}: not valid UTF-8 text")
+                reasons.append(f"s3://{bucket}/{key}: {e}")
                 continue
+            txt, verdict = kc.guard(txt, gid, gver)
+            if verdict == "blocked":
+                failed += 1
+                reasons.append(f"s3://{bucket}/{key}: blocked by guardrail {gid} (PII/sensitive content scan)")
+                continue
+            redacted += verdict == "redacted"
             meta = {}
             mr = s3c.get_object(s3, bucket, key + ".metadata.json", {}, {})
             if mr.status == 200:
@@ -262,17 +285,40 @@ def _ingest(s3, kb, ds):
                     meta = (json.loads(mr.body) or {}).get("metadataAttributes") or {}
                 except ValueError:
                     meta = {}
-            for ch in _chunk_text(txt, mx, ov):
+            for ch, head in kc.split_text(txt, mx, ov, strat):
                 texts.append(ch)
-                metas.append((f"s3://{bucket}/{key}", meta))
+                metas.append((f"s3://{bucket}/{key}", meta, head, verdict))
             indexed += 1
     if texts:
         vecs = llm.embed(texts)["vectors"]
-        for t, (uri, meta), v in zip(texts, metas, vecs):
-            kb["chunks"].append({"ds": ds["dataSourceId"], "uri": uri, "text": t, "vec": v, "metadata": meta})
+        for n, (t, (uri, meta, head, verdict), v) in enumerate(zip(texts, metas, vecs)):
+            kb["chunks"].append({"id": f"{ds['dataSourceId']}-{n}", "ds": ds["dataSourceId"], "uri": uri, "text": t, "vec": v, "metadata": meta,
+                                 "section": head, "tokens": len(t.split()), "pii": verdict})
+    _mirror_opensearch(s3, kb, ds)
     return {"numberOfDocumentsScanned": scanned, "numberOfNewDocumentsIndexed": indexed, "numberOfModifiedDocumentsIndexed": 0,
             "numberOfMetadataDocumentsScanned": 0, "numberOfMetadataDocumentsModified": 0, "numberOfDocumentsDeleted": 0,
             "numberOfDocumentsFailed": failed}, reasons
+
+
+def _mirror_opensearch(s3, kb, ds):
+    """When the KB names an OpenSearch (Serverless/managed) index, also write the chunks there with the configured fieldMapping
+    so opensearch-py _search on that index sees the same data (what a real KB does)."""
+    sto = kb.get("storageConfiguration") or {}
+    cfg = sto.get("opensearchServerlessConfiguration") or sto.get("opensearchManagedClusterConfiguration") or {}
+    index = cfg.get("vectorIndexName")
+    if not index:
+        return
+    fm = cfg.get("fieldMapping") or {}
+    vf, tf, mf = fm.get("vectorField", "vector"), fm.get("textField", "text"), fm.get("metadataField", "metadata")
+    try:
+        from core import opensearch_core as osc
+    except ImportError:
+        import opensearch_core as osc  # type: ignore
+    osc.drop_docs(s3, index, ds["dataSourceId"] + "-")
+    dim = len(kb["chunks"][0]["vec"]) if kb["chunks"] else 0
+    osc.index_docs(s3, index, [(c["id"], {vf: c["vec"], tf: c["text"], mf: {**c["metadata"], "source": c["uri"], "section": c.get("section", "")}})
+                               for c in kb["chunks"] if c["ds"] == ds["dataSourceId"]],
+                   {"properties": {vf: {"type": "knn_vector", "dimension": dim}, tf: {"type": "text"}, mf: {"type": "object"}}})
 
 
 def _start_ingestion(s3, kb, ds, p):
@@ -299,24 +345,138 @@ def _paginate(items, query, key, size_default=100):
     return out
 
 
-def _retrieve(kb, text, k, flt=None):
-    if not kb["chunks"]:
-        return []
+def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
+    """Retrieve with a per-candidate trace. ``vs`` = vectorSearchConfiguration (overrideSearchType, rerankingConfiguration).
+    -> (results, trace) ; hybrid_weight (Vyomi extension) 0 = vector only, otherwise lexical+vector RRF."""
+    import time as _t
+    vs = vs or {}
+    chunks = kb["chunks"]
+    stages = {}
+    if not chunks:
+        return [], {"candidates": [], "latencyMs": {}}
+    t0 = _t.time()
     qv = llm.embed(text)["vectors"][0]
-    scored = []
-    for c in kb["chunks"]:
+    stages["embed"] = (_t.time() - t0) * 1000
+    t0 = _t.time()
+    allowed, why = set(), {}
+    for i, c in enumerate(chunks):
         if flt and not _match_filter(flt, c["metadata"]):
-            continue
-        scored.append((llm.cosine(qv, c["vec"]), c))
-    scored.sort(key=lambda x: -x[0])
+            why[i] = "metadata filter"
+        else:
+            allowed.add(i)
+    stages["filter"] = (_t.time() - t0) * 1000
+    mode = (vs.get("overrideSearchType") or "HYBRID").upper()
+    lw = hybrid_weight if hybrid_weight is not None else (0.0 if mode == "SEMANTIC" else 0.5)
+    t0 = _t.time()
+    texts = [c["text"] for c in chunks]
+    vsc = {i: llm.cosine(qv, c["vec"]) for i, c in enumerate(chunks)}
+    lex_all = kc.bm25([texts[i] for i in sorted(allowed)], text) if lw else {}
+    order = sorted(allowed)
+    lex = {order[j]: sc for j, sc in lex_all.items()}
+    stages["search"] = (_t.time() - t0) * 1000
+    fused = kc.hybrid(texts, [c["vec"] for c in chunks], text, qv, allowed, max(len(chunks), 1), weight_lex=lw)
+    rank = {i: (n + 1, sc) for n, (i, sc) in enumerate(fused)}
+    rr = (vs.get("rerankingConfiguration") or {}).get("bedrockRerankingConfiguration") or {}
+    top = fused[:max(k * 3, k)] if rr or vs.get("rerankingConfiguration") else fused[:k]
+    rrs = {}
+    t0 = _t.time()
+    if vs.get("rerankingConfiguration"):
+        n_out = int(rr.get("numberOfRerankedResults", k))
+        for n, (j, sc) in enumerate(kc.rerank(text, [texts[i] for i, _ in top], n_out)):
+            rrs[top[j][0]] = (n + 1, sc)
+        final = [(i, rrs[i][1]) for i in sorted(rrs, key=lambda x: rrs[x][0])][:k]
+        stages["rerank"] = (_t.time() - t0) * 1000
+    else:
+        final = top[:k]
     res = []
-    for sc, c in scored[:k]:
-        r = {"content": {"type": "TEXT", "text": c["text"]}, "location": {"type": "S3", "s3Location": {"uri": c["uri"]}},
-             "score": round(max(sc, 0.0), 6)}
-        if c["metadata"]:
-            r["metadata"] = c["metadata"]
+    for i, sc in final:
+        c = chunks[i]
+        r = {"content": {"type": "TEXT", "text": c["text"]}, "location": {"type": "S3", "s3Location": {"uri": c["uri"]}}, "score": round(max(min(sc, 1.0), 0.0), 6),
+             "metadata": {**c["metadata"], "x-amz-bedrock-kb-source-uri": c["uri"], "x-amz-bedrock-kb-chunk-id": c.get("id", ""),
+                          "x-amz-bedrock-kb-data-source-id": c["ds"]}}
+        if c.get("section"):
+            r["metadata"]["section"] = c["section"]
         res.append(r)
-    return res
+    cand = []
+    for i, c in enumerate(chunks):
+        cand.append({"chunkId": c.get("id", str(i)), "uri": c["uri"], "vector_score": round(vsc[i], 6), "bm25_score": round(lex.get(i, 0.0), 6),
+                     "fused_rank": rank[i][0] if i in rank else None, "fused_score": round(rank[i][1], 6) if i in rank else None,
+                     "rerank_score": rrs[i][1] if i in rrs else None, "rerank_rank": rrs[i][0] if i in rrs else None,
+                     "returned": any(f[0] == i for f in final),
+                     "filtered_out_reason": why.get(i) or (None if i in rank and any(f[0] == i for f in final) else
+                                                           ("below top-k after fusion" if i in rank else "not ranked"))})
+    return res, {"candidates": cand, "searchType": mode, "hybridWeight": lw, "reranked": bool(vs.get("rerankingConfiguration")),
+                 "latencyMs": {k_: round(v, 3) for k_, v in stages.items()}}
+
+
+def _retrieve(kb, text, k, flt=None, vs=None):
+    return _retrieve_trace(kb, text, k, flt, vs)[0]
+
+
+def _rerank_op(p):
+    """bedrock-agent-runtime Rerank: queries[0].textQuery.text, sources[].inlineDocumentSource.textDocument.text."""
+    qs = p.get("queries") or []
+    srcs = p.get("sources") or []
+    if not qs or not srcs:
+        raise _bad("queries and sources are required")
+    q = (qs[0].get("textQuery") or {}).get("text", "")
+    docs = [((s.get("inlineDocumentSource") or {}).get("textDocument") or {}).get("text", "") for s in srcs]
+    n = int(((p.get("rerankingConfiguration") or {}).get("bedrockRerankingConfiguration") or {}).get("numberOfResults", len(docs)))
+    out = [{"index": i, "relevanceScore": sc} for i, sc in kc.rerank(q, docs, n)]
+    return _j(200, {"results": out})
+
+
+def inspect_dispatch(s3, method, path, query, body):
+    """Vyomi extension (outside the AWS namespace) for the RAG Studio: GET /_vyomi/kb/{id}/chunks, POST /_vyomi/kb/{id}/retrieve-trace."""
+    st = _state(s3)
+    segs = [x for x in path.strip("/").split("/") if x]
+    try:
+        kb = _find_kb(st, segs[2]) if len(segs) >= 4 else None
+        if kb is None:
+            raise _nf("Unknown inspect route")
+        if segs[3] == "chunks" and method == "GET":
+            want_vec = (query or {}).get("vectors", "false") == "true"
+            rows = [{"id": c.get("id"), "dataSourceId": c["ds"], "documentUri": c["uri"], "text": c["text"], "tokenCount": c.get("tokens", len(c["text"].split())),
+                     "metadata": c["metadata"], "section": c.get("section", ""), "pii": c.get("pii", "ok"), "projection2d": None, "vector": c["vec"] if want_vec else None}
+                    for c in kb["chunks"]]
+            _project2d(rows, [c["vec"] for c in kb["chunks"]])
+            return _j(200, {"knowledgeBaseId": kb["knowledgeBaseId"], "count": len(rows), "dimensions": len(kb["chunks"][0]["vec"]) if kb["chunks"] else 0, "chunks": rows})
+        if segs[3] == "retrieve-trace" and method == "POST":
+            p = _body(body)
+            q = ((p.get("retrievalQuery") or {}).get("text") or "").strip()
+            if not q:
+                raise _bad("retrievalQuery.text is required")
+            vs = (p.get("retrievalConfiguration") or {}).get("vectorSearchConfiguration") or {}
+            res, trace = _retrieve_trace(kb, q, int(vs.get("numberOfResults", 5)), vs.get("filter"), vs, p.get("hybridWeight"))
+            return _j(200, {"retrievalResults": res, "trace": trace})
+    except _Err as e:
+        return _err_resp(e)
+    return _err_resp(_Err("UnknownOperationException", f"Unsupported inspect route: {method} {path}", 404))
+
+
+def _project2d(rows, vecs):
+    """2-D PCA projection (power iteration, pure Python) so the Studio can plot clusters without numpy."""
+    n = len(vecs)
+    if n < 2:
+        for r in rows:
+            r["projection2d"] = [0.0, 0.0]
+        return
+    d = len(vecs[0])
+    mean = [sum(v[j] for v in vecs) / n for j in range(d)]
+    X = [[v[j] - mean[j] for j in range(d)] for v in vecs]
+    comps = []
+    for c in range(2):
+        w = [((j * 7919 + c * 104729) % 1000) / 1000.0 - 0.5 for j in range(d)]
+        for _ in range(25):
+            t = [sum(x[j] * w[j] for j in range(d)) for x in X]
+            nw = [sum(X[i][j] * t[i] for i in range(n)) for j in range(d)]
+            norm = sum(a * a for a in nw) ** 0.5 or 1.0
+            w = [a / norm for a in nw]
+        comps.append(w)
+        X = [[x[j] - sum(x[m] * w[m] for m in range(d)) * w[j] for j in range(d)] for x in X]
+    for i, r in enumerate(rows):
+        c = [v - m for v, m in zip(vecs[i], mean)]
+        r["projection2d"] = [round(sum(c[j] * comps[k][j] for j in range(d)), 6) for k in range(2)]
 
 
 def _match_filter(f, meta):
@@ -374,7 +534,7 @@ def _retrieve_op(st, kid, p):
     k = int(vs.get("numberOfResults", 5))
     if not 1 <= k <= 100:
         raise _bad("numberOfResults must be between 1 and 100")
-    return _j(200, {"retrievalResults": _retrieve(kb, q, k, vs.get("filter"))})
+    return _j(200, {"retrievalResults": _retrieve(kb, q, k, vs.get("filter"), vs)})
 
 
 def _rag_op(st, p):
@@ -389,7 +549,7 @@ def _rag_op(st, p):
     if not kc.get("modelArn"):
         raise _bad("knowledgeBaseConfiguration.modelArn is required")
     vs = (kc.get("retrievalConfiguration") or {}).get("vectorSearchConfiguration") or {}
-    res = _retrieve(kb, q, int(vs.get("numberOfResults", 5)), vs.get("filter"))
+    res = _retrieve(kb, q, int(vs.get("numberOfResults", 5)), vs.get("filter"), vs)
     sid = p.get("sessionId") or _rid(32, string.ascii_lowercase + string.digits)
     if not res:
         return _j(200, {"sessionId": sid, "output": {"text": "Sorry, I am unable to assist you with this request."}, "citations": []})
@@ -537,7 +697,7 @@ def _invoke_agent(st, s3, aid, alias_id, sid, p):
 # ═══════════════════════════ dispatch: bedrock-agent / agent-runtime ═══════════════════════════
 def handles(path: str) -> bool:
     p = path.lower()
-    return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate)(/|$)", p))
+    return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate|rerank|_vyomi/kb)(/|$)", p))
 
 
 def dispatch(s3, method, path, query, headers, body):
@@ -549,6 +709,10 @@ def dispatch(s3, method, path, query, headers, body):
         st = _state(s3)
         p = _body(body) if method in ("PUT", "POST", "PATCH") else {}
         # ── runtime ──
+        if low[0] == "_vyomi":
+            return inspect_dispatch(s3, method, path, query, body)
+        if low == ["rerank"] and method == "POST":
+            return _rerank_op(p)
         if low == ["retrieveandgenerate"] and method == "POST":
             return _rag_op(st, p)
         if low[0] == "knowledgebases" and len(low) == 3 and low[2] == "retrieve" and method == "POST":
