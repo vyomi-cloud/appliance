@@ -17,9 +17,15 @@ Per service routed: pubsub 100%, logging 98%, cloudfunctions 95%, iam 88%, monit
 Caveat: GCP APIs are resolved by PATH, so APIs sharing a path shape can be answered by the wrong engine, and generic JSON catch-alls overstate coverage (logging 98% looks high). Read per-service numbers as an upper bound.
 **Bug found and fixed:** `core/gcp_agentengine_core.py` crashed with an unhandled AttributeError (HTTP 500) on 62 requests that reached the engine but missed its path regex (reasoningEngines sub-resources: runtimeRevisions, sandboxEnvironmentTemplates, ...). Now a modeled 404 NOT_FOUND (core + wasm mirror). Test: `tests/conformance/test_gcp_agentengine_unmatched_path.py` (fails before, passes after). Routed 53.6% -> 56.3%.
 
+## Azure probe result (2026-11-15, `tools/ai_probe/azure_probe.py`, `azure_probe.csv`)
+REST-level probe of the 1611 inventory operations as the single simulated subscription (`00000000-0000-0000-0000-cloudlearn01`), `?api-version=` from each spec: **58.5% routed** (565 ok, 377 modeled error, 669 unimplemented), 0 HTTP 5xx.
+Routed per spec: search 96%, insights 100%, eventgrid 85%, cognitiveservices ARM 82%, apim 77%, operationalinsights 72%, keyvault 46%, logic 41%.
+**Zero:** machinelearningservices ARM (217 ops: Foundry hubs/projects/endpoints), Foundry agents data-plane (42), Foundry projects data-plane (29), Azure OpenAI data-plane (6), Content Safety (12), model inference (4), Front Door (38).
+Caveat: Azure data-plane APIs are served on their own hostnames (`{account}.openai.azure.com`, `{account}.cognitiveservices.azure.com`, `{project}.services.ai.azure.com`); this probe routes by PATH on one ingress, so the data-plane rows may be undercounted (real SDK calls carry the host). The ARM numbers are the reliable ones. Also: `openai-v1-data` has 0 inventory rows.
+
 ## Known gaps
 - Azure: `openai-v1-data` returned 0 operations (TypeSpec-generated layout; needs the emitted swagger path) and Azure OpenAI/Foundry are thin. Foundry agents data-plane has 42 ops, projects 29.
-- GCP has a REST probe (not the real SDK). Azure has an INVENTORY only, not a probe yet.
+- GCP has a REST probe (not the real SDK). Azure also has a REST probe (path-routed; data-plane hosts caveat above).
 - The AWS probe measures "routed and answered with the right wire format", not semantics.
 
 ## Run
