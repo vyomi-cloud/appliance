@@ -38,7 +38,7 @@ function Waterfall({ trace }) {
       <text x={x0 + 4 * cw + 6} y={14} fontSize="11" fontWeight="700" fill="currentColor">Fate</text>
       {rows.map((r, ri) => { const y = 26 + ri * rh;
         return <g key={r.id} data-testid="wf-row" data-fate={r.fate.kind}>
-          <text x={0} y={y + 14} fontSize="11" fill="currentColor">{r.uri.split("/").pop().slice(0, 26)} · {r.id}</text>
+          <text x={0} y={y + 14} fontSize="11" fill="currentColor">{r.uri.split("/").pop().replace(".txt", "").slice(0, 28)}</text>
           {STAGES.map(([k, , sc, rk], i) => { const v = sc ? r[sc] : null, rank = r[rk], w = v ? (v / mx[sc]) * (cw - 52) : 0;
             return <g key={k}><rect x={x0 + i * cw} y={y + 5} width={Math.max(0, w)} height={13} fill={PALETTE[i]} opacity={0.85} rx={2} /><text x={x0 + i * cw + Math.max(w, 0) + 4} y={y + 15} fontSize="10" fill="currentColor">{rank ? `#${rank}` : "-"}</text></g>; })}
           <text x={x0 + 4 * cw + 6} y={y + 15} fontSize="11" fill={FATE[r.fate.kind]} fontWeight="600">{r.fate.text}</text></g>; })}
@@ -48,7 +48,7 @@ function Waterfall({ trace }) {
 
 export default function PostRag({ test, data, proj, runs, thr }) {
   const rows = useMemo(() => (test ? waterfallRows(test.trace) : []), [test]);
-  const q = useMemo(() => (test && proj && test.trace.queryEmbedding ? projectQuery(proj, test.trace.queryEmbedding, test.trace.results.filter((r) => !r.filtered_out_reason)) : null), [test, proj]);
+  const q = useMemo(() => (test && proj ? projectQuery(proj, test.trace.queryEmbedding, test.trace.results.filter((r) => !r.filtered_out_reason)) : null), [test, proj]);
   if (!test) return <Alert type="info" header="Run a query first">Post-RAG views plot the last query from the Test tab: the map, the stage waterfall and the answer provenance.</Alert>;
   const retrieved = test.trace.results.filter((r) => !r.filtered_out_reason);
   const last = runs[0];

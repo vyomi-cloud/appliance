@@ -19,7 +19,8 @@ export function Answer({ test }) {
   const prov = test.prov;
   return (
     <SpaceBetween size="s">
-      {test.rag.guardrailAction === "INTERVENED" ? <Alert type="warning" header="Guardrail intervened" data-testid="guardrail">{test.rag.guardrail?.input || "blocked"}: {test.rag.output.text}</Alert>
+      {test.rag.error && <Alert type="error" header={`Generation failed: ${test.rag.error.code || "error"}`} data-testid="gen-error">{test.rag.error.message} Retrieval and stage scores below are still valid.</Alert>}
+      {test.rag.error ? null : test.rag.guardrailAction === "INTERVENED" ? <Alert type="warning" header="Guardrail intervened" data-testid="guardrail">{test.rag.guardrail?.input || "blocked"}: {test.rag.output.text}</Alert>
         : <Alert type={test.rag.grounded === false ? "info" : "success"} header={test.rag.grounded === false ? "Refused: not grounded" : "Generated answer"}><span data-testid="rag-answer">{test.rag.output.text}</span></Alert>}
       <Box variant="small" data-testid="guardrail-status">Guardrail: <StatusIndicator type={test.rag.guardrailAction === "INTERVENED" ? "warning" : "success"}>{test.rag.guardrailAction || "NONE"}</StatusIndicator></Box>
       {(test.rag.citations || []).length > 0 && <Box variant="small" data-testid="citations">Citations: {(test.rag.citations || []).flatMap((c) => c.retrievedReferences.map((r) => r.location?.s3Location?.uri?.split("/").pop())).filter((x, i, a) => a.indexOf(x) === i).join(", ")}</Box>}
@@ -34,7 +35,7 @@ export default function Test({ be, design, opts, test, setTest, goPost }) {
   const run = async () => {
     setBusy(true); setErr(null);
     try {
-      const t0 = performance.now(), [trace, rag] = await Promise.all([be.trace(q, opts), be.rag(q, opts)]);
+      const t0 = performance.now(), [trace, rag] = await Promise.all([be.trace(q, opts), be.rag(q, opts).catch((e) => ({ output: { text: "" }, citations: [], error: e }))]);
       const fin = finalOf(trace), prov = provenance(rag.output?.text || "", fin.length ? fin : trace.results.slice(0, 3));
       setTest({ query: q, trace, rag, prov, ms: performance.now() - t0 });
     } catch (e) { setErr(e); } finally { setBusy(false); }

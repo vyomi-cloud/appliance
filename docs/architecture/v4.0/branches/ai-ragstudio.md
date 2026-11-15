@@ -12,10 +12,15 @@ Open: AWS console -> Amazon Bedrock -> Build -> RAG Studio (`#/bedrock/knowledge
 
 ## Backends
 `studio/backend.js`: live (real bedrock-agent + bedrock-agent-runtime wires + Vyomi inspect extension) or fake (`studio/fake.js`, in-browser demo corpus, identical shapes). Auto-detect: live `facilities-kb` else demo with a banner; header button toggles. `live-limited` = KB found but no inspect API (apply/ingest/test work; corpus and stage views limited).
-Inspect API expected from the knowledge lane (under the wire prefix, outside the AWS namespace):
-- `GET {wire}/_vyomi/kb/{kbId}/chunks` -> `{embeddingModel, chunks:[{id, uri, text, tokens, metadata, embedding:[...], pii?:[], lang?, position?:[x,y]}]}`
-- `POST {wire}/_vyomi/kb/{kbId}/retrieve-trace` body `{query, options:{numberOfResults, searchType, hybridWeight, rerank, rerankTopN, filter:{key,value}|null, threshold}}` -> `{query, queryEmbedding, confidence, latencyMs:{embed,vector,bm25,fuse,rerank,total}, results:[{id, uri, text, tokens, metadata, vector_score, vector_rank, bm25_score, bm25_rank, fused_rank, rerank_score, filtered_out_reason, final_rank}]}`
-Not tested against the real knowledge backend: v4/ai-knowledge was not on origin when this lane finished.
+Inspect API as built by the knowledge lane (v4/ai-knowledge 7ab9d70bf), consumed through adapters in backend.js:
+- `GET {wire}/_vyomi/kb/{kbId}/chunks?vectors=true` -> `{count, dimensions, chunks:[{id, documentUri, text, tokenCount, metadata, section, pii, projection2d, vector}]}`; Studio re-projects the vectors with UMAP so the query can be placed (server PCA `projection2d` is the fallback).
+- `POST {wire}/_vyomi/kb/{kbId}/retrieve-trace` body = Retrieve body + `hybridWeight` (LEXICAL share; Studio sends 1 - vector weight) -> `{retrievalResults, trace:{candidates:[{chunkId, uri, vector_score, bm25_score, fused_rank, rerank_score, rerank_rank, returned, filtered_out_reason}], latencyMs:{embed,filter,search,rerank}}}`.
+The server trace has no query embedding, so the live query point is a score-weighted centroid of the retrieved chunks (the fake uses a true UMAP transform).
+
+## Verified live
+Merged v4/ai-knowledge into a LOCAL scratch branch (not pushed) and ran `consoles/dev_server.py` (same router as the appliance) with the llm stub: seeded 12 docs into S3, created facilities-kb, ingested (28 chunks), then Studio showed "Live: facilities-kb", Test returned 12 candidates with stage scores and an answer, Corpus showed 28 points, post-RAG map/waterfall/provenance rendered, no page errors.
+Nano finding (knowledge lane): on Nano `CreateKnowledgeBase` rejects every embedding model (the WEB catalog has no default embed model, and the lane requires nomic-embed-text), so a live facilities-kb cannot be created in the browser yet; Studio falls back to the demo corpus there. Mesh/offline is fine.
+Generation errors (no LLM) no longer hide retrieval: Test shows a "Generation failed" alert and still the stage scores.
 
 ## OSS choices
 | Need | Chosen | License / size | Substrate | Why / rejected |

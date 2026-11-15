@@ -5,6 +5,7 @@
  * If the live KB exists but the inspect extension is absent, mode is "live-limited": apply/ingest/retrieve/generate work, corpus + stage-score views do not. */
 import { awsRest, WIRE_BASE, WireError, authHeader, backendReady } from "../../../../common/wire.js";
 import { createFake } from "./fake.js";
+import { detectLang } from "./engine.js";
 import { modelArn, NOVA } from "../Common.jsx";
 
 const B = (m, p, o) => awsRest("bedrock", m, p, o);
@@ -34,7 +35,13 @@ export async function openLive() {
   const dsList = await B("POST", `/knowledgebases/${id}/datasources/`, { body: {} }).then((r) => r.dataSourceSummaries || []);
   const ds = dsList[0];
   let inspectOk = true;
-  try { await inspect(id, "chunks?limit=1"); } catch { inspectOk = false; }
+  try { await inspect(id, "chunks"); } catch { inspectOk = false; }
+  let chunkMap = new Map();
+  const limitedTrace = async (query, o) => {
+    const t0 = performance.now(), rs = await api.retrieve(query, o).then((r) => r.retrievalResults || []);   // limited: only the final score exists
+    return { query, options: o, queryEmbedding: null, latencyMs: { total: +(performance.now() - t0).toFixed(1) }, confidence: rs[0]?.score ?? 0,
+      results: rs.map((r, i) => ({ id: `r${i}`, uri: r.location?.s3Location?.uri || "", text: r.content?.text || "", tokens: 0, metadata: r.metadata || {}, vector_score: r.score, vector_rank: i + 1, bm25_score: null, bm25_rank: null, fused_rank: i + 1, rerank_score: null, filtered_out_reason: null, final_rank: i + 1 })) };
+  };
   const api = {
     mode: inspectOk ? "live" : "live-limited", label: inspectOk ? `Live: ${KB_NAME} (${id})` : `Live (limited, no inspect API): ${KB_NAME}`, kb, hasInspect: inspectOk,
     async listKbs() { return list; },
@@ -50,12 +57,29 @@ export async function openLive() {
       for (let i = 0; i < 120 && ["STARTING", "IN_PROGRESS"].includes(job.status); i++) { await new Promise((r) => setTimeout(r, 1000)); job = await B("GET", `/knowledgebases/${id}/datasources/${ds.dataSourceId}/ingestionjobs/${job.ingestionJobId}`).then((r) => r.ingestionJob); }
       return job;
     },
-    async chunks() { if (!inspectOk) throw new WireError(404, "InspectUnavailable", "The backend has no /_vyomi/kb inspect API; corpus views need it."); return inspect(id, "chunks"); },
+    async chunks() {
+      if (!inspectOk) throw new WireError(404, "InspectUnavailable", "The backend has no /_vyomi/kb inspect API; corpus views need it.");
+      const r = await inspect(id, "chunks?vectors=true");
+      const chunks = (r.chunks || []).map((c) => ({ id: c.id, uri: c.documentUri || c.uri, text: c.text, tokens: c.tokenCount || c.tokens, metadata: { ...(c.metadata || {}), ...(c.section ? { section: c.section } : {}) },
+        pii: c.pii && !["ok", "clean", "none"].includes(c.pii) ? [].concat(c.pii) : [], lang: detectLang(c.text), embedding: c.vector || c.embedding, ...(c.vector || c.embedding ? {} : { position: c.projection2d }) }));
+      chunkMap = new Map(chunks.map((c) => [c.id, c]));
+      return { knowledgeBaseId: id, embeddingModel: `${r.dimensions || "?"}-dim local embeddings`, chunks };
+    },
     async trace(query, o) {
-      if (inspectOk) return inspect(id, "retrieve-trace", { method: "POST", body: JSON.stringify({ query, options: o }) });
-      const t0 = performance.now(), rs = await api.retrieve(query, o).then((r) => r.retrievalResults || []);   // limited: only the final score exists
-      return { query, options: o, queryEmbedding: null, latencyMs: { total: +(performance.now() - t0).toFixed(1) }, confidence: rs[0]?.score ?? 0,
-        results: rs.map((r, i) => ({ id: `r${i}`, uri: r.location?.s3Location?.uri || "", text: r.content?.text || "", tokens: 0, metadata: r.metadata || {}, vector_score: r.score, vector_rank: i + 1, bm25_score: null, bm25_rank: null, fused_rank: i + 1, rerank_score: null, filtered_out_reason: null, final_rank: i + 1 })) };
+      if (!inspectOk) return limitedTrace(query, o);
+      if (!chunkMap.size) await api.chunks();
+      const body = { retrievalQuery: { text: query }, retrievalConfiguration: toRetrieveOptions(o), ...(o.searchType === "SEMANTIC" ? {} : { hybridWeight: +(1 - o.hybridWeight).toFixed(3) }) };   // server weight is the LEXICAL share
+      const t0 = performance.now(), r = await inspect(id, "retrieve-trace", { method: "POST", body: JSON.stringify(body) });
+      const tr = r.trace || {}, cand = tr.candidates || [], finals = (r.retrievalResults || []).map((x) => x.metadata?.["x-amz-bedrock-kb-chunk-id"]);
+      const live = cand.filter((c) => !c.filtered_out_reason || !/filter/.test(c.filtered_out_reason));
+      const vr = new Map([...live].sort((a, b) => b.vector_score - a.vector_score).map((c, i) => [c.chunkId, i + 1])), br = new Map([...live].sort((a, b) => b.bm25_score - a.bm25_score).map((c, i) => [c.chunkId, i + 1]));
+      const pool = o.numberOfResults;
+      const keep = cand.filter((c) => (c.fused_rank && c.fused_rank <= pool) || c.returned);
+      const dropped = cand.filter((c) => /filter/.test(c.filtered_out_reason || "")).sort((a, b) => b.vector_score - a.vector_score).slice(0, 3);
+      const row = (c) => { const ch = chunkMap.get(c.chunkId) || {}; const filt = /filter/.test(c.filtered_out_reason || ""); const fin = finals.indexOf(c.chunkId);
+        return { id: c.chunkId, uri: c.uri, text: ch.text || "", tokens: ch.tokens || 0, metadata: ch.metadata || {}, vector_score: c.vector_score, vector_rank: filt ? null : vr.get(c.chunkId), bm25_score: filt ? null : c.bm25_score, bm25_rank: filt ? null : br.get(c.chunkId), fused_rank: c.fused_rank, rerank_score: c.rerank_score, filtered_out_reason: filt ? `${c.filtered_out_reason} (${o.filter?.key} = "${o.filter?.value}")` : null, final_rank: fin >= 0 ? fin + 1 : null }; };
+      const lat = tr.latencyMs || {}; lat.total = +(performance.now() - t0).toFixed(1);
+      return { query, options: o, queryEmbedding: null, latencyMs: lat, confidence: r.retrievalResults?.[0]?.score ?? 0, results: [...keep, ...dropped].map(row), searchType: tr.searchType };
     },
     retrieve(query, o) { return R("POST", `/knowledgebases/${id}/retrieve`, { body: { retrievalQuery: { text: query }, retrievalConfiguration: toRetrieveOptions(o) } }); },
     rag(query, o) { return R("POST", "/retrieveAndGenerate", { body: { input: { text: query }, retrieveAndGenerateConfiguration: { type: "KNOWLEDGE_BASE", knowledgeBaseConfiguration: { knowledgeBaseId: id, modelArn: modelArn(NOVA), retrievalConfiguration: toRetrieveOptions(o), generationConfiguration: { inferenceConfig: { textInferenceConfig: { temperature: 0.1 } } } } } } }).then((r) => ({ ...r, citations: o.citations === false ? [] : r.citations })); },

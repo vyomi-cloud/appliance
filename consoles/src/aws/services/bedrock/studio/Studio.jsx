@@ -65,7 +65,7 @@ export default function Studio() {
       if (sig(d) !== appliedSig.current) { await be.applyDesign(designToApi(d)); appliedSig.current = sig(d); await be.ingest(); await loadChunks(be); }   // re-chunk when the chunking config differs
       const o = retrievalOptions(d), k = d.rerank.enabled ? d.rerank.topN : d.retrieve.topK, t0 = performance.now(), rows = [];
       for (const g of golden.filter((x) => x.question)) {
-        const [tr, rag] = await Promise.all([be.trace(g.question, o), be.rag(g.question, o)]);
+        const [tr, rag] = await Promise.all([be.trace(g.question, o), be.rag(g.question, o).catch(() => ({ output: { text: "" }, citations: [] }))]);
         const retrieved = finalOf(tr), cites = (rag.citations || []).flatMap((c) => (c.retrievedReferences || []).map((r) => r.location?.s3Location?.uri));
         rows.push({ question: g.question, answer: rag.output?.text || "", scores: scoreRow(g, { retrieved, answer: rag.output?.text || "", citations: cites }, k) });
       }
