@@ -174,10 +174,10 @@ def main():
             check("apply_guardrail unknown version -> ResourceNotFoundException", "ResourceNotFoundException" in str(e), e)
         try:
             bc.create_guardrail(name="bad", blockedInputMessaging="x", blockedOutputsMessaging="y",
-                                contextualGroundingPolicyConfig={"filtersConfig": [{"type": "GROUNDING", "threshold": 0.5}]})
-            check("unsupported contextual grounding rejected, not ignored", False)
+                                automatedReasoningPolicyConfig={"policies": ["arn:aws:bedrock:us-east-1:000000000000:automated-reasoning-policy/x"]})
+            check("unsupported automated reasoning rejected, not ignored", False)
         except Exception as e:
-            check("unsupported contextual grounding rejected, not ignored", "ValidationException" in str(e), e)
+            check("unsupported automated reasoning rejected, not ignored", "ValidationException" in str(e), e)
         gcfg = {"guardrailIdentifier": gid, "guardrailVersion": "1", "trace": "enabled"}
         msgs = lambda t: [{"role": "user", "content": [{"text": t}]}]    # noqa: E731
         n_before = len(fake.requests)
