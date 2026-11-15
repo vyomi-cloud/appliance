@@ -40,7 +40,7 @@ export default function Compare() {
   return (
     <ContentLayout header={<Header variant="h1">Compare models</Header>}>
       <SpaceBetween size="m">
-        <Alert>Comparison covers the models of this simulator (the open Vyomi pool and its provider-named aliases). The real console compares selected Anthropic models only.</Alert>
+        <Alert>Comparison covers the models served by this simulator (Nano: in-browser WebLLM models; Mesh: the open-source pool).</Alert>
         {t.loading ? <Spinner /> : <ColumnLayout columns={Math.min(3, Math.max(1, ms.length))}>{ms.map((m) => <Card key={m.modelId} m={m} />)}</ColumnLayout>}
       </SpaceBetween>
     </ContentLayout>

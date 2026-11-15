@@ -47,7 +47,7 @@ export default function Landing() {
         </Container>
         <ColumnLayout columns={2}>
           <Container header={<Header variant="h2">Model catalog</Header>} fitHeight>
-            <SpaceBetween size="l"><Box>Amazon Bedrock supports {n > 0 ? `${n} models in this simulator` : "foundation models"} from industry-leading providers (the open Vyomi pool plus provider-named aliases). Select the model best suited for achieving your unique goals.</Box><Lnk to="models">View Model catalog</Lnk></SpaceBetween>
+            <SpaceBetween size="l"><Box>Amazon Bedrock supports {n > 0 ? `${n} models in this simulator` : "foundation models"} served locally by this simulator (Nano: small in-browser WebLLM models; Mesh: the open-source pool). Select the model best suited for achieving your unique goals.</Box><Lnk to="models">View Model catalog</Lnk></SpaceBetween>
           </Container>
           <Container fitHeight header={<Header variant="h2" actions={<SpaceBetween direction="horizontal" size="xs"><Button iconName="angle-left" variant="icon" ariaLabel="Previous" onClick={() => setI((i + SPOT.length - 1) % SPOT.length)} /><Button iconName="angle-right" variant="icon" ariaLabel="Next" onClick={() => setI((i + 1) % SPOT.length)} /></SpaceBetween>}>Model spotlight</Header>}>
             <SpaceBetween size="s"><Box variant="h3">{s.name}</Box><Box>{s.text}</Box><Link onFollow={go("#/bedrock/playground")} href="#/bedrock/playground">Open in playground</Link>
