@@ -78,10 +78,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Dev Simplified: deterministic simple filters, not Bedrock's classifiers. Word lists (custom + small PROFANITY list), denied topics (name/example phrase match), regex PII (EMAIL, PHONE, US SSN, card, IP, AWS key, URL) with BLOCK/ANONYMIZE, custom regexes, and keyword content filters (HATE, INSULTS, SEXUAL, VIOLENCE, MISCONDUCT, PROMPT_ATTACK). Contextual grounding, automated reasoning and image content are rejected. Converse checks the input and the output; ConverseStream and InvokeModel check input only (stream output is not re-checked). State is process-local."
+   "Dev Simplified: deterministic simple filters, not Bedrock's trained classifiers. Word lists (custom + small PROFANITY list), denied topics (name/example phrase match), regex PII (EMAIL, PHONE, US SSN, card, IP, AWS key, URL and more) with BLOCK/ANONYMIZE, custom regexes, and content filters (HATE, INSULTS, SEXUAL, VIOLENCE, MISCONDUCT, PROMPT_ATTACK) whose LOW/MEDIUM/HIGH strength is honoured against a confidence from keyword hits plus, only when a real embedding model is up, a zero-shot embedding-prototype score (conservative thresholds, not calibrated against a labelled set; without a real embedder it is keywords only). Contextual GROUNDING and RELEVANCE filters (thresholds, scores, grounding_source/query/guard_content qualifiers, Converse guardContent) are scored by word coverage plus embedding cosine: a deterministic scorer, thresholds behave the same but absolute scores differ from Bedrock's. Converse, ConverseStream, InvokeModel and InvokeModelWithResponseStream check input and output; stream output is judged in ~1000-character windows (sync holds a window until judged and can mask or replace it, async streams then only reports), so a violation split across two windows can be missed. Automated reasoning, image content and cross-Region config are rejected. State is kept in the persisted space account bag and survives a restart."
   ],
   "tests": [
-   "tests/conformance/test_ai_agent_lanes.py"
+   "tests/conformance/test_ai_agent_lanes.py",
+   "tests/conformance/test_bedrock_guardrails_caps.py"
   ]
  }
 }
