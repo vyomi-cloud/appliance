@@ -8,6 +8,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tools", "llm_stub"))
 import stub_llm_server  # noqa: E402
 os.environ["VYOMI_LLM_ENDPOINT"] = stub_llm_server.start()
+os.environ["VYOMI_LIST_BEDROCK_ALIASES"] = "1"  # the default routers/system profiles come from the opt-in alias set
 os.environ.setdefault("CLOUDLEARN_STATE_FILE", "/tmp/bedrock-ctl-test.sqlite3")
 import anyio, boto3, uvicorn  # noqa: E402
 from botocore.config import Config  # noqa: E402

@@ -7,9 +7,10 @@ MODEL = "anthropic.claude-3-haiku-20240307-v1:0"
 
 def run(ctx):
     br, b = ctx.client("bedrock-runtime"), ctx.client("bedrock")
-    ctx.step("bedrock: ListFoundationModels includes an Anthropic and a Titan model", lambda: (lambda ids: (
-        (any("anthropic" in i for i in ids) and any("titan" in i for i in ids)) or (_ for _ in ()).throw(AssertionError(ids[:5]))) and f"{len(ids)} models")(
+    ctx.step("bedrock: ListFoundationModels lists only the served local models", lambda: (lambda ids: (
+        (len(ids) > 0 and not any(i.startswith(("anthropic.", "amazon.nova", "meta.llama", "cohere.")) for i in ids)) or (_ for _ in ()).throw(AssertionError(ids[:5]))) and f"{len(ids)} models")(
         [m["modelId"] for m in b.list_foundation_models()["modelSummaries"]]))
+    ctx.step("bedrock: standard Bedrock id still resolves (SDK compatibility alias, unlisted)", lambda: b.get_foundation_model(modelIdentifier=MODEL)["modelDetails"]["modelId"])
 
     def conv():
         r = br.converse(modelId=MODEL, messages=[{"role": "user", "content": [{"text": "Reply with the single word OK."}]}], inferenceConfig={"maxTokens": 20})

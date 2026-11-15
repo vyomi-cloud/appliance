@@ -9,6 +9,7 @@ Run: PYTHONPATH=. python3 tests/conformance/test_bedrock_models_alias.py     (bo
 """
 import json
 import os
+os.environ["VYOMI_LIST_BEDROCK_ALIASES"] = "1"  # these tests assert the opt-in alias listing
 import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")

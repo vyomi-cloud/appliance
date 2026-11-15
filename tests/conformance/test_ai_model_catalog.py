@@ -49,7 +49,7 @@ check("consoles ai-model-catalog.json is in sync (run scripts/gen_ai_model_catal
 _all_aws = [m["modelId"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"]]
 # v4 lane `models`: standard Bedrock ids are also listed, as explicit aliases (tests/conformance/test_bedrock_models_alias.py)
 aws = [i for i in _all_aws if i.startswith("vyomi.")]
-check("Bedrock ListFoundationModels = the ten (vyomi.<id>) + listed aliases", len(_all_aws) == len(aws) + len(am.BEDROCK_ALIASES))
+check("Bedrock ListFoundationModels lists only the served ten by default (aliases hidden unless VYOMI_LIST_BEDROCK_ALIASES=1)", len(_all_aws) == len(aws))
 check("Bedrock ListFoundationModels native ids = the ten (vyomi.<id>)", sorted(aws) == sorted("vyomi." + i for i in CAT.IDS), aws)
 R = AwsWireRouter()
 AwsWireRouter.STRICT_GCP_PROJECT = False

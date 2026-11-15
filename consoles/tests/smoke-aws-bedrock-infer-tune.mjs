@@ -54,7 +54,7 @@ await go("prompt-routers", "Prompt Routers");
 await page.getByText("No prompt routers").first().waitFor({ timeout: 30000 }); await shot("015-configured");
 await tab("Default");
 await page.getByText("Nova Prompt Router").first().waitFor({ timeout: 30000 });
-check("routers: two default routers", (await page.getByText("Anthropic Prompt Router").count()) > 0); await shot("015-default");
+check("routers: default routers hidden unless aliases opted in", (await page.getByText("Anthropic Prompt Router").count()) === 0); await shot("015-default");
 
 await go("marketplace-deployments", "Marketplace deployments");
 await page.getByText("No deployments").first().waitFor({ timeout: 30000 }); await shot("016-marketplace");

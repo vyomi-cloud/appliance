@@ -99,7 +99,7 @@ def _sort(items, query, field):
 # ───────────── inference profiles ─────────────
 def _sys_profiles():
     out = []
-    for a in am.BEDROCK_ALIASES:
+    for a in (am.BEDROCK_ALIASES if am.list_aliases() else []):
         if "EMBEDDING" in a[4] or a[0].startswith(_NO_PROFILE):
             continue
         for pre, regs in _REGIONS.items():
@@ -489,6 +489,8 @@ def _custom(method, path, query, p):
 
 # ───────────── prompt routers ─────────────
 def _default_routers():
+    if not am.list_aliases():
+        return []
     def mk(arn_tail, name, ids, desc):
         return {"promptRouterName": name, "routingCriteria": {"responseQualityDifference": 0.0}, "description": desc, "createdAt": "2024-11-01T00:00:00Z",
                 "updatedAt": "2024-11-01T00:00:00Z", "promptRouterArn": f"arn:aws:bedrock:{_REG}:{_ACCT}:default-prompt-router/{arn_tail}",

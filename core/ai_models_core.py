@@ -58,6 +58,13 @@ _BM = {m[0]: m for m in BEDROCK_MODELS}
 # modalities the local model has (no vision/doc input), `vyomiBackedBy` says which catalogue model answers, and the lifecycle
 # is ACTIVE only in the sense that the id is callable. Each row: (modelId, provider, display name, input, output, streaming).
 _T, _E = ["TEXT"], ["EMBEDDING"]
+def list_aliases():
+    """Standard Bedrock ids (anthropic.claude-*, amazon.nova-*, ...) always RESOLVE for SDK compatibility, but are only LISTED
+    when VYOMI_LIST_BEDROCK_ALIASES=1: by default consoles show only the models actually served (Nano WebLLM / Mesh open-source)."""
+    import os
+    return os.environ.get("VYOMI_LIST_BEDROCK_ALIASES") == "1"
+
+
 BEDROCK_ALIASES = [
     ("anthropic.claude-3-haiku-20240307-v1:0", "Anthropic", "Claude 3 Haiku", _T, _T, True),
     ("anthropic.claude-3-5-haiku-20241022-v1:0", "Anthropic", "Claude 3.5 Haiku", _T, _T, True),
@@ -639,10 +646,10 @@ def bedrock_dispatch(method, path, query, headers, body):
         outm = (query or {}).get("byOutputModality")
         prov = (query or {}).get("byProvider")
         ms = [m for m in BEDROCK_MODELS if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
-        al = [a for a in BEDROCK_ALIASES if (not outm or outm.upper() in a[4]) and (not prov or prov.lower() == a[1].lower())]
+        al = [a for a in (BEDROCK_ALIASES if list_aliases() else []) if (not outm or outm.upper() in a[4]) and (not prov or prov.lower() == a[1].lower())]
         return _j(200, {"modelSummaries": [_summary(m) for m in ms] + [_alias_summary(a) for a in al]})
     if path == "/inference-profiles" and method == "GET":
-        return _j(200, {"inferenceProfileSummaries": [_profile(a, pre) for a in BEDROCK_ALIASES if "EMBEDDING" not in a[4] and not a[0].startswith(("amazon.titan", "cohere", "meta.llama3-2-3b"))
+        return _j(200, {"inferenceProfileSummaries": [_profile(a, pre) for a in (BEDROCK_ALIASES if list_aliases() else []) if "EMBEDDING" not in a[4] and not a[0].startswith(("amazon.titan", "cohere", "meta.llama3-2-3b"))
                                                       for pre in _INF_PROFILE_PREFIX[:1]]})
     mt = re.match(r"^/inference-profiles/(.+)$", path)
     if mt and method == "GET":
