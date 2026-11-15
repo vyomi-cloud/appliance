@@ -38,7 +38,7 @@ const readHelpW = () => { const n = parseInt(pref("helpW", ""), 10); return Numb
 
 /** Help panel docked to the right edge as an OVERLAY: it floats above the page (the content never reflows),
  * can be dragged wider from its left edge, and toggled between normal and expanded width. */
-function HelpOverlay({ open, onClose, children }) {
+function HelpOverlay({ open, onOpen, onClose, children }) {
   const [width, setWidth] = useState(readHelpW);
   const [expanded, setExpanded] = useState(false);
   const max = () => Math.max(HELP_MIN, Math.floor(window.innerWidth * 0.8));
@@ -50,8 +50,19 @@ function HelpOverlay({ open, onClose, children }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   const [topH, setTopH] = useState(56);
-  useEffect(() => { if (open) setTopH(document.getElementById("vyomi-top")?.offsetHeight || 56); }, [open]);
-  if (!open) return null;
+  useEffect(() => { setTopH(document.getElementById("vyomi-top")?.offsetHeight || 56); }, [open]);
+  // Closed: a docked "info" tab on the right edge, like the Cloudscape tools toggle this overlay replaced (toolsHide removed it).
+  // The top-bar Help button still opens the panel too.
+  if (!open) {
+    return (
+      <button id="vyomi-help-toggle" type="button" aria-label="Open help panel" aria-expanded="false" title="Help" onClick={onOpen}
+        style={{ position: "fixed", top: topH + 12, right: 0, zIndex: 1000, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", color: "var(--color-text-body-default, #0f1b2a)", background: "var(--color-background-container-content, #fff)",
+          border: "1px solid var(--color-border-divider-default, #d5dbdb)", borderRight: 0, borderRadius: "8px 0 0 8px", boxShadow: "-2px 2px 8px rgba(0,28,36,.18)" }}>
+        <Icon name="status-info" size="medium" />
+      </button>
+    );
+  }
   const shown = clamp(expanded ? Math.floor(window.innerWidth * 0.65) : width);
   const startDrag = (e) => {
     e.preventDefault();
@@ -171,7 +182,7 @@ export default function App() {
         toolsHide
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}
       />
-      <HelpOverlay open={toolsOpen} onClose={() => setToolsOpen(false)}>
+      <HelpOverlay open={toolsOpen} onOpen={() => setToolsOpen(true)} onClose={() => setToolsOpen(false)}>
         <HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{svc && <BackendsSection cloud="aws" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0972d3" />}{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>
       </HelpOverlay>
       {!isNano() && <footer id="vyomi-footer" style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 32, zIndex: 1001, display: "flex", alignItems: "center", gap: 20, padding: "0 16px", background: "#0f141a", color: "#d1d5db", fontSize: 12, fontFamily: '"Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif' }}>
