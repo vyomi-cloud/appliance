@@ -27,6 +27,11 @@ import math
 import re
 import time
 from dataclasses import dataclass, field
+
+try:
+    from core import training_core as tc
+except ImportError:  # Pyodide flat layout
+    import training_core as tc  # type: ignore
 from datetime import datetime, timezone
 
 LOCATIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west4", "europe-west1", "europe-west2", "europe-west4",
@@ -204,10 +209,65 @@ def _op(store, project, loc, coll, resp, verb="Create", empty=False, rname=None)
 
 
 # ── job lifecycle (lazy, clock based) ──────────────────────────────────────
+def _tuning_begin(project, loc, rid, body):
+    """tuningJobs on a trainable base (core/training_core): validate + launch the REAL job. -> (error response | None, trainable)."""
+    base = str(body.get("baseModel") or (body.get("supervisedTuningSpec") or {}).get("baseModel") or "")
+    if not tc.is_trainable(base):
+        return None, False
+    spec = body.get("supervisedTuningSpec") or {}
+    uri = spec.get("trainingDatasetUri") or spec.get("training_dataset_uri")
+    if not uri:
+        return _err(400, "INVALID_ARGUMENT", "supervisedTuningSpec.trainingDatasetUri: must not be empty."), True
+    try:
+        tc.start(f"vtx-{rid}", f"vtx-{rid}", tc.read_uri(uri), spec.get("hyperParameters") or {}, None, base, body.get("tunedModelDisplayName") or "")
+    except tc.TrainError as e:
+        return _err(404 if e.kind == "notfound" else 400, "NOT_FOUND" if e.kind == "notfound" else "INVALID_ARGUMENT", str(e)), True
+    return None, True
+
+
+def _tuning_sync(store, rec):
+    """Mirror the real training job into the TuningJob; on success create the tuned Model + Endpoint (predict-able)."""
+    try:
+        v = tc.view(rec["_vyomi"])
+    except tc.TrainError:
+        return
+    rec["vyomiTraining"] = v
+    st, t = v["status"], _now()
+    if st in tc.ACTIVE:
+        new = "JOB_STATE_PENDING" if st == "Queued" else "JOB_STATE_RUNNING"
+        if new.endswith("RUNNING") and not rec.get("startTime"):
+            rec["startTime"] = t
+        rec["state"] = new
+        return
+    if rec["state"].endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
+        return
+    rec.setdefault("startTime", t)
+    rec["endTime"] = rec["updateTime"] = t
+    if st == "Completed":
+        rec["state"] = "JOB_STATE_SUCCEEDED"
+        project, loc = rec["name"].split("/")[1], rec["name"].split("/")[3]
+        mid, eid = _numeric_id(store), _numeric_id(store)
+        mname, ename = f"projects/{project}/locations/{loc}/models/{mid}", f"projects/{project}/locations/{loc}/endpoints/{eid}"
+        store.res[mname] = {"name": mname, "displayName": rec.get("tunedModelDisplayName") or "tuned-head", "createTime": t, "updateTime": t, "versionId": "1",
+                            "deployedModels": [{"endpoint": ename, "deployedModelId": mid}], "labels": {"vyomi-trained": "true"}, "_vyomiHead": rec["_vyomi"],
+                            "artifactUri": v.get("artifact")}
+        store.res[ename] = {"name": ename, "displayName": (rec.get("tunedModelDisplayName") or "tuned-head") + "-endpoint", "createTime": t, "updateTime": t,
+                            "deployedModels": [{"id": mid, "model": mname, "displayName": rec.get("tunedModelDisplayName") or "tuned-head", "createTime": t}],
+                            "trafficSplit": {mid: 100}, "etag": "AMEu" + eid[-8:]}
+        rec["tunedModel"] = {"model": mname, "endpoint": ename}
+        rec["tuningDataStats"] = {"supervisedTuningDataStats": {"tuningDatasetExampleCount": str(v.get("rows", 0))}}
+    elif st == "Failed":
+        rec["state"], rec["error"] = "JOB_STATE_FAILED", {"code": 13, "message": v.get("note", "Training failed.")}
+    else:
+        rec["state"] = "JOB_STATE_CANCELLED"
+
+
 def _advance(store, rec, coll):
     pre = SPEC[coll].get("job")
     if not pre:
         return
+    if rec.get("_vyomi"):
+        return _tuning_sync(store, rec)
     st = rec.get("state", "")
     if st.endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
         return
@@ -433,8 +493,17 @@ def _create(store, project, loc, chain, body, query, verb="Create"):
         _ensure_default_store(store, project, loc)
     if full in store.res:
         return _err(409, "ALREADY_EXISTS", f"{spec['type']} {full} already exists.")
+    trained = False
+    if coll == "tuningJobs":
+        bad, trained = _tuning_begin(project, loc, rid, body)
+        if bad:
+            return bad
     t = _now()
     rec = dict(body)
+    if trained:
+        rec["_vyomi"] = f"vtx-{rid}"
+    elif coll == "tuningJobs":
+        rec["vyomiNote"] = "Metadata only: this base model is not trainable by Vyomi; the job completes without training."
     rec.update(name=full, createTime=t, updateTime=t)
     if spec.get("job"):
         rec["state"] = spec["job"] + "PENDING"
@@ -526,12 +595,32 @@ def _list(store, project, loc, coll, parent_prefix, query):
     return _j(200, out)
 
 
+def _predict_trained(mrec, dm, p):
+    """endpoints:predict on a tuned head: instances [{"text"}] -> classifier labels; [{"query","document"}] -> reranker score."""
+    inst = p.get("instances")
+    if not isinstance(inst, list) or not inst or not all(isinstance(i, dict) for i in inst):
+        return _err(400, "INVALID_ARGUMENT", "instances: a non-empty list of objects is required.")
+    out = []
+    try:
+        for i in inst:
+            r = tc.invoke(mrec["_vyomiHead"], {"task": "score" if "query" in i else "classify", **i})
+            out.append({k: v for k, v in r.items() if k != "embedder"})
+    except tc.TrainError as e:
+        return _err(404 if e.kind == "notfound" else 400, "NOT_FOUND" if e.kind == "notfound" else "INVALID_ARGUMENT", str(e))
+    return _j(200, {"predictions": out, "deployedModelId": dm.get("id"), "model": mrec["name"], "modelDisplayName": mrec.get("displayName"), "vyomiTrained": True})
+
+
 def _verb(store, project, loc, coll, full, rec, verb, p):
     t = _now()
     if verb == "cancel":
         _advance(store, rec, coll)
         if rec["state"].endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
             return _err(400, "FAILED_PRECONDITION", f"{coll[:-1]} is already in a terminal state ({rec['state']}).")
+        if rec.get("_vyomi"):
+            try:
+                tc.stop(rec["_vyomi"])
+            except tc.TrainError:
+                pass
         rec["state"] = SPEC[coll]["job"] + "CANCELLED"
         rec["endTime"] = rec["updateTime"] = t
         return _j(200, {})
@@ -576,7 +665,10 @@ def _verb(store, project, loc, coll, full, rec, verb, p):
         if verb in ("predict", "rawPredict"):
             if not rec.get("deployedModels"):
                 return _err(400, "FAILED_PRECONDITION", "Endpoint has no deployed model.")
-            return _err(501, "UNIMPLEMENTED", "Custom-model serving is not simulated: Vyomi serves Gemini and embedding publisher models only.")
+            dm = next((d for d in rec["deployedModels"] if (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiHead")), None)
+            if dm:
+                return _predict_trained(store.res[dm["model"].split("@")[0]], dm, p)
+            return _err(501, "UNIMPLEMENTED", "Custom-model serving is not simulated: Vyomi serves Gemini and embedding publisher models only (and heads it trained itself).")
         return _err(501, "UNIMPLEMENTED", f"endpoints:{verb} is not simulated.")
     if coll == "indexes":
         pts = store.vectors.setdefault(full, {})

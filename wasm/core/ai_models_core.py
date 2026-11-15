@@ -641,6 +641,39 @@ def _guard_output(gcfg, r):
     return _guard_blocked("converse", (res["text"], res["assessment"], "OUTPUT"), gcfg, time.time(), usage)
 
 
+def _trained():
+    try:
+        from core import training_core as t
+    except ImportError:  # Pyodide flat layout
+        import training_core as t  # type: ignore
+    return t
+
+
+def _invoke_trained(cid, op, p):
+    """InvokeModel / Converse on a custom model trained in core/training_core: {"task":"classify","text"} -> {label, scores}; {"task":"score",
+    "query","document"} -> {score}. Converse classifies the last user message. Every answer carries vyomiTrained: it is a head, not an LLM."""
+    t = _trained()
+    if p is None:
+        return _b_err("ValidationException", "Malformed input request, please reformat your input and try again.", 400)
+    if op.endswith("stream") or op == "invoke-with-response-stream":
+        return _b_err("ValidationException", "This trained model doesn't support streaming operations.", 400)
+    t0 = time.time()
+    try:
+        if op == "converse":
+            msgs = p.get("messages") or []
+            last = next((m for m in reversed(msgs) if m.get("role") == "user"), None)
+            txt = " ".join(b.get("text", "") for b in (last or {}).get("content", []) if isinstance(b, dict))
+            r = t.invoke(cid, {"task": "classify", "text": txt})
+            return _j(200, {"output": {"message": {"role": "assistant", "content": [{"text": r["label"]}]}}, "stopReason": "end_turn",
+                            "usage": {"inputTokens": llm.estimate_tokens(txt), "outputTokens": 1, "totalTokens": llm.estimate_tokens(txt) + 1},
+                            "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
+                            "additionalModelResponseFields": {"vyomiTrained": True, "scores": r["scores"], "embedder": r["embedder"]}},
+                      {"x-vyomi-trained": "true"})
+        return _j(200, t.invoke(cid, p), {"x-vyomi-trained": "true"})
+    except t.TrainError as e:
+        return _b_err("ResourceNotFoundException" if e.kind == "notfound" else "ValidationException", str(e), 404 if e.kind == "notfound" else 400)
+
+
 def bedrock_dispatch(method, path, query, headers, body):
     method, path = method.upper(), "/" + path.strip("/")
     path = re.sub(r"/{2,}", "/", path)
@@ -700,6 +733,9 @@ def bedrock_dispatch(method, path, query, headers, body):
         return _b_err("UnknownOperationException", f"{method} is not supported for this operation", 405)
     from urllib.parse import unquote
     mid, op = unquote(mt.group(1)), mt.group(2)
+    tm = re.match(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:custom-model/(.+)$", mid)
+    if tm and _trained().has_model(tm.group(1)):      # a head trained by core/training_core: not an LLM, answered by the head itself
+        return _invoke_trained(tm.group(1), op, _body(body))
     m = _resolve_model(mid)
     if not m:
         return _b_err("ValidationException", "The provided model identifier is invalid.", 400)
@@ -1247,7 +1283,164 @@ def _azure_agents():
     return a
 
 
+# ───────── Azure OpenAI fine-tuning + files (a trainable base runs a REAL head-training job in core/training_core) ─────────
+_AZ_FILES: dict[str, dict] = {}
+_AZ_FT: dict[str, dict] = {}
+
+
+def _ft_status(v):
+    return {"Queued": "queued", "Completed": "succeeded", "Failed": "failed", "Stopped": "cancelled"}.get(v["status"], "running")
+
+
+def _ft_view(j):
+    """OpenAI fine_tuning.job object, kept in step with the live training job (+ the Vyomi extension vyomiTraining)."""
+    t = _trained()
+    try:
+        v = t.view(j["model_id"])
+    except t.TrainError:
+        v = {"status": "Failed", "metrics": []}
+    st = _ft_status(v)
+    if st == "succeeded" and not j.get("fine_tuned_model"):
+        j["fine_tuned_model"] = f"ft:{j['model']}:{j['suffix'] or 'vyomi'}:{j['id'][len('ftjob-'):]}"
+    if st in ("succeeded", "failed", "cancelled") and not j.get("finished_at"):
+        j["finished_at"] = int(time.time())
+    out = {k: v2 for k, v2 in j.items() if k not in ("model_id", "suffix")}
+    out.update(status=st, vyomiTraining=v, trained_tokens=(sum(1 for _ in v.get("metrics", [])) * v.get("rows", 0) or None) if st == "succeeded" else None,
+               error=({"code": "training_failed", "message": v.get("note", "Training failed.")} if st == "failed" else {}))
+    return out
+
+
+def _ft_events(j):
+    v = _ft_view(j)
+    ev, base = [], j["created_at"]
+    ev.append({"object": "fine_tuning.job.event", "id": "ftevent-0", "created_at": base, "level": "info", "message": "Job enqueued. Waiting for jobs ahead to complete.", "data": None, "type": "message"})
+    for m in (v["vyomiTraining"].get("metrics") or []):
+        ev.append({"object": "fine_tuning.job.event", "id": f"ftevent-{m['epoch']}", "created_at": base + m["epoch"], "level": "info",
+                   "message": f"Epoch {m['epoch']}/{v['vyomiTraining'].get('epochs')}: loss={m['loss']} accuracy={m['accuracy']}", "type": "metrics",
+                   "data": {"step": m["epoch"], "train_loss": m["loss"], "train_mean_token_accuracy": m["accuracy"], "valid_mean_token_accuracy": m.get("valAccuracy")}})
+    if v["status"] == "succeeded":
+        ev.append({"object": "fine_tuning.job.event", "id": "ftevent-done", "created_at": v.get("finished_at") or int(time.time()), "level": "info",
+                   "message": f"New fine-tuned model created: {v['fine_tuned_model']}", "data": None, "type": "message"})
+    return list(reversed(ev))
+
+
+def _multipart(headers, body):
+    from email.parser import BytesParser
+    from email.policy import default
+    msg = BytesParser(policy=default).parsebytes(b"Content-Type: " + headers.get("content-type", "").encode() + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+    out = {}
+    for part in msg.iter_parts() if msg.is_multipart() else []:
+        out[part.get_param("name", header="content-disposition")] = (part.get_filename(), part.get_payload(decode=True) or b"")
+    return out
+
+
+def _azure_files_ft(method, path, query, lh, body):
+    """/openai/files + /openai/fine_tuning/jobs[/{id}[/cancel|/events]] (also under /openai/v1)."""
+    t = _trained()
+    if not (lh.get("api-key") or lh.get("authorization")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    path = re.sub(r"^/openai(/v1)?", "", path).rstrip("/")
+    method = method.upper()
+    now = int(time.time())
+
+    def bad(msg, param=None, code="invalid_request_error", status=400):
+        return _j(status, {"error": {"code": code, "message": msg, "param": param, "type": "invalid_request_error"}})
+    if path == "/files" and method == "POST":
+        parts = _multipart(lh, body) if "multipart/form-data" in lh.get("content-type", "") else {}
+        if "file" not in parts:
+            return bad("Missing required parameter: 'file'.", "file")
+        purpose = parts.get("purpose", (None, b""))[1].decode() or "fine-tune"
+        fid = "file-" + uuid.uuid4().hex[:24]
+        t.put_file(fid, parts["file"][1])
+        _AZ_FILES[fid] = {"id": fid, "object": "file", "bytes": len(parts["file"][1]), "created_at": now, "filename": parts["file"][0] or "file.jsonl", "purpose": purpose, "status": "processed", "status_details": None}
+        return _j(200, _AZ_FILES[fid])
+    if path == "/files" and method == "GET":
+        return _j(200, {"object": "list", "data": list(_AZ_FILES.values()), "has_more": False})
+    mf = re.match(r"^/files/([^/]+)(/content)?$", path)
+    if mf:
+        f = _AZ_FILES.get(mf.group(1))
+        if not f:
+            return bad(f"File {mf.group(1)} not found.", None, "NotFound", 404)
+        if method == "DELETE":
+            del _AZ_FILES[f["id"]]
+            return _j(200, {"object": "file", "id": f["id"], "deleted": True})
+        if mf.group(2):
+            return _bytes(200, t.get_file(f["id"]) or b"", "application/octet-stream")
+        return _j(200, f)
+    if path == "/fine_tuning/jobs" and method == "POST":
+        p = _body(body)
+        if p is None:
+            return bad("Invalid JSON body.")
+        model, tf = p.get("model"), p.get("training_file")
+        if not model:
+            return bad("Missing required parameter: 'model'.", "model")
+        if not tf:
+            return bad("Missing required parameter: 'training_file'.", "training_file")
+        if not t.is_trainable(model):
+            return bad(f"The model {model} cannot be fine-tuned by Vyomi (trainable: {', '.join(t.TRAINABLE_EMBEDDERS)} or {t.HEAD_PREFIX}*); real model customization is metadata-only here.", "model", "model_not_trainable")
+        if tf not in _AZ_FILES:
+            return bad(f"No such File object: {tf}", "training_file", "invalid_request_error", 404)
+        jid = "ftjob-" + uuid.uuid4().hex[:24]
+        hpr = dict(p.get("hyperparameters") or {})
+        try:
+            t.start("azft-" + jid[6:], "azft-" + jid[6:], t.get_file(tf) or b"", {"epochs": hpr.get("n_epochs", 10) if hpr.get("n_epochs") != "auto" else 10, "batchSize": hpr.get("batch_size") if hpr.get("batch_size") != "auto" else None,
+                                                                    "learningRateMultiplier": hpr.get("learning_rate_multiplier") if hpr.get("learning_rate_multiplier") != "auto" else None}, None, model, p.get("suffix") or "")
+        except t.TrainError as e:
+            return bad(str(e), "training_file")
+        j = {"id": jid, "object": "fine_tuning.job", "model": model, "created_at": now, "finished_at": None, "fine_tuned_model": None, "organization_id": "org-vyomi",
+             "result_files": [], "training_file": tf, "validation_file": p.get("validation_file"), "seed": p.get("seed") or 7, "suffix": p.get("suffix"),
+             "hyperparameters": {"n_epochs": int(hpr.get("n_epochs") or 10) if str(hpr.get("n_epochs", "")).isdigit() or hpr.get("n_epochs") is None else 10,
+                                 "batch_size": hpr.get("batch_size") or "auto", "learning_rate_multiplier": hpr.get("learning_rate_multiplier") or "auto"},
+             "model_id": "azft-" + jid[6:]}
+        _AZ_FT[jid] = j
+        return _j(200, _ft_view(j))
+    if path == "/fine_tuning/jobs" and method == "GET":
+        return _j(200, {"object": "list", "data": [_ft_view(j) for j in reversed(list(_AZ_FT.values()))], "has_more": False})
+    mj = re.match(r"^/fine_tuning/jobs/([^/]+)(?:/(cancel|events))?$", path)
+    if mj:
+        j = _AZ_FT.get(mj.group(1))
+        if not j:
+            return bad(f"Fine-tuning job {mj.group(1)} not found.", None, "NotFound", 404)
+        if mj.group(2) == "cancel" and method == "POST":
+            try:
+                t.stop(j["model_id"])
+            except t.TrainError as e:
+                return bad(str(e), None, "conflict", 409)
+            return _j(200, _ft_view(j))
+        if mj.group(2) == "events" and method == "GET":
+            return _j(200, {"object": "list", "data": _ft_events(j), "has_more": False})
+        if not mj.group(2) and method == "GET":
+            return _j(200, _ft_view(j))
+    return _a_err(404, "404", "Resource not found")
+
+
+def _azure_trained_chat(model, p):
+    """chat/completions on a deployment of a fine-tuned head (Vyomi extension: the head classifies the last user message)."""
+    t = _trained()
+    mid = "azft-" + model.rsplit(":", 1)[-1]
+    if not t.has_model(mid):
+        return None
+    msgs = p.get("messages") or []
+    last = next((m for m in reversed(msgs) if isinstance(m, dict) and m.get("role") == "user"), None)
+    c = (last or {}).get("content")
+    txt = c if isinstance(c, str) else " ".join(b.get("text", "") for b in (c or []) if isinstance(b, dict))
+    if not txt.strip():
+        return _a_err(400, "BadRequest", "'messages' must contain a user message to classify.", "messages")
+    try:
+        r = t.invoke(mid, {"task": "classify", "text": txt})
+    except t.TrainError as e:
+        return _a_err(404 if e.kind == "notfound" else 400, "BadRequest" if e.kind != "notfound" else "NotFound", str(e))
+    n = llm.estimate_tokens(txt)
+    return _j(200, {"id": "chatcmpl-" + uuid.uuid4().hex[:29], "object": "chat.completion", "created": int(time.time()), "model": model,
+                    "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": r["label"]}}],
+                    "usage": {"prompt_tokens": n, "completion_tokens": 1, "total_tokens": n + 1},
+                    "vyomiTrained": True, "vyomiScores": r["scores"],
+                    "vyomiNote": "Vyomi extension: a trained classifier head answered (label as assistant content); this is not an LLM."})
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
+    if re.match(r"^/openai(/v1)?/(files|fine_tuning)(/|$)", path):
+        return _azure_files_ft(method, path, query, {k.lower(): v for k, v in (headers or {}).items()}, body)
     ag = _azure_agents()
     mt = re.match(r"^/openai/(?:deployments/([^/]+)/)?(chat/completions|completions|embeddings)$", path) \
         or re.match(r"^/openai/(?:v1/)?()(chat/completions|completions|embeddings|responses)$", path)
@@ -1296,6 +1489,10 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
                       "within the last 5 minutes, please wait a moment and try again.")
     model = dep["properties"]["model"]["name"]
     caps = dep["properties"].get("capabilities") or {}
+    if model.startswith("ft:") and op == "chat/completions":
+        r = _azure_trained_chat(model, p)
+        if r is not None:
+            return r
     if op == "embeddings":
         if "embeddings" not in caps and "embedding" not in model:
             return _a_err(400, "OperationNotSupported", f"The embeddings operation does not work with the specified model, {model}. "
