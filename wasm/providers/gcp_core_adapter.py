@@ -1450,6 +1450,14 @@ class _NanoKey:
     def __init__(self, name):
         self.key = _short(name)
         self.ring = "projects/%s/locations/%s/keyRings/%s" % (PROJ, LOC, RING)
+        # a key can live in any ring/location (wizard Key ring + Region fields): resolve its real ring
+        try:
+            for _ring in list(_kms._rings(_STORES["kms"]).keys()):
+                if _STORES["kms"].get_key("%s/cryptoKeys/%s" % (_ring, self.key)):
+                    self.ring = _ring
+                    break
+        except Exception:
+            pass
         self.name = "%s/cryptoKeys/%s" % (self.ring, self.key)
         self._m = None
         if self.get() is None:

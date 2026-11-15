@@ -111,3 +111,9 @@ The one Azure finding (Function apps "Deployment slots" tab 404) was already fix
 - Offline GCP suites red in the baseline AND re-run here (pubsub-tabs-project NOT_FOUND on a just-created topic, gce-ssh 400, ui-* waitForFunction timeouts; `/console/gcp` is 404 on the local :9000 stack and `static/*-console.html` no longer exists in v4). Looks like the offline stack/suites are stale vs v4 (decision for the trunk owner: retire or port these suites). Not guessed at.
 - `gcp-eventarc-nano-http-bridge` shows fail with exit 0 and an "ok" log: runner marks it fail although the test passes (harness/runner owner; not changed).
 - Not fixed, need Docker/Go modules/network: offline-sdk-go-gcp, offline-sdk-go-gcp-artifactregistry, offline-post-create-gcp-event-delivery, offline-post-create-gcp-apigateway-invoke.
+
+## GCP nightly, 2026-11-15
+- FIXED: Nano KMS detail tabs (Labels/Versions/Rotation/Import jobs/Metrics) 404'd for any key outside the default ring (`_NanoKey` hard-coded global/demo); now resolves the key's real ring. Test: `test_gcp_console_tabs.py` kms[nano] (3 tests red -> green).
+- FIXED: `updatePrimaryVersion` accepted a non-ENABLED version; now FAILED_PRECONDITION like Cloud KMS. Touched `core/gcp_kms_core.py` (GCP core); `wasm/core` re-vendored.
+- Still red in `test_gcp_console_tabs.py[nano]` (pre-existing, not touched): cloudsql backups/connectivity/replicas/users, firestore x3, pubsub encryption/schema, secret versions, storage x3.
+- Not run: UI Playwright, roundtrip/tunnel legs (no Codespace), offline stack (stale vs v4, see 2026-11-13).

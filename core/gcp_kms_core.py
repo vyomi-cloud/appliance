@@ -905,6 +905,9 @@ def dispatch(store: KeyStore, method: str, path: str,
             ver = str(payload.get("cryptoKeyVersionId") or "")
             if ver not in meta.get("versions", {}):
                 return _err(400, "INVALID_ARGUMENT", f"CryptoKeyVersion {ver} not found.")
+            if meta["versions"][ver].get("state", "ENABLED") != "ENABLED":
+                return _err(400, "FAILED_PRECONDITION",
+                            f"CryptoKeyVersion {ver} must be ENABLED to be the primary version.")
             meta["primary"] = ver
             store.put_key(name, meta, store.get_material(name))
             store.persist()
