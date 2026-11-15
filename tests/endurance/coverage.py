@@ -11,6 +11,10 @@ An entry may only be an excuse when the reason is written down; stale ids (not i
     python3 tests/endurance/coverage.py                # report
     python3 tests/endurance/coverage.py --gate         # exit 1 if any capability is uncovered/stale
     python3 tests/endurance/coverage.py --gate --ratchet N   # allow at most N uncovered (CI ratchet)
+    python3 tests/endurance/coverage.py --require-verified   # RELEASE gate: every non-excused row must be status=verified
+
+Each entry has a `status`: "planned" (mapped to a stage + checks, not yet proven by a green run) or "verified" (a green
+estate run proved it). A mapping is never proof; only the release gate (--require-verified) treats it as done.
 """
 import collections, json, os, sys
 
@@ -52,6 +56,10 @@ def main():
         if not e.get("stage") or not e.get("tf") and not e.get("verify"):
             problems.append(f"incomplete entry: {r['id']}")
         stat[key]["covered"] += 1
+        if e.get("status") not in ("planned", "verified"):
+            problems.append(f"entry needs status planned|verified: {r['id']}")
+        elif e["status"] == "verified":
+            stat[key]["verified"] += 1
     tot = collections.Counter()
     for cloud in ("aws", "gcp", "azure"):
         c = collections.Counter()
@@ -64,12 +72,17 @@ def main():
         tot.update(c)
     n = sum(tot.values())
     pct = 100.0 * (tot["covered"] + tot["excused"]) / n if n else 0
+    print(f"VERIFIED (green estate run): {tot['verified']} of {n}")
     print(f"\nENDURANCE COVERAGE: {tot['covered']} covered + {tot['excused']} excused of {n} = {pct:.1f}%  (uncovered {tot['uncovered']})")
     print("\nBY STAGE (capabilities to wrap: aws / gcp / azure)")
     for st in sorted(by_stage):
         b = by_stage[st]
         print(f"  {st:22} {b['aws']:4} / {b['gcp']:4} / {b['azure']:4}")
     for p in sorted(set(problems)): print("PROBLEM:", p)
+    if "--require-verified" in sys.argv:
+        if tot["verified"] + tot["excused"] < n or problems:
+            print(f"RELEASE GATE FAILED: {n - tot['verified'] - tot['excused']} capabilities are not verified")
+            sys.exit(1)
     if "--gate" in sys.argv:
         allow = int(sys.argv[sys.argv.index("--ratchet") + 1]) if "--ratchet" in sys.argv else 0
         if tot["uncovered"] > allow or problems:
