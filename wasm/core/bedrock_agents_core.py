@@ -764,7 +764,7 @@ def _create_gateway(st, p):
           "createdAt": now, "updatedAt": now, "status": "CREATING", "name": name, "description": p.get("description", ""), "roleArn": p["roleArn"],
           "protocolType": "MCP", "protocolConfiguration": p.get("protocolConfiguration") or {"mcp": {"supportedVersions": ["2025-03-26"]}},
           "authorizerType": auth, "authorizerConfiguration": p.get("authorizerConfiguration"), "exceptionLevel": p.get("exceptionLevel"),
-          "targets": {}, "_readyAt": time.time() + 1.0}
+          "policyEngineConfiguration": p.get("policyEngineConfiguration"), "targets": {}, "_readyAt": time.time() + 1.0}
     st["gateways"][gid] = gw
     r = {k: v for k, v in gw.items() if not k.startswith("_") and k not in ("targets", "lastUpdatedAt")}
     return _j(202, r)
@@ -831,6 +831,14 @@ def _mcp_tools(gw):
     return out
 
 
+def _ext():
+    try:
+        from core import agentcore_ext_core as m
+    except ImportError:
+        import agentcore_ext_core as m  # type: ignore
+    return m
+
+
 def _mcp(st, lam, gid, p, headers):
     gw = _find_gw(st, gid)
     _ac_ready(gw)
@@ -851,10 +859,22 @@ def _mcp(st, lam, gid, p, headers):
         return ok({"protocolVersion": "2025-03-26", "capabilities": {"tools": {"listChanged": False}}, "serverInfo": {"name": gw["name"], "version": "1.0.0"}})
     if method in ("notifications/initialized", "ping"):
         return ok({}) if method == "ping" else _j(202, None)
+    ext = _ext()
+    claims = ext.jwt_claims(headers)
+    visible = [(n, t, tool) for n, t, tool in _mcp_tools(gw) if ext.authorize(st, gw, claims, n, {}, probe=True)[0]]   # list is filtered by policy
+    searchable = ((gw.get("protocolConfiguration") or {}).get("mcp") or {}).get("searchType") == "SEMANTIC"
     if method == "tools/list":
-        return ok({"tools": [{"name": n, "description": tool["description"], "inputSchema": tool["inputSchema"]} for n, _t, tool in _mcp_tools(gw)]})
+        tl = [{"name": n, "description": tool["description"], "inputSchema": tool["inputSchema"]} for n, _t, tool in visible]
+        return ok({"tools": ([ext.search_tool_def()] if searchable else []) + tl})
     if method == "tools/call":
         prm = p.get("params") or {}
+        if searchable and prm.get("name") == ext.SEARCH_TOOL:
+            q = str((prm.get("arguments") or {}).get("query") or "")
+            hits = ext.search_tools([(n, tool["description"], tool["inputSchema"]) for n, _t, tool in visible], q)
+            return ok({"isError": False, "content": [{"type": "text", "text": json.dumps({"tools": hits})}], "structuredContent": {"tools": hits}})
+        allowed, why = ext.authorize(st, gw, claims, prm.get("name") or "", prm.get("arguments") or {})
+        if not allowed:
+            return fail(-32002, f"Tool call not allowed due to policy enforcement [{why}]")
         hit = next(((t, tool) for n, t, tool in _mcp_tools(gw) if n == prm.get("name")), None)
         if not hit:
             return fail(-32602, f"Unknown tool: {prm.get('name')}")
@@ -910,7 +930,7 @@ def _page_q(pq, method, body):
     return pq
 
 
-def _runtimes(st, method, path, query, headers, body):
+def _runtimes(st, method, path, query, headers, body, lam=None):
     rest = path[len("/runtimes"):].strip("/")
     pq = dict(query or {})
     if not rest:                                   # collection: create (PUT, or legacy POST with a name) / list (POST body or GET)
@@ -940,7 +960,7 @@ def _runtimes(st, method, path, query, headers, body):
     rt.setdefault("_sessions", {})
     _ac_ready(rt)
     if tail == "invocations" and method == "POST":
-        return _invoke_runtime(rt, query or {}, headers or {}, body)
+        return _invoke_runtime(rt, query or {}, headers or {}, body, st, lam)
     if tail == "stopruntimesession" and method == "POST":
         sid = _body(body).get("runtimeSessionId") or (headers or {}).get(_SESS_HDR)
         if not sid or sid not in rt["_sessions"]:
@@ -1035,7 +1055,7 @@ def _rt_client_err(msg):
     return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "RuntimeClientError"}, "body": json.dumps({"message": msg}).encode()}
 
 
-def _invoke_runtime(rt, query, headers, body):
+def _invoke_runtime(rt, query, headers, body, st=None, lam=None):
     """InvokeAgentRuntime: run the runtime's Vyomi agent spec (env VYOMI_AGENT_SPEC) in-process over llm_core."""
     q = {k.lower(): v for k, v in (query or {}).items()}
     h = {k.lower(): v for k, v in (headers or {}).items()}
@@ -1057,12 +1077,23 @@ def _invoke_runtime(rt, query, headers, body):
     if len(sid) < 33:
         raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
     text, want_stream = _payload_text(body)
+    ext = _ext()
+    raw_h = dict(h)
+    claims = ext.jwt_claims(raw_h)
+    jwt = ""
+    for k in ("authorization", "x-amzn-bedrock-agentcore-runtime-custom-authorization"):
+        if (raw_h.get(k) or "").lower().startswith("bearer "):
+            jwt = raw_h[k][7:].strip()
+            break
+    actor = str(claims.get("sub") or h.get("x-amzn-bedrock-agentcore-runtime-user-id") or "anonymous")
+    text, mem_after = ext.memory_hooks(ext._x(st), spec, actor, sid, text)
     sess = rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
     accept = h.get("accept", "")
     hdrs = {_SESS_HDR: sid, "x-vyomi-local-model": llm.model_name()}
     try:
         if want_stream or "text/event-stream" in accept:
-            gen = ag.run_events(spec, text, sess["history"])
+            evs = ext.run_context(st, lam, jwt, actor, lambda: list(ag.run_events(spec, text, sess["history"])))   # events buffered: the tool context is scoped to the call
+            gen = iter(evs)
             first = next(gen)
 
             def sse():
@@ -1070,6 +1101,7 @@ def _invoke_runtime(rt, query, headers, body):
                 for ev in itertools.chain([first], gen):
                     if ev["type"] == "final":
                         sess["history"].extend(ev["messages"])
+                        mem_after(ev["text"])
                         yield "data: " + json.dumps({"event": "final", "response": ev["text"], "usage": ev["usage"]}) + "\n\n"
                     elif ev["type"] == "model" and not ev["tool_calls"]:
                         yield "data: " + json.dumps({"event": "message", "text": ev["text"]}) + "\n\n"
@@ -1082,7 +1114,8 @@ def _invoke_runtime(rt, query, headers, body):
             except ImportError:
                 import ai_models_core as am  # type: ignore
             return am._stream_out(200, hdrs, sse(), "text/event-stream")
-        r = ag.run(spec, text, sess["history"])
+        r = ext.run_context(st, lam, jwt, actor, lambda: ag.run(spec, text, sess["history"]))
+        mem_after(r["text"])
     except llm.LlmUnavailable as e:
         return {"status": 503, "headers": {"content-type": "application/json", "x-amzn-errortype": "ServiceUnavailableException"},
                 "body": json.dumps({"message": f"{e}"}).encode()}
@@ -1101,7 +1134,15 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
     try:
         st = _state(s3)
         if segs[0] == "runtimes":
-            return _runtimes(st, method, path, query, headers, body)
+            return _runtimes(st, method, path, query, headers, body, lam)
+        if segs[0] in ("memories", "policy-engines"):
+            try:
+                from core import agentcore_ext_core as ext
+            except ImportError:
+                import agentcore_ext_core as ext  # type: ignore
+            r = ext.dispatch(st, lam, method, segs, query, headers, body)
+            if r is not None:
+                return r
         p = _body(body) if method in ("PUT", "POST", "PATCH") else {}
         if segs[0] == "gateways":
             if len(segs) == 1:
@@ -1121,7 +1162,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                         if not p.get("name") or not p.get("roleArn") or p.get("authorizerType") not in _GATEWAY_AUTH:
                             raise _bad("name, roleArn and authorizerType are required")
                         gw.update(name=p["name"], roleArn=p["roleArn"], authorizerType=p["authorizerType"], updatedAt=_iso())
-                        for f in ("description", "authorizerConfiguration", "exceptionLevel"):
+                        for f in ("description", "authorizerConfiguration", "exceptionLevel", "policyEngineConfiguration", "protocolConfiguration"):
                             if f in p:
                                 gw[f] = p[f]
                         return _j(202, _pub(gw))
