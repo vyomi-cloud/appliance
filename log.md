@@ -1,3 +1,14 @@
+### Upstream watch — 2026-11-15T23:11:29+00:00
+
+Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `release` cli:azure: azure-cli-2.92.0 → azure-cli-2.93.0
+
+Sources that failed this run (2): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-15T22:11:36+00:00
 
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3009,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
 
-Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-02T20:28:06+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 0 actionable.**
-- · `announcement` Amazon Aurora MySQL 3.14 (compatible with MySQL 8.0.46) is generally available ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-314-available/))
