@@ -528,7 +528,7 @@ def _notification_payload(bucket: str, key: str, version: dict | None, event_nam
             "s3SchemaVersion": "1.0", "configurationId": source or "vyomi-s3-notification",
             "bucket": {"name": bucket, "arn": f"arn:aws:s3:::{bucket}"},
             "object": {"key": key, "size": int((version or {}).get("size", 0) or 0),
-                       "eTag": (version or {}).get("etag", ""),
+                       "eTag": str((version or {}).get("etag", "")).strip('"'),
                        "versionId": (version or {}).get("version_id", "null"),
                        "sequencer": uuid.uuid4().hex[:16]},
         },
@@ -557,7 +557,7 @@ def _deliver_notifications(store: ObjectStore, bucket: str, key: str, event_name
             if rule.get("cloudFunction") and _notification_event_matches(rule, event_name, key):
                 try:
                     from core import lambda_core as _lam_core
-                    if _lam_core.invoke_by_arn(lam, rule["cloudFunction"], _notification_payload(bucket, key, version, event_name, source)):
+                    if _lam_core.invoke_by_arn(lam, rule["cloudFunction"], _notification_payload(bucket, key, version, event_name, rule.get("id") or source)):
                         delivered.append(rule.get("id", ""))
                 except Exception:
                     pass
@@ -568,7 +568,7 @@ def _deliver_notifications(store: ObjectStore, bucket: str, key: str, event_name
                     from core import sqs_core as _sqs_core
                     q = msg.get_queue_by_arn(rule["queue"])
                     if q:
-                        _sqs_core.enqueue(msg, q, json.dumps(_notification_payload(bucket, key, version, event_name, source), default=str))
+                        _sqs_core.enqueue(msg, q, json.dumps(_notification_payload(bucket, key, version, event_name, rule.get("id") or source), default=str))
                         delivered.append(rule.get("id", ""))
                 except Exception:
                     pass
@@ -576,7 +576,7 @@ def _deliver_notifications(store: ObjectStore, bucket: str, key: str, event_name
             if rule.get("topic") and _notification_event_matches(rule, event_name, key):
                 try:
                     from core import sns_core as _sns_core
-                    if _sns_core.publish_arn(msg, rule["topic"], json.dumps(_notification_payload(bucket, key, version, event_name, source), default=str)):
+                    if _sns_core.publish_arn(msg, rule["topic"], json.dumps(_notification_payload(bucket, key, version, event_name, rule.get("id") or source), default=str)):
                         delivered.append(rule.get("id", ""))
                 except Exception:
                     pass
