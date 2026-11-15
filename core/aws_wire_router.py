@@ -2072,7 +2072,9 @@ class AwsWireRouter:
 
         if svc == "bedrock":
             from core import ai_models_core
-            from core import bedrock_agents_core
+            from core import bedrock_agents_core, bedrock_ctl_core
+            if bedrock_ctl_core.handles(path.split("?", 1)[0]):   # Infer + Tune control plane (profiles, batch, provisioned, customization, routers, marketplace)
+                return bedrock_ctl_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
             if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
                 return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))

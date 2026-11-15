@@ -138,6 +138,11 @@ def _b_err(code, msg, status):
 
 def _resolve_model(mid):
     """Accept foundation-model ids, cross-Region inference profile ids (us./eu./apac. prefix) and their ARNs."""
+    try:
+        from core import bedrock_ctl_core as _ctl
+    except ImportError:  # Pyodide flat layout
+        import bedrock_ctl_core as _ctl  # type: ignore
+    mid = _ctl.app_profile_model(mid) or mid    # application inference profile / prompt router ARN -> its model
     mid = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:(foundation-model|inference-profile)/", "", mid)
     base = re.sub(r"^(us|eu|apac|us-gov|global)\.", "", mid)
     if base in _BM:

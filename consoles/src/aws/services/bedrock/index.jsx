@@ -11,6 +11,7 @@ import { KnowledgeBases, KnowledgeBaseDetail } from "./KnowledgeBases.jsx";
 import { Agents, AgentDetail } from "./Agents.jsx";
 import { AgentCore, GatewayDetail } from "./AgentCore.jsx";
 import Studio from "./studio/Studio.jsx";
+import { INFER_TUNE_ROUTES } from "./inferTune/routes.jsx";
 
 const top = [{ text: "Amazon Bedrock", href: "#/bedrock" }];
 const c = (text, h) => ({ text, href: h });
@@ -18,6 +19,7 @@ const c = (text, h) => ({ text, href: h });
 export default {
   nav: bedrockNav,
   routes: [
+    ...INFER_TUNE_ROUTES,   // lane bedrockui-b: Infer + Tune pages (nav entries live in nav.js)
     { pattern: "/bedrock", component: Landing, crumbs: () => [c("Overview", "#/bedrock")] },
     { pattern: "/bedrock/quickstart", component: Quickstart, crumbs: () => [c("Quickstart", "#/bedrock/quickstart")] },
     { pattern: "/bedrock/api-keys", component: ApiKeys, crumbs: () => [c("API keys", "#/bedrock/api-keys")] },
