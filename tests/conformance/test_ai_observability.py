@@ -9,7 +9,7 @@ import json
 import os
 import tempfile
 _d = tempfile.mkdtemp()
-os.environ.setdefault("CLOUDLEARN_STATE_FILE", os.path.join(_d, "state.sqlite3"))   # never touch a dev's real state
+os.environ["CLOUDLEARN_STATE_FILE"] = os.path.join(_d, "state.sqlite3")   # ALWAYS a fresh state: the metric/log sums assert exact counts, so a reused file doubles them
 import socket
 import sys
 import threading

@@ -38,13 +38,17 @@ if WEB:
         ("qwen2.5-0.5b", "Qwen2.5 0.5B", "Alibaba", "qwen", "chat", "Tiny (0.5B)", "General", "Small general assistant in your browser", "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"),
         ("llama3.2-1b", "Llama 3.2 1B", "Meta", "meta", "chat", "Small (1B)", "Tool use / agents", "Compact instruction model in your browser", "Llama-3.2-1B-Instruct-q4f16_1-MLC"),
         ("qwen2.5-1.5b", "Qwen2.5 1.5B", "Alibaba", "qwen", "chat", "Small (1.5B)", "Better answers", "Largest web LLM; needs a WebGPU laptop", "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"),
+        # In-browser embedding model (transformers.js + ONNX, Apache-2.0, ~23 MB q8, 384-d, WASM so no WebGPU needed).
+        ("all-minilm-l6-v2", "all-MiniLM-L6-v2", "Sentence Transformers", "sentence-transformers", "embed", "Embedding (23 MB)", "Embeddings",
+         "Vector search and retrieval (RAG) in your browser", "Xenova/all-MiniLM-L6-v2"),
     ]
 MODELS = [dict(id=r[0], name=r[1], vendor=r[2], publisher=r[3], kind=r[4], size=r[5], role=r[6], blurb=r[7], tag=r[8],
                pooled=r[0] == "qwen3-30b") for r in _ROWS]
 IDS = [m["id"] for m in MODELS]
 BY_ID = {m["id"]: m for m in MODELS}
+WEB_EMBED = "all-minilm-l6-v2"
 LOCAL_ID = IDS[0] if WEB else "qwen2.5-3b"   # the model that runs without a mesh (web LLM on Nano, small model on the appliance)
-DEFAULT_CHAT, DEFAULT_EMBED = (IDS[0], "") if WEB else ("qwen2.5-3b", "nomic-embed-text")
+DEFAULT_CHAT, DEFAULT_EMBED = (IDS[0], WEB_EMBED) if WEB else ("qwen2.5-3b", "nomic-embed-text")
 NEEDS_MESH = "Needs Mesh (Pro/Max)"
 
 # Hidden compatibility map: cloud API id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest pattern.
@@ -71,7 +75,7 @@ ALIASES = {
 
 
 if WEB:  # hidden compat aliases may only point at models that exist here
-    ALIASES = {c: {k: (v if v in BY_ID else (IDS[1] if v.startswith("qwen2.5-7b") or "7b" in v or "8b" in v or "9b" in v or "30b" in v else IDS[0]))
+    ALIASES = {c: {k: (v if v in BY_ID else (WEB_EMBED if v == "nomic-embed-text" else IDS[1] if v.startswith("qwen2.5-7b") or "7b" in v or "8b" in v or "9b" in v or "30b" in v else IDS[0]))
                    for k, v in m.items()} for c, m in ALIASES.items()}
 
 

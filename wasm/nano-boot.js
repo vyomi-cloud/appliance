@@ -348,6 +348,34 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
     globalThis.__vyomiLlm = engine || null;
     py.runPython(`_llm_bridge_set(${JSON.stringify(engine ? String(engine.model || "webllm") : "")})`);
   };
+  // ── In-browser embeddings (transformers.js + ONNX all-MiniLM-L6-v2, ~23 MB q8, 384-d, WASM: no WebGPU needed) ──────────
+  // Backs Bedrock Knowledge Bases (Titan/Cohere/nomic embed ids resolve to it). Loaded lazily on the first embed call; if the
+  // model cannot be fetched (offline/blocked) llm_core falls back to its labelled deterministic "vyomi-hash-embed".
+  py.runPython(`
+import json, builtins
+async def _embed_bridge(texts):
+    import js
+    r = await js.globalThis.vyomiEmbed(json.dumps(texts))
+    return json.loads(str(r))
+def _embed_bridge_set(model):
+    from core import llm_core
+    llm_core.set_async_embed(_embed_bridge if model else None, model=model or None)
+builtins._embed_bridge_set = _embed_bridge_set
+`);
+  let __embPipe = null;
+  globalThis.vyomiEmbed = async (textsJson) => {
+    if (!__embPipe) {
+      __embPipe = (async () => {
+        const tf = globalThis.transformers || await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");
+        return tf.pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true });
+      })();
+      __embPipe.catch(() => { __embPipe = null; });
+    }
+    const pipe = await __embPipe;
+    const out = await pipe(JSON.parse(textsJson), { pooling: "mean", normalize: true });
+    return JSON.stringify(out.tolist());
+  };
+  py.runPython(`_embed_bridge_set("all-minilm-l6-v2")`);
   globalThis.vyomiLlmStatus = () => JSON.parse(py.runPython("_llm_bridge_status()"));
   // The four web LLMs the Nano catalogue lists (core/ai_model_catalog.py, web mode). id = catalogue id, mlc = WebLLM model_id.
   globalThis.vyomiWebLLMModels = [
