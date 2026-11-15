@@ -54,7 +54,7 @@ export const PRODUCTS = [
   { id: "cloudbuild", title: "Cloud Build", description: "Build, test and push images on every commit", category: "CI/CD", icon: ArtifactIcon, load: () => import("./cloudbuild/index.jsx") },
   { id: "security/binauthz", title: "Binary Authorization", description: "Deploy-time image policy, attestors and attestations", category: "Security", icon: KeyIcon, load: () => import("./security/binauthz/index.jsx") },
   { id: "security/scc", title: "Security Command Center", description: "Findings, sources and mute rules", category: "Security", icon: KeyIcon, load: () => import("./security/scc/index.jsx") },
-  { id: "vertex-ai", title: "Vertex AI", description: "Gemini models and generative AI studio", category: "AI and Machine Learning", icon: AiIcon, load: () => import("./vertex-ai/index.jsx") },
+  { id: "vertex-ai", title: "Agent Platform", description: "Vertex AI: Gemini models, Model Garden, agents and generative AI studio", category: "AI and Machine Learning", icon: AiIcon, load: () => import("./vertex-ai/index.jsx") },
   { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, load: () => import("./monitoring/index.jsx") },
   { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, load: () => import("./logs/index.jsx") },
 ];
