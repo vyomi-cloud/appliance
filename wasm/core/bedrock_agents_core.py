@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import random
 import re
 import string
@@ -880,14 +881,39 @@ def _pub(o):
     return {k: v for k, v in o.items() if not k.startswith("_") and k != "targets"}
 
 
+def _check_artifact(art):
+    """agentRuntimeArtifact is a union: containerConfiguration (image) or codeConfiguration (zip in S3 + entryPoint)."""
+    cc = art.get("codeConfiguration")
+    if cc:
+        s3 = (cc.get("code") or {}).get("s3") or {}
+        if not s3.get("bucket") or not s3.get("prefix"):
+            raise _bad("agentRuntimeArtifact.codeConfiguration.code.s3.bucket and prefix are required")
+        if not cc.get("entryPoint"):
+            raise _bad("agentRuntimeArtifact.codeConfiguration.entryPoint is required")
+    elif not (art.get("containerConfiguration") or {}).get("containerUri"):
+        raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+
+
+def _snap(rt):
+    """Per-version snapshot the host runs (artifact + env), so an endpoint pinned to version N keeps running version N's code."""
+    rt.setdefault("_snap", {})[rt["agentRuntimeVersion"]] = {"version": rt["agentRuntimeVersion"], "agentRuntimeArtifact": rt["agentRuntimeArtifact"],
+                                                              "environmentVariables": dict(rt.get("environmentVariables") or {})}
+
+
+def _host():
+    try:
+        from core import agentcore_runtime_host as m
+    except ImportError:
+        import agentcore_runtime_host as m  # type: ignore
+    return m
+
+
 def _create_runtime(st, p):
     name = p.get("agentRuntimeName")
     if not name or not _RT_NAME.match(name):
         raise _bad("1 validation error detected: Value at 'agentRuntimeName' failed to satisfy constraint: Member must satisfy regular expression pattern: [a-zA-Z][a-zA-Z0-9_]{0,47}")
     art = p.get("agentRuntimeArtifact") or {}
-    uri = (art.get("containerConfiguration") or {}).get("containerUri") or ""
-    if not uri:
-        raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+    _check_artifact(art)
     if not p.get("roleArn"):
         raise _bad("roleArn is required")
     net = (p.get("networkConfiguration") or {}).get("networkMode")
@@ -1094,7 +1120,7 @@ def _page_q(pq, method, body):
     return pq
 
 
-def _runtimes(st, method, path, query, headers, body, lam=None):
+def _runtimes(st, method, path, query, headers, body, lam=None, s3=None):
     rest = path[len("/runtimes"):].strip("/")
     pq = dict(query or {})
     if not rest:                                   # collection: create (PUT, or legacy POST with a name) / list (POST body or GET)
@@ -1105,6 +1131,7 @@ def _runtimes(st, method, path, query, headers, body, lam=None):
             rt["_versions"] = {"1": _rt_summary(rt)}
             rt["_endpoints"] = {"DEFAULT": _mk_endpoint(rt, "DEFAULT", "1", "Default endpoint for the agent runtime")}
             rt["_sessions"] = {}
+            _snap(rt)
             return r
         if method in ("GET", "POST"):
             pq.update({k: str(v) for k, v in p.items() if k in ("maxResults", "nextToken")})
@@ -1124,12 +1151,13 @@ def _runtimes(st, method, path, query, headers, body, lam=None):
     rt.setdefault("_sessions", {})
     _ac_ready(rt)
     if tail == "invocations" and method == "POST":
-        return _invoke_runtime(rt, query or {}, headers or {}, body, st, lam)
+        return _invoke_runtime(rt, query or {}, headers or {}, body, st, lam, s3)
     if tail == "stopruntimesession" and method == "POST":
         sid = _body(body).get("runtimeSessionId") or (headers or {}).get(_SESS_HDR)
-        if not sid or sid not in rt["_sessions"]:
+        killed = _host().stop_session(rt["agentRuntimeId"], sid)
+        if not sid or (sid not in rt["_sessions"] and not killed):
             raise _nf(f"Runtime session {sid} not found")
-        del rt["_sessions"][sid]
+        rt["_sessions"].pop(sid, None)
         return _j(200, {"runtimeSessionId": sid, "statusCode": 200}, {_SESS_HDR: sid})
     if tail == "commands":
         raise _Err("ValidationException", "InvokeAgentRuntimeCommand needs a container; the Vyomi agent-spec runtime has none", 400)
@@ -1142,8 +1170,7 @@ def _runtimes(st, method, path, query, headers, body, lam=None):
         if method == "PUT":
             p = _body(body)
             art = p.get("agentRuntimeArtifact") or rt["agentRuntimeArtifact"]
-            if not (art.get("containerConfiguration") or {}).get("containerUri"):
-                raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+            _check_artifact(art)
             rt["agentRuntimeArtifact"] = art
             rt["agentRuntimeVersion"] = str(int(rt["agentRuntimeVersion"]) + 1)
             for f in ("roleArn", "networkConfiguration", "description", "environmentVariables", "protocolConfiguration", "authorizerConfiguration"):
@@ -1151,8 +1178,12 @@ def _runtimes(st, method, path, query, headers, body, lam=None):
                     rt[f] = p[f]
             rt["status"], rt["_readyAt"], rt["lastUpdatedAt"] = "UPDATING", time.time() + 1.0, _iso()
             rt["_versions"][rt["agentRuntimeVersion"]] = _rt_summary(rt)
+            _snap(rt)
+            if "DEFAULT" in rt["_endpoints"]:        # the DEFAULT endpoint always follows the latest version
+                rt["_endpoints"]["DEFAULT"].update(liveVersion=rt["agentRuntimeVersion"], targetVersion=rt["agentRuntimeVersion"], lastUpdatedAt=_iso())
             return _j(202, {k: rt[k] for k in ("agentRuntimeArn", "agentRuntimeId", "agentRuntimeVersion", "createdAt", "lastUpdatedAt", "status", "workloadIdentityDetails")})
         if method == "DELETE":
+            _host().stop_session(rid)
             del st["runtimes"][rid]
             return _j(202, {"status": "DELETING", "agentRuntimeId": rid, "agentRuntimeVersion": rt["agentRuntimeVersion"]})
     if tail == "versions" and method in ("POST", "GET"):
@@ -1219,7 +1250,42 @@ def _rt_client_err(msg):
     return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "RuntimeClientError"}, "body": json.dumps({"message": msg}).encode()}
 
 
-def _invoke_runtime(rt, query, headers, body, st=None, lam=None):
+def _invoke_hosted(rt, qual, h, body, s3):
+    """Real hosting (core/agentcore_runtime_host): run the runtime's code/container through the AgentCore contract, one process per session."""
+    host = _host()
+    ver = rt["agentRuntimeVersion"]
+    if qual and qual != "DEFAULT":
+        ver = rt["_endpoints"][qual]["liveVersion"]
+    elif qual == "DEFAULT" and "DEFAULT" in rt["_endpoints"]:
+        ver = rt["_endpoints"]["DEFAULT"]["liveVersion"]
+    snap = rt.get("_snap", {}).get(ver)
+    if not snap:
+        _snap(rt)
+        snap = rt["_snap"][ver]
+    sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
+    if len(sid) < 33:
+        raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
+    endpoint = os.environ.get("VYOMI_SELF_ENDPOINT") or ("http://" + h["host"] if h.get("host") else "http://127.0.0.1:8099")
+    try:
+        status, rh, out = host.invoke(rt, snap, s3, endpoint, sid, body or b"", h)
+    except host.HostError as e:
+        return _rt_client_err(str(e))
+    rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
+    ct = {k.lower(): v for k, v in rh.items()}.get("content-type", "application/json")
+    hdrs = {_SESS_HDR: sid, "x-vyomi-runtime-backend": host.backend_for(snap["agentRuntimeArtifact"])}
+    if status >= 400:
+        raw = out if isinstance(out, bytes) else out.read()
+        return _rt_client_err(f"Agent returned {status}: " + raw.decode("utf-8", "replace")[:500])
+    if isinstance(out, bytes):
+        return {"status": 200, "headers": {"content-type": ct, **hdrs}, "body": out}
+    try:
+        from core import ai_models_core as am
+    except ImportError:
+        import ai_models_core as am  # type: ignore
+    return am._stream_out(200, hdrs, iter(lambda: out.read1(65536) if hasattr(out, "read1") else out.read(65536), b""), "text/event-stream")
+
+
+def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
     """InvokeAgentRuntime: run the runtime's Vyomi agent spec (env VYOMI_AGENT_SPEC) in-process over llm_core."""
     q = {k.lower(): v for k, v in (query or {}).items()}
     h = {k.lower(): v for k, v in (headers or {}).items()}
@@ -1229,6 +1295,8 @@ def _invoke_runtime(rt, query, headers, body, st=None, lam=None):
     if rt["status"] != "READY":
         return _rt_client_err(f"Runtime is {rt['status']}, not READY")
     raw_spec = (rt.get("environmentVariables") or {}).get(_SPEC_ENV)
+    if not raw_spec and _host().hostable(rt["agentRuntimeArtifact"]):
+        return _invoke_hosted(rt, qual, h, body, s3)
     if not raw_spec:
         return _rt_client_err("The simulator does not run AgentCore runtime containers. Give the runtime a Vyomi agent spec "
                               f"(environmentVariables[{_SPEC_ENV}] = JSON of instructions + tools) to make it invocable (Dev Simplified).")
@@ -1298,7 +1366,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
     try:
         st = _state(s3)
         if segs[0] == "runtimes":
-            return _runtimes(st, method, path, query, headers, body, lam)
+            return _runtimes(st, method, path, query, headers, body, lam, s3)
         if segs[0] in ("memories", "policy-engines"):
             try:
                 from core import agentcore_ext_core as ext
