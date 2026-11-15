@@ -174,6 +174,138 @@ def _ll_err(e):
     return _b_err("ModelNotReadyException", f"{e} (the local model has not been started)", 429)
 
 
+# ───────────── document / image content blocks + prompt-cache accounting ─────────────
+_DOC_FORMATS = ("pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md")
+_IMG_FORMATS = ("png", "jpeg", "gif", "webp")
+_NO_VISION = ("This model does not accept image content blocks: no vision-capable local model is running (the local llama.cpp/WebLLM "
+              "model is text-only; serve a multimodal GGUF and set VYOMI_LLM_VISION=1 to enable images).")
+
+
+def _kcore():
+    try:
+        from core import knowledge_core as kc
+    except ImportError:  # Pyodide flat layout
+        import knowledge_core as kc  # type: ignore
+    return kc
+
+
+def _document_text(name, fmt, raw):
+    """A Converse document block / Claude document source -> '<document name=..>text</document>' text for the model, or an error string.
+    PDF/DOCX/XLSX/PPTX/CSV/HTML/MD are really parsed (core/knowledge_core, the same parsers the Knowledge Base ingestion uses)."""
+    kc = _kcore()
+    if fmt not in _DOC_FORMATS:
+        return f"document.format must be one of {', '.join(_DOC_FORMATS)}"
+    if not isinstance(name, str) or not name.strip():
+        return "document.name is required"
+    try:
+        data = raw if isinstance(raw, (bytes, bytearray)) else (base64.b64decode(raw, validate=True) if isinstance(raw, str) else None)
+    except Exception:  # noqa: BLE001
+        data = None
+    if data is None:
+        return "document.source must carry base64 bytes (s3Location sources are not supported)"
+    try:
+        txt = kc.parse_document(f"{name}.{fmt}", bytes(data), markdown_tables=True)
+    except kc.ParseError as e:
+        return f"Could not process the document {name}.{fmt}: {e}"
+    return f'<document name="{name}" format="{fmt}">\n{txt}\n</document>'
+
+
+def _image_part(fmt, raw):
+    """-> content part for a vision-capable backend, or an error string when none is running."""
+    if not llm.vision_available():
+        return _NO_VISION
+    if fmt not in _IMG_FORMATS:
+        return f"image.format must be one of {', '.join(_IMG_FORMATS)}"
+    b64 = raw if isinstance(raw, str) else base64.b64encode(bytes(raw)).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:image/{fmt};base64,{b64}"}}
+
+
+_PCACHE: dict = {}                 # prefix hash -> {"tokens": int, "exp": float}   (in-process; per appliance, like a provider-side cache)
+PCACHE_TTL = 300.0                 # seconds, refreshed on every hit (Bedrock's 5-minute ephemeral cache)
+PCACHE_MIN_TOKENS = 1024           # a checkpoint shorter than this is not cacheable (Claude/Nova minimum)
+
+
+def _cache_plan(p, style):
+    """Serialise the request in cache order (tools, system, messages) -> [(segment_text, is_checkpoint)]. style = 'converse' | 'claude'."""
+    segs = []
+
+    def add(obj):
+        segs.append((json.dumps(obj, sort_keys=True, separators=(",", ":")), False))
+
+    def mark():
+        segs.append(("", True))
+    for t in (p.get("tools") or []):
+        if isinstance(t, dict):
+            if "cachePoint" in t:
+                mark()
+            else:
+                add(t)
+                if (t.get("cache_control") or {}).get("type") == "ephemeral":
+                    mark()
+    sysb = p.get("system")
+    for b in (sysb if isinstance(sysb, list) else ([{"type": "text", "text": sysb}] if isinstance(sysb, str) else [])):
+        if isinstance(b, dict):
+            if "cachePoint" in b:
+                mark()
+            else:
+                add({k: v for k, v in b.items() if k != "cache_control"})
+                if (b.get("cache_control") or {}).get("type") == "ephemeral":
+                    mark()
+    for m in (p.get("messages") or []):
+        if not isinstance(m, dict):
+            continue
+        cs = m.get("content")
+        for b in (cs if isinstance(cs, list) else ([{"type": "text", "text": cs}] if isinstance(cs, str) else [])):
+            if isinstance(b, dict):
+                if "cachePoint" in b:
+                    mark()
+                else:
+                    add([m.get("role"), {k: v for k, v in b.items() if k != "cache_control"}])
+                    if (b.get("cache_control") or {}).get("type") == "ephemeral":
+                        mark()
+    return segs
+
+
+def _cache_account(p, style, input_tokens, now=None):
+    """Real prefix-cache accounting over the request's checkpoints. Returns {"read","write","uncached"} or None when the request has no
+    checkpoint. A checkpoint's prefix (everything before it, in tools/system/messages order) is keyed by its SHA-256; a prefix seen within
+    the TTL is a read (and its TTL refreshes), otherwise the longest checkpoint is written (when it holds >= PCACHE_MIN_TOKENS).
+    Token counts are the model's own input_tokens apportioned by prefix length, so they sum to the real prompt size."""
+    import hashlib
+    segs = _cache_plan(p, style)
+    if not any(m for _, m in segs):
+        return None
+    now = now if now is not None else time.time()
+    for k in [k for k, v in _PCACHE.items() if v["exp"] < now]:
+        del _PCACHE[k]
+    total_chars = max(sum(len(t) for t, m in segs if not m), 1)
+    pts, h, chars = [], hashlib.sha256(), 0
+    for t, m in segs:
+        if m:
+            tok = int(round(input_tokens * chars / total_chars))
+            pts.append((h.copy().hexdigest(), tok))
+        else:
+            h.update(t.encode())
+            h.update(b"\x1f")
+            chars += len(t)
+    read = write = 0
+    for key, tok in reversed(pts):             # longest cached prefix wins
+        if key in _PCACHE and _PCACHE[key]["tokens"] <= input_tokens:
+            read = _PCACHE[key]["tokens"]
+            break
+    for key, tok in pts:
+        if key in _PCACHE:
+            _PCACHE[key]["exp"] = now + PCACHE_TTL
+    if pts:
+        key, tok = pts[-1]
+        if key not in _PCACHE and tok >= PCACHE_MIN_TOKENS:
+            write = max(tok - read, 0)
+            for k2, t2 in pts:
+                if t2 >= PCACHE_MIN_TOKENS:
+                    _PCACHE[k2] = {"tokens": t2, "exp": now + PCACHE_TTL}
+    return {"read": read, "write": write, "uncached": max(input_tokens - read - write, 0)}
+
+
 _TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
@@ -232,14 +364,35 @@ def _converse_messages(msgs_in):
     for mm in msgs_in:
         if not isinstance(mm, dict) or mm.get("role") not in ("user", "assistant") or not isinstance(mm.get("content"), list):
             return "Invalid message: role must be user/assistant and content a list of content blocks"
-        texts, calls, results = [], [], []
+        texts, calls, results, images = [], [], [], []
         for blk in mm["content"]:
             if not isinstance(blk, dict):
                 return "Invalid content block"
             keys = set(blk) - {"cachePoint"}
-            if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult"}:
-                return "Only text, toolUse and toolResult content blocks are supported by the local model (image/document/video are not)"
-            if "text" in blk:
+            if not keys:                      # a bare cachePoint marker: handled by _cache_account, carries no content
+                continue
+            if "reasoningContent" in keys:
+                return "reasoningContent blocks are not supported: no served local model emits reasoning"
+            if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult", "document", "image"}:
+                return "Only text, document, image, toolUse and toolResult content blocks are supported by the local model (video is not)"
+            if "document" in blk:
+                d = blk["document"] or {}
+                src = d.get("source") or {}
+                dt = _document_text(d.get("name"), d.get("format"), src.get("bytes")) if "bytes" in src else (
+                    f'<document name="{d.get("name")}">\n{src["text"]}\n</document>' if isinstance(src.get("text"), str) else
+                    "document.source must carry base64 bytes (s3Location sources are not supported)")
+                if dt.startswith(("document.", "Could not process")):
+                    return dt
+                if mm["role"] != "user":
+                    return "document blocks are only allowed in user messages"
+                texts.append(dt + "\n")
+            elif "image" in blk:
+                im = blk["image"] or {}
+                part = _image_part(im.get("format"), (im.get("source") or {}).get("bytes"))
+                if isinstance(part, str):
+                    return part
+                images.append(part)
+            elif "text" in blk:
                 texts.append(str(blk["text"]))
             elif "toolUse" in blk:
                 tu = blk["toolUse"] or {}
@@ -262,8 +415,8 @@ def _converse_messages(msgs_in):
             if calls:
                 m["tool_calls"] = calls
             out.append(m)
-        elif texts:
-            out.append({"role": "user", "content": "".join(texts)})
+        elif texts or images:
+            out.append({"role": "user", "content": ([{"type": "text", "text": "".join(texts)}] + images) if images else "".join(texts)})
     return out
 
 
@@ -274,6 +427,9 @@ def _converse_request(p, mid, max_key="maxTokens"):
         return msgs
     if "guardrailConfig" in p and not isinstance(p["guardrailConfig"], dict):
         return "guardrailConfig must be a structure"
+    amf = p.get("additionalModelRequestFields")
+    if isinstance(amf, dict) and ({"thinking", "reasoning_config", "reasoningConfig"} & set(amf)):
+        return "Reasoning/thinking is not supported: no served local model emits reasoning content (remove additionalModelRequestFields.thinking)"
     ex = {"model": mid}
     ic = p.get("inferenceConfig") or {}
     if ic.get("topP") is not None:
@@ -306,6 +462,8 @@ def _claude_request(p, mid):
     if "max_tokens" not in p:
         return "max_tokens: field required"
     out, pending = [], {}
+    if isinstance(p.get("thinking"), dict) and p["thinking"].get("type") == "enabled":
+        return "thinking is not supported: no served local model emits reasoning content"
     for mm in p["messages"]:
         c = mm.get("content") if isinstance(mm, dict) else None
         if mm.get("role") not in ("user", "assistant"):
@@ -315,7 +473,7 @@ def _claude_request(p, mid):
             continue
         if not isinstance(c, list):
             return "messages.content: must be a string or a list of content blocks"
-        texts, calls, results = [], [], []
+        texts, calls, results, images = [], [], [], []
         for b in c:
             ty = b.get("type") if isinstance(b, dict) else None
             if ty == "text":
@@ -329,16 +487,36 @@ def _claude_request(p, mid):
                     return txt
                 results.append({"role": "tool", "tool_call_id": b.get("tool_use_id", ""), "name": pending.get(b.get("tool_use_id"), ""),
                                 "content": ("[tool error] " if b.get("is_error") else "") + txt})
+            elif ty == "document" and mm["role"] == "user":
+                src = b.get("source") or {}
+                if src.get("type") == "text":
+                    texts.append(f'<document name="{b.get("title") or "document"}">\n{src.get("data", "")}\n</document>\n')
+                elif src.get("type") == "base64":
+                    ext = {"application/pdf": "pdf", "text/csv": "csv", "text/html": "html", "text/plain": "txt", "text/markdown": "md"}.get(src.get("media_type"))
+                    dt = _document_text(b.get("title") or "document", ext, src.get("data")) if ext else "document.source.media_type must be application/pdf, text/csv, text/html, text/plain or text/markdown"
+                    if dt.startswith(("document.", "Could not process")):
+                        return dt
+                    texts.append(dt + "\n")
+                else:
+                    return "document.source.type must be base64 or text"
+            elif ty == "image" and mm["role"] == "user":
+                src = b.get("source") or {}
+                part = _image_part((src.get("media_type") or "").split("/")[-1], src.get("data")) if src.get("type") == "base64" else "image.source.type must be base64"
+                if isinstance(part, str):
+                    return part
+                images.append(part)
+            elif ty in ("thinking", "redacted_thinking"):
+                return "thinking blocks are not supported: no served local model emits reasoning"
             else:
-                return f"messages.content: block type {ty!r} is not supported by the local model (image/document/thinking are not)"
+                return f"messages.content: block type {ty!r} is not supported by the local model (video/search results are not)"
         out += results
         if mm["role"] == "assistant":
             m = {"role": "assistant", "content": "".join(texts)}
             if calls:
                 m["tool_calls"] = calls
             out.append(m)
-        elif texts:
-            out.append({"role": "user", "content": "".join(texts)})
+        elif texts or images:
+            out.append({"role": "user", "content": ([{"type": "text", "text": "".join(texts)}] + images) if images else "".join(texts)})
     ex = {"model": mid}
     if p.get("top_p") is not None:
         ex["top_p"] = p["top_p"]
@@ -419,6 +597,15 @@ def _stop_reason(fr):
     return "max_tokens" if fr == "length" else ("tool_use" if fr == "tool_calls" else "end_turn")
 
 
+def _usage(r, ca=None):
+    """Converse usage block. With prompt-cache accounting (``ca`` from _cache_account) inputTokens counts only the uncached tokens and
+    cacheRead/WriteInputTokens report the cached ones, as Bedrock does."""
+    if not ca:
+        return {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+    return {"inputTokens": ca["uncached"], "outputTokens": r["output_tokens"], "cacheReadInputTokens": ca["read"], "cacheWriteInputTokens": ca["write"],
+            "totalTokens": r["input_tokens"] + r["output_tokens"]}
+
+
 def _converse_content(r):
     content = [{"text": r["text"]}] if (r["text"] or not r.get("tool_calls")) else []
     content += [{"toolUse": {"toolUseId": c["id"], "name": c["name"], "input": c["arguments"]}} for c in r.get("tool_calls") or []]
@@ -473,7 +660,7 @@ def _chunks(text, n=12):
     return [text[i:i + n] for i in range(0, len(text), n)] or [""]
 
 
-def _converse_events(it, t0, F):
+def _converse_events(it, t0, F, cache_fn=None):
     """Seam events -> Converse stream frames: text deltas as they arrive; toolUse blocks start/delta(input fragments)/stop."""
     yield F("messageStart", {"role": "assistant"})
     idx, text_idx, tool_open, tool_blk, got_args = -1, None, None, {}, set()
@@ -510,15 +697,14 @@ def _converse_events(it, t0, F):
                     yield F("contentBlockDelta", {"contentBlockIndex": 0, "delta": {"text": ""}})
                     yield F("contentBlockStop", {"contentBlockIndex": 0})
                 yield F("messageStop", {"stopReason": _stop_reason(ev["finish_reason"])})
-                yield F("metadata", {"usage": {"inputTokens": ev["input_tokens"], "outputTokens": ev["output_tokens"],
-                                                                "totalTokens": ev["input_tokens"] + ev["output_tokens"]},
+                yield F("metadata", {"usage": _usage(ev, cache_fn(ev["input_tokens"]) if cache_fn else None),
                                                       "metrics": {"latencyMs": int((time.time() - t0) * 1000)}})
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
         yield F("modelStreamErrorException", {"message": str(e)}, message_type="exception")
 
 
-def _converse_frames(it, t0):
-    return _converse_events(it, t0, eventstream_frame)
+def _converse_frames(it, t0, cache_fn=None):
+    return _converse_events(it, t0, eventstream_frame, cache_fn)
 
 
 def _chunk_frame(obj):
@@ -609,7 +795,7 @@ def _invoke_frames(m, it, t0):
 def _guard_input(gcfg, msgs):
     gr = _guardrails()
     user = [m for m in msgs if m["role"] == "user"]
-    text = user[-1]["content"] if user else ""
+    text = llm._ctext(user[-1]["content"]) if user else ""
     try:
         r = gr.converse_check(gcfg, text if isinstance(text, str) else json.dumps(text), "INPUT")
     except gr.GErr as e:
@@ -821,13 +1007,13 @@ def bedrock_dispatch(method, path, query, headers, body):
             if go is not None:
                 return go
         if op == "converse":
-            usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+            usage = _usage(r, _cache_account(p, "converse", r["input_tokens"]))
             return _j(200, {"output": {"message": {"role": "assistant", "content": _converse_content(r)}},
                             "stopReason": _stop_reason(r["finish_reason"]), "usage": usage,
                             "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
                             **({"additionalModelResponseFields": {"vyomiImported": True, "vyomiTrained": True}} if _fam(m) == "vyomi.import" else {})},
                       {"x-vyomi-local-model": r["model"]})
-        return _stream_out(200, {}, _converse_frames(it, t0), "application/vnd.amazon.eventstream")
+        return _stream_out(200, {}, _converse_frames(it, t0, lambda n: _cache_account(p, "converse", n)), "application/vnd.amazon.eventstream")
     # InvokeModel[WithResponseStream]
     if m[6] == CAT.DEFAULT_EMBED and m[0] in CAT._BYNAME:      # native ids: 768-d nomic-style embedding, Titan-free body
         if op != "invoke":
@@ -869,6 +1055,11 @@ def bedrock_dispatch(method, path, query, headers, body):
     except ValueError as e:
         return _b_err("ValidationException", str(e), 400)
     resp = _bedrock_response(m, p, r)
+    if _fam(m).startswith("anthropic."):
+        ca = _cache_account(p, "claude", r["input_tokens"])
+        if ca:
+            resp["usage"] = {"input_tokens": ca["uncached"], "output_tokens": r["output_tokens"],
+                             "cache_read_input_tokens": ca["read"], "cache_creation_input_tokens": ca["write"]}
     hh = {"x-amzn-bedrock-input-token-count": str(r["input_tokens"]), "x-amzn-bedrock-output-token-count": str(r["output_tokens"]),
           "x-amzn-bedrock-invocation-latency": str(int((time.time() - t0) * 1000)), "x-vyomi-local-model": r["model"]}
     if op == "invoke":

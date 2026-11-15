@@ -297,6 +297,9 @@ def _norm_messages(messages, system):
     for m in messages or []:
         role = m.get("role", "user")
         content = m.get("content", "")
+        if isinstance(content, list) and role == "user" and vision_available() and any(isinstance(x, dict) and x.get("type") == "image_url" for x in content):
+            out.append({"role": "user", "content": content})          # multimodal turn: OpenAI-style parts go to a vision backend untouched
+            continue
         if isinstance(content, list):
             content = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
         nm = {"role": "assistant" if role in ("assistant", "model") else ("system" if role == "system" else ("tool" if role == "tool" else "user")),
@@ -476,6 +479,14 @@ def _tool_prompt(tools, choice):
     return "\n".join(lines)
 
 
+def _join_content(a, b):
+    if isinstance(a, str) and isinstance(b, str):
+        return a + "\n" + b
+    pa = [{"type": "text", "text": a}] if isinstance(a, str) else list(a)
+    pb = [{"type": "text", "text": b}] if isinstance(b, str) else list(b)
+    return pa + pb
+
+
 def _flatten_for_prompt(msgs, tools, choice):
     """Neutral messages -> plain system/user/assistant turns (roles alternate; tool turns become JSON/user text)."""
     out, sysparts = [], []
@@ -489,7 +500,7 @@ def _flatten_for_prompt(msgs, tools, choice):
         elif m["role"] == "tool":
             m = {"role": "user", "content": f"Tool result for {m.get('name') or m.get('tool_call_id') or 'tool'}: {m['content']}"}
         if out and out[-1]["role"] == m["role"]:
-            out[-1] = {"role": m["role"], "content": out[-1]["content"] + "\n" + m["content"]}
+            out[-1] = {"role": m["role"], "content": _join_content(out[-1]["content"], m["content"])}
         else:
             out.append({"role": m["role"], "content": m["content"]})
     if tools:
@@ -553,6 +564,11 @@ def _fn_native_tools(fn) -> bool:
     return "tools" in params
 
 
+def _ctext(c) -> str:
+    """Message content (str, or a list of OpenAI-style parts when an image is attached) -> its text."""
+    return c if isinstance(c, str) else "".join(x.get("text", "") for x in (c or []) if isinstance(x, dict))
+
+
 def _oa_messages(msgs):
     out = []
     for m in msgs:
@@ -606,9 +622,19 @@ def _lora_request(lora) -> list:
                          f"`--lora-init-without-apply --lora <dir>/{base}` (core/llm_runtime.lora_args); loaded now: {[os.path.basename(str(a.get('path', ''))) for a in loaded] if isinstance(loaded, list) else 'unknown'}.")
 
 
+def vision_available() -> bool:
+    """True only when the local backend can read images: a multimodal llama-server (``--mmproj``) flagged with VYOMI_LLM_VISION=1, or a
+    backend registered with ``set_vision(True)``. No vision model -> Bedrock/Vertex/Azure image parts are rejected, never ignored."""
+    return bool(_state.get("vision")) or os.environ.get("VYOMI_LLM_VISION", "") in ("1", "true", "yes")
+
+
+def set_vision(on: bool = True) -> None:
+    _state["vision"] = bool(on)
+
+
 def _http_body(msgs, o, stream, native_tools):
     body = {"model": resolve_model(o.get("model")), "messages": _oa_messages(msgs), "max_tokens": o["max_tokens"],
-            "temperature": float(o["temperature"]), "stream": stream}
+            "temperature": float(o["temperature"]), "stream": stream, "cache_prompt": True}   # llama.cpp reuses the KV of a shared prompt prefix
     if o.get("stop"):
         body["stop"] = list(o["stop"])[:4]
     if o.get("top_p") is not None:
@@ -636,7 +662,7 @@ def _oa_calls(msg):
 
 def _generate(msgs, o, native_tools=False) -> dict:
     """One model call. ``msgs``: neutral messages (native_tools) or plain turns. Returns the chat() dict (tool_calls only when native)."""
-    prompt_text = "\n".join(m["content"] for m in msgs)
+    prompt_text = "\n".join(_ctext(m["content"]) for m in msgs)
     fin = lambda f: "length" if f == "length" else ("tool_calls" if f in ("tool_calls", "tool_use", "function_call") else "stop")
     if _is_custom(o.get("model")):      # imported LoRA chat model: only its own engine may answer (never the default model)
         if not _state["custom_afn"]:
@@ -826,7 +852,7 @@ def _http_stream(msgs, o, native_tools):
     """Yield events straight off the backend's SSE stream (llama.cpp / Ollama ``stream: true``)."""
     body = _http_body(msgs, o, True, native_tools)
     resp = _http_open("/v1/chat/completions", body)
-    prompt_text = "\n".join(m["content"] for m in msgs)
+    prompt_text = "\n".join(_ctext(m["content"]) for m in msgs)
     text, calls, usage, finish, mdl = [], {}, {}, None, None
     try:
         for raw in resp:
@@ -909,7 +935,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
               tool_choice=choice if tools else None, response_format=response_format, top_p=top_p, seed=seed)
     if _state["fn"] and _state["stream_fn"] and not tools and not response_format and not _is_custom(model):
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
-        parts, ptxt = [], "\n".join(m["content"] for m in msgs)
+        parts, ptxt = [], "\n".join(_ctext(m["content"]) for m in msgs)
         for piece in _state["stream_fn"](_flatten_for_prompt(msgs, None, "none"), sysm, o["max_tokens"], temperature, o["stop"]):
             if isinstance(piece, dict):
                 piece = piece.get("text", "")

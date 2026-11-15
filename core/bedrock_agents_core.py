@@ -10,13 +10,13 @@ bedrock-agent-runtime (``bedrock``): Retrieve, RetrieveAndGenerate, InvokeAgent 
 AgentCore (``bedrock-agentcore``): control plane runtimes (CreateAgentRuntime...), gateways and gateway targets, plus the
 gateway's MCP endpoint (initialize / tools/list / tools/call -> Lambda targets are really invoked).
 
-Real behaviour: ingestion reads the S3 objects of the data source, chunks them (fixed size / none), embeds every chunk with
+Real behaviour: ingestion reads the S3 objects of the data source, chunks them (fixed size / hierarchical / semantic / none), embeds every chunk with
 ``llm_core.embed`` and keeps the index in the account bag; Retrieve is exact cosine kNN with the S3 location + score; the
 agent/RetrieveAndGenerate answer is the local model prompted with the retrieved passages and returns citations.
 
 Honest limits: the model is a small local one (see llm_core.HONEST_LIMIT). Agent action groups are stored but the model does
-not emit tool calls, so they are never invoked; only text (.txt/.md/.csv/.json/.html/.xml/.log) documents are ingested - other
-types (PDF/Office) are counted as failed; vector storage is always the in-account index regardless of the storage type named;
+not emit tool calls, so they are never invoked; text/CSV/HTML/Markdown, PDF (pypdf), DOCX, XLSX and PPTX are ingested - other
+types (legacy .doc/.xls, scanned PDFs) are counted as failed with a per-file reason; vector storage is always the in-account index regardless of the storage type named;
 AgentCore runtimes: InvokeAgentRuntime runs a Vyomi agent spec (core/agent_spec_core: JSON instructions + declarative tools in-process over
 llm_core, Dev Simplified) carried in environmentVariables.VYOMI_AGENT_SPEC - container images are never run (without a spec the invoke
 returns RuntimeClientError); runtime endpoints/versions/sessions are modelled; gateway targets of type openApiSchema/smithyModel/mcpServer are registered but their tools are not callable.
@@ -176,6 +176,11 @@ def _create_ds(st, kb, p):
         raise _bad("dataSourceConfiguration.s3Configuration.bucketArn must be a bucket ARN (arn:aws:s3:::bucket)")
     if any(d["name"] == name for d in kb["datasources"].values()):
         raise _conflict(f"Data source with name {name} already exists")
+    try:
+        kc.chunk_config(p.get("vectorIngestionConfiguration") or {})
+        kc.parsing_config(p.get("vectorIngestionConfiguration") or {})
+    except ValueError as e:
+        raise _bad(str(e))
     did = _rid()
     now = _iso()
     ds = {"knowledgeBaseId": kb["knowledgeBaseId"], "dataSourceId": did, "name": name, "description": p.get("description", ""),
@@ -185,36 +190,41 @@ def _create_ds(st, kb, p):
     return _j(202, {"dataSource": _ds_view(ds)})
 
 
-def _chunk_cfg(ds):
-    """-> (max_tokens|None, overlap_pct, strategy) from the standard chunkingConfiguration."""
-    c = (ds.get("vectorIngestionConfiguration") or {}).get("chunkingConfiguration") or {}
-    strat = c.get("chunkingStrategy", "FIXED_SIZE")
-    if strat == "NONE":
-        return None, 0, "NONE"
-    if strat == "HIERARCHICAL":
-        lv = (c.get("hierarchicalChunkingConfiguration") or {}).get("levelConfigurations") or [{"maxTokens": 300}]
-        mx = int(lv[-1].get("maxTokens", 300))
-        ov = int((c.get("hierarchicalChunkingConfiguration") or {}).get("overlapTokens", 60))
-        return mx, min(90, int(100 * ov / max(mx, 1))), strat
-    if strat == "SEMANTIC":
-        return int((c.get("semanticChunkingConfiguration") or {}).get("maxTokens", 300)), 0, strat
-    f = c.get("fixedSizeChunkingConfiguration") or {}
-    return int(f.get("maxTokens", 300)), int(f.get("overlapPercentage", 20)), "FIXED_SIZE"
-
-
-def _chunk_text(text, max_tokens, overlap_pct):
-    words = text.split()
-    if max_tokens is None or not words:
-        return [text.strip()] if text.strip() else []
-    step = max(1, max_tokens - int(max_tokens * overlap_pct / 100))
-    out = []
-    i = 0
-    while i < len(words):
-        out.append(" ".join(words[i:i + max_tokens]))
-        if i + max_tokens >= len(words):
-            break
-        i += step
-    return out
+def _read_metadata(raw):
+    """A `<object>.metadata.json` -> (attributes, embed_keys). Accepts {"metadataAttributes": {k: v}} where v is a string, number, bool or
+    list of strings, or the typed form {"value": {"type": STRING|NUMBER|BOOLEAN|STRING_LIST, ...}, "includeForEmbedding": bool}.
+    Raises ValueError on a malformed file (the data document is then counted as failed, as Bedrock does)."""
+    if len(raw) > 10 * 1024:
+        raise ValueError("metadata file is over the 10 KB limit")
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        raise ValueError("metadata file is not valid JSON")
+    attrs = doc.get("metadataAttributes") if isinstance(doc, dict) else None
+    if not isinstance(attrs, dict):
+        raise ValueError("metadata file must be an object with a metadataAttributes object")
+    out, emb = {}, []
+    for k, v in attrs.items():
+        inc = False
+        if isinstance(v, dict) and "value" in v:
+            inc = bool(v.get("includeForEmbedding"))
+            tv = v["value"]
+            if isinstance(tv, dict):
+                key = {"STRING": "stringValue", "NUMBER": "numberValue", "BOOLEAN": "booleanValue", "STRING_LIST": "stringListValue"}.get(tv.get("type"))
+                if not key or key not in tv:
+                    raise ValueError(f"metadata attribute {k}: typed value needs type and the matching *Value field")
+                v = tv[key]
+            else:
+                v = tv
+        ok = isinstance(v, (str, bool, int, float)) or (isinstance(v, list) and all(isinstance(x, str) for x in v))
+        if not ok:
+            raise ValueError(f"metadata attribute {k}: value must be a string, number, boolean or list of strings")
+        out[k] = v
+        if inc:
+            emb.append(k)
+    if len(out) > 10:
+        raise ValueError("a document can have at most 10 metadata attributes")
+    return out, emb
 
 
 def _list_keys(s3, bucket, prefix):
@@ -251,57 +261,73 @@ def _ingest(s3, kb, ds):
     conf = ds["dataSourceConfiguration"]["s3Configuration"]
     bucket = conf["bucketArn"].rsplit(":", 1)[-1]
     prefixes = conf.get("inclusionPrefixes") or [""]
-    mx, ov, strat = _chunk_cfg(ds)
+    vic = ds.get("vectorIngestionConfiguration") or {}
+    cfg, pcfg = kc.chunk_config(vic), kc.parsing_config(vic)
     s3c = _s3c()
     pipe = _pipeline_cfg(s3c, s3, bucket)
     gid, gver = pipe.get("guardrailIdentifier"), str(pipe.get("guardrailVersion", "DRAFT"))
     kb["chunks"] = [c for c in kb["chunks"] if c["ds"] != ds["dataSourceId"]]       # a re-sync replaces this data source's chunks
-    scanned = failed = indexed = 0
-    reasons, texts, metas = [], [], []
+    scanned = failed = indexed = meta_scanned = 0
+    reasons, items = [], []
     seen = set()
-    redacted = 0
     for pfx in prefixes:
         for key in _list_keys(s3, bucket, pfx):
             if key in seen or key.endswith("/") or key.endswith(".metadata.json") or key == ".vyomi-pipeline.json":
                 continue
             seen.add(key)
             scanned += 1
+            uri = f"s3://{bucket}/{key}"
             r = s3c.get_object(s3, bucket, key, {}, {})
             if r.status != 200:
                 failed += 1
-                reasons.append(f"s3://{bucket}/{key}: could not read object")
+                reasons.append(f"{uri}: could not read object")
                 continue
             try:
-                txt = kc.parse_document(key, r.body)
+                txt = kc.parse_document(key, r.body, pcfg["markdown_tables"])
             except kc.ParseError as e:
                 failed += 1
-                reasons.append(f"s3://{bucket}/{key}: {e}")
+                reasons.append(f"{uri}: {e}")
                 continue
+            meta, emb_keys = {}, []
+            mr = s3c.get_object(s3, bucket, key + ".metadata.json", {}, {})
+            if mr.status == 200:
+                meta_scanned += 1
+                try:
+                    meta, emb_keys = _read_metadata(mr.body)
+                except ValueError as e:
+                    failed += 1
+                    reasons.append(f"{uri}: invalid {key.rsplit('/', 1)[-1]}.metadata.json: {e}")
+                    continue
             txt, verdict = kc.guard(txt, gid, gver)
             if verdict == "blocked":
                 failed += 1
-                reasons.append(f"s3://{bucket}/{key}: blocked by guardrail {gid} (PII/sensitive content scan)")
+                reasons.append(f"{uri}: blocked by guardrail {gid} (PII/sensitive content scan)")
                 continue
-            redacted += verdict == "redacted"
-            meta = {}
-            mr = s3c.get_object(s3, bucket, key + ".metadata.json", {}, {})
-            if mr.status == 200:
-                try:
-                    meta = (json.loads(mr.body) or {}).get("metadataAttributes") or {}
-                except ValueError:
-                    meta = {}
-            for ch, head in kc.split_text(txt, mx, ov, strat):
-                texts.append(ch)
-                metas.append((f"s3://{bucket}/{key}", meta, head, verdict))
+            try:
+                parts = kc.chunk_document(txt, cfg)
+            except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
+                failed += 1
+                reasons.append(f"{uri}: semantic chunking needs the embedding model: {e}")
+                continue
+            if not parts:
+                failed += 1
+                reasons.append(f"{uri}: no text left after chunking")
+                continue
+            for pt in parts:
+                items.append((pt, uri, meta, emb_keys, verdict))
             indexed += 1
-    if texts:
-        vecs = llm.embed(texts)["vectors"]
-        for n, (t, (uri, meta, head, verdict), v) in enumerate(zip(texts, metas, vecs)):
-            kb["chunks"].append({"id": f"{ds['dataSourceId']}-{n}", "ds": ds["dataSourceId"], "uri": uri, "text": t, "vec": v, "metadata": meta,
-                                 "section": head, "tokens": len(t.split()), "pii": verdict})
+    if items:
+        etexts = [pt["text"] + ("".join(f"\n{k}: {m[k]}" for k in ek if k in m)) for pt, _, m, ek, _ in items]
+        vecs = llm.embed(etexts)["vectors"]
+        for n, ((pt, uri, meta, _ek, verdict), v) in enumerate(zip(items, vecs)):
+            c = {"id": f"{ds['dataSourceId']}-{n}", "ds": ds["dataSourceId"], "uri": uri, "text": pt["text"], "vec": v, "metadata": meta,
+                 "section": pt["section"], "tokens": len(pt["text"].split()), "pii": verdict}
+            if pt.get("parent"):
+                c["parent"] = pt["parent"]
+            kb["chunks"].append(c)
     _mirror_opensearch(s3, kb, ds)
     return {"numberOfDocumentsScanned": scanned, "numberOfNewDocumentsIndexed": indexed, "numberOfModifiedDocumentsIndexed": 0,
-            "numberOfMetadataDocumentsScanned": 0, "numberOfMetadataDocumentsModified": 0, "numberOfDocumentsDeleted": 0,
+            "numberOfMetadataDocumentsScanned": meta_scanned, "numberOfMetadataDocumentsModified": 0, "numberOfDocumentsDeleted": 0,
             "numberOfDocumentsFailed": failed}, reasons
 
 
@@ -398,10 +424,14 @@ def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
         stages["rerank"] = (_t.time() - t0) * 1000
     else:
         final = top[:k]
-    res = []
+    res, seen_parent = [], set()
     for i, sc in final:
         c = chunks[i]
-        r = {"content": {"type": "TEXT", "text": c["text"]}, "location": {"type": "S3", "s3Location": {"uri": c["uri"]}}, "score": round(max(min(sc, 1.0), 0.0), 6),
+        if c.get("parent"):                      # hierarchical: the child matched, the parent chunk is returned (once)
+            if (c["uri"], c["parent"]) in seen_parent:
+                continue
+            seen_parent.add((c["uri"], c["parent"]))
+        r = {"content": {"type": "TEXT", "text": c.get("parent") or c["text"]}, "location": {"type": "S3", "s3Location": {"uri": c["uri"]}}, "score": round(max(min(sc, 1.0), 0.0), 6),
              "metadata": {**c["metadata"], "x-amz-bedrock-kb-source-uri": c["uri"], "x-amz-bedrock-kb-chunk-id": c.get("id", ""),
                           "x-amz-bedrock-kb-data-source-id": c["ds"]}}
         if c.get("section"):

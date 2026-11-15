@@ -7,14 +7,15 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every model id is answered by one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Images/documents, prompt caching and reasoning content are rejected with a validation error rather than ignored.",
+   "Every model id is answered by one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Converse/Claude `document` blocks (PDF, DOCX, XLSX, PPTX, CSV, HTML, Markdown, text) are really parsed and the extracted text is sent to the model (legacy .doc/.xls and scanned PDFs are rejected; s3Location sources are not supported). `image` blocks are rejected with a ValidationException unless a vision-capable local model is configured (none is served by default). cachePoint / cache_control checkpoints are accepted and reported as cacheRead/WriteInputTokens from a real in-process prefix cache (SHA-256 of the prompt prefix, 5-minute TTL, 1024-token minimum; Converse, ConverseStream and Claude InvokeModel) - it is accounting, the compute saving comes only from llama.cpp's own prompt cache. Reasoning/thinking content is rejected because no served model emits it.",
    "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
   ],
   "tests": [
    "tests/conformance/test_ai_agent_lanes.py",
    "tests/conformance/test_ai_sdk_tools.py",
    "tests/conformance/test_llm_async_bridge.py",
-   "tests/conformance/test_local_llm_seam.py"
+   "tests/conformance/test_local_llm_seam.py",
+   "tests/conformance/test_bedrock_kb_runtime_caps.py"
   ]
  },
  "bedrock.knowledge-bases": {
@@ -24,10 +25,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Ingestion really reads the S3 data source, chunks (fixed size / none) and embeds with the local embedding seam; Retrieve is exact cosine kNN with metadata filters. Only text documents (.txt/.md/.csv/.json/.html/.xml/.log) are ingested - PDF/Office files are reported as failed. The vector store type named at creation is recorded but the index always lives in the account (no OpenSearch/Pinecone/etc). Without an embedding model on the backend, vyomi-hash-embed (a deterministic bag-of-words embedding) is used, so retrieval is lexical-ish, not semantic. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+   "Ingestion really reads the S3 data source, chunks (fixed size / hierarchical parent-child / semantic embedding-breakpoint / none) and embeds with the local embedding seam; Retrieve is exact cosine kNN with metadata filters. Text, CSV, HTML, Markdown, PDF (pure-Python pypdf; scanned PDFs have no OCR), DOCX, XLSX and PPTX are parsed (legacy .doc/.xls/.ppt fail); parsingStrategy BEDROCK_FOUNDATION_MODEL keeps tables as markdown but is not a model call, BEDROCK_DATA_AUTOMATION is rejected; .metadata.json sidecars (plain and typed) feed Retrieve filters; unreadable documents are listed per file in the ingestion job's failureReasons. On Nano PDF needs pypdf to be loaded into Pyodide (otherwise PDFs fail with an explicit reason). The vector store type named at creation is recorded but the index always lives in the account (no OpenSearch/Pinecone/etc). Without an embedding model on the backend, vyomi-hash-embed (a deterministic bag-of-words embedding) is used, so retrieval is lexical-ish, not semantic. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
   ],
   "tests": [
-   "tests/conformance/test_bedrock_agents_core.py"
+   "tests/conformance/test_bedrock_agents_core.py",
+   "tests/conformance/test_bedrock_kb_runtime_caps.py"
   ]
  },
  "bedrock.agents": {
