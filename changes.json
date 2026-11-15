@@ -1,8 +1,6 @@
 {
- "at": "2026-11-15T20:11:29+00:00",
+ "at": "2026-11-15T21:11:29+00:00",
  "baseline": false,
  "changes": [],
- "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out"
- ]
+ "errors": []
 }
