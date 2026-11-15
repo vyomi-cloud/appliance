@@ -138,8 +138,12 @@ def _create_kb(st, p):
         raise _bad("knowledgeBaseConfiguration.type must be VECTOR")
     emb = ((cfg.get("vectorKnowledgeBaseConfiguration") or {}).get("embeddingModelArn") or "")
     fmm = _resolve_fm(emb.rsplit("/", 1)[-1]) if emb else None
-    if not fmm or fmm[6] != "nomic-embed-text":
-        raise _bad(f"The knowledge base embedding model {emb or '(none)'} is not supported; use vyomi.nomic-embed-text")
+    try:
+        from core import ai_model_catalog as _cat
+    except ImportError:
+        import ai_model_catalog as _cat  # type: ignore
+    if not fmm or fmm[6] != _cat.DEFAULT_EMBED:       # nomic-embed-text on the appliance; all-minilm-l6-v2 (in-browser ONNX) on Nano
+        raise _bad(f"The knowledge base embedding model {emb or '(none)'} is not supported; use vyomi.{_cat.DEFAULT_EMBED}")
     sto = p.get("storageConfiguration") or {}
     if sto.get("type") not in _STORAGE_TYPES:
         raise _bad(f"storageConfiguration.type must be one of {', '.join(_STORAGE_TYPES)}")
@@ -356,6 +360,11 @@ def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
         return [], {"candidates": [], "latencyMs": {}}
     t0 = _t.time()
     qv = llm.embed(text)["vectors"][0]
+    if any(len(c["vec"]) != len(qv) for c in chunks):   # index built by another embedder (e.g. hash fallback before the in-browser model loaded)
+        for c, v in zip(chunks, llm.embed([c["text"] for c in chunks])["vectors"]):
+            c["vec"] = v
+        if any(len(c["vec"]) != len(qv) for c in chunks):
+            qv = llm.embed(text, dimensions=len(chunks[0]["vec"]))["vectors"][0]
     stages["embed"] = (_t.time() - t0) * 1000
     t0 = _t.time()
     allowed, why = set(), {}

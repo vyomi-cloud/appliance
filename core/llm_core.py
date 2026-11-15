@@ -43,7 +43,7 @@ class LlmUnavailable(Exception):
 
 
 _state = {"fn": None, "embed_fn": None, "endpoint": None, "model": None, "afn": None, "acache": {}, "in_arun": False,
-          "stream_fn": None, "no_rf": False, "no_native": False}
+          "stream_fn": None, "no_rf": False, "no_native": False, "aembed": None, "aembed_model": None}
 
 
 class NeedAsync(BaseException):
@@ -51,9 +51,9 @@ class NeedAsync(BaseException):
     (``arun``) awaits the engine, caches the answer and replays the request. BaseException so no ``except Exception``
     in a core can swallow it."""
 
-    def __init__(self, key, args):
+    def __init__(self, key, args, kind="chat"):
         super().__init__(key)
-        self.key, self.args_ = key, args
+        self.key, self.args_, self.kind = key, args, kind
 
 
 def set_async_backend(afn=None, model: str | None = None) -> None:
@@ -64,11 +64,18 @@ def set_async_backend(afn=None, model: str | None = None) -> None:
         _state["model"] = model
 
 
+def set_async_embed(afn=None, model: str | None = None) -> None:
+    """Register an awaitable embedding backend ``afn(texts) -> list[list[float]]`` (Nano: transformers.js MiniLM ONNX in the page).
+    Used through ``arun``; with none (or a failure) embed() falls back to the labelled deterministic ``vyomi-hash-embed``."""
+    _state["aembed"], _state["aembed_model"] = afn, model
+    _state["acache"] = {}
+
+
 async def arun(handler, max_rounds: int = 16):
     """Run the synchronous ``handler()`` (a whole wire request); every chat() it makes is answered by the async backend
     (awaited here, cached, request replayed) so cores stay synchronous. A request that makes several model calls (tool
     retries) replays once per call. Without an async backend this is just handler()."""
-    if not _state["afn"]:
+    if not _state["afn"] and not _state["aembed"]:
         return handler()
     _state["acache"] = {}
     try:
@@ -77,6 +84,12 @@ async def arun(handler, max_rounds: int = 16):
                 _state["in_arun"] = True
                 return handler()
             except NeedAsync as n:
+                if n.kind == "embed":
+                    try:
+                        _state["acache"][n.key] = {"vectors": await _state["aembed"](list(n.args_))}
+                    except Exception as e:
+                        _state["acache"][n.key] = e
+                    continue
                 msgs, system, max_tokens, temperature, stop = n.args_
                 try:
                     r = await _state["afn"](msgs, system, max_tokens, temperature, stop)
@@ -861,6 +874,14 @@ def embed(texts, dimensions: int | None = None) -> dict:
     try:
         if _state["embed_fn"]:
             vecs, backend = _state["embed_fn"](texts), "registered"
+        elif _state["aembed"]:
+            key = _akey(["embed"] + texts)
+            hit = _state["acache"].get(key)
+            if hit is None and _state["in_arun"]:
+                raise NeedAsync(key, texts, "embed")
+            if isinstance(hit, dict):
+                vecs, backend = hit["vectors"], "transformers.js"
+            # no hit (sync path) or engine failed -> labelled hash fallback below
         elif not _state["fn"] and not _state["afn"] and _endpoint():
             r = _http("/v1/embeddings", {"model": model_name(), "input": texts}, timeout=30.0)
             vecs, backend = [d["embedding"] for d in r["data"]], "llama.cpp"
@@ -871,7 +892,7 @@ def embed(texts, dimensions: int | None = None) -> dict:
     if dimensions and vecs and dimensions < len(vecs[0]):
         vecs = [_renorm(v[:dimensions]) for v in vecs]
     return {"vectors": vecs, "dimensions": len(vecs[0]) if vecs else 0, "input_tokens": toks, "backend": backend,
-            "model": model_name() if backend != "vyomi-hash-embed" else "vyomi-hash-embed"}
+            "model": "vyomi-hash-embed" if backend == "vyomi-hash-embed" else (_state["aembed_model"] if backend == "transformers.js" else model_name())}
 
 
 def _renorm(v):
