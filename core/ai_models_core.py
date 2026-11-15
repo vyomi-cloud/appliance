@@ -54,6 +54,36 @@ BEDROCK_MODELS = [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT"
                    m["kind"] != "embed", m["id"]) for m in CAT.MODELS]
 _BM = {m[0]: m for m in BEDROCK_MODELS}
 
+# Standard Bedrock ids listed as ALIASES of the local model (v4 reference-app lane `models`). They are honest: same TEXT-only
+# modalities the local model has (no vision/doc input), `vyomiBackedBy` says which catalogue model answers, and the lifecycle
+# is ACTIVE only in the sense that the id is callable. Each row: (modelId, provider, display name, input, output, streaming).
+_T, _E = ["TEXT"], ["EMBEDDING"]
+BEDROCK_ALIASES = [
+    ("anthropic.claude-3-haiku-20240307-v1:0", "Anthropic", "Claude 3 Haiku", _T, _T, True),
+    ("anthropic.claude-3-5-haiku-20241022-v1:0", "Anthropic", "Claude 3.5 Haiku", _T, _T, True),
+    ("anthropic.claude-3-5-sonnet-20241022-v2:0", "Anthropic", "Claude 3.5 Sonnet v2", _T, _T, True),
+    ("anthropic.claude-3-7-sonnet-20250219-v1:0", "Anthropic", "Claude 3.7 Sonnet", _T, _T, True),
+    ("anthropic.claude-sonnet-4-20250514-v1:0", "Anthropic", "Claude Sonnet 4", _T, _T, True),
+    ("anthropic.claude-haiku-4-5-20251001-v1:0", "Anthropic", "Claude Haiku 4.5", _T, _T, True),
+    ("amazon.titan-text-lite-v1", "Amazon", "Titan Text G1 - Lite", _T, _T, True),
+    ("amazon.titan-text-express-v1", "Amazon", "Titan Text G1 - Express", _T, _T, True),
+    ("amazon.titan-embed-text-v1", "Amazon", "Titan Embeddings G1 - Text", _T, _E, False),
+    ("amazon.titan-embed-text-v2:0", "Amazon", "Titan Text Embeddings V2", _T, _E, False),
+    ("amazon.nova-micro-v1:0", "Amazon", "Nova Micro", _T, _T, True),
+    ("amazon.nova-lite-v1:0", "Amazon", "Nova Lite", _T, _T, True),
+    ("amazon.nova-pro-v1:0", "Amazon", "Nova Pro", _T, _T, True),
+    ("meta.llama3-1-8b-instruct-v1:0", "Meta", "Llama 3.1 8B Instruct", _T, _T, True),
+    ("meta.llama3-1-70b-instruct-v1:0", "Meta", "Llama 3.1 70B Instruct", _T, _T, True),
+    ("meta.llama3-2-3b-instruct-v1:0", "Meta", "Llama 3.2 3B Instruct", _T, _T, True),
+    ("cohere.command-r-v1:0", "Cohere", "Command R", _T, _T, True),
+    ("cohere.embed-english-v3", "Cohere", "Embed English", _T, _E, False),
+    ("cohere.embed-multilingual-v3", "Cohere", "Embed Multilingual", _T, _E, False),
+]
+# standard ids the catalogue's hidden alias map does not cover (Titan Text, Cohere Command): resolved here, to the small local model
+_EXTRA_ALIASES = {"amazon.titan-text": "qwen2.5-3b", "cohere.command": "qwen2.5-7b"}
+_ALIAS_BY_ID = {a[0]: a for a in BEDROCK_ALIASES}
+_INF_PROFILE_PREFIX = ("us", "eu", "apac")
+
 
 def _j(status, doc, headers=None):
     h = {"content-type": "application/json"}
@@ -110,7 +140,11 @@ def _resolve_model(mid):
     base = re.sub(r"^(us|eu|apac|us-gov|global)\.", "", mid)
     if base in _BM:
         return _BM[base]
-    cid = CAT.resolve("aws", base)          # hidden compat alias (anthropic.claude*, amazon.nova*, ...): resolves, never listed
+    cid = CAT.resolve("aws", base)          # compat alias (anthropic.claude*, amazon.nova*, ...): resolves, and is listed via BEDROCK_ALIASES
+    if cid is None:
+        cid = next((v for k, v in _EXTRA_ALIASES.items() if base.startswith(k)), None)
+        if cid is not None and cid not in CAT.BY_ID:
+            cid = CAT.DEFAULT_CHAT
     if cid is None:
         return None
     return (base, CAT.BY_ID[cid]["vendor"], CAT.BY_ID[cid]["name"], ["TEXT"], ["EMBEDDING"] if CAT.BY_ID[cid]["kind"] == "embed" else ["TEXT"],
@@ -600,13 +634,29 @@ def bedrock_dispatch(method, path, query, headers, body):
         outm = (query or {}).get("byOutputModality")
         prov = (query or {}).get("byProvider")
         ms = [m for m in BEDROCK_MODELS if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
-        return _j(200, {"modelSummaries": [_summary(m) for m in ms]})
+        al = [a for a in BEDROCK_ALIASES if (not outm or outm.upper() in a[4]) and (not prov or prov.lower() == a[1].lower())]
+        return _j(200, {"modelSummaries": [_summary(m) for m in ms] + [_alias_summary(a) for a in al]})
+    if path == "/inference-profiles" and method == "GET":
+        return _j(200, {"inferenceProfileSummaries": [_profile(a, pre) for a in BEDROCK_ALIASES if "EMBEDDING" not in a[4] and not a[0].startswith(("amazon.titan", "cohere", "meta.llama3-2-3b"))
+                                                      for pre in _INF_PROFILE_PREFIX[:1]]})
+    mt = re.match(r"^/inference-profiles/(.+)$", path)
+    if mt and method == "GET":
+        from urllib.parse import unquote
+        pid = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:inference-profile/", "", unquote(mt.group(1)))
+        pre, _, base = pid.partition(".")
+        if pre in _INF_PROFILE_PREFIX and base in _ALIAS_BY_ID and "EMBEDDING" not in _ALIAS_BY_ID[base][4]:
+            return _j(200, _profile(_ALIAS_BY_ID[base], pre))
+        return _b_err("ResourceNotFoundException", "Could not find the inference profile from the provided identifier.", 404)
     _gr = _guardrails()
     if _gr.handles(path):
         return _gr.dispatch(method, path, query, body)
     mt = re.match(r"^/foundation-models/(.+)$", path)
     if mt and method == "GET":
-        m = _BM.get(mt.group(1))
+        from urllib.parse import unquote
+        mid = unquote(mt.group(1))
+        if mid in _ALIAS_BY_ID:
+            return _j(200, {"modelDetails": _alias_summary(_ALIAS_BY_ID[mid])})
+        m = _BM.get(mid)
         if not m:
             return _b_err("ResourceNotFoundException", f"Could not resolve the foundation model from the provided model identifier.", 404)
         return _j(200, {"modelDetails": _summary(m)})
@@ -714,6 +764,29 @@ def _summary(m):
             "providerName": m[1], "inputModalities": m[3], "outputModalities": m[4], "responseStreamingSupported": m[5],
             "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
             "vyomiAvailability": CAT.availability(m[6])}
+
+
+def _backed_by(mid):
+    m = _resolve_model(mid)
+    cid = m[6] if m else CAT.DEFAULT_CHAT
+    return {"catalogModelId": cid, "localModel": llm.resolve_model(mid), "availability": CAT.availability(cid),
+            "note": "Vyomi alias: this standard Bedrock id is answered by the local open model above (Mesh: llama.cpp Qwen2.5 via the "
+                    "core/llm_core seam; Nano: WebLLM), not by the original vendor model. Behaviour and quality are those of the local model."}
+
+
+def _alias_summary(a):
+    return {"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{a[0]}", "modelId": a[0], "modelName": a[2],
+            "providerName": a[1], "inputModalities": a[3], "outputModalities": a[4], "responseStreamingSupported": a[5],
+            "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
+            "vyomiBackedBy": _backed_by(a[0])}
+
+
+def _profile(a, pre):
+    return {"inferenceProfileName": f"{pre.upper()} {a[2]}", "description": f"Vyomi system-defined cross-Region profile alias for {a[0]} (local model)",
+            "createdAt": "2024-08-01T00:00:00Z", "updatedAt": "2024-08-01T00:00:00Z",
+            "inferenceProfileArn": f"arn:aws:bedrock:us-east-1:000000000000:inference-profile/{pre}.{a[0]}",
+            "models": [{"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{a[0]}"}],
+            "inferenceProfileId": f"{pre}.{a[0]}", "status": "ACTIVE", "type": "SYSTEM_DEFINED"}
 
 
 # ───────────────────────────── Vertex AI ─────────────────────────────

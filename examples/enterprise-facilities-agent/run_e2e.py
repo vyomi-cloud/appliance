@@ -32,7 +32,14 @@ def main():
     ap.add_argument("--region", default="us-east-1")
     ap.add_argument("--out", default=os.path.join(HERE, "results"))
     ap.add_argument("--only", help="comma list of component numbers")
+    ap.add_argument("--llm-stub", action="store_true", help="start the deterministic TEST STUB llm (tools/llm_stub) and point the simulator at it "
+                    "(VYOMI_LLM_ENDPOINT). Model-dependent PASSes are then STUB-BACKED, not a real model.")
     a = ap.parse_args()
+    if a.llm_stub:
+        sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "llm_stub"))
+        import stub_llm_server
+        os.environ["VYOMI_LLM_ENDPOINT"] = stub_llm_server.start()
+        print(f"[llm-stub] VYOMI_LLM_ENDPOINT={os.environ['VYOMI_LLM_ENDPOINT']}  (deterministic test stub, NOT a real model)", flush=True)
     endpoint = a.endpoint
     if not endpoint:
         from facilities.server import start_in_process
@@ -83,8 +90,10 @@ def main():
         out(f"{c:>2}  {COMPONENTS[c]:<62} {v:<8} {table[-1]['passed']}/{len(subs)}" + (f"   blocked by: {', '.join(blocked)}" if blocked else ""))
     tot = {k: sum(1 for t in table if t["status"] == k) for k in (PASS, BLOCKED, FAIL)}
     out(f"\n{tot[PASS]} PASS, {tot[BLOCKED]} BLOCKED, {tot[FAIL]} FAIL of {len(table)} components   ({time.time() - t0:.1f}s)")
+    if a.llm_stub:
+        out("NOTE: run with --llm-stub: components 10/11 (and agent routing/answers) were answered by the deterministic TEST STUB, not a real model: STUB-BACKED PASS.")
     os.makedirs(a.out, exist_ok=True)
-    doc = dict(endpoint=endpoint, when=time.strftime("%Y-%m-%dT%H:%M:%S"), totals=tot, components=table, transcript="\n".join(lines),
+    doc = dict(llm_stub=bool(a.llm_stub), endpoint=endpoint, when=time.strftime("%Y-%m-%dT%H:%M:%S"), totals=tot, components=table, transcript="\n".join(lines),
                agent={k: res.get(k) for k in ("question", "user", "route", "llm_used", "tools", "answer", "citations", "approval")}, work_order=ctx.state.get("work_order_id"))
     with open(os.path.join(a.out, "e2e-result.json"), "w") as f:
         json.dump(doc, f, indent=2, default=str)
