@@ -660,6 +660,25 @@ def bedrock_dispatch(method, path, query, headers, body):
         if not m:
             return _b_err("ResourceNotFoundException", f"Could not resolve the foundation model from the provided model identifier.", 404)
         return _j(200, {"modelDetails": _summary(m)})
+    mt = re.match(r"^/model/(.+?)/count-tokens$", path)
+    if mt and method == "POST":   # Bedrock CountTokens: same ~4 chars/token estimate the local-LLM seam uses when no backend usage exists
+        from urllib.parse import unquote
+        if not _resolve_model(unquote(mt.group(1))):
+            return _b_err("ValidationException", "The provided model identifier is invalid.", 400)
+        p = _body(body)
+        inp = (p or {}).get("input") if isinstance(p, dict) else None
+        if not isinstance(inp, dict) or not ({"converse", "invokeModel"} & set(inp)):
+            return _b_err("ValidationException", "Malformed input request: input must contain converse or invokeModel.", 400)
+        if "converse" in inp:
+            txt = " ".join(str(c.get("text", "")) for m_ in (inp["converse"].get("messages") or []) for c in (m_.get("content") or []) if isinstance(c, dict))
+            txt += " ".join(str(c.get("text", "")) for c in (inp["converse"].get("system") or []) if isinstance(c, dict))
+        else:
+            txt = str(inp["invokeModel"].get("body", ""))
+            try:
+                txt = base64.b64decode(txt).decode("utf-8", "replace")
+            except Exception:
+                pass
+        return _j(200, {"inputTokens": llm.estimate_tokens(txt)})
     mt = re.match(r"^/model/(.+?)/(invoke|invoke-with-response-stream|converse|converse-stream)$", path)
     if not mt:
         return _b_err("UnknownOperationException", f"Unsupported Bedrock operation: {method} {path}", 404)

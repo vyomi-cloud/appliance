@@ -1,4 +1,10 @@
-import Overview from "./Overview.jsx";
+import Landing from "./Landing.jsx";
+import Quickstart from "./Quickstart.jsx";
+import ApiKeys from "./ApiKeys.jsx";
+import Quotas from "./Quotas.jsx";
+import Compare from "./Compare.jsx";
+import Tokenizer from "./Tokenizer.jsx";
+import { bedrockNav } from "./nav.js";
 import Playground from "./Playground.jsx";
 import Models from "./Models.jsx";
 import { KnowledgeBases, KnowledgeBaseDetail } from "./KnowledgeBases.jsx";
@@ -10,25 +16,14 @@ const top = [{ text: "Amazon Bedrock", href: "#/bedrock" }];
 const c = (text, h) => ({ text, href: h });
 
 export default {
-  nav: [
-    { type: "link", text: "Overview", href: "#/bedrock" },
-    { type: "section", text: "Test", items: [
-      { type: "link", text: "Chat / text playground", href: "#/bedrock/playground" },
-    ] },
-    { type: "section", text: "Discover", items: [
-      { type: "link", text: "Model catalog", href: "#/bedrock/models" },
-    ] },
-    { type: "section", text: "Build", items: [
-      { type: "link", text: "Knowledge bases", href: "#/bedrock/knowledge-bases" },
-      { type: "link", text: "RAG Studio", href: "#/bedrock/knowledge-bases/studio" },
-      { type: "link", text: "Agents", href: "#/bedrock/agents" },
-    ] },
-    { type: "section", text: "AgentCore", items: [
-      { type: "link", text: "Gateways and runtimes", href: "#/bedrock/agentcore" },
-    ] },
-  ],
+  nav: bedrockNav,
   routes: [
-    { pattern: "/bedrock", component: Overview, crumbs: () => top },
+    { pattern: "/bedrock", component: Landing, crumbs: () => [c("Overview", "#/bedrock")] },
+    { pattern: "/bedrock/quickstart", component: Quickstart, crumbs: () => [c("Quickstart", "#/bedrock/quickstart")] },
+    { pattern: "/bedrock/api-keys", component: ApiKeys, crumbs: () => [c("API keys", "#/bedrock/api-keys")] },
+    { pattern: "/bedrock/quotas", component: Quotas, crumbs: () => [c("Quotas", "#/bedrock/quotas")] },
+    { pattern: "/bedrock/compare-models", component: Compare, crumbs: () => [c("Compare models", "#/bedrock/compare-models")] },
+    { pattern: "/bedrock/tokenizer", component: Tokenizer, crumbs: () => [c("Tokenizer", "#/bedrock/tokenizer")] },
     { pattern: "/bedrock/playground", component: Playground, crumbs: () => [...top, c("Playground", "#/bedrock/playground")] },
     { pattern: "/bedrock/models", component: Models, crumbs: () => [...top, c("Model catalog", "#/bedrock/models")] },
     { pattern: "/bedrock/knowledge-bases", component: KnowledgeBases, crumbs: () => [...top, c("Knowledge bases", "#/bedrock/knowledge-bases")] },

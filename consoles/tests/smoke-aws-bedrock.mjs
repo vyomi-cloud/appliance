@@ -24,7 +24,7 @@ const W = (svc, method, path, body, extra = {}) => page.evaluate(async ([u, a, m
 }, [WIRE, auth(svc), method, path, body, extra]);
 const body = () => page.locator("body").innerText();
 await page.goto(UI + "#/bedrock");
-await page.getByRole("heading", { name: "Amazon Bedrock" }).first().waitFor({ timeout: 30000 });
+await page.getByRole("heading", { name: "Overview" }).first().waitFor({ timeout: 30000 });
 
 // seed: S3 docs + Lambda
 await W("s3", "PUT", "/kbdocs");
@@ -49,6 +49,7 @@ check("overview: local model answered", true);
 
 // playground
 await page.goto(UI + "#/bedrock/playground");
+await page.getByRole("button", { name: "Select model" }).click(); await page.getByRole("dialog").getByRole("button", { name: /Choose a model/ }).click(); await page.getByRole("option").first().click(); await page.getByRole("button", { name: "Apply" }).click();
 await page.getByRole("button", { name: "Run" }).waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
 await page.getByRole("button", { name: "Run" }).click();

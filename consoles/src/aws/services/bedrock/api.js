@@ -87,3 +87,23 @@ export async function listLambdas() {
   const r = await awsRest("lambda", "GET", "/2015-03-31/functions");
   return (r.Functions || []).map((f) => ({ name: f.FunctionName, arn: f.FunctionArn }));
 }
+
+// ── tokenizer, API keys (IAM service-specific credentials, ServiceName bedrock.amazonaws.com) ──
+import { awsQuery, asList, pick } from "../../../common/wire.js";
+export const countTokens = (modelId, text) => B("POST", `/model/${enc(modelId)}/count-tokens`, { body: { input: { converse: { messages: [{ role: "user", content: [{ text }] }] } } } }).then((r) => r.inputTokens);
+const IAMQ = (a, p) => awsQuery("iam", a, p);
+const SVC = "bedrock.amazonaws.com";
+const credList = (x) => asList(pick(x, "member")).map((c) => ({ id: c.ServiceSpecificCredentialId, user: c.UserName, status: c.Status, created: c.CreateDate, expires: c.ExpirationDate || "", serviceUser: c.ServiceUserName }));
+export const listApiKeys = () => IAMQ("ListServiceSpecificCredentials", { ServiceName: SVC }).then((r) => credList(r.ListServiceSpecificCredentialsResponse.ListServiceSpecificCredentialsResult.ServiceSpecificCredentials));
+/** The console's "Generate long-term API keys": a BedrockAPIKey-xxxx IAM user + AmazonBedrockLimitedAccess + a service-specific credential. */
+export async function createApiKey(days) {
+  const user = `BedrockAPIKey-${Math.random().toString(36).slice(2, 6)}`;
+  await IAMQ("CreateUser", { UserName: user });
+  await IAMQ("AttachUserPolicy", { UserName: user, PolicyArn: "arn:aws:iam::aws:policy/AmazonBedrockLimitedAccess" }).catch(() => {});
+  const r = await IAMQ("CreateServiceSpecificCredential", { UserName: user, ServiceName: SVC, ...(days ? { CredentialAgeDays: String(days) } : {}) });
+  const c = r.CreateServiceSpecificCredentialResponse.CreateServiceSpecificCredentialResult.ServiceSpecificCredential;
+  return { user, id: c.ServiceSpecificCredentialId, serviceUser: c.ServiceUserName, key: c.ServicePassword, expires: c.ExpirationDate || "" };
+}
+export const setApiKeyStatus = (c, Status) => IAMQ("UpdateServiceSpecificCredential", { UserName: c.user, ServiceSpecificCredentialId: c.id, Status });
+export const resetApiKey = (c) => IAMQ("ResetServiceSpecificCredential", { UserName: c.user, ServiceSpecificCredentialId: c.id }).then((r) => r.ResetServiceSpecificCredentialResponse.ResetServiceSpecificCredentialResult.ServiceSpecificCredential.ServicePassword);
+export const deleteApiKey = (c) => IAMQ("DeleteServiceSpecificCredential", { UserName: c.user, ServiceSpecificCredentialId: c.id });
