@@ -487,6 +487,7 @@ _SIGNING = {
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "vyomi-ultraservers": "vyomi-ultraservers",   # Dev Simplified EC2 Capacity Blocks + UltraServers (rest-json POST /<Operation>) -> core/ec2_ultraservers_core over the EC2 model
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
+    "es": "opensearch", "aoss": "opensearch",   # OpenSearch Service/Serverless control plane + data plane -> core/opensearch_core (S3 account bag)
     "bedrock-agentcore": "agentcore",   # Bedrock AgentCore control plane + gateway MCP endpoint -> core/bedrock_agents_core (S3 + Lambda stores)
     "glue": "glue", "redshift-data": "redshift-data",
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
@@ -516,6 +517,7 @@ _TARGET_PREFIX = {
     "AWSGlue": "glue", "RedshiftData": "redshift-data",   # Glue zero-ETL integrations + Redshift Data API over the Redshift-lite warehouse -> core/zeroetl_core
     "AmazonDMSv20160101": "dms",   # Database Migration Service between simulator RDS instances -> core/dms_core
     "AWSStepFunctions": "stepfunctions",
+    "OpenSearchServerless": "opensearch",
     "AWSRAMFrontendService": "ram",
     "NetworkFirewall_20201112": "netfw",
     "Route53Resolver": "dnsfw",
@@ -1264,6 +1266,8 @@ class AwsWireRouter:
             return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
+        if path.startswith("/_vyomi/kb/"):   # Vyomi extension: RAG Studio inspect API (core/bedrock_agents_core.inspect_dispatch)
+            return "bedrock"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
             return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
         target = lheaders.get("x-amz-target", "") or ""
@@ -1290,6 +1294,9 @@ class AwsWireRouter:
                 return "cloudwatch"
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
+        from core import opensearch_core as _osc
+        if _osc.looks_like_data_plane(path):   # unsigned/basic-auth opensearch-py calls (/idx/_search, /_bulk, ...)
+            return "opensearch"
         return "s3"  # default: bucket/key path-style
 
     def _azure_sql_conn(self, base):
@@ -2016,6 +2023,15 @@ class AwsWireRouter:
             if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
                 return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+
+        if svc == "opensearch":
+            from core import opensearch_core as _osc
+            tgt = lheaders.get("x-amz-target", "")
+            if tgt.startswith("OpenSearchServerless"):
+                return _osc.serverless_dispatch(self.s3, tgt, bytes(body))
+            if _osc.is_control_path(path.split("?", 1)[0]):
+                return _osc.control_dispatch(self.s3, method, path, query or {}, lheaders, bytes(body))
+            return _osc.data_dispatch(self.s3, method, path, query or {}, lheaders, bytes(body))
 
         if svc == "agentcore":
             from core import bedrock_agents_core
