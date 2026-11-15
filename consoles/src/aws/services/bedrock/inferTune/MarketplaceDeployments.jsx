@@ -30,7 +30,7 @@ export default function MarketplaceDeployments() {
       <ResourceTable variant="container" resourceName="Managed deployments" description="This is a list of deployed endpoints that are available in Bedrock." items={t.data || []} loading={t.loading} error={t.error} onRefresh={t.reload}
         trackBy="endpointArn" selectionType="single" selectedItems={sel} onSelectionChange={setSel} filterPlaceholder="Find endpoints"
         actions={<>
-          <ButtonDropdown variant="primary" items={[{ id: "register", text: "Register endpoint" }, { id: "dereg", text: "Deregister endpoint", disabled: !sel.length }]}
+          <ButtonDropdown items={[{ id: "register", text: "Register endpoint" }, { id: "dereg", text: "Deregister endpoint", disabled: !sel.length }]}
             onItemClick={async ({ detail }) => { if (detail.id === "register") setOpen(true); else { await api.deregisterEndpoint(sel[0].endpointArn); t.reload(); } }}>Registration</ButtonDropdown>
           <Button disabled>Edit</Button><Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button><Button disabled>Open in playground</Button></>}
         empty={{ title: "No deployments", subtitle: <>Use the model catalog to subscribe and deploy models. Once deployed, those endpoints will be displayed here. You can also <Link onFollow={() => setOpen(true)}>register endpoints</Link> from SageMaker.</>, action: cta }}

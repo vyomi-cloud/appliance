@@ -41,8 +41,8 @@ export default function CustomModels() {
           <SpaceBetween size="l">
             <ResourceTable variant="container" resourceName="Models" description="Customized model and their jobs successfully completed will appear here." items={models.data || []} loading={models.loading} error={models.error} onRefresh={models.reload}
               trackBy="modelArn" selectionType="single" selectedItems={sel} onSelectionChange={setSel} filterPlaceholder="Find model" empty={none}
-              actions={<ButtonDropdown disabled={!sel.length} items={[{ id: "pt", text: "Purchase provisioned throughput" }, { id: "delete", text: "Delete" }]}
-                onItemClick={({ detail }) => (detail.id === "delete" ? setDel(true) : navigate("bedrock", "provisioned-throughput"))}>Actions</ButtonDropdown>}
+              actions={<><ButtonDropdown disabled={!sel.length} items={[{ id: "pt", text: "Provisioned Throughput" }, { id: "playground", text: "Open in playground" }]} onItemClick={({ detail }) => navigate("bedrock", detail.id === "pt" ? "provisioned-throughput" : "playground")}>Setup inference</ButtonDropdown><ButtonDropdown disabled={!sel.length} items={[{ id: "pt", text: "Purchase provisioned throughput" }, { id: "delete", text: "Delete" }]}
+                onItemClick={({ detail }) => (detail.id === "delete" ? setDel(true) : navigate("bedrock", "provisioned-throughput"))}>Actions</ButtonDropdown></>}
               columns={[
                 { id: "name", header: "Custom model name", isRowHeader: true, sortingField: "modelName", cell: (m) => m.modelName },
                 { id: "status", header: "Model Status", cell: (m) => jobStatus(m.modelStatus) },

@@ -16,12 +16,12 @@ const modal = () => page.locator('[role="dialog"]');
 const pick = async (label, text) => { await modal().getByRole("button", { name: new RegExp(label) }).first().click(); await page.getByRole("option", { name: new RegExp(text) }).first().click(); };
 
 await go("inference-profiles", "Inference profiles");
-await page.locator("table tbody tr").first().waitFor({ timeout: 240000 });   // Pyodide boot
+await page.getByText("Loading system-defined").first().waitFor({ state: "detached", timeout: 300000 });   // Pyodide boot
 await page.waitForTimeout(800);
-check("profiles: system-defined table has rows + counter", (await page.locator("table tbody tr").count()) >= 5, await page.getByText(/System-defined inference profiles/).first().innerText());
+check("profiles: system-defined table has rows + counter", (await page.locator("table tbody tr").count()) >= 5 && (await page.getByText(/\(\d{2,}\)/).count()) > 0);
 await shot("011-system");
 await tab("Application");
-await page.getByText("No base models").waitFor();
+await page.getByText("No base models").waitFor({ timeout: 60000 });
 await page.getByRole("button", { name: "Create inference profile" }).click();
 await modal().getByLabel("Inference profile name").fill("ui-haiku");
 await pick("Choose a model", "US Anthropic Claude 3 Haiku");
