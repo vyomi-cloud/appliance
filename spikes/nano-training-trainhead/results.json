@@ -1,0 +1,214 @@
+{
+ "env": {
+  "node": "v26.3.0",
+  "platform": "darwin arm64",
+  "chromium": "chromium",
+  "headless": true,
+  "webgpu": "not used (CPU/WASM only)"
+ },
+ "embed": {
+  "out": {
+   "import_ms": 379.2000000476837,
+   "model_load_ms": 3899,
+   "embed_ms": 14363.299999952316,
+   "n_texts": 1215,
+   "per_text_ms": 11.821646090495733,
+   "emb_bytes": 1866240
+  },
+  "net_mb": 25.16,
+  "net_by_host_mb": {
+   "cdn.jsdelivr.net": 1.97,
+   "huggingface.co": 0.2,
+   "us.aws.cdn.hf.co": 22.99
+  },
+  "rss_base_mb": 292,
+  "rss_peak_mb": 507,
+  "rss_delta_mb": 215
+ },
+ "baseline": {
+  "majority_acc": 0.2,
+  "zero_shot_cosine_acc": 0.725
+ },
+ "cands": {
+  "js": {
+   "cold_download_mb": 0,
+   "cold_download_by_host_mb": {},
+   "warm": {
+    "train_ms": {
+     "logreg": 86.89999997615814,
+     "mlp": 708.5,
+     "rerank": 162.5
+    },
+    "acc": {
+     "logreg": 0.99,
+     "mlp": 1,
+     "rerank_top1": 0.84
+    },
+    "loss_first_last": {
+     "logreg": [
+      1.107187120530643,
+      0.0473786758423903
+     ],
+     "mlp": [
+      1.1875163775305888,
+      0.004323348786430212
+     ],
+     "rerank": [
+      0.6704025077388991,
+      0.416074597549296
+     ]
+    },
+    "total_train_ms": 957.8999999761581,
+    "ckpt_bytes": 147720
+   },
+   "warm_rss_delta_mb": 76,
+   "warm_rss_peak_mb": 366,
+   "warm_rss_base_mb": 290,
+   "reload": {
+    "acc": {
+     "logreg": 0.99,
+     "mlp": 1,
+     "rerank_top1": 0.84
+    },
+    "reload_ms": 30.899999976158142
+   },
+   "reload_download_mb": 0
+  },
+  "tfjs-wasm": {
+   "cold_download_mb": 0.43,
+   "cold_download_by_host_mb": {
+    "cdn.jsdelivr.net": 0.43
+   },
+   "warm": {
+    "train_ms": {
+     "logreg": 289.10000002384186,
+     "mlp": 500.60000002384186,
+     "rerank": 608.8999999761581
+    },
+    "acc": {
+     "logreg": 0.99,
+     "mlp": 0.995,
+     "rerank_top1": 0.84
+    },
+    "loss_first_last": {
+     "logreg": [
+      1.119914174079895,
+      0.0483822226524353
+     ],
+     "mlp": [
+      1.0419771671295166,
+      0.004296792205423117
+     ],
+     "rerank": [
+      0.6702719926834106,
+      0.41610297560691833
+     ]
+    },
+    "ckpt_bytes": 150437,
+    "lib_load_ms": 97.60000002384186,
+    "backend": "wasm",
+    "total_train_ms": 1398.6000000238419
+   },
+   "warm_rss_delta_mb": 115,
+   "warm_rss_peak_mb": 406,
+   "warm_rss_base_mb": 291,
+   "reload": {
+    "acc": {
+     "logreg": 0.99,
+     "mlp": 0.995,
+     "rerank_top1": 0.84
+    },
+    "reload_ms": 126
+   },
+   "reload_download_mb": 0
+  },
+  "tfjs-cpu": {
+   "cold_download_mb": 0,
+   "cold_download_by_host_mb": {
+    "cdn.jsdelivr.net": 0
+   },
+   "warm": {
+    "train_ms": {
+     "logreg": 656.1000000238419,
+     "mlp": 3192,
+     "rerank": 1139.7000000476837
+    },
+    "acc": {
+     "logreg": 0.995,
+     "mlp": 0.995,
+     "rerank_top1": 0.845
+    },
+    "loss_first_last": {
+     "logreg": [
+      1.0925945043563843,
+      0.04728228971362114
+     ],
+     "mlp": [
+      1.0641456842422485,
+      0.004540492780506611
+     ],
+     "rerank": [
+      0.6695871353149414,
+      0.4114113450050354
+     ]
+    },
+    "ckpt_bytes": 150437,
+    "lib_load_ms": 97.10000002384186,
+    "backend": "cpu",
+    "total_train_ms": 4987.800000071526
+   },
+   "warm_rss_delta_mb": 101,
+   "warm_rss_peak_mb": 391,
+   "warm_rss_base_mb": 290,
+   "reload": {
+    "acc": {
+     "logreg": 0.995,
+     "mlp": 0.995,
+     "rerank_top1": 0.845
+    },
+    "reload_ms": 132.79999995231628
+   },
+   "reload_download_mb": 0
+  },
+  "sklearn": {
+   "cold_download_mb": 23.86,
+   "cold_download_by_host_mb": {
+    "cdn.jsdelivr.net": 23.86
+   },
+   "warm": {
+    "pyodide_boot_ms": 888.2000000476837,
+    "packages_ms": 905.5,
+    "train_ms": {
+     "logreg": 119.59999999999926,
+     "mlp": 708.0000000000002,
+     "rerank": 71.00000000000063
+    },
+    "acc": {
+     "logreg": 0.995,
+     "mlp": 0.995,
+     "rerank_top1": 0.895
+    },
+    "ckpt_bytes": 326581,
+    "mlp_loss_first_last": [
+     1.065989625939417,
+     0.005596086838203669
+    ],
+    "total_train_ms": 898.6000000000001
+   },
+   "warm_rss_delta_mb": 420,
+   "warm_rss_peak_mb": 710,
+   "warm_rss_base_mb": 290,
+   "reload": {
+    "pyodide_boot_ms": 1216.2000000476837,
+    "packages_ms": 927.6000000238419,
+    "acc": {
+     "logreg": 0.995,
+     "mlp": 0.995,
+     "rerank_top1": 0.895
+    },
+    "reload_ms": 4175.800000071526
+   },
+   "reload_download_mb": -0.01
+  }
+ }
+}

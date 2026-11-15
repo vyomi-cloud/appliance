@@ -1,0 +1,22 @@
+{
+ "billing": [
+  "Billing and payments: charges, invoices, refunds and card updates.",
+  "Payment help for wrong or duplicate charges and statements."
+ ],
+ "tech_support": [
+  "Technical support: crashes, errors, slow performance and sync problems.",
+  "Troubleshooting software that will not start or freezes."
+ ],
+ "account_access": [
+  "Account access: login, password reset, locked accounts and verification codes.",
+  "Sign-in help for two factor and email changes."
+ ],
+ "shipping": [
+  "Shipping and delivery: tracking, late or damaged packages and address changes.",
+  "Order delivery status and parcel problems."
+ ],
+ "cancellation": [
+  "Cancellation: end a subscription, stop renewal or close a membership.",
+  "Unsubscribe and plan termination requests."
+ ]
+}

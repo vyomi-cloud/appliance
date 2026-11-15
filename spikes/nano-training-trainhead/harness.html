@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>trainhead spike</title>
+<script>
+const w = new Worker('worker.js');
+window.call = (msg) => new Promise((res) => { w.onmessage = (e) => { if (e.data && e.data.__log) console.log(e.data.__log); else res(e.data); }; w.postMessage(msg); });
+window.ready = true;
+</script>

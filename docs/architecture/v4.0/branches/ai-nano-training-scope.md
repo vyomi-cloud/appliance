@@ -94,3 +94,70 @@ Phase 3: T3 import and Mesh parity (about 1 week)
 2. Approve the Phase 0 spike (2-3 days) before any console work?
 3. May a tuned chat model be served by wllama (CPU, slower) if WebLLM cannot load adapters, or should T2 be dropped in that case?
 4. Dataset and size caps: is "about 1k rows, a few MB" the right order of magnitude for Nano?
+
+## 9. Phase 0 results, T1 (lane `trainhead`, 2026-11-15): GO, with plain typed-array JS
+
+Spike code: `spikes/nano-training-trainhead/` (raw numbers in `results.json`). Headless Chromium 1223 on macOS arm64, CPU/WASM only
+(WebGPU not used; T1 does not need it). All training ran inside a classic Web Worker. Frozen embeddings: transformers.js 2.17.2
+`Xenova/all-MiniLM-L6-v2` q8, exactly as `wasm/nano-boot.js` loads it, run in the same worker.
+
+Data: template-generated, 5 intents (billing, tech_support, account_access, shipping, cancellation), 1000 train + 200 held-out rows,
+100 KB JSONL. This is an easy dataset (templates), so absolute accuracy is optimistic; use it to compare engines and plumbing, not to
+promise quality. Heads: softmax logistic (384->5), MLP router (384->64->5), pairwise reranker (logistic on [q*d, |q-d|], 768 features,
+2000 pairs; evaluated on held-out docs: top-1 among 5 candidate docs). 10 epochs, batch 32, Adam.
+
+Shared cost (paid once, already in Nano): model download 23.0 MB (HF) + 2.0 MB (transformers.js JS) = 25.2 MB measured on the wire;
+model load 3.9 s; embedding 1215 texts took 14.4 s (11.8 ms/text, single-thread WASM); embedding cache for 1215 texts = 1.87 MB in OPFS.
+Peak browser RSS delta during embedding: 215 MB.
+
+Baselines on the 200 held-out rows: majority 20.0%, zero-shot cosine to label names 72.5%.
+
+| Candidate | Cold download (wire) | Train 3 heads, 10 ep (warm) | Browser RSS delta while training | Held-out acc: logreg / MLP / rerank top-1 | Checkpoint | Reload (new browser context, no training) |
+|---|---|---|---|---|---|---|
+| Plain typed-array JS (hand-rolled Adam, about 90 lines of code) | 0 (code only, a few KB) | 0.96 s (logreg 87 ms, MLP 709 ms, rerank 163 ms) | 76 MB | 99.0% / 100% / 84.0% | 148 KB JSON | OK, identical accuracy, 31 ms |
+| TensorFlow.js 4.22 wasm backend | 0.43 MB (br; 2.0 MB raw JS+wasm) | 1.40 s | 115 MB | 99.0% / 99.5% / 84.0% | 150 KB | OK, identical, 126 ms |
+| TensorFlow.js 4.22 cpu backend | same libs | 4.99 s | 101 MB | 99.5% / 99.5% / 84.5% | 150 KB | OK, identical, 133 ms |
+| scikit-learn in Pyodide 0.26.2 (LogisticRegression, MLPClassifier, pickle) | 23.9 MB (Pyodide + numpy + scipy + sklearn; Nano already ships Pyodide, the extra packages are the delta) | 0.90 s train, plus 0.9 s Pyodide boot + 0.9 s package load | 420 MB | 99.5% / 99.5% / 89.5% | 327 KB pickle | OK, identical, 4.2 s (boot + package load + unpickle) |
+| onnxruntime-web training | NOT RUN. See below | not measured | not measured | not measured | not measured | not measured |
+
+All candidates trained to real convergence (e.g. MLP loss 1.19 to 0.004) and the results are nondeterministic only within seed effects;
+loss curves and per-head times are in `results.json`. Every candidate survives a full browser restart: the checkpoint is written to OPFS
+and a brand-new browser context sharing the profile reloads it and reproduces the held-out accuracy exactly. (Loss of the OPFS profile,
+for example a private window or "clear site data", loses the checkpoint; the job engine must keep the source JSONL/embeddings in the
+simulated object store so a head can be retrained.)
+
+onnxruntime-web training: the web training build was removed upstream. The last npm release that ships it is 1.19.2
+(`ort.training.wasm.min.js` 55 KB + `ort-training-wasm-simd-threaded.wasm` 11.8 MB); 1.20.1 and later, including 1.31.1, contain no
+`TrainingSession`. Using it also requires offline "training artifacts" (training/eval/optimizer ONNX graphs plus a checkpoint) from the
+Python `onnxruntime-training` package, which has Linux x86_64 wheels only (not installable on this macOS arm64 host), so artifacts could
+not be generated here. Rejected on maturity and size (12 MB for something a 90-line loop does), not measured.
+
+### Recommendation: ONE candidate = plain typed-array JS heads in the job worker
+
+Reasons: smallest (no download, no new dependency, no licence), fastest wall time (0.96 s for all three heads), lowest memory (76 MB
+delta vs 115 and 420), identical accuracy to the libraries on this task, tiny deterministic checkpoint (148 KB) that is trivial to move
+through OPFS and the simulated object store, and cancellable per mini-batch (a loop we own can check a flag and report loss each
+epoch for the console metrics chart). The cost is that we maintain the dense-layer/Adam code ourselves; it is small, fixed in scope
+(logistic, 1-hidden-layer MLP, pairwise logistic), and verified here against TF.js and sklearn (same accuracies within 1 point on
+logreg/MLP). It is hand-built despite the thumb rule because TF.js is the only library that fits and it costs 0.4 MB plus 40% more
+memory for no capability a head needs; keep TF.js wasm as the documented fallback if the engine must grow to arbitrary layer graphs.
+scikit-learn in Pyodide is the right answer ONLY for classical tabular/TF-IDF jobs, never as the T1 default (23.9 MB, 420 MB RSS, 4 s
+cold start); the rerank top-1 gap (89.5% vs 84%) comes from solver differences (lbfgs, full-batch) not from the library, and can be
+closed in JS with more epochs, but this was not measured.
+
+Invocation (Nano job engine):
+- Train: job worker reads JSONL from the simulated object store, embeds with the existing `vyomiEmbed` bridge (batches of 64, cache the
+  vectors keyed by text hash in OPFS so a retrain does not re-embed; embedding dominates cost: 11.8 ms/text, so 1000 rows is about 12 s
+  and is the real time budget), trains in a dedicated Worker, posts `{epoch, loss, acc}` per epoch, honours a `cancel` message.
+- Artifact: `{kind: "classifier"|"router"|"reranker", dims, outAct, labels, embedder: "all-minilm-l6-v2", W/b as base64 Float32, metrics}`
+  (about 150 KB) written to OPFS `models/<custom-model-id>/head.json` AND to the simulated object store as the model artifact.
+- Invoke: `classify(text) -> {label, scores{label:p}}` = `embed(text)` then head forward pass (about 1 ms); `score(query, doc) -> float`
+  for rerankers (feature [q*d, |q-d|]); `rank(query, docs[]) -> sorted`. Map these onto Bedrock `InvokeModel` on a custom model id, Vertex
+  `predict`, and Azure custom classifier endpoints as thin adapters.
+- Persist/reload: load `head.json` lazily on first invoke after a reload; the embedder id is stored so a head is never applied to
+  vectors from a different embedder (offline fallback `vyomi-hash-embed` heads must be flagged and refused for MiniLM heads).
+
+Declared limits: tab must stay open during embedding (about 12 s per 1000 rows on this laptop; slower on weak devices, not measured);
+the head can only separate what MiniLM embeddings separate (no new language/knowledge); a 100 KB templated dataset is an optimistic
+accuracy test, so the console must show the held-out split metrics, not claim quality; low-memory/mobile devices not tested; WebGPU
+and non-Chromium browsers not tested; run-to-run determinism was not checked beyond seeding.
