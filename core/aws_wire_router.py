@@ -1864,7 +1864,12 @@ class AwsWireRouter:
         self._sched_pulse()
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
-            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
+            from core import otel_bridge as _otb   # AgentOps: OTLP protobuf decode + span fan-out to X-Ray / CloudWatch Logs / metrics
+            _bb = body if isinstance(body, (bytes, bytearray)) else (body or "").encode()
+            _hh, _bb, _pl = _otb.preprocess(method, p0, headers or {}, bytes(_bb))
+            r = _obsc.dispatch(self.obs, method, p0, query or {}, _hh, _bb, cw_store=self.cw, mon_store=self.gcp_mon)
+            if _pl is not None and r.status == 200:
+                _otb.after_ingest(self, p0, _pl)
             return {"status": r.status, "headers": dict(r.headers), "body": r.body}
         if p0 == "/_vyomi/db-connect" and method.upper() == "GET":      # one paste-and-run connection string per database (console reads this)
             import json as _json
@@ -2016,6 +2021,9 @@ class AwsWireRouter:
             return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
 
         if svc == "agentcore":
+            from core import agentcore_eval_core    # AgentCore Evaluations (evaluators + Evaluate)
+            if agentcore_eval_core.handles(path.split("?", 1)[0]):
+                return agentcore_eval_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             from core import bedrock_agents_core
             return bedrock_agents_core.agentcore_dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
