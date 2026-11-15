@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-15 02:12 UTC · refreshes after every pipeline run_
+_Updated 2026-11-15 03:07 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -226,7 +226,7 @@ Existing work rebuilt onto main by the agent, then **reviewed and merged by a pe
 | Upgrade | Source PRs | Stage | Review PR |
 |---|---|---|---|
 | Azure Service Bus over AMQP 1.0 (Rohith's stack #34→#45) [#181](https://github.com/vyomi-cloud/appliance/issues/181) | [#34](https://github.com/vyomi-cloud/appliance/pull/34) → [#35](https://github.com/vyomi-cloud/appliance/pull/35) → [#37](https://github.com/vyomi-cloud/appliance/pull/37) → [#38](https://github.com/vyomi-cloud/appliance/pull/38) → [#39](https://github.com/vyomi-cloud/appliance/pull/39) → [#40](https://github.com/vyomi-cloud/appliance/pull/40) → [#45](https://github.com/vyomi-cloud/appliance/pull/45) | 🛠 Rebuilding | — |
-| Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (Rohith's stack #43→#46) [#182](https://github.com/vyomi-cloud/appliance/issues/182) | [#43](https://github.com/vyomi-cloud/appliance/pull/43) → [#44](https://github.com/vyomi-cloud/appliance/pull/44) → [#46](https://github.com/vyomi-cloud/appliance/pull/46) | ✅ Merged | [PR #194](https://github.com/vyomi-cloud/appliance/pull/194) |
+| Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (Rohith's stack #43→#46) [#182](https://github.com/vyomi-cloud/appliance/issues/182) | [#43](https://github.com/vyomi-cloud/appliance/pull/43) → [#44](https://github.com/vyomi-cloud/appliance/pull/44) → [#46](https://github.com/vyomi-cloud/appliance/pull/46) | 🛠 Rebuilding | — |
 
 ## Real backends and vyomi-libs
 
