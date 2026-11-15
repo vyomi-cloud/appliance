@@ -14,8 +14,9 @@ HONEST SCOPE (no hand-built backend beyond metadata):
   - batch inference: runs for real over the local-LLM seam (core/llm_core): reads the S3 JSONL input (``recordId`` + ``modelInput``),
     answers each record (max 25) and writes ``<output>/<jobId>/<input>.out`` + ``manifest.json.out``. No LLM backend => job Failed.
   - provisioned throughput: metadata only (InService immediately; no capacity is reserved, nothing is billed).
-  - model customization: METADATA ONLY, no training happens. The job completes with a custom-model record so the console/SDK
-    lifecycle works; the custom model is not a different network (invocation resolves to the base model's local alias).
+  - model customization: a TRAINABLE base (the embedder all-minilm-l6-v2 / nomic-embed-text, or vyomi.head.*) runs a REAL job in
+    core/training_core (small head on frozen embeddings; held-out metrics; Stop works; custom model invocable). Every other base is
+    METADATA ONLY: the job completes with a custom-model record (invocation resolves to the base model's local alias).
   - marketplace endpoints: metadata only (no SageMaker endpoint is created).
 State is process-local (module dicts).
 """
@@ -32,7 +33,13 @@ try:
 except ImportError:  # Pyodide flat layout
     import ai_models_core as am  # type: ignore
 
+try:
+    from core import training_core as tc
+except ImportError:  # Pyodide flat layout
+    import training_core as tc  # type: ignore
+
 _ACCT, _REG = "123456789012", "us-east-1"
+_REH = {"done": False}
 _APP: dict[str, dict] = {}      # application inference profiles
 _BATCH: dict[str, dict] = {}
 _PT: dict[str, dict] = {}
@@ -393,6 +400,9 @@ def _tick_jobs():
     """Metadata-only lifecycle: InProgress -> Completed 2 s after submit, producing the custom-model record. No training runs."""
     now = time.time()
     for j in _JOBS.values():
+        if j.get("_train"):
+            _sync_training(j)
+            continue
         if j["status"] == "InProgress" and now - j["_t"] >= 2:
             j["status"] = "Completed"
             j["endTime"] = j["lastModifiedTime"] = _iso(now)
@@ -403,6 +413,55 @@ def _tick_jobs():
                             "baseModelName": re.sub(r"^arn:.*foundation-model/", "", j["baseModelArn"]), "customizationType": j["customizationType"],
                             "ownerAccountId": _ACCT, "modelStatus": "Active", "jobArn": j["jobArn"], "jobName": j["jobName"],
                             "hyperParameters": j.get("hyperParameters", {}), "trainingDataConfig": j.get("trainingDataConfig"), "outputDataConfig": j.get("outputDataConfig")}
+
+
+def _sync_training(j):
+    """Mirror the real training job (core/training_core) into the Bedrock job record; on completion materialise the custom model."""
+    try:
+        v = tc.view(j["_id"])
+    except tc.TrainError:
+        return
+    j["vyomiTraining"] = v
+    st = v["status"]
+    if st in tc.ACTIVE:
+        j["status"] = "InProgress"
+        return
+    if j["status"] in ("Completed", "Failed", "Stopped"):
+        return
+    j["endTime"] = j["lastModifiedTime"] = _iso(time.time())
+    if st == "Completed":
+        j["status"] = "Completed"
+        cid = j["_cid"]
+        arn = f"arn:aws:bedrock:{_REG}:{_ACCT}:custom-model/{cid}"
+        j["outputModelArn"], j["outputModelName"] = arn, j["_cname"]
+        _CUSTOM[cid] = {"modelArn": arn, "modelName": j["_cname"], "creationTime": _iso(time.time()), "baseModelArn": j["baseModelArn"],
+                        "baseModelName": re.sub(r"^arn:.*foundation-model/", "", j["baseModelArn"]), "customizationType": j["customizationType"],
+                        "ownerAccountId": _ACCT, "modelStatus": "Active", "jobArn": j["jobArn"], "jobName": j["jobName"],
+                        "hyperParameters": j.get("hyperParameters", {}), "trainingDataConfig": j.get("trainingDataConfig"),
+                        "outputDataConfig": j.get("outputDataConfig"), "vyomiTraining": v}
+    elif st == "Failed":
+        j["status"], j["failureMessage"] = "Failed", v.get("note", "Training failed.")
+    else:
+        j["status"] = "Stopped"
+
+
+def _rehydrate():
+    """After a reload the heads are still in the simulated object store: rebuild their custom-model records from meta.json."""
+    if _REH["done"]:
+        return
+    _REH["done"] = True
+    try:
+        for m in tc.persisted_models():
+            cid = m["modelId"]
+            if cid in _CUSTOM:
+                continue
+            arn = f"arn:aws:bedrock:{_REG}:{_ACCT}:custom-model/{cid}"
+            _CUSTOM[cid] = {"modelArn": arn, "modelName": m.get("name") or cid, "creationTime": _iso(time.time()), "baseModelArn": _fm(m.get("base") or "all-minilm-l6-v2"),
+                            "baseModelName": m.get("base") or "all-minilm-l6-v2", "customizationType": "FINE_TUNING", "ownerAccountId": _ACCT,
+                            "modelStatus": "Active", "vyomiTraining": {"engine": "head-py", "taskType": m.get("task"), "status": "Completed", "heldOut": m.get("heldOut"),
+                                                                       "artifact": f"s3://{tc.MODELS_BUCKET}/models/{cid}/head.json"}}
+    except Exception:  # noqa: BLE001 - rehydration is best effort
+        pass
 
 
 def _job_summary(j):
@@ -420,12 +479,21 @@ def _job_get(j):
                            "trainingDataConfig": j.get("trainingDataConfig"), "outputDataConfig": j.get("outputDataConfig"),
                            "trainingMetrics": {}, "validationMetrics": [],
                            "vyomiNote": "Metadata only: Vyomi does not train; the job completes with a custom-model record."}
+    if j.get("_train"):
+        v = j.get("vyomiTraining") or {}
+        d["vyomiNote"] = "Trained for real: a small head on frozen embeddings (not an LLM fine-tune). See vyomiTraining for per-epoch metrics."
+        d["vyomiTraining"] = v
+        if v.get("metrics"):
+            d["trainingMetrics"] = {"trainingLoss": v["metrics"][-1]["loss"]}
+        if j.get("failureMessage"):
+            d["failureMessage"] = j["failureMessage"]
     if j.get("outputModelArn"):
         d["outputModelArn"] = j["outputModelArn"]
     return d
 
 
 def _custom(method, path, query, p):
+    _rehydrate()
     _tick_jobs()
     if path == "/model-customization-jobs" and method == "POST":
         for k in ("jobName", "customModelName", "roleArn", "baseModelIdentifier", "trainingDataConfig", "outputDataConfig"):
@@ -433,16 +501,25 @@ def _custom(method, path, query, p):
                 raise _bad(f"1 validation error detected: Value null at '{k}' failed to satisfy constraint: Member must not be null")
         base = p["baseModelIdentifier"]
         bid = re.sub(r"^arn:.*foundation-model/", "", base)
-        if am._resolve_model(bid) is None:
+        trainable = tc.is_trainable(bid)
+        if not trainable and am._resolve_model(bid) is None:
             raise _bad("The provided base model identifier is invalid.")
         if any(x["jobName"] == p["jobName"] for x in _JOBS.values()):
             raise CErr("ConflictException", f"Job {p['jobName']} already exists.", 409)
         jid, cid = uuid.uuid4().hex[:12], uuid.uuid4().hex[:12]
+        if trainable:
+            if p.get("customizationType", "FINE_TUNING") != "FINE_TUNING":
+                raise _bad("Only FINE_TUNING is supported for this base model.")
+            try:
+                uri = (p["trainingDataConfig"] or {}).get("s3Uri")
+                tc.start(jid, cid, tc.read_uri(uri), p.get("hyperParameters") or {}, (p["outputDataConfig"] or {}).get("s3Uri"), bid, p["customModelName"])
+            except tc.TrainError as e:
+                raise _bad(str(e))
         now = _iso(time.time())
         j = {"jobArn": f"arn:aws:bedrock:{_REG}:{_ACCT}:model-customization-job/{jid}", "jobName": p["jobName"], "status": "InProgress",
              "baseModelArn": base if base.startswith("arn:") else _fm(base), "creationTime": now, "lastModifiedTime": now, "roleArn": p["roleArn"],
              "customizationType": p.get("customizationType", "FINE_TUNING"), "hyperParameters": p.get("hyperParameters", {}),
-             "trainingDataConfig": p["trainingDataConfig"], "outputDataConfig": p["outputDataConfig"], "_t": time.time(), "_cid": cid, "_cname": p["customModelName"], "_id": jid}
+             "trainingDataConfig": p["trainingDataConfig"], "outputDataConfig": p["outputDataConfig"], "_t": time.time(), "_cid": cid, "_cname": p["customModelName"], "_id": jid, "_train": trainable}
         _JOBS[jid] = j
         return _j(201, {"jobArn": j["jobArn"]})
     if path == "/model-customization-jobs" and method == "GET":
@@ -462,6 +539,11 @@ def _custom(method, path, query, p):
         if m.group(2) and method == "POST":
             if j["status"] != "InProgress":
                 raise CErr("ConflictException", f"Job is in state {j['status']} and cannot be stopped.", 409)
+            if j.get("_train"):
+                try:
+                    tc.stop(j["_id"])
+                except tc.TrainError as e:
+                    raise CErr("ConflictException", str(e), 409)
             j["status"] = "Stopped"
             j["lastModifiedTime"] = _iso(time.time())
             return _j(200, {})
@@ -485,6 +567,8 @@ def _custom(method, path, query, p):
             if any(x["foundationModelArn"] == c["baseModelArn"] and x["modelArn"] == c["modelArn"] for x in _PT.values()):
                 raise CErr("ConflictException", "The custom model is in use by a provisioned throughput.", 409)
             del _CUSTOM[re.sub(r"^arn:.*/", "", c["modelArn"])]
+            if c.get("vyomiTraining"):
+                tc.delete_model(re.sub(r"^arn:.*/", "", c["modelArn"]))
             return _j(200, {})
     raise CErr("UnknownOperationException", f"Unsupported Bedrock operation: {method} {path}", 404)
 
@@ -624,6 +708,7 @@ def dispatch(s3, method, path, query, body):
     method = method.upper()
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     query = query or {}
+    tc.bind_s3(s3)
     try:
         p = json.loads(body) if body else {}
         if not isinstance(p, dict):

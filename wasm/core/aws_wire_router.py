@@ -366,7 +366,7 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
-    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads)(/|$)", p0):
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|files|fine_tuning)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0):
         return "az-graph"
@@ -754,6 +754,8 @@ class AwsWireRouter:
             stores.setdefault("resources", ResourceCollections())
         self._stores = s
         self.s3 = s.get("s3") or InMemoryObjectStore()
+        from core import training_core as _tc     # training engine reads datasets / writes heads in this shared object store
+        _tc.bind_s3(self.s3)
         self.ddb = s.get("ddb") or InMemoryNoSqlStore()
         self.dax = s.get("dax") or dax.DaxStore()
         self.dax.ddb_store = self.ddb   # real read-through/write-through into the fronted table

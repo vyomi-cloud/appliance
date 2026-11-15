@@ -459,6 +459,8 @@ def _openai_ops(rec, rest, method, payload, state=None, query=None):
 # ── deployments / commitment plans / RAI policies ────────────────────────────
 def _find_model(fmt, name, version):
     nm = str(name or "").lower()
+    if nm.startswith("ft:"):        # a head fine-tuned through /openai/fine_tuning/jobs (core/training_core): deployable, answers via the head
+        return ("OpenAI", str(name), str(version or "1"), 1000, _CHAT_CAPS)
     for m in MODELS:
         if m[1].lower() == nm:      # a listed model; the format is the vendor (a stale "OpenAI" default is tolerated)
             return m if (not version or m[2] == version) else (m[0], m[1], str(version), m[3], m[4])

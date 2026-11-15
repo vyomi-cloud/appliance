@@ -87,7 +87,7 @@ const MODULES = [
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
-  "llm_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "training_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -654,6 +654,8 @@ builtins._embed_bridge_set = _embed_bridge_set
   // Host access to in-browser databases: psql / mysql / ORMs reach RDS + Cloud SQL instances through `vyomi-tunnel` (db-bridge.js).
   // API Gateway data plane: backend calls leave the tab through the local tunnel / hosted relay (core/gcp_apigateway_gateway.ahandle).
   try { import("./gw-bridge.js").then((m) => m.installGatewayBridge()).catch((e) => console.warn("[nano] gateway bridge skipped:", e)); } catch (_) {}
+  // Real head training behind Bedrock/Vertex/Azure model customization (core/training_core.py): in-tab MiniLM embeddings + a typed-array Web Worker.
+  try { import("./train-bridge.js").then((m) => m.installTrainBridge(py)).catch((e) => console.warn("[nano] training bridge skipped:", e)); } catch (_) {}
   try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
   window.__vyomiNanoReady = true;
   try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
