@@ -3,7 +3,7 @@
     (llm_core.set_async_http, the same hook wasm/gw-bridge.js feeds on Nano), with the Nano code path forced on;
   * smithyModel targets are callable (awsJson1_0 and restJson1 operations executed against the simulator's own wire);
   * AWS_IAM gateways verify the SigV4 signature of an IAM access key (wrong secret -> 403; ambient dev keys flagged unverified; strict mode rejects them);
-  * runtime inbound JWT is verified; the A2A agent card is served at /.well-known/agent-card.json; message/stream emits SSE task events.
+  * runtime inbound JWT is verified; the A2A agent card is served at /.well-known/agent-card.json; message/stream emits SSE task events (per token since round 9: test_agentcore_auth_limits.py).
 Run: PYTHONPATH=. python tests/conformance/test_agentcore_limits.py
 """
 import asyncio
@@ -263,8 +263,9 @@ def main():
     evs = [json.loads(ln[5:]) for ln in raw.decode().split("\n\n") if ln.startswith("data:") for ln in [ln.strip()]]
     kinds = [e["result"]["kind"] for e in evs]
     check("message/stream answers text/event-stream", st == 200 and "text/event-stream" in hdrs.get("content-type", ""), hdrs)
-    check("  task events in order: task, working, artifact-update, completed(final)", kinds == ["task", "status-update", "artifact-update", "status-update"] and evs[-1]["result"]["final"] is True
-          and evs[-1]["result"]["status"]["state"] == "completed" and "A2A-ANSWER" in evs[2]["result"]["artifact"]["parts"][0]["text"], evs)
+    check("  task events in order: task, artifact-update chunk(s), final artifact-update, completed(final)", kinds[0] == "task" and kinds[-1] == "status-update" and set(kinds[1:-1]) == {"artifact-update"}
+          and evs[-1]["result"]["final"] is True and evs[-1]["result"]["status"]["state"] == "completed" and evs[-2]["result"]["lastChunk"] is True
+          and "A2A-ANSWER" in evs[-2]["result"]["artifact"]["parts"][0]["text"], evs)
     plain = ctl.create_agent_runtime(agentRuntimeName="plain_http", agentRuntimeArtifact=art, roleArn=ROLE, networkConfiguration={"networkMode": "PUBLIC"})
     time.sleep(1.2)
     try:

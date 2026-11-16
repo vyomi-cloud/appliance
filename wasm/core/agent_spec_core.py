@@ -206,8 +206,11 @@ def run(spec, message: str, history: list | None = None) -> dict:
     return final
 
 
-def run_events(spec, message: str, history: list | None = None):
-    """Generator: model / tool_call / tool_result step events then one ``final`` event (same dict ``run`` returns)."""
+def run_events(spec, message: str, history: list | None = None, stream_tokens: bool = False):
+    """Generator: model / tool_call / tool_result step events then one ``final`` event (same dict ``run`` returns).
+    ``stream_tokens``: also yield ``{"type": "token", "step", "text"}`` for every text piece the model produces, as it produces it
+    (llm_core.chat_stream: token-by-token from llama.cpp/Ollama and registered streaming backends; backends or paths that cannot
+    stream - prompt-translated tools, structured output - emit the finished step as pieces)."""
     spec = parse_spec(spec)
     tools = _by_name(spec)
     schemas = _schemas(spec)
@@ -216,8 +219,19 @@ def run_events(spec, message: str, history: list | None = None):
     steps, usage, model = [], {"input_tokens": 0, "output_tokens": 0}, None
     text, truncated = "", True
     for i in range(spec.get("max_steps", 5)):
-        r = llm.chat(msgs, system=spec.get("instructions"), max_tokens=spec.get("max_tokens", 256),
-                     temperature=spec.get("temperature", 0.7), model=spec.get("model"), tools=schemas or None)
+        kw = dict(system=spec.get("instructions"), max_tokens=spec.get("max_tokens", 256), temperature=spec.get("temperature", 0.7),
+                  model=spec.get("model"), tools=schemas or None)
+        if stream_tokens:
+            r = None
+            for piece in llm.chat_stream(msgs, **kw):
+                if piece["type"] == "text":
+                    yield {"type": "token", "step": i, "text": piece["text"]}
+                elif piece["type"] == "done":
+                    r = piece
+            if r is None:
+                raise llm.LlmUnavailable("model stream ended without a result")
+        else:
+            r = llm.chat(msgs, **kw)
         usage["input_tokens"] += r["input_tokens"]
         usage["output_tokens"] += r["output_tokens"]
         model = r["model"]

@@ -87,7 +87,7 @@ const MODULES = [
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
-  "llm_core.py", "gcp_agentgov_core.py", "bedrock_bda_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "agentcore_gateway_targets.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "gcp_agentplatform_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "bedrock_build_core.py", "training_core.py", "import_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "code_sandbox_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "gcp_agentgov_core.py", "bedrock_bda_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "cedar_wasm_shim.py", "agentcore_command_core.py", "agentcore_gateway_targets.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "gcp_agentplatform_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "bedrock_build_core.py", "training_core.py", "import_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "code_sandbox_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -205,6 +205,9 @@ async function bootBackend() {
   // Knowledge Bases parse PDFs with pure-Python pypdf (BSD-3), which is NOT in the Pyodide 0.26 package set: unpack the vendored wheel
   // (wasm/pylib/, ~0.4 MB, same-origin, no PyPI call). Without it a .pdf fails ingestion with an explicit reason (DOCX/XLSX/PPTX need nothing).
   try { py.unpackArchive(await (await fetch(BASE + "/pylib/pypdf-7.1.0-py3-none-any.whl")).arrayBuffer(), "wheel"); } catch (e) { console.warn("[nano] pypdf unavailable (PDF knowledge-base documents will fail):", e); }
+  // Cedar policy engine (AgentCore gateway ENFORCE policies): the OSS Cedar core as WebAssembly, vendored in wasm/cedar/ (4.4 MB).
+  try { const { installCedar } = await import(BASE + "/cedar/cedar-eval.mjs"); await installCedar(new URL(BASE + "/cedar/", location.origin).href); }
+  catch (e) { console.warn("[nano] Cedar evaluator unavailable (ENFORCE gateways fail closed):", e); }
   // Kubernetes posture for Defender for Cloud: the regolibrary (Kubescape) Rego controls compiled to
   // WebAssembly with OPA (wasm/kubescape/). kubescape_core calls globalThis.__vyomi_kubescape_eval
   // synchronously; if this fails to load, Defender reports the scanner as unavailable (never fakes).

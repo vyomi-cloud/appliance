@@ -217,5 +217,32 @@ fa = ba.create_flow_version(flowIdentifier=f3)["version"]
 al3 = ba.create_flow_alias(flowIdentifier=f3, name="live", routingConfiguration=[{"flowVersion": fa}])["id"]
 check("published version + alias execute the same graph", outs(run(f3, [5, 6], alias=al3)) == [[10, 12]])
 
+# ── InlineCode node (Python_3 on core/code_sandbox_core); Lex stays rejected (no NLU runtime)
+IC = lambda code, ins=("x",), outs_=("response",): N("Code", "InlineCode", {"inlineCode": {"code": code, "language": "Python_3"}}, ins, outs_)  # noqa: E731
+f8 = mkflow("inline-flow", [IN, IC("import json\ntotal = sum(x)\n{'total': total, 'n': len(x), 'big': total > 5}"), OUT],
+            [D("a", "In", "document", "Code", "x"), D("b", "Code", "response", "Out", "document")])
+o = outs(run(f8, [1, 2, 3]))
+check("InlineCode node runs Python over its inputs; the last expression is the output", o == [{"total": 6, "n": 3, "big": True}], o)
+es8 = run(f8, [4], trace=True)
+no8 = [e["flowTraceEvent"]["trace"]["nodeOutputTrace"] for e in es8 if "nodeOutputTrace" in e.get("flowTraceEvent", {}).get("trace", {}) and e["flowTraceEvent"]["trace"]["nodeOutputTrace"]["nodeName"] == "Code"]
+check("  InlineCode emits node input/output traces named by the declared output", no8 and no8[0]["fields"][0]["nodeOutputName"] == "response", no8)
+f8b = mkflow("inline-str", [IN, IC("x.upper() + '!'"), OUT], [D("a", "In", "document", "Code", "x"), D("b", "Code", "response", "Out", "document")])
+check("InlineCode returns strings too", outs(run(f8b, "hi")) == ["HI!"], outs(run(f8b, "hi")))
+f8c = mkflow("inline-err", [IN, IC("1 / 0"), OUT], [D("a", "In", "document", "Code", "x"), D("b", "Code", "response", "Out", "document")])
+try:
+    run(f8c, "x")
+    check("InlineCode runtime error -> DependencyFailedException", False)
+except Exception as e:
+    check("InlineCode runtime error -> DependencyFailedException naming ZeroDivisionError", "DependencyFailed" in str(e) and "ZeroDivisionError" in str(e), e)
+f8d = mkflow("inline-evil", [IN, IC("import os\nos.system('echo pwned')\n'x'"), OUT], [D("a", "In", "document", "Code", "x"), D("b", "Code", "response", "Out", "document")])
+try:
+    run(f8d, "x")
+    check("InlineCode sandbox blocks os.system", False)
+except Exception as e:
+    check("InlineCode sandbox blocks os.system (DependencyFailedException, 'blocked')", "DependencyFailed" in str(e) and "blocked" in str(e), e)
+check("InlineCode with a language other than Python_3 -> ValidationException", bad([IN, N("C", "InlineCode", {"inlineCode": {"code": "1", "language": "Node_20"}}), OUT]) == "ValidationException")
+check("InlineCode with a syntax error is rejected at create", bad([IN, IC("def (:"), OUT]) == "ValidationException")
+check("InlineCode without code -> ValidationException", bad([IN, IC("  "), OUT]) == "ValidationException")
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

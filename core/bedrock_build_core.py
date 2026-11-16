@@ -13,7 +13,8 @@ thin dict records in the persisted account bag; every *behaviour* runs on existi
 
 HONEST SCOPE
   - Flows: node types Input, Output, Prompt (inline or a managed promptArn), Condition (``name == "x"``, ``!=``, ``contains``, ``true``),
-    Collector, Iterator-less. LambdaFunction / KnowledgeBase / Agent / Lex / Storage / Retrieval nodes are rejected at Prepare time.
+    Collector, Iterator, Loop, Agent, KnowledgeBase, LambdaFunction, Storage, Retrieval and InlineCode (Python_3 on core/code_sandbox_core).
+    Lex nodes are rejected: Vyomi has no Lex NLU runtime.
   - Evaluations: automated model evaluation only, custom prompt dataset (JSONL prompt/referenceResponse/category), <=25 records,
     metrics Builtin.Accuracy (token F1 vs the reference), Builtin.Robustness (token F1 between the answer to the prompt and to a
     case/whitespace-perturbed prompt), Builtin.Toxicity (share of answers hitting the guardrail content lexicon). These are simple OSS-style
@@ -25,6 +26,7 @@ HONEST SCOPE
 """
 from __future__ import annotations
 
+import ast
 import base64
 import gzip
 import json
@@ -262,10 +264,10 @@ def _prompts(method, path, query, p):
 
 # ───────────────────────── Flows ─────────────────────────
 _NODE_OK = {"Input", "Output", "Prompt", "Condition", "Collector", "Iterator", "Agent", "KnowledgeBase", "LambdaFunction", "Retrieval", "Storage",
-            "Loop", "LoopInput", "LoopController"}
+            "Loop", "LoopInput", "LoopController", "InlineCode"}
 _NODE_TYPE_NAME = {"Input": "FlowInputNode", "Output": "FlowOutputNode", "Prompt": "PromptNode", "Condition": "ConditionNode", "Collector": "CollectorNode",
                    "Iterator": "IteratorNode", "Agent": "AgentNode", "KnowledgeBase": "KnowledgeBaseNode", "LambdaFunction": "LambdaFunctionNode",
-                   "Retrieval": "RetrievalNode", "Storage": "StorageNode", "Loop": "LoopNode", "LoopInput": "LoopInputNode", "LoopController": "LoopControllerNode"}
+                   "Retrieval": "RetrievalNode", "Storage": "StorageNode", "Loop": "LoopNode", "LoopInput": "LoopInputNode", "LoopController": "LoopControllerNode", "InlineCode": "InlineCodeNode"}
 _MAX_NODE_RUNS = 1000
 _FREPLAY: dict = {}      # memo of side-effecting node results (Lambda, Storage) while a request is replayed on Nano
 
@@ -295,6 +297,19 @@ def _validate_flow(defn, inner=False):
             raise _bad(f"Node {n.get('name')}: configuration.agent.agentAliasArn must be an agent alias ARN (arn:aws:bedrock:<region>:<account>:agent-alias/<agentId>/<aliasId>)")
         if t == "KnowledgeBase" and not (cfg.get("knowledgeBase") or {}).get("knowledgeBaseId"):
             raise _bad(f"Node {n.get('name')}: configuration.knowledgeBase.knowledgeBaseId is required")
+        if t == "Lex":
+            raise BErr("ValidationException", f"Node {n.get('name')}: Lex nodes need a Lex NLU runtime (intent recognition), which Vyomi does not simulate. "
+                                              "Use a Prompt node with a classification prompt, or a LambdaFunction node.", 400)
+        if t == "InlineCode":
+            ic = cfg.get("inlineCode") or {}
+            if ic.get("language") != "Python_3":
+                raise _bad(f"Node {n.get('name')}: configuration.inlineCode.language must be Python_3")
+            if not str(ic.get("code") or "").strip() or len(ic["code"]) > 100000:
+                raise _bad(f"Node {n.get('name')}: configuration.inlineCode.code is required (at most 100000 characters)")
+            try:
+                ast.parse(ic["code"])
+            except SyntaxError as e:
+                raise _bad(f"Node {n.get('name')}: inline code is not valid Python 3: {e.msg} (line {e.lineno})")
         if t == "LambdaFunction" and not (cfg.get("lambdaFunction") or {}).get("lambdaArn"):
             raise _bad(f"Node {n.get('name')}: configuration.lambdaFunction.lambdaArn is required")
         if t in ("Retrieval", "Storage") and not _s3_cfg(n, t.lower()).get("bucketName"):
@@ -634,6 +649,33 @@ class _Run:
             raise BErr("DependencyFailedException", res["error"], 424)
         return res
 
+    def node_inline_code(self, n, vals):
+        """InlineCode node: Python 3 run in core/code_sandbox_core (Mesh: audit-hooked subprocess; Nano: AST-gated in-process, stdlib allow-list).
+        Every node input is a variable of the same name; the value of the LAST expression statement is the output (named by the node's first
+        declared output, default ``response``). No network, files outside the sandbox or processes; time limit 10 s."""
+        try:
+            from core import code_sandbox_core as cs
+        except ImportError:
+            import code_sandbox_core as cs  # type: ignore
+        code = n["configuration"]["inlineCode"]["code"]
+        tree = ast.parse(code)
+        if tree.body and isinstance(tree.body[-1], ast.Expr):
+            tree.body[-1] = ast.copy_location(ast.Assign(targets=[ast.Name(id="vyomi_flow_result", ctx=ast.Store())], value=tree.body[-1].value), tree.body[-1])
+            ast.fix_missing_locations(tree)
+            body = ast.unparse(tree)
+        else:
+            body = code + "\nvyomi_flow_result = None" if "vyomi_flow_result" not in code else code
+        pre = "import json as vyomi_json\n" + "".join(f"{k} = vyomi_json.loads({json.dumps(json.dumps(v, default=str))})\n" for k, v in vals.items() if str(k).isidentifier())
+        src = pre + body + "\nprint('\\n@@VYOMI-RESULT@@' + vyomi_json.dumps(vyomi_flow_result, default=str))\n"
+        r = cs.run(src, None, timeout=10.0)
+        if r.get("error"):
+            raise BErr("DependencyFailedException", f"Inline code node {n['name']} failed: {str(r['error'])[-400:]}", 424)
+        out = r.get("stdout", "")
+        if "@@VYOMI-RESULT@@" not in out:
+            raise BErr("DependencyFailedException", f"Inline code node {n['name']} produced no result", 424)
+        outs = n.get("outputs") or []
+        return {(outs[0].get("name") if outs else None) or "response": json.loads(out.rsplit("@@VYOMI-RESULT@@", 1)[1].strip())}
+
     def node_retrieval(self, n, vals):
         bucket, key = _s3_cfg(n, "retrieval")["bucketName"], _txt(vals.get("objectKey", ""))
         g = _s3().get_object(self.s3, bucket, key, {}, {})
@@ -791,6 +833,8 @@ class _Run:
                 produced = self.node_kb(n, vals)
             elif t == "LambdaFunction":
                 produced = self.node_lambda(n, ctx, vals)
+            elif t == "InlineCode":
+                produced = self.node_inline_code(n, vals)
             elif t == "Retrieval":
                 produced = self.node_retrieval(n, vals)
             elif t == "Storage":

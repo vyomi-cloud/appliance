@@ -374,7 +374,7 @@ def _azure_service(path, lheaders, query):
     p0 = path.split("?", 1)[0]
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|evals|vyomi/promptflow|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
-    if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0) and not p0.startswith("/identities/"):   # /identities/oauth2/token is AgentCore GetResourceOauth2Token
+    if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0) and not p0.startswith("/identities/") and not re.match(r"^/[a-z0-9-]+_[A-Za-z0-9]+/", p0):   # /identities/oauth2/token is AgentCore GetResourceOauth2Token; /{poolId}/oauth2/* is the Cognito hosted UI (core/identity_core)
         return "az-graph"
     p = path
     if p.startswith("/devstoreaccount1/"):     # Azurite account prefix
@@ -1311,7 +1311,7 @@ class AwsWireRouter:
             return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
-        if "aws4" not in (lheaders.get("authorization", "") or "").lower() and re.match(r"^/(runtimes/.+?/invocations(/|$)|gateways/[^/?]+/mcp/?$)", path.split("?", 1)[0]):
+        if "aws4" not in (lheaders.get("authorization", "") or "").lower() and re.match(r"^/(runtimes/.+?/(invocations|commands)(/|$)|gateways/[^/?]+/mcp/?$|identities/oauth2/callback/[^/?]+$)", path.split("?", 1)[0]):
             return "agentcore"   # AgentCore data plane called without SigV4 (Bearer-JWT MCP / A2A clients, agent-card GET): core/bedrock_agents_core authenticates it
         if path.startswith("/_vyomi/kb/"):   # Vyomi extension: RAG Studio inspect API (core/bedrock_agents_core.inspect_dispatch)
             return "bedrock"

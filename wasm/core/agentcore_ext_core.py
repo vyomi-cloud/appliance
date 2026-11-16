@@ -1,3 +1,5 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """AgentCore extensions: Memory, Policy engines (Cedar), gateway policy enforcement + semantic tool search, and the runtime
 tool kinds that make a supervisor agent route to sub-agents / gateway tools / memory. Thin wire adapters over OSS/shared engines:
 
@@ -8,7 +10,7 @@ tool kinds that make a supervisor agent route to sub-agents / gateway tools / me
   * Policy  (bedrock-agentcore-control /policy-engines/*): real Cedar (cedarpy, the engine core/cedar_engine uses) evaluating one
             request per gateway tool call: principal = JWT identity with claims as Cedar TAGS, action = AgentCore::Action::"<target>___<tool>",
             resource = the gateway, context.input = tool arguments. ENFORCE = default deny, LOG_ONLY = allow + audit entry.
-            Nano: cedarpy is native Rust and not in Pyodide -> a gateway with an ENFORCE engine denies every call there (fail closed).
+            Nano: cedarpy is not in Pyodide -> the same Cedar core as WebAssembly (core/cedar_wasm_shim.py, wasm/cedar/); if that fails to load an ENFORCE gateway fails closed.
   * Runtime tool kinds (registered into core/agent_spec_core): "agent" (sub-agent, inline spec or another runtime by name/id),
             "gateway" (an MCP gateway tool, caller JWT propagated), "memory" (retrieve long-term records).
 
@@ -33,9 +35,9 @@ except ImportError:  # Pyodide flat layout
     import agent_spec_core as ag  # type: ignore
 
 try:
-    import cedarpy
-except ImportError:
-    cedarpy = None  # type: ignore[assignment]
+    from core.cedar_wasm_shim import cedarpy, CedarUnavailable  # real cedarpy (Mesh/host) or cedar-wasm facade (Nano)
+except ImportError:  # Pyodide flat layout
+    from cedar_wasm_shim import cedarpy, CedarUnavailable  # type: ignore
 
 _LOWER = B._LOWER
 _MEM_NAME = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,47}$")
@@ -327,6 +329,8 @@ def _cedar_check(stmt):
         r = cedarpy.is_authorized({"principal": 'AgentCore::OAuthUser::"v"', "action": 'AgentCore::Action::"v"', "resource": 'AgentCore::Gateway::"v"', "context": {}}, stmt, [])
         if str(r.decision) == "Decision.NoDecision":
             raise ValueError("policy text does not parse")
+    except CedarUnavailable:
+        return
     except Exception as e:
         raise B._Err("ValidationException", f"Invalid Cedar policy: {str(e)[:300]}", 400)
 
@@ -465,7 +469,7 @@ def authorize(st, gw, claims, tool, args, probe=False):
             allowed = str(r.decision) == "Decision.Allow"
             ok = allowed or mode != "ENFORCE"
             why = "explicit-permit" if allowed else "denied by default: no policy permits the request"
-        except Exception as ex:
+        except Exception as ex:   # incl. CedarUnavailable (evaluator not loaded): fail closed under ENFORCE
             ok, why = (mode != "ENFORCE"), f"cedar-error: {str(ex)[:200]}"
     if probe:
         return ok, why
@@ -561,6 +565,21 @@ def run_context(st, lam, jwt, actor, fn):
         return fn()
     finally:
         _CTX.reset(tok)
+
+
+def run_context_iter(st, lam, jwt, actor, make_gen):
+    """Like run_context for a generator: the tool context is bound around each step, so events are handed to the caller (and onto the
+    wire) as they are produced instead of after the run."""
+    gen = make_gen()
+    while True:
+        tok = _CTX.set({"st": st, "lam": lam, "jwt": jwt, "actor": actor, "depth": 0})
+        try:
+            ev = next(gen)
+        except StopIteration:
+            return
+        finally:
+            _CTX.reset(tok)
+        yield ev
 
 
 def memory_hooks(st, spec, actor, session, text):

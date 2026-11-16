@@ -14,6 +14,7 @@ OAuth2 client-credentials), and the runtime MCP / A2A JSON-RPC protocol variants
 """
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import sys
@@ -142,7 +143,7 @@ def _view(kind, p):
     return out
 
 
-def _providers(st, method, segs, body):
+def _providers(st, method, segs, body, headers=None):
     """POST /identities/{Create|Get|Update|Delete|List}{ApiKey|Oauth2}Credential{Provider|Providers}."""
     m = re.match(r"^(Create|Get|Update|Delete|List)(ApiKey|Oauth2)CredentialProviders?$", segs[1])
     if not m or method != "POST":
@@ -176,7 +177,7 @@ def _providers(st, method, segs, body):
             if not disc.get("discoveryUrl") and not (disc.get("authorizationServerMetadata") or {}).get("tokenEndpoint"):
                 raise B._bad("oauthDiscovery.discoveryUrl or authorizationServerMetadata.tokenEndpoint is required")
             rec = {"name": name, "credentialProviderArn": _parn(kind, name), "credentialProviderVendor": vendor, "createdTime": now, "lastUpdatedTime": now,
-                   "callbackUrl": f"https://bedrock-agentcore.{B._REGION}.amazonaws.com/identities/oauth2/callback/{B._rid(12, B._LOWER)}",
+                   "callbackUrl": f"{_public_base(headers)}/identities/oauth2/callback/{B._rid(12, B._LOWER)}",
                    "_cfg": c, "_vendor": vendor}
             rec["oauth2ProviderConfigOutput"] = {next(iter(cfg)): {"oauthDiscovery": disc, "clientId": c["clientId"]}}
         vault[name] = rec
@@ -205,6 +206,16 @@ def _providers(st, method, segs, body):
 
 
 _TOK: dict = {}
+
+
+def _public_base(headers):
+    """Where the identity service is reachable: the AWS endpoint, or - when the SDK was pointed at the simulator - the simulator itself
+    (so the authorization server can redirect the user's browser back to it)."""
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    host = h.get("host", "")
+    if not host or host.endswith(".amazonaws.com"):
+        return f"https://bedrock-agentcore.{B._REGION}.amazonaws.com"
+    return f"{'https' if h.get('x-forwarded-proto') == 'https' else 'http'}://{host}"
 
 
 def _find_provider(st, kind, ref):
@@ -244,9 +255,25 @@ def oauth_token(rec, scopes, now=None):
     return tok
 
 
-def data_plane(st, method, segs, body):
+def data_plane(st, method, segs, body, headers=None):
     """bedrock-agentcore: POST /identities/api-key and /identities/oauth2/token (workload identity token is required but not verified: declared)."""
     p = B._body(body)
+    if len(segs) == 2 and segs[1] in ("GetWorkloadAccessToken", "GetWorkloadAccessTokenForUserId", "GetWorkloadAccessTokenForJWT") and method == "POST":
+        if not p.get("workloadName"):
+            raise B._bad("workloadName is required")
+        user = None
+        if segs[1].endswith("ForUserId"):
+            user = p.get("userId")
+        elif segs[1].endswith("ForJWT"):
+            try:
+                import base64
+                seg = (p.get("userToken") or "").split(".")[1]
+                user = (json.loads(base64.urlsafe_b64decode(seg + "=" * (-len(seg) % 4))) or {}).get("sub")
+            except Exception:  # noqa: BLE001
+                raise B._bad("userToken must be a JWT")
+        return B._j(200, {"workloadAccessToken": _wit(p["workloadName"], user)})
+    if segs[1:] == ["CompleteResourceTokenAuth"] and method == "POST":
+        return _complete_token_auth(st, p)
     if segs[1:] == ["api-key"] and method == "POST":
         if not p.get("workloadIdentityToken"):
             raise B._bad("workloadIdentityToken is required")
@@ -260,8 +287,11 @@ def data_plane(st, method, segs, body):
         rec = _vault(st)["oauth2"].get(p.get("resourceCredentialProviderName", ""))
         if not rec:
             raise B._nf(f"Credential provider {p.get('resourceCredentialProviderName')} not found")
-        if p.get("oauth2Flow") != "M2M":
-            raise B._bad("only oauth2Flow M2M (client credentials) is supported; USER_FEDERATION needs a browser consent flow")
+        flow = p.get("oauth2Flow")
+        if flow == "USER_FEDERATION":
+            return _user_federation(st, rec, p)
+        if flow != "M2M":
+            raise B._bad("oauth2Flow must be M2M or USER_FEDERATION (ON_BEHALF_OF_TOKEN_EXCHANGE is not supported)")
         try:
             return B._j(200, {"accessToken": oauth_token(rec, p.get("scopes") or [])})
         except Exception as e:  # noqa: BLE001
@@ -269,11 +299,168 @@ def data_plane(st, method, segs, body):
     return None
 
 
-def dispatch(st, method, segs, body):
+# ═════════════ USER_FEDERATION (three-legged OAuth: authorization code + PKCE) ═════════════
+# GetResourceOauth2Token(USER_FEDERATION) -> authorizationUrl + sessionUri (IN_PROGRESS); the user signs in at the provider's
+# authorization server (locally: the Cognito hosted UI in core/identity_core); the server redirects the browser to the provider's
+# callbackUrl on THIS service, which exchanges the code (+ PKCE code_verifier) at the token endpoint; the app then calls
+# CompleteResourceTokenAuth(userIdentifier, sessionUri) from its own return URL; the next GetResourceOauth2Token(sessionUri) returns
+# the accessToken. Tokens are cached per (provider, user, scopes) so a signed-in user is not asked again unless forceAuthentication.
+_SESS_PREFIX = "urn:ietf:params:oauth:request_uri:"
+_USER_TOK: dict = {}
+
+
+def _wit(workload, user=None):
+    import base64
+    return "vyomi-wit." + base64.urlsafe_b64encode(json.dumps({"w": workload, "u": user, "iat": int(time.time())}).encode()).decode().rstrip("=")
+
+
+def _wit_user(tok):
+    import base64
+    try:
+        if tok.startswith("vyomi-wit."):
+            raw = tok[10:]
+            return (json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))) or {}).get("u")
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _oauth_endpoints(c):
+    disc = c.get("oauthDiscovery") or {}
+    md = disc.get("authorizationServerMetadata") or {}
+    ep, tp = md.get("authorizationEndpoint"), md.get("tokenEndpoint")
+    if (not ep or not tp) and disc.get("discoveryUrl"):
+        doc = _http_json(disc["discoveryUrl"])
+        ep, tp = ep or doc.get("authorization_endpoint"), tp or doc.get("token_endpoint")
+    return ep, tp
+
+
+def _pkce():
+    import base64
+    import hashlib
+    import secrets
+    v = secrets.token_urlsafe(48)
+    return v, base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).rstrip(b"=").decode()
+
+
+def _user_federation(st, rec, p):
+    wit = p["workloadIdentityToken"]
+    user = _wit_user(wit) or wit
+    scopes = p.get("scopes") or []
+    sessions = st.setdefault("oauth_sessions", {})
+    su = p.get("sessionUri")
+    if su:
+        s_ = sessions.get(su)
+        if not s_ or s_["provider"] != rec["name"]:
+            raise B._nf(f"Session {su} not found")
+        if s_["status"] == "FAILED":
+            return B._j(200, {"sessionUri": su, "sessionStatus": "FAILED"})
+        if s_["status"] == "CONFIRMED":
+            return B._j(200, {"accessToken": s_["accessToken"], "sessionUri": su})
+        return B._j(200, {"authorizationUrl": s_["authorizationUrl"], "sessionUri": su, "sessionStatus": "IN_PROGRESS"})
+    hit = _USER_TOK.get((rec["name"], user, tuple(scopes)))
+    if hit and hit[0] > time.time() and not p.get("forceAuthentication"):
+        return B._j(200, {"accessToken": hit[1]})
+    c = rec["_cfg"]
+    ep, _tp = _oauth_endpoints(c)
+    if not ep:
+        raise B._bad("the credential provider has no authorization endpoint (oauthDiscovery needs a discoveryUrl with authorization_endpoint, or authorizationServerMetadata.authorizationEndpoint)")
+    ru = p.get("resourceOauth2ReturnUrl")
+    if ru is not None and not re.match(r"^https?://", ru):
+        raise B._bad("resourceOauth2ReturnUrl must be an http(s) URL")
+    verifier, challenge = _pkce()
+    sid = _SESS_PREFIX + B._rid(32, B._LOWER)
+    state = B._rid(32, B._LOWER)
+    q = [("response_type", "code"), ("client_id", c["clientId"]), ("redirect_uri", rec["callbackUrl"]), ("state", state),
+         ("code_challenge", challenge), ("code_challenge_method", "S256")]
+    if scopes:
+        q.append(("scope", " ".join(scopes)))
+    q += [("resource", r) for r in p.get("resources") or []] + [("audience", a) for a in p.get("audiences") or []]
+    q += [(k, v) for k, v in (p.get("customParameters") or {}).items() if k not in dict(q)]
+    url = ep + ("&" if "?" in ep else "?") + urllib.parse.urlencode(q)
+    sessions[sid] = {"provider": rec["name"], "user": user, "scopes": scopes, "state": state, "verifier": verifier, "authorizationUrl": url,
+                     "returnUrl": ru, "customState": p.get("customState"), "status": "IN_PROGRESS", "created": time.time()}
+    return B._j(200, {"authorizationUrl": url, "sessionUri": sid, "sessionStatus": "IN_PROGRESS"})
+
+
+def _user_callback(st, cbid, query):
+    """GET /identities/oauth2/callback/{id}?code&state - the redirect target the authorization server sends the user's browser to."""
+    q = {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()}
+    state = q.get("state", "")
+    sid, s_ = next(((k, v) for k, v in st.get("oauth_sessions", {}).items() if v["state"] == state and v["status"] == "IN_PROGRESS"), (None, None))
+    rec = _vault(st)["oauth2"].get(s_["provider"]) if s_ else None
+    if not s_ or not rec or not rec["callbackUrl"].endswith("/identities/oauth2/callback/" + cbid):
+        return B._j(400, {"message": "Unknown or expired authorization session (state)"})
+
+    def back(ok, msg=""):
+        if s_.get("returnUrl"):
+            params = {"session_id": sid}
+            if s_.get("customState"):
+                params["state"] = s_["customState"]
+            if not ok:
+                params["error"] = msg
+            return {"status": 302, "headers": {"location": s_["returnUrl"] + ("&" if "?" in s_["returnUrl"] else "?") + urllib.parse.urlencode(params), "content-type": "text/plain"}, "body": b""}
+        text = "Authorization complete. You can close this window." if ok else "Authorization failed: " + msg
+        return {"status": 200 if ok else 400, "headers": {"content-type": "text/html; charset=utf-8"}, "body": f"<!doctype html><title>Vyomi</title><p>{text}</p>".encode()}
+    if q.get("error"):
+        s_["status"] = "FAILED"
+        return back(False, q.get("error_description") or q["error"])
+    c = rec["_cfg"]
+    try:
+        _ep, tp = _oauth_endpoints(c)
+        form = {"grant_type": "authorization_code", "code": q.get("code", ""), "redirect_uri": rec["callbackUrl"], "code_verifier": s_["verifier"]}
+        hdrs = {"content-type": "application/x-www-form-urlencoded", "accept": "application/json"}
+        if (c.get("clientAuthenticationMethod") or "CLIENT_SECRET_BASIC") == "CLIENT_SECRET_POST":
+            form.update(client_id=c["clientId"], client_secret=c["clientSecret"])
+        else:
+            import base64
+            hdrs["authorization"] = "Basic " + base64.b64encode(f"{urllib.parse.quote(c['clientId'], safe='')}:{urllib.parse.quote(c['clientSecret'], safe='')}".encode()).decode()
+        status, _ct, raw = _http("POST", tp, hdrs, urllib.parse.urlencode(form).encode())
+        doc = json.loads(raw.decode("utf-8", "replace") or "{}")
+        if status >= 400 or not doc.get("access_token"):
+            raise RuntimeError(doc.get("error_description") or doc.get("error") or f"token endpoint returned HTTP {status}")
+    except Exception as e:  # noqa: BLE001
+        s_["status"] = "FAILED"
+        return back(False, str(e)[:200])
+    s_.update(status="AUTHORIZED", accessToken=doc["access_token"], expires=time.time() + max(float(doc.get("expires_in", 300)) - 30, 1))
+    return back(True)
+
+
+def _complete_token_auth(st, p):
+    """POST /identities/CompleteResourceTokenAuth: binds the finished authorization to the user the app says it is."""
+    su, ui = p.get("sessionUri"), p.get("userIdentifier") or {}
+    if not su or not (ui.get("userToken") or ui.get("userId")):
+        raise B._bad("sessionUri and userIdentifier (userToken or userId) are required")
+    s_ = st.get("oauth_sessions", {}).get(su)
+    if not s_:
+        raise B._nf(f"Session {su} not found")
+    who = ui.get("userId")
+    if ui.get("userToken"):
+        try:
+            import base64
+            seg = ui["userToken"].split(".")[1]
+            who = (json.loads(base64.urlsafe_b64decode(seg + "=" * (-len(seg) % 4))) or {}).get("sub") or ui["userToken"]
+        except Exception:  # noqa: BLE001
+            who = ui["userToken"]
+    if who != s_["user"] and ui.get("userToken") != s_["user"]:
+        raise B._Err("AccessDeniedException", "userIdentifier does not match the user that started this authorization session", 403)
+    if s_["status"] == "FAILED":
+        raise B._bad("The authorization session failed")
+    if s_["status"] == "IN_PROGRESS":
+        raise B._bad("The user has not finished authorizing yet")
+    s_["status"] = "CONFIRMED"
+    _USER_TOK[(s_["provider"], s_["user"], tuple(s_["scopes"]))] = (s_["expires"], s_["accessToken"])
+    return B._j(200, {})
+    return None
+
+
+def dispatch(st, method, segs, body, headers=None, query=None):
     if segs[0] != "identities" or len(segs) < 2:
         return None
+    if len(segs) == 4 and segs[1:3] == ["oauth2", "callback"] and method == "GET":
+        return _user_callback(st, segs[3], query)
     try:
-        return _providers(st, method, segs, body) or data_plane(st, method, segs, body)
+        return _providers(st, method, segs, body, headers) or data_plane(st, method, segs, body, headers)
     except B._Err as e:
         return B._err_resp(e)
 
@@ -751,11 +938,46 @@ def _a2a_run(rt, prm, run_agent):
     return msg, ctx, out, "task-" + B._rid(16, B._LOWER)
 
 
-def runtime_a2a(rt, spec, req, run_agent, tasks):
-    """A2A JSON-RPC: message/send runs the agent and returns a completed Task; message/stream the same as Server-Sent task events
-    (returned as {"_sse": [...]}; the agent run completes first, events are then emitted - no token-level streaming);
-    tasks/get; agent/getAuthenticatedExtendedCard."""
+def runtime_a2a(rt, spec, req, run_agent, tasks, run_stream=None):
+    """A2A JSON-RPC: message/send runs the agent and returns a completed Task; message/stream returns Server-Sent task events
+    ({"_sse": generator}). With ``run_stream`` (a generator of ("token", piece) / ("tools", names) / ("final", text)) the events are
+    emitted AS THE MODEL PRODUCES THEM: a ``working`` task first (as soon as the model answers its first piece), one ``artifact-update`` (append) per token
+    chunk, a ``working`` status-update naming the tools after a tool-calling step (the next artifact chunk restarts the artifact),
+    then the final artifact chunk and the ``completed`` status. tasks/get; agent/getAuthenticatedExtendedCard."""
     rid, method, prm = req.get("id"), req.get("method"), req.get("params") or {}
+    if method == "message/stream" and run_stream is not None:
+        msg = prm.get("message") or {}
+        text = " ".join(p.get("text", "") for p in msg.get("parts") or [] if p.get("kind", "text") == "text").strip()
+        if not text:
+            return _rpc_err(rid, -32602, "message.parts needs a text part")
+        ctx = msg.get("contextId") or "ctx-" + B._rid(16, B._LOWER)
+        tid, aid = "task-" + B._rid(16, B._LOWER), "art-" + B._rid(8, B._LOWER)
+        stream = run_stream(text, ctx)
+        pending = next(stream, None)   # model errors surface as a proper HTTP status before the first event
+
+        def events():
+            working = {"state": "working", "timestamp": B._iso()}
+            yield _rpc_ok(rid, {"kind": "task", "id": tid, "contextId": ctx, "status": working, "history": [msg]})
+            fresh = True
+            for kind, val in (itertools.chain([pending], stream) if pending else iter(())):
+                if kind == "token":
+                    yield _rpc_ok(rid, {"kind": "artifact-update", "taskId": tid, "contextId": ctx, "append": not fresh, "lastChunk": False,
+                                        "artifact": {"artifactId": aid, "name": "response", "parts": [{"kind": "text", "text": val}]}})
+                    fresh = False
+                elif kind == "tools":
+                    fresh = True
+                    yield _rpc_ok(rid, {"kind": "status-update", "taskId": tid, "contextId": ctx, "final": False,
+                                        "status": {"state": "working", "timestamp": B._iso(),
+                                                   "message": {"kind": "message", "role": "agent", "messageId": "m-" + B._rid(10, B._LOWER),
+                                                               "parts": [{"kind": "text", "text": "calling tools: " + ", ".join(val)}]}}})
+                elif kind == "final":
+                    art = {"artifactId": aid, "name": "response", "parts": [{"kind": "text", "text": val}]}
+                    reply = {"kind": "message", "role": "agent", "messageId": "m-" + B._rid(10, B._LOWER), "contextId": ctx, "parts": [{"kind": "text", "text": val}]}
+                    done = {"state": "completed", "timestamp": B._iso()}
+                    tasks[tid] = {"kind": "task", "id": tid, "contextId": ctx, "status": done, "artifacts": [art], "history": [msg, reply]}
+                    yield _rpc_ok(rid, {"kind": "artifact-update", "taskId": tid, "contextId": ctx, "append": False, "lastChunk": True, "artifact": art})
+                    yield _rpc_ok(rid, {"kind": "status-update", "taskId": tid, "contextId": ctx, "status": done, "final": True})
+        return {"_sse": events()}
     if method in ("message/send", "message/stream"):
         msg, ctx, out, tid = _a2a_run(rt, prm, run_agent)
         if msg is None:

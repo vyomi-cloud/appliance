@@ -1134,6 +1134,35 @@ def _render(tpl, vals):
     return re.sub(r"\$([a-zA-Z_]+)\$", lambda m: str(vals.get(m.group(1), m.group(0))), tpl)
 
 
+def _kb_response_generation(snap, lam, ctx, tr, fm, infer, infer_kw, query, results):
+    """KNOWLEDGE_BASE_RESPONSE_GENERATION: the agent's own prompt template ($query$, $search_results$, $output_format_instructions$) is rendered over the
+    retrieved passages and run on the model; the parser Lambda (parserMode OVERRIDDEN) may rewrite the output (generatedResponse.generatedResponseParts).
+    -> the generated text, or None when the prompt is not overridden / DISABLED (the retrieved passages then go to orchestration verbatim)."""
+    c = _pcfg(snap, "KNOWLEDGE_BASE_RESPONSE_GENERATION")
+    if not c or c.get("promptCreationMode") != "OVERRIDDEN":
+        return None
+    tid = _tid()
+    if c.get("promptState") == "DISABLED":
+        tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "parsedResponse": {"text": "Knowledge base response generation is disabled (promptState DISABLED): passages used verbatim."}}})
+        return None
+    sr = "<search_results>" + "".join(f"<search_result><content>{r['content']['text']}</content><source>{i + 1}</source></search_result>" for i, r in enumerate(results)) + "</search_results>"
+    prompt = _render(c["basePromptTemplate"], {"query": query, "search_results": sr, "output_format_instructions": "", "question": query})
+    tr("orchestrationTrace", {"modelInvocationInput": {"traceId": tid, "type": "KNOWLEDGE_BASE_RESPONSE_GENERATION", "foundationModel": fm,
+                                                       "inferenceConfiguration": (c.get("inferenceConfiguration") or infer), "text": prompt}})
+    rr = llm.chat([{"role": "user", "content": prompt}], system=snap["instruction"], **infer_kw(c, 400))
+    raw, text = rr["text"], rr["text"]
+    doc = _parser_lambda(lam, snap, "KNOWLEDGE_BASE_RESPONSE_GENERATION", ctx, raw)
+    if doc is not None:
+        gr = (doc.get("knowledgeBaseResponseGenerationParsedResponse") or {}).get("generatedResponse")
+        if isinstance(gr, dict):
+            text = "".join(pt.get("text", "") for pt in gr.get("generatedResponseParts") or []) or text
+        elif isinstance(gr, str):
+            text = gr
+    tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": raw}, "parsedResponse": {"text": text},
+                                                       "metadata": {"usage": {"inputTokens": rr["input_tokens"], "outputTokens": rr["output_tokens"]}}}})
+    return text
+
+
 def _parser_lambda(lam, snap, ptype, ctx, raw):
     """Invoke the parser Lambda (overrideLambda) with the real OUTPUT_PARSER event -> the response document, or None."""
     c = _pcfg(snap, ptype)
@@ -1697,7 +1726,9 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam, inline=None, sink=None
             tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "KNOWLEDGE_BASE", "knowledgeBaseLookupOutput": {"retrievedReferences": [
                 {kk: vv for kk, vv in r2.items() if kk != "score"} for r2 in res]}}})
             refs += res
-            kbctx += "\n".join(r2["content"]["text"] for r2 in res) + "\n"
+            gen_txt = _kb_response_generation(snap, lam, ctx, tr, fm, infer, infer_kw, text, res) if res else None
+            kbctx += (("Answer generated from the knowledge base by the agent's KNOWLEDGE_BASE_RESPONSE_GENERATION prompt:\n" + gen_txt + "\n") if gen_txt
+                      else "\n".join(r2["content"]["text"] for r2 in res) + "\n")
         mem_txt = ""
         if mid and _mem_cfg(snap):
             ms = sorted(_live_memories(a, alias_id, mid), key=lambda m: m["sessionSummary"]["sessionStartTime"])
@@ -2462,8 +2493,8 @@ def _runtimes(st, method, path, query, headers, body, lam=None, s3=None):
             raise _nf(f"Runtime session {sid} not found")
         rt["_sessions"].pop(sid, None)
         return _j(200, {"runtimeSessionId": sid, "statusCode": 200}, {_SESS_HDR: sid})
-    if tail == "commands":
-        raise _Err("ValidationException", "InvokeAgentRuntimeCommand needs a container; the Vyomi agent-spec runtime has none", 400)
+    if tail == "commands" and method == "POST":
+        return _invoke_command(rt, query or {}, headers or {}, body)
     if tail == "":
         if method == "GET":
             v = pq.get("agentRuntimeVersion")
@@ -2630,14 +2661,15 @@ def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
     hdrs = {_SESS_HDR: sid, "x-vyomi-local-model": llm.model_name()}
     try:
         if want_stream or "text/event-stream" in accept:
-            evs = ext.run_context(st, lam, jwt, actor, lambda: list(ag.run_events(spec, text, sess["history"])))   # events buffered: the tool context is scoped to the call
-            gen = iter(evs)
-            first = next(gen)
+            gen = ext.run_context_iter(st, lam, jwt, actor, lambda: ag.run_events(spec, text, sess["history"], stream_tokens=True))
+            first = next(gen)   # a dead model fails the request with a proper status before any byte is sent
 
             def sse():
                 import itertools
                 for ev in itertools.chain([first], gen):
-                    if ev["type"] == "final":
+                    if ev["type"] == "token":   # as the model produces it
+                        yield "data: " + json.dumps({"event": "token", "text": ev["text"]}) + "\n\n"
+                    elif ev["type"] == "final":
                         sess["history"].extend(ev["messages"])
                         mem_after(ev["text"])
                         yield "data: " + json.dumps({"event": "final", "response": ev["text"], "usage": ev["usage"]}) + "\n\n"
@@ -2663,6 +2695,37 @@ def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
     return _j(200, {"response": r["text"], "sessionId": sid,
                     "toolCalls": [{"name": s["name"], "arguments": s["arguments"], "result": s["result"], "isError": s["isError"]} for s in r["steps"] if s["type"] == "tool_result"],
                     "usage": r["usage"], "model": r["model"], "truncated": r["truncated"]}, hdrs)
+
+
+def _invoke_command(rt, query, headers, body):
+    """InvokeAgentRuntimeCommand: a command in the session workspace (core/agentcore_command_core on core/code_sandbox_core), streamed as an event stream."""
+    q = {k.lower(): v for k, v in (query or {}).items()}
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    if q.get("qualifier") and q["qualifier"] != "DEFAULT" and q["qualifier"] not in rt["_endpoints"]:
+        raise _nf(f"Endpoint {q['qualifier']} not found")
+    if rt["status"] != "READY":
+        return _rt_client_err(f"Runtime is {rt['status']}, not READY")
+    p = _body(body)
+    cmd, tmo = p.get("command"), p.get("timeout", 300)
+    if not isinstance(cmd, str) or not 1 <= len(cmd) <= 65536:
+        raise _bad("1 validation error detected: Value at 'body.command' failed to satisfy constraint: Member must have length between 1 and 65536")
+    if isinstance(tmo, bool) or not isinstance(tmo, int) or not 1 <= tmo <= 3600:
+        raise _bad("1 validation error detected: Value at 'body.timeout' failed to satisfy constraint: Member must have value between 1 and 3600")
+    sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
+    if len(sid) < 33:
+        raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
+    sess = rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
+    files = sess.setdefault("files", {})
+    try:
+        from core import agentcore_command_core as cc
+    except ImportError:
+        import agentcore_command_core as cc  # type: ignore
+    gen = (_evt("chunk", ev) for ev in cc.events(cmd, files, rt.get("environmentVariables") or {}, tmo))
+    try:
+        from core import ai_models_core as am
+    except ImportError:
+        import ai_models_core as am  # type: ignore
+    return am._stream_out(200, {_SESS_HDR: sid}, gen, "application/vnd.amazon.eventstream")
 
 
 def _agent_card(rt, headers):
@@ -2705,9 +2768,22 @@ def _invoke_protocol(rt, proto, spec, ag, h, body, st, lam):
         mem_after(r["text"])
         sess["history"].extend(r["messages"])
         return r["text"]
+    def run_stream(text, ctx):
+        """Generator of ("token", piece) as the model produces it, ("tools", [names]) after a tool-calling step, then ("final", text)."""
+        text2, mem_after = ext.memory_hooks(ext._x(st), spec, actor, ctx, text)
+        sess = rt["_sessions"].setdefault(ctx, {"history": [], "created": _iso()})
+        for ev in ext.run_context_iter(st, lam, jwt, actor, lambda: ag.run_events(spec, text2, sess["history"], stream_tokens=True)):
+            if ev["type"] == "token":
+                yield "token", ev["text"]
+            elif ev["type"] == "model" and ev["tool_calls"]:
+                yield "tools", [c["name"] for c in ev["tool_calls"]]
+            elif ev["type"] == "final":
+                sess["history"].extend(ev["messages"])
+                mem_after(ev["text"])
+                yield "final", ev["text"]
     try:
-        out = gt.runtime_a2a(rt, spec, req, run_agent, rt.setdefault("_a2a_tasks", {}))
-        if isinstance(out, dict) and "_sse" in out:   # message/stream: Server-Sent Events, one JSON-RPC response per task event
+        out = gt.runtime_a2a(rt, spec, req, run_agent, rt.setdefault("_a2a_tasks", {}), run_stream)
+        if isinstance(out, dict) and "_sse" in out:   # message/stream: Server-Sent Events, one JSON-RPC response per task event, sent as produced
             try:
                 from core import ai_models_core as am
             except ImportError:
@@ -2728,7 +2804,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
         if segs[0] == "runtimes":
             return _runtimes(st, method, path, query, headers, body, lam, s3)
         if segs[0] == "identities":
-            r = _gt().dispatch(st, method, segs, body)
+            r = _gt().dispatch(st, method, segs, body, headers, query)
             if r is not None:
                 return r
         if segs[0] in ("memories", "policy-engines"):
