@@ -166,15 +166,15 @@ def("aws.bedrock.prompt-management", ["/bedrock/prompt-management", "/bedrock/pr
 });
 def("aws.bedrock.flows", ["/bedrock/flows", "/bedrock/flows/:id"], {
   title: "Flows: scope and limits",
-  intro: "CreateFlow, PrepareFlow, versions, aliases and InvokeFlow, executed by a small in-process runner.",
-  real: ["Input, Prompt (inline or a managed prompt), Condition, Collector and Output nodes with Data and Conditional connections; the Test panel uses the TSTALIASID test alias on the prepared draft."],
-  limits: ["LambdaFunction, KnowledgeBase, Agent, Lex, Storage, Retrieval, Iterator and loop nodes are rejected at create/update time. There is no drag-and-drop canvas: nodes are edited as JSON. Flow executions are not traced."],
+  intro: "CreateFlow, PrepareFlow, versions, aliases and InvokeFlow (with execution tracing), run by a graph runner and edited on a drag-and-drop canvas.",
+  real: ["Input, Output, Prompt (inline or a managed prompt), Condition, Iterator + Collector, Agent, KnowledgeBase, LambdaFunction, Retrieval (S3 get), Storage (S3 put) and Loop nodes with Data and Conditional connections. A node fires when all its inputs have arrived. The Test panel runs the prepared draft (TSTALIASID) with enableTrace and shows per-node input/output events."],
+  limits: ["Lex and InlineCode nodes are rejected, and graphs may not contain cycles outside a Loop body. The Loop node is Vyomi's reading of the LoopInput / LoopController shape. Prompt, Agent and KnowledgeBase nodes use the single small local model. Canvas positions live in this browser, not in the flow definition. 1000 node executions per invoke."],
 });
 def("aws.bedrock.evaluations", ["/bedrock/evaluations", "/bedrock/evaluations/:id"], {
-  title: "Model evaluations: scope and limits",
-  intro: "CreateEvaluationJob for automated model evaluation with a custom prompt dataset, scored against the local model.",
-  real: ["Jobs read a JSONL dataset from S3, answer each prompt with the selected model and write per-record scores plus report.json to the output location."],
-  limits: ["Metrics are token F1 (Accuracy), answer stability under a perturbed prompt (Robustness) and a guardrail-lexicon rate (Toxicity), not the managed scorers. At most 25 records per dataset. Human, RAG and LLM-as-a-judge jobs are rejected."],
+  title: "Evaluations: scope and limits",
+  intro: "CreateEvaluationJob for automatic model evaluation, LLM-as-a-judge, RAG evaluation over a knowledge base, and human-workflow jobs.",
+  real: ["Jobs read a JSONL dataset (up to 1000 records) from S3, generate answers with the model or the knowledge base, score them and write per-record rows plus report.json to S3. Long jobs run in batches and report progress. Scorers: token F1, ROUGE-L, exact match, embedding cosine, robustness, toxicity lexicon, and judge metrics (correctness, completeness, helpfulness, coherence, relevance, instruction following, tone, harmfulness, stereotyping, refusal, faithfulness, citation precision/coverage, context relevance/coverage, custom rating scales)."],
+  limits: ["The judge is the single small local model, so judged scores are far less reliable than the managed judge models; unparsable verdicts are counted as unscored. Not BERTScore or the real-world-knowledge scorer. The human-workflow job type writes the model responses but the Ground Truth work team and rating UI are not simulated, so it stays InProgress awaiting reviewers."],
 });
 def("aws.bedrock.model-access", ["/bedrock/model-access"], {
   title: "Model access: scope and limits",
@@ -352,8 +352,8 @@ def("azure.foundry.overview", ["/foundry"], {
   title: "Foundry: scope and limits",
   intro: "The Microsoft Foundry hub blade over real ARM lists of Azure AI resources.",
   real: ["Overview and Dashboard follow the real chrome, title, chips and left menu. Resource lists are real ARM reads (Microsoft.CognitiveServices accounts by kind, Microsoft.Search services). Model tiles show only models this simulator serves."],
-  real: ["Agents (Assistants API), Content filters (enforced on deployments), Fine-tuning and the AI Search blade are real. Evaluations, Prompt flow and Machine Learning say plainly that they are not in scope, with what to use instead."],
-  limits: ["Foundry project pages (model catalog, project deployments, playground) are not built.", "Hero and capability-card illustrations are plain blocks. The group membership of the sub-menu was inferred; the capture never expanded it."],
+  real: ["Agents (Assistants API), Content filters (enforced on deployments), Fine-tuning and the AI Search blade are real. Evaluations (Azure OpenAI Evals API) and Prompt flow (flow.dag.yaml DAGs on the shared flow runner) are real over the Azure OpenAI engine. Machine Learning says plainly that it is not in scope, with what to use instead."],
+  limits: ["Evaluations: string_check, text_similarity (rouge/bleu/fuzzy/cosine), label_model and score_model graders, up to 1000 rows; the judge is the small local model so judged scores are indicative; python graders and logs sources are rejected. Prompt flow: llm and prompt nodes only (python tool nodes rejected), management endpoints are a Vyomi extension, state is in memory.", "Foundry project pages (model catalog, project deployments, playground) are not built.", "Hero and capability-card illustrations are plain blocks. The group membership of the sub-menu was inferred; the capture never expanded it."],
 });
 def("azure.foundry.finetuning", ["/foundry/finetuning", "/foundry/finetuning/:jobId"], {
   title: "Fine-tuning: scope and limits",

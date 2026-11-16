@@ -88,7 +88,7 @@ evs = list(r["responseStream"])
 outs = [e["flowOutputEvent"] for e in evs if "flowOutputEvent" in e]
 check("invoke_flow returns model output + completion", len(outs) == 1 and isinstance(outs[0]["content"]["document"], str) and outs[0]["content"]["document"] != ""
       and any(e.get("flowCompletionEvent", {}).get("completionReason") == "SUCCESS" for e in evs), evs)
-bad = dict(defn); bad = {**defn, "nodes": defn["nodes"] + [{"name": "L", "type": "LambdaFunction", "configuration": {"lambdaFunction": {"lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:f"}}}]}
+bad = dict(defn); bad = {**defn, "nodes": defn["nodes"] + [{"name": "L", "type": "Lex", "configuration": {"lex": {"botAliasArn": "arn:aws:lex:us-east-1:123456789012:bot-alias/A/B", "localeId": "en_US"}}}]}
 check("unsupported node type rejected", code(lambda: ba.create_flow(name="bad-flow", executionRoleArn="arn:aws:iam::123456789012:role/r", definition=bad)) == "ValidationException")
 check("alias to missing version -> NotFound", code(lambda: ba.create_flow_alias(flowIdentifier=fid, name="x", routingConfiguration=[{"flowVersion": "9"}])) == "ResourceNotFoundException")
 ba.delete_flow_alias(flowIdentifier=fid, aliasIdentifier=al)

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
 import uuid
 
@@ -710,6 +711,10 @@ def _run_stream(t, run, asst, before_msgs):
 def assistants_dispatch(arm_find, method, path, query, p):
     """-> response dict, or None when path is not an Assistants route."""
     am = _am()
+    if re.match(r"^/openai(/v1)?/evals(/|$)", path):
+        return evals_dispatch(arm_find, method, path, query, p)
+    if re.match(r"^/openai(/v1)?/vyomi/promptflow(/|$)", path):
+        return pf_dispatch(arm_find, method, path, query, p)
     method = method.upper()
     path = re.sub(r"^/openai(/v1)?", "", path).rstrip("/")
     J = am._j
@@ -889,5 +894,479 @@ def _create_run(arm_find, t, asst, p):
     return am._j(200, _run_view(run))
 
 
+# ───────────────────── Azure OpenAI Evals + Microsoft Foundry Prompt flow (lane limflows) ─────────────────────
+# Evals: the real Azure OpenAI Evals API (/openai/evals, runs, output_items) graded by the SAME scorers as Bedrock evaluations
+# (core/bedrock_build_core: token F1 / ROUGE / embedding cosine, and the local-model judge parser). Prompt flow: a flow.dag.yaml-shaped DAG
+# (inputs / outputs / nodes of type llm and prompt) executed on the SAME flow runner as Bedrock Flows (bedrock_build_core._Run); a flow is
+# tested via .../test and served like a managed online endpoint via POST .../score. python-tool nodes are rejected (they would run
+# arbitrary user code). Honest limits: the judge is the single small local model; state is process-local like the Assistants objects.
+_EVALS: dict = {}
+_EVRUNS: dict = {}
+_PF: dict = {}
+_EV_MAX = 1000
+_EV_BATCH = 3 if sys.platform == "emscripten" else 25
+_BB_RAW = [None]
+
+
+def _bb():
+    try:
+        from core import bedrock_build_core as b
+    except ImportError:  # Pyodide flat layout
+        import bedrock_build_core as b  # type: ignore
+    return b
+
+
+def _dig(ctx, path):
+    cur = ctx
+    for k in path.split("."):
+        cur = cur.get(k) if isinstance(cur, dict) else None
+        if cur is None:
+            return ""
+    return cur if isinstance(cur, str) else json.dumps(cur)
+
+
+def _tmpl(s, ctx):
+    if isinstance(s, dict):      # {type: input_text, text: ...} content part
+        s = s.get("text", "")
+    return re.sub(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}", lambda m: _dig(ctx, m.group(1)), str(s or ""))
+
+
+def _chat_text(arm_find, model, messages, temperature=0.0, max_tokens=256):
+    if arm_find is not None and not arm_find(model)[1]:
+        raise Bad(f"The API deployment '{model}' for this resource does not exist.", "model", 404, "DeploymentNotFound")
+    body = {"messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+    return _call(_chat_req(body), model)["text"]
+
+
+_METRICS = ("fuzzy_match", "bleu", "rouge_1", "rouge_2", "rouge_3", "rouge_4", "rouge_5", "rouge_l", "cosine")
+
+
+def _ngrams(toks, n):
+    from collections import Counter
+    return Counter(tuple(toks[i:i + n]) for i in range(len(toks) - n + 1))
+
+
+def _sim(metric, a, b):
+    bb = _bb()
+    ta, tb = bb._toks(a), bb._toks(b)
+    if metric == "fuzzy_match":
+        import difflib
+        return difflib.SequenceMatcher(None, " ".join(ta), " ".join(tb)).ratio()
+    if metric == "rouge_l":
+        return bb.rouge_l(a, b)
+    if metric.startswith("rouge_"):
+        n = int(metric[-1])
+        ca, cb = _ngrams(ta, n), _ngrams(tb, n)
+        common = sum((ca & cb).values())
+        if not common:
+            return 0.0
+        pr, rc = common / max(1, sum(ca.values())), common / max(1, sum(cb.values()))
+        return 2 * pr * rc / (pr + rc)
+    if metric == "bleu":
+        import math
+        if not ta or not tb:
+            return 0.0
+        logs = []
+        for n in range(1, 5):
+            ca, cb = _ngrams(ta, n), _ngrams(tb, n)
+            tot = max(1, sum(ca.values()))
+            logs.append(math.log((sum((ca & cb).values()) + (0 if n == 1 else 1)) / (tot + (0 if n == 1 else 1)) or 1e-9))
+        bp = 1.0 if len(ta) >= len(tb) else math.exp(1 - len(tb) / len(ta))
+        return bp * math.exp(sum(logs) / 4)
+    if metric == "cosine":
+        v = llm.embed([a, b])["vectors"]
+        return max(0.0, bb._cos(v[0], v[1]))
+    raise Bad(f"Unsupported evaluation_metric '{metric}': supported {', '.join(_METRICS)}", "evaluation_metric")
+
+
+def _grade(arm_find, c, ctx):
+    t, name = c.get("type"), c.get("name") or c.get("type")
+    bb = _bb()
+    if t == "string_check":
+        a, b = _tmpl(c.get("input"), ctx), _tmpl(c.get("reference"), ctx)
+        op = c.get("operation")
+        ok = {"eq": a == b, "ne": a != b, "like": b in a, "ilike": b.lower() in a.lower()}.get(op)
+        return {"name": name, "type": t, "score": 1.0 if ok else 0.0, "passed": bool(ok)}
+    if t == "text_similarity":
+        a, b = _tmpl(c.get("input"), ctx), _tmpl(c.get("reference"), ctx)
+        s = round(_sim(c.get("evaluation_metric"), a, b), 4)
+        return {"name": name, "type": t, "score": s, "passed": s >= float(c.get("pass_threshold", 0.5))}
+    if t in ("label_model", "score_model"):
+        msgs = [{"role": m.get("role", "user"), "content": _tmpl(m.get("content"), ctx)} for m in (c.get("input") or [])]
+        body = "\n\n".join(f"{m['role']}: {m['content']}" for m in msgs)
+        if t == "label_model":
+            labels, passing = c["labels"], set(c.get("passing_labels") or [])
+            scale = [(l, 1.0 if l in passing else 0.0) for l in labels]
+            prompt = f"You are an impartial grader.\n\n{body}\n\nChoose exactly one label from: {' | '.join(labels)}.\nReply with JSON only: " + '{"reasoning": "<one short sentence>", "answer": "<one label>"}'
+            txt = _chat_text(arm_find, c["model"], [{"role": "user", "content": prompt}])
+            sc, lab, why = bb._parse_verdict(txt, scale)
+            if sc is None:
+                return {"name": name, "type": t, "score": None, "passed": False, "sample": {"error": "unparsable judge verdict", "raw": why}}
+            return {"name": name, "type": t, "score": sc, "passed": lab in passing, "sample": {"label": lab, "reasoning": why}}
+        lo, hi = (c.get("range") or [0, 1])[:2]
+        prompt = f"You are an impartial grader.\n\n{body}\n\nGive a numeric score between {lo} and {hi}.\nReply with JSON only: " + '{"reasoning": "<one short sentence>", "score": <number>}'
+        txt = _chat_text(arm_find, c["model"], [{"role": "user", "content": prompt}])
+        val = None
+        m = re.search(r"\{.*\}", txt, re.S)
+        if m:
+            try:
+                val = float(json.loads(m.group(0)).get("score"))
+            except (ValueError, TypeError):
+                val = None
+        if val is None:
+            mm = re.search(r"-?\d+(?:\.\d+)?", txt)
+            val = float(mm.group(0)) if mm else None
+        if val is None:
+            return {"name": name, "type": t, "score": None, "passed": False, "sample": {"error": "unparsable judge score", "raw": txt[:200]}}
+        val = max(float(lo), min(float(hi), val))
+        return {"name": name, "type": t, "score": val, "passed": val >= float(c.get("pass_threshold", (lo + hi) / 2))}
+    raise Bad(f"Unsupported testing_criteria type '{t}' (supported: string_check, text_similarity, label_model, score_model)", "testing_criteria")
+
+
+def _eval_view(e):
+    return {k: v for k, v in e.items() if not k.startswith("_")}
+
+
+def _run_view(r):
+    out = {k: v for k, v in r.items() if not k.startswith("_")}
+    its = r["_items"]
+    out["result_counts"] = {"total": len(r["_src"]), "errored": sum(1 for i in its if i["status"] == "error"), "failed": sum(1 for i in its if i["status"] == "fail"), "passed": sum(1 for i in its if i["status"] == "pass")}
+    out["per_testing_criteria_results"] = [{"testing_criteria": c.get("name") or c["type"], "passed": sum(1 for i in its for x in i["results"] if x["name"] == (c.get("name") or c["type"]) and x["passed"]),
+                                            "failed": sum(1 for i in its for x in i["results"] if x["name"] == (c.get("name") or c["type"]) and not x["passed"])} for c in r["_crit"]]
+    out["vyomiProgress"] = {"processedItems": len(its), "totalItems": len(r["_src"])}
+    return out
+
+
+def _ev_step(arm_find, run, max_items=None):
+    """Advance a run by up to max_items items, committing each item as it finishes (replay-safe on Nano)."""
+    if run["status"] != "in_progress":
+        return
+    done, t0 = 0, time.time()
+    try:
+        while len(run["_items"]) < len(run["_src"]):
+            if run["status"] != "in_progress" or (max_items is not None and done >= max_items) or time.time() - t0 > 25:
+                return
+            i = len(run["_items"])
+            src = run["_src"][i]
+            item = src.get("item") or {}
+            ds = run["data_source"]
+            sample = dict(src.get("sample") or {})
+            if ds["type"] == "completions":
+                msgs = [{"role": m.get("role", "user"), "content": _tmpl(m.get("content"), {"item": item})} for m in (ds["input_messages"].get("template") or [])]
+                sp = ds.get("sampling_params") or {}
+                text = _chat_text(arm_find, ds["model"], msgs, float(sp.get("temperature", 0.0)), int(sp.get("max_completion_tokens") or sp.get("max_tokens") or 256))
+                sample = {"input": msgs, "output": [{"role": "assistant", "content": text}], "model": ds["model"]}
+                sample["output_text"] = text
+            elif "output_text" not in sample:
+                o = sample.get("output")
+                sample["output_text"] = o if isinstance(o, str) else (" ".join(m.get("content", "") for m in o) if isinstance(o, list) else "")
+            ctx = {"item": item, "sample": {**sample, "output_text": sample.get("output_text", "")}}
+            results = [_grade(arm_find, c, ctx) for c in run["_crit"]]
+            ok = all(r["passed"] for r in results)
+            bad = any(r["score"] is None for r in results)
+            run["_items"].append({"object": "eval.run.output_item", "id": f"outputitem_{uuid.uuid4().hex[:16]}", "run_id": run["id"], "eval_id": run["eval_id"], "created_at": int(time.time()),
+                                  "status": "error" if bad else ("pass" if ok else "fail"), "datasource_item_id": i, "datasource_item": item, "results": results, "sample": sample})
+            done += 1
+        run.update(status="completed", completed_at=int(time.time()), report_url=f"vyomi://evals/{run['eval_id']}/runs/{run['id']}")
+    except Bad as e:
+        run.update(status="failed", error={"code": e.code, "message": e.msg})
+    except llm.LlmUnavailable as e:
+        run.update(status="failed", error={"code": "ServiceUnavailable", "message": str(e)})
+
+
+def _ev_drive(arm_find, run):
+    if sys.platform == "emscripten":
+        return
+    import threading
+
+    def go():
+        while run["status"] == "in_progress":
+            try:
+                _ev_step(arm_find, run, _EV_BATCH)
+            except BaseException:  # noqa: BLE001
+                run.update(status="failed", error={"code": "server_error", "message": "background evaluation worker stopped"})
+    threading.Thread(target=go, daemon=True).start()
+
+
+def _source_items(ds):
+    src = ds.get("source") or {}
+    if src.get("type") == "file_content":
+        rows = src.get("content") or []
+    elif src.get("type") == "file_id":
+        raw = _am()._trained().get_file(src.get("id")) if src.get("id") else None
+        if raw is None:
+            raise Bad(f"No such File object: {src.get('id')}", "data_source.source.id", 404, "NotFound")
+        rows = [json.loads(x) for x in raw.decode("utf-8", "replace").splitlines() if x.strip()]
+    else:
+        raise Bad("data_source.source.type must be file_content or file_id", "data_source.source")
+    rows = [r if isinstance(r, dict) and "item" in r else {"item": r} for r in rows]
+    if not rows:
+        raise Bad("The data source has no rows", "data_source.source")
+    if len(rows) > _EV_MAX:
+        raise Bad(f"The data source has {len(rows)} rows; the maximum is {_EV_MAX}", "data_source.source")
+    return rows
+
+
+def evals_dispatch(arm_find, method, path, query, p):
+    am = _am()
+    J = am._j
+    method = method.upper()
+    path = re.sub(r"^/openai(/v1)?", "", path).rstrip("/")
+
+    def err(msg, param=None, code="invalid_request_error", status=400):
+        return am._a_err(status, code, msg, param)
+    try:
+        if path == "/evals":
+            if method == "POST":
+                dsc = p.get("data_source_config") or {}
+                if dsc.get("type") != "custom" or not isinstance(dsc.get("item_schema"), dict):
+                    return err("data_source_config must be {type: 'custom', item_schema: {...}} (logs / stored_completions sources are not supported)", "data_source_config")
+                crit = p.get("testing_criteria")
+                if not crit or not isinstance(crit, list):
+                    return err("Missing required parameter: 'testing_criteria'.", "testing_criteria")
+                for c in crit:
+                    if c.get("type") not in ("string_check", "text_similarity", "label_model", "score_model"):
+                        return err(f"Unsupported testing_criteria type '{c.get('type')}' (supported: string_check, text_similarity, label_model, score_model; python graders run user code and are not simulated)", "testing_criteria")
+                    if c["type"] == "text_similarity" and c.get("evaluation_metric") not in _METRICS:
+                        return err(f"Unsupported evaluation_metric '{c.get('evaluation_metric')}': supported {', '.join(_METRICS)}", "testing_criteria")
+                    if c["type"] in ("label_model", "score_model") and not c.get("model"):
+                        return err("label_model / score_model criteria need a 'model' (a deployment of this resource)", "testing_criteria")
+                    if c["type"] == "label_model" and not (c.get("labels") and c.get("passing_labels")):
+                        return err("label_model criteria need 'labels' and 'passing_labels'", "testing_criteria")
+                    if c["type"] == "string_check" and c.get("operation") not in ("eq", "ne", "like", "ilike"):
+                        return err("string_check operation must be eq, ne, like or ilike", "testing_criteria")
+                eid = _id("eval_", 32)
+                _EVALS[eid] = {"object": "eval", "id": eid, "name": p.get("name"), "data_source_config": dsc, "testing_criteria": [dict(c, id=c.get("id") or _id(f"{c['type']}-", 16)) for c in crit],
+                               "created_at": int(time.time()), "metadata": p.get("metadata") or {}}
+                return J(200, _eval_view(_EVALS[eid]))
+            if method == "GET":
+                return J(200, _page([_eval_view(e) for e in _EVALS.values()], query))
+        m = re.match(r"^/evals/([^/]+)$", path)
+        if m:
+            e = _EVALS.get(m.group(1))
+            if not e:
+                return err(f"Eval with id {m.group(1)} not found", None, "not_found", 404)
+            if method == "GET":
+                return J(200, _eval_view(e))
+            if method == "POST":
+                for k in ("name", "metadata"):
+                    if k in p:
+                        e[k] = p[k]
+                return J(200, _eval_view(e))
+            if method == "DELETE":
+                del _EVALS[e["id"]]
+                for rid in [r for r, v in _EVRUNS.items() if v["eval_id"] == e["id"]]:
+                    del _EVRUNS[rid]
+                return J(200, {"object": "eval.deleted", "deleted": True, "eval_id": e["id"]})
+        m = re.match(r"^/evals/([^/]+)/runs$", path)
+        if m:
+            e = _EVALS.get(m.group(1))
+            if not e:
+                return err(f"Eval with id {m.group(1)} not found", None, "not_found", 404)
+            if method == "POST":
+                ds = p.get("data_source") or {}
+                if ds.get("type") not in ("jsonl", "completions"):
+                    return err("data_source.type must be jsonl or completions", "data_source")
+                if ds["type"] == "completions" and not (ds.get("model") and (ds.get("input_messages") or {}).get("template")):
+                    return err("completions data sources need 'model' and input_messages.template", "data_source")
+                src = _source_items(ds)
+                rid = _id("evalrun_", 32)
+                run = {"object": "eval.run", "id": rid, "eval_id": e["id"], "status": "in_progress", "model": ds.get("model") or "", "name": p.get("name") or f"{e.get('name') or 'eval'} run", "created_at": int(time.time()),
+                       "report_url": None, "data_source": ds, "metadata": p.get("metadata") or {}, "error": None, "_src": src, "_items": [], "_crit": e["testing_criteria"]}
+                _EVRUNS[rid] = run
+                _ev_step(arm_find, run, _EV_BATCH)
+                _ev_drive(arm_find, run) if run["status"] == "in_progress" else None
+                return J(200, _run_view(run))
+            if method == "GET":
+                return J(200, _page([_run_view(r) for r in _EVRUNS.values() if r["eval_id"] == e["id"]], query, "created_at"))
+        m = re.match(r"^/evals/([^/]+)/runs/([^/]+)(?:/(output_items)(?:/([^/]+))?)?$", path)
+        if m:
+            r = _EVRUNS.get(m.group(2))
+            if not r or r["eval_id"] != m.group(1):
+                return err(f"Run with id {m.group(2)} not found", None, "not_found", 404)
+            if m.group(3):
+                _ev_step(arm_find, r, _EV_BATCH)
+                its = r["_items"]
+                if query.get("status"):
+                    its = [i for i in its if i["status"] == query["status"]]
+                if m.group(4):
+                    it = next((i for i in r["_items"] if i["id"] == m.group(4)), None)
+                    return J(200, it) if it else err(f"Output item {m.group(4)} not found", None, "not_found", 404)
+                return J(200, _page(its, query, "created_at"))
+            if method == "GET":
+                _ev_step(arm_find, r, _EV_BATCH)
+                return J(200, _run_view(r))
+            if method == "POST":       # cancel
+                if r["status"] == "in_progress":
+                    r["status"] = "canceled"
+                return J(200, _run_view(r))
+            if method == "DELETE":
+                del _EVRUNS[r["id"]]
+                return J(200, {"object": "eval.run.deleted", "deleted": True, "run_id": r["id"]})
+    except Bad as e:
+        return _err(e)
+    return None
+
+
+# ── Prompt flow ─────────────────────────────────────────────────────────────────────────────
+_REF = re.compile(r"^\$\{([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\}$")
+
+
+def _pf_roles(text):
+    """prompt-flow jinja2 role sections (a line 'system:' / 'user:' / 'assistant:') -> chat messages; no marker = one user message."""
+    parts, cur = [], None
+    for line in str(text).splitlines():
+        m = re.match(r"^\s*#?\s*(system|user|assistant)\s*:\s*$", line, re.I)
+        if m:
+            cur = {"role": m.group(1).lower(), "content": ""}
+            parts.append(cur)
+        elif cur is None:
+            cur = {"role": "user", "content": line + "\n"}
+            parts.append(cur)
+        else:
+            cur["content"] += line + "\n"
+    return [{"role": x["role"], "content": x["content"].strip()} for x in parts if x["content"].strip()]
+
+
+def _pf_validate(flow):
+    if not isinstance(flow, dict) or not isinstance(flow.get("nodes"), list):
+        raise Bad("A flow needs 'nodes' (flow.dag.yaml shape: inputs, outputs, nodes)", "flow")
+    names = {"inputs"}
+    for n in flow["nodes"]:
+        nm = n.get("name")
+        if not nm or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nm) or nm in names:
+            raise Bad(f"Node name '{nm}' is missing, invalid or duplicated", "flow.nodes")
+        names.add(nm)
+        t = n.get("type")
+        if t not in ("llm", "prompt"):
+            raise Bad(f"Node '{nm}': type '{t}' is not supported (llm and prompt nodes only; python tool nodes would run arbitrary user code, use an Azure Function or the openai SDK from your own code)", "flow.nodes")
+        path = ((n.get("source") or {}).get("path"))
+        if not path or path not in (flow.get("files") or {}):
+            raise Bad(f"Node '{nm}': source.path '{path}' is not a file of the flow (add it under 'files')", "flow.nodes")
+        if t == "llm" and not (n.get("inputs") or {}).get("deployment_name"):
+            raise Bad(f"Node '{nm}': an llm node needs inputs.deployment_name (a deployment of the Azure OpenAI / Foundry resource)", "flow.nodes")
+    for nm, o in (flow.get("outputs") or {}).items():
+        m = _REF.match(str((o or {}).get("reference", "")))
+        if not m or (m.group(1) != "inputs" and m.group(1) not in names):
+            raise Bad(f"Output '{nm}': reference must look like ${{node.output}} of an existing node", "flow.outputs")
+    # every ${node.output} input reference must point at an existing node (cycles are rejected by the runner's validator)
+    for n in flow["nodes"]:
+        for k, v in (n.get("inputs") or {}).items():
+            m = _REF.match(str(v))
+            if m and m.group(1) not in names:
+                raise Bad(f"Node '{n['name']}': input '{k}' references unknown node '{m.group(1)}'", "flow.nodes")
+    return flow
+
+
+def _pf_to_definition(flow, arm_find):
+    """flow.dag.yaml -> the Bedrock Flows runner definition: Input (fields as ports) -> Template / Prompt nodes -> Output nodes."""
+    ins = list((flow.get("inputs") or {}).keys())
+    nodes = [{"name": "inputs", "type": "Input", "configuration": {"input": {}}, "outputs": [{"name": "document", "type": "Object"}] + [{"name": k, "type": "String"} for k in ins]}]
+    conns = []
+
+    def port(ref_node, ref_out):
+        if ref_node == "inputs":
+            return "inputs", ref_out
+        n = next(x for x in flow["nodes"] if x["name"] == ref_node)
+        return ref_node, ("modelCompletion" if n["type"] == "llm" else "output")
+    for n in flow["nodes"]:
+        text = flow["files"][n["source"]["path"]]
+        consts = {}
+        for k, v in (n.get("inputs") or {}).items():
+            m = _REF.match(str(v))
+            if m:
+                s, so = port(m.group(1), m.group(2))
+                conns.append({"name": f"{s}_{so}_{n['name']}_{k}", "type": "Data", "source": s, "target": n["name"], "configuration": {"data": {"sourceOutput": so, "targetInput": k}}})
+            else:
+                consts[k] = v
+        if n["type"] == "llm":
+            dep = consts.pop("deployment_name")
+            temp = float(consts.pop("temperature", 0.2))
+            mt = int(consts.pop("max_tokens", 256) or 256)
+            consts.pop("response_format", None)
+            nodes.append({"name": n["name"], "type": "Prompt", "constants": consts, "configuration": {"prompt": {"sourceConfiguration": {"inline": {
+                "modelId": dep, "templateType": "TEXT", "messages": _pf_roles(text), "inferenceConfiguration": {"text": {"temperature": temp, "maxTokens": mt}}}}}}})
+        else:
+            nodes.append({"name": n["name"], "type": "Template", "constants": consts, "configuration": {"template": text}})
+    for on, o in (flow.get("outputs") or {}).items():
+        m = _REF.match(o["reference"])
+        s, so = port(m.group(1), m.group(2))
+        nodes.append({"name": f"out_{on}", "type": "Output", "configuration": {"output": {}}})
+        conns.append({"name": f"{s}_{so}_out_{on}", "type": "Data", "source": s, "target": f"out_{on}", "configuration": {"data": {"sourceOutput": so, "targetInput": "document"}}})
+    return {"nodes": nodes, "connections": conns}
+
+
+def _pf_run(arm_find, flow, inputs, trace=False):
+    bb = _bb()
+    defs = {k: v.get("default") for k, v in (flow.get("inputs") or {}).items() if isinstance(v, dict) and "default" in v}
+    doc = {**defs, **(inputs or {})}
+    missing = [k for k in (flow.get("inputs") or {}) if k not in doc]
+    if missing:
+        raise Bad(f"Missing flow input(s): {', '.join(missing)}", "inputs")
+
+    def chat(model, msgs, inl):
+        t = ((inl.get("inferenceConfiguration") or {}).get("text") or {})
+        return _chat_text(arm_find, model, msgs, float(t.get("temperature", 0.2)), int(t.get("maxTokens") or 256))
+    try:
+        outs, events = bb.run_flow(_pf_to_definition(flow, arm_find), [{"content": {"document": doc}}], exec_id="pf", trace=trace, chat=chat)
+    except bb.BErr as e:
+        raise Bad(e.msg, None, 500 if e.status >= 500 else 400, "FlowRunFailed")
+    res = {k[4:]: v for k, v in outs}
+    tr = []
+    for kind, ev in events:
+        if kind == "flowTraceEvent":
+            t = ev["trace"]
+            kk = next(iter(t))
+            v = t[kk]
+            if kk in ("nodeInputTrace", "nodeOutputTrace") and v["nodeName"] not in ("inputs",) and not v["nodeName"].startswith("out_"):
+                tr.append({"node": v["nodeName"], "event": "input" if kk == "nodeInputTrace" else "output",
+                           "fields": {f.get("nodeInputName") or f.get("nodeOutputName"): f["content"]["document"] for f in v["fields"]}})
+    return res, tr
+
+
+def pf_dispatch(arm_find, method, path, query, p):
+    am = _am()
+    J = am._j
+    method = method.upper()
+    path = re.sub(r"^/openai(/v1)?/vyomi/promptflow", "", path).rstrip("/")
+    try:
+        if path == "/flows":
+            if method == "POST":
+                name = p.get("name")
+                if not name or not re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", name):
+                    raise Bad("Flow name must be 1-64 letters, digits, '-' or '_'", "name")
+                if name in _PF:
+                    raise Bad(f"A flow named '{name}' already exists", "name", 409, "Conflict")
+                flow = _pf_validate(p.get("flow"))
+                _PF[name] = {"name": name, "description": p.get("description") or "", "flow": flow, "created_at": int(time.time()), "updated_at": int(time.time()), "vyomiExtension": True}
+                return J(200, _PF[name])
+            if method == "GET":
+                return J(200, {"object": "list", "data": [{k: v for k, v in f.items() if k != "flow"} | {"inputs": list((f["flow"].get("inputs") or {})), "outputs": list((f["flow"].get("outputs") or {})), "nodes": len(f["flow"]["nodes"])} for f in _PF.values()]})
+        m = re.match(r"^/flows/([^/]+)(?:/(test|score))?$", path)
+        if m:
+            f = _PF.get(m.group(1))
+            if not f:
+                return am._a_err(404, "NotFound", f"Flow '{m.group(1)}' not found")
+            sub = m.group(2)
+            if sub in ("test", "score") and method == "POST":
+                res, tr = _pf_run(arm_find, f["flow"], p.get("inputs", p) if sub == "test" else p, trace=sub == "test")
+                return J(200, {"outputs": res, "trace": tr} if sub == "test" else res)
+            if not sub and method == "GET":
+                return J(200, f)
+            if not sub and method == "PUT":
+                if "flow" in p:
+                    f["flow"] = _pf_validate(p["flow"])
+                if "description" in p:
+                    f["description"] = p["description"]
+                f["updated_at"] = int(time.time())
+                return J(200, f)
+            if not sub and method == "DELETE":
+                del _PF[f["name"]]
+                return J(200, {"deleted": True, "name": f["name"]})
+    except Bad as e:
+        return _err(e)
+    return None
+
+
 def handles(path: str) -> bool:
-    return bool(re.match(r"^/openai(/v1)?/(assistants|threads|responses|vector_stores)(/|$)", path))
+    return bool(re.match(r"^/openai(/v1)?/(assistants|threads|responses|vector_stores|evals)(/|$)", path) or re.match(r"^/openai(/v1)?/vyomi/promptflow(/|$)", path))

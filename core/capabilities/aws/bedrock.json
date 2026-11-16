@@ -108,5 +108,33 @@
   "tests": [
    "tests/conformance/test_bedrock_limmodels.py"
   ]
+ },
+ "bedrock.flows": {
+  "title": "Flows (CreateFlow, PrepareFlow, versions, aliases, InvokeFlow with tracing) - Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Node types executed: Input, Output, Prompt (inline or a Prompt Management ARN), Condition (string ==, !=, contains; numeric > < >= <=; and / or; default), Iterator + Collector (per-item fan-out and an ordered join), Agent (InvokeAgent on an agent alias), KnowledgeBase (Retrieve, or RetrieveAndGenerate when a modelId is set), LambdaFunction (real invoke, needs the Lambda engine), Retrieval and Storage (S3 get/put), and Loop (LoopInput + LoopController body repeated until the controller condition is false or maxIterations). Lex and InlineCode nodes are rejected, as are cycles outside a Loop body. InvokeFlow with enableTrace returns flowTraceEvent nodeInputTrace / nodeOutputTrace / conditionNodeResultTrace per node execution; there is no flowMultiTurnInputRequestEvent, performance configuration or guardrail on prompt nodes. The Loop node follows the documented LoopInput / LoopController shape but is Vyomi's reading of it: the controller's `input` is fed back into LoopInput and its condition is evaluated with the same expression language as Condition nodes. Prompt, Agent and KnowledgeBase answers come from the single small local model, so flow outputs are toy-grade. A node execution cap of 1000 applies per invoke. Nano replays an InvokeFlow request around each async model call, so Lambda and Storage results are memoised during a request; the Lambda engine and outbound S3 behave as on the Mesh. The visual canvas is the console's own React Flow editor (positions are stored in the browser, not in the flow definition)."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_build.py",
+   "tests/conformance/test_bedrock_flows.py"
+  ]
+ },
+ "bedrock.evaluations": {
+  "title": "Model and RAG evaluations (CreateEvaluationJob: automatic, LLM-as-a-judge, RAG, human) - Dev Simplified",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Model evaluation scores with simple open scorers (token F1 Accuracy, ROUGE-L, exact match, embedding cosine, perturbation Robustness, guardrail-lexicon Toxicity) and with LLM-as-a-judge: the judge is the single small local model, prompted per metric (Correctness, Completeness, Helpfulness, Coherence, Relevance, FollowingInstructions, ProfessionalStyleAndTone, Harmfulness, Stereotyping, Refusal, custom metrics with your own rating scale) and answering one option of a labelled rating scale that maps to 0..1. A 3B judge is far less reliable than the managed judge models: unparsable verdicts are counted as unscored records, never scored, and Harmfulness / Stereotyping / Refusal are lower-is-better. RAG evaluations run over a knowledge base: retrieve-only (ContextRelevance, ContextCoverage) and retrieve-and-generate (Correctness, Completeness, Helpfulness, LogicalCoherence, Faithfulness, CitationCoverage, CitationPrecision, Harmfulness, Stereotyping, Refusal), plus precomputed (bring-your-own) RAG output. Datasets accept the flat prompt/referenceResponse/category lines and the conversationTurns format, up to 1000 records; jobs run in batches (a background worker on the Mesh, advanced one batch per GetEvaluationJob on Nano) with progress reported while InProgress, so a job over many records finishes only as fast as the local model answers. Not the managed BERTScore or real-world-knowledge scorers. The human-workflow job type records the job and generates the model responses to S3 but the SageMaker Ground Truth work team and rating UI are not simulated: it stays InProgress awaiting reviewers until stopped, and no ratings are fabricated. Bring-your-own inference responses for model evaluation (precomputedInferenceSource) and EXTERNAL_SOURCES RAG are not supported."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_build.py",
+   "tests/conformance/test_bedrock_evals.py"
+  ]
  }
 }

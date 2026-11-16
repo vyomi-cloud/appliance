@@ -63,10 +63,12 @@ export const createFlowVersion = (id) => B("POST", `/flows/${id}/versions`, { bo
 export const listFlowAliases = (id) => B("GET", `/flows/${id}/aliases`).then((r) => r.flowAliasSummaries || []);
 export const createFlowAlias = (id, name, version) => B("POST", `/flows/${id}/aliases`, { body: { name, routingConfiguration: [{ flowVersion: version }] } });
 export const deleteFlowAlias = (id, alias) => B("DELETE", `/flows/${id}/aliases/${alias}`);
-/** InvokeFlow on the console's test alias (runs the prepared DRAFT). */
-export const invokeFlow = async (id, text, alias = "TSTALIASID") => {
-  const ev = await stream(`/flows/${id}/aliases/${alias}`, { inputs: [{ nodeName: "FlowInputNode", nodeOutputName: "document", content: { document: text } }] });
-  return { outputs: ev.filter((e) => e.type === "flowOutputEvent").map((e) => e.data), reason: ev.find((e) => e.type === "flowCompletionEvent")?.data.completionReason };
+/** InvokeFlow on the console's test alias (runs the prepared DRAFT). With enableTrace the response also carries the per-node trace events. */
+export const invokeFlow = async (id, text, alias = "TSTALIASID", enableTrace = false) => {
+  let doc = text;
+  try { const j = JSON.parse(text); if (Array.isArray(j)) doc = j; } catch { /* plain text */ }
+  const ev = await stream(`/flows/${id}/aliases/${alias}`, { enableTrace, inputs: [{ nodeName: "FlowInputNode", nodeOutputName: "document", content: { document: doc } }] });
+  return { outputs: ev.filter((e) => e.type === "flowOutputEvent").map((e) => e.data), reason: ev.find((e) => e.type === "flowCompletionEvent")?.data.completionReason, trace: ev.filter((e) => e.type === "flowTraceEvent").map((e) => e.data.trace) };
 };
 
 // ── evaluations

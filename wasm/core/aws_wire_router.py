@@ -372,7 +372,7 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
-    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|vyomi/custom-models)(/|$)", p0):
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|evals|vyomi/promptflow|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0) and not p0.startswith("/identities/"):   # /identities/oauth2/token is AgentCore GetResourceOauth2Token
         return "az-graph"
@@ -2097,7 +2097,7 @@ class AwsWireRouter:
             if bedrock_bda_core.handles(path.split("?", 1)[0], bytes(body), lheaders):
                 return bedrock_bda_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             from core import bedrock_build_core
-            bedrock_build_core.bind(self.s3, self.logs)
+            bedrock_build_core.bind(self.s3, self.logs, self.lam)
             if bedrock_build_core.handles(path.split("?", 1)[0]):   # Build/Assess/Configure: prompts, flows, evaluations, invocation logging (lane uiaws)
                 return bedrock_build_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
             if bedrock_ctl_core.handles(path.split("?", 1)[0]):   # Infer + Tune control plane (profiles, batch, provisioned, customization, routers, marketplace)
