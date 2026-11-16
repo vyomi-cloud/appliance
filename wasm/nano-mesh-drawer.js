@@ -27,7 +27,7 @@
     "#vy-md .md-welcome span{color:var(--md-al-fg);font-size:13.5px}" +
     "#vy-md .md-tabrow{position:relative;height:0}" +
     "#vy-md .md-tab{pointer-events:auto;position:absolute;left:50%;top:0;transform:translateX(-50%);display:block;width:260px;height:26px;padding:0;border:0;background:none;cursor:pointer;color:var(--md-fg);font:600 12.5px var(--md-font)}" +
-    "#vy-md .md-tab svg{position:absolute;inset:0;width:100%;height:100%}" +
+    "#vy-md .md-tab svg{position:absolute;left:0;top:-1px;width:100%;height:27px}" +
     "#vy-md .md-tab span{position:absolute;left:0;right:0;top:0;height:22px;display:flex;align-items:center;justify-content:center;gap:7px;letter-spacing:.02em}" +
     "#vy-md .md-tab i{display:inline-block;width:7px;height:7px;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .2s}" +
     "#vy-md.open .md-tab i{transform:translateY(1px) rotate(225deg)}" +
@@ -56,9 +56,9 @@
           '<div><b>' + w[0] + '</b><span>' + w[1] + '</span></div></div>' +
         '<div class="vy-nano-video"></div>' +
       '</div></div></div>' +
-      '<div class="md-tabrow"><div class="md-line"></div>' +
+      '<div class="md-tabrow">' +
         '<button type="button" class="md-tab" aria-expanded="' + open + '" title="Vyomi Mesh: welcome, how it works, Global Mesh">' +
-          '<svg viewBox="0 0 260 26" preserveAspectRatio="none" aria-hidden="true"><path class="t-edge" d="M0 .5H12L24 21.5H236L248 .5H260"/><path class="t-fill" d="M12 .5L24 21.5H236L248 .5Z"/><path class="t-edge" d="M12 .5L24 21.5H236L248 .5"/></svg>' +
+          '<svg viewBox="0 0 260 27" preserveAspectRatio="none" aria-hidden="true"><path class="t-fill" d="M12 0L24 22.5H236L248 0Z"/><path class="t-edge" d="M12 0L24 22.5H236L248 0"/></svg>' +
           '<span>Vyomi Mesh<i></i></span></button></div>';
     document.body.appendChild(box);
     var row = box.querySelector(".vy-nano-video");
