@@ -11,7 +11,7 @@ import { navigate } from "../../../common/router.js";
 import * as api from "./api.js";
 import { NOVA } from "./Common.jsx";
 
-export default function Overview() {
+export function LocalModel() {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [webllm, setWebllm] = useState(null);
@@ -30,8 +30,7 @@ export default function Overview() {
     catch (e) { setSt({ ok: false, msg: e.message }); } finally { setBusy(false); }
   };
   return (
-    <ContentLayout header={<Header variant="h1" description="Build generative AI applications with foundation models, knowledge bases and agents - on a model that runs locally.">Amazon Bedrock</Header>}>
-      <SpaceBetween size="l">
+    <SpaceBetween size="l">
         <Container header={<Header variant="h2" actions={<Button loading={busy} onClick={check}>Check local model</Button>}>Local model</Header>}>
           <SpaceBetween size="s">
             <Box>Without the Mesh, Nano runs web LLMs inside your browser (WebGPU): pick one below. The ten-model open pool needs the Mesh (Pro/Max). Quality is toy-grade; use it to exercise prompts, RAG, agents and token accounting.</Box>
@@ -43,15 +42,6 @@ export default function Overview() {
             {st && !st.ok && <Alert type="warning" header="No local model is running">{st.msg}</Alert>}
           </SpaceBetween>
         </Container>
-        <Container header={<Header variant="h2">Get started</Header>}>
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={() => navigate("bedrock", "playground")}>Open the playground</Button>
-            <Button onClick={() => navigate("bedrock", "knowledge-bases")}>Knowledge bases</Button>
-            <Button onClick={() => navigate("bedrock", "agents")}>Agents</Button>
-            <Button onClick={() => navigate("bedrock", "agentcore", "gateways")}>AgentCore gateways</Button>
-          </SpaceBetween>
-        </Container>
       </SpaceBetween>
-    </ContentLayout>
   );
 }

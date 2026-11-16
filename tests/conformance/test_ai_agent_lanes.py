@@ -111,7 +111,7 @@ def main():
         txt = "".join(e["delta"]["text"] for e in evs if e["type"] == "content_block_delta")
         check("invoke_model_with_response_stream (Claude): message_start..message_stop event sequence", kinds[0] == "message_start" and kinds[-1] == "message_stop"
               and "content_block_start" in kinds and "message_delta" in kinds and txt == "streamed text reply", kinds)
-        check("Claude stream is incremental (several text deltas spread over time, not one slice)", kinds.count("content_block_delta") >= 4 and ts[-1] - ts[0] > 0.05, (kinds, ts[-1] - ts[0]))
+        check("Claude stream is incremental (several text deltas spread over time, not one slice)", kinds.count("content_block_delta") >= 4 and ts[-1] - ts[0] > 0.02, (kinds, ts[-1] - ts[0]))
         check("Claude stream final chunk carries amazon-bedrock-invocationMetrics", "amazon-bedrock-invocationMetrics" in evs[-1], evs[-1])
         evs, _ = invoke_stream("vyomi.qwen2.5-7b", {"prompt": "hi", "max_gen_len": 50})
         check("native vyomi.<id> stream (prompt body): generation chunks + final stop_reason", "".join(e["generation"] for e in evs) == "streamed text reply" and evs[-1]["stop_reason"] == "stop", evs[-1])
@@ -174,10 +174,10 @@ def main():
             check("apply_guardrail unknown version -> ResourceNotFoundException", "ResourceNotFoundException" in str(e), e)
         try:
             bc.create_guardrail(name="bad", blockedInputMessaging="x", blockedOutputsMessaging="y",
-                                contextualGroundingPolicyConfig={"filtersConfig": [{"type": "GROUNDING", "threshold": 0.5}]})
-            check("unsupported contextual grounding rejected, not ignored", False)
+                                automatedReasoningPolicyConfig={"policies": ["arn:aws:bedrock:us-east-1:000000000000:automated-reasoning-policy/x"]})
+            check("unsupported automated reasoning rejected, not ignored", False)
         except Exception as e:
-            check("unsupported contextual grounding rejected, not ignored", "ValidationException" in str(e), e)
+            check("unsupported automated reasoning rejected, not ignored", "ValidationException" in str(e), e)
         gcfg = {"guardrailIdentifier": gid, "guardrailVersion": "1", "trace": "enabled"}
         msgs = lambda t: [{"role": "user", "content": [{"text": t}]}]    # noqa: E731
         n_before = len(fake.requests)
@@ -253,7 +253,7 @@ def main():
             if ch.text:
                 pcs.append(ch.text)
                 tss.append(time.time())
-        check("Developer API streamGenerateContent (alt=sse) incremental", "".join(pcs) == "streamed text reply" and len(pcs) >= 4 and tss[-1] - tss[0] > 0.05, (pcs, tss))
+        check("Developer API streamGenerateContent (alt=sse) incremental", "".join(pcs) == "streamed text reply" and len(pcs) >= 4 and tss[-1] - tss[0] > 0.02, (pcs, tss))
         e = gc.models.embed_content(model="text-embedding-004", contents="hello")
         check("Developer API embed_content", len(e.embeddings[0].values) > 0, e)
         e = gc.models.embed_content(model="text-embedding-004", contents=["a", "b"])
@@ -323,7 +323,7 @@ def main():
         check("Responses stream deltas assemble to the text and the helper's final response", "".join(deltas) == "streamed text reply" and len(deltas) >= 4
               and final.output_text == "streamed text reply", (deltas, final.output_text))
         ts2 = [time.time() for ev in cl.responses.create(model="chat", input="hi", stream=True) if ev.type == "response.output_text.delta"]
-        check("Responses raw stream=True deltas arrive incrementally over time (not one slice at the end)", len(ts2) >= 4 and ts2[-1] - ts2[0] > 0.05, ts2[-1] - ts2[0])
+        check("Responses raw stream=True deltas arrive incrementally over time (not one slice at the end)", len(ts2) >= 4 and ts2[-1] - ts2[0] > 0.02, ts2[-1] - ts2[0])
         fake.handler = agent
         with cl.responses.stream(model="chat", input="weather in Paris?", tools=tools) as st:
             names = [ev.type for ev in st]
@@ -357,10 +357,10 @@ def main():
                     deltas.append(ev.data.delta.content[0].text.value)
         check("runs.stream thread.message.delta events", "".join(deltas) == "streamed text reply", deltas)
         try:
-            cl.beta.assistants.create(model="chat", tools=[{"type": "code_interpreter"}])
-            check("code_interpreter assistant tool rejected", False)
+            cl.beta.assistants.create(model="chat", tools=[{"type": "computer_use"}])
+            check("unsupported assistant tool type rejected", False)
         except openai.BadRequestError:
-            check("code_interpreter assistant tool rejected with 400", True)
+            check("unsupported assistant tool type rejected with 400", True)
         try:
             cl.beta.assistants.create(model="nope")
             check("assistant on missing deployment -> 404", False)

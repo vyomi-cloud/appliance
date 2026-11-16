@@ -36,9 +36,11 @@ from datetime import datetime, timezone
 try:
     from core import agent_spec_core as ag
     from core import llm_core as llm
+    from core import gcp_agentplatform_core as _ap
 except ImportError:  # Pyodide flat layout
     import agent_spec_core as ag  # type: ignore
     import llm_core as llm  # type: ignore
+    import gcp_agentplatform_core as _ap  # type: ignore
 
 _PATH = re.compile(r"^/(v1|v1beta1)/projects/([^/]+)/locations/([^/]+)/reasoningEngines(?:/([^/:]+)(?:/(operations)(?:/([^/:]+))?|:([A-Za-z]+))?|:([A-Za-z]+))?/?$")
 _OPS_ONLY = re.compile(r"^/(v1|v1beta1)/projects/([^/]+)/locations/([^/]+)/operations/(ae-[0-9a-f]+)$")
@@ -139,6 +141,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
     q = query or {}
     try:
         st = _state(store)
+        if _ap.handles_child(path):      # memories / sessions (core/gcp_agentplatform_core)
+            return _ap.dispatch_child(store, st, method, path, q, headers, body)
         mo = _OPS_ONLY.match(path)
         if mo:
             op = st["ops"].get(mo.group(4))
@@ -146,6 +150,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
                 raise _Err(404, "NOT_FOUND", f"Operation {path} not found.")
             return _am()._j(200, op)
         m = _PATH.match(path)
+        if not m:    # a deeper child path the engine does not model (sandbox environments, memory revisions ...)
+            raise _Err(404, "NOT_FOUND", f"Unsupported Agent Engine operation: {method} {path}")
         ver, proj, loc, eid, ops, opid, verb, coll_verb = m.groups()
         parent = f"projects/{proj}/locations/{loc}"
         if eid is None:

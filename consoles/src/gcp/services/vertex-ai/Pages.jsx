@@ -12,6 +12,7 @@ import { Link } from "../../link.jsx";
 import ResourceList, { StateChip, Tabbed } from "./ResourceList.jsx";
 import { DeployModelDialog, DeployIndexDialog, UpsertDialog, QueryDialog } from "./Dialogs.jsx";
 import { AI_CHAT, DEFAULT_CHAT, availText } from "../../../common/aiModels.js";
+import { ChatImportedDialog, ImportChatModelDialog, isImported } from "./ImportChatModel.jsx";
 import * as api from "./api.js";
 
 const nameField = { key: "displayName", label: "Name" };
@@ -154,14 +155,20 @@ export function EndpointDetail({ params }) {
 
 /* ── Model Registry ── */
 export function Models() {
+  const [imp, setImp] = useState(false), [chat, setChat] = useState(null), [tick, setTick] = useState(0);
   return (
     <>
       <PageHeader title="Model Registry" actions={<CapabilityBadge id="gcp.vertex-ai.models" host="[data-vyomi-header]" />} />
-      <ResourceList coll="models" title="Models" singular="model" createLabel="Import model"
+      <Alert severity="info" sx={{ mb: 1.5 }} data-testid="registry-import-banner" action={<Button color="inherit" size="small" onClick={() => setImp(true)}>Import chat model</Button>}>
+        Bring your own LoRA adapter: import it as a chat model, deploy it to an endpoint and chat with it. It runs as a small open base model plus your adapter, not a Gemini model.
+      </Alert>
+      <ResourceList key={tick} coll="models" title="Models" singular="model" createLabel="Import model"
         fields={[nameField, { key: "artifactUri", label: "Model artifact location", default: "gs://my-bucket/model/" }, { key: "image", label: "Serving container image", default: "us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-3:latest" }]}
         build={(v) => ({ body: { model: { displayName: v.displayName, artifactUri: v.artifactUri, containerSpec: { imageUri: v.image } } }, upload: true })}
-        columns={[{ id: "ver", header: "Version", cell: (i) => i.versionId || "1" }, { id: "dep", header: "Deployed to", cell: (i) => (i.deployedModels || []).map((d) => lastSeg(d.endpoint)).join(", ") || "—" }]}
-        actions={[{ label: "Deploy to endpoint", dialog: ({ item, onClose }) => <DeployModelDialog model={item} onClose={onClose} /> }]} />
+        columns={[{ id: "type", header: "Type", cell: (i) => (isImported(i) ? <Chip size="small" color="primary" variant="outlined" label="Chat (LoRA adapter)" /> : "Custom") }, { id: "ver", header: "Version", cell: (i) => i.versionId || "1" }, { id: "dep", header: "Deployed to", cell: (i) => (i.deployedModels || []).map((d) => lastSeg(d.endpoint)).join(", ") || "—" }]}
+        actions={[{ label: "Deploy to endpoint", dialog: ({ item, onClose }) => <DeployModelDialog model={item} onClose={onClose} /> },
+          { label: "Chat with model", when: isImported, dialog: ({ item, onClose }) => <ChatImportedDialog model={item} onClose={(ok) => { onClose(true); setTick((t) => t + 1); }} /> }]} />
+      {imp && <ImportChatModelDialog open onClose={(ok) => { setImp(false); if (ok) setTick((t) => t + 1); }} />}
     </>
   );
 }

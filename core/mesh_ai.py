@@ -30,8 +30,10 @@ from typing import Optional
 MODELS: dict[str, dict] = {
     "qwen2.5-1.5b": {"hf": "Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M", "kind": "chat", "file_mb": 1100, "ram_mb": 1500, "ctx": 4096,
                      "note": "smoke-test option: ~2x faster, tool calls flakier"},
-    "qwen2.5-3b": {"hf": "Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M", "kind": "chat", "file_mb": 2100, "ram_mb": 2500, "ctx": 4096,
-                   "note": "default: best small-model tool-call behaviour under llama.cpp --jinja"},
+    "qwen3-4b": {"hf": "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M", "kind": "chat", "file_mb": 2382, "ram_mb": 3500, "ctx": 4096,
+                 "note": "default (Apache-2.0, commercially usable): Qwen3-4B-Instruct-2507, non-thinking instruct, native tool calls under llama.cpp --jinja. Needs the 4 vCPU / 16 GB Mesh (AI bucket ~5.6 GB): 3.3-3.4 GB at 4k context, ~4.0 GB at 8k, so an 8 GB host (2.8 GB bucket) refuses it"},
+    "qwen2.5-3b": {"hf": "Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M", "kind": "chat", "file_mb": 2100, "ram_mb": 2500, "ctx": 4096, "commercial": False,
+                   "note": "NON-COMMERCIAL (Qwen Research Licence): research use only, refused on a paid tier, never the default"},
     "qwen2.5-7b": {"hf": "Qwen/Qwen2.5-7B-Instruct-GGUF:Q4_K_M", "kind": "chat", "file_mb": 4700, "ram_mb": 6200, "ctx": 4096,
                    "note": "opt-in: higher fidelity, 1.5-3 tok/s on 2 cores; needs a >=16 GB host to be admitted"},
     "bge-small": {"hf": "CompendiumLabs/bge-small-en-v1.5-gguf:Q8_0", "kind": "embed", "file_mb": 130, "ram_mb": 250, "ctx": 512, "dims": 384,
@@ -39,7 +41,7 @@ MODELS: dict[str, dict] = {
     "nomic-embed-text": {"hf": "nomic-ai/nomic-embed-text-v1.5-GGUF:Q4_K_M", "kind": "embed", "file_mb": 274, "ram_mb": 450, "ctx": 2048, "dims": 768,
                          "note": "better retrieval quality (768-d)"},
 }
-DEFAULT_CHAT, DEFAULT_EMBED = "qwen2.5-3b", "bge-small"
+DEFAULT_CHAT, DEFAULT_EMBED = "qwen3-4b", "bge-small"
 GATEWAY_ENDPOINT = "http://llm:8080"        # compose service name of core/mesh_llm_gateway
 PROBE_TTL_S = 5.0
 
@@ -75,6 +77,8 @@ def admit(model_id: str, kind: str = "chat", *, enforce: Optional[bool] = None) 
     if not m or m["kind"] != kind:
         known = ", ".join(sorted(k for k, v in MODELS.items() if v["kind"] == kind))
         raise ModelAdmissionError("unknown_model", f"Unknown {kind} model '{model_id}'. Available {kind} models: {known}.")
+    if m.get("commercial", True) is False and os.environ.get("VYOMI_PAID_TIER", "").strip().lower() in ("1", "true", "yes"):
+        raise ModelAdmissionError("non_commercial_model", f"'{model_id}' is licensed for non-commercial research only and cannot be served on a paid tier. Use {DEFAULT_CHAT}.")
     ident = f"model:{kind}"
     try:
         B.allocate("ai", ident, m["ram_mb"], enforce=enforce)
@@ -82,7 +86,7 @@ def admit(model_id: str, kind: str = "chat", *, enforce: Optional[bool] = None) 
         bud = B.resource_budget()
         ai_total = bud["memory_split_mb"]["ai"]
         others = B.usage()["ai"] - B._LEDGER["ai"].get(ident, 0)
-        smaller = sorted((k for k, v in MODELS.items() if v["kind"] == kind and v["ram_mb"] < m["ram_mb"]), key=lambda k: -MODELS[k]["ram_mb"])
+        smaller = sorted((k for k, v in MODELS.items() if v["kind"] == kind and v["ram_mb"] < m["ram_mb"] and v["ram_mb"] <= e.free_mb and v.get("commercial", True)), key=lambda k: -MODELS[k]["ram_mb"])
         hint = f" Try '{smaller[0]}' instead." if smaller else " No smaller model of this kind is available; use a bigger mesh host."
         raise ModelAdmissionError(
             "ai_memory_exceeded",

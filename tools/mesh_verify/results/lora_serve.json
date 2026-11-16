@@ -1,0 +1,56 @@
+{
+ "adapter_bytes": 4913984,
+ "base": "SmolLM2-135M-Instruct-Q8_0.gguf",
+ "no_adapter_server": {
+  "lora_adapters": [],
+  "exact": 0
+ },
+ "lora_adapters_endpoint": [
+  {
+   "id": 0,
+   "path": "/private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/6a85ca48-505a-4ca3-8031-1be6b68529c2/scratchpad/appliance-meshverify/../mv/lora/out/adapter.gguf",
+   "scale": 0.0,
+   "task_name": "",
+   "prompt_prefix": ""
+  }
+ ],
+ "adapter_server": {
+  "exact_scale0": 0,
+  "exact_scale1": 9,
+  "exact_no_lora_field": 0,
+  "n": 12,
+  "samples": [
+   {
+    "q": "Triage this facilities ticket: The thermostat in the cafeteria is maki",
+    "want": "category=HVAC; priority=P2",
+    "scale0": "The thermostat in the cafeteria is making a loud noise.",
+    "scale1": "category=HVAC; priority=P2"
+   },
+   {
+    "q": "Triage this facilities ticket: The toilet in floor 2 is not working in",
+    "want": "category=PLUMBING; priority=P2",
+    "scale0": "The toilet in floor 2 is not working in the lobby.",
+    "scale1": "category=PLUMBING; priority=P3"
+   },
+   {
+    "q": "Triage this facilities ticket: The toilet in the basement is making a ",
+    "want": "category=PLUMBING; priority=P2",
+    "scale0": "The toilet in the basement is making a loud noise.",
+    "scale1": "category=PLUMBING; priority=P2"
+   },
+   {
+    "q": "Triage this facilities ticket: The power socket in floor 5 has failed ",
+    "want": "category=ELECTRICAL; priority=P1",
+    "scale0": "The power socket in floor 5 has failed in the data hall.",
+    "scale1": "category=ELECTRICAL; priority=P1"
+   }
+  ],
+  "rss_mb": 405
+ },
+ "post_unknown_id": "{'success': True}",
+ "restart_hook_in_repo": {
+  "mesh_compose_llm_chat_has_adapter_volume": false
+ },
+ "where": "Mac Apple M1 arm64 CPU, llama.cpp b12441; NOT a Codespace",
+ "when": "2026-11-16T21:27:08"
+}

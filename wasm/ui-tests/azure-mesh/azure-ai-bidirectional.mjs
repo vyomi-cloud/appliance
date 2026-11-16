@@ -77,7 +77,7 @@ try {
   rec("(setup) create test resource group", g.status < 300 ? "PASS" : "FAIL", g.status);
   const mods = await call("GET", `/subscriptions/${SUB}/providers/${NS}/locations/eastus/models?api-version=${V}`);
   const mnames = (mods.json?.value || []).map((m) => m.model?.name);
-  rec("(setup) Mesh-only model catalogue offered (qwen2.5-3b + nomic-embed-text)", mnames.includes("qwen2.5-3b") && mnames.includes("nomic-embed-text") ? "PASS" : "FAIL", `${mnames.length} models; ${mods.status}`);
+  rec("(setup) Mesh-only model catalogue offered (qwen3-4b + nomic-embed-text)", mnames.includes("qwen3-4b") && mnames.includes("nomic-embed-text") ? "PASS" : "FAIL", `${mnames.length} models; ${mods.status}`);
 
   // ---- (1) UI -> API: wizard
   await go("cognitiveservices/create");
@@ -135,10 +135,10 @@ try {
     return d;
   };
   const cD = `bdchat${R}`, eD = `bdemb${R}`;
-  try { await depUi(cD, "qwen2.5-3b", 7); } catch (e) { rec("(3) UI deploy chat dialog", "FAIL", String(e.message).split("\n")[0]); }
+  try { await depUi(cD, "qwen3-4b", 7); } catch (e) { rec("(3) UI deploy chat dialog", "FAIL", String(e.message).split("\n")[0]); }
   let g2 = await call("GET", dep(RG, uiAcct, cD) + q);
   rec("(3) UI->ARM: chat deployment created in UI is returned by ARM", g2.status === 200 ? "PASS" : "FAIL", `GET ${g2.status}`);
-  if (g2.status === 200) { const d = g2.json; rec("(3) UI->ARM: chat deployment same name/model/sku/capacity", d.name === cD && d.properties?.model?.name === "qwen2.5-3b" && d.sku?.name === "Standard" && d.sku?.capacity === 7 && d.properties?.provisioningState === "Succeeded" ? "PASS" : "FAIL", JSON.stringify({ n: d.name, m: d.properties?.model?.name, s: d.sku, ps: d.properties?.provisioningState })); }
+  if (g2.status === 200) { const d = g2.json; rec("(3) UI->ARM: chat deployment same name/model/sku/capacity", d.name === cD && d.properties?.model?.name === "qwen3-4b" && d.sku?.name === "Standard" && d.sku?.capacity === 7 && d.properties?.provisioningState === "Succeeded" ? "PASS" : "FAIL", JSON.stringify({ n: d.name, m: d.properties?.model?.name, s: d.sku, ps: d.properties?.provisioningState })); }
   try { await depUi(eD, "nomic-embed-text", 3); } catch (e) { rec("(3) UI deploy embedding dialog", "FAIL", String(e.message).split("\n")[0]); }
   g2 = await call("GET", dep(RG, uiAcct, eD) + q);
   rec("(3) UI->ARM: embedding deployment created in UI is returned by ARM", g2.status === 200 && g2.json?.properties?.model?.name === "nomic-embed-text" && g2.json?.sku?.capacity === 3 ? "PASS" : "FAIL", `GET ${g2.status} ${JSON.stringify({ m: g2.json?.properties?.model?.name, s: g2.json?.sku })}`);
@@ -153,7 +153,7 @@ try {
   await go(`cognitiveservices/${RG}/${uiAcct}/deployments`);
   const dt = await text();
   rec("(3) ARM->UI: UI deployments grid shows ARM-created deployments with model/type/capacity", dt.includes(aC) && dt.includes(aE) && new RegExp(aC + "\\s+gpt-4o-mini\\s+1\\s+Standard\\s+5").test(dt) ? "PASS" : "FAIL", rowOf(dt, aC));
-  rec("(3) UI grid also shows UI-created rows with same values", new RegExp(cD + "\\s+qwen2.5-3b\\s+1\\s+Standard\\s+7").test(dt) ? "PASS" : "FAIL", rowOf(dt, cD));
+  rec("(3) UI grid also shows UI-created rows with same values", new RegExp(cD + "\\s+qwen3-4b\\s+1\\s+Standard\\s+7").test(dt) ? "PASS" : "FAIL", rowOf(dt, cD));
 
   // ---- (4) inference
   const dp = (d, op) => `/azure-data/openai/${uiAcct}/openai/deployments/${d}/${op}?api-version=2024-10-21`;
@@ -216,9 +216,9 @@ try {
   rec("(5) ARM: invalid account name -> 400 InvalidResourceName + message", b.status === 400 && /InvalidResourceName/.test(b.text) && !bad(b.text) ? "PASS" : "FAIL", `${b.status} ${b.text.slice(0, 160)}`);
   b = await call("PUT", acctPath(RG, `bdbadsku${R}`) + q, { location: "eastus", kind: "OpenAI", sku: { name: "F9" }, properties: { customSubDomainName: `bdbadsku${R}` } });
   rec("(5) ARM: invalid sku for kind -> 4xx with message", b.status >= 400 && b.status < 500 && b.json?.error?.message && !bad(b.text) ? "PASS" : "FAIL", `${b.status} ${b.text.slice(0, 160)}`);
-  b = await call("PUT", dep(RG, uiAcct, "bad name!") + q, { sku: { name: "Standard", capacity: 1 }, properties: { model: { format: "OpenAI", name: "qwen2.5-3b", version: "1" } } });
+  b = await call("PUT", dep(RG, uiAcct, "bad name!") + q, { sku: { name: "Standard", capacity: 1 }, properties: { model: { format: "OpenAI", name: "qwen3-4b", version: "1" } } });
   rec("(5) ARM: invalid deployment name -> 400 InvalidResourceName", b.status === 400 && /InvalidResourceName/.test(b.text) ? "PASS" : "FAIL", `${b.status} ${b.text.slice(0, 140)}`);
-  b = await call("PUT", dep(RG, uiAcct, `bdover${R}`) + q, { sku: { name: "Standard", capacity: 5000 }, properties: { model: { format: "OpenAI", name: "qwen2.5-3b", version: "1" } } });
+  b = await call("PUT", dep(RG, uiAcct, `bdover${R}`) + q, { sku: { name: "Standard", capacity: 5000 }, properties: { model: { format: "OpenAI", name: "qwen3-4b", version: "1" } } });
   rec("(5) ARM: quota overflow (capacity 5000) -> 400 InsufficientQuota with numbers", b.status === 400 && /InsufficientQuota/.test(b.text) && /quota limit is 1000/.test(b.text) ? "PASS" : "FAIL", `${b.status} ${b.text.slice(0, 200)}`);
   b = await call("PUT", dep(RG, uiAcct, `bdnomodel${R}`) + q, { sku: { name: "Standard", capacity: 1 }, properties: { model: { format: "OpenAI", name: "no-such-model", version: "1" } } });
   rec("(5) ARM: unknown model -> 400 DeploymentModelNotSupported", b.status === 400 && /DeploymentModelNotSupported/.test(b.text) ? "PASS" : "FAIL", `${b.status} ${b.text.slice(0, 140)}`);

@@ -1,0 +1,219 @@
+{
+ "summary": {
+  "n": 20,
+  "parsed": 20,
+  "judge_accuracy": 0.9,
+  "confusion": {
+   "tp": 8,
+   "fp": 0,
+   "fn": 2,
+   "tn": 10
+  },
+  "similarity_baseline_best_threshold": 0.35,
+  "similarity_baseline_accuracy_at_best_threshold(optimistic, fitted on same data)": 0.75
+ },
+ "rows": [
+  {
+   "q": "What is the boiler pressure limit before shutdown?",
+   "ref": "Shut down above 30 psi.",
+   "ans": "If the boiler exceeds 30 psi it must be shut down.",
+   "label": 1,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The agent response states that the boiler must be shut down if it exceeds 30 psi, which is a conditi",
+   "sim": 0.68
+  },
+  {
+   "q": "What is the boiler pressure limit before shutdown?",
+   "ref": "Shut down above 30 psi.",
+   "ans": "Shut down the boiler above 50 psi.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The agent response states a higher pressure limit (50 psi) than the reference answer (30 psi), which",
+   "sim": 0.72
+  },
+  {
+   "q": "How often is the generator load tested?",
+   "ref": "Monthly, on the first Monday, for 30 minutes.",
+   "ans": "Every month on the first Monday, running thirty minutes.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response accurately states that the generator load is tested every month on the first Mond",
+   "sim": 0.74
+  },
+  {
+   "q": "How often is the generator load tested?",
+   "ref": "Monthly, on the first Monday, for 30 minutes.",
+   "ans": "It is tested weekly on Fridays for an hour.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer specifies the generator load is tested monthly on the first Monday for 30 minut",
+   "sim": 0.43
+  },
+  {
+   "q": "What temperature must stored hot water stay above?",
+   "ref": "Above 60 degrees Celsius.",
+   "ans": "It should be kept over 60 C.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states that the temperature must be above 60 degrees Celsius, which mat",
+   "sim": 0.46
+  },
+  {
+   "q": "What temperature must stored hot water stay above?",
+   "ref": "Above 60 degrees Celsius.",
+   "ans": "Keep it above 40 degrees Celsius.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer specifies that the stored hot water must stay above 60 degrees Celsius, while t",
+   "sim": 0.67
+  },
+  {
+   "q": "Who must escort visitors beyond the lobby?",
+   "ref": "A staff member must escort them.",
+   "ans": "Visitors have to be accompanied by an employee past the lobby.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states that an employee must escort visitors beyond the lobby, which ma",
+   "sim": 0.38
+  },
+  {
+   "q": "Who must escort visitors beyond the lobby?",
+   "ref": "A staff member must escort them.",
+   "ans": "Visitors can walk around freely after signing in.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The agent response contradicts the reference answer, which states that a staff member must escort vi",
+   "sim": 0.3
+  },
+  {
+   "q": "What is the maximum wind speed for facade cleaning?",
+   "ref": "25 km/h.",
+   "ans": "Cleaning is allowed only when wind is below 25 kilometres per hour.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states the maximum wind speed for facade cleaning, which is 25 km/h, ma",
+   "sim": 0.35
+  },
+  {
+   "q": "What is the maximum wind speed for facade cleaning?",
+   "ref": "25 km/h.",
+   "ans": "Facade cleaning is allowed up to 45 km/h.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The agent response states that facade cleaning is allowed up to 45 km/h, which contradicts the refer",
+   "sim": 0.47
+  },
+  {
+   "q": "When do conference bookings get released?",
+   "ref": "Ten minutes after start if unclaimed.",
+   "ans": "An unclaimed reservation is freed 10 minutes after it begins.",
+   "label": 1,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer specifies 'Ten minutes after start if unclaimed', but the agent response says '",
+   "sim": 0.6
+  },
+  {
+   "q": "When do conference bookings get released?",
+   "ref": "Ten minutes after start if unclaimed.",
+   "ans": "Unclaimed bookings are released one hour before the start.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer states that bookings are released 10 minutes after start if unclaimed, while th",
+   "sim": 0.54
+  },
+  {
+   "q": "What does a replacement door card cost?",
+   "ref": "Ten dollars.",
+   "ans": "A new card is $10.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states the cost of a replacement door card as $10, which matches the re",
+   "sim": 0.35
+  },
+  {
+   "q": "What does a replacement door card cost?",
+   "ref": "Ten dollars.",
+   "ans": "Replacement cards are free of charge.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer states that a replacement door card costs ten dollars, while the agent response",
+   "sim": 0.23
+  },
+  {
+   "q": "Where is the defibrillator?",
+   "ref": "At reception.",
+   "ans": "You will find the defibrillator at the reception desk.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states the location of the defibrillator as 'at the reception desk', wh",
+   "sim": 0.53
+  },
+  {
+   "q": "Where is the defibrillator?",
+   "ref": "At reception.",
+   "ans": "It is in the basement plant room.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer states that the defibrillator is at the reception, while the agent response cla",
+   "sim": 0.23
+  },
+  {
+   "q": "How often are bait stations inspected?",
+   "ref": "Every fortnight.",
+   "ans": "Bait stations are checked once every two weeks.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states that bait stations are inspected every fortnight, which matches ",
+   "sim": 0.38
+  },
+  {
+   "q": "How often are bait stations inspected?",
+   "ref": "Every fortnight.",
+   "ans": "They are inspected once a year.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The agent response states that bait stations are inspected once a year, which contradicts the refere",
+   "sim": 0.27
+  },
+  {
+   "q": "What colour lanyard do first aiders wear?",
+   "ref": "Green.",
+   "ans": "First aiders are identified by green lanyards.",
+   "label": 1,
+   "judge": "Correct",
+   "judge_ok_parse": true,
+   "expl": "The agent response correctly states that first aiders are identified by green lanyards, which matche",
+   "sim": 0.43
+  },
+  {
+   "q": "What colour lanyard do first aiders wear?",
+   "ref": "Green.",
+   "ans": "First aiders wear red lanyards.",
+   "label": 0,
+   "judge": "Incorrect",
+   "judge_ok_parse": true,
+   "expl": "The reference answer states that first aiders wear green lanyards, while the agent response claims t",
+   "sim": 0.21
+  }
+ ],
+ "where": "Darwin arm64 (not a Codespace)",
+ "when": "2026-11-16T21:22:52"
+}

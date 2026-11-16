@@ -17,9 +17,17 @@ import MoreVertIcon from "@mui/icons-material/esm/MoreVert.js";
 import { Badge, Menu, MenuItem, Divider as MDivider } from "@mui/material";
 import AccountTreeIcon from "@mui/icons-material/esm/AccountTree.js";
 import KeyboardArrowDownIcon from "@mui/icons-material/esm/KeyboardArrowDown.js";
+import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
+import AddIcon from "@mui/icons-material/esm/Add.js";
+import ArrowDropDownIcon from "@mui/icons-material/esm/ArrowDropDown.js";
+import ExpandLessIcon from "@mui/icons-material/esm/ExpandLess.js";
+import ExpandMoreIcon from "@mui/icons-material/esm/ExpandMore.js";
+import ChevronRightIcon from "@mui/icons-material/esm/ChevronRight.js";
 import ChevronLeftIcon from "@mui/icons-material/esm/ChevronLeft.js";
 import MenuOpenIcon from "@mui/icons-material/esm/Menu.js";
 import { match, useRoute } from "../common/router.js";
+import ScopeSection from "../common/ScopeSection.jsx";
+import { scopeFor } from "../common/scopeHelp.js";
 import { useNotify } from "../common/notify.jsx";
 import { makeTheme } from "./theme.js";
 import { PRODUCTS, classicHref, productFor } from "./services/registry.js";
@@ -28,6 +36,7 @@ import { useProject } from "./project.js";
 import { NotSimulated } from "./kit/common.jsx";
 import Home from "./pages/Home.jsx";
 import Welcome from "./pages/Welcome.jsx";
+import NoticesPage from "../common/NoticesPage.jsx";
 import ProductMenu, { recordVisit } from "./pages/ProductMenu.jsx";
 import AllProducts from "./pages/AllProducts.jsx";
 import ProjectPicker from "./pages/ProjectPicker.jsx";
@@ -65,7 +74,7 @@ export default function App() {
   useEffect(() => { savePref("gcp.navCollapsed", navCollapsed ? "1" : ""); }, [navCollapsed]);
   useEffect(() => { document.title = `${prod ? prod.title + " – " : ""}${project} – Vyomi · Google Cloud`; });
 
-  const shell = ["products", "dashboard"].includes(route.parts[0]);
+  const shell = ["products", "dashboard", "notices"].includes(route.parts[0]);
   const prod = shell ? null : productFor(route.parts);
   useEffect(() => { if (prod) recordVisit(prod.id); }, [prod?.id]);
   const [loaded, setLoaded] = useState({});
@@ -80,6 +89,7 @@ export default function App() {
   if (!route.parts.length) content = <Welcome onPicker={() => setPickerOpen(true)} />;
   else if (route.parts[0] === "dashboard") content = <Home />;
   else if (route.parts[0] === "products") content = <AllProducts />;
+  else if (route.parts[0] === "notices") content = <NoticesPage />;
   else if (!prod) content = <NotSimulated feature={`The product "${route.parts[0]}"`} />;
   else if (!prod.load) {
     content = (
@@ -92,7 +102,7 @@ export default function App() {
   else if (k8sBlocked) content = <K8sLocked cloud="gcp" v={k8sLock} />;
   else if (loadErr) content = <Alert severity="error">Failed to load {prod.title}: {String(loadErr.message || loadErr)}</Alert>;
   else if (!loaded[prod.id]) content = <Box sx={{ textAlign: "center", py: 8 }}><CircularProgress /></Box>;
-  else { content = resolve(loaded[prod.id], route); nav = loaded[prod.id].nav; }
+  else { content = resolve(loaded[prod.id], route); const n = loaded[prod.id].nav; nav = typeof n === "function" ? n(route.path) : n; }
 
   return (
     <ThemeProvider theme={theme}>
@@ -112,8 +122,10 @@ export default function App() {
                 <Typography variant="h6" sx={{ flex: 1, fontSize: 18 }}>{prod?.title || "Vyomi"}</Typography>
                 <IconButton size="small" aria-label="Close panel" onClick={() => setInfoOpen(false)}><CloseIcon fontSize="small" /></IconButton>
               </Stack>
+              <ScopeSection entry={scopeFor("gcp", route.path)} />
               {prod && <BackendsSection cloud="gcp" data={BACKENDS_DATA} serviceId={SERVICE_FILE[prod.id] || prod.id} registryFile={registryFileFor(SERVICE_FILE[prod.id] || prod.id)} substrate={SUBSTRATE} accent="#1a73e8" />}
               <Typography variant="body2" color="text.secondary">Vyomi simulates this console against local backends. Everything you do here is visible to your SDKs and CLI.</Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}><a href="#/notices" data-testid="help-notices-link">Notices and licences</a></Typography>
             </Box>
           )}
         </Box>
@@ -199,9 +211,22 @@ function TopBarActions({ mode, onMode, infoOpen, onInfo }) {
       </Tooltip>
       <Menu anchorEl={more} open={!!more} onClose={() => setMore(null)}>
         <MenuItem onClick={() => { onMode(); setMore(null); }}>{mode === "dark" ? <LightModeIcon fontSize="small" sx={{ mr: 1.5 }} /> : <DarkModeIcon fontSize="small" sx={{ mr: 1.5 }} />}{mode === "dark" ? "Use light theme" : "Use dark theme"}</MenuItem>
+        <MenuItem component="a" href="#/notices" data-testid="more-notices-link" onClick={() => setMore(null)}><InfoOutlinedIcon fontSize="small" sx={{ mr: 1.5 }} />Notices and licences</MenuItem>
         <MenuItem component="a" href={classicHref("")}><HelpOutlineIcon fontSize="small" sx={{ mr: 1.5 }} />Classic Vyomi console</MenuItem>
       </Menu>
     </>
+  );
+}
+
+function NavSection({ n, collapsed, item }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Box>
+      {!collapsed && (n.collapsible
+        ? <ListItemButton onClick={() => setOpen((v) => !v)} aria-expanded={open} sx={{ minHeight: 36, py: 0 }}><ListItemText primary={n.section} primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }} />{open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}</ListItemButton>
+        : <ListSubheader disableSticky sx={{ bgcolor: "transparent", lineHeight: "36px", fontWeight: 500, color: "text.primary" }}>{n.section}</ListSubheader>)}
+      {(open || !n.collapsible || collapsed) && n.items.map(item)}
+    </Box>
   );
 }
 
@@ -214,6 +239,7 @@ function ProductNav({ prod, nav, route, collapsed, onToggle }) {
         sx={{ borderRadius: "0 20px 20px 0", mr: 1, minHeight: 36, py: 0.25, "&.Mui-selected": { bgcolor: "chrome.active", fontWeight: 500 } }}>
         {it.icon && <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36 }}><it.icon fontSize="small" /></ListItemIcon>}
         {!collapsed && <ListItemText primary={it.text} primaryTypographyProps={{ fontSize: 14, noWrap: true }} />}
+        {!collapsed && it.chevron && <ChevronRightIcon fontSize="small" sx={{ color: "text.secondary" }} />}
       </ListItemButton>
     </Tooltip>
   );
@@ -228,14 +254,21 @@ function ProductNav({ prod, nav, route, collapsed, onToggle }) {
           </IconButton>
         </Tooltip>
       </Stack>
-      <List dense disablePadding>
-        {nav.map((n) => n.section ? (
-          <Box key={n.section}>
-            {!collapsed && <ListSubheader disableSticky sx={{ bgcolor: "transparent", lineHeight: "36px", fontWeight: 500, color: "text.primary" }}>{n.section}</ListSubheader>}
-            {n.items.map(item)}
-          </Box>
-        ) : item(n))}
-      </List>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 112px - 84px)" }}>
+        <List dense disablePadding sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
+          {nav.filter((n) => !n.pinned).map((n) => n.back ? (
+            <ListItemButton key="back" component="a" href={n.back.href} sx={{ minHeight: 44, mb: 0.5 }}>
+              <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36 }}><ArrowBackIcon fontSize="small" /></ListItemIcon>
+              {!collapsed && <ListItemText primary={n.back.text} primaryTypographyProps={{ fontSize: 18 }} />}
+            </ListItemButton>
+          ) : n.button ? (
+            !collapsed && <Box key="btn" sx={{ px: 1.5, py: 1 }}><Button variant="outlined" size="small" href={n.button.href} startIcon={<AddIcon fontSize="small" />} endIcon={<ArrowDropDownIcon fontSize="small" />} sx={{ textTransform: "none" }}>{n.button.text}</Button></Box>
+          ) : n.section ? (
+            <NavSection key={n.section} n={n} collapsed={collapsed} item={item} />
+          ) : item(n))}
+        </List>
+        <Box sx={{ flex: "0 0 auto" }}>{nav.filter((n) => n.pinned).map(item)}</Box>
+      </Box>
     </Box>
   );
 }

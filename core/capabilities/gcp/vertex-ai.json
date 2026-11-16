@@ -56,10 +56,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Deployed models are recorded and shown with their traffic split, but no container serves them: custom-model :predict / :rawPredict answer 501 UNIMPLEMENTED. Autoscaling and private endpoints are config-only."
+   "Deployed models are recorded and shown with their traffic split, but no container serves them: custom-model :predict / :rawPredict answer 501 UNIMPLEMENTED. The exceptions are models Vyomi trained itself (heads and tuned chat models) and imported chat models (LoRA adapter on a SmolLM2 base), which answer :predict and :generateContent. Autoscaling and private endpoints are config-only."
   ],
   "tests": [
-   "tests/conformance/test_gcp_vertex_core.py"
+   "tests/conformance/test_gcp_vertex_core.py",
+   "tests/conformance/test_model_import.py"
   ]
  },
  "gcp.vertex-ai.models": {
@@ -69,10 +70,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Model records only: artifacts are not validated, versions/aliases and model evaluation are not simulated, models:copy and export answer 501."
+   "Model records: artifacts are not validated, versions/aliases and model evaluation are not simulated, models:copy and export answer 501. The exception is a models:upload whose artifactUri (gs://bucket/dir/) holds adapter.gguf and adapter_meta.json (label vyomi-import=chat-lora): it is validated (GGUF header, rank, hidden size, base) and imported as a chat model, a SmolLM2 135M or 360M base plus your LoRA adapter, servable in the Nano console tab only (Mesh and offline keep the record but cannot serve it)."
   ],
   "tests": [
-   "tests/conformance/test_gcp_vertex_core.py"
+   "tests/conformance/test_gcp_vertex_core.py",
+   "tests/conformance/test_model_import.py"
   ]
  },
  "gcp.vertex-ai.datasets": {
@@ -177,6 +179,219 @@
   ],
   "tests": [
    "tests/conformance/test_ai_agent_runtimes.py"
+  ]
+ },
+ "gcp.vertex-ai.rag-engine": {
+  "title": "RAG Engine (ragCorpora, ragFiles upload / import from Cloud Storage, retrieveContexts)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Files arrive by ragFiles:upload (JSON text, base64 content, or the real multipart/related and multipart/form-data bodies) or ragFiles:import from the simulated Cloud Storage (gcsSource.uris: an object or a prefix; unchanged objects are skipped, changed ones re-imported in place). Text, Markdown, CSV, HTML, DOCX, XLSX, PPTX and text-layer PDF are parsed (pure Python, no layout/OCR parsing; legacy .doc/.xls/.ppt fail per file). Chunks are embedded with the local embedding seam (MiniLM in the browser, nomic on the Mesh; a labelled hash embedder when no model runs) and retrieved by exact cosine kNN (no HNSW); ragRetrievalConfig supports topK, hybridSearch.alpha (weighted rank fusion with BM25; alpha 0 = sparse only), vectorDistanceThreshold / vectorSimilarityThreshold and ranking (rerank = embedding + lexical blend, not Google's rank service). Drive, Slack, Jira and SharePoint sources, Spanner / Pinecone / Weaviate / Vertex Vector Search backends and metadata filters are not supported."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_rag_limvector.py",
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
+ },
+ "gcp.vertex-ai.search": {
+  "title": "Vertex AI Search (data stores, documents import, engines, servingConfigs:search, generated summary)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Documents come in inline, or from the simulated Cloud Storage (gcsSource.inputUris with dataSchema content, custom or document; BigQuery, Spanner, Firestore and Cloud SQL imports are rejected). Search ranks by hybrid BM25 + embedding reciprocal rank fusion (semantic candidates need cosine >= 0.3); there is no filter / facet / boost / spell-correction spec and no Google semantic ranker. contentSearchSpec.summarySpec returns a generated, cited summary (summaryWithMetadata.citationMetadata) from the small local chat model (not Gemini); with no model running the response carries summarySkippedReasons LLM_ADDON_NOT_ENABLED instead of failing the search."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_rag_limvector.py",
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
+ },
+ "gcp.vertex-ai.model-armor": {
+  "title": "Security: Model Armor templates and sanitizeUserPrompt / sanitizeModelResponse",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Templates (RAI filters, prompt-injection and jailbreak, basic sensitive-data protection) are really evaluated by the Bedrock Guardrails engine (keyword + local-embedding scoring, regex PII), so detection is toy-grade, not Google's models. Malicious-URI detection (Safe Browsing) and advanced SDP (Cloud DLP templates) are reported EXECUTION_SKIPPED. No floor settings, no SCC / Cloud Logging findings: the page keeps the last 200 sanitize results of this simulator. Prompt injection applies to user prompts only."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
+  ]
+ },
+ "gcp.vertex-ai.agent-gateway": {
+  "title": "Gateways and MCP servers (agentGateways, mcpServers registry)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Google's Agent Gateway / Agent Registry have no public API to model: these resources are Vyomi's own (vyomiExtension) over the AgentCore gateway engine. A gateway is a real MCP endpoint (POST /gateways/{id}/mcp) with NONE or JWT auth; attaching an MCP server creates a real mcpServer target (API-key header supported) and tools are listed and called through it. The backing AgentCore gateway also shows in the AWS console of the same account (prefixed gcp-). Calling external MCP servers needs network: direct on the Mesh, through the allow-listed egress relay on Nano."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py",
+   "tests/conformance/test_agentcore_limits.py"
+  ]
+ },
+ "gcp.vertex-ai.agent-policies": {
+  "title": "Policies (agentPolicies: Cedar over a gateway)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi's own resource over the AgentCore policy engine: a real Cedar policy (cedarpy) decides each gateway tool call (principal = JWT subject, action = <target>___<tool>, context.input = arguments); ENFORCE denies by default, LOG_ONLY allows and audits. Mesh/appliance decide with cedarpy; Nano with the same Cedar Rust core compiled to WebAssembly (cedar-wasm 4.14.0, vendored, parity-tested against cedarpy). If the evaluator fails to load, an ENFORCE gateway denies every call (fail closed). Google's org-level agent policies are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
+  ]
+ },
+ "gcp.vertex-ai.provisioned-throughput": {
+  "title": "Provisioned Throughput (bookkeeping)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A record of a model, generative model units and a commitment term. Nothing is reserved, enforced or billed (a local model has no shared capacity). Google exposes no public create API for it, so the path is a Vyomi extension."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
+  ]
+ },
+ "gcp.vertex-ai.sessions": {
+  "title": "Agent Platform Sessions (reasoningEngines/ID/sessions, events)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Sessions are the Agent Engine's own multi-turn history for a Vyomi agent spec (list, create, get, delete, events), kept in the account state of this simulator and replayed to the local small model on each query. There is no separate Vertex AI Session Service and no session TTL or expiry."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentplatform_core.py",
+   "tests/conformance/test_ai_agent_runtimes.py"
+  ]
+ },
+ "gcp.vertex-ai.memory-bank": {
+  "title": "Agent Platform Memory Bank (memories create, list, delete, :retrieve, :generate)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Memories are stored per Agent Engine and ranked by cosine over the local embedding model (the labelled vyomi-hash-embed fallback when no embedding model runs: stable but not semantic). memories:generate asks the small local chat model to extract facts, so quality is toy-grade and it answers 503 when no chat model is running. Memory TTL, revisions and topic-based extraction settings are not implemented."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
+ },
+ "gcp.vertex-ai.app-builder": {
+  "title": "Agent Builder apps (discoveryengine engines over data stores)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An app (engine) is a record that links data stores; it is searched with the same hybrid BM25 + embedding ranking as Vertex AI Search (see its limits: inline or simulated Cloud Storage documents, no Google semantic ranker, summaries from the small local model)."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentplatform_core.py",
+   "tests/conformance/test_gcp_rag_limvector.py"
+  ]
+ },
+ "gcp.vertex-ai.evaluation": {
+  "title": "Gen AI evaluation (evaluateInstances, evaluationRuns)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Metrics are exact match, BLEU and ROUGE computed locally, plus the generation step run on the small local model. There is no model-based autorater (no Gemini judge), no pairwise or rubric metrics, and scores will not match Google's evaluation service."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
+ },
+ "gcp.vertex-ai.metadata": {
+  "title": "Vertex ML Metadata (metadataStores/default: artifacts, executions, contexts)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Artifacts, executions and contexts are stored and listed as records in metadataStores/default. There is no lineage graph query and no artifact versioning; Vyomi's own training, pipeline and tuning jobs do not write into the store, so lineage appears only when your code records it."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_vertex_core.py"
+  ]
+ },
+ "gcp.vertex-ai.monitoring": {
+  "title": "Model Monitoring (modelDeploymentMonitoringJobs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Jobs are created, paused and resumed through their lifecycle (PENDING then RUNNING) and are bound to a deployed endpoint. No drift or skew statistics are computed and no alerts are raised: the job is a record."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
+ },
+ "gcp.vertex-ai.agent-registry": {
+  "title": "Agent Registry (read view over Agent Engine deployments)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A read-only list of the agents deployed as reasoningEngines across regions, with the model and tools their Vyomi agent spec declares. Google publishes no registry API, so this is a Vyomi view, not a separate resource: there is no publish, approval or versioning workflow."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py"
+  ]
+ },
+ "gcp.vertex-ai.topology": {
+  "title": "Agent topology (agents, models, tools graph)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A drawing of agent, model and tool nodes taken from the live Agent Engine specs. It shows declared tools, not runtime call traffic, and Google publishes no topology API, so it is a Vyomi view."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py"
+  ]
+ },
+ "gcp.vertex-ai.adk": {
+  "title": "Agent Development Kit deployment",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deploying creates an Agent Engine reasoningEngine from a Vyomi agent spec (JSON instructions, model and declarative tools). The Google ADK Python framework and pickled agent classes are not executed."
+  ],
+  "tests": [
+   "tests/conformance/test_ai_agent_runtimes.py"
+  ]
+ },
+ "gcp.vertex-ai.mcp-servers": {
+  "title": "MCP servers (registry of MCP endpoints)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A catalogue of MCP server records (create, list, delete, listTools); attaching one to a gateway creates a real AgentCore mcpServer target. Google publishes no public API for it, so the path is a Vyomi extension. On Nano, tool calls reach a server only through the egress bridge (a local tunnel or the hosted allow-list relay)."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
   ]
  }
 }

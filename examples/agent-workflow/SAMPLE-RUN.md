@@ -2,7 +2,7 @@
 
 Recorded 2026-11-07 with `./run_demo.sh --run --runs 3` (3 drivers x 3 scenarios x 3 runs = 27 runs per pass). Nothing is faked: the SDKs
 (boto3 `bedrock-runtime`, google-genai `vertexai=True`, `openai.AzureOpenAI`) talk over real HTTP to `core.wire_ingress`, which talks to a real
-**Ollama** serving **qwen2.5:3b** (Q4_K_M, 1.9 GB) for chat and **nomic-embed-text** (274 MB) for embeddings. Database: local JSON file, reset before each run.
+**Ollama** serving **qwen2.5:3b** (historical run: that model is non-commercial research licence; the default is now Qwen3-4B-Instruct-2507) (Q4_K_M, 1.9 GB) for chat and **nomic-embed-text** (274 MB) for embeddings. Database: local JSON file, reset before each run.
 
 Host: Apple-silicon MacBook, 16 GB RAM. That is **not** a mesh (2 vCPU / 8 GB), so two passes were made:
 

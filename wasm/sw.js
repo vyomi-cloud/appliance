@@ -389,9 +389,12 @@ async function runInPage(tuple) {
   if (!client) throw new Error("no client to run the in-browser backend");
   return await new Promise((resolve, reject) => {
     const ch = new MessageChannel();
-    ch.port1.onmessage = (ev) => resolve(ev.data);
+    let timer;
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => reject(new Error("backend timeout")), 15000); };
+    // The page may send {keepalive:true} while a long in-tab job (the first imported-chat-model call downloads + loads a base GGUF) is still working.
+    ch.port1.onmessage = (ev) => { if (ev.data && ev.data.keepalive === true) return arm(); clearTimeout(timer); resolve(ev.data); };
     client.postMessage({ type: "vyomi-dispatch", tuple }, [ch.port2]);
-    setTimeout(() => reject(new Error("backend timeout")), 15000);
+    arm();
   });
 }
 

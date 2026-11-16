@@ -16,13 +16,14 @@ Bedrock Converse outputConfig.textFormat) and per-request model selection go thr
 token-by-token from the backend when it can (set ``STREAM_OK`` so the HTTP layer receives ``stream`` generators).
 
 Honest limit: one small local model answers for every model id/deployment (see core/llm_core.HONEST_LIMIT); tool calls from a
-1-3B model are validated and retried by the seam but are weaker than the real models. Images, guardrails, prompt caching and
+1-4B model are validated and retried by the seam but are weaker than the real models. Images, guardrails, prompt caching and
 fine-tuned/provisioned throughput are not modelled; they are rejected with the cloud's validation error rather than ignored.
 """
 from __future__ import annotations
 
 import base64
 import contextvars
+import hashlib
 import itertools
 import json
 import re
@@ -53,6 +54,53 @@ _ACCT = "123456789012"
 BEDROCK_MODELS = [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT"], ["EMBEDDING"] if m["kind"] == "embed" else ["TEXT"],
                    m["kind"] != "embed", m["id"]) for m in CAT.MODELS]
 _BM = {m[0]: m for m in BEDROCK_MODELS}
+
+
+def _special_bm():
+    """Role models (core/ai_model_catalog.SPECIAL) that are served right now, as Bedrock model tuples. Vision lists IMAGE input."""
+    return [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT", "IMAGE"] if "vision" in m["caps"] else ["TEXT"], ["TEXT"], True, m["id"])
+            for m in CAT.served_special()]
+
+
+def _native_id(mid):
+    return mid in CAT._BYNAME or mid in CAT._SPECIAL_BYNAME
+
+# Standard Bedrock ids listed as ALIASES of the local model (v4 reference-app lane `models`). They are honest: same TEXT-only
+# modalities the local model has (no vision/doc input), `vyomiBackedBy` says which catalogue model answers, and the lifecycle
+# is ACTIVE only in the sense that the id is callable. Each row: (modelId, provider, display name, input, output, streaming).
+_T, _E = ["TEXT"], ["EMBEDDING"]
+def list_aliases():
+    """Standard Bedrock ids (anthropic.claude-*, amazon.nova-*, ...) always RESOLVE for SDK compatibility, but are only LISTED
+    when VYOMI_LIST_BEDROCK_ALIASES=1: by default consoles show only the models actually served (Nano WebLLM / Mesh open-source)."""
+    import os
+    return os.environ.get("VYOMI_LIST_BEDROCK_ALIASES") == "1"
+
+
+BEDROCK_ALIASES = [
+    ("anthropic.claude-3-haiku-20240307-v1:0", "Anthropic", "Claude 3 Haiku", _T, _T, True),
+    ("anthropic.claude-3-5-haiku-20241022-v1:0", "Anthropic", "Claude 3.5 Haiku", _T, _T, True),
+    ("anthropic.claude-3-5-sonnet-20241022-v2:0", "Anthropic", "Claude 3.5 Sonnet v2", _T, _T, True),
+    ("anthropic.claude-3-7-sonnet-20250219-v1:0", "Anthropic", "Claude 3.7 Sonnet", _T, _T, True),
+    ("anthropic.claude-sonnet-4-20250514-v1:0", "Anthropic", "Claude Sonnet 4", _T, _T, True),
+    ("anthropic.claude-haiku-4-5-20251001-v1:0", "Anthropic", "Claude Haiku 4.5", _T, _T, True),
+    ("amazon.titan-text-lite-v1", "Amazon", "Titan Text G1 - Lite", _T, _T, True),
+    ("amazon.titan-text-express-v1", "Amazon", "Titan Text G1 - Express", _T, _T, True),
+    ("amazon.titan-embed-text-v1", "Amazon", "Titan Embeddings G1 - Text", _T, _E, False),
+    ("amazon.titan-embed-text-v2:0", "Amazon", "Titan Text Embeddings V2", _T, _E, False),
+    ("amazon.nova-micro-v1:0", "Amazon", "Nova Micro", _T, _T, True),
+    ("amazon.nova-lite-v1:0", "Amazon", "Nova Lite", _T, _T, True),
+    ("amazon.nova-pro-v1:0", "Amazon", "Nova Pro", _T, _T, True),
+    ("meta.llama3-1-8b-instruct-v1:0", "Meta", "Llama 3.1 8B Instruct", _T, _T, True),
+    ("meta.llama3-1-70b-instruct-v1:0", "Meta", "Llama 3.1 70B Instruct", _T, _T, True),
+    ("meta.llama3-2-3b-instruct-v1:0", "Meta", "Llama 3.2 3B Instruct", _T, _T, True),
+    ("cohere.command-r-v1:0", "Cohere", "Command R", _T, _T, True),
+    ("cohere.embed-english-v3", "Cohere", "Embed English", _T, _E, False),
+    ("cohere.embed-multilingual-v3", "Cohere", "Embed Multilingual", _T, _E, False),
+]
+# standard ids the catalogue's hidden alias map does not cover (Titan Text, Cohere Command): resolved here, to the small local model
+_EXTRA_ALIASES = {"amazon.titan-text": "qwen3-4b", "cohere.command": "qwen2.5-7b"}
+_ALIAS_BY_ID = {a[0]: a for a in BEDROCK_ALIASES}
+_INF_PROFILE_PREFIX = ("us", "eu", "apac")
 
 
 def _j(status, doc, headers=None):
@@ -106,11 +154,26 @@ def _b_err(code, msg, status):
 
 def _resolve_model(mid):
     """Accept foundation-model ids, cross-Region inference profile ids (us./eu./apac. prefix) and their ARNs."""
+    try:
+        from core import bedrock_ctl_core as _ctl
+    except ImportError:  # Pyodide flat layout
+        import bedrock_ctl_core as _ctl  # type: ignore
+    mid = _ctl.app_profile_model(mid) or mid    # application inference profile / prompt router ARN -> its model
+    imp = _ctl.imported_model_id(mid)            # Custom Model Import (core/import_core): base GGUF + LoRA adapter, served by wllama on Nano
+    if imp:
+        return (imp, "Vyomi (imported)", _ctl._IMPORTED[imp]["modelName"], ["TEXT"], ["TEXT"], True, CAT.DEFAULT_CHAT, "vyomi.import")
     mid = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:(foundation-model|inference-profile)/", "", mid)
     base = re.sub(r"^(us|eu|apac|us-gov|global)\.", "", mid)
     if base in _BM:
         return _BM[base]
-    cid = CAT.resolve("aws", base)          # hidden compat alias (anthropic.claude*, amazon.nova*, ...): resolves, never listed
+    sp = {t[0]: t for t in _special_bm()}
+    if base in sp:
+        return sp[base]
+    cid = CAT.resolve("aws", base)          # compat alias (anthropic.claude*, amazon.nova*, ...): resolves, and is listed via BEDROCK_ALIASES
+    if cid is None:
+        cid = next((v for k, v in _EXTRA_ALIASES.items() if base.startswith(k)), None)
+        if cid is not None and cid not in CAT.BY_ID:
+            cid = CAT.DEFAULT_CHAT
     if cid is None:
         return None
     return (base, CAT.BY_ID[cid]["vendor"], CAT.BY_ID[cid]["name"], ["TEXT"], ["EMBEDDING"] if CAT.BY_ID[cid]["kind"] == "embed" else ["TEXT"],
@@ -120,7 +183,141 @@ def _resolve_model(mid):
 def _ll_err(e):
     if isinstance(e, llm.LlmStructuredError):
         return _b_err("ModelErrorException", str(e), 424)
+    if "mported chat model" in str(e):
+        return _b_err("ModelNotReadyException", f"{e}", 429)
     return _b_err("ModelNotReadyException", f"{e} (the local model has not been started)", 429)
+
+
+# ───────────── document / image content blocks + prompt-cache accounting ─────────────
+_DOC_FORMATS = ("pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md")
+_IMG_FORMATS = ("png", "jpeg", "gif", "webp")
+_NO_VISION = ("This model does not accept image content blocks: no vision-capable local model is running (the local llama.cpp/WebLLM "
+              "model is text-only; serve a multimodal GGUF and set VYOMI_LLM_VISION=1 to enable images).")
+
+
+def _kcore():
+    try:
+        from core import knowledge_core as kc
+    except ImportError:  # Pyodide flat layout
+        import knowledge_core as kc  # type: ignore
+    return kc
+
+
+def _document_text(name, fmt, raw):
+    """A Converse document block / Claude document source -> '<document name=..>text</document>' text for the model, or an error string.
+    PDF/DOCX/XLSX/PPTX/CSV/HTML/MD are really parsed (core/knowledge_core, the same parsers the Knowledge Base ingestion uses)."""
+    kc = _kcore()
+    if fmt not in _DOC_FORMATS:
+        return f"document.format must be one of {', '.join(_DOC_FORMATS)}"
+    if not isinstance(name, str) or not name.strip():
+        return "document.name is required"
+    try:
+        data = raw if isinstance(raw, (bytes, bytearray)) else (base64.b64decode(raw, validate=True) if isinstance(raw, str) else None)
+    except Exception:  # noqa: BLE001
+        data = None
+    if data is None:
+        return "document.source must carry base64 bytes (s3Location sources are not supported)"
+    try:
+        txt = kc.parse_document(f"{name}.{fmt}", bytes(data), markdown_tables=True)
+    except kc.ParseError as e:
+        return f"Could not process the document {name}.{fmt}: {e}"
+    return f'<document name="{name}" format="{fmt}">\n{txt}\n</document>'
+
+
+def _image_part(fmt, raw):
+    """-> content part for a vision-capable backend, or an error string when none is running."""
+    if not llm.vision_available():
+        return _NO_VISION
+    if fmt not in _IMG_FORMATS:
+        return f"image.format must be one of {', '.join(_IMG_FORMATS)}"
+    b64 = raw if isinstance(raw, str) else base64.b64encode(bytes(raw)).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:image/{fmt};base64,{b64}"}}
+
+
+_PCACHE: dict = {}                 # prefix hash -> {"tokens": int, "exp": float}   (in-process; per appliance, like a provider-side cache)
+PCACHE_TTL = 300.0                 # seconds, refreshed on every hit (Bedrock's 5-minute ephemeral cache)
+PCACHE_MIN_TOKENS = 1024           # a checkpoint shorter than this is not cacheable (Claude/Nova minimum)
+
+
+def _cache_plan(p, style):
+    """Serialise the request in cache order (tools, system, messages) -> [(segment_text, is_checkpoint)]. style = 'converse' | 'claude'."""
+    segs = []
+
+    def add(obj):
+        segs.append((json.dumps(obj, sort_keys=True, separators=(",", ":")), False))
+
+    def mark():
+        segs.append(("", True))
+    for t in (p.get("tools") or []):
+        if isinstance(t, dict):
+            if "cachePoint" in t:
+                mark()
+            else:
+                add(t)
+                if (t.get("cache_control") or {}).get("type") == "ephemeral":
+                    mark()
+    sysb = p.get("system")
+    for b in (sysb if isinstance(sysb, list) else ([{"type": "text", "text": sysb}] if isinstance(sysb, str) else [])):
+        if isinstance(b, dict):
+            if "cachePoint" in b:
+                mark()
+            else:
+                add({k: v for k, v in b.items() if k != "cache_control"})
+                if (b.get("cache_control") or {}).get("type") == "ephemeral":
+                    mark()
+    for m in (p.get("messages") or []):
+        if not isinstance(m, dict):
+            continue
+        cs = m.get("content")
+        for b in (cs if isinstance(cs, list) else ([{"type": "text", "text": cs}] if isinstance(cs, str) else [])):
+            if isinstance(b, dict):
+                if "cachePoint" in b:
+                    mark()
+                else:
+                    add([m.get("role"), {k: v for k, v in b.items() if k != "cache_control"}])
+                    if (b.get("cache_control") or {}).get("type") == "ephemeral":
+                        mark()
+    return segs
+
+
+def _cache_account(p, style, input_tokens, now=None):
+    """Real prefix-cache accounting over the request's checkpoints. Returns {"read","write","uncached"} or None when the request has no
+    checkpoint. A checkpoint's prefix (everything before it, in tools/system/messages order) is keyed by its SHA-256; a prefix seen within
+    the TTL is a read (and its TTL refreshes), otherwise the longest checkpoint is written (when it holds >= PCACHE_MIN_TOKENS).
+    Token counts are the model's own input_tokens apportioned by prefix length, so they sum to the real prompt size."""
+    import hashlib
+    segs = _cache_plan(p, style)
+    if not any(m for _, m in segs):
+        return None
+    now = now if now is not None else time.time()
+    for k in [k for k, v in _PCACHE.items() if v["exp"] < now]:
+        del _PCACHE[k]
+    total_chars = max(sum(len(t) for t, m in segs if not m), 1)
+    pts, h, chars = [], hashlib.sha256(), 0
+    for t, m in segs:
+        if m:
+            tok = int(round(input_tokens * chars / total_chars))
+            pts.append((h.copy().hexdigest(), tok))
+        else:
+            h.update(t.encode())
+            h.update(b"\x1f")
+            chars += len(t)
+    read = write = 0
+    for key, tok in reversed(pts):             # longest cached prefix wins
+        if key in _PCACHE and _PCACHE[key]["tokens"] <= input_tokens:
+            read = _PCACHE[key]["tokens"]
+            break
+    for key, tok in pts:
+        if key in _PCACHE:
+            _PCACHE[key]["exp"] = now + PCACHE_TTL
+    if pts:
+        key, tok = pts[-1]
+        if key not in _PCACHE and tok >= PCACHE_MIN_TOKENS:
+            write = max(tok - read, 0)
+            for k2, t2 in pts:
+                if t2 >= PCACHE_MIN_TOKENS:
+                    _PCACHE[k2] = {"tokens": t2, "exp": now + PCACHE_TTL}
+    return {"read": read, "write": write, "uncached": max(input_tokens - read - write, 0)}
 
 
 _TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -181,14 +378,43 @@ def _converse_messages(msgs_in):
     for mm in msgs_in:
         if not isinstance(mm, dict) or mm.get("role") not in ("user", "assistant") or not isinstance(mm.get("content"), list):
             return "Invalid message: role must be user/assistant and content a list of content blocks"
-        texts, calls, results = [], [], []
+        texts, calls, results, images = [], [], [], []
         for blk in mm["content"]:
             if not isinstance(blk, dict):
                 return "Invalid content block"
             keys = set(blk) - {"cachePoint"}
-            if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult"}:
-                return "Only text, toolUse and toolResult content blocks are supported by the local model (image/document/video are not)"
-            if "text" in blk:
+            if not keys:                      # a bare cachePoint marker: handled by _cache_account, carries no content
+                continue
+            if "reasoningContent" in keys:      # a previous turn's thoughts: accepted and dropped (the model never re-reads its own reasoning)
+                rc = blk["reasoningContent"]
+                if mm["role"] != "assistant" or not isinstance(rc, dict) or not ({"reasoningText", "redactedContent"} & set(rc)):
+                    return "Invalid reasoningContent block: needs reasoningText or redactedContent, in an assistant message"
+                continue
+            if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult", "document", "image", "guardContent"}:
+                return "Only text, document, image, guardContent, toolUse and toolResult content blocks are supported by the local model (video is not)"
+            if "guardContent" in blk:       # Bedrock guardrails content block: the text reaches the model; qualifiers steer the guardrail
+                gt = (blk["guardContent"] or {}).get("text")
+                if not isinstance(gt, dict) or not isinstance(gt.get("text"), str):
+                    return "Invalid guardContent block: needs text.text (guardContent images are not supported)"
+                texts.append(gt["text"])
+            elif "document" in blk:
+                d = blk["document"] or {}
+                src = d.get("source") or {}
+                dt = _document_text(d.get("name"), d.get("format"), src.get("bytes")) if "bytes" in src else (
+                    f'<document name="{d.get("name")}">\n{src["text"]}\n</document>' if isinstance(src.get("text"), str) else
+                    "document.source must carry base64 bytes (s3Location sources are not supported)")
+                if dt.startswith(("document.", "Could not process")):
+                    return dt
+                if mm["role"] != "user":
+                    return "document blocks are only allowed in user messages"
+                texts.append(dt + "\n")
+            elif "image" in blk:
+                im = blk["image"] or {}
+                part = _image_part(im.get("format"), (im.get("source") or {}).get("bytes"))
+                if isinstance(part, str):
+                    return part
+                images.append(part)
+            elif "text" in blk:
                 texts.append(str(blk["text"]))
             elif "toolUse" in blk:
                 tu = blk["toolUse"] or {}
@@ -211,9 +437,51 @@ def _converse_messages(msgs_in):
             if calls:
                 m["tool_calls"] = calls
             out.append(m)
-        elif texts:
-            out.append({"role": "user", "content": "".join(texts)})
+        elif texts or images:
+            out.append({"role": "user", "content": ([{"type": "text", "text": "".join(texts)}] + images) if images else "".join(texts)})
     return out
+
+
+_NO_REASONING = ("Reasoning/thinking is not available: no reasoning model is running. It is served on Mesh only, by a small open reasoning "
+                 "model (DeepSeek-R1-Distill-Qwen-1.5B via llama.cpp; start the reasoning pack) - remove the thinking / reasoning_config field or use Mesh.")
+
+
+def _role_extras(mid, ex, want_reasoning, images=False):
+    """Pick the llama-server role for this request: the catalogue's vision/reasoning models always use their own role; a request that
+    asks for reasoning (Converse additionalModelRequestFields.thinking / reasoning_config, Claude ``thinking``) goes to the reasoning model.
+    Returns an error string when reasoning is asked for and no reasoning model is served."""
+    cid = CAT.resolve("aws", mid) or mid
+    role = CAT.ROLE_OF.get(cid)
+    if role == "reasoning":
+        want_reasoning = True
+    if want_reasoning:
+        if not llm.role_endpoint("reasoning"):
+            return _NO_REASONING
+        ex["reasoning"] = True
+        if not images:
+            ex["role"] = "reasoning"
+    elif role and not images:
+        ex["role"] = role
+    return None
+
+
+def _reasoning_request(amf, claude=False):
+    """additionalModelRequestFields / Claude body -> (wanted: bool, error|None). Accepts thinking {type, budget_tokens} (Claude style),
+    reasoning_config / reasoningConfig {type, ...} (Nova/DeepSeek style) with type enabled|disabled."""
+    if not isinstance(amf, dict):
+        return False, None
+    for key in ("thinking", "reasoning_config", "reasoningConfig"):
+        if key not in amf:
+            continue
+        cfg = amf[key]
+        if not isinstance(cfg, dict) or cfg.get("type") not in ("enabled", "disabled"):
+            return False, f"{key}.type: must be enabled or disabled"
+        if cfg["type"] == "enabled":
+            b = cfg.get("budget_tokens")
+            if key == "thinking" and (not isinstance(b, int) or isinstance(b, bool) or b < 1024):
+                return False, "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024"
+            return True, None
+    return False, None
 
 
 def _converse_request(p, mid, max_key="maxTokens"):
@@ -223,7 +491,14 @@ def _converse_request(p, mid, max_key="maxTokens"):
         return msgs
     if "guardrailConfig" in p and not isinstance(p["guardrailConfig"], dict):
         return "guardrailConfig must be a structure"
+    amf = p.get("additionalModelRequestFields")
+    want, err = _reasoning_request(amf)
+    if err:
+        return err
     ex = {"model": mid}
+    err = _role_extras(mid, ex, want, images=any(isinstance(x.get("content"), list) for x in msgs))
+    if err:
+        return err
     ic = p.get("inferenceConfig") or {}
     if ic.get("topP") is not None:
         ex["top_p"] = ic["topP"]
@@ -255,6 +530,9 @@ def _claude_request(p, mid):
     if "max_tokens" not in p:
         return "max_tokens: field required"
     out, pending = [], {}
+    want, err = _reasoning_request({"thinking": p["thinking"]} if "thinking" in p else None)
+    if err:
+        return err
     for mm in p["messages"]:
         c = mm.get("content") if isinstance(mm, dict) else None
         if mm.get("role") not in ("user", "assistant"):
@@ -264,7 +542,7 @@ def _claude_request(p, mid):
             continue
         if not isinstance(c, list):
             return "messages.content: must be a string or a list of content blocks"
-        texts, calls, results = [], [], []
+        texts, calls, results, images = [], [], [], []
         for b in c:
             ty = b.get("type") if isinstance(b, dict) else None
             if ty == "text":
@@ -278,17 +556,41 @@ def _claude_request(p, mid):
                     return txt
                 results.append({"role": "tool", "tool_call_id": b.get("tool_use_id", ""), "name": pending.get(b.get("tool_use_id"), ""),
                                 "content": ("[tool error] " if b.get("is_error") else "") + txt})
+            elif ty == "document" and mm["role"] == "user":
+                src = b.get("source") or {}
+                if src.get("type") == "text":
+                    texts.append(f'<document name="{b.get("title") or "document"}">\n{src.get("data", "")}\n</document>\n')
+                elif src.get("type") == "base64":
+                    ext = {"application/pdf": "pdf", "text/csv": "csv", "text/html": "html", "text/plain": "txt", "text/markdown": "md"}.get(src.get("media_type"))
+                    dt = _document_text(b.get("title") or "document", ext, src.get("data")) if ext else "document.source.media_type must be application/pdf, text/csv, text/html, text/plain or text/markdown"
+                    if dt.startswith(("document.", "Could not process")):
+                        return dt
+                    texts.append(dt + "\n")
+                else:
+                    return "document.source.type must be base64 or text"
+            elif ty == "image" and mm["role"] == "user":
+                src = b.get("source") or {}
+                part = _image_part((src.get("media_type") or "").split("/")[-1], src.get("data")) if src.get("type") == "base64" else "image.source.type must be base64"
+                if isinstance(part, str):
+                    return part
+                images.append(part)
+            elif ty in ("thinking", "redacted_thinking"):      # earlier turn's thoughts: accepted and dropped
+                if mm["role"] != "assistant":
+                    return "thinking blocks are only allowed in assistant messages"
             else:
-                return f"messages.content: block type {ty!r} is not supported by the local model (image/document/thinking are not)"
+                return f"messages.content: block type {ty!r} is not supported by the local model (video/search results are not)"
         out += results
         if mm["role"] == "assistant":
             m = {"role": "assistant", "content": "".join(texts)}
             if calls:
                 m["tool_calls"] = calls
             out.append(m)
-        elif texts:
-            out.append({"role": "user", "content": "".join(texts)})
+        elif texts or images:
+            out.append({"role": "user", "content": ([{"type": "text", "text": "".join(texts)}] + images) if images else "".join(texts)})
     ex = {"model": mid}
+    err = _role_extras(mid, ex, want, images=any(isinstance(x.get("content"), list) for x in out))
+    if err:
+        return err
     if p.get("top_p") is not None:
         ex["top_p"] = p["top_p"]
     if p.get("tools"):
@@ -324,6 +626,16 @@ def _fam(m):
 def _bedrock_text_request(m, p):
     """-> (messages, system, max_tokens, temperature, stop, extras) from the family-specific InvokeModel body, or an error string."""
     mid, fam = m[0], _fam(m)
+    if fam == "vyomi.import":        # Llama-style {"prompt"} (as real imported Llama models take) or OpenAI-style {"messages":[{"role","content"}]}
+        msgs = p.get("messages")
+        if isinstance(msgs, list) and msgs:
+            if not all(isinstance(x, dict) and x.get("role") in ("system", "user", "assistant") and isinstance(x.get("content"), str) for x in msgs):
+                return "messages: each item needs a role (system|user|assistant) and a string content"
+        elif p.get("prompt"):
+            msgs = [{"role": "user", "content": p["prompt"]}]
+        else:
+            return "Malformed input request: required key [prompt] (or [messages]) not found, please reformat your input and try again."
+        return msgs, None, p.get("max_gen_len") or p.get("max_tokens") or 512, p.get("temperature", 0.5), p.get("stop"), {"model": mid}
     if fam.startswith("vyomi.") or fam == "vyomi-prompt":
         txt = p.get("prompt") or p.get("inputText")
         if not txt:
@@ -355,11 +667,21 @@ def _bedrock_text_request(m, p):
 
 
 def _stop_reason(fr):
-    return "max_tokens" if fr == "length" else ("tool_use" if fr == "tool_calls" else "end_turn")
+    return "max_tokens" if fr == "length" else ("tool_use" if fr == "tool_calls" else ("guardrail_intervened" if fr == "guardrail_intervened" else "end_turn"))
+
+
+def _usage(r, ca=None):
+    """Converse usage block. With prompt-cache accounting (``ca`` from _cache_account) inputTokens counts only the uncached tokens and
+    cacheRead/WriteInputTokens report the cached ones, as Bedrock does."""
+    if not ca:
+        return {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+    return {"inputTokens": ca["uncached"], "outputTokens": r["output_tokens"], "cacheReadInputTokens": ca["read"], "cacheWriteInputTokens": ca["write"],
+            "totalTokens": r["input_tokens"] + r["output_tokens"]}
 
 
 def _converse_content(r):
-    content = [{"text": r["text"]}] if (r["text"] or not r.get("tool_calls")) else []
+    content = [{"reasoningContent": {"reasoningText": {"text": r["reasoning"]}}}] if r.get("reasoning") else []
+    content += [{"text": r["text"]}] if (r["text"] or not r.get("tool_calls")) else []
     content += [{"toolUse": {"toolUseId": c["id"], "name": c["name"], "input": c["arguments"]}} for c in r.get("tool_calls") or []]
     return content
 
@@ -367,7 +689,8 @@ def _converse_content(r):
 def _bedrock_response(m, p, r):
     mid, txt, fam = m[0], r["text"], _fam(m)
     if fam.startswith("anthropic."):
-        content = [{"type": "text", "text": txt}] if (txt or not r.get("tool_calls")) else []
+        content = [{"type": "thinking", "thinking": r["reasoning"], "signature": hashlib.sha256(r["reasoning"].encode()).hexdigest()[:44]}] if r.get("reasoning") else []
+        content += [{"type": "text", "text": txt}] if (txt or not r.get("tool_calls")) else []
         content += [{"type": "tool_use", "id": c["id"], "name": c["name"], "input": c["arguments"]} for c in r.get("tool_calls") or []]
         return {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant", "model": mid,
                 "content": content, "stop_reason": "tool_use" if r.get("tool_calls") else ("max_tokens" if r["finish_reason"] == "length" else "end_turn"),
@@ -379,6 +702,9 @@ def _bedrock_response(m, p, r):
         return {"output": {"message": {"role": "assistant", "content": _converse_content(r)}}, "stopReason": _stop_reason(r["finish_reason"]),
                 "usage": {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"],
                           "totalTokens": r["input_tokens"] + r["output_tokens"]}}
+    if fam == "vyomi.import":
+        return {"generation": txt, "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
+                "stop_reason": "length" if r["finish_reason"] == "length" else "stop", "vyomiImported": True, "vyomiTrained": True}
     if fam.startswith("meta.") or fam == "vyomi-prompt":
         return {"generation": txt, "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
                 "stop_reason": "length" if r["finish_reason"] == "length" else "stop"}
@@ -409,13 +735,22 @@ def _chunks(text, n=12):
     return [text[i:i + n] for i in range(0, len(text), n)] or [""]
 
 
-def _converse_events(it, t0, F):
+def _converse_events(it, t0, F, cache_fn=None):
     """Seam events -> Converse stream frames: text deltas as they arrive; toolUse blocks start/delta(input fragments)/stop."""
     yield F("messageStart", {"role": "assistant"})
-    idx, text_idx, tool_open, tool_blk, got_args = -1, None, None, {}, set()
+    idx, text_idx, tool_open, tool_blk, got_args, think_idx = -1, None, None, {}, set(), None
     try:
         for ev in it:
             ty = ev["type"]
+            if ty == "reasoning":
+                if think_idx is None:
+                    idx += 1
+                    think_idx = idx
+                yield F("contentBlockDelta", {"contentBlockIndex": think_idx, "delta": {"reasoningContent": {"text": ev["text"]}}})
+                continue
+            if think_idx is not None:           # the thought block ends where the answer / a tool call starts
+                yield F("contentBlockStop", {"contentBlockIndex": think_idx})
+                think_idx = None
             if ty == "text":
                 if text_idx is None:
                     idx += 1
@@ -446,15 +781,15 @@ def _converse_events(it, t0, F):
                     yield F("contentBlockDelta", {"contentBlockIndex": 0, "delta": {"text": ""}})
                     yield F("contentBlockStop", {"contentBlockIndex": 0})
                 yield F("messageStop", {"stopReason": _stop_reason(ev["finish_reason"])})
-                yield F("metadata", {"usage": {"inputTokens": ev["input_tokens"], "outputTokens": ev["output_tokens"],
-                                                                "totalTokens": ev["input_tokens"] + ev["output_tokens"]},
-                                                      "metrics": {"latencyMs": int((time.time() - t0) * 1000)}})
+                yield F("metadata", {"usage": _usage(ev, cache_fn(ev["input_tokens"]) if cache_fn else None),
+                                                      "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
+                                      **({"trace": ev["guardrail_trace"]} if ev.get("guardrail_trace") else {})})
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
         yield F("modelStreamErrorException", {"message": str(e)}, message_type="exception")
 
 
-def _converse_frames(it, t0):
-    return _converse_events(it, t0, eventstream_frame)
+def _converse_frames(it, t0, cache_fn=None):
+    return _converse_events(it, t0, eventstream_frame, cache_fn)
 
 
 def _chunk_frame(obj):
@@ -467,18 +802,31 @@ def _invoke_frames(m, it, t0):
     mid, fam = m[0], _fam(m)
     first = [None]
 
+    def ga(ev):     # guardrail action/trace ride on the final chunk, as on real InvokeModelWithResponseStream
+        return dict(({"amazon-bedrock-guardrailAction": ev["guardrail_action"]} if ev.get("guardrail_action") else {}),
+                    **({"amazon-bedrock-trace": ev["guardrail_trace"]} if ev.get("guardrail_trace") else {}))
+
     def metrics(ev):
         return {"inputTokenCount": ev["input_tokens"], "outputTokenCount": ev["output_tokens"],
                 "invocationLatency": int((time.time() - t0) * 1000), "firstByteLatency": int(((first[0] or time.time()) - t0) * 1000)}
     try:
         if fam.startswith("amazon.nova"):
+            last = {}
+
+            def tap(it2):
+                for e in it2:
+                    if e["type"] == "done":
+                        last.update(ga(e))
+                    yield e
+            it = tap(it)
+
             def F(name, payload, message_type="event"):
                 if message_type != "event":
                     return eventstream_frame(name, payload, message_type=message_type)
                 if name == "metadata":
                     return b""
                 if name == "messageStop":
-                    payload = dict(payload, **{"amazon-bedrock-invocationMetrics": {"invocationLatency": int((time.time() - t0) * 1000)}})
+                    payload = dict(payload, **{"amazon-bedrock-invocationMetrics": {"invocationLatency": int((time.time() - t0) * 1000)}}, **last)
                 return _chunk_frame({name: payload})
             for fr in _converse_events(it, t0, F):
                 if fr:
@@ -488,9 +836,18 @@ def _invoke_frames(m, it, t0):
             yield _chunk_frame({"type": "message_start", "message": {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant",
                                                                     "model": mid, "content": [], "stop_reason": None, "stop_sequence": None,
                                                                     "usage": {"input_tokens": 0, "output_tokens": 0}}})
-            idx, text_idx, tool_idx, nxt = None, None, {}, 0
+            idx, text_idx, tool_idx, nxt, think_idx = None, None, {}, 0, None
             for ev in it:
                 first[0] = first[0] or time.time()
+                if ev["type"] == "reasoning":
+                    if think_idx is None:
+                        think_idx, nxt = nxt, nxt + 1
+                        yield _chunk_frame({"type": "content_block_start", "index": think_idx, "content_block": {"type": "thinking", "thinking": ""}})
+                    yield _chunk_frame({"type": "content_block_delta", "index": think_idx, "delta": {"type": "thinking_delta", "thinking": ev["text"]}})
+                    continue
+                if think_idx is not None:
+                    yield _chunk_frame({"type": "content_block_stop", "index": think_idx})
+                    think_idx = None
                 if ev["type"] == "text":
                     if text_idx is None:
                         text_idx, nxt = nxt, nxt + 1
@@ -514,7 +871,7 @@ def _invoke_frames(m, it, t0):
                     yield _chunk_frame({"type": "message_delta", "delta": {"stop_reason": "tool_use" if ev["tool_calls"] else
                                                                         ("max_tokens" if ev["finish_reason"] == "length" else "end_turn"), "stop_sequence": None},
                                         "usage": {"output_tokens": ev["output_tokens"]}})
-                    yield _chunk_frame({"type": "message_stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
+                    yield _chunk_frame({"type": "message_stop", "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
             return
         n_out = 0
         for ev in it:
@@ -531,21 +888,34 @@ def _invoke_frames(m, it, t0):
                 lim = ev["finish_reason"] == "length"
                 if fam.startswith("amazon.titan-text"):
                     yield _chunk_frame({"outputText": "", "index": 0, "totalOutputTextTokenCount": ev["output_tokens"], "completionReason": "LENGTH" if lim else "FINISH",
-                                        "inputTextTokenCount": ev["input_tokens"], "amazon-bedrock-invocationMetrics": metrics(ev)})
+                                        "inputTextTokenCount": ev["input_tokens"], "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
                 elif fam.startswith("meta.") or fam == "vyomi-prompt":
                     yield _chunk_frame({"generation": "", "prompt_token_count": ev["input_tokens"], "generation_token_count": ev["output_tokens"],
-                                        "stop_reason": "length" if lim else "stop", "amazon-bedrock-invocationMetrics": metrics(ev)})
+                                        "stop_reason": "length" if lim else "stop", "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
                 else:
-                    yield _chunk_frame({"outputs": [{"text": "", "stop_reason": "length" if lim else "stop"}], "amazon-bedrock-invocationMetrics": metrics(ev)})
+                    yield _chunk_frame({"outputs": [{"text": "", "stop_reason": "length" if lim else "stop"}], "amazon-bedrock-invocationMetrics": metrics(ev), **ga(ev)})
     except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
         yield eventstream_frame("modelStreamErrorException", {"message": str(e)}, message_type="exception")
 
 
 
-def _guard_input(gcfg, msgs):
+def _guard_blocks(p):
+    """guardContent blocks of the last user message -> [(text, qualifiers)] (empty when the caller sent none)."""
+    users = [m for m in (p.get("messages") or []) if isinstance(m, dict) and m.get("role") == "user"]
+    out = []
+    for b in (users[-1].get("content") or []) if users else []:
+        gt = ((b or {}).get("guardContent") or {}).get("text") if isinstance(b, dict) else None
+        if isinstance(gt, dict) and isinstance(gt.get("text"), str):
+            out.append((gt["text"], list(gt.get("qualifiers") or [])))
+    return out
+
+
+def _guard_input(gcfg, msgs, ctx=None):
     gr = _guardrails()
     user = [m for m in msgs if m["role"] == "user"]
-    text = user[-1]["content"] if user else ""
+    text = llm._ctext(user[-1]["content"]) if user else ""
+    if ctx:    # guardContent present: only guard_content (or unqualified) text is judged, like real Converse; source/query are grounding context
+        text = " ".join(t for t, q in ctx if not ({"grounding_source", "query"} & set(q)))
     try:
         r = gr.converse_check(gcfg, text if isinstance(text, str) else json.dumps(text), "INPUT")
     except gr.GErr as e:
@@ -579,12 +949,12 @@ def _guard_blocked(op, gi, gcfg, t0, usage=None):
     return _bytes(200, b"".join(frames), "application/vnd.amazon.eventstream")
 
 
-def _guard_output(gcfg, r):
+def _guard_output(gcfg, r, ctx=None):
     gr = _guardrails()
     if not r.get("text"):
         return None
     try:
-        res = gr.converse_check(gcfg, r["text"], "OUTPUT")
+        res = gr.converse_check(gcfg, r["text"], "OUTPUT", ctx)
     except gr.GErr as e:
         return _b_err(e.code, e.msg, e.status)
     if res is None:
@@ -593,23 +963,153 @@ def _guard_output(gcfg, r):
     return _guard_blocked("converse", (res["text"], res["assessment"], "OUTPUT"), gcfg, time.time(), usage)
 
 
+def _invoke_guard_cfg(headers):
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    gid = h.get("x-amzn-bedrock-guardrailidentifier")
+    if not gid:
+        return None
+    return {"guardrailIdentifier": gid, "guardrailVersion": h.get("x-amzn-bedrock-guardrailversion") or "",
+            "trace": "enabled" if str(h.get("x-amzn-bedrock-trace", "")).upper() == "ENABLED" else "disabled"}
+
+
+def _invoke_blocked(m, p, op, gi, gcfg, t0):
+    """InvokeModel[WithResponseStream] intervened: the family's own response shape carrying the blocked message + guardrail action/trace."""
+    text, assessment, kind = gi
+    r = {"text": text, "finish_reason": "stop", "input_tokens": 0, "output_tokens": 0, "tool_calls": [], "model": llm.resolve_model(m[0])}
+    tr = _guard_trace(gcfg, assessment, kind)
+    if op == "invoke-with-response-stream":
+        done = {"type": "done", "finish_reason": "stop", "input_tokens": 0, "output_tokens": 0, "tool_calls": [], "guardrail_action": "INTERVENED"}
+        if tr:
+            done["guardrail_trace"] = tr
+        return _stream_out(200, {"x-amzn-bedrock-content-type": "application/json"},
+                           _invoke_frames(m, iter([{"type": "text", "text": text}, done]), t0), "application/vnd.amazon.eventstream")
+    resp = _bedrock_response(m, p, r)
+    resp["amazon-bedrock-guardrailAction"] = "INTERVENED"
+    if tr:
+        resp["amazon-bedrock-trace"] = tr
+    if op == "invoke":
+        return _j(200, resp)
+    return _bytes(200, eventstream_frame("chunk", {"bytes": base64.b64encode(json.dumps(resp).encode()).decode()}), "application/vnd.amazon.eventstream")
+
+
+def _trained():
+    try:
+        from core import training_core as t
+    except ImportError:  # Pyodide flat layout
+        import training_core as t  # type: ignore
+    return t
+
+
+def _invoke_trained(cid, op, p):
+    """InvokeModel / Converse on a custom model trained in core/training_core: {"task":"classify","text"} -> {label, scores}; {"task":"score",
+    "query","document"} -> {score}. Converse classifies the last user message. Every answer carries vyomiTrained: it is a head, not an LLM."""
+    t = _trained()
+    if p is None:
+        return _b_err("ValidationException", "Malformed input request, please reformat your input and try again.", 400)
+    if op.endswith("stream") or op == "invoke-with-response-stream":
+        return _b_err("ValidationException", "This trained model doesn't support streaming operations.", 400)
+    t0 = time.time()
+    if t.is_chat_model(cid):
+        return _invoke_trained_chat(t, cid, op, p, t0)
+    try:
+        if op == "converse":
+            msgs = p.get("messages") or []
+            last = next((m for m in reversed(msgs) if m.get("role") == "user"), None)
+            txt = " ".join(b.get("text", "") for b in (last or {}).get("content", []) if isinstance(b, dict))
+            r = t.invoke(cid, {"task": "classify", "text": txt})
+            return _j(200, {"output": {"message": {"role": "assistant", "content": [{"text": r["label"]}]}}, "stopReason": "end_turn",
+                            "usage": {"inputTokens": llm.estimate_tokens(txt), "outputTokens": 1, "totalTokens": llm.estimate_tokens(txt) + 1},
+                            "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
+                            "additionalModelResponseFields": {"vyomiTrained": True, "scores": r["scores"], "embedder": r["embedder"]}},
+                      {"x-vyomi-trained": "true"})
+        return _j(200, t.invoke(cid, p), {"x-vyomi-trained": "true"})
+    except t.TrainError as e:
+        return _b_err("ResourceNotFoundException" if e.kind == "notfound" else "ValidationException", str(e), 404 if e.kind == "notfound" else 400)
+
+
+def _invoke_trained_chat(t, cid, op, p, t0):
+    """InvokeModel / Converse on a chat-model LoRA custom model: the base open model + this adapter on the local llama.cpp server.
+    InvokeModel bodies: Nova-style {"messages":[{"role","content":[{"text"}]}],"inferenceConfig"} or Llama-style {"prompt","max_gen_len","temperature"}."""
+    hdr = {"x-vyomi-trained": "true", "x-vyomi-adapter": cid}
+    if op == "converse" or isinstance(p.get("messages"), list):
+        req = _converse_request(p, cid)
+        if isinstance(req, str):
+            return _b_err("ValidationException", req, 400)
+        msgs, system, mx, temp, stop, _ = req
+    else:
+        pr = p.get("prompt")
+        if not isinstance(pr, str) or not pr.strip():
+            return _b_err("ValidationException", "Malformed input request: provide messages (Converse/Nova style) or prompt (Llama style).", 400)
+        msgs, system, mx, temp, stop = [{"role": "user", "content": pr}], None, int(p.get("max_gen_len") or p.get("max_tokens") or 256), float(p.get("temperature", 0.7)), None
+    try:
+        r = t.invoke_chat(cid, msgs, system, mx, temp, stop)
+    except t.TrainError as e:
+        return _b_err("ResourceNotFoundException" if e.kind == "notfound" else "ValidationException", str(e), 404 if e.kind == "notfound" else 400)
+    except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
+        return _ll_err(e)
+    usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+    extra = {"vyomiTrained": True, "adapterId": cid, "baseModel": r["baseModel"]}
+    if op == "converse":
+        return _j(200, {"output": {"message": {"role": "assistant", "content": [{"text": r["text"]}]}}, "stopReason": _stop_reason(r["finish_reason"]), "usage": usage,
+                        "metrics": {"latencyMs": int((time.time() - t0) * 1000)}, "additionalModelResponseFields": extra}, hdr)
+    if isinstance(p.get("messages"), list):
+        return _j(200, {"output": {"message": {"role": "assistant", "content": [{"text": r["text"]}]}}, "stopReason": _stop_reason(r["finish_reason"]), "usage": usage, **extra}, hdr)
+    return _j(200, {"generation": r["text"], "prompt_token_count": r["input_tokens"], "generation_token_count": r["output_tokens"],
+                    "stop_reason": "length" if r["finish_reason"] == "length" else "stop", **extra}, hdr)
+
+
 def bedrock_dispatch(method, path, query, headers, body):
     method, path = method.upper(), "/" + path.strip("/")
     path = re.sub(r"/{2,}", "/", path)
     if path in ("/foundation-models",) and method == "GET":
         outm = (query or {}).get("byOutputModality")
         prov = (query or {}).get("byProvider")
-        ms = [m for m in BEDROCK_MODELS if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
-        return _j(200, {"modelSummaries": [_summary(m) for m in ms]})
+        ms = [m for m in BEDROCK_MODELS + _special_bm() if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
+        al = [a for a in (BEDROCK_ALIASES if list_aliases() else []) if (not outm or outm.upper() in a[4]) and (not prov or prov.lower() == a[1].lower())]
+        return _j(200, {"modelSummaries": [_summary(m) for m in ms] + [_alias_summary(a) for a in al]})
+    if path == "/inference-profiles" and method == "GET":
+        return _j(200, {"inferenceProfileSummaries": [_profile(a, pre) for a in (BEDROCK_ALIASES if list_aliases() else []) if "EMBEDDING" not in a[4] and not a[0].startswith(("amazon.titan", "cohere", "meta.llama3-2-3b"))
+                                                      for pre in _INF_PROFILE_PREFIX[:1]]})
+    mt = re.match(r"^/inference-profiles/(.+)$", path)
+    if mt and method == "GET":
+        from urllib.parse import unquote
+        pid = re.sub(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:inference-profile/", "", unquote(mt.group(1)))
+        pre, _, base = pid.partition(".")
+        if pre in _INF_PROFILE_PREFIX and base in _ALIAS_BY_ID and "EMBEDDING" not in _ALIAS_BY_ID[base][4]:
+            return _j(200, _profile(_ALIAS_BY_ID[base], pre))
+        return _b_err("ResourceNotFoundException", "Could not find the inference profile from the provided identifier.", 404)
     _gr = _guardrails()
     if _gr.handles(path):
         return _gr.dispatch(method, path, query, body)
     mt = re.match(r"^/foundation-models/(.+)$", path)
     if mt and method == "GET":
-        m = _BM.get(mt.group(1))
+        from urllib.parse import unquote
+        mid = unquote(mt.group(1))
+        if mid in _ALIAS_BY_ID:
+            return _j(200, {"modelDetails": _alias_summary(_ALIAS_BY_ID[mid])})
+        m = _BM.get(mid) or {t[0]: t for t in _special_bm()}.get(mid)
         if not m:
             return _b_err("ResourceNotFoundException", f"Could not resolve the foundation model from the provided model identifier.", 404)
         return _j(200, {"modelDetails": _summary(m)})
+    mt = re.match(r"^/model/(.+?)/count-tokens$", path)
+    if mt and method == "POST":   # Bedrock CountTokens: same ~4 chars/token estimate the local-LLM seam uses when no backend usage exists
+        from urllib.parse import unquote
+        if not _resolve_model(unquote(mt.group(1))):
+            return _b_err("ValidationException", "The provided model identifier is invalid.", 400)
+        p = _body(body)
+        inp = (p or {}).get("input") if isinstance(p, dict) else None
+        if not isinstance(inp, dict) or not ({"converse", "invokeModel"} & set(inp)):
+            return _b_err("ValidationException", "Malformed input request: input must contain converse or invokeModel.", 400)
+        if "converse" in inp:
+            txt = " ".join(str(c.get("text", "")) for m_ in (inp["converse"].get("messages") or []) for c in (m_.get("content") or []) if isinstance(c, dict))
+            txt += " ".join(str(c.get("text", "")) for c in (inp["converse"].get("system") or []) if isinstance(c, dict))
+        else:
+            txt = str(inp["invokeModel"].get("body", ""))
+            try:
+                txt = base64.b64decode(txt).decode("utf-8", "replace")
+            except Exception:
+                pass
+        return _j(200, {"inputTokens": llm.estimate_tokens(txt)})
     mt = re.match(r"^/model/(.+?)/(invoke|invoke-with-response-stream|converse|converse-stream)$", path)
     if not mt:
         return _b_err("UnknownOperationException", f"Unsupported Bedrock operation: {method} {path}", 404)
@@ -617,13 +1117,16 @@ def bedrock_dispatch(method, path, query, headers, body):
         return _b_err("UnknownOperationException", f"{method} is not supported for this operation", 405)
     from urllib.parse import unquote
     mid, op = unquote(mt.group(1)), mt.group(2)
+    tm = re.match(r"^arn:aws[a-z-]*:bedrock:[^:]*:[0-9]*:custom-model/(.+)$", mid)
+    if tm and _trained().has_model(tm.group(1)):      # a head trained by core/training_core: not an LLM, answered by the head itself
+        return _invoke_trained(tm.group(1), op, _body(body))
     m = _resolve_model(mid)
     if not m:
         return _b_err("ValidationException", "The provided model identifier is invalid.", 400)
     p = _body(body)
     if p is None:
         return _b_err("ValidationException", "Malformed input request, please reformat your input and try again.", 400)
-    if m[0] in CAT._BYNAME:     # native ids: Converse-style body -> nova family, else Llama-style
+    if _native_id(m[0]):     # native ids: Converse-style body -> nova family, else Llama-style
         m = m + ("amazon.nova-vyomi" if isinstance(p.get("messages"), list) else "vyomi-prompt",)
     t0 = time.time()
     if op.startswith("converse"):
@@ -633,8 +1136,9 @@ def bedrock_dispatch(method, path, query, headers, body):
         if isinstance(req, str):
             return _b_err("ValidationException", req, 400)
         gcfg = p.get("guardrailConfig")
+        gctx = _guard_blocks(p) if gcfg else []
         if gcfg:
-            gi = _guard_input(gcfg, req[0])
+            gi = _guard_input(gcfg, req[0], gctx)
             if isinstance(gi, tuple):
                 return _guard_blocked(op, gi, gcfg, t0)
             if gi is not None:
@@ -642,24 +1146,32 @@ def bedrock_dispatch(method, path, query, headers, body):
         try:
             if op == "converse-stream":
                 it = _prime(llm.chat_stream(*req[:5], **req[5]))
+                if gcfg:       # output guarding in buffered windows (streamProcessingMode sync|async)
+                    gr = _guardrails()
+                    it = gr.guard_events(it, gr.policy_of(gcfg), gcfg.get("streamProcessingMode") or "sync", gctx,
+                                         gcfg["guardrailIdentifier"], (gcfg.get("trace") or "disabled") != "disabled")
             else:
                 r = _llm_chat(req)
         except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
             return _ll_err(e)
         except ValueError as e:
             return _b_err("ValidationException", str(e), 400)
+        except _guardrails().GErr as e:
+            return _b_err(e.code, e.msg, e.status)
         if op == "converse" and gcfg:
-            go = _guard_output(gcfg, r)
+            go = _guard_output(gcfg, r, gctx)
             if go is not None:
                 return go
         if op == "converse":
-            usage = {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"], "totalTokens": r["input_tokens"] + r["output_tokens"]}
+            usage = _usage(r, _cache_account(p, "converse", r["input_tokens"]))
             return _j(200, {"output": {"message": {"role": "assistant", "content": _converse_content(r)}},
                             "stopReason": _stop_reason(r["finish_reason"]), "usage": usage,
-                            "metrics": {"latencyMs": int((time.time() - t0) * 1000)}}, {"x-vyomi-local-model": r["model"]})
-        return _stream_out(200, {}, _converse_frames(it, t0), "application/vnd.amazon.eventstream")
+                            "metrics": {"latencyMs": int((time.time() - t0) * 1000)},
+                            **({"additionalModelResponseFields": {"vyomiImported": True, "vyomiTrained": True}} if _fam(m) == "vyomi.import" else {})},
+                      {"x-vyomi-local-model": r["model"]})
+        return _stream_out(200, {}, _converse_frames(it, t0, lambda n: _cache_account(p, "converse", n)), "application/vnd.amazon.eventstream")
     # InvokeModel[WithResponseStream]
-    if m[6] == CAT.DEFAULT_EMBED and m[0] in CAT._BYNAME:      # native ids: 768-d nomic-style embedding, Titan-free body
+    if m[6] == CAT.DEFAULT_EMBED and _native_id(m[0]):      # native ids: 768-d nomic-style embedding, Titan-free body
         if op != "invoke":
             return _b_err("ValidationException", "This model doesn't support the InvokeModelWithResponseStream operation.", 400)
         txt = p.get("inputText") or p.get("prompt") or p.get("input")
@@ -683,13 +1195,24 @@ def bedrock_dispatch(method, path, query, headers, body):
     req = _bedrock_text_request(m, p)
     if isinstance(req, str):
         return _b_err("ValidationException", req, 400)
+    gcfg, gr = _invoke_guard_cfg(headers), _guardrails()
+    if gcfg:     # X-Amzn-Bedrock-Guardrail* headers: input is judged first, output after (windowed for streams)
+        gi = _guard_input(gcfg, req[0])
+        if isinstance(gi, tuple):
+            return _invoke_blocked(m, p, op, gi, gcfg, t0)
+        if gi is not None:
+            return gi
     if op == "invoke-with-response-stream":
         try:
             it = _prime(llm.chat_stream(*req[:5], **req[5]))
+            if gcfg:
+                it = gr.guard_events(it, gr.policy_of(gcfg), "sync", None, gcfg["guardrailIdentifier"], (gcfg.get("trace") or "disabled") != "disabled")
         except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
             return _ll_err(e)
         except ValueError as e:
             return _b_err("ValidationException", str(e), 400)
+        except gr.GErr as e:
+            return _b_err(e.code, e.msg, e.status)
         return _stream_out(200, {"x-amzn-bedrock-content-type": "application/json", "x-vyomi-local-model": llm.resolve_model(m[0])},
                            _invoke_frames(m, it, t0), "application/vnd.amazon.eventstream")
     try:
@@ -698,7 +1221,21 @@ def bedrock_dispatch(method, path, query, headers, body):
         return _ll_err(e)
     except ValueError as e:
         return _b_err("ValidationException", str(e), 400)
+    if gcfg:
+        try:
+            res = gr.converse_check(gcfg, r["text"], "OUTPUT") if r.get("text") else None
+        except gr.GErr as e:
+            return _b_err(e.code, e.msg, e.status)
+        if res is not None:
+            return _invoke_blocked(m, p, op, (res["text"], res["assessment"], "OUTPUT"), gcfg, t0)
     resp = _bedrock_response(m, p, r)
+    if _fam(m).startswith("anthropic."):
+        ca = _cache_account(p, "claude", r["input_tokens"])
+        if ca:
+            resp["usage"] = {"input_tokens": ca["uncached"], "output_tokens": r["output_tokens"],
+                             "cache_read_input_tokens": ca["read"], "cache_creation_input_tokens": ca["write"]}
+    if gcfg:
+        resp["amazon-bedrock-guardrailAction"] = "NONE"
     hh = {"x-amzn-bedrock-input-token-count": str(r["input_tokens"]), "x-amzn-bedrock-output-token-count": str(r["output_tokens"]),
           "x-amzn-bedrock-invocation-latency": str(int((time.time() - t0) * 1000)), "x-vyomi-local-model": r["model"]}
     if op == "invoke":
@@ -713,12 +1250,46 @@ def _summary(m):
     return {"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{m[0]}", "modelId": m[0], "modelName": m[2],
             "providerName": m[1], "inputModalities": m[3], "outputModalities": m[4], "responseStreamingSupported": m[5],
             "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
-            "vyomiAvailability": CAT.availability(m[6])}
+            "vyomiAvailability": CAT.availability(m[6]), "vyomiLicense": CAT.license_of(m[6])}
+
+
+def _backed_by(mid):
+    m = _resolve_model(mid)
+    cid = m[6] if m else CAT.DEFAULT_CHAT
+    return {"catalogModelId": cid, "localModel": llm.resolve_model(mid), "availability": CAT.availability(cid),
+            "note": "Vyomi alias: this standard Bedrock id is answered by the local open model above (Mesh: llama.cpp Qwen3-4B-Instruct-2507 via the "
+                    "core/llm_core seam; Nano: WebLLM), not by the original vendor model. Behaviour and quality are those of the local model."}
+
+
+def _alias_summary(a):
+    ins = a[3] + ["IMAGE"] if (a[0].startswith(("anthropic.claude", "amazon.nova-lite", "amazon.nova-pro")) and "IMAGE" not in a[3]
+                                and llm.role_available("vision")) else a[3]       # only while the local vision model is up (Mesh)
+    return {"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{a[0]}", "modelId": a[0], "modelName": a[2],
+            "providerName": a[1], "inputModalities": ins, "outputModalities": a[4], "responseStreamingSupported": a[5],
+            "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
+            "vyomiBackedBy": _backed_by(a[0])}
+
+
+def _profile(a, pre):
+    return {"inferenceProfileName": f"{pre.upper()} {a[2]}", "description": f"Vyomi system-defined cross-Region profile alias for {a[0]} (local model)",
+            "createdAt": "2024-08-01T00:00:00Z", "updatedAt": "2024-08-01T00:00:00Z",
+            "inferenceProfileArn": f"arn:aws:bedrock:us-east-1:000000000000:inference-profile/{pre}.{a[0]}",
+            "models": [{"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{a[0]}"}],
+            "inferenceProfileId": f"{pre}.{a[0]}", "status": "ACTIVE", "type": "SYSTEM_DEFINED"}
 
 
 # ───────────────────────────── Vertex AI ─────────────────────────────
 # Vertex / Gemini-API model ids: the ten catalogue models by bare id (and ollama/vyomi by-name ids); legacy gemini-*/text-embedding-*
 # ids still RESOLVE through the hidden alias map but are never listed (core/ai_model_catalog.py).
+def _with_role(cloud, model, ex):
+    """Add the llama-server role of a catalogue role model (vision / reasoning) to a request's extras, keyed by the deployment/model id."""
+    cid = CAT.resolve(cloud, model)
+    role = CAT.ROLE_OF.get(cid)
+    if role:
+        ex.setdefault("role", role)
+    return ex
+
+
 def _vx_known(model):
     return CAT.resolve("gcp", model) is not None
 
@@ -761,11 +1332,22 @@ def _gem_request(p):
     for c in contents:
         if not isinstance(c, dict):
             return "contents: each content must be an object"
-        texts, calls, results = [], [], []
+        texts, calls, results, images = [], [], [], []
         for pt in c.get("parts") or []:
             keys = set(pt) - {"thought", "thoughtSignature"}
             if keys == {"text"}:
+                if pt.get("thought") and c.get("role") == "model":      # an earlier turn's thought summary: dropped, never re-fed
+                    continue
                 texts.append(pt["text"])
+            elif keys == {"inlineData"}:
+                idt = pt["inlineData"] or {}
+                mt_ = str(idt.get("mimeType") or "")
+                if not mt_.startswith("image/"):
+                    return f"inlineData.mimeType {mt_!r} is not supported by the local model (images only: png, jpeg, gif, webp)."
+                part = _image_part(mt_.split("/", 1)[1].replace("jpg", "jpeg"), idt.get("data"))
+                if isinstance(part, str):
+                    return part
+                images.append(part)
             elif keys == {"functionCall"}:
                 fc = pt["functionCall"] or {}
                 if not fc.get("name"):
@@ -784,8 +1366,10 @@ def _gem_request(p):
                 results.append({"role": "tool", "tool_call_id": (hit or (fr.get("id") or "call_" + uuid.uuid4().hex[:24],))[0], "name": name,
                                 "content": json.dumps(fr.get("response", {}))})
             else:
-                return "Only text, functionCall and functionResponse parts are supported by the local model (inlineData/fileData are not)."
-        if calls or texts:
+                return "Only text, inlineData (image), functionCall and functionResponse parts are supported by the local model (fileData/audio/video are not)."
+        if images and c.get("role") != "model":
+            msgs.append({"role": "user", "content": [{"type": "text", "text": "".join(texts)}] + images})
+        elif calls or texts:
             if c.get("role") == "model" or calls:
                 m = {"role": "assistant", "content": "".join(texts)}
                 if calls:
@@ -827,6 +1411,14 @@ def _gem_request(p):
     elif p.get("toolConfig"):
         return "toolConfig requires tools"
     gc = p.get("generationConfig") or {}
+    tcfg = gc.get("thinkingConfig")
+    if tcfg is not None:      # Gemini thinking: includeThoughts -> thought summaries (the reasoning model's reasoning stream), Mesh only
+        if not isinstance(tcfg, dict):
+            return "generationConfig.thinkingConfig must be an object."
+        if tcfg.get("includeThoughts") or (tcfg.get("thinkingBudget") or 0) > 0:
+            if not llm.role_endpoint("reasoning"):
+                return _NO_REASONING
+            ex["reasoning"], ex["role"] = True, "reasoning"
     mime = gc.get("responseMimeType")
     if mime == "application/json":
         sch = gc.get("responseJsonSchema") or _lower_types(gc.get("responseSchema"))
@@ -848,8 +1440,9 @@ def _gem_request(p):
     return msgs, si or None, gc.get("maxOutputTokens", 512), gc.get("temperature", 1.0), gc.get("stopSequences"), ex
 
 
-def _gem_parts(text, calls):
-    parts = [{"text": text}] if (text or not calls) else []
+def _gem_parts(text, calls, thought=None):
+    parts = [{"text": thought, "thought": True}] if thought else []
+    parts += [{"text": text}] if (text or not calls) else []
     parts += [{"functionCall": {"name": c["name"], "args": c["arguments"]}} for c in calls or []]
     return parts
 
@@ -872,7 +1465,9 @@ def _gem_stream(model, it, sse):
         return s
     try:
         for ev in it:
-            if ev["type"] == "text":
+            if ev["type"] == "reasoning":
+                yield enc({"candidates": [{"content": {"role": "model", "parts": [{"text": ev["text"], "thought": True}]}, "index": 0}], "modelVersion": model})
+            elif ev["type"] == "text":
                 yield enc({"candidates": [{"content": {"role": "model", "parts": [{"text": ev["text"]}]}, "index": 0}], "modelVersion": model})
             elif ev["type"] == "done":
                 fin = "MAX_TOKENS" if ev["finish_reason"] == "length" else "STOP"
@@ -896,7 +1491,7 @@ def _gdev_dispatch(method, path, query, headers, body):
     method = method.upper()
     mt = re.match(r"^/v1(?:beta)?/models/?$", path)
     if mt and method == "GET":
-        return _j(200, {"models": [_gdev_model(m) for m in CAT.IDS]})
+        return _j(200, {"models": [_gdev_model(m) for m in CAT.IDS + [x["id"] for x in CAT.served_special()]]})
     mt = re.match(r"^/v1(?:beta)?/models/([^/:]+)$", path)
     if mt and method == "GET":
         m = mt.group(1)
@@ -973,9 +1568,9 @@ def vertex_dispatch(method, path, query, headers, body):
             return _g_err(400, "INVALID_ARGUMENT", req)
         msgs, si = req[0], req[1]
         if op == "countTokens":
-            n = sum(llm.estimate_tokens(m["content"]) for m in msgs) + llm.estimate_tokens(si or "")
-            return _j(200, {"totalTokens": n, "totalBillableCharacters": sum(len(m["content"]) for m in msgs)})
-        req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model))
+            n = sum(llm.estimate_tokens(llm._ctext(m["content"])) for m in msgs) + llm.estimate_tokens(si or "")
+            return _j(200, {"totalTokens": n, "totalBillableCharacters": sum(len(llm._ctext(m["content"])) for m in msgs)})
+        req = (req[0], req[1], req[2], req[3], req[4], _with_role("gcp", model, dict(req[5], model=model)))
         try:
             if op == "streamGenerateContent":
                 it = _prime(llm.chat_stream(*req[:5], **req[5]))
@@ -989,12 +1584,55 @@ def vertex_dispatch(method, path, query, headers, body):
             return _g_err(400, "INVALID_ARGUMENT", str(e))
         if op == "generateContent":
             fin = "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"
-            return _j(200, {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"])}, "index": 0, "finishReason": fin}],
+            return _j(200, {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"], r.get("reasoning"))}, "index": 0, "finishReason": fin}],
                             "usageMetadata": _gem_usage(r), "modelVersion": model, "responseId": uuid.uuid4().hex[:20]},
                       {"x-vyomi-local-model": r["model"]})
         sse = (query or {}).get("alt") == "sse"
         return _stream_out(200, {}, _gem_stream(model, it, sse), "text/event-stream" if sse else "application/json")
     return _g_err(404, "NOT_FOUND", f"Unsupported Vertex AI method :{op}")
+
+
+def vertex_imported_call(model_id, op, p, query=None):
+    """Endpoint :generateContent / :streamGenerateContent / :predict on a deployed IMPORTED chat model (core/import_core; wllama on Nano)."""
+    ic = _imported()
+    if not ic.has_model(model_id):
+        return _g_err(404, "NOT_FOUND", f"Imported model {model_id} not found.")
+    if op == "predict":      # vLLM-style custom-container instances: {"prompt" | "messages", "max_tokens", "temperature"}
+        inst = p.get("instances")
+        if not isinstance(inst, list) or not inst or not all(isinstance(i, dict) for i in inst):
+            return _g_err(400, "INVALID_ARGUMENT", "instances: a non-empty list of objects is required.")
+        preds = []
+        for i in inst:
+            msgs = i.get("messages") if isinstance(i.get("messages"), list) else ([{"role": "user", "content": i["prompt"]}] if isinstance(i.get("prompt"), str) and i["prompt"] else None)
+            if not msgs or not all(isinstance(x, dict) and isinstance(x.get("content"), str) and x.get("role") in ("system", "user", "assistant") for x in msgs):
+                return _g_err(400, "INVALID_ARGUMENT", "each instance needs a prompt string or messages [{role, content}].")
+            try:
+                r = llm.chat(msgs, None, i.get("max_tokens") or 256, i.get("temperature", 0.0), i.get("stop"), model=model_id)
+            except llm.LlmUnavailable as e:
+                return _g_err(503, "UNAVAILABLE", f"{e}")
+            preds.append({"content": r["text"], "finishReason": "length" if r["finish_reason"] == "length" else "stop",
+                          "usage": {"promptTokens": r["input_tokens"], "completionTokens": r["output_tokens"]}, "vyomiImported": True, "vyomiTrained": True})
+        return _j(200, {"predictions": preds, "model": model_id, "vyomiImported": True, "vyomiTrained": True})
+    req = _gem_request(p)
+    if isinstance(req, str):
+        return _g_err(400, "INVALID_ARGUMENT", req)
+    req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model_id))
+    try:
+        r = _llm_chat(req)
+    except llm.LlmStructuredError as e:
+        return _g_err(500, "INTERNAL", str(e))
+    except llm.LlmUnavailable as e:
+        return _g_err(503, "UNAVAILABLE", f"{e}")
+    except ValueError as e:
+        return _g_err(400, "INVALID_ARGUMENT", str(e))
+    out = {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"])}, "index": 0,
+                           "finishReason": "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"}],
+           "usageMetadata": _gem_usage(r), "modelVersion": model_id, "responseId": uuid.uuid4().hex[:20], "vyomiImported": True, "vyomiTrained": True}
+    if op == "streamGenerateContent":      # buffered: one chunk with the finished answer (the wllama path answers whole)
+        sse = (query or {}).get("alt") == "sse"
+        return _stream_out(200, {}, iter([("data: " + json.dumps(out) + "\n\n") if sse else json.dumps([out])]), "text/event-stream" if sse else "application/json")
+    return _j(200, out, {"x-vyomi-local-model": r["model"]})
+
 
 
 # ───────────────────────────── Azure OpenAI ─────────────────────────────
@@ -1026,8 +1664,22 @@ def _az_chat_request(p):
             return ("messages", "Invalid value for 'role' in messages.")
         c = m.get("content")
         if isinstance(c, list):
-            if any(not isinstance(x, dict) or x.get("type") not in ("text",) for x in c):
-                return ("messages", "Only text content parts are supported by the local model (image_url/input_audio are not).")
+            if any(not isinstance(x, dict) or x.get("type") not in ("text", "image_url") for x in c):
+                return ("messages", "Only text and image_url content parts are supported by the local model (input_audio/file are not).")
+            if any(x.get("type") == "image_url" for x in c):      # vision: only data: URLs (the simulator never fetches the internet); needs the vision model
+                if not llm.vision_available():
+                    return ("messages", _NO_VISION)
+                parts = []
+                for x in c:
+                    if x.get("type") == "text":
+                        parts.append({"type": "text", "text": x.get("text", "")})
+                        continue
+                    url = (x.get("image_url") or {}).get("url") if isinstance(x.get("image_url"), dict) else x.get("image_url")
+                    if not isinstance(url, str) or not re.match(r"^data:image/(png|jpe?g|gif|webp);base64,", url):
+                        return ("messages", "image_url.url must be a base64 data:image/(png|jpeg|gif|webp) URL; the simulator does not fetch remote images.")
+                    parts.append({"type": "image_url", "image_url": {"url": url}})
+                out.append({"role": role, "content": parts})
+                continue
             c = "".join(x.get("text", "") for x in c)
         if role == "tool":
             if not m.get("tool_call_id"):
@@ -1086,6 +1738,10 @@ def _az_chat_request(p):
     for k in ("top_p", "seed"):
         if p.get(k) is not None:
             ex[k] = p[k]
+    if p.get("reasoning_effort") in ("low", "medium", "high"):     # o-series style: answered by the small reasoning model, reasoning_content returned
+        if not llm.role_endpoint("reasoning"):
+            return ("reasoning_effort", _NO_REASONING)
+        ex["reasoning"], ex["role"] = True, "reasoning"
     stop = [p["stop"]] if isinstance(p.get("stop"), str) else p.get("stop")
     return out, None, p.get("max_completion_tokens") or p.get("max_tokens") or 512, p.get("temperature", 1.0), stop, ex
 
@@ -1094,6 +1750,8 @@ def _az_msg(r):
     msg = {"role": "assistant", "content": r["text"] if (r["text"] or not r["tool_calls"]) else None}
     if r["tool_calls"]:
         msg["tool_calls"] = [{"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": json.dumps(c["arguments"])}} for c in r["tool_calls"]]
+    if r.get("reasoning"):       # DeepSeek-R1-style deployments on Foundry expose the thought as reasoning_content
+        msg["reasoning_content"] = r["reasoning"]
     return msg
 
 
@@ -1141,7 +1799,312 @@ def _azure_agents():
     return a
 
 
+# ───────── Azure OpenAI fine-tuning + files (a trainable base runs a REAL head-training job in core/training_core) ─────────
+_AZ_FILES: dict[str, dict] = {}
+_AZ_FT: dict[str, dict] = {}
+
+
+def _ft_status(v):
+    return {"Queued": "queued", "Completed": "succeeded", "Failed": "failed", "Stopped": "cancelled"}.get(v["status"], "running")
+
+
+def _ft_view(j):
+    """OpenAI fine_tuning.job object, kept in step with the live training job (+ the Vyomi extension vyomiTraining)."""
+    t = _trained()
+    try:
+        v = t.view(j["model_id"])
+    except t.TrainError:
+        v = {"status": "Failed", "metrics": []}
+    st = _ft_status(v)
+    if st == "succeeded" and not j.get("fine_tuned_model"):
+        j["fine_tuned_model"] = f"ft:{j['model']}:{j['suffix'] or 'vyomi'}:{j['id'][len('ftjob-'):]}"
+    if st in ("succeeded", "failed", "cancelled") and not j.get("finished_at"):
+        j["finished_at"] = int(time.time())
+    out = {k: v2 for k, v2 in j.items() if k not in ("model_id", "suffix")}
+    out.update(status=st, vyomiTraining=v, trained_tokens=(sum(1 for _ in v.get("metrics", [])) * v.get("rows", 0) or None) if st == "succeeded" else None,
+               error=({"code": "training_failed", "message": v.get("note", "Training failed.")} if st == "failed" else {}))
+    return out
+
+
+def _ft_events(j):
+    v = _ft_view(j)
+    ev, base = [], j["created_at"]
+    ev.append({"object": "fine_tuning.job.event", "id": "ftevent-0", "created_at": base, "level": "info", "message": "Job enqueued. Waiting for jobs ahead to complete.", "data": None, "type": "message"})
+    for st in (v["vyomiTraining"].get("steps") or []):      # chat LoRA: one event per optimiser step like the real service
+        ev.append({"object": "fine_tuning.job.event", "id": f"ftevent-s{st['step']}", "created_at": base + st["step"], "level": "info",
+                   "message": f"Step {st['step']}: training loss={st['loss']}", "type": "metrics", "data": {"step": st["step"], "train_loss": st["loss"]}})
+    for m in ([] if v["vyomiTraining"].get("steps") else (v["vyomiTraining"].get("metrics") or [])):
+        ev.append({"object": "fine_tuning.job.event", "id": f"ftevent-{m['epoch']}", "created_at": base + m["epoch"], "level": "info",
+                   "message": f"Epoch {m['epoch']}/{v['vyomiTraining'].get('epochs')}: loss={m['loss']} accuracy={m['accuracy']}", "type": "metrics",
+                   "data": {"step": m["epoch"], "train_loss": m["loss"], "train_mean_token_accuracy": m["accuracy"], "valid_mean_token_accuracy": m.get("valAccuracy")}})
+    if v["status"] == "succeeded":
+        ev.append({"object": "fine_tuning.job.event", "id": "ftevent-done", "created_at": v.get("finished_at") or int(time.time()), "level": "info",
+                   "message": f"New fine-tuned model created: {v['fine_tuned_model']}", "data": None, "type": "message"})
+    return list(reversed(ev))
+
+
+def _multipart(headers, body):
+    from email.parser import BytesParser
+    from email.policy import default
+    msg = BytesParser(policy=default).parsebytes(b"Content-Type: " + headers.get("content-type", "").encode() + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+    out = {}
+    for part in msg.iter_parts() if msg.is_multipart() else []:
+        out[part.get_param("name", header="content-disposition")] = (part.get_filename(), part.get_payload(decode=True) or b"")
+    return out
+
+
+def _azure_files_ft(method, path, query, lh, body):
+    """/openai/files + /openai/fine_tuning/jobs[/{id}[/cancel|/events]] (also under /openai/v1)."""
+    t = _trained()
+    if not (lh.get("api-key") or lh.get("authorization")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    path = re.sub(r"^/openai(/v1)?", "", path).rstrip("/")
+    method = method.upper()
+    now = int(time.time())
+
+    def bad(msg, param=None, code="invalid_request_error", status=400):
+        return _j(status, {"error": {"code": code, "message": msg, "param": param, "type": "invalid_request_error"}})
+    if path == "/files" and method == "POST":
+        parts = _multipart(lh, body) if "multipart/form-data" in lh.get("content-type", "") else {}
+        if "file" not in parts:
+            return bad("Missing required parameter: 'file'.", "file")
+        purpose = parts.get("purpose", (None, b""))[1].decode() or "fine-tune"
+        fid = "file-" + uuid.uuid4().hex[:24]
+        t.put_file(fid, parts["file"][1])
+        _AZ_FILES[fid] = {"id": fid, "object": "file", "bytes": len(parts["file"][1]), "created_at": now, "filename": parts["file"][0] or "file.jsonl", "purpose": purpose, "status": "processed", "status_details": None}
+        return _j(200, _AZ_FILES[fid])
+    if path == "/files" and method == "GET":
+        return _j(200, {"object": "list", "data": list(_AZ_FILES.values()), "has_more": False})
+    mf = re.match(r"^/files/([^/]+)(/content)?$", path)
+    if mf:
+        f = _AZ_FILES.get(mf.group(1))
+        if not f:
+            return bad(f"File {mf.group(1)} not found.", None, "NotFound", 404)
+        if method == "DELETE":
+            del _AZ_FILES[f["id"]]
+            return _j(200, {"object": "file", "id": f["id"], "deleted": True})
+        if mf.group(2):
+            return _bytes(200, t.get_file(f["id"]) or b"", "application/octet-stream")
+        return _j(200, f)
+    if path == "/fine_tuning/jobs" and method == "POST":
+        p = _body(body)
+        if p is None:
+            return bad("Invalid JSON body.")
+        model, tf = p.get("model"), p.get("training_file")
+        if not model:
+            return bad("Missing required parameter: 'model'.", "model")
+        if not tf:
+            return bad("Missing required parameter: 'training_file'.", "training_file")
+        if not t.is_trainable(model):
+            return bad(f"The model {model} cannot be fine-tuned by Vyomi (trainable: {', '.join(t.TRAINABLE_EMBEDDERS)} or {t.HEAD_PREFIX}*); real model customization is metadata-only here.", "model", "model_not_trainable")
+        if tf not in _AZ_FILES:
+            return bad(f"No such File object: {tf}", "training_file", "invalid_request_error", 404)
+        jid = "ftjob-" + uuid.uuid4().hex[:24]
+        hpr = dict(p.get("hyperparameters") or {})
+        try:
+            _hy = {"epochs": hpr.get("n_epochs"), "batchSize": hpr.get("batch_size"), "learningRateMultiplier": hpr.get("learning_rate_multiplier")}
+            t.start("azft-" + jid[6:], "azft-" + jid[6:], t.get_file(tf) or b"", {k: v for k, v in _hy.items() if v not in (None, "auto")}, None, model, p.get("suffix") or "")
+        except t.TrainError as e:
+            return bad(str(e), "training_file")
+        j = {"id": jid, "object": "fine_tuning.job", "model": model, "created_at": now, "finished_at": None, "fine_tuned_model": None, "organization_id": "org-vyomi",
+             "result_files": [], "training_file": tf, "validation_file": p.get("validation_file"), "seed": p.get("seed") or 7, "suffix": p.get("suffix"),
+             "hyperparameters": {"n_epochs": int(hpr.get("n_epochs") or 10) if str(hpr.get("n_epochs", "")).isdigit() or hpr.get("n_epochs") is None else 10,
+                                 "batch_size": hpr.get("batch_size") or "auto", "learning_rate_multiplier": hpr.get("learning_rate_multiplier") or "auto"},
+             "model_id": "azft-" + jid[6:]}
+        _AZ_FT[jid] = j
+        return _j(200, _ft_view(j))
+    if path == "/fine_tuning/jobs" and method == "GET":
+        return _j(200, {"object": "list", "data": [_ft_view(j) for j in reversed(list(_AZ_FT.values()))], "has_more": False})
+    mj = re.match(r"^/fine_tuning/jobs/([^/]+)(?:/(cancel|events))?$", path)
+    if mj:
+        j = _AZ_FT.get(mj.group(1))
+        if not j:
+            return bad(f"Fine-tuning job {mj.group(1)} not found.", None, "NotFound", 404)
+        if mj.group(2) == "cancel" and method == "POST":
+            try:
+                t.stop(j["model_id"])
+            except t.TrainError as e:
+                return bad(str(e), None, "conflict", 409)
+            return _j(200, _ft_view(j))
+        if mj.group(2) == "events" and method == "GET":
+            return _j(200, {"object": "list", "data": _ft_events(j), "has_more": False})
+        if not mj.group(2) and method == "GET":
+            return _j(200, _ft_view(j))
+    return _a_err(404, "404", "Resource not found")
+
+
+def _azure_lora_chat(t, mid, model, p):
+    """chat/completions on a deployment of a LoRA-tuned chat model (ft:): base open model + adapter on the local llama.cpp server."""
+    if p.get("stream"):
+        return _a_err(400, "BadRequest", "This fine-tuned model does not support streaming in Vyomi.", "stream")
+    req = _az_chat_request(p)
+    if isinstance(req[0], str) and not isinstance(req[0], list):
+        return _a_err(400, "BadRequest", req[1], req[0])
+    msgs, system, mx, temp, stop = req[:5]
+    try:
+        r = t.invoke_chat(mid, msgs, system, mx, temp, stop)
+    except t.TrainError as e:
+        return _a_err(404 if e.kind == "notfound" else 400, "NotFound" if e.kind == "notfound" else "BadRequest", str(e))
+    except llm.LlmUnavailable as e:
+        return _a_err(503, "ServiceUnavailable", f"{e}")
+    u = {"prompt_tokens": r["input_tokens"], "completion_tokens": r["output_tokens"], "total_tokens": r["input_tokens"] + r["output_tokens"]}
+    return _j(200, {"id": "chatcmpl-" + uuid.uuid4().hex[:29], "object": "chat.completion", "created": int(time.time()), "model": model,
+                    "choices": [{"index": 0, "finish_reason": "length" if r["finish_reason"] == "length" else "stop", "message": {"role": "assistant", "content": r["text"]}}],
+                    "usage": u, "vyomiTrained": True, "vyomiAdapter": mid, "vyomiBaseModel": r["baseModel"],
+                    "vyomiNote": "Vyomi extension: the open base model plus your LoRA adapter answered; this is not a vendor model."}, {"x-vyomi-trained": "true"})
+
+
+def _azure_trained_chat(model, p):
+    """chat/completions on a deployment of a fine-tuned head (Vyomi extension: the head classifies the last user message)."""
+    t = _trained()
+    mid = "azft-" + model.rsplit(":", 1)[-1]
+    if not t.has_model(mid):
+        return None
+    if t.is_chat_model(mid):
+        return _azure_lora_chat(t, mid, model, p)
+    msgs = p.get("messages") or []
+    last = next((m for m in reversed(msgs) if isinstance(m, dict) and m.get("role") == "user"), None)
+    c = (last or {}).get("content")
+    txt = c if isinstance(c, str) else " ".join(b.get("text", "") for b in (c or []) if isinstance(b, dict))
+    if not txt.strip():
+        return _a_err(400, "BadRequest", "'messages' must contain a user message to classify.", "messages")
+    try:
+        r = t.invoke(mid, {"task": "classify", "text": txt})
+    except t.TrainError as e:
+        return _a_err(404 if e.kind == "notfound" else 400, "BadRequest" if e.kind != "notfound" else "NotFound", str(e))
+    n = llm.estimate_tokens(txt)
+    return _j(200, {"id": "chatcmpl-" + uuid.uuid4().hex[:29], "object": "chat.completion", "created": int(time.time()), "model": model,
+                    "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": r["label"]}}],
+                    "usage": {"prompt_tokens": n, "completion_tokens": 1, "total_tokens": n + 1},
+                    "vyomiTrained": True, "vyomiScores": r["scores"],
+                    "vyomiNote": "Vyomi extension: a trained classifier head answered (label as assistant content); this is not an LLM."})
+
+
+# ───────── Imported chat models (LoRA adapter GGUF + base, served by wllama on Nano): Azure registration is a VYOMI EXTENSION (no real API fits) ─────────
+def _imported():
+    try:
+        from core import import_core as m
+    except ImportError:  # Pyodide flat layout
+        import import_core as m  # type: ignore
+    return m
+
+
+def _az_cm_view(r):
+    return {"id": r["modelId"], "object": "vyomi.custom_model", "name": r["name"], "status": "succeeded", "created_at": r["createdAt"], "base_model": r["base"],
+            "vyomiImported": True, "vyomiTrained": True,
+            "vyomiImport": {"engine": r.get("engine"), "rank": r.get("rank"), "alpha": r.get("alpha"), "adapterBytes": r.get("adapterBytes"), "adapterSha256": r.get("adapterSha256")},
+            "vyomiNote": "Vyomi extension (no real Azure API registers a custom LoRA model this way): base GGUF + your adapter, served in the browser. Deploy it with an ARM "
+                         "deployment whose model.name is this id (format Vyomi)."}
+
+
+def _azure_custom_models(method, path, lh, body):
+    """POST /openai/vyomi/custom-models (multipart: name, adapter, meta  |  JSON: {name, adapter_file, meta_file} with ids from /openai/files); GET list/one; DELETE."""
+    ic, t = _imported(), _trained()
+    if not (lh.get("api-key") or lh.get("authorization")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    path = re.sub(r"^/openai(/v1)?/vyomi/custom-models", "", path).rstrip("/")
+    method = method.upper()
+
+    def bad(msg, param=None, code="invalid_request_error", status=400):
+        return _j(status, {"error": {"code": code, "message": msg, "param": param, "type": "invalid_request_error"}})
+    mine = lambda: [r for r in ic.persisted_models() if r.get("cloud") == "azure"]
+    if path == "" and method == "GET":
+        return _j(200, {"object": "list", "data": [_az_cm_view(r) for r in mine()], "has_more": False})
+    if path == "" and method == "POST":
+        try:
+            if "multipart/form-data" in lh.get("content-type", ""):
+                parts = _multipart(lh, body)
+                name = (parts.get("name") or (None, b""))[1].decode() or None
+                if "adapter" not in parts or "meta" not in parts:
+                    return bad("Both 'adapter' (adapter.gguf) and 'meta' (adapter_meta.json) files are required.", "adapter")
+                adapter, meta, src = parts["adapter"][1], parts["meta"][1], "upload"
+            else:
+                p = _body(body)
+                if p is None:
+                    return bad("Invalid JSON body.")
+                name = p.get("name")
+                fa, fm = p.get("adapter_file"), p.get("meta_file")
+                if not fa or not fm:
+                    return bad("Missing 'adapter_file' and 'meta_file' (ids from POST /openai/files holding adapter.gguf and adapter_meta.json), or upload both files as multipart.", "adapter_file")
+                adapter, meta, src = t.get_file(fa), t.get_file(fm), f"files:{fa},{fm}"
+                if adapter is None or meta is None:
+                    return bad(f"No such File object: {fa if adapter is None else fm}", "adapter_file", "invalid_request_error", 404)
+            if not name or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._~-]{0,63}$", name):
+                return bad("'name' is required (letters, digits, . _ ~ -).", "name")
+            if any(r["name"] == name for r in mine()):
+                return bad(f"A custom model named {name} already exists.", "name", "Conflict", 409)
+            mid = ic.ID_PREFIX + uuid.uuid4().hex[:8]
+            r = ic.register(mid, name, adapter, meta, src, extra={"cloud": "azure"})
+        except ic.ImportErr as e:
+            return bad(str(e), "adapter")
+        return _j(200, _az_cm_view(r))
+    mm = re.match(r"^/([^/]+)$", path)
+    if mm:
+        r = next((x for x in mine() if x["modelId"] == mm.group(1) or x["name"] == mm.group(1)), None)
+        if not r:
+            return bad(f"Custom model {mm.group(1)} not found.", None, "NotFound", 404)
+        if method == "GET":
+            return _j(200, _az_cm_view(r))
+        if method == "DELETE":
+            ic.delete_model(r["modelId"])
+            return _j(200, {"object": "vyomi.custom_model", "id": r["modelId"], "deleted": True})
+    return _a_err(404, "404", "Resource not found")
+
+
+
+def _az_rai_policy(acct, dep, source):
+    """Azure OpenAI content filter (a user-managed raiPolicy on the deployment) -> a bedrock_guardrails_core policy dict, or None.
+    Hate/Sexual/Violence map to the guardrail content filters and Jailbreak to PROMPT_ATTACK (input only); a severity threshold of
+    Low/Medium/High blocks at filter strength HIGH/MEDIUM/LOW. SelfHarm is not modelled by the engine. Built-in policies do not block."""
+    name = str((dep.get("properties") or {}).get("raiPolicyName") or "")
+    pol = ((acct or {}).get("_rai") or {}).get(name.lower())
+    if not pol:
+        return None
+    kinds = {"hate": "HATE", "sexual": "SEXUAL", "violence": "VIOLENCE", "jailbreak": "PROMPT_ATTACK"}
+    strength = {"low": "HIGH", "medium": "MEDIUM", "high": "LOW"}
+    flt = []
+    for f in (pol.get("properties") or {}).get("contentFilters") or []:
+        t = kinds.get(str(f.get("name", "")).lower())
+        if not t or not f.get("enabled", True) or not f.get("blocking", True):
+            continue
+        if (t == "PROMPT_ATTACK" and source != "Prompt") or (t != "PROMPT_ATTACK" and str(f.get("source", "Prompt")).lower() != source.lower()):
+            continue
+        st = strength.get(str(f.get("severityThreshold", "Medium")).lower(), "MEDIUM")
+        flt.append({"type": t, "inputStrength": st, "outputStrength": "NONE" if t == "PROMPT_ATTACK" else st})
+    return {"contentPolicyConfig": {"filtersConfig": flt}, "blockedInputMessaging": "", "blockedOutputsMessaging": ""} if flt else None
+
+
+def _az_filtered(assess):
+    return {k: {"filtered": True, "severity": str(v.get("confidence", "medium")).lower()} for k, v in
+            ((str(f["type"]).lower().replace("prompt_attack", "jailbreak"), f) for f in (assess.get("contentPolicy") or {}).get("filters", []))}
+
+
+def _az_block_input(acct, dep, req):
+    pol = _az_rai_policy(acct, dep, "Prompt")
+    if not pol:
+        return None
+    text = "\n".join(llm._ctext(m.get("content") or "") if isinstance(m, dict) else str(m) for m in req[0])
+    r = _guardrails().evaluate(pol, text, "INPUT")
+    if not r["blocked"]:
+        return None
+    return _j(400, {"error": {"message": "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. "
+                                         "Please modify your prompt and retry.", "type": None, "param": "prompt", "code": "content_filter", "status": 400,
+                              "innererror": {"code": "ResponsibleAIPolicyViolation", "content_filter_result": _az_filtered(r["assessment"])}}})
+
+
+def _az_block_output(acct, dep, text):
+    pol = _az_rai_policy(acct, dep, "Completion")
+    if not pol:
+        return None
+    r = _guardrails().evaluate(pol, text, "OUTPUT")
+    return _az_filtered(r["assessment"]) if r["blocked"] else None
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
+    if re.match(r"^/openai(/v1)?/(files|fine_tuning)(/|$)", path):
+        return _azure_files_ft(method, path, query, {k.lower(): v for k, v in (headers or {}).items()}, body)
+    if re.match(r"^/openai(/v1)?/vyomi/custom-models(/|$)", path):
+        return _azure_custom_models(method, path, {k.lower(): v for k, v in (headers or {}).items()}, body)
     ag = _azure_agents()
     mt = re.match(r"^/openai/(?:deployments/([^/]+)/)?(chat/completions|completions|embeddings)$", path) \
         or re.match(r"^/openai/(?:v1/)?()(chat/completions|completions|embeddings|responses)$", path)
@@ -1190,6 +2153,10 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
                       "within the last 5 minutes, please wait a moment and try again.")
     model = dep["properties"]["model"]["name"]
     caps = dep["properties"].get("capabilities") or {}
+    if model.startswith("ft:") and op == "chat/completions":
+        r = _azure_trained_chat(model, p)
+        if r is not None:
+            return r
     if op == "embeddings":
         if "embeddings" not in caps and "embedding" not in model:
             return _a_err(400, "OperationNotSupported", f"The embeddings operation does not work with the specified model, {model}. "
@@ -1225,7 +2192,10 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         req = _az_chat_request(p)
         if len(req) == 2:
             return _a_err(400, "BadRequest", req[1], req[0])
-    req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model))
+    req = (req[0], req[1], req[2], req[3], req[4], _with_role("azure", model, dict(req[5], model=model)))
+    blocked_in = _az_block_input(acct, dep, req)      # a user-managed content filter on the deployment (Foundry > Guardrails + controls)
+    if blocked_in is not None:
+        return blocked_in
     cid, now = ("chatcmpl-" if op == "chat/completions" else "cmpl-") + uuid.uuid4().hex[:29], int(time.time())
     stream = bool(p.get("stream")) and op == "chat/completions"
     try:
@@ -1245,9 +2215,16 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
     fin = "length" if r["finish_reason"] == "length" else "stop"
     usage = {"prompt_tokens": r["input_tokens"], "completion_tokens": r["output_tokens"], "total_tokens": r["input_tokens"] + r["output_tokens"]}
     hh = {"x-vyomi-local-model": r["model"]}
+    cf = _az_block_output(acct, dep, r.get("text") or "")
+    if cf:      # output filtered: empty content, finish_reason content_filter (what Azure returns)
+        ch = {"index": 0, "finish_reason": "content_filter", "content_filter_results": cf}
+        ch.update({"text": ""} if op == "completions" else {"message": {"role": "assistant", "content": None}})
+        return _j(200, {"id": cid, "object": "text_completion" if op == "completions" else "chat.completion", "created": now, "model": model,
+                        "choices": [ch], "usage": usage}, hh)
     if op == "completions":
         return _j(200, {"id": cid, "object": "text_completion", "created": now, "model": model,
                         "choices": [{"text": r["text"], "index": 0, "finish_reason": fin, "logprobs": None}], "usage": usage}, hh)
     return _j(200, {"id": cid, "object": "chat.completion", "created": now, "model": model,
                     "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": _az_msg(r)}],
-                    "usage": usage, "system_fingerprint": "fp_vyomi_local"}, hh)
+                    "usage": usage, "system_fingerprint": "fp_vyomi_local",
+                    **({"vyomiImported": True, "vyomiTrained": True} if _imported().is_import_id(model) else {})}, hh)

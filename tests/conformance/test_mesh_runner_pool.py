@@ -161,7 +161,7 @@ cat = P.load_catalogue()
 ms, rs = cat["models"], cat["runners"]
 SLOTS = ["fast", "general", "coder", "agents", "gemma", "qwen3", "r1", "mistral", "big#0", "big#1"]
 check("catalogue: TEN models on 10 slots (8 runners; qwen3:30b pooled over 2); 3B + nomic share the fast runner; no optional 14B",
-      len(ms) == 10 and set(rs) == {"fast", "general", "coder", "agents", "gemma", "qwen3", "r1", "mistral", "big"} and rs["fast"]["models"] == ["qwen2.5-3b", "nomic-embed-text"]
+      len(ms) == 10 and set(rs) == {"fast", "general", "coder", "agents", "gemma", "qwen3", "r1", "mistral", "big"} and rs["fast"]["models"] == ["qwen3-4b", "nomic-embed-text"]
       and rs["big"]["slots"] == 2 and "qwen2.5-14b" not in ms and not any(r.get("optional") for r in rs.values()) and all(m in ms for r in rs.values() for m in r["models"]))
 check("catalogue: every model has ram/size/ollama tag (llama3.1:8b, gemma2:9b, qwen3:8b, deepseek-r1:8b, mistral:7b, qwen3:30b)",
       all({"ram_mb", "size_mb", "ollama", "kind"} <= set(m) for m in ms.values()) and ms["gemma2-9b"]["ollama"].startswith("gemma2:9b") and ms["qwen3-30b"]["ollama"] == "qwen3:30b"
@@ -177,7 +177,7 @@ EP = info["endpoint"]
 check("staggered: at attach ONLY stage 0 (3B+embed, 7B) is dispatched", sorted(r for r, _, _ in disp.started) == ["fast", "general"], disp.started)
 check("staggered: queued models report 'starting' (progressive readiness), not 'stopped'", pool.state("qwen3-8b") == "starting" and pool.state("qwen3-30b") == "starting"
       and {m["id"]: m["queued"] for m in pool.models_status()["models"]}["gemma2-9b"] is True)
-check("eager: fast runner is given both tags (3B + nomic embed)", any(r == "fast" and "qwen2.5:3b" in t and "nomic-embed-text" in t for r, _, t in disp.started))
+check("eager: fast runner is given both tags (Qwen3-4B + nomic embed) and never the non-commercial 2.5-3B", any(r == "fast" and "qwen3:4b-instruct-2507" in t and "nomic-embed-text" in t and "qwen2.5:3b" not in t for r, _, t in disp.started))
 check("window: Pro tier -> 30 h wall-clock, set at attach", abs(pool.window_s - 30 * 3600) < 1 and pool.window()["window_h"] == 30 and pool.window()["label"].startswith("Models: 30h 00m left of 30h"), pool.window())
 check("pooled attach: AI bucket 0, nothing reserved locally, not metered", B.resource_budget()["memory_split_mb"]["ai"] == 0 and B.usage()["ai"] == 0 and pool.usage()["metered"] is False)
 def post(path, model, body=None, timeout=15):
@@ -204,7 +204,7 @@ def wait(cond, secs=12):
     return False
 
 
-check("stage 0 becomes ready on its own (3B, nomic, 7B)", wait(lambda: all(pool.state(m) == "ready" for m in ("qwen2.5-3b", "nomic-embed-text", "qwen2.5-7b"))), {m: pool.state(m) for m in ms})
+check("stage 0 becomes ready on its own (3B, nomic, 7B)", wait(lambda: all(pool.state(m) == "ready" for m in ("qwen3-4b", "nomic-embed-text", "qwen2.5-7b"))), {m: pool.state(m) for m in ms})
 c, j, h = post("/v1/chat/completions", "llama3.1-8b")
 check("starting: a not-yet-started model answers 503 + Retry-After + status 'starting' (never blocks)", c == 503 and h.get("retry-after") and j["error"]["status"] == "starting", (c, j))
 check("starting: ready models are unaffected meanwhile", post("/v1/chat/completions", "qwen2.5-7b")[0] == 200)
@@ -221,14 +221,14 @@ check("progressive: all ten models become ready (pooled 30B only when BOTH its s
 c, j, _ = post("/v1/chat/completions", "meta.llama3-1-8b-instruct-v1:0")
 check("map+route: Bedrock meta.llama3-1-8b -> llama3.1 8B runner, model rewritten to its Ollama tag", c == 200 and j["served_by"].startswith("agents#") and j["model"] == ms["llama3.1-8b"]["ollama"], (c, j))
 c, j, _ = post("/v1/chat/completions", "gemini-2.0-flash")
-check("map+route: Vertex gemini-2.0-flash -> 3B on the fast runner", c == 200 and j["served_by"].startswith("fast#") and j["model"] == ms["qwen2.5-3b"]["ollama"], (c, j))
+check("map+route: Vertex gemini-2.0-flash -> 3B on the fast runner", c == 200 and j["served_by"].startswith("fast#") and j["model"] == ms["qwen3-4b"]["ollama"], (c, j))
 c, j, _ = post("/v1/embeddings", "text-embedding-004")
 check("map+route: Vertex text-embedding-004 -> nomic on the SAME fast runner", c == 200 and j["served_by"].startswith("fast#") and j["model"] == ms["nomic-embed-text"]["ollama"], (c, j))
 c, j, _ = post("/v1/chat/completions", "codestral-latest")
 check("map+route: codestral -> coder runner", c == 200 and j["served_by"].startswith("coder#"), (c, j))
 check("map: Azure gpt-4o -> 7B, gpt-4o-mini -> 3B, unknown deployment -> default chat; user alias for a deployment name",
-      pool.resolve("gpt-4o") == "qwen2.5-7b" and pool.resolve("gpt-4o-mini") == "qwen2.5-3b" and pool.resolve("my-deployment") == "qwen2.5-3b"
-      and P.RunnerPool(HUB, lambda: BTOK, disp, clock=clock).resolve("x") == "qwen2.5-3b")
+      pool.resolve("gpt-4o") == "qwen2.5-7b" and pool.resolve("gpt-4o-mini") == "qwen3-4b" and pool.resolve("my-deployment") == "qwen3-4b"
+      and P.RunnerPool(HUB, lambda: BTOK, disp, clock=clock).resolve("x") == "qwen3-4b")
 os.environ["VYOMI_RUNNER_MODEL_ALIASES"] = json.dumps({"my-coder-deployment": "qwen2.5-coder-7b"})
 check("map: VYOMI_RUNNER_MODEL_ALIASES maps an Azure deployment name", P.RunnerPool(HUB, lambda: BTOK, disp, clock=clock).resolve("my-coder-deployment") == "qwen2.5-coder-7b")
 os.environ.pop("VYOMI_RUNNER_MODEL_ALIASES")
@@ -247,9 +247,9 @@ row = {m["id"]: m for m in md["models"]}
 check("console data: /api/mesh/models has name, role, ollama tag, state, per-cloud ids, tokens/s, window",
       {"window", "models"} <= set(md) and row["qwen2.5-7b"]["state"] == "ready" and row["qwen2.5-7b"]["role"] == "general instruct"
       and row["qwen2.5-7b"]["ollama"].startswith("qwen2.5:7b") and {"aws", "gcp", "azure"} <= set(row["llama3.1-8b"]["endpoints"]) and "ollama.llama3.1:8b" in row["llama3.1-8b"]["endpoints"]["gcp"]
-      and "azure" in row["qwen2.5-7b"]["endpoints"] and row["qwen2.5-3b"]["tokens_per_s"] is not None and md["window"]["deadline"], md["window"])
+      and "azure" in row["qwen2.5-7b"]["endpoints"] and row["qwen3-4b"]["tokens_per_s"] is not None and md["window"]["deadline"], md["window"])
 check("console data: lists all 10 models with state + role; pooled 30B shows 2 slots", len(md["models"]) == 10 and all(m["state"] == "ready" and m["role"] for m in md["models"])
-      and row["qwen3-30b"]["pooled"] and row["qwen3-30b"]["slots"] == 2 and row["qwen2.5-3b"]["runner"] == row["nomic-embed-text"]["runner"] == "fast")
+      and row["qwen3-30b"]["pooled"] and row["qwen3-30b"]["slots"] == 2 and row["qwen3-4b"]["runner"] == row["nomic-embed-text"]["runner"] == "fast")
 check("console data: /v1/models lists states too", {d["id"]: d["state"] for d in get("/v1/models")["data"]}["qwen2.5-coder-7b"] == "ready")
 
 # ---- rotation: no gap ------------------------------------------------------------------------------------------------
@@ -338,9 +338,9 @@ check("idle: no activity for 60 min -> whole pool destroyed (why idle) and the m
 # ---- dispatch not configured / no local fallback / sanity max ------------------------------------------------------------
 bad = P.RunnerPool(HUB, lambda: BTOK, P.HttpDispatcher(url=""), clock=clock2)
 bad.start_all()
-check("dispatch not configured: start_all does not crash, models stay 'starting' (honest 503), nothing local", bad.state("qwen2.5-3b") == "starting"
+check("dispatch not configured: start_all does not crash, models stay 'starting' (honest 503), nothing local", bad.state("qwen3-4b") == "starting"
       and any("dispatch_failed" in e["event"] for e in bad._events))
-big = P.load_catalogue(); big["runners"] = {f"r{i}": {"role": "x", "models": ["qwen2.5-3b"]} for i in range(21)}      # 21 slots > 20
+big = P.load_catalogue(); big["runners"] = {f"r{i}": {"role": "x", "models": ["qwen3-4b"]} for i in range(21)}      # 21 slots > 20
 try:
     P.RunnerPool(HUB, lambda: BTOK, disp2, catalogue=big, clock=clock2).start_all(); ok = False
 except P.PoolError as e:

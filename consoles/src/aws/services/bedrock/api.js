@@ -48,25 +48,43 @@ export const associateKb = (id, kb, description) => B("PUT", `/agents/${id}/agen
 export const disassociateKb = (id, kb) => B("DELETE", `/agents/${id}/agentversions/DRAFT/knowledgebases/${kb}`);
 export const listActionGroups = (id) => B("POST", `/agents/${id}/agentversions/DRAFT/agentactiongroups/`, { body: {} }).then((r) => r.actionGroupSummaries || []);
 
-/** InvokeAgent returns vnd.amazon.eventstream: decode the `chunk` events' base64 bytes. */
-export async function invokeAgent(agentId, aliasId, sessionId, inputText) {
+export const updateAgent = (id, a, patch) => B("PUT", `/agents/${id}/`, { body: { agentName: a.agentName, agentResourceRoleArn: a.agentResourceRoleArn, foundationModel: a.foundationModel, instruction: a.instruction,
+  description: a.description, idleSessionTTLInSeconds: a.idleSessionTTLInSeconds, guardrailConfiguration: a.guardrailConfiguration, memoryConfiguration: a.memoryConfiguration,
+  promptOverrideConfiguration: a.promptOverrideConfiguration, agentCollaboration: a.agentCollaboration, ...patch } }).then((r) => r.agent);
+export const getActionGroup = (id, gid) => B("GET", `/agents/${id}/agentversions/DRAFT/actiongroups/${gid}/`).then((r) => r.agentActionGroup);
+export const createActionGroup = (id, body) => B("PUT", `/agents/${id}/agentversions/DRAFT/actiongroups/`, { body }).then((r) => r.agentActionGroup);
+export const deleteActionGroup = (id, gid) => B("DELETE", `/agents/${id}/agentversions/DRAFT/actiongroups/${gid}/`);
+export const listCollaborators = (id) => B("POST", `/agents/${id}/agentversions/DRAFT/agentcollaborators/`, { body: {} }).then((r) => r.agentCollaboratorSummaries || []);
+export const associateCollaborator = (id, body) => B("PUT", `/agents/${id}/agentversions/DRAFT/agentcollaborators/`, { body }).then((r) => r.agentCollaborator);
+export const disassociateCollaborator = (id, cid) => B("DELETE", `/agents/${id}/agentversions/DRAFT/agentcollaborators/${cid}/`);
+export const getAgentMemory = (id, aliasId, memoryId) => B("GET", `/agents/${id}/agentAliases/${aliasId}/memories`, { query: { memoryId, memoryType: "SESSION_SUMMARY" } }).then((r) => r.memoryContents || []);
+
+/** InvokeAgent returns vnd.amazon.eventstream. Returns { text, citations, traces[], returnControl, files[] }.
+ *  opts: { enableTrace, memoryId, sessionState }. A returnControl event (RETURN_CONTROL or requireConfirmation) is returned for the caller to answer
+ *  by calling again with sessionState.invocationId + returnControlInvocationResults and no inputText. */
+export async function invokeAgent(agentId, aliasId, sessionId, inputText, opts = {}) {
+  const body = { ...(inputText ? { inputText } : {}), ...(opts.enableTrace ? { enableTrace: true } : {}), ...(opts.memoryId ? { memoryId: opts.memoryId } : {}), ...(opts.sessionState ? { sessionState: opts.sessionState } : {}) };
   const res = await fetch(`${WIRE_BASE}/agents/${agentId}/agentAliases/${aliasId}/sessions/${sessionId}/text`, {
-    method: "POST", headers: { ...authHeader("bedrock"), "content-type": "application/json" }, body: JSON.stringify({ inputText }) });
+    method: "POST", headers: { ...authHeader("bedrock"), "content-type": "application/json" }, body: JSON.stringify(body) });
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!res.ok) { let d = {}; try { d = JSON.parse(new TextDecoder().decode(buf)); } catch { /* not json */ } throw new WireError(res.status, d.__type || res.headers.get("x-amzn-errortype"), d.message, ""); }
   const dv = new DataView(buf.buffer);
-  let off = 0, text = "", citations = [];
+  let off = 0, text = "", citations = [], traces = [], returnControl = null, files = [];
   while (off + 16 <= buf.length) {
     const total = dv.getUint32(off), hl = dv.getUint32(off + 4);
+    const hdr = new TextDecoder().decode(buf.slice(off + 12, off + 12 + hl));
     const payload = buf.slice(off + 12 + hl, off + total - 4);
     try {
       const j = JSON.parse(new TextDecoder().decode(payload));
       if (j.bytes) text += decodeURIComponent(escape(atob(j.bytes)));
       if (j.attribution?.citations) citations = citations.concat(j.attribution.citations);
+      if (j.trace) traces.push(j);
+      if (j.invocationInputs) returnControl = j;
+      if (j.files && hdr.includes("files")) files = files.concat(j.files);
     } catch { /* non-json frame */ }
     off += total;
   }
-  return { text, citations };
+  return { text, citations, traces, returnControl, files };
 }
 
 // ── AgentCore ──
@@ -87,3 +105,23 @@ export async function listLambdas() {
   const r = await awsRest("lambda", "GET", "/2015-03-31/functions");
   return (r.Functions || []).map((f) => ({ name: f.FunctionName, arn: f.FunctionArn }));
 }
+
+// ── tokenizer, API keys (IAM service-specific credentials, ServiceName bedrock.amazonaws.com) ──
+import { awsQuery, asList, pick } from "../../../common/wire.js";
+export const countTokens = (modelId, text) => B("POST", `/model/${enc(modelId)}/count-tokens`, { body: { input: { converse: { messages: [{ role: "user", content: [{ text }] }] } } } }).then((r) => r.inputTokens);
+const IAMQ = (a, p) => awsQuery("iam", a, p);
+const SVC = "bedrock.amazonaws.com";
+const credList = (x) => asList(pick(x, "member")).map((c) => ({ id: c.ServiceSpecificCredentialId, user: c.UserName, status: c.Status, created: c.CreateDate, expires: c.ExpirationDate || "", serviceUser: c.ServiceUserName }));
+export const listApiKeys = () => IAMQ("ListServiceSpecificCredentials", { ServiceName: SVC }).then((r) => credList(r.ListServiceSpecificCredentialsResponse.ListServiceSpecificCredentialsResult.ServiceSpecificCredentials));
+/** The console's "Generate long-term API keys": a BedrockAPIKey-xxxx IAM user + AmazonBedrockLimitedAccess + a service-specific credential. */
+export async function createApiKey(days) {
+  const user = `BedrockAPIKey-${Math.random().toString(36).slice(2, 6)}`;
+  await IAMQ("CreateUser", { UserName: user });
+  await IAMQ("AttachUserPolicy", { UserName: user, PolicyArn: "arn:aws:iam::aws:policy/AmazonBedrockLimitedAccess" }).catch(() => {});
+  const r = await IAMQ("CreateServiceSpecificCredential", { UserName: user, ServiceName: SVC, ...(days ? { CredentialAgeDays: String(days) } : {}) });
+  const c = r.CreateServiceSpecificCredentialResponse.CreateServiceSpecificCredentialResult.ServiceSpecificCredential;
+  return { user, id: c.ServiceSpecificCredentialId, serviceUser: c.ServiceUserName, key: c.ServicePassword, expires: c.ExpirationDate || "" };
+}
+export const setApiKeyStatus = (c, Status) => IAMQ("UpdateServiceSpecificCredential", { UserName: c.user, ServiceSpecificCredentialId: c.id, Status });
+export const resetApiKey = (c) => IAMQ("ResetServiceSpecificCredential", { UserName: c.user, ServiceSpecificCredentialId: c.id }).then((r) => r.ResetServiceSpecificCredentialResponse.ResetServiceSpecificCredentialResult.ServiceSpecificCredential.ServicePassword);
+export const deleteApiKey = (c) => IAMQ("DeleteServiceSpecificCredential", { UserName: c.user, ServiceSpecificCredentialId: c.id });

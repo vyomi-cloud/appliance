@@ -15,7 +15,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 os.environ.setdefault("CLOUDLEARN_STATE_DIR", tempfile.mkdtemp(prefix="mesh-ai-"))
-os.environ["VYOMI_HOST_MEM_MB"] = "8000"          # a 2-core/8 GB Codespace: cap 5600 -> AI share 2800 MB
+os.environ["VYOMI_HOST_MEM_MB"] = "8000"          # starts as a 2-core/8 GB Codespace: cap 5600 -> AI share 2800 MB (the admission block then moves to the 16 GB Mesh)
 os.environ.pop("VYOMI_MESH_CAP_MB", None)
 
 PASS = FAIL = 0
@@ -66,18 +66,33 @@ from core import mesh as B, mesh_ai as AI, llm_core, mesh_llm_gateway as GW  # n
 # ---- admission ----------------------------------------------------------------------------------------------------------
 check("AI bucket on an 8 GB host is 2800 MB", B.resource_budget()["memory_split_mb"]["ai"] == 2800, B.resource_budget()["memory_split_mb"])
 AI.release_all()
-m = AI.admit("qwen2.5-3b", "chat", enforce=True)
-check("3B default admitted (reserves RAM in the ai ledger)", m["id"] == "qwen2.5-3b" and B.usage()["ai"] == 2500, B.usage())
+try:
+    AI.admit("qwen3-4b", "chat", enforce=True)
+    check("Qwen3-4B default is refused on the 8 GB host (honest: it needs ~3.4 GB at 4k context)", False)
+except AI.ModelAdmissionError as e:
+    check("Qwen3-4B refused on 8 GB with ai_memory_exceeded and a COMMERCIAL smaller alternative (never the non-commercial 2.5-3B)",
+          e.code == "ai_memory_exceeded" and "qwen2.5-1.5b" in e.message and "qwen2.5-3b" not in e.message, e.message)
+os.environ["VYOMI_HOST_MEM_MB"] = "16000"          # the 4 vCPU / 16 GB Mesh default: cap 11200 -> AI share 5600 MB
+R = AI.MODELS["qwen3-4b"]["ram_mb"]
+m = AI.admit("qwen3-4b", "chat", enforce=True)
+check("Qwen3-4B default admitted on the 16 GB Mesh (reserves RAM in the ai ledger)", m["id"] == "qwen3-4b" and B.usage()["ai"] == R and AI.DEFAULT_CHAT == "qwen3-4b", B.usage())
 AI.admit("bge-small", "embed", enforce=True)
-check("3B + bge-small both fit the 8 GB Codespace AI bucket", B.usage()["ai"] == 2750, B.usage())
+check("Qwen3-4B + bge-small both fit the 16 GB Mesh AI bucket", B.usage()["ai"] == R + 250 and R + 250 <= 5600, B.usage())
 try:
     AI.admit("qwen2.5-7b", "chat", enforce=True)
-    check("7B refused on 8 GB host", False)
+    check("7B refused beside the embedder on the 16 GB Mesh bucket", False)
 except AI.ModelAdmissionError as e:
     check("7B refused with ai_memory_exceeded", e.code == "ai_memory_exceeded", e.code)
     check("refusal names model, need, free, bucket size and a smaller alternative",
-          all(x in e.message for x in ("qwen2.5-7b", "6.1 GB", "2.7 GB" if False else "AI memory", "70%", "qwen2.5-3b")) and "Try" in e.message, e.message)
-check("refused model reserved nothing; previous chat model still held", B.usage()["ai"] == 2750, B.usage())
+          all(x in e.message for x in ("qwen2.5-7b", "6.1 GB", "AI memory", "70%", "qwen3-4b")) and "Try" in e.message, e.message)
+check("refused model reserved nothing; previous chat model still held", B.usage()["ai"] == R + 250, B.usage())
+os.environ["VYOMI_PAID_TIER"] = "1"
+try:
+    AI.admit("qwen2.5-3b", "chat", enforce=True); check("paid tier refuses the non-commercial qwen2.5-3b", False)
+except AI.ModelAdmissionError as e:
+    check("paid tier: qwen2.5-3b refused with non_commercial_model", e.code == "non_commercial_model", e.code)
+finally:
+    os.environ.pop("VYOMI_PAID_TIER", None)
 try:
     AI.admit("gpt-5", "chat", enforce=True); check("unknown model refused", False)
 except AI.ModelAdmissionError as e:
@@ -92,15 +107,15 @@ os.environ["VYOMI_HOST_MEM_MB"] = "32000"          # the 32 GB design box: 22400
 AI.release_all()
 AI.admit("qwen2.5-7b", "chat", enforce=True); AI.admit("nomic-embed-text", "embed", enforce=True)
 check("7B opt-in + nomic fit when the host is big", B.usage()["ai"] == 6650, B.usage())
-os.environ["VYOMI_HOST_MEM_MB"] = "8000"; AI.release_all()
+os.environ["VYOMI_HOST_MEM_MB"] = "16000"; AI.release_all()
 
 os.environ["VYOMI_MESH_AI_MODEL"] = "qwen2.5-7b"
 p = AI.admit_configured(enforce=True)
 check("admit_configured never raises; refused chat -> plan.ok False with reason", p["ok"] is False and "chat" in p["errors"] and "qwen2.5-7b" in p["errors"]["chat"]["message"], p)
 check("embed still admitted when only chat was refused", p["embed"] and p["embed"]["id"] == "bge-small", p)
-os.environ["VYOMI_MESH_AI_MODEL"] = "qwen2.5-3b"
+os.environ["VYOMI_MESH_AI_MODEL"] = "qwen3-4b"
 p = AI.admit_configured(enforce=True)
-check("default plan ok: Qwen2.5-3B Q4_K_M + bge-small, gateway endpoint", p["ok"] and p["chat"]["hf"].endswith("Qwen2.5-3B-Instruct-GGUF:Q4_K_M") and p["embed"]["id"] == "bge-small" and p["endpoint"] == "http://llm:8080" and not p["errors"], p)
+check("default plan ok: Qwen3-4B Q4_K_M + bge-small, gateway endpoint", p["ok"] and p["chat"]["hf"].endswith("Qwen3-4B-Instruct-2507-GGUF:Q4_K_M") and p["embed"]["id"] == "bge-small" and p["endpoint"] == "http://llm:8080" and not p["errors"], p)
 
 # ---- gateway: chat -> chat server, embeddings -> embed server -----------------------------------------------------------
 gw, gw_url = serve(type("G", (GW.Handler,), {"chat_url": chat_url, "embed_url": embed_url}))
@@ -113,8 +128,8 @@ def post(url, o):
 
 
 Chat.seen.clear()
-post(gw_url + "/v1/embeddings", {"model": "qwen2.5-3b", "input": ["a"]})
-post(gw_url + "/v1/chat/completions", {"model": "qwen2.5-3b", "messages": [{"role": "user", "content": "x"}]})
+post(gw_url + "/v1/embeddings", {"model": "qwen3-4b", "input": ["a"]})
+post(gw_url + "/v1/chat/completions", {"model": "qwen3-4b", "messages": [{"role": "user", "content": "x"}]})
 check("gateway sends embeddings and chat to different upstreams and rewrites the embed model name",
       [p for p, _ in Chat.seen] == ["/v1/embeddings", "/v1/chat/completions"] and Chat.seen[0][1]["model"] == "embed", Chat.seen)
 check("gateway /health reports both servers", json.loads(urllib.request.urlopen(gw_url + "/health").read()) == {"status": "ok", "chat": True, "embed": True})
@@ -138,13 +153,13 @@ from core import gcp_project  # noqa: E402
 GP = gcp_project.project_id()
 
 BR = {"authorization": "AWS4-HMAC-SHA256 Credential=T/20261104/us-east-1/bedrock/aws4_request, SignedHeaders=host, Signature=0"}
-r = c.post("/model/vyomi.qwen2.5-3b/converse", headers=BR,
+r = c.post("/model/vyomi.qwen3-4b/converse", headers=BR,
            json={"messages": [{"role": "user", "content": [{"text": "hello"}]}], "inferenceConfig": {"maxTokens": 20}})
 check("Bedrock Converse answered by the mesh model with exact usage", r.status_code == 200 and r.json()["usage"]["inputTokens"] == 17 and r.json()["usage"]["outputTokens"] == 5, r.text)
-r = c.post(f"/v1/projects/{GP}/locations/us-central1/publishers/qwen/models/qwen2.5-3b:generateContent",
+r = c.post(f"/v1/projects/{GP}/locations/us-central1/publishers/qwen/models/qwen3-4b:generateContent",
            json={"contents": [{"role": "user", "parts": [{"text": "hi"}]}]})
 check("Vertex generateContent answered", r.status_code == 200 and r.json()["usageMetadata"]["promptTokenCount"] == 17, r.text[:200])
-r = c.post(f"/v1beta1/projects/{GP}/locations/us-central1/publishers/qwen/models/qwen2.5-3b:generateContent",
+r = c.post(f"/v1beta1/projects/{GP}/locations/us-central1/publishers/qwen/models/qwen3-4b:generateContent",
            json={"contents": [{"role": "user", "parts": [{"text": "hi"}]}]})
 check("Vertex v1beta1 path routed too", r.status_code == 200, r.text[:200])
 u = AI.LEDGER.summary()
@@ -161,7 +176,7 @@ check("embed call recorded as an aws embed op", any(e["op"] in ("invoke", "embed
 # unavailable backend is counted as an error and surfaced in the cloud's own shape
 os.environ["VYOMI_LLM_ENDPOINT"] = "http://127.0.0.1:9"
 before = AI.LEDGER.summary()["totals"]["errors"]
-r = c.post("/model/vyomi.qwen2.5-3b/converse", headers=BR, json={"messages": [{"role": "user", "content": [{"text": "x"}]}]})
+r = c.post("/model/vyomi.qwen3-4b/converse", headers=BR, json={"messages": [{"role": "user", "content": [{"text": "x"}]}]})
 check("model down -> Bedrock ModelNotReady 429 (no canned answer) and ledger error", r.status_code == 429 and AI.LEDGER.summary()["totals"]["errors"] == before + 1, (r.status_code, r.text[:120]))
 os.environ["VYOMI_LLM_ENDPOINT"] = gw_url
 
@@ -169,7 +184,7 @@ os.environ["VYOMI_LLM_ENDPOINT"] = gw_url
 AI._PROBE["at"] = 0
 st = c.get("/mesh/status", headers={"host": "127.0.0.1:9000"}).json()
 ai = st.get("ai")
-check("/mesh/status carries ai{state, models, usage, chip}", ai and ai["state"] == "ready" and ai["models"]["chat"]["id"] == "qwen2.5-3b" and ai["usage"]["totals"]["requests"] >= 4, ai and {k: ai[k] for k in ("state", "chip")})
+check("/mesh/status carries ai{state, models, usage, chip}", ai and ai["state"] == "ready" and ai["models"]["chat"]["id"] == "qwen3-4b" and ai["usage"]["totals"]["requests"] >= 4, ai and {k: ai[k] for k in ("state", "chip")})
 check("chip line is compact", ai["chip"].startswith("AI: ") and "tok" in ai["chip"], ai["chip"])
 r = c.get("/mesh/ai/status", headers={"host": "127.0.0.1:9000"})
 check("/mesh/ai/status returns the ledger with recent events", r.status_code == 200 and r.json()["usage"]["session"] == "sess-test" and r.json()["usage"]["recent"], r.text[:200])
@@ -228,8 +243,8 @@ else:
 # ---- deployment files ---------------------------------------------------------------------------------------------------
 d = "codespace/.devcontainer/mesh"
 comp = open(f"{d}/docker-compose.mesh.yml").read(); boot = open(f"{d}/boot-mesh.sh").read()
-check("compose defines llm-chat/llm-embed/llm in profile ai with the default Qwen2.5-3B Q4_K_M and a cached model volume",
-      all(x in comp for x in ("llm-chat:", "llm-embed:", "  llm:", 'profiles: ["ai"]', "Qwen2.5-3B-Instruct-GGUF:Q4_K_M", "ai-models:/root/.cache", "--jinja")) and "ports:" not in comp)
+check("compose defines llm-chat/llm-embed/llm in profile ai with the default Qwen3-4B Q4_K_M and a cached model volume",
+      all(x in comp for x in ("llm-chat:", "llm-embed:", "  llm:", 'profiles: ["ai"]', "Qwen3-4B-Instruct-2507-GGUF:Q4_K_M", "ai-models:/root/.cache", "--jinja")) and "ports:" not in comp)
 check("boot script admits before starting models and tears the ai profile down", "mesh/ai/plan" in boot and "--profile ai up" in boot and "--profile ai down" in boot)
 if shutil.which("bash"):
     check("boot script is valid bash", subprocess.run(["bash", "-n", f"{d}/boot-mesh.sh"]).returncode == 0)
@@ -239,6 +254,23 @@ if shutil.which("python3"):
         yaml.safe_load(comp); check("compose is valid YAML", True)
     except Exception as e:
         check("compose is valid YAML", False, e)
+
+# ---- llm-chat adapter hot-reload hook (restarts llama-server inside the container when a trained adapter lands) ----------
+check("compose mounts the adapter dir read-only and runs llm-chat through the reload entrypoint",
+      "llm-chat-entry.sh:/entry.sh:ro" in comp and "mesh-data:/mesh-data:ro" in comp and 'entrypoint: ["/bin/sh", "/entry.sh"]' in comp and "VYOMI_LLM_ADAPTER_DIR: /mesh-data/llm-adapters" in comp)
+if shutil.which("sh"):
+    import tempfile, time
+    check("entry script is valid sh", subprocess.run(["sh", "-n", f"{d}/llm-chat-entry.sh"]).returncode == 0)
+    tmp = tempfile.mkdtemp(); fake = os.path.join(tmp, "fake"); ad = os.path.join(tmp, "ad"); os.makedirs(ad)
+    open(fake, "w").write('#!/bin/sh\necho "START $*"\nexec sleep 600\n'); os.chmod(fake, 0o755)
+    log = open(os.path.join(tmp, "log"), "w")
+    pr = subprocess.Popen(["sh", f"{d}/llm-chat-entry.sh", "-c", "4096"], stdout=log, stderr=subprocess.STDOUT,
+                          env=dict(os.environ, LLAMA_BIN=fake, VYOMI_LLM_ADAPTER_DIR=ad, VYOMI_LLM_ADAPTER_POLL="1"))
+    time.sleep(3); open(os.path.join(ad, "a.gguf"), "w").write("x"); time.sleep(3.5)
+    pr.terminate(); pr.wait(); subprocess.run(["pkill", "-f", "sleep 600"]); txt = open(os.path.join(tmp, "log")).read()
+    starts = [l for l in txt.splitlines() if l.startswith("START")]
+    check("entry script starts without adapters, then restarts llama-server with --lora-scaled <file>:0 when one lands",
+          len(starts) == 2 and "--lora-scaled" not in starts[0] and starts[1].endswith("a.gguf:0") and "-c 4096" in starts[1], txt)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

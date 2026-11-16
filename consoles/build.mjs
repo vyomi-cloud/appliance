@@ -92,6 +92,8 @@ async function buildCloud(cloud, watch) {
     define: { "process.env.NODE_ENV": watch ? '"development"' : '"production"' },
     logLevel: "info",
     plugins: [backendsData(cloud)],
+    // @xyflow/react and umap-js (RAG Studio, Flows, Prompt flow) are ordinary dependencies in package.json; install with `npm install --omit=peer` so react resolves once.
+    nodePaths: [join(HERE, "node_modules")],
   };
   await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
   await cp(join(HERE, "..", "wasm", "issue-reporter.js"), join(out, "issue-reporter.js"));   // automatic issue reporting (both substrates)

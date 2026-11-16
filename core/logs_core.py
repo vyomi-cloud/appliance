@@ -1007,6 +1007,115 @@ def _duration_secs(s: str) -> int:
     return total or 60
 
 
+_AGG_RE = re.compile(r"^(count_distinct|count|sum|avg|min|max|pct|stddev)\(\s*([^)]*?)\s*\)(?:\s+as\s+([\w.@]+))?$", re.I)
+
+
+def _flatten_json(v, prefix, out):
+    if isinstance(v, dict):
+        for k, x in v.items():
+            _flatten_json(x, f"{prefix}.{k}" if prefix else str(k), out)
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            _flatten_json(x, f"{prefix}.{i}", out)
+    elif prefix and prefix not in out:
+        out[prefix] = v
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_num(x):
+    return str(int(x)) if float(x).is_integer() else f"{x:.4f}".rstrip("0").rstrip(".")
+
+
+def _split_top(txt):
+    parts, depth, cur = [], 0, ""
+    for ch in txt:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        parts.append(cur.strip())
+    return parts
+
+
+def _agg_value(fn, arg, members):
+    fn = fn.lower()
+    if fn == "count":
+        return len(members) if arg in ("", "*") else sum(1 for r in members if r.get(arg) is not None)
+    if fn == "count_distinct":
+        return len({str(r.get(arg)) for r in members if r.get(arg) is not None})
+    vals = sorted(x for x in (_num(r.get(arg)) for r in members) if x is not None)
+    if not vals:
+        return None
+    if fn == "sum":
+        return sum(vals)
+    if fn == "avg":
+        return sum(vals) / len(vals)
+    if fn == "min":
+        return vals[0]
+    if fn == "max":
+        return vals[-1]
+    if fn == "stddev":
+        m = sum(vals) / len(vals)
+        return (sum((x - m) ** 2 for x in vals) / len(vals)) ** 0.5
+    return None
+
+
+def _run_stats(st, recs):
+    """`stats agg(f) [as a], ... [by f, bin(5m)]` over discovered fields: count, count_distinct, sum, avg, min, max, pct(f, N), stddev."""
+    m = re.match(r"^stats\s+(.+?)(?:\s+by\s+(.+))?$", st, re.I)
+    if not m:
+        return recs, None
+    aggs = []
+    for a in _split_top(m.group(1)):
+        pm = re.match(r"^pct\(\s*([^,)]+?)\s*,\s*([\d.]+)\s*\)(?:\s+as\s+([\w.@]+))?$", a, re.I)
+        if pm:
+            aggs.append(("pct", pm.group(1), float(pm.group(2)), pm.group(3) or a))
+            continue
+        am = _AGG_RE.match(a)
+        if not am:
+            continue
+        aggs.append((am.group(1), am.group(2), None, am.group(3) or f"{am.group(1).lower()}({am.group(2)})"))
+    by = _split_top(m.group(2)) if m.group(2) else []
+    keyfns = []
+    for b in by:
+        bm = re.match(r"^bin\(\s*([\dsmhd]+)\s*\)$", b, re.I)
+        if bm:
+            ms = _duration_secs(bm.group(1)) * 1000
+            keyfns.append((f"bin({bm.group(1)})", lambda r, ms=ms: _iso(int(r["_ts"] // ms * ms))))
+        else:
+            keyfns.append((b, lambda r, b=b: "" if r.get(b) is None else str(r.get(b))))
+    groups: dict = {}
+    for r in recs:
+        groups.setdefault(tuple(fn(r) for _n, fn in keyfns), []).append(r)
+    if not by and not groups:
+        groups[()] = []
+    out = []
+    for key, members in sorted(groups.items()):
+        row = {n: k for (n, _f), k in zip(keyfns, key)}
+        for fn, arg, q, alias in aggs:
+            if fn == "pct":
+                vals = sorted(x for x in (_num(r.get(arg)) for r in members) if x is not None)
+                v = vals[min(len(vals) - 1, max(0, int(round(q / 100.0 * len(vals) + 0.5)) - 1))] if vals else None
+            else:
+                v = _agg_value(fn, arg, members)
+            if v is not None:
+                row[alias] = _fmt_num(v)
+        out.append(row)
+    return out, [n for n, _f in keyfns] + [a[3] for a in aggs]
+
+
 def _run_insights(store, groups, qs, start_ms, end_ms):
     stages = [s.strip() for s in qs.split("|") if s.strip()]
     recs = []
@@ -1014,9 +1123,15 @@ def _run_insights(store, groups, qs, start_ms, end_ms):
         for s in store.log_groups[gn]["streams"].values():
             for e in s["events"]:
                 if start_ms <= e["timestamp"] <= end_ms:
-                    recs.append({"@timestamp": _iso(e["timestamp"]), "@message": e["message"],
-                                 "@logStream": s["name"], "@log": f"{store.account_id}:{gn}",
-                                 "_ts": e["timestamp"]})
+                    rec = {"@timestamp": _iso(e["timestamp"]), "@message": e["message"],
+                           "@logStream": s["name"], "@log": f"{store.account_id}:{gn}",
+                           "_ts": e["timestamp"]}
+                    if e["message"][:1] == "{":          # Logs Insights auto-discovers JSON fields (dotted paths)
+                        try:
+                            _flatten_json(json.loads(e["message"]), "", rec)
+                        except ValueError:
+                            pass
+                    recs.append(rec)
     scanned = len(recs)
     fields = None
     stats_col = None
@@ -1025,7 +1140,7 @@ def _run_insights(store, groups, qs, start_ms, end_ms):
         if low.startswith("fields") or low.startswith("display"):
             fields = [f.strip() for f in st.split(None, 1)[1].split(",")]
         elif low.startswith("filter"):
-            m = re.match(r'^filter\s+(@?\w+)\s*(like|=|!=|>=|<=|>|<)\s*(.+)$', st, re.I)
+            m = re.match(r'^filter\s+([@\w.]+)\s*(like|=|!=|>=|<=|>|<)\s*(.+)$', st, re.I)
             if m:
                 f, op, val = m.groups()
                 val = val.strip()
@@ -1043,9 +1158,10 @@ def _run_insights(store, groups, qs, start_ms, end_ms):
                         return {"=": a == b, "!=": a != b, ">": a > b, "<": a < b, ">=": a >= b, "<=": a <= b}[op]
                     recs = [r for r in recs if cmp(r)]
         elif low.startswith("sort"):
-            m = re.match(r'^sort\s+(@?\w+)\s*(asc|desc)?', st, re.I)
+            m = re.match(r'^sort\s+([@\w.]+)\s*(asc|desc)?', st, re.I)
             if m:
-                recs.sort(key=lambda r: r.get(m.group(1), ""), reverse=(m.group(2) or "asc").lower() == "desc")
+                recs.sort(key=lambda r, f=m.group(1): ((0, _num(r.get(f)), "") if _num(r.get(f)) is not None else (1, 0.0, str(r.get(f, "")))),
+                          reverse=(m.group(2) or "asc").lower() == "desc")
         elif low.startswith("limit"):
             recs = recs[:int(st.split()[1])]
         elif low.startswith("pattern"):
@@ -1065,26 +1181,9 @@ def _run_insights(store, groups, qs, start_ms, end_ms):
             fields = ["@pattern", "@severityLabel", "@ratio", "@sampleCount", "@logSamples"]
             stats_col = True
         elif low.startswith("stats"):
-            m = re.match(r'^stats\s+count\(\*?\)\s*(?:as\s+(\w+))?\s*(?:by\s+(.+))?$', st, re.I)
-            if m:
-                alias, by = m.group(1) or "count(*)", (m.group(2) or "").strip()
-                if by:
-                    bm = re.match(r'^bin\(\s*([\dsmh]+)\s*\)$', by, re.I)
-                    if bm:
-                        secs_ms = _duration_secs(bm.group(1)) * 1000
-                        key = lambda r: _iso(int(r["_ts"] // secs_ms * secs_ms))
-                    else:
-                        key = lambda r: str(r.get(by, ""))
-                    buckets: dict = {}
-                    for r in recs:
-                        k = key(r)
-                        buckets[k] = buckets.get(k, 0) + 1
-                    recs = [{by: k, alias: str(v)} for k, v in sorted(buckets.items())]
-                    fields = [by, alias]
-                else:
-                    recs = [{alias: str(len(recs))}]
-                    fields = [alias]
-                stats_col = True
+            recs, sf = _run_stats(st, recs)
+            if sf is not None:
+                fields, stats_col = sf, True
     if fields is None:
         fields = ["@timestamp", "@message"]
     out = []

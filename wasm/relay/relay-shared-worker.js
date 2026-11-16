@@ -28,7 +28,7 @@ const pyodideIndex = () => fetch(new URL("../pyodide-source.json", import.meta.u
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
-  "llm_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "cedar_wasm_shim.py", "agentcore_command_core.py", "code_sandbox_core.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "gcp_agentplatform_core.py", "gcp_agentgov_core.py", "agentcore_gateway_targets.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "training_core.py", "import_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -38,7 +38,7 @@ const CORES = [
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py", "gcp_osconfig_core.py", "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",
   "azure_netaccess.py", "azure_diag_pipeline.py", "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py",
-  "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "gateway_common.py", "apigateway_gateway.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
+  "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "gateway_common.py", "apigateway_gateway.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "cloudtrail_events_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
   "vpc_lattice_dataplane.py",
   "eventbridge_partner_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
   "azure_cmk_core.py", "azure_sql_security_core.py", "azure_storage_svc_core.py", "azure_sql_ext_core.py", "azure_sql_mirror_core.py", "azure_sql_core.py", "azure_iam_core.py", "azure_acr_core.py", "azure_graph_ext_core.py", "azure_graph_core.py", "azure_cdn_edge_core.py",
@@ -54,7 +54,7 @@ const CORES = [
   "azure_dpbackup_core.py",
   "ce_core.py",
   "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",
-  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
+  "azure_files_core.py", "azure_search_sources_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
@@ -156,10 +156,14 @@ async function bootPyodide() {
     const { loadPyodide } = await import(PYODIDE_INDEX + "pyodide.mjs");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+    try { py.unpackArchive(await (await fetch(new URL("../pylib/pypdf-7.1.0-py3-none-any.whl", import.meta.url))).arrayBuffer(), "wheel"); }   // pure-Python pypdf for PDF knowledge-base docs (not a Pyodide package)
+    catch (e) { log("pypdf unavailable (PDF knowledge-base documents will fail): " + e, "dim"); }
     await installTzdata();
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
   try { installParquet(new URL("../parquet/", import.meta.url).href); } catch (e) { /* exports then fail with a clear cause */ }
+    try { const { installCedar } = await import(new URL("../cedar/cedar-eval.mjs", import.meta.url).href); await installCedar(new URL("../cedar/", import.meta.url).href); }
+    catch (e) { log("Cedar evaluator unavailable (ENFORCE gateways fail closed): " + e, "dim"); }
     try {   // Kubescape (OPA-wasm) evaluator for Defender for Cloud's Kubernetes posture — optional
       const { installKubescape } = await import(new URL("../kubescape/ks-eval.mjs", import.meta.url).href);
       await installKubescape(new URL("../kubescape/", import.meta.url).href);

@@ -38,7 +38,7 @@ def js(o):
 
 # ── catalogue vs the runner catalogue / generated console JSON
 cat = json.load(open(os.path.join(ROOT, "docker", "mesh-runner-llm", "models.json")))
-check("catalogue ids == mesh runner models.json ids (ten, same order)", list(cat["models"]) == CAT.IDS and len(CAT.IDS) == 10, list(cat["models"]))
+check("catalogue ids == mesh runner models.json ids (eleven: ten hosted + the unhosted non-commercial qwen2.5-3b, same order)", list(cat["models"]) == CAT.IDS and len(CAT.IDS) == 11, list(cat["models"]))
 check("hidden alias map == models.json aliases (all three clouds)", all(cat["aliases"][c] == CAT.ALIASES[c] for c in ("aws", "gcp", "azure")))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import gen_ai_model_catalog_json as G  # noqa: E402
@@ -46,8 +46,11 @@ cj = json.load(open(os.path.join(ROOT, "consoles", "src", "common", "ai-model-ca
 check("consoles ai-model-catalog.json is in sync (run scripts/gen_ai_model_catalog_json.py)", cj == G.doc())
 
 # ── the three clouds list exactly the same ten
-aws = [m["modelId"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"]]
-check("Bedrock ListFoundationModels = the ten (vyomi.<id>)", sorted(aws) == sorted("vyomi." + i for i in CAT.IDS), aws)
+_all_aws = [m["modelId"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"]]
+# v4 lane `models`: standard Bedrock ids are also listed, as explicit aliases (tests/conformance/test_bedrock_models_alias.py)
+aws = [i for i in _all_aws if i.startswith("vyomi.")]
+check("Bedrock ListFoundationModels lists only the served ten by default (aliases hidden unless VYOMI_LIST_BEDROCK_ALIASES=1)", len(_all_aws) == len(aws))
+check("Bedrock ListFoundationModels native ids = the ten (vyomi.<id>)", sorted(aws) == sorted("vyomi." + i for i in CAT.IDS), aws)
 R = AwsWireRouter()
 AwsWireRouter.STRICT_GCP_PROJECT = False
 
@@ -69,15 +72,16 @@ az_acct = cs.dispatch(stt, "GET", "sub1", "rg1", ["accounts", "o1", "models"], [
 check("Azure location model catalogue = the ten", sorted({x["model"]["name"] for x in az_loc}) == TEN)
 check("Azure account model catalogue = the ten", sorted({x["model"]["name"] for x in az_acct}) == TEN)
 check("same ten across AWS/GCP/Azure", sorted(a.replace("vyomi.", "") for a in aws) == sorted(gcp) == sorted({x["model"]["name"] for x in az_acct}) == TEN)
-every = json.dumps([aws, gcp, [x["model"] for x in az_loc]])
-check("no real-vendor model ids in any listing", not any(o in every for o in OLD), every[:200])
+every = json.dumps([gcp, [x["model"] for x in az_loc]])
+check("no real-vendor model ids in the GCP/Azure listings", not any(o in every for o in OLD), every[:200])
 check("providers are the real open-model vendors", {m["vendor"] for m in CAT.MODELS} == {"Alibaba", "Nomic AI", "Meta", "Google", "DeepSeek", "Mistral AI"})
 
 # ── availability: no mesh -> only the local small model
-av = {m["modelId"].replace("vyomi.", ""): m["vyomiAvailability"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"]}
-check("no mesh: only qwen2.5-3b available", [k for k, v in av.items() if v["available"]] == ["qwen2.5-3b"], av)
-check("no mesh: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k != "qwen2.5-3b") and sum(1 for k in av if k != "qwen2.5-3b") == 9)
-check("Azure availability matches", {x["model"]["name"]: x["vyomiAvailability"]["available"] for x in az_acct} == {i: i == "qwen2.5-3b" for i in CAT.IDS})
+av = {m["modelId"].replace("vyomi.", ""): m["vyomiAvailability"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"] if "vyomiAvailability" in m}
+check("no mesh: only qwen3-4b (the commercial default) available", [k for k, v in av.items() if v["available"]] == ["qwen3-4b"], av)
+check("no mesh: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k not in ("qwen3-4b", "qwen2.5-3b")) and sum(1 for k in av if k not in ("qwen3-4b", "qwen2.5-3b")) == 9)
+check("the non-commercial qwen2.5-3b is listed but 'Not served' (never available)", av["qwen2.5-3b"] == {"state": "not_served", "label": "Not served (non-commercial licence)", "available": False}, av["qwen2.5-3b"])
+check("Azure availability matches", {x["model"]["name"]: x["vyomiAvailability"]["available"] for x in az_acct} == {i: i == "qwen3-4b" for i in CAT.IDS})
 
 
 class FakePool:
@@ -120,7 +124,7 @@ check("legacy Bedrock id (anthropic.claude / amazon.nova) still invokes (hidden 
       all(am.bedrock_dispatch("POST", f"/model/{m}/converse", {}, {}, body)["status"] == 200 for m in ("amazon.nova-lite-v1:0", "anthropic.claude-3-haiku-20240307-v1:0")))
 o = am.bedrock_dispatch("POST", "/model/some.unknown-model/converse", {}, {}, body)
 check("Bedrock id outside the ten -> ValidationException", o["status"] == 400 and o["headers"]["x-amzn-errortype"] == "ValidationException")
-check("Bedrock GetFoundationModel of a legacy id -> ResourceNotFound", am.bedrock_dispatch("GET", "/foundation-models/anthropic.claude-3-haiku-20240307-v1:0", {}, {}, b"")["status"] == 404)
+check("Bedrock GetFoundationModel of a listed alias -> 200 (v4 models lane); an unlisted legacy id -> ResourceNotFound", am.bedrock_dispatch("GET", "/foundation-models/anthropic.claude-3-haiku-20240307-v1:0", {}, {}, b"")["status"] == 200 and am.bedrock_dispatch("GET", "/foundation-models/anthropic.claude-v2", {}, {}, b"")["status"] == 404)
 gb = json.dumps({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).encode()
 P = "/v1/projects/p/locations/us-central1/publishers"
 check("Vertex generateContent works on every chat model id", all(am.vertex_dispatch("POST", f"{P}/{CAT.BY_ID[i]['publisher']}/models/{i}:generateContent", {}, {}, gb)["status"] == 200 for i in CAT.IDS if CAT.BY_ID[i]["kind"] == "chat"))

@@ -32,6 +32,7 @@ except ImportError:  # Pyodide flat layout
     import llm_core as llm  # type: ignore
 
 SPLIT = "#Microsoft.Skills.Text.SplitSkill"
+MERGE = "#Microsoft.Skills.Text.MergeSkill"
 EMBED = "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill"
 KNOWN_PREFIX = "#Microsoft.Skills."
 
@@ -113,12 +114,18 @@ def vector_rank(idx, docs, queries):
     return sorted(best.values(), key=lambda x: -x[0]), None
 
 
-def fuse(keyword_scored, vector_scored, keyf):
-    """Reciprocal rank fusion of two ranked lists of (score, doc)."""
+def query_weight(queries):
+    """Mean of the vector queries' ``weight`` (relative importance in the RRF, default 1)."""
+    ws = [float(q.get("weight", 1.0)) for q in queries if isinstance(q, dict)]
+    return sum(ws) / len(ws) if ws else 1.0
+
+
+def fuse(keyword_scored, vector_scored, keyf, vector_weight=1.0):
+    """Reciprocal rank fusion (k=60) of the BM25 ranking and the vector ranking; ``vector_weight`` scales the vector side."""
     score, docs = {}, {}
-    for ranked in (keyword_scored, vector_scored):
+    for ranked, w in ((keyword_scored, 1.0), (vector_scored, vector_weight)):
         for r, (_s, d) in enumerate(ranked, 1):
-            score[d[keyf]] = score.get(d[keyf], 0.0) + 1.0 / (60 + r)
+            score[d[keyf]] = score.get(d[keyf], 0.0) + w / (60 + r)
             docs[d[keyf]] = d
     return sorted(((s, docs[k]) for k, s in score.items()), key=lambda x: -x[0])
 
@@ -141,6 +148,10 @@ def validate_skillset(body):
             ov = s.get("pageOverlapLength", 0)
             if not isinstance(ov, int) or ov < 0 or ov >= ml:
                 return f"skills[{i}]: pageOverlapLength must be >= 0 and less than maximumPageLength."
+        if t == SPLIT and s.get("textSplitMode", "pages") not in ("pages", "sentences"):
+            return f"skills[{i}]: textSplitMode must be 'pages' or 'sentences'."
+        if t == MERGE and not any(x.get("name") == "text" for x in s["inputs"]):
+            return f"skills[{i}]: a MergeSkill needs a 'text' input."
         if t == EMBED:
             d = s.get("dimensions")
             if d is not None and (not isinstance(d, int) or not 2 <= d <= 4096):
@@ -236,17 +247,35 @@ def run_skillset(skillset, document):
     for n, s in enumerate(skillset["skills"]):
         t = s["@odata.type"]
         ctx = s.get("context") or "/document"
-        if t not in (SPLIT, EMBED):
-            return tree, f"Skill #{n + 1} ({s.get('name') or t}) of type {t} cannot be executed by Vyomi (only SplitSkill and AzureOpenAIEmbeddingSkill run)."
+        if t not in (SPLIT, EMBED, MERGE):
+            return tree, f"Skill #{n + 1} ({s.get('name') or t}) of type {t} cannot be executed by Vyomi (only SplitSkill, MergeSkill and AzureOpenAIEmbeddingSkill run)."
         ins = {i["name"]: i.get("source") for i in s["inputs"]}
         outs = {o["name"]: o.get("targetName") or o["name"] for o in s["outputs"]}
         for concrete in _expand(tree, ctx):
             src = _bind(ins.get("text") or "", ctx, concrete)
             text = _get(tree, src)
+            if t == MERGE:
+                items = _get(tree, _bind(ins.get("itemsToInsert") or "", ctx, concrete)) if ins.get("itemsToInsert") else []
+                offs = _get(tree, _bind(ins.get("offsets") or "", ctx, concrete)) if ins.get("offsets") else None
+                items = [str(x) for x in (items if isinstance(items, list) else [items] if items is not None else [])]
+                pre, post = s.get("insertPreTag", " "), s.get("insertPostTag", " ")
+                base = "" if text is None else str(text)
+                if isinstance(offs, list) and len(offs) == len(items):
+                    for off, it in sorted(zip(offs, items), key=lambda x: -int(x[0])):
+                        base = base[:int(off)] + pre + it + post + base[int(off):]
+                else:
+                    base = base + "".join(pre + it + post for it in items)
+                _set(tree, f"{concrete}/{outs.get('mergedText', 'mergedText')}", base)
+                continue
             if t == SPLIT:
                 if not isinstance(text, str):
                     text = "" if text is None else str(text)
-                pages = _split_text(text, s.get("maximumPageLength", 5000), s.get("pageOverlapLength", 0))
+                if s.get("textSplitMode") == "sentences":
+                    pages = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
+                else:
+                    pages = _split_text(text, s.get("maximumPageLength", 5000), s.get("pageOverlapLength", 0))
+                if s.get("maximumPagesToTake"):
+                    pages = pages[:int(s["maximumPagesToTake"])]
                 _set(tree, f"{concrete}/{outs.get('textItems', 'pages')}", pages)
             else:
                 if text is None or (isinstance(text, str) and not text.strip()):
@@ -305,3 +334,129 @@ def project(skillset, tree, parent_key):
 
 def child_key(parent_key, n):
     return hashlib.sha1(f"{parent_key}_{n}".encode()).hexdigest()[:24]
+
+
+# ───────────────────────────── semantic ranker (approximation) ─────────────────────────────
+def validate_semantic(body):
+    sem = body.get("semantic")
+    if not sem:
+        return None
+    confs = sem.get("configurations")
+    if not isinstance(confs, list) or not confs:
+        return "semantic.configurations must list at least one configuration."
+    fields = {f["name"]: f for f in body.get("fields", [])}
+    names = set()
+    for c in confs:
+        n = c.get("name")
+        if not n or n in names:
+            return "Every semantic configuration needs a unique name."
+        names.add(n)
+        pf = c.get("prioritizedFields") or {}
+        refs = [pf.get("titleField")] + (pf.get("prioritizedContentFields") or []) + (pf.get("prioritizedKeywordsFields") or [])
+        refs = [r for r in refs if r]
+        if not (pf.get("prioritizedContentFields") or pf.get("titleField")):
+            return f"Semantic configuration '{n}' needs a titleField or prioritizedContentFields."
+        for r in refs:
+            fn = r.get("fieldName") if isinstance(r, dict) else None
+            f = fields.get(fn)
+            if not f or f.get("type") not in ("Edm.String", "Collection(Edm.String)"):
+                return f"Semantic configuration '{n}' references '{fn}', which is not a string field of the index."
+    if sem.get("defaultConfiguration") and sem["defaultConfiguration"] not in names:
+        return f"semantic.defaultConfiguration '{sem['defaultConfiguration']}' is not defined."
+    return None
+
+
+def _sem_conf(idx, params):
+    sem = idx.get("semantic") or {}
+    name = params.get("semanticConfiguration") or sem.get("defaultConfiguration")
+    conf = next((c for c in sem.get("configurations", []) if c["name"] == name), None)
+    return name, conf
+
+
+def semantic_check(idx, params):
+    name, conf = _sem_conf(idx, params)
+    if not name:
+        return "queryType 'semantic' requires 'semanticConfiguration' (or a defaultConfiguration on the index)."
+    if conf is None:
+        return f"The semantic configuration '{name}' does not exist on this index."
+    for k in ("captions", "answers"):
+        v = params.get(k)
+        if v and not str(v).startswith(("extractive", "none")):
+            return f"'{k}' must be 'extractive' (optionally with |highlight-true or |count-N), or 'none'."
+    return None
+
+
+def _doc_semantic_text(doc, conf):
+    pf = conf.get("prioritizedFields") or {}
+    parts = []
+    for r in [pf.get("titleField")] + (pf.get("prioritizedContentFields") or []) + (pf.get("prioritizedKeywordsFields") or []):
+        v = doc.get(r["fieldName"]) if r else None
+        if v:
+            parts.append(" ".join(v) if isinstance(v, list) else str(v))
+    return ". ".join(parts)[:4000]
+
+
+def _sentences(text):
+    return [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text) if len(x.strip()) > 3]
+
+
+def _coverage(q_terms, text):
+    if not q_terms:
+        return 0.0
+    tt = set(re.findall(r"[a-z0-9]+", text.lower()))
+    return len(q_terms & tt) / len(q_terms)
+
+
+def _highlight(sentence, q_terms):
+    return re.sub(r"[A-Za-z0-9]+", lambda m: f"<em>{m.group(0)}</em>" if m.group(0).lower() in q_terms else m.group(0), sentence)
+
+
+def semantic_rerank(index_rec, idx, query, scored, params, window=50):
+    """Re-rank the top ``window`` of ``scored`` [(score, doc)] -> (new scored list, {"docs": {key: {score, caption}}, "answers": [...]|None}).
+
+    NOT Microsoft's L2 cross-encoder: reranker score = 4 * (0.7 * scaled embedding cosine + 0.3 * query-term coverage) over the
+    configuration's title + content fields, captions are the sentence with the best term coverage, answers are the best
+    sentences by embedding similarity. Honest approximation of the 0..4 contract."""
+    name, conf = _sem_conf(idx, params)
+    keyf = next(f["name"] for f in idx["fields"] if f["key"])
+    head, tail = scored[:window], scored[window:]
+    q_terms = set(re.findall(r"[a-z0-9]+", query.lower()))
+    texts = [_doc_semantic_text(d, conf) for _s, d in head]
+    cache = index_rec.setdefault("_semvec", {})
+    if len(cache) > 400:
+        cache.clear()
+    need = [t for t in dict.fromkeys(texts) if t and hashlib.sha1(t.encode()).hexdigest() not in cache]
+    qv = llm.embed(query)["vectors"][0]
+    if need:
+        for t, v in zip(need, llm.embed(need)["vectors"]):
+            cache[hashlib.sha1(t.encode()).hexdigest()] = v
+    info, ranked = {}, []
+    for (s0, d), t in zip(head, texts):
+        v = cache.get(hashlib.sha1(t.encode()).hexdigest()) if t else None
+        cos = llm.cosine(qv, v) if v else 0.0
+        rs = 4.0 * (0.7 * min(max((cos - 0.1) / 0.6, 0.0), 1.0) + 0.3 * _coverage(q_terms, t))
+        info[d[keyf]] = {"score": round(rs, 4), "text": t}
+        ranked.append((rs, d))
+    ranked.sort(key=lambda x: -x[0])
+    cap = str(params.get("captions") or "")
+    if cap.startswith("extractive"):
+        hl = "highlight-false" not in cap
+        for _rs, d in ranked[:50]:
+            sents = _sentences(info[d[keyf]]["text"])
+            if sents:
+                best = max(sents, key=lambda x: _coverage(q_terms, x))
+                info[d[keyf]]["caption"] = {"text": best, "highlights": _highlight(best, q_terms) if hl else ""}
+    answers = None
+    ans = str(params.get("answers") or "")
+    if ans.startswith("extractive"):
+        m = re.search(r"count-(\d+)", ans)
+        n = int(m.group(1)) if m else 1
+        cands = [(d[keyf], x) for _rs, d in ranked[:5] for x in _sentences(info[d[keyf]]["text"])[:12]][:60]
+        answers = []
+        if cands:
+            vs = llm.embed([x for _k, x in cands])["vectors"]
+            sc = sorted(((llm.cosine(qv, v) * 0.6 + 0.4 * _coverage(q_terms, x), k, x) for (k, x), v in zip(cands, vs)), reverse=True)
+            for s_, k, x in sc[:n]:
+                answers.append({"key": k, "text": x, "highlights": _highlight(x, q_terms), "score": round(min(max(s_, 0.0), 1.0), 4)})
+    out = [(rs, d) for rs, d in ranked] + tail
+    return out, {"docs": {k: {"score": v["score"], "caption": v.get("caption")} for k, v in info.items()}, "answers": answers}

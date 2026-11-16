@@ -29,8 +29,8 @@ OUT = os.path.join(HERE, "core")
 CORES = [
     "object_store.py", "s3_object_core.py",        # S3
     "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
-    "llm_core.py",
-    "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py",
+    "llm_core.py", "gcp_agentgov_core.py", "gcp_agentengine_core.py", "gcp_agentplatform_core.py",
+    "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "bedrock_build_core.py", "training_core.py", "import_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "code_sandbox_core.py", "agentcore_runtime_host.py", "cedar_wasm_shim.py", "agentcore_command_core.py", "agent_spec_core.py", "agentcore_ext_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py",
     "dms_core.py",
     "backup_vaults_core.py",
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB
@@ -87,7 +87,8 @@ CORES = [
     "azure_graph_ext_core.py", "azure_graph_core.py", "azure_cdn_edge_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
     "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
-    "gateway_common.py", "apigateway_gateway.py",  # shared cross-cloud gateway primitives + AWS REST (v1) data plane enforcement
+    "gateway_common.py", "apigateway_gateway.py", "identity_core.py",  # identity_core: Cognito/WAFv2 wire adapter over moto (Mesh; Nano answers 501 until moto is micropip-loaded)
+      # shared cross-cloud gateway primitives + AWS REST (v1) data plane enforcement
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
@@ -110,11 +111,12 @@ CORES = [
     "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
     "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
     "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
+    "cloudtrail_events_core.py",                   # CloudTrail LookupEvents audit ring (ai-approvals lane)
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
     "cloudformation_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_vpn_core.py",
-    "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "vpc_lattice_dataplane.py", "ec2_ops_core.py", "xray_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
+    "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "vpc_lattice_dataplane.py", "ec2_ops_core.py", "xray_core.py", "xray_admin_core.py", "otel_bridge.py", "agentcore_eval_core.py", "agentcore_gateway_targets.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
     "netfw_core.py",
     "dnsfw_core.py",
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
@@ -147,7 +149,7 @@ CORES = [
     "azure_alerts_core.py",                         # v4: Azure Monitor alert evaluation + processing rules (Microsoft.AlertsManagement) — after monitor/operationalinsights, before azure_arm_core
     "azure_monitorproducts_core.py", "azure_devsimplified_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",
-    "azure_search_vector_core.py", "azure_search_core.py",
+    "azure_search_sources_core.py", "azure_search_vector_core.py", "azure_search_core.py",
     "azure_storagemover_core.py",
     "azure_marketplace_core.py",
     "azure_billing_ext_core.py",

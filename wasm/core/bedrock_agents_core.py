@@ -12,13 +12,13 @@ bedrock-agent-runtime (``bedrock``): Retrieve, RetrieveAndGenerate, InvokeAgent 
 AgentCore (``bedrock-agentcore``): control plane runtimes (CreateAgentRuntime...), gateways and gateway targets, plus the
 gateway's MCP endpoint (initialize / tools/list / tools/call -> Lambda targets are really invoked).
 
-Real behaviour: ingestion reads the S3 objects of the data source, chunks them (fixed size / none), embeds every chunk with
+Real behaviour: ingestion reads the S3 objects of the data source, chunks them (fixed size / hierarchical / semantic / none), embeds every chunk with
 ``llm_core.embed`` and keeps the index in the account bag; Retrieve is exact cosine kNN with the S3 location + score; the
 agent/RetrieveAndGenerate answer is the local model prompted with the retrieved passages and returns citations.
 
 Honest limits: the model is a small local one (see llm_core.HONEST_LIMIT). Agent action groups are stored but the model does
-not emit tool calls, so they are never invoked; only text (.txt/.md/.csv/.json/.html/.xml/.log) documents are ingested - other
-types (PDF/Office) are counted as failed; vector storage is always the in-account index regardless of the storage type named;
+not emit tool calls, so they are never invoked; text/CSV/HTML/Markdown, PDF (pypdf), DOCX, XLSX and PPTX are ingested - other
+types (legacy .doc/.xls, scanned PDFs) are counted as failed with a per-file reason; vector storage is always the in-account index regardless of the storage type named;
 AgentCore runtimes: InvokeAgentRuntime runs a Vyomi agent spec (core/agent_spec_core: JSON instructions + declarative tools in-process over
 llm_core, Dev Simplified) carried in environmentVariables.VYOMI_AGENT_SPEC - container images are never run (without a spec the invoke
 returns RuntimeClientError); runtime endpoints/versions/sessions are modelled; gateway targets of type openApiSchema/smithyModel/mcpServer are registered but their tools are not callable.
@@ -26,7 +26,9 @@ returns RuntimeClientError); runtime endpoints/versions/sessions are modelled; g
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import os
 import random
 import re
 import string
@@ -36,10 +38,15 @@ from datetime import datetime, timezone
 
 try:
     from core import llm_core as llm
+    from core import knowledge_core as kc
 except ImportError:  # Pyodide flat layout
     import llm_core as llm  # type: ignore
+    import knowledge_core as kc  # type: ignore
 
 _ACCT = "123456789012"
+# Hooks the wire router attaches before dispatching (both substrates): "iam_key" = access-key-id -> IAM key record | None (SigV4 verification),
+# "wire" = the router's own handle(method, path, query, headers, body) (smithyModel gateway targets call the simulator's AWS APIs through it).
+HOOKS: dict = {"iam_key": None, "wire": None}
 _REGION = "us-east-1"
 _ALNUM = string.ascii_uppercase + string.digits
 _TEXT_EXT = (".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm", ".xml", ".log", ".tsv", ".yaml", ".yml", ".rst")
@@ -138,8 +145,12 @@ def _create_kb(st, p):
         raise _bad("knowledgeBaseConfiguration.type must be VECTOR")
     emb = ((cfg.get("vectorKnowledgeBaseConfiguration") or {}).get("embeddingModelArn") or "")
     fmm = _resolve_fm(emb.rsplit("/", 1)[-1]) if emb else None
-    if not fmm or fmm[6] != "nomic-embed-text":
-        raise _bad(f"The knowledge base embedding model {emb or '(none)'} is not supported; use vyomi.nomic-embed-text")
+    try:
+        from core import ai_model_catalog as _cat
+    except ImportError:
+        import ai_model_catalog as _cat  # type: ignore
+    if not fmm or fmm[6] != _cat.DEFAULT_EMBED:       # nomic-embed-text on the appliance; all-minilm-l6-v2 (in-browser ONNX) on Nano
+        raise _bad(f"The knowledge base embedding model {emb or '(none)'} is not supported; use vyomi.{_cat.DEFAULT_EMBED}")
     sto = p.get("storageConfiguration") or {}
     if sto.get("type") not in _STORAGE_TYPES:
         raise _bad(f"storageConfiguration.type must be one of {', '.join(_STORAGE_TYPES)}")
@@ -171,6 +182,11 @@ def _create_ds(st, kb, p):
         raise _bad("dataSourceConfiguration.s3Configuration.bucketArn must be a bucket ARN (arn:aws:s3:::bucket)")
     if any(d["name"] == name for d in kb["datasources"].values()):
         raise _conflict(f"Data source with name {name} already exists")
+    try:
+        kc.chunk_config(p.get("vectorIngestionConfiguration") or {})
+        kc.parsing_config(p.get("vectorIngestionConfiguration") or {})
+    except ValueError as e:
+        raise _bad(str(e))
     did = _rid()
     now = _iso()
     ds = {"knowledgeBaseId": kb["knowledgeBaseId"], "dataSourceId": did, "name": name, "description": p.get("description", ""),
@@ -180,28 +196,41 @@ def _create_ds(st, kb, p):
     return _j(202, {"dataSource": _ds_view(ds)})
 
 
-def _chunk_cfg(ds):
-    c = (ds.get("vectorIngestionConfiguration") or {}).get("chunkingConfiguration") or {}
-    strat = c.get("chunkingStrategy", "FIXED_SIZE")
-    if strat == "NONE":
-        return None, 0
-    f = c.get("fixedSizeChunkingConfiguration") or {}
-    return int(f.get("maxTokens", 300)), int(f.get("overlapPercentage", 20))
-
-
-def _chunk_text(text, max_tokens, overlap_pct):
-    words = text.split()
-    if max_tokens is None or not words:
-        return [text.strip()] if text.strip() else []
-    step = max(1, max_tokens - int(max_tokens * overlap_pct / 100))
-    out = []
-    i = 0
-    while i < len(words):
-        out.append(" ".join(words[i:i + max_tokens]))
-        if i + max_tokens >= len(words):
-            break
-        i += step
-    return out
+def _read_metadata(raw):
+    """A `<object>.metadata.json` -> (attributes, embed_keys). Accepts {"metadataAttributes": {k: v}} where v is a string, number, bool or
+    list of strings, or the typed form {"value": {"type": STRING|NUMBER|BOOLEAN|STRING_LIST, ...}, "includeForEmbedding": bool}.
+    Raises ValueError on a malformed file (the data document is then counted as failed, as Bedrock does)."""
+    if len(raw) > 10 * 1024:
+        raise ValueError("metadata file is over the 10 KB limit")
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        raise ValueError("metadata file is not valid JSON")
+    attrs = doc.get("metadataAttributes") if isinstance(doc, dict) else None
+    if not isinstance(attrs, dict):
+        raise ValueError("metadata file must be an object with a metadataAttributes object")
+    out, emb = {}, []
+    for k, v in attrs.items():
+        inc = False
+        if isinstance(v, dict) and "value" in v:
+            inc = bool(v.get("includeForEmbedding"))
+            tv = v["value"]
+            if isinstance(tv, dict):
+                key = {"STRING": "stringValue", "NUMBER": "numberValue", "BOOLEAN": "booleanValue", "STRING_LIST": "stringListValue"}.get(tv.get("type"))
+                if not key or key not in tv:
+                    raise ValueError(f"metadata attribute {k}: typed value needs type and the matching *Value field")
+                v = tv[key]
+            else:
+                v = tv
+        ok = isinstance(v, (str, bool, int, float)) or (isinstance(v, list) and all(isinstance(x, str) for x in v))
+        if not ok:
+            raise ValueError(f"metadata attribute {k}: value must be a string, number, boolean or list of strings")
+        out[k] = v
+        if inc:
+            emb.append(k)
+    if len(out) > 10:
+        raise ValueError("a document can have at most 10 metadata attributes")
+    return out, emb
 
 
 def _list_keys(s3, bucket, prefix):
@@ -225,56 +254,108 @@ def _list_keys(s3, bucket, prefix):
             return keys
 
 
+def _pipeline_cfg(s3c, s3, bucket):
+    """Optional Vyomi sidecar `.vyomi-pipeline.json` in the bucket root: {"guardrailIdentifier","guardrailVersion"} -> PII/guardrail scan per document."""
+    r = s3c.get_object(s3, bucket, ".vyomi-pipeline.json", {}, {})
+    try:
+        return json.loads(r.body) if r.status == 200 else {}
+    except ValueError:
+        return {}
+
+
 def _ingest(s3, kb, ds):
     conf = ds["dataSourceConfiguration"]["s3Configuration"]
     bucket = conf["bucketArn"].rsplit(":", 1)[-1]
     prefixes = conf.get("inclusionPrefixes") or [""]
-    mx, ov = _chunk_cfg(ds)
+    vic = ds.get("vectorIngestionConfiguration") or {}
+    cfg, pcfg = kc.chunk_config(vic), kc.parsing_config(vic)
     s3c = _s3c()
-    # drop this data source's previous chunks (a re-sync replaces them)
-    kb["chunks"] = [c for c in kb["chunks"] if c["ds"] != ds["dataSourceId"]]
-    scanned = failed = indexed = 0
-    reasons, texts, metas = [], [], []
+    pipe = _pipeline_cfg(s3c, s3, bucket)
+    gid, gver = pipe.get("guardrailIdentifier"), str(pipe.get("guardrailVersion", "DRAFT"))
+    kb["chunks"] = [c for c in kb["chunks"] if c["ds"] != ds["dataSourceId"]]       # a re-sync replaces this data source's chunks
+    scanned = failed = indexed = meta_scanned = 0
+    reasons, items = [], []
     seen = set()
     for pfx in prefixes:
         for key in _list_keys(s3, bucket, pfx):
-            if key in seen or key.endswith("/") or key.endswith(".metadata.json"):
+            if key in seen or key.endswith("/") or key.endswith(".metadata.json") or key == ".vyomi-pipeline.json":
                 continue
             seen.add(key)
             scanned += 1
-            if not key.lower().endswith(_TEXT_EXT):
-                failed += 1
-                reasons.append(f"s3://{bucket}/{key}: unsupported document type (the simulator ingests text documents only)")
-                continue
+            uri = f"s3://{bucket}/{key}"
             r = s3c.get_object(s3, bucket, key, {}, {})
             if r.status != 200:
                 failed += 1
-                reasons.append(f"s3://{bucket}/{key}: could not read object")
+                reasons.append(f"{uri}: could not read object")
                 continue
             try:
-                txt = r.body.decode("utf-8")
-            except UnicodeDecodeError:
+                txt = kc.parse_document(key, r.body, pcfg["markdown_tables"])
+            except kc.ParseError as e:
                 failed += 1
-                reasons.append(f"s3://{bucket}/{key}: not valid UTF-8 text")
+                reasons.append(f"{uri}: {e}")
                 continue
-            meta = {}
+            meta, emb_keys = {}, []
             mr = s3c.get_object(s3, bucket, key + ".metadata.json", {}, {})
             if mr.status == 200:
+                meta_scanned += 1
                 try:
-                    meta = (json.loads(mr.body) or {}).get("metadataAttributes") or {}
-                except ValueError:
-                    meta = {}
-            for ch in _chunk_text(txt, mx, ov):
-                texts.append(ch)
-                metas.append((f"s3://{bucket}/{key}", meta))
+                    meta, emb_keys = _read_metadata(mr.body)
+                except ValueError as e:
+                    failed += 1
+                    reasons.append(f"{uri}: invalid {key.rsplit('/', 1)[-1]}.metadata.json: {e}")
+                    continue
+            txt, verdict = kc.guard(txt, gid, gver)
+            if verdict == "blocked":
+                failed += 1
+                reasons.append(f"{uri}: blocked by guardrail {gid} (PII/sensitive content scan)")
+                continue
+            try:
+                parts = kc.chunk_document(txt, cfg)
+            except (llm.LlmUnavailable, llm.LlmStructuredError) as e:
+                failed += 1
+                reasons.append(f"{uri}: semantic chunking needs the embedding model: {e}")
+                continue
+            if not parts:
+                failed += 1
+                reasons.append(f"{uri}: no text left after chunking")
+                continue
+            for pt in parts:
+                items.append((pt, uri, meta, emb_keys, verdict))
             indexed += 1
-    if texts:
-        vecs = llm.embed(texts)["vectors"]
-        for t, (uri, meta), v in zip(texts, metas, vecs):
-            kb["chunks"].append({"ds": ds["dataSourceId"], "uri": uri, "text": t, "vec": v, "metadata": meta})
+    if items:
+        etexts = [pt["text"] + ("".join(f"\n{k}: {m[k]}" for k in ek if k in m)) for pt, _, m, ek, _ in items]
+        vecs = llm.embed(etexts)["vectors"]
+        for n, ((pt, uri, meta, _ek, verdict), v) in enumerate(zip(items, vecs)):
+            c = {"id": f"{ds['dataSourceId']}-{n}", "ds": ds["dataSourceId"], "uri": uri, "text": pt["text"], "vec": v, "metadata": meta,
+                 "section": pt["section"], "tokens": len(pt["text"].split()), "pii": verdict}
+            if pt.get("parent"):
+                c["parent"] = pt["parent"]
+            kb["chunks"].append(c)
+    _mirror_opensearch(s3, kb, ds)
     return {"numberOfDocumentsScanned": scanned, "numberOfNewDocumentsIndexed": indexed, "numberOfModifiedDocumentsIndexed": 0,
-            "numberOfMetadataDocumentsScanned": 0, "numberOfMetadataDocumentsModified": 0, "numberOfDocumentsDeleted": 0,
+            "numberOfMetadataDocumentsScanned": meta_scanned, "numberOfMetadataDocumentsModified": 0, "numberOfDocumentsDeleted": 0,
             "numberOfDocumentsFailed": failed}, reasons
+
+
+def _mirror_opensearch(s3, kb, ds):
+    """When the KB names an OpenSearch (Serverless/managed) index, also write the chunks there with the configured fieldMapping
+    so opensearch-py _search on that index sees the same data (what a real KB does)."""
+    sto = kb.get("storageConfiguration") or {}
+    cfg = sto.get("opensearchServerlessConfiguration") or sto.get("opensearchManagedClusterConfiguration") or {}
+    index = cfg.get("vectorIndexName")
+    if not index:
+        return
+    fm = cfg.get("fieldMapping") or {}
+    vf, tf, mf = fm.get("vectorField", "vector"), fm.get("textField", "text"), fm.get("metadataField", "metadata")
+    try:
+        from core import opensearch_core as osc
+    except ImportError:
+        import opensearch_core as osc  # type: ignore
+    osc.drop_docs(s3, index, ds["dataSourceId"] + "-")
+    dim = len(kb["chunks"][0]["vec"]) if kb["chunks"] else 0
+    osc.index_docs(s3, index, [(c["id"], {vf: c["vec"], tf: c["text"], mf: {**c["metadata"], "source": c["uri"], "section": c.get("section", "")}})
+                               for c in kb["chunks"] if c["ds"] == ds["dataSourceId"]],
+                   {"properties": {vf: {"type": "knn_vector", "dimension": dim}, tf: {"type": "text"}, mf: {"type": "object"}}})
 
 
 def _start_ingestion(s3, kb, ds, p):
@@ -301,24 +382,216 @@ def _paginate(items, query, key, size_default=100):
     return out
 
 
-def _retrieve(kb, text, k, flt=None):
-    if not kb["chunks"]:
-        return []
+def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
+    """Retrieve with a per-candidate trace. ``vs`` = vectorSearchConfiguration (overrideSearchType, rerankingConfiguration).
+    -> (results, trace) ; hybrid_weight (Vyomi extension) 0 = vector only, otherwise lexical+vector RRF."""
+    import time as _t
+    vs = vs or {}
+    mode_in = vs.get("overrideSearchType")
+    if mode_in is not None and str(mode_in).upper() not in ("HYBRID", "SEMANTIC"):
+        raise _bad(f"overrideSearchType must be HYBRID or SEMANTIC (got {mode_in})")
+    _validate_filter(flt)
+    rr_cfg = _validate_rerank_cfg(vs.get("rerankingConfiguration"), "numberOfRerankedResults")
+    if vs.get("implicitFilterConfiguration") is not None:
+        flt = _implicit_filter(vs["implicitFilterConfiguration"], text, flt)
+    chunks = kb["chunks"]
+    stages = {}
+    if not chunks:
+        return [], {"candidates": [], "latencyMs": {}}
+    t0 = _t.time()
     qv = llm.embed(text)["vectors"][0]
-    scored = []
-    for c in kb["chunks"]:
+    if any(len(c["vec"]) != len(qv) for c in chunks):   # index built by another embedder (e.g. hash fallback before the in-browser model loaded)
+        for c, v in zip(chunks, llm.embed([c["text"] for c in chunks])["vectors"]):
+            c["vec"] = v
+        if any(len(c["vec"]) != len(qv) for c in chunks):
+            qv = llm.embed(text, dimensions=len(chunks[0]["vec"]))["vectors"][0]
+    stages["embed"] = (_t.time() - t0) * 1000
+    t0 = _t.time()
+    allowed, why = set(), {}
+    for i, c in enumerate(chunks):
         if flt and not _match_filter(flt, c["metadata"]):
-            continue
-        scored.append((llm.cosine(qv, c["vec"]), c))
-    scored.sort(key=lambda x: -x[0])
-    res = []
-    for sc, c in scored[:k]:
-        r = {"content": {"type": "TEXT", "text": c["text"]}, "location": {"type": "S3", "s3Location": {"uri": c["uri"]}},
-             "score": round(max(sc, 0.0), 6)}
-        if c["metadata"]:
-            r["metadata"] = c["metadata"]
+            why[i] = "metadata filter"
+        else:
+            allowed.add(i)
+    stages["filter"] = (_t.time() - t0) * 1000
+    mode = (vs.get("overrideSearchType") or "HYBRID").upper()
+    lw = hybrid_weight if hybrid_weight is not None else (0.0 if mode == "SEMANTIC" else 0.5)
+    t0 = _t.time()
+    texts = [c["text"] for c in chunks]
+    vsc = {i: llm.cosine(qv, c["vec"]) for i, c in enumerate(chunks)}
+    lex_all = kc.bm25([texts[i] for i in sorted(allowed)], text) if lw else {}
+    order = sorted(allowed)
+    lex = {order[j]: sc for j, sc in lex_all.items()}
+    stages["search"] = (_t.time() - t0) * 1000
+    fused = kc.hybrid(texts, [c["vec"] for c in chunks], text, qv, allowed, max(len(chunks), 1), weight_lex=lw)
+    rank = {i: (n + 1, sc) for n, (i, sc) in enumerate(fused)}
+    top = fused[:max(k * 3, k)] if rr_cfg else fused[:k]
+    rrs = {}
+    t0 = _t.time()
+    if rr_cfg:
+        n_out = int(rr_cfg.get("numberOfRerankedResults", k))
+        for n, (j, sc) in enumerate(kc.rerank(text, [_rerank_text(chunks[i]["text"], chunks[i]["metadata"], rr_cfg.get("metadataConfiguration")) for i, _ in top], n_out)):
+            rrs[top[j][0]] = (n + 1, sc)
+        final = [(i, rrs[i][1]) for i in sorted(rrs, key=lambda x: rrs[x][0])][:k]
+        stages["rerank"] = (_t.time() - t0) * 1000
+    elif mode == "SEMANTIC":
+        final = [(i, max(vsc[i], 0.0)) for i, _ in fused[:k]]       # pure vector search: the score is the cosine similarity
+    else:
+        final = top[:k]
+    res, seen_parent = [], set()
+    for i, sc in final:
+        c = chunks[i]
+        if c.get("parent"):                      # hierarchical: the child matched, the parent chunk is returned (once)
+            if (c["uri"], c["parent"]) in seen_parent:
+                continue
+            seen_parent.add((c["uri"], c["parent"]))
+        r = {"content": {"type": "TEXT", "text": c.get("parent") or c["text"]}, "location": {"type": "S3", "s3Location": {"uri": c["uri"]}}, "score": round(max(min(sc, 1.0), 0.0), 6),
+             "metadata": {**c["metadata"], "x-amz-bedrock-kb-source-uri": c["uri"], "x-amz-bedrock-kb-chunk-id": c.get("id", ""),
+                          "x-amz-bedrock-kb-data-source-id": c["ds"]}}
+        if c.get("section"):
+            r["metadata"]["section"] = c["section"]
         res.append(r)
-    return res
+    cand = []
+    for i, c in enumerate(chunks):
+        cand.append({"chunkId": c.get("id", str(i)), "uri": c["uri"], "vector_score": round(vsc[i], 6), "bm25_score": round(lex.get(i, 0.0), 6),
+                     "fused_rank": rank[i][0] if i in rank else None, "fused_score": round(rank[i][1], 6) if i in rank else None,
+                     "rerank_score": rrs[i][1] if i in rrs else None, "rerank_rank": rrs[i][0] if i in rrs else None,
+                     "returned": any(f[0] == i for f in final),
+                     "filtered_out_reason": why.get(i) or (None if i in rank and any(f[0] == i for f in final) else
+                                                           ("below top-k after fusion" if i in rank else "not ranked"))})
+    return res, {"candidates": cand, "searchType": mode, "hybridWeight": lw, "reranked": bool(rr_cfg), "rerankBackend": kc.rerank_backend() if rr_cfg else None,
+                 "latencyMs": {k_: round(v, 3) for k_, v in stages.items()}}
+
+
+def _retrieve(kb, text, k, flt=None, vs=None):
+    return _retrieve_trace(kb, text, k, flt, vs)[0]
+
+
+def _rerank_op(p):
+    """bedrock-agent-runtime Rerank: queries[0].textQuery.text, sources[].inlineDocumentSource.textDocument.text -> relevance scored results."""
+    qs = p.get("queries") or []
+    srcs = p.get("sources") or []
+    if not isinstance(qs, list) or len(qs) != 1:
+        raise _bad("queries must contain exactly one query.")
+    if qs[0].get("type") != "TEXT" or not (qs[0].get("textQuery") or {}).get("text"):
+        raise _bad("queries[0] must be of type TEXT with textQuery.text.")
+    if not isinstance(srcs, list) or not 1 <= len(srcs) <= 1000:
+        raise _bad("sources must contain between 1 and 1000 documents.")
+    docs = []
+    for i, sr in enumerate(srcs):
+        if sr.get("type") != "INLINE":
+            raise _bad(f"sources[{i}].type must be INLINE.")
+        src = sr.get("inlineDocumentSource") or {}
+        if src.get("type") != "TEXT" or not isinstance((src.get("textDocument") or {}).get("text"), str):
+            raise _bad(f"sources[{i}].inlineDocumentSource must be a TEXT document with textDocument.text (JSON documents are not supported).")
+        docs.append(src["textDocument"]["text"])
+    b = _validate_rerank_cfg(p.get("rerankingConfiguration"), "numberOfResults")
+    if b is None:
+        raise _bad("rerankingConfiguration is required.")
+    n = min(int(b.get("numberOfResults", len(docs))), len(docs))
+    q = qs[0]["textQuery"]["text"]
+    out = [{"index": i, "relevanceScore": sc, "document": {"type": "TEXT", "textDocument": {"text": docs[i]}}} for i, sc in kc.rerank(q, docs, n)]
+    return _j(200, {"results": out})
+
+
+def inspect_dispatch(s3, method, path, query, body):
+    """Vyomi extension (outside the AWS namespace) for the RAG Studio: GET /_vyomi/kb/{id}/chunks, POST /_vyomi/kb/{id}/retrieve-trace."""
+    st = _state(s3)
+    segs = [x for x in path.strip("/").split("/") if x]
+    try:
+        kb = _find_kb(st, segs[2]) if len(segs) >= 4 else None
+        if kb is None:
+            raise _nf("Unknown inspect route")
+        if segs[3] == "chunks" and method == "GET":
+            want_vec = (query or {}).get("vectors", "false") == "true"
+            rows = [{"id": c.get("id"), "dataSourceId": c["ds"], "documentUri": c["uri"], "text": c["text"], "tokenCount": c.get("tokens", len(c["text"].split())),
+                     "metadata": c["metadata"], "section": c.get("section", ""), "pii": c.get("pii", "ok"), "projection2d": None, "vector": c["vec"] if want_vec else None}
+                    for c in kb["chunks"]]
+            _project2d(rows, [c["vec"] for c in kb["chunks"]])
+            return _j(200, {"knowledgeBaseId": kb["knowledgeBaseId"], "count": len(rows), "dimensions": len(kb["chunks"][0]["vec"]) if kb["chunks"] else 0, "chunks": rows})
+        if segs[3] == "retrieve-trace" and method == "POST":
+            p = _body(body)
+            q = ((p.get("retrievalQuery") or {}).get("text") or "").strip()
+            if not q:
+                raise _bad("retrievalQuery.text is required")
+            vs = (p.get("retrievalConfiguration") or {}).get("vectorSearchConfiguration") or {}
+            res, trace = _retrieve_trace(kb, q, int(vs.get("numberOfResults", 5)), vs.get("filter"), vs, p.get("hybridWeight"))
+            return _j(200, {"retrievalResults": res, "trace": trace})
+    except _Err as e:
+        return _err_resp(e)
+    return _err_resp(_Err("UnknownOperationException", f"Unsupported inspect route: {method} {path}", 404))
+
+
+def _project2d(rows, vecs):
+    """2-D PCA projection (power iteration, pure Python) so the Studio can plot clusters without numpy."""
+    n = len(vecs)
+    if n < 2:
+        for r in rows:
+            r["projection2d"] = [0.0, 0.0]
+        return
+    d = len(vecs[0])
+    mean = [sum(v[j] for v in vecs) / n for j in range(d)]
+    X = [[v[j] - mean[j] for j in range(d)] for v in vecs]
+    comps = []
+    for c in range(2):
+        w = [((j * 7919 + c * 104729) % 1000) / 1000.0 - 0.5 for j in range(d)]
+        for _ in range(25):
+            t = [sum(x[j] * w[j] for j in range(d)) for x in X]
+            nw = [sum(X[i][j] * t[i] for i in range(n)) for j in range(d)]
+            norm = sum(a * a for a in nw) ** 0.5 or 1.0
+            w = [a / norm for a in nw]
+        comps.append(w)
+        X = [[x[j] - sum(x[m] * w[m] for m in range(d)) * w[j] for j in range(d)] for x in X]
+    for i, r in enumerate(rows):
+        c = [v - m for v, m in zip(vecs[i], mean)]
+        r["projection2d"] = [round(sum(c[j] * comps[k][j] for j in range(d)), 6) for k in range(2)]
+
+
+_FILTER_OPS = ("equals", "notEquals", "greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals", "in", "notIn",
+               "startsWith", "stringContains", "listContains")
+_RERANK_MODELS = ("amazon.rerank-v1:0", "cohere.rerank-v3-5:0")
+
+
+def _validate_filter(f, depth=0):
+    """RetrievalFilter union rules: exactly one member; andAll/orAll hold 2..5 filters; typed values per operator."""
+    if f is None:
+        return
+    if not isinstance(f, dict) or len(f) != 1:
+        raise _bad("A retrieval filter must contain exactly one operator (equals, notEquals, greaterThan, greaterThanOrEquals, lessThan, "
+                   "lessThanOrEquals, in, notIn, startsWith, stringContains, listContains, andAll or orAll).")
+    (op, arg), = f.items()
+    if op in ("andAll", "orAll"):
+        if depth >= 2:
+            raise _bad("Filters can be nested at most two levels deep.")
+        if not isinstance(arg, list) or not 2 <= len(arg) <= 5:
+            raise _bad(f"{op} needs between 2 and 5 filters.")
+        for x in arg:
+            _validate_filter(x, depth + 1)
+        return
+    if op not in _FILTER_OPS:
+        raise _bad(f"Unknown retrieval filter operator '{op}'.")
+    if not isinstance(arg, dict) or not isinstance(arg.get("key"), str) or not 1 <= len(arg["key"]) <= 200 or "value" not in arg:
+        raise _bad(f"{op} needs a 'key' (1-200 characters) and a 'value'.")
+    v = arg["value"]
+    if op in ("in", "notIn"):
+        if not isinstance(v, list) or not v or any(isinstance(x, (dict, list)) for x in v):
+            raise _bad(f"{op} needs a non-empty list of strings or numbers.")
+    elif op in ("startsWith", "stringContains", "listContains"):
+        if not isinstance(v, str):
+            raise _bad(f"{op} needs a string value.")
+    elif op in ("greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals"):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise _bad(f"{op} needs a numeric value.")
+    elif isinstance(v, (dict,)) or (isinstance(v, list) and any(isinstance(x, (dict, list)) for x in v)):
+        raise _bad(f"{op} needs a string, number, boolean or list of strings.")
+
+
+def _same_kind(a, b):
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool)
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return True
+    return type(a) is type(b)
 
 
 def _match_filter(f, meta):
@@ -326,37 +599,97 @@ def _match_filter(f, meta):
         return all(_match_filter(x, meta) for x in f["andAll"])
     if "orAll" in f:
         return any(_match_filter(x, meta) for x in f["orAll"])
-    for op in ("equals", "notEquals", "greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals", "in", "notIn",
-               "startsWith", "stringContains", "listContains"):
+    for op in _FILTER_OPS:
         if op in f:
             key, val = f[op].get("key"), f[op].get("value")
             have = meta.get(key)
-            try:
-                if op == "equals":
-                    return have == val
-                if op == "notEquals":
-                    return have != val
-                if op == "greaterThan":
-                    return have is not None and have > val
-                if op == "greaterThanOrEquals":
-                    return have is not None and have >= val
-                if op == "lessThan":
-                    return have is not None and have < val
-                if op == "lessThanOrEquals":
-                    return have is not None and have <= val
-                if op == "in":
-                    return have in (val or [])
-                if op == "notIn":
-                    return have not in (val or [])
-                if op == "startsWith":
-                    return isinstance(have, str) and have.startswith(val)
-                if op == "stringContains":
-                    return isinstance(have, str) and val in have or isinstance(have, list) and val in have
-                if op == "listContains":
-                    return isinstance(have, list) and val in have
-            except TypeError:
+            if op == "notEquals":
+                return have is None or not (_same_kind(have, val) and have == val)
+            if op == "notIn":
+                return have is None or not any(_same_kind(have, x) and have == x for x in val)
+            if have is None:
                 return False
+            if op == "equals":
+                return _same_kind(have, val) and have == val if not isinstance(have, list) else have == val
+            if op == "in":
+                return any(_same_kind(have, x) and have == x for x in val)
+            if op in ("greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals"):
+                if isinstance(have, bool) or not isinstance(have, (int, float)):
+                    return False
+                return {"greaterThan": have > val, "greaterThanOrEquals": have >= val, "lessThan": have < val, "lessThanOrEquals": have <= val}[op]
+            if op == "startsWith":
+                return isinstance(have, str) and have.startswith(val)
+            if op == "stringContains":      # a string containing the value, or a list of strings with a member containing it
+                return (isinstance(have, str) and val in have) or (isinstance(have, list) and any(isinstance(x, str) and val in x for x in have))
+            if op == "listContains":
+                return isinstance(have, list) and val in have
     raise _bad("Unsupported retrieval filter")
+
+
+def _implicit_filter(cfg, query, explicit):
+    """implicitFilterConfiguration: the local chat model derives a metadata filter from the query (Bedrock uses a foundation model)."""
+    attrs = (cfg or {}).get("metadataAttributes")
+    if not isinstance(attrs, list) or not attrs or not (cfg or {}).get("modelArn"):
+        raise _bad("implicitFilterConfiguration needs metadataAttributes and modelArn.")
+    for a in attrs:
+        if not a.get("key") or a.get("type") not in ("STRING", "NUMBER", "BOOLEAN", "STRING_LIST"):
+            raise _bad("Each metadataAttribute needs a key and a type of STRING, NUMBER, BOOLEAN or STRING_LIST.")
+    desc = "\n".join(f"- {a['key']} ({a['type']}): {a.get('description', '')}" for a in attrs)
+    sysm = ("Derive a metadata filter from the user question. Reply with ONLY JSON: either {} when no attribute is implied, or one filter object like "
+            '{"equals":{"key":"dept","value":"hvac"}}, or {"andAll":[f1,f2]} / {"orAll":[f1,f2]} (2 to 5 members). Operators: equals, notEquals, '
+            "greaterThan, greaterThanOrEquals, lessThan, lessThanOrEquals, in, notIn, startsWith, stringContains, listContains. Allowed attributes:\n" + desc)
+    r = llm.chat([{"role": "user", "content": query}], system=sysm, max_tokens=200, temperature=0.0)
+    try:
+        f, _parsed = llm.extract_json(r["text"])
+    except Exception:  # noqa: BLE001
+        f = None
+    keys = {a["key"] for a in attrs}
+
+    def ok(x):
+        if not isinstance(x, dict) or len(x) != 1:
+            return False
+        (op, arg), = x.items()
+        return all(ok(y) for y in arg) if op in ("andAll", "orAll") and isinstance(arg, list) else (op in _FILTER_OPS and isinstance(arg, dict) and arg.get("key") in keys)
+    if not f or not ok(f):
+        return explicit
+    try:
+        _validate_filter(f)
+    except _Err:
+        return explicit
+    return {"andAll": [explicit, f]} if explicit else f
+
+
+def _validate_rerank_cfg(rc, count_key):
+    """rerankingConfiguration (Retrieve) / Rerank API config -> the bedrockRerankingConfiguration dict (+ type/model checks), or None."""
+    if not rc:
+        return None
+    if rc.get("type") != "BEDROCK_RERANKING_MODEL":
+        raise _bad("rerankingConfiguration.type must be BEDROCK_RERANKING_MODEL.")
+    b = rc.get("bedrockRerankingConfiguration") or {}
+    arn = (b.get("modelConfiguration") or {}).get("modelArn") or ""
+    if not re.match(r"^arn:aws(?:-[a-z-]+)?:bedrock:[a-z0-9-]+::foundation-model/(%s)$" % "|".join(re.escape(m) for m in _RERANK_MODELS), arn):
+        raise _bad("modelConfiguration.modelArn must be the ARN of a reranking model (%s)." % ", ".join(_RERANK_MODELS))
+    n = b.get(count_key)
+    if n is not None and (isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 1000):
+        raise _bad(f"{count_key} must be an integer between 1 and 1000.")
+    mc = b.get("metadataConfiguration")
+    if mc is not None and mc.get("selectionMode") not in ("SELECTIVE", "ALL"):
+        raise _bad("metadataConfiguration.selectionMode must be SELECTIVE or ALL.")
+    return b
+
+
+def _rerank_text(text, meta, mc):
+    """Document text handed to the reranker: the chunk, plus the metadata attributes selected by metadataConfiguration."""
+    if not mc or not meta:
+        return text
+    if mc.get("selectionMode") == "ALL":
+        keys = [k for k in meta if not k.startswith("x-amz-")]
+    else:
+        sel = mc.get("selectiveModeConfiguration") or {}
+        inc = [x.get("fieldName") for x in sel.get("fieldsToInclude") or []]
+        exc = {x.get("fieldName") for x in sel.get("fieldsToExclude") or []}
+        keys = [k for k in meta if k in inc] if inc else [k for k in meta if k not in exc and not k.startswith("x-amz-")]
+    return text + "".join(f"\n{k}: {meta[k]}" for k in keys)
 
 
 def _rag_answer(st, results, question, model_hint=None):
@@ -376,7 +709,7 @@ def _retrieve_op(st, kid, p):
     k = int(vs.get("numberOfResults", 5))
     if not 1 <= k <= 100:
         raise _bad("numberOfResults must be between 1 and 100")
-    return _j(200, {"retrievalResults": _retrieve(kb, q, k, vs.get("filter"))})
+    return _j(200, {"retrievalResults": _retrieve(kb, q, k, vs.get("filter"), vs)})
 
 
 def _rag_op(st, p):
@@ -391,7 +724,7 @@ def _rag_op(st, p):
     if not kc.get("modelArn"):
         raise _bad("knowledgeBaseConfiguration.modelArn is required")
     vs = (kc.get("retrievalConfiguration") or {}).get("vectorSearchConfiguration") or {}
-    res = _retrieve(kb, q, int(vs.get("numberOfResults", 5)), vs.get("filter"))
+    res = _retrieve(kb, q, int(vs.get("numberOfResults", 5)), vs.get("filter"), vs)
     sid = p.get("sessionId") or _rid(32, string.ascii_lowercase + string.digits)
     if not res:
         return _j(200, {"sessionId": sid, "output": {"text": "Sorry, I am unable to assist you with this request."}, "citations": []})
@@ -415,7 +748,7 @@ def _resolve_fm(arn_or_id):
 
 
 def _agent_view(a):
-    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups")}
+    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups", "sessions", "memories", "snapshots", "collaborators")}
 
 
 def _find_agent(st, aid):
@@ -436,6 +769,7 @@ def _create_agent(st, p):
         raise _bad("1 validation error detected: Value null at 'agentResourceRoleArn' failed to satisfy constraint: Member must not be null")
     if p.get("instruction") is not None and not 40 <= len(p["instruction"]) <= 20000:
         raise _bad("1 validation error detected: Value at 'instruction' failed to satisfy constraint: Member must have length greater than or equal to 40")
+    _check_agent_cfg(p)
     ttl = int(p.get("idleSessionTTLInSeconds", 600))
     if not 60 <= ttl <= 3600:
         raise _bad("idleSessionTTLInSeconds must be between 60 and 3600")
@@ -447,6 +781,10 @@ def _create_agent(st, p):
          "agentStatus": "NOT_PREPARED", "foundationModel": fm or "", "instruction": p.get("instruction", ""), "description": p.get("description", ""),
          "idleSessionTTLInSeconds": ttl, "agentResourceRoleArn": p["agentResourceRoleArn"], "createdAt": now, "updatedAt": now,
          "aliases": {}, "kbs": {}, "actionGroups": {}, "_version": 0}
+    for f in ("guardrailConfiguration", "memoryConfiguration", "promptOverrideConfiguration"):
+        if p.get(f):
+            a[f] = p[f]
+    a["agentCollaboration"] = p.get("agentCollaboration") or "DISABLED"
     st["agents"][aid] = a
     return _j(202, {"agent": _agent_view(a)})
 
@@ -477,7 +815,11 @@ def _create_alias(a, p):
         a["_version"] += 1
         ver = str(a["_version"])
         a.setdefault("snapshots", {})[ver] = {"instruction": a["instruction"], "foundationModel": a["foundationModel"],
-                                              "kbs": [dict(k) for k in a["kbs"].values()]}
+                                              "kbs": [dict(k) for k in a["kbs"].values()],
+                                              "actionGroups": json.loads(json.dumps(list(a["actionGroups"].values()))),
+                                              "guardrailConfiguration": a.get("guardrailConfiguration"), "memoryConfiguration": a.get("memoryConfiguration"),
+                                              "promptOverrideConfiguration": a.get("promptOverrideConfiguration"), "agentCollaboration": a.get("agentCollaboration", "DISABLED"),
+                                              "collaborators": json.loads(json.dumps(list((a.get("collaborators") or {}).values()))), "idleSessionTTLInSeconds": a["idleSessionTTLInSeconds"]}
         rc = [{"agentVersion": ver}]
     alid = _rid()
     now = _iso()
@@ -488,61 +830,1124 @@ def _create_alias(a, p):
     return _j(202, {"agentAlias": al})
 
 
-def _invoke_agent(st, s3, aid, alias_id, sid, p):
-    a = _find_agent(st, aid)
-    text = (p.get("inputText") or "").strip()
-    if not text:
-        raise _bad("inputText is required")
-    if alias_id == "TSTALIASID":     # the built-in test alias runs the DRAFT version
-        snap = {"instruction": a["instruction"], "foundationModel": a["foundationModel"], "kbs": list(a["kbs"].values())}
-        if a["agentStatus"] != "PREPARED":
-            raise _conflict("The agent is not in PREPARED state; call PrepareAgent first")
-    else:
-        al = a["aliases"].get(alias_id)
-        if not al:
-            raise _nf(f"Could not find resource: Alias {alias_id} of agent {aid}")
-        snap = (a.get("snapshots") or {}).get(str(al["routingConfiguration"][0]["agentVersion"]))
-        if not snap:
-            raise _nf("Agent version not found")
-    refs, ctx = [], ""
-    for k in snap["kbs"]:
-        if k.get("knowledgeBaseState", "ENABLED") != "ENABLED" or k["knowledgeBaseId"] not in st["kbs"]:
-            continue
-        res = _retrieve(st["kbs"][k["knowledgeBaseId"]], text, 3)
-        refs += res
-        ctx += "\n".join(r["content"]["text"] for r in res) + "\n"
-    sysm = snap["instruction"]
-    if ctx.strip():
-        sysm += "\n\nUse these knowledge base passages when relevant:\n" + ctx
-    hist = (a.setdefault("sessions", {}).setdefault(sid, []))
-    msgs = hist + [{"role": "user", "content": text}]
+# ── action groups -> model tools ──
+_MAX_STEPS = 6
+_REPLAY: dict = {}      # Lambda results of the request in flight: Nano replays the whole handler per awaited model call (llm.arun)
+_TYPES = {"string": "string", "number": "number", "integer": "integer", "boolean": "boolean", "array": "array"}
+
+
+def _gr():
     try:
-        r = llm.chat(msgs, system=sysm, max_tokens=400, temperature=0.4)
-    except llm.LlmUnavailable as e:
-        return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "DependencyFailedException"},
-                "body": json.dumps({"message": f"{e} (the local model has not been started)"}).encode()}
-    hist += [{"role": "user", "content": text}, {"role": "assistant", "content": r["text"]}]
-    del hist[:-20]
+        from core import bedrock_guardrails_core as m
+    except ImportError:
+        import bedrock_guardrails_core as m  # type: ignore
+    return m
+
+
+def _safe(s):
+    return re.sub(r"[^A-Za-z0-9_-]", "_", s)[:60]
+
+
+def _load_openapi(g, s3=None):
+    sch = g.get("apiSchema") or {}
+    txt = sch.get("payload")
+    if txt is None:
+        loc = sch.get("s3") or {}
+        if not loc.get("s3BucketName") or not loc.get("s3ObjectKey"):
+            raise _bad("apiSchema needs either payload or s3 {s3BucketName, s3ObjectKey}")
+        if s3 is None:
+            raise _bad("apiSchema.s3 cannot be read on this substrate")
+        r = _s3c().get_object(s3, loc["s3BucketName"], loc["s3ObjectKey"], {}, {})
+        if r.status != 200:
+            raise _bad(f"Unable to read the API schema s3://{loc['s3BucketName']}/{loc['s3ObjectKey']} (status {r.status}); check the bucket, key and that the object exists")
+        txt = r.body.decode("utf-8", "replace")
+    try:
+        doc = json.loads(txt)
+    except (TypeError, ValueError):
+        try:
+            import yaml  # type: ignore
+            doc = yaml.safe_load(txt)
+        except ImportError:
+            raise _bad("apiSchema.payload is not JSON and PyYAML is not available on this substrate; send the OpenAPI document as JSON")
+        except Exception as e:  # noqa: BLE001
+            raise _bad(f"apiSchema.payload is not valid OpenAPI JSON/YAML: {e}")
+    if not isinstance(doc, dict) or not isinstance(doc.get("paths"), dict) or not str(doc.get("openapi", "")).startswith("3"):
+        raise _bad("apiSchema.payload must be an OpenAPI 3 document with a paths object")
+    return doc
+
+
+def _deref(doc, node):
+    if isinstance(node, dict) and "$ref" in node and str(node["$ref"]).startswith("#/"):
+        cur = doc
+        for part in node["$ref"][2:].split("/"):
+            cur = (cur or {}).get(part, {})
+        return cur or {}
+    return node or {}
+
+
+def _jschema(spec, desc=""):
+    spec = spec or {}
+    t = _TYPES.get(spec.get("type", "string"), "string")
+    out = {"type": t}
+    d = spec.get("description") or desc
+    if d:
+        out["description"] = d
+    if t == "array":
+        out["items"] = {}
+    return out
+
+
+def _group_tools(g, s3=None):
+    """-> list of {name, description, parameters (JSON schema), kind, group, meta, executor} for one ENABLED action group."""
+    if g.get("actionGroupState", "ENABLED") != "ENABLED":
+        return []
+    ex = g.get("actionGroupExecutor") or {}
+    out = []
+    gname = g["actionGroupName"]
+    sig = g.get("parentActionGroupSignature")
+    if sig == "AMAZON.UserInput":
+        return [{"name": "AMAZON_UserInput__askuser", "description": "Ask the user a question when information needed to continue is missing; the question is returned to the user as the agent's reply.",
+                 "parameters": {"type": "object", "properties": {"question": {"type": "string", "description": "the question for the user"}}, "required": ["question"]},
+                 "kind": "userinput", "group": gname, "meta": {}, "executor": ex}]
+    if sig == "AMAZON.CodeInterpreter":
+        return [{"name": "AMAZON_CodeInterpreter__execute", "description": "Write and run Python code in a sandbox to compute, analyse data or build files; returns stdout, errors and any files written.",
+                 "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "Python source to run"}}, "required": ["code"]},
+                 "kind": "code", "group": gname, "meta": {}, "executor": ex}]
+    for fn in ((g.get("functionSchema") or {}).get("functions") or []):
+        props, req = {}, []
+        for pn, ps in (fn.get("parameters") or {}).items():
+            props[pn] = _jschema(ps)
+            if ps.get("required"):
+                req.append(pn)
+        out.append({"name": f"{_safe(gname)}__{_safe(fn['name'])}", "description": fn.get("description") or fn["name"],
+                    "parameters": {"type": "object", "properties": props, "required": req}, "kind": "function", "group": gname,
+                    "meta": {"function": fn["name"], "confirm": fn.get("requireConfirmation") == "ENABLED"}, "executor": ex})
+    if g.get("apiSchema"):
+        doc = _load_openapi(g, s3)
+        for path, item in doc["paths"].items():
+            for verb, op in (item or {}).items():
+                if verb.lower() not in ("get", "post", "put", "delete", "patch") or not isinstance(op, dict):
+                    continue
+                props, req, inbody = {}, [], []
+                for prm in op.get("parameters") or []:
+                    prm = _deref(doc, prm)
+                    props[prm["name"]] = _jschema(_deref(doc, prm.get("schema")), prm.get("description", ""))
+                    if prm.get("required"):
+                        req.append(prm["name"])
+                rb = _deref(doc, (((op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema"))
+                for pn, ps in (rb.get("properties") or {}).items():
+                    props[pn] = _jschema(_deref(doc, ps))
+                    inbody.append(pn)
+                    if pn in (rb.get("required") or []):
+                        req.append(pn)
+                oid = op.get("operationId") or f"{verb}_{path}"
+                out.append({"name": f"{_safe(gname)}__{_safe(oid)}", "description": op.get("description") or op.get("summary") or oid,
+                            "parameters": {"type": "object", "properties": props, "required": req}, "kind": "api", "group": gname,
+                            "meta": {"apiPath": path, "httpMethod": verb.upper(), "inbody": inbody,
+                                    "confirm": str(op.get("x-requireConfirmation", "")).upper() == "ENABLED"}, "executor": ex})
+    return out
+
+
+def _arg_text(v):
+    return v if isinstance(v, str) else json.dumps(v)
+
+
+def _arg_params(t, args):
+    """Arguments -> Bedrock Parameter lists [{name,type,value}] (values are strings, as the real agent sends them): (plain, in request body)."""
+    props = t["parameters"]["properties"]
+    inb = set(t["meta"].get("inbody") or [])
+    plain = [{"name": k, "type": props.get(k, {}).get("type", "string"), "value": _arg_text(v)} for k, v in args.items() if k not in inb]
+    body = [{"name": k, "type": props.get(k, {}).get("type", "string"), "value": _arg_text(v)} for k, v in args.items() if k in inb]
+    return plain, body
+
+
+def _lambda_name(arn):
+    return arn.split(":function:")[1].split(":")[0] if ":function:" in arn else arn
+
+
+def _run_lambda(lam, t, args, ctx):
+    """Invoke the action-group Lambda with the Bedrock Agents event; -> (result text, sessionAttributes|None, is_error)."""
+    plain, body = _arg_params(t, args)
+    ev = {"messageVersion": "1.0", "agent": {"name": ctx["agent"]["agentName"], "id": ctx["agent"]["agentId"], "alias": ctx["alias"], "version": ctx["version"]},
+          "inputText": ctx["text"], "sessionId": ctx["sid"], "actionGroup": t["group"], "parameters": plain,
+          "sessionAttributes": ctx["sess"].get("attrs") or {}, "promptSessionAttributes": ctx["prompt_attrs"]}
+    if t["kind"] == "function":
+        ev["function"] = t["meta"]["function"]
+    else:
+        ev["apiPath"], ev["httpMethod"] = t["meta"]["apiPath"], t["meta"]["httpMethod"]
+        ev["requestBody"] = {"content": {"application/json": {"properties": body}}}
+    key = json.dumps([ctx["sid"], ctx["req"], t["name"], args], sort_keys=True, default=str)
+    if key in _REPLAY:
+        return _REPLAY[key]
+    if lam is None:
+        res = ("Lambda is unavailable on this substrate", None, True)
+    else:
+        try:
+            from core import lambda_core
+        except ImportError:
+            import lambda_core  # type: ignore
+        r = lambda_core._invoke(lam, _lambda_name(t["executor"]["lambda"]), json.dumps(ev).encode())
+        raw = (r.body or b"").decode("utf-8", "replace")
+        hdrs = {str(k).lower() for k in (r.headers or {})}
+        if r.status >= 400 or "x-amz-function-error" in hdrs:
+            res = (raw[:2000], None, True)
+        else:
+            try:
+                doc = json.loads(raw)
+            except ValueError:
+                doc = None
+            resp = doc.get("response") if isinstance(doc, dict) else None
+            if not isinstance(resp, dict):
+                res = (raw[:4000], None, False)       # not the agent response contract: hand the model what the function returned
+            else:
+                rb = (resp.get("functionResponse") or {}).get("responseBody") if t["kind"] == "function" else resp.get("responseBody")
+                txt = next((v.get("body", "") for v in (rb or {}).values() if isinstance(v, dict)), "")
+                bad = t["kind"] == "api" and int(resp.get("httpStatusCode", 200)) >= 400
+                res = (txt if isinstance(txt, str) else json.dumps(txt), doc.get("sessionAttributes"), bad)
+    _REPLAY[key] = res
+    return res
+
+
+def _rc_inputs(t, args, confirm=False):
+    plain, body = _arg_params(t, args)
+    typ = "CONFIRM" if confirm else "RESULT"
+    if t["kind"] == "function":
+        return {"functionInvocationInput": {"actionGroup": t["group"], "actionInvocationType": typ, "function": t["meta"]["function"], "parameters": plain}}
+    d = {"actionGroup": t["group"], "actionInvocationType": typ, "apiPath": t["meta"]["apiPath"], "httpMethod": t["meta"]["httpMethod"], "parameters": plain}
+    if body:
+        d["requestBody"] = {"content": {"application/json": body}}
+    return {"apiInvocationInput": d}
+
+
+def _rc_match(t, res):
+    if t["kind"] == "function":
+        f = res.get("functionResult")
+        return bool(f) and f.get("actionGroup") == t["group"] and f.get("function") == t["meta"]["function"]
+    x = res.get("apiResult")
+    return bool(x) and x.get("actionGroup") == t["group"] and x.get("apiPath") == t["meta"]["apiPath"] and str(x.get("httpMethod", "")).upper() == t["meta"]["httpMethod"]
+
+
+def _rc_text(res):
+    body = (res.get("functionResult") or res.get("apiResult") or {}).get("responseBody") or {}
+    return next((v.get("body", "") for v in body.values() if isinstance(v, dict)), "")
+
+
+# ── session memory (SESSION_SUMMARY) ──
+def _mem_cfg(snap):
+    mc = snap.get("memoryConfiguration") or {}
+    return mc if "SESSION_SUMMARY" in (mc.get("enabledMemoryTypes") or []) else None
+
+
+def _memories(a, alias_id, mid):
+    return a.setdefault("memories", {}).setdefault(alias_id, {}).setdefault(mid, [])
+
+
+def _live_memories(a, alias_id, mid):
+    now = time.time()
+    return [m for m in (a.get("memories") or {}).get(alias_id, {}).get(mid, []) if m["_expires"] > now]
+
+
+def _summarise(transcript):
+    r = llm.chat([{"role": "user", "content": "Summarise this conversation in two or three sentences, keeping names, preferences and open requests:\n\n" + transcript}],
+                 system="You write short factual conversation summaries.", max_tokens=200, temperature=0.2)
+    return r["text"].strip()
+
+
+def _memory_op(a, alias_id, method, query):
+    if alias_id != "TSTALIASID" and alias_id not in a["aliases"]:
+        raise _nf(f"Could not find resource: Alias {alias_id} of agent {a['agentId']}")
+    _sweep(a)
+    q = query or {}
+    mid = q.get("memoryId")
+    if method == "GET":
+        if q.get("memoryType") != "SESSION_SUMMARY":
+            raise _bad("1 validation error detected: Value at 'memoryType' failed to satisfy constraint: Member must satisfy enum value set: [SESSION_SUMMARY]")
+        if not mid:
+            raise _bad("memoryId is required")
+        items = sorted(_live_memories(a, alias_id, mid), key=lambda m: m["sessionSummary"]["sessionStartTime"], reverse=True)
+        n = int(q.get("maxItems") or 100)
+        off = int(q["nextToken"]) if str(q.get("nextToken") or "").isdigit() else 0
+        doc = {"memoryContents": [{"sessionSummary": m["sessionSummary"]} for m in items[off:off + n]]}
+        if off + n < len(items):
+            doc["nextToken"] = str(off + n)
+        return _j(200, doc)
+    mem = (a.get("memories") or {}).get(alias_id, {})
+    sid = q.get("sessionId")
+    for k in ([mid] if mid else list(mem)):
+        if k in mem:
+            mem[k] = [m for m in mem[k] if m["sessionSummary"]["sessionId"] != sid] if sid else []
+    return _j(202, {})
+
+
+# ── custom prompts / parser Lambdas ──
+_PROMPT_TYPES = ("PRE_PROCESSING", "ORCHESTRATION", "POST_PROCESSING", "KNOWLEDGE_BASE_RESPONSE_GENERATION", "MEMORY_SUMMARIZATION", "ROUTING_CLASSIFIER")
+_LAMBDA_ARN = re.compile(r"^arn:aws(-[a-z]+)*:lambda:[a-z0-9-]+:\d{12}:function:[A-Za-z0-9_-]+(:[A-Za-z0-9_$-]+)?$")
+
+
+def _check_prompt_override(po):
+    if po is None:
+        return
+    cfgs = po.get("promptConfigurations")
+    if not isinstance(cfgs, list) or not cfgs:
+        raise _bad("promptOverrideConfiguration.promptConfigurations must list at least one prompt configuration")
+    seen, parser = set(), False
+    for c in cfgs:
+        t = c.get("promptType")
+        if t not in _PROMPT_TYPES:
+            raise _bad(f"promptType must be one of {list(_PROMPT_TYPES)}")
+        if t in seen:
+            raise _bad(f"promptType {t} is configured twice")
+        seen.add(t)
+        if c.get("promptCreationMode") not in ("DEFAULT", "OVERRIDDEN"):
+            raise _bad(f"{t}: promptCreationMode must be DEFAULT or OVERRIDDEN")
+        if c.get("promptState") not in (None, "ENABLED", "DISABLED"):
+            raise _bad(f"{t}: promptState must be ENABLED or DISABLED")
+        if c["promptCreationMode"] == "OVERRIDDEN" and not str(c.get("basePromptTemplate") or "").strip():
+            raise _bad(f"{t}: basePromptTemplate is required when promptCreationMode is OVERRIDDEN")
+        if len(str(c.get("basePromptTemplate") or "")) > 100000:
+            raise _bad(f"{t}: basePromptTemplate must not exceed 100000 characters")
+        inf = c.get("inferenceConfiguration") or {}
+        for k, lo, hi in (("temperature", 0, 1), ("topP", 0, 1), ("topK", 0, 500), ("maximumLength", 0, 8192)):
+            if k in inf and not lo <= float(inf[k]) <= hi:
+                raise _bad(f"{t}: inferenceConfiguration.{k} must be between {lo} and {hi}")
+        if c.get("parserMode") not in (None, "DEFAULT", "OVERRIDDEN"):
+            raise _bad(f"{t}: parserMode must be DEFAULT or OVERRIDDEN")
+        parser = parser or c.get("parserMode") == "OVERRIDDEN"
+    ov = po.get("overrideLambda")
+    if ov is not None and not _LAMBDA_ARN.match(str(ov)):
+        raise _bad("promptOverrideConfiguration.overrideLambda must be a Lambda function ARN")
+    if parser and not ov:
+        raise _bad("promptOverrideConfiguration.overrideLambda is required when a prompt configuration sets parserMode OVERRIDDEN")
+    if ov and not parser:
+        raise _bad("overrideLambda was given but no prompt configuration sets parserMode OVERRIDDEN")
+
+
+def _pcfg(snap, ptype):
+    """-> the prompt configuration of `ptype` (or None)."""
+    for c in (snap.get("promptOverrideConfiguration") or {}).get("promptConfigurations") or []:
+        if c["promptType"] == ptype:
+            return c
+    return None
+
+
+def _render(tpl, vals):
+    return re.sub(r"\$([a-zA-Z_]+)\$", lambda m: str(vals.get(m.group(1), m.group(0))), tpl)
+
+
+def _kb_response_generation(snap, lam, ctx, tr, fm, infer, infer_kw, query, results):
+    """KNOWLEDGE_BASE_RESPONSE_GENERATION: the agent's own prompt template ($query$, $search_results$, $output_format_instructions$) is rendered over the
+    retrieved passages and run on the model; the parser Lambda (parserMode OVERRIDDEN) may rewrite the output (generatedResponse.generatedResponseParts).
+    -> the generated text, or None when the prompt is not overridden / DISABLED (the retrieved passages then go to orchestration verbatim)."""
+    c = _pcfg(snap, "KNOWLEDGE_BASE_RESPONSE_GENERATION")
+    if not c or c.get("promptCreationMode") != "OVERRIDDEN":
+        return None
+    tid = _tid()
+    if c.get("promptState") == "DISABLED":
+        tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": "Knowledge base response generation is disabled (promptState DISABLED): passages used verbatim."}})
+        return None
+    sr = "<search_results>" + "".join(f"<search_result><content>{r['content']['text']}</content><source>{i + 1}</source></search_result>" for i, r in enumerate(results)) + "</search_results>"
+    prompt = _render(c["basePromptTemplate"], {"query": query, "search_results": sr, "output_format_instructions": "", "question": query})
+    tr("orchestrationTrace", {"modelInvocationInput": {"traceId": tid, "type": "KNOWLEDGE_BASE_RESPONSE_GENERATION", "foundationModel": fm,
+                                                       "inferenceConfiguration": (c.get("inferenceConfiguration") or infer), "text": prompt}})
+    rr = llm.chat([{"role": "user", "content": prompt}], system=snap["instruction"], **infer_kw(c, 400))
+    raw, text = rr["text"], rr["text"]
+    doc = _parser_lambda(lam, snap, "KNOWLEDGE_BASE_RESPONSE_GENERATION", ctx, raw)
+    if doc is not None:
+        gr = (doc.get("knowledgeBaseResponseGenerationParsedResponse") or {}).get("generatedResponse")
+        if isinstance(gr, dict):
+            text = "".join(pt.get("text", "") for pt in gr.get("generatedResponseParts") or []) or text
+        elif isinstance(gr, str):
+            text = gr
+    tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": raw},
+                                                       "metadata": {"usage": {"inputTokens": rr["input_tokens"], "outputTokens": rr["output_tokens"]}}}})
+    return text
+
+
+def _parser_lambda(lam, snap, ptype, ctx, raw):
+    """Invoke the parser Lambda (overrideLambda) with the real OUTPUT_PARSER event -> the response document, or None."""
+    c = _pcfg(snap, ptype)
+    if not c or c.get("parserMode") != "OVERRIDDEN":
+        return None
+    arn = snap["promptOverrideConfiguration"]["overrideLambda"]
+    ev = {"messageVersion": "1.0", "agent": {"name": ctx["agent"]["agentName"], "id": ctx["agent"]["agentId"], "alias": ctx["alias"], "version": ctx["version"]},
+          "invokeModelRawResponse": raw, "promptType": ptype, "overrideType": "OUTPUT_PARSER"}
+    key = json.dumps(["parser", ctx["sid"], ctx["req"], ptype, raw], sort_keys=True, default=str)
+    if key in _REPLAY:
+        return _REPLAY[key]
+    if lam is None:
+        raise _bad("The parser Lambda cannot be invoked on this substrate")
+    try:
+        from core import lambda_core
+    except ImportError:
+        import lambda_core  # type: ignore
+    r = lambda_core._invoke(lam, _lambda_name(arn), json.dumps(ev).encode())
+    if r.status >= 400 or "x-amz-function-error" in {str(k).lower() for k in (r.headers or {})}:
+        raise _Err("DependencyFailedException", f"The parser Lambda for {ptype} failed: {(r.body or b'')[:300].decode('utf-8', 'replace')}", 424)
+    try:
+        doc = json.loads((r.body or b"{}").decode())
+    except ValueError:
+        raise _Err("DependencyFailedException", f"The parser Lambda for {ptype} did not return JSON", 424)
+    _REPLAY[key] = doc
+    return doc
+
+
+# ── guardrail / memory config validation (CreateAgent / UpdateAgent) ──
+def _check_agent_cfg(p):
+    g = p.get("guardrailConfiguration")
+    if g is not None:
+        if not g.get("guardrailIdentifier") or not g.get("guardrailVersion"):
+            raise _bad("guardrailConfiguration requires guardrailIdentifier and guardrailVersion")
+        gr = _gr()
+        try:
+            gr.resolve_policy(g["guardrailIdentifier"], str(g["guardrailVersion"]))
+        except gr.GErr as e:
+            raise _Err(e.code, e.msg, e.status)
+    ac = p.get("agentCollaboration")
+    if ac is not None and ac not in ("DISABLED", "SUPERVISOR", "SUPERVISOR_ROUTER"):
+        raise _bad("1 validation error detected: Value at 'agentCollaboration' failed to satisfy constraint: Member must satisfy enum value set: [DISABLED, SUPERVISOR, SUPERVISOR_ROUTER]")
+    _check_prompt_override(p.get("promptOverrideConfiguration"))
+    m = p.get("memoryConfiguration")
+    if m is not None:
+        types = m.get("enabledMemoryTypes")
+        if not isinstance(types, list) or not types or any(t != "SESSION_SUMMARY" for t in types):
+            raise _bad("memoryConfiguration.enabledMemoryTypes must be [SESSION_SUMMARY]")
+        if not 0 <= int(m.get("storageDays", 30)) <= 365:
+            raise _bad("memoryConfiguration.storageDays must be between 0 and 365")
+
+
+_SIGNATURES = ("AMAZON.UserInput", "AMAZON.CodeInterpreter")
+
+
+def _check_action_group(p, update=False, s3=None):
+    if not update and not p.get("actionGroupName"):
+        raise _bad("actionGroupName is required")
+    sig = p.get("parentActionGroupSignature")
+    if sig is not None:
+        if sig not in _SIGNATURES:
+            raise _bad(f"parentActionGroupSignature must be one of {list(_SIGNATURES)} (AMAZON.KnowledgeBaseLookup is not an action group in Vyomi: associate a knowledge base instead)")
+        if p.get("actionGroupExecutor") or p.get("apiSchema") or p.get("functionSchema"):
+            raise _bad("A built-in action group (parentActionGroupSignature) takes no executor, apiSchema or functionSchema")
+        return
+    if p.get("apiSchema") and p.get("functionSchema"):
+        raise _bad("Provide either apiSchema or functionSchema, not both")
+    ex = p.get("actionGroupExecutor")
+    if ex is not None:
+        if ex.get("customControl") is not None:
+            if ex["customControl"] != "RETURN_CONTROL":
+                raise _bad("actionGroupExecutor.customControl must be RETURN_CONTROL")
+        elif not re.match(r"^arn:aws(-[a-z]+)*:lambda:[a-z0-9-]+:\d{12}:function:[A-Za-z0-9_-]+(:[A-Za-z0-9_$-]+)?$", str(ex.get("lambda") or "")):
+            raise _bad("actionGroupExecutor.lambda must be a Lambda function ARN (or use customControl RETURN_CONTROL)")
+    if p.get("apiSchema"):
+        _load_openapi(p, s3)
+    fs = (p.get("functionSchema") or {}).get("functions")
+    if p.get("functionSchema") is not None and (not isinstance(fs, list) or not fs):
+        raise _bad("functionSchema.functions must list at least one function")
+    for fn in fs or []:
+        if not fn.get("name"):
+            raise _bad("each function needs a name")
+        if fn.get("requireConfirmation") not in (None, "ENABLED", "DISABLED"):
+            raise _bad(f"function {fn['name']}: requireConfirmation must be ENABLED or DISABLED")
+        for pn, ps in (fn.get("parameters") or {}).items():
+            if ps.get("type") not in _TYPES:
+                raise _bad(f"parameter {pn} of {fn['name']}: type must be one of {sorted(_TYPES)}")
+
+
+def _action_group(a, p, gid=None, s3=None):
+    _check_action_group(p, s3=s3)
+    now = _iso()
+    g = {"agentId": a["agentId"], "agentVersion": "DRAFT", "actionGroupId": gid or _rid(), "actionGroupName": p["actionGroupName"], "description": p.get("description", ""),
+         "actionGroupState": p.get("actionGroupState", "ENABLED"), "actionGroupExecutor": p.get("actionGroupExecutor"),
+         "apiSchema": p.get("apiSchema"), "functionSchema": p.get("functionSchema"), "createdAt": now, "updatedAt": now}
+    if p.get("parentActionGroupSignature"):
+        g["parentActionGroupSignature"] = p["parentActionGroupSignature"]
+    return g
+
+
+# ── the orchestration loop ──
+def _evt(kind, payload):
     try:
         from core import ai_models_core as am
     except ImportError:
         import ai_models_core as am  # type: ignore
-    part = {"bytes": base64.b64encode(r["text"].encode()).decode()}
-    if refs:
-        part["attribution"] = {"citations": [{"generatedResponsePart": {"textResponsePart": {"text": r["text"], "span": {"start": 0, "end": len(r["text"])}}},
-                                              "retrievedReferences": [{k: v for k, v in x.items() if k != "score"} for x in refs[:3]]}]}
-    body = am.eventstream_frame("chunk", part)
-    return {"status": 200, "headers": {"content-type": "application/vnd.amazon.eventstream", "x-amz-bedrock-agent-session-id": sid,
-                                        "x-amzn-bedrock-agent-content-type": "application/json"}, "body": body}
+    return am.eventstream_frame(kind, payload)
+
+
+def _tid(n=0):
+    return f"{_rid(8, string.ascii_lowercase + string.digits)}-{_rid(4, string.ascii_lowercase + string.digits)}-{n}"
+
+
+def _unavailable(e):
+    return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "DependencyFailedException"},
+            "body": json.dumps({"message": f"{e} (the local model has not been started)"}).encode()}
+
+
+def _invoke_agent(st, s3, aid, alias_id, sid, p, lam=None, inline=None):
+    try:
+        out = _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam, inline=inline)
+    except llm.NeedAsync:
+        raise                                         # the request will be replayed: keep the memoised Lambda results
+    except llm.LlmUnavailable as e:                   # router / custom-prompt / summary model calls outside the orchestration loop
+        _REPLAY.clear()
+        return _unavailable(e)
+    except BaseException:
+        _REPLAY.clear()
+        raise
+    _REPLAY.clear()
+    return out
+
+
+# ── collaborators, sessions, code interpreter ──
+_MAX_DEPTH = 3
+_ALIAS_ARN = re.compile(r"^arn:aws(-[a-z]+)*:bedrock:[a-z0-9-]+:\d{12}:agent-alias/([0-9A-Za-z]{10})/([0-9A-Za-z]{10})$")
+
+
+def _collab_view(a, c):
+    return {"agentId": a["agentId"], "agentVersion": "DRAFT", "agentDescriptor": c["agentDescriptor"], "collaboratorId": c["collaboratorId"],
+            "collaboratorName": c["collaboratorName"], "collaborationInstruction": c["collaborationInstruction"],
+            "relayConversationHistory": c.get("relayConversationHistory", "DISABLED"), "createdAt": c["createdAt"], "lastUpdatedAt": c["lastUpdatedAt"]}
+
+
+def _reaches(st, aid, target, seen=None):
+    seen = seen or set()
+    if aid in seen:
+        return False
+    seen.add(aid)
+    a = st["agents"].get(aid)
+    for c in ((a or {}).get("collaborators") or {}).values():
+        m = _ALIAS_ARN.match(c["agentDescriptor"]["aliasArn"])
+        if m and (m.group(2) == target or _reaches(st, m.group(2), target, seen)):
+            return True
+    return False
+
+
+def _collab_check(st, a, p, cur=None):
+    if a.get("agentCollaboration", "DISABLED") not in ("SUPERVISOR", "SUPERVISOR_ROUTER"):
+        raise _bad("The agent must have agentCollaboration set to SUPERVISOR or SUPERVISOR_ROUTER before collaborators can be associated")
+    arn = (p.get("agentDescriptor") or {}).get("aliasArn")
+    m = _ALIAS_ARN.match(str(arn or ""))
+    if not m:
+        raise _bad("agentDescriptor.aliasArn must be an agent alias ARN (arn:aws:bedrock:<region>:<account>:agent-alias/<agentId>/<aliasId>)")
+    other = st["agents"].get(m.group(2))
+    if not other or (m.group(3) != "TSTALIASID" and m.group(3) not in other["aliases"]):
+        raise _nf(f"Could not find resource: agent alias {m.group(3)} of agent {m.group(2)}")
+    if other["agentId"] == a["agentId"] or _reaches(st, other["agentId"], a["agentId"]):
+        raise _bad("A collaborator cannot be the supervisor itself or an agent that (transitively) collaborates with it")
+    name = p.get("collaboratorName")
+    if not name or not re.match(r"^([0-9a-zA-Z][_-]?){1,100}$", name):
+        raise _bad("1 validation error detected: Value at 'collaboratorName' failed to satisfy constraint: Member must satisfy regular expression pattern: ^([0-9a-zA-Z][_-]?){1,100}$")
+    if not p.get("collaborationInstruction"):
+        raise _bad("collaborationInstruction is required")
+    if p.get("relayConversationHistory") not in (None, "TO_COLLABORATOR", "DISABLED"):
+        raise _bad("relayConversationHistory must be TO_COLLABORATOR or DISABLED")
+    if any(c["collaboratorName"] == name and c is not cur for c in (a.get("collaborators") or {}).values()):
+        raise _conflict(f"A collaborator named {name} is already associated with this agent")
+
+
+def _collaborators_op(st, a, method, segs, p):
+    cs = a.setdefault("collaborators", {})
+    if len(segs) == 5:
+        if method == "PUT":
+            _collab_check(st, a, p)
+            now = _iso()
+            c = {"collaboratorId": _rid(), "agentDescriptor": {"aliasArn": p["agentDescriptor"]["aliasArn"]}, "collaboratorName": p["collaboratorName"],
+                 "collaborationInstruction": p["collaborationInstruction"], "relayConversationHistory": p.get("relayConversationHistory", "DISABLED"),
+                 "createdAt": now, "lastUpdatedAt": now}
+            cs[c["collaboratorId"]] = c
+            a["agentStatus"] = "NOT_PREPARED"
+            return _j(200, {"agentCollaborator": _collab_view(a, c)})
+        if method == "POST":
+            return _j(200, {"agentCollaboratorSummaries": [_collab_view(a, c) for c in cs.values()]})
+        return None
+    c = cs.get(segs[5])
+    if not c:
+        raise _nf(f"Could not find resource: collaborator {segs[5]}")
+    if method == "GET":
+        return _j(200, {"agentCollaborator": _collab_view(a, c)})
+    if method == "PUT":
+        _collab_check(st, a, p, cur=c)
+        c.update(agentDescriptor={"aliasArn": p["agentDescriptor"]["aliasArn"]}, collaboratorName=p["collaboratorName"],
+                 collaborationInstruction=p["collaborationInstruction"], relayConversationHistory=p.get("relayConversationHistory", c.get("relayConversationHistory", "DISABLED")), lastUpdatedAt=_iso())
+        a["agentStatus"] = "NOT_PREPARED"
+        return _j(200, {"agentCollaborator": _collab_view(a, c)})
+    if method == "DELETE":
+        del cs[segs[5]]
+        a["agentStatus"] = "NOT_PREPARED"
+        return _j(204, None)
+    return None
+
+
+def _draft_snap(a):
+    return {"instruction": a["instruction"], "foundationModel": a["foundationModel"], "kbs": list(a["kbs"].values()),
+            "actionGroups": [dict(g) for g in a["actionGroups"].values()], "guardrailConfiguration": a.get("guardrailConfiguration"),
+            "memoryConfiguration": a.get("memoryConfiguration"), "promptOverrideConfiguration": a.get("promptOverrideConfiguration"),
+            "agentCollaboration": a.get("agentCollaboration", "DISABLED"), "collaborators": list((a.get("collaborators") or {}).values()),
+            "idleSessionTTLInSeconds": a["idleSessionTTLInSeconds"]}
+
+
+def _snap_for(a, alias_id):
+    if alias_id == "TSTALIASID":
+        return _draft_snap(a), "DRAFT"
+    al = a["aliases"].get(alias_id)
+    if not al:
+        return None, None
+    ver = str(al["routingConfiguration"][0]["agentVersion"])
+    return (a.get("snapshots") or {}).get(ver), ver
+
+
+def _summarise_with(snap, transcript):
+    c = _pcfg(snap, "MEMORY_SUMMARIZATION")
+    if c and c.get("promptState") == "DISABLED":
+        return None
+    if c and c.get("promptCreationMode") == "OVERRIDDEN":
+        inf = c.get("inferenceConfiguration") or {}
+        prompt = _render(c["basePromptTemplate"], {"conversation": transcript, "past_conversation_summary": "", "question": transcript})
+        r = llm.chat([{"role": "user", "content": prompt}], system="You write short factual conversation summaries.", max_tokens=int(inf.get("maximumLength") or 200),
+                     temperature=float(inf.get("temperature", 0.2)))
+        return r["text"].strip()
+    return _summarise(transcript)
+
+
+def _store_summary(a, snap, alias_id, sid, mid, sess, days):
+    tx = "\n".join(f"{m['role']}: {m['content']}" for m in sess["history"])
+    txt = _summarise_with(snap, tx)
+    if txt is None:
+        return
+    ent = {"sessionId": sid, "memoryId": mid, "sessionStartTime": _iso(sess.get("started", time.time())), "sessionExpiryTime": _iso(time.time() + days * 86400), "summaryText": txt}
+    lst = _memories(a, alias_id, mid)
+    lst[:] = [m for m in lst if m["sessionSummary"]["sessionId"] != sid] + [{"sessionSummary": ent, "_expires": time.time() + days * 86400}]
+    keep = int(((snap.get("memoryConfiguration") or {}).get("sessionSummaryConfiguration") or {}).get("maxRecentSessions", 20))
+    lst[:] = sorted(lst, key=lambda m: m["sessionSummary"]["sessionStartTime"])[-keep:]
+
+
+def _sweep(a):
+    """Idle-timeout expiry: a session untouched for idleSessionTTLInSeconds ends; with SESSION_SUMMARY memory its transcript is summarised first
+    (lazily, on the next request that touches the agent, since there is no background clock inside Nano's request/response model)."""
+    now = time.time()
+    for sid, sess in list((a.get("sessions") or {}).items()):
+        if not isinstance(sess, dict):
+            continue
+        ttl = int(sess.get("ttl") or a.get("idleSessionTTLInSeconds") or 600)
+        if now - float(sess.get("last", now)) <= ttl:
+            continue
+        mid, alias_id = sess.get("mid"), sess.get("alias")
+        if mid and alias_id and sess.get("history"):
+            snap, _v = _snap_for(a, alias_id)
+            mc = _mem_cfg(snap or {})
+            if mc:
+                _store_summary(a, snap, alias_id, sid, mid, sess, int(mc.get("storageDays", 30)))
+        a["sessions"].pop(sid, None)
+
+
+def _ci_files_in(sstate, s3, sess):
+    """sessionState.files with useCase CODE_INTERPRETER -> sess['ci_files'] {name: base64}."""
+    for f in sstate.get("files") or []:
+        if f.get("useCase", "CODE_INTERPRETER") != "CODE_INTERPRETER":
+            raise _bad(f"sessionState.files[{f.get('name')}]: useCase CHAT (multimodal chat attachments) is not supported; use CODE_INTERPRETER")
+        src = f.get("source") or {}
+        if src.get("sourceType") == "S3":
+            uri = (src.get("s3Location") or {}).get("uri", "")
+            m = re.match(r"^s3://([^/]+)/(.+)$", uri)
+            if not m:
+                raise _bad(f"sessionState.files[{f.get('name')}]: s3Location.uri must be s3://bucket/key")
+            r = _s3c().get_object(s3, m.group(1), m.group(2), {}, {})
+            if r.status != 200:
+                raise _bad(f"Unable to read {uri}")
+            raw = r.body
+        else:
+            d = (src.get("byteContent") or {}).get("data")
+            if d is None:
+                raise _bad(f"sessionState.files[{f.get('name')}]: byteContent.data is required")
+            raw = base64.b64decode(d) if isinstance(d, str) else bytes(d)
+        if len(raw) > (1 << 20):
+            raise _bad(f"sessionState.files[{f.get('name')}] exceeds the 1 MiB code interpreter file limit")
+        sess.setdefault("ci_files", {})[os.path.basename(f["name"])] = base64.b64encode(raw).decode()
+
+
+def _run_code(sess, code, ctx):
+    key = json.dumps(["code", ctx["sid"], ctx["req"], code], sort_keys=True)
+    if key in _REPLAY:
+        return _REPLAY[key]
+    try:
+        from core import code_sandbox_core as cs
+    except ImportError:
+        import code_sandbox_core as cs  # type: ignore
+    files = {n: base64.b64decode(v) for n, v in (sess.get("ci_files") or {}).items()}
+    res = cs.run(code, files=files, timeout=10.0)
+    for n, v in res["files"].items():
+        sess.setdefault("ci_files", {})[n] = base64.b64encode(v).decode()
+    _REPLAY[key] = res
+    return res
+
+
+def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam, inline=None, sink=None, chain=None):
+    if inline is not None:
+        a, snap, version = inline["agent"], inline["snap"], "DRAFT"
+    else:
+        a = _find_agent(st, aid)
+    sstate = p.get("sessionState") or {}
+    results = sstate.get("returnControlInvocationResults")
+    text = (p.get("inputText") or "").strip()
+    if not text and not results:
+        raise _bad("inputText is required")
+    if inline is None:
+        if alias_id == "TSTALIASID":     # the built-in test alias runs the DRAFT version
+            snap, version = _draft_snap(a), "DRAFT"
+            if a["agentStatus"] != "PREPARED":
+                raise _conflict("The agent is not in PREPARED state; call PrepareAgent first")
+        else:
+            al = a["aliases"].get(alias_id)
+            if not al:
+                raise _nf(f"Could not find resource: Alias {alias_id} of agent {aid}")
+            version = str(al["routingConfiguration"][0]["agentVersion"])
+            snap = (a.get("snapshots") or {}).get(version)
+            if not snap:
+                raise _nf("Agent version not found")
+    mid = p.get("memoryId")
+    if mid is not None and not 1 <= len(mid) <= 100:
+        raise _bad("memoryId must be between 1 and 100 characters")
+    if chain is None:
+        _sweep(a)
+    sess = a.setdefault("sessions", {}).get(sid)
+    if isinstance(sess, list):
+        sess = {"history": sess}
+    sess = json.loads(json.dumps(sess)) if sess else {}          # work on a copy: committed only when the request completes (replay-safe)
+    sess.setdefault("history", [])
+    sess.setdefault("started", time.time())
+    sess["alias"], sess["version"], sess["ttl"] = alias_id, version, int(snap.get("idleSessionTTLInSeconds") or a.get("idleSessionTTLInSeconds") or 600)
+    if mid:
+        sess["mid"] = mid
+    if sstate.get("sessionAttributes"):
+        sess["attrs"] = dict(sstate["sessionAttributes"])
+    _ci_files_in(sstate, s3, sess)
+    ctx = {"agent": a, "alias": alias_id, "version": version, "sid": sid, "sess": sess, "text": text, "prompt_attrs": dict(sstate.get("promptSessionAttributes") or {}),
+           "req": hashlib.md5(json.dumps(p, sort_keys=True, default=str).encode()).hexdigest()[:12]}
+    trace_on = bool(p.get("enableTrace"))
+    frames: list = []
+    tframes: list = []
+    base = {"agentId": aid, "agentAliasId": alias_id, "agentVersion": version, "sessionId": sid}
+    me_arn = f"arn:aws:bedrock:{_REGION}:{_ACCT}:agent-alias/{aid}/{alias_id}"
+    if chain is not None:
+        base["callerChain"] = [{"agentAliasArn": x} for x in chain + [me_arn]]
+        base["collaboratorName"] = p.get("_collaboratorName", "")
+
+    def tr(part, body):
+        if trace_on:
+            f = _evt("trace", dict(base, eventTime=_iso(), trace={part: body}))
+            frames.append(f)
+            tframes.append(f)
+
+    tools = []
+    for g in snap.get("actionGroups") or []:
+        tools += _group_tools(g, s3)
+    collabs = list(snap.get("collaborators") or []) if snap.get("agentCollaboration") in ("SUPERVISOR", "SUPERVISOR_ROUTER") else []
+    for c in collabs:
+        tools.append({"name": "agentcollaborator__" + _safe(c["collaboratorName"]), "description": c["collaborationInstruction"],
+                      "parameters": {"type": "object", "properties": {"input": {"type": "string", "description": "the request to hand to the collaborator agent"}}, "required": ["input"]},
+                      "kind": "collab", "group": c["collaboratorName"], "meta": {"collab": c}, "executor": {}})
+    reg = {t["name"]: t for t in tools}
+    gcfg = snap.get("guardrailConfiguration")
+    gr = _gr() if gcfg else None
+    fm = snap["foundationModel"]
+    ocfg = _pcfg(snap, "ORCHESTRATION")
+    oinf = (ocfg or {}).get("inferenceConfiguration") or {}
+    infer = {"maximumLength": int(oinf.get("maximumLength", 400)), "stopSequences": list(oinf.get("stopSequences") or []), "temperature": float(oinf.get("temperature", 0.4)),
+             "topK": int(oinf.get("topK", 250)), "topP": float(oinf.get("topP", 1.0))}
+    blocked_in = [False]
+    out_files: list = []
+
+    def guard(txt, source):
+        try:
+            r = gr.evaluate(gr.resolve_policy(gcfg["guardrailIdentifier"], str(gcfg["guardrailVersion"])), txt, source)
+        except gr.GErr as e:
+            raise _Err(e.code, e.msg, e.status)
+        tr("guardrailTrace", {"traceId": _tid(), "action": "INTERVENED" if r["action"] != "NONE" else "NONE",
+                              ("inputAssessments" if source == "INPUT" else "outputAssessments"): [r["assessment"]] if r["assessment"] else []})
+        return r
+
+    def commit():
+        hdr = {"content-type": "application/vnd.amazon.eventstream", "x-amz-bedrock-agent-session-id": sid, "x-amzn-bedrock-agent-content-type": "application/json"}
+        if mid:
+            hdr["x-amz-bedrock-agent-memory-id"] = mid
+        return {"status": 200, "headers": hdr, "body": b"".join(frames)}
+
+    def infer_kw(cfg, default_tokens=400):
+        i = (cfg or {}).get("inferenceConfiguration") or {}
+        return {"max_tokens": int(i.get("maximumLength") or default_tokens), "temperature": float(i.get("temperature", 0.4)), "stop": list(i.get("stopSequences") or []) or None}
+
+    def finish(final, refs=None, skip_post=False):
+        refs = refs or []
+        pc = _pcfg(snap, "POST_PROCESSING")
+        if pc and pc.get("promptState") == "ENABLED" and not skip_post:
+            tr("postProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "POST_PROCESSING", "foundationModel": fm,
+                                                               "text": json.dumps({"prompt": pc.get("basePromptTemplate")})}})
+            if pc.get("promptCreationMode") == "OVERRIDDEN":
+                prompt = _render(pc["basePromptTemplate"], {"latest_response": final, "responses": final, "question": ctx["text"], "bot_response": final})
+                rr = llm.chat([{"role": "user", "content": prompt}], system=snap["instruction"], **infer_kw(pc))
+                raw = rr["text"]
+            else:
+                raw = final
+            tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "rawResponse": {"content": raw}}})
+            doc = _parser_lambda(lam, snap, "POST_PROCESSING", ctx, raw)
+            pr = (doc or {}).get("postProcessingParsedResponse") or {}
+            final = pr.get("responseText", raw if pc.get("promptCreationMode") == "OVERRIDDEN" else final)
+            tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"text": final}}})
+        else:
+            tr("postProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "POST_PROCESSING", "foundationModel": fm,
+                                                               "text": "Vyomi post-processing: deterministic finalisation of the orchestration answer (no model call)."}})
+            tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"text": final}, "rawResponse": {"content": final}}})
+        if gcfg and final and not blocked_in[0]:
+            r = guard(final, "OUTPUT")
+            final = r["text"] if r["action"] != "NONE" else final
+        if sink is not None:
+            sink["text"], sink["frames"] = final, tframes
+        part = {"bytes": base64.b64encode(final.encode()).decode()}
+        if refs:
+            part["attribution"] = {"citations": [{"generatedResponsePart": {"textResponsePart": {"text": final, "span": {"start": 0, "end": len(final)}}},
+                                                  "retrievedReferences": [{k: v for k, v in x.items() if k != "score"} for x in refs[:3]]}]}
+        frames.append(_evt("chunk", part))
+        if out_files and sink is None:
+            import mimetypes
+            frames.append(_evt("files", {"files": [{"name": n, "type": mimetypes.guess_type(n)[0] or "application/octet-stream", "bytes": b64} for n, b64 in out_files]}))
+        sess["history"] += [{"role": "user", "content": ctx["text"]}, {"role": "assistant", "content": final}]
+        del sess["history"][:-20]
+        sess["pending"] = None
+        sess["last"] = time.time()
+        mc = _mem_cfg(snap)
+        if p.get("endSession"):
+            if mid and mc:
+                _store_summary(a, snap, alias_id, sid, mid, sess, int(mc.get("storageDays", 30)))
+            a["sessions"].pop(sid, None)
+        else:
+            a["sessions"][sid] = sess
+        return commit()
+
+    def run_collab(cfg, inp, source):
+        """Hand `inp` to the collaborator agent (its own session, deterministic per supervisor session) -> text. Collaborator traces are relayed."""
+        m = _ALIAS_ARN.match(cfg["agentDescriptor"]["aliasArn"])
+        tid = _tid()
+        tr(source, {"invocationInput": {"traceId": tid, "invocationType": "AGENT_COLLABORATOR", "agentCollaboratorInvocationInput": {
+            "agentCollaboratorName": cfg["collaboratorName"], "agentCollaboratorAliasArn": cfg["agentDescriptor"]["aliasArn"], "input": {"type": "TEXT", "text": inp}}}})
+        key = json.dumps(["collab", sid, ctx["req"], cfg["collaboratorName"], inp], sort_keys=True)
+        if key in _REPLAY:
+            out, sub_frames = _REPLAY[key]
+        elif len(chain or []) + 1 >= _MAX_DEPTH:
+            out, sub_frames = "Collaboration depth limit exceeded: this collaborator cannot delegate further.", []
+        else:
+            body = {"inputText": inp, "enableTrace": trace_on, "_collaboratorName": cfg["collaboratorName"]}
+            if cfg.get("relayConversationHistory") == "TO_COLLABORATOR" and sess["history"]:
+                body["inputText"] = "Conversation so far:\n" + "\n".join(f"{x['role']}: {x['content']}" for x in sess["history"][-10:]) + "\n\nCurrent request: " + inp
+            sub = {}
+            try:
+                _invoke_agent_run(st, s3, m.group(2), m.group(3), f"{sid}--{cfg['collaboratorName']}", body, lam, sink=sub, chain=(chain or []) + [me_arn])
+                out, sub_frames = sub.get("text") or "The collaborator returned no answer.", sub.get("frames") or []
+            except _Err as e:
+                out, sub_frames = f"The collaborator {cfg['collaboratorName']} failed: {e.msg}", []
+            _REPLAY[key] = (out, sub_frames)
+        frames.extend(sub_frames)
+        tframes.extend(sub_frames)
+        tr(source, {"observation": {"traceId": tid, "type": "AGENT_COLLABORATOR", "agentCollaboratorInvocationOutput": {
+            "agentCollaboratorName": cfg["collaboratorName"], "agentCollaboratorAliasArn": cfg["agentDescriptor"]["aliasArn"],
+            "output": {"type": "TEXT", "text": out}}}})
+        return out
+
+    refs, kbctx = [], ""
+    pend = sess.get("pending")
+    if results:                                      # ── continuation of a RETURN_CONTROL / requireConfirmation turn
+        if not pend or pend.get("invocationId") != sstate.get("invocationId"):
+            raise _bad("sessionState.invocationId does not match a pending RETURN_CONTROL invocation of this session")
+        msgs = list(pend["msgs"])
+        text = ctx["text"] = pend["text"]
+        for call in pend["calls"]:
+            t = reg.get(call["name"])
+            res = next((r for r in results if t and _rc_match(t, r)), None)
+            if res is None:
+                raise _bad(f"returnControlInvocationResults is missing a result for {call['name']}")
+            body_ = res.get("functionResult") or res.get("apiResult") or {}
+            if call.get("confirm"):
+                cs_ = body_.get("confirmationState")
+                if cs_ not in ("CONFIRM", "DENY"):
+                    raise _bad(f"{call['name']} requires confirmation: send confirmationState CONFIRM or DENY in the result")
+                if cs_ == "DENY":
+                    out = "The user DENIED this action, so it was NOT performed. Do not retry it; tell the user it was not carried out." + (" Reason: " + _rc_text(res) if _rc_text(res) else "")
+                else:
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": "(user confirmed)"}}})
+                    o2, sattrs, is_err = _run_lambda(lam, t, call["arguments"], ctx)
+                    if sattrs:
+                        sess["attrs"] = sattrs
+                    out = ("ERROR: " if is_err else "") + o2
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": out}}})
+            else:
+                out = ("ERROR: " if body_.get("responseState") == "FAILURE" else "") + _rc_text(res)
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": _rc_text(res)}}})
+            msgs.append({"role": "tool", "tool_call_id": call["id"], "name": call["name"], "content": out})
+        msgs += pend.get("done", [])
+        refs = pend.get("refs") or []
+        system = pend["system"]
+        step0 = pend.get("step", 1)
+    else:
+        sess["pending"] = None                        # a new user turn abandons an unanswered RETURN_CONTROL request
+        if gcfg:
+            r = guard(text, "INPUT")
+            if r["blocked"]:
+                blocked_in[0] = True
+                return finish(r["text"], skip_post=True)
+            text = ctx["text"] = r["text"] if r["action"] != "NONE" else text
+        nkb = sum(1 for k in snap["kbs"] if k.get("knowledgeBaseState", "ENABLED") == "ENABLED")
+        pre = _pcfg(snap, "PRE_PROCESSING")
+        if pre and pre.get("promptState") == "DISABLED":
+            tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"isValid": True, "rationale": "Pre-processing is disabled (promptState DISABLED)."}}})
+        elif pre and pre.get("promptCreationMode") == "OVERRIDDEN":
+            tid0 = _tid()
+            prompt = _render(pre["basePromptTemplate"], {"question": text, "conversation_history": "\n".join(f"{x['role']}: {x['content']}" for x in sess["history"][-6:])})
+            tr("preProcessingTrace", {"modelInvocationInput": {"traceId": tid0, "type": "PRE_PROCESSING", "foundationModel": fm, "inferenceConfiguration": infer, "text": prompt}})
+            rr = llm.chat([{"role": "user", "content": prompt}], system=snap["instruction"], **infer_kw(pre, 200))
+            raw = rr["text"]
+            doc = _parser_lambda(lam, snap, "PRE_PROCESSING", ctx, raw)
+            if doc is not None:
+                pr = doc.get("preProcessingParsedResponse") or {}
+                valid, why = bool(pr.get("isValid", True)), pr.get("rationale", "")
+            else:
+                cat = re.search(r"<category>\s*([A-E])\s*</category>", raw)
+                valid, why = (cat.group(1) not in ("A", "B") if cat else True), (f"category {cat.group(1)}" if cat else "no category tag: treated as valid")
+            tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": tid0, "rawResponse": {"content": raw}, "parsedResponse": {"isValid": valid, "rationale": why}}})
+            if not valid:
+                return finish("Sorry, I am unable to assist you with this request.", skip_post=True)
+        else:
+            tr("preProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "PRE_PROCESSING", "foundationModel": fm, "inferenceConfiguration": infer,
+                                                               "text": "Vyomi pre-processing: input checks only (no model call)."}})
+            tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"isValid": True, "rationale": (
+                f"Input accepted ({len(text)} chars); guardrail {'applied' if gcfg else 'not configured'}; {len(tools)} action tool(s) and {nkb} knowledge base(s) available.")}}})
+        for k in snap["kbs"]:
+            if k.get("knowledgeBaseState", "ENABLED") != "ENABLED" or k["knowledgeBaseId"] not in st["kbs"]:
+                continue
+            tr("orchestrationTrace", {"invocationInput": {"traceId": _tid(), "invocationType": "KNOWLEDGE_BASE",
+                                                          "knowledgeBaseLookupInput": {"knowledgeBaseId": k["knowledgeBaseId"], "text": text}}})
+            res = _retrieve(st["kbs"][k["knowledgeBaseId"]], text, 3)
+            tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "KNOWLEDGE_BASE", "knowledgeBaseLookupOutput": {"retrievedReferences": [
+                {kk: vv for kk, vv in r2.items() if kk != "score"} for r2 in res]}}})
+            refs += res
+            gen_txt = _kb_response_generation(snap, lam, ctx, tr, fm, infer, infer_kw, text, res) if res else None
+            kbctx += (("Answer generated from the knowledge base by the agent's KNOWLEDGE_BASE_RESPONSE_GENERATION prompt:\n" + gen_txt + "\n") if gen_txt
+                      else "\n".join(r2["content"]["text"] for r2 in res) + "\n")
+        mem_txt = ""
+        if mid and _mem_cfg(snap):
+            ms = sorted(_live_memories(a, alias_id, mid), key=lambda m: m["sessionSummary"]["sessionStartTime"])
+            if ms:
+                mem_txt = "\n".join("- " + m["sessionSummary"]["summaryText"] for m in ms)
+        collab_txt = "\n".join(f"- {c['collaboratorName']}: {c['collaborationInstruction']}" for c in collabs)
+        if ocfg and ocfg.get("promptCreationMode") == "OVERRIDDEN":
+            system = _render(ocfg["basePromptTemplate"], {
+                "instruction": snap["instruction"], "knowledge_base_guideline": ("Use these knowledge base passages when relevant:\n" + kbctx) if kbctx.strip() else "",
+                "knowledge_base_additional_guideline": "", "memory_guideline": "Use the summaries of previous sessions when relevant." if mem_txt else "", "memory_content": mem_txt,
+                "prompt_session_attributes": json.dumps(ctx["prompt_attrs"]) if ctx["prompt_attrs"] else "", "agent_collaborators": collab_txt, "question": text,
+                "conversation_history": "\n".join(f"{x['role']}: {x['content']}" for x in sess["history"][-10:]),
+                "tools": json.dumps([{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools]),
+                "functions": json.dumps([{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools])})
+        else:
+            system = snap["instruction"]
+            if kbctx.strip():
+                system += "\n\nUse these knowledge base passages when relevant:\n" + kbctx
+            if mem_txt:
+                system += "\n\nSummaries of this user's previous sessions:\n" + mem_txt
+            if ctx["prompt_attrs"]:
+                system += "\n\nPrompt session attributes: " + json.dumps(ctx["prompt_attrs"])
+            if collab_txt:
+                system += "\n\nYou are a supervisor. Delegate to these collaborator agents (call the matching tool with the sub-request) and combine their answers:\n" + collab_txt
+        msgs = list(sess["history"]) + [{"role": "user", "content": text}]
+        step0 = 1
+        # ── SUPERVISOR_ROUTER: a classifier step may hand the whole request to ONE collaborator and relay its answer
+        if collabs and snap.get("agentCollaboration") == "SUPERVISOR_ROUTER":
+            rc_cfg = _pcfg(snap, "ROUTING_CLASSIFIER")
+            reach = "\n".join(f"- {c['collaboratorName']}: {c['collaborationInstruction']}" for c in collabs)
+            if rc_cfg and rc_cfg.get("promptCreationMode") == "OVERRIDDEN":
+                rsys = _render(rc_cfg["basePromptTemplate"], {"reachable_agents": reach, "knowledge_base_routing": "", "action_group_routing": "", "question": text, "instruction": snap["instruction"]})
+            else:
+                rsys = ("You route requests. If exactly ONE of these collaborator agents can fully handle the user's request, call its tool with the request. "
+                        "Otherwise answer with the single word SUPERVISOR.\n" + reach)
+            ctools = [{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools if t["kind"] == "collab"]
+            rid_ = _tid()
+            tr("routingClassifierTrace", {"modelInvocationInput": {"traceId": rid_, "type": "ROUTING_CLASSIFIER", "foundationModel": fm, "text": json.dumps({"system": rsys, "question": text})}})
+            rr = llm.chat(msgs, system=rsys, tools=ctools, tool_choice="auto", **infer_kw(rc_cfg, 200))
+            rcalls = rr.get("tool_calls") or []
+            tr("routingClassifierTrace", {"modelInvocationOutput": {"traceId": rid_, "rawResponse": {"content": rr["text"] or json.dumps({"tool_calls": rcalls})},
+                                                                   "metadata": {"usage": {"inputTokens": rr["input_tokens"], "outputTokens": rr["output_tokens"]}}}})
+            if rcalls and rcalls[0]["name"] in reg and reg[rcalls[0]["name"]]["kind"] == "collab":
+                t0 = reg[rcalls[0]["name"]]
+                inp = _arg_text((rcalls[0]["arguments"] or {}).get("input") or text)
+                out = run_collab(t0["meta"]["collab"], inp, "routingClassifierTrace")
+                return finish(out, refs)
+    try:
+        final = None
+        pco = ocfg if (ocfg and ocfg.get("parserMode") == "OVERRIDDEN") else None
+        ltools = None if pco else ([{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools] or None)
+        ikw = infer_kw(ocfg, 400)
+        for step in range(step0, _MAX_STEPS + 1):
+            tid = _tid(step)
+            tr("orchestrationTrace", {"modelInvocationInput": {"traceId": tid, "type": "ORCHESTRATION", "foundationModel": fm, "inferenceConfiguration": infer,
+                                                               "text": json.dumps({"system": system, "messages": msgs, "tools": [t["name"] for t in tools]})}})
+            r = llm.chat(msgs, system=system, tools=ltools, tool_choice="auto" if ltools else None, **ikw)
+            calls = r.get("tool_calls") or []
+            tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": r["text"] or json.dumps({"tool_calls": calls})},
+                                                                "metadata": {"usage": {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"]}}}})
+            if pco:                                      # custom ORCHESTRATION parser Lambda decides what the raw model text means
+                doc = _parser_lambda(lam, snap, "ORCHESTRATION", ctx, r["text"] or "")
+                op = (doc or {}).get("orchestrationParsedResponse") or {}
+                if (doc or {}).get("parsingErrorDetails") or op.get("parsingErrorDetails"):
+                    msgs += [{"role": "assistant", "content": r["text"] or ""}, {"role": "user", "content": str(((doc or {}).get("parsingErrorDetails") or op["parsingErrorDetails"]).get("repromptResponse", "Reformat your answer."))}]
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "REPROMPT", "repromptResponse": {"text": msgs[-1]["content"], "source": "PARSER"}}})
+                    continue
+                rd = op.get("responseDetails") or {}
+                it = rd.get("invocationType", "FINISH")
+                if it == "FINISH":
+                    final = (rd.get("agentFinalResponse") or {}).get("responseText", r["text"])
+                    tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": op.get("rationale", "")}})
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "FINISH", "finalResponse": {"text": final}}})
+                    break
+                if it == "ASK_USER":
+                    q = (rd.get("agentAskUser") or {}).get("responseText", r["text"])
+                    tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ASK_USER"}})
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ASK_USER", "finalResponse": {"text": q}}})
+                    return finish(q, refs, skip_post=True)
+                if it == "ACTION_GROUP":
+                    agi_ = rd.get("actionGroupInvocation") or {}
+                    tt = next((t for t in tools if t["group"] == agi_.get("actionGroupName") and (t["meta"].get("function") == agi_.get("functionName") or
+                                                                                              (agi_.get("apiName") and t["meta"].get("apiPath") == agi_.get("apiName")))), None)
+                    if tt is None:
+                        raise llm.LlmStructuredError(f"parser Lambda named an unknown action {agi_}")
+                    calls = [{"id": "call_" + _rid(8, string.ascii_lowercase + string.digits), "name": tt["name"], "arguments": dict(agi_.get("actionGroupInput") or agi_.get("parameters") or {})}]
+                else:
+                    raise llm.LlmStructuredError(f"parser Lambda returned unsupported invocationType {it}")
+            if not calls:
+                final = r["text"]
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "FINISH", "finalResponse": {"text": final}}})
+                break
+            for c in calls:      # llm_core already constrained + validated the call; re-check against OUR schema before anything is invoked
+                t = reg.get(c["name"])
+                errs = ["unknown tool"] if not t else llm.validate(t["parameters"], c["arguments"])
+                if errs:
+                    raise llm.LlmStructuredError(f"tool call {c['name']} is invalid: {'; '.join(errs[:3])}")
+            ask = next((c for c in calls if reg[c["name"]]["kind"] == "userinput"), None)
+            if ask is not None:                           # AMAZON.UserInput: the question goes back to the user as the answer; the next InvokeAgent carries the reply
+                q = _arg_text(ask["arguments"]["question"])
+                tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ASK_USER"}})
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ASK_USER", "finalResponse": {"text": q}}})
+                return finish(q, refs, skip_post=True)
+            msgs.append({"role": "assistant", "content": r["text"] or "", "tool_calls": calls})
+            tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": (r["text"] or "").strip() or
+                                                    "Selected " + ", ".join(f"{c['name']}({json.dumps(c['arguments'])})" for c in calls) + " via schema-constrained tool-call output."}})
+            rc, done = [], []
+            for c in calls:
+                t = reg[c["name"]]
+                if t["kind"] == "code":
+                    code = _arg_text(c["arguments"]["code"])
+                    tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ACTION_GROUP_CODE_INTERPRETER",
+                                                                  "codeInterpreterInvocationInput": {"code": code, "files": sorted((sess.get("ci_files") or {}))}}})
+                    res_ = _run_code(sess, code, ctx)
+                    for n, v in res_["files"].items():
+                        out_files[:] = [x for x in out_files if x[0] != n] + [(n, base64.b64encode(v).decode())]
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "codeInterpreterInvocationOutput": {
+                        "executionOutput": res_["stdout"], **({"executionError": res_["error"]} if res_["error"] else {}), "executionTimeout": bool(res_["timeout"]),
+                        "files": sorted(res_["files"]), "metadata": {"engine": res_["engine"]}}}})
+                    done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"],
+                                 "content": (res_["stdout"] or "(no output)") + (("\nERROR: " + res_["error"]) if res_["error"] else "") + (("\nFiles written: " + ", ".join(sorted(res_["files"]))) if res_["files"] else "")})
+                    continue
+                if t["kind"] == "collab":
+                    out = run_collab(t["meta"]["collab"], _arg_text(c["arguments"].get("input", "")), "orchestrationTrace")
+                    done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"], "content": out})
+                    continue
+                plain, body = _arg_params(t, c["arguments"])
+                is_rc = t["executor"].get("customControl") == "RETURN_CONTROL"
+                is_cf = bool(t["meta"].get("confirm")) and not is_rc
+                agi = {"actionGroupName": t["group"], "parameters": plain, "executionType": "RETURN_CONTROL" if is_rc else "LAMBDA"}
+                agi.update({"function": t["meta"]["function"]} if t["kind"] == "function" else {"apiPath": t["meta"]["apiPath"], "verb": t["meta"]["httpMethod"]})
+                if body:
+                    agi["requestBody"] = {"content": {"application/json": body}}
+                tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ACTION_GROUP", "actionGroupInvocationInput": agi}})
+                if is_rc or is_cf:
+                    rc.append((c, t, is_cf))
+                    continue
+                if not t["executor"].get("lambda"):
+                    raise _bad(f"Action group {t['group']} has no executor: set a Lambda ARN or customControl RETURN_CONTROL")
+                out, sattrs, is_err = _run_lambda(lam, t, c["arguments"], ctx)
+                if sattrs:
+                    sess["attrs"] = sattrs
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": out}}})
+                done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"], "content": ("ERROR: " if is_err else "") + out})
+            if rc:
+                invid = _rid(16, string.ascii_lowercase + string.digits)
+                if sink is not None:
+                    sink["text"], sink["frames"] = "The collaborator needs the caller to return control or confirm an action, which is not supported inside agent collaboration.", tframes
+                    return commit()
+                sess["pending"] = {"invocationId": invid, "msgs": msgs, "text": text, "system": system, "refs": refs, "step": step + 1,
+                                   "calls": [{"id": c["id"], "name": c["name"], "arguments": c["arguments"], "confirm": cf} for c, _t, cf in rc], "done": done}
+                sess["last"] = time.time()
+                a["sessions"][sid] = sess
+                frames.append(_evt("returnControl", {"invocationId": invid, "invocationInputs": [_rc_inputs(t, c["arguments"], cf) for c, t, cf in rc]}))
+                return commit()
+            msgs += done
+        if final is None:
+            final = "Sorry, I am unable to assist you with this request."
+            tr("failureTrace", {"traceId": _tid(), "failureReason": f"The agent did not reach a final answer within {_MAX_STEPS} orchestration steps."})
+        return finish(final, refs)
+    except llm.LlmStructuredError as e:
+        tr("failureTrace", {"traceId": _tid(), "failureReason": str(e)})
+        return finish("Sorry, I am unable to assist you with this request.", refs)
+    except llm.LlmUnavailable as e:
+        return _unavailable(e)
+
+
+# ── InvokeInlineAgent ──
+def _inline_agent(st, s3, sid, p, lam):
+    if not p.get("foundationModel") or not _resolve_fm(p["foundationModel"]):
+        raise _bad(f"The provided foundation model {p.get('foundationModel')} is invalid or unsupported")
+    ins = p.get("instruction") or ""
+    if not 40 <= len(ins) <= 20000:
+        raise _bad("1 validation error detected: Value at 'instruction' failed to satisfy constraint: Member must have length between 40 and 20000")
+    if p.get("collaborators"):
+        raise _bad("Inline collaborators (nested inline agents) are not supported; reference deployed agents with collaboratorConfigurations[].agentAliasArn")
+    _check_agent_cfg({k: p[k] for k in ("guardrailConfiguration", "promptOverrideConfiguration", "agentCollaboration") if p.get(k) is not None})
+    ttl = int(p.get("idleSessionTTLInSeconds", 600))
+    if not 60 <= ttl <= 3600:
+        raise _bad("idleSessionTTLInSeconds must be between 60 and 3600")
+    groups = []
+    for g in p.get("actionGroups") or []:
+        _check_action_group(g, s3=s3)
+        groups.append({"actionGroupName": g["actionGroupName"], "actionGroupState": g.get("actionGroupState", "ENABLED"), "actionGroupExecutor": g.get("actionGroupExecutor"),
+                       "apiSchema": g.get("apiSchema"), "functionSchema": g.get("functionSchema"), "parentActionGroupSignature": g.get("parentActionGroupSignature"), "description": g.get("description", "")})
+    kbs = []
+    for k in p.get("knowledgeBases") or []:
+        if k.get("knowledgeBaseId") not in st["kbs"]:
+            raise _nf(f"Knowledge base with id {k.get('knowledgeBaseId')} does not exist")
+        kbs.append({"knowledgeBaseId": k["knowledgeBaseId"], "description": k.get("description", ""), "knowledgeBaseState": "ENABLED"})
+    collabs = []
+    for c in p.get("collaboratorConfigurations") or []:
+        arn = c.get("agentAliasArn")
+        m = _ALIAS_ARN.match(str(arn or ""))
+        other = st["agents"].get(m.group(2)) if m else None
+        if not m or not other or (m.group(3) != "TSTALIASID" and m.group(3) not in other["aliases"]):
+            raise _nf(f"Could not find resource: collaborator agent alias {arn}")
+        collabs.append({"collaboratorName": c["collaboratorName"], "collaborationInstruction": c["collaboratorInstruction"], "agentDescriptor": {"aliasArn": arn},
+                        "relayConversationHistory": c.get("relayConversationHistory", "DISABLED")})
+    if collabs and p.get("agentCollaboration", "DISABLED") == "DISABLED":
+        raise _bad("collaboratorConfigurations need agentCollaboration SUPERVISOR or SUPERVISOR_ROUTER")
+    ia = st.setdefault("inline", {}).setdefault(sid, {"agentId": "INLINE" + _rid(4), "agentName": "inline-agent", "sessions": {}, "memories": {}, "aliases": {}, "kbs": {}, "actionGroups": {},
+                                                    "agentStatus": "PREPARED", "agentVersion": "DRAFT", "idleSessionTTLInSeconds": ttl, "instruction": ins, "foundationModel": p["foundationModel"]})
+    ia["idleSessionTTLInSeconds"] = ttl
+    snap = {"instruction": ins, "foundationModel": p["foundationModel"], "kbs": kbs, "actionGroups": groups, "guardrailConfiguration": p.get("guardrailConfiguration"),
+            "memoryConfiguration": None, "promptOverrideConfiguration": p.get("promptOverrideConfiguration"), "agentCollaboration": p.get("agentCollaboration", "DISABLED"),
+            "collaborators": collabs, "idleSessionTTLInSeconds": ttl}
+    q = dict(p)
+    q["sessionState"] = p.get("inlineSessionState") or {}
+    return _invoke_agent(st, s3, ia["agentId"], "INLINE", sid, q, lam, inline={"agent": ia, "snap": snap})
 
 
 # ═══════════════════════════ dispatch: bedrock-agent / agent-runtime ═══════════════════════════
 def handles(path: str) -> bool:
     p = path.lower()
-    return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate)(/|$)", p))
+    return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate|rerank|_vyomi/kb)(/|$)", p))
 
 
-def dispatch(s3, method, path, query, headers, body):
+def dispatch(s3, method, path, query, headers, body, lam=None):
     method = method.upper()
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
@@ -551,12 +1956,18 @@ def dispatch(s3, method, path, query, headers, body):
         st = _state(s3)
         p = _body(body) if method in ("PUT", "POST", "PATCH") else {}
         # ── runtime ──
+        if low[0] == "_vyomi":
+            return inspect_dispatch(s3, method, path, query, body)
+        if low == ["rerank"] and method == "POST":
+            return _rerank_op(p)
         if low == ["retrieveandgenerate"] and method == "POST":
             return _rag_op(st, p)
         if low[0] == "knowledgebases" and len(low) == 3 and low[2] == "retrieve" and method == "POST":
             return _retrieve_op(st, segs[1], p)
+        if low[0] == "agents" and len(low) == 2 and method == "POST" and (p.get("inputText") is not None or p.get("foundationModel") is not None):
+            return _inline_agent(st, s3, segs[1], p, lam)           # InvokeInlineAgent: POST /agents/{sessionId}
         if low[0] == "agents" and len(low) == 7 and low[2] == "agentaliases" and low[4] == "sessions" and low[6] == "text" and method == "POST":
-            return _invoke_agent(st, s3, segs[1], segs[3], segs[5], p)
+            return _invoke_agent(st, s3, segs[1], segs[3], segs[5], p, lam)
         # ── knowledge bases ──
         if low[0] == "knowledgebases":
             if len(low) == 1:
@@ -630,8 +2041,9 @@ def dispatch(s3, method, path, query, headers, body):
                             raise _bad("agentName and agentResourceRoleArn are required")
                         if p.get("foundationModel") and not _resolve_fm(p["foundationModel"]):
                             raise _bad(f"The provided foundation model {p['foundationModel']} is invalid or unsupported")
+                        _check_agent_cfg(p)
                         a.update(agentName=p["agentName"], agentResourceRoleArn=p["agentResourceRoleArn"], updatedAt=_iso(), agentStatus="NOT_PREPARED")
-                        for f in ("foundationModel", "instruction", "description", "idleSessionTTLInSeconds"):
+                        for f in ("foundationModel", "instruction", "description", "idleSessionTTLInSeconds", "guardrailConfiguration", "memoryConfiguration", "promptOverrideConfiguration", "agentCollaboration"):
                             if f in p:
                                 a[f] = p[f]
                         return _j(202, {"agent": _agent_view(a)})
@@ -640,6 +2052,8 @@ def dispatch(s3, method, path, query, headers, body):
                             raise _conflict("Agent has aliases; delete them first or set skipResourceInUseCheck")
                         del st["agents"][a["agentId"]]
                         return _j(202, {"agentId": a["agentId"], "agentStatus": "DELETING"})
+                elif low[2] == "agentaliases" and len(low) == 5 and low[4] == "memories" and method in ("GET", "DELETE"):
+                    return _memory_op(a, segs[3], method, query)
                 elif low[2] == "agentaliases":
                     if len(low) == 3:
                         if method == "PUT":
@@ -678,19 +2092,32 @@ def dispatch(s3, method, path, query, headers, body):
                             del a["kbs"][segs[5]]
                             a["agentStatus"] = "NOT_PREPARED"
                             return _j(204, None)
-                    elif low[4] == "agentactiongroups":
+                    elif low[4] == "agentcollaborators" and len(low) in (5, 6):
+                        r_ = _collaborators_op(st, a, method, segs, p)
+                        if r_ is not None:
+                            return r_
+                    elif low[4] in ("actiongroups", "agentactiongroups"):   # the real SDK path is .../actiongroups/; the old spelling is kept
                         if len(low) == 5 and method == "PUT":
-                            nm = p.get("actionGroupName")
-                            if not nm:
-                                raise _bad("actionGroupName is required")
-                            gid = _rid()
-                            now = _iso()
-                            g = {"agentId": a["agentId"], "agentVersion": "DRAFT", "actionGroupId": gid, "actionGroupName": nm, "description": p.get("description", ""),
-                                 "actionGroupState": p.get("actionGroupState", "ENABLED"), "actionGroupExecutor": p.get("actionGroupExecutor"),
-                                 "apiSchema": p.get("apiSchema"), "functionSchema": p.get("functionSchema"), "createdAt": now, "updatedAt": now}
-                            a["actionGroups"][gid] = g
+                            g = _action_group(a, p, s3=s3)
+                            a["actionGroups"][g["actionGroupId"]] = g
                             a["agentStatus"] = "NOT_PREPARED"
                             return _j(200, {"agentActionGroup": g})
+                        if len(low) == 6:
+                            g = a["actionGroups"].get(segs[5])
+                            if not g:
+                                raise _nf(f"Could not find resource: ActionGroup {segs[5]}")
+                            if method == "GET":
+                                return _j(200, {"agentActionGroup": g})
+                            if method == "PUT":
+                                n = _action_group(a, p, g["actionGroupId"], s3=s3)
+                                n["createdAt"] = g["createdAt"]
+                                a["actionGroups"][g["actionGroupId"]] = n
+                                a["agentStatus"] = "NOT_PREPARED"
+                                return _j(200, {"agentActionGroup": n})
+                            if method == "DELETE":
+                                del a["actionGroups"][g["actionGroupId"]]
+                                a["agentStatus"] = "NOT_PREPARED"
+                                return _j(204, None)
                         if len(low) == 5 and method == "POST":
                             return _j(200, _paginate([{k: g[k] for k in ("actionGroupId", "actionGroupName", "actionGroupState", "description", "updatedAt")} for g in a["actionGroups"].values()], query, "actionGroupSummaries"))
     except _Err as e:
@@ -716,16 +2143,44 @@ def _pub(o):
     return {k: v for k, v in o.items() if not k.startswith("_") and k != "targets"}
 
 
+def _check_artifact(art):
+    """agentRuntimeArtifact is a union: containerConfiguration (image) or codeConfiguration (zip in S3 + entryPoint)."""
+    cc = art.get("codeConfiguration")
+    if cc:
+        s3 = (cc.get("code") or {}).get("s3") or {}
+        if not s3.get("bucket") or not s3.get("prefix"):
+            raise _bad("agentRuntimeArtifact.codeConfiguration.code.s3.bucket and prefix are required")
+        if not cc.get("entryPoint"):
+            raise _bad("agentRuntimeArtifact.codeConfiguration.entryPoint is required")
+    elif not (art.get("containerConfiguration") or {}).get("containerUri"):
+        raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+
+
+def _snap(rt):
+    """Per-version snapshot the host runs (artifact + env), so an endpoint pinned to version N keeps running version N's code."""
+    rt.setdefault("_snap", {})[rt["agentRuntimeVersion"]] = {"version": rt["agentRuntimeVersion"], "agentRuntimeArtifact": rt["agentRuntimeArtifact"],
+                                                              "environmentVariables": dict(rt.get("environmentVariables") or {})}
+
+
+def _host():
+    try:
+        from core import agentcore_runtime_host as m
+    except ImportError:
+        import agentcore_runtime_host as m  # type: ignore
+    return m
+
+
 def _create_runtime(st, p):
     name = p.get("agentRuntimeName")
     if not name or not _RT_NAME.match(name):
         raise _bad("1 validation error detected: Value at 'agentRuntimeName' failed to satisfy constraint: Member must satisfy regular expression pattern: [a-zA-Z][a-zA-Z0-9_]{0,47}")
     art = p.get("agentRuntimeArtifact") or {}
-    uri = (art.get("containerConfiguration") or {}).get("containerUri") or ""
-    if not uri:
-        raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+    _check_artifact(art)
     if not p.get("roleArn"):
         raise _bad("roleArn is required")
+    jwt_auth = (p.get("authorizerConfiguration") or {}).get("customJWTAuthorizer")
+    if p.get("authorizerConfiguration") and not (jwt_auth or {}).get("discoveryUrl"):
+        raise _bad("authorizerConfiguration.customJWTAuthorizer.discoveryUrl is required")
     net = (p.get("networkConfiguration") or {}).get("networkMode")
     if net not in ("PUBLIC", "VPC"):
         raise _bad("networkConfiguration.networkMode must be PUBLIC or VPC")
@@ -737,6 +2192,7 @@ def _create_runtime(st, p):
           "agentRuntimeVersion": "1", "description": p.get("description", ""), "agentRuntimeArtifact": art, "roleArn": p["roleArn"],
           "networkConfiguration": p["networkConfiguration"], "protocolConfiguration": p.get("protocolConfiguration") or {"serverProtocol": "HTTP"},
           "environmentVariables": p.get("environmentVariables") or {}, "status": "CREATING", "createdAt": now, "lastUpdatedAt": now,
+          **({"authorizerConfiguration": p["authorizerConfiguration"]} if p.get("authorizerConfiguration") else {}),
           "workloadIdentityDetails": {"workloadIdentityArn": f"arn:aws:bedrock-agentcore:{_REGION}:{_ACCT}:workload-identity-directory/default/workload-identity/{name}-{_rid(10, _LOWER)}"},
           "_readyAt": time.time() + 1.0}
     st["runtimes"][rid] = rt
@@ -764,7 +2220,7 @@ def _create_gateway(st, p):
           "createdAt": now, "updatedAt": now, "status": "CREATING", "name": name, "description": p.get("description", ""), "roleArn": p["roleArn"],
           "protocolType": "MCP", "protocolConfiguration": p.get("protocolConfiguration") or {"mcp": {"supportedVersions": ["2025-03-26"]}},
           "authorizerType": auth, "authorizerConfiguration": p.get("authorizerConfiguration"), "exceptionLevel": p.get("exceptionLevel"),
-          "targets": {}, "_readyAt": time.time() + 1.0}
+          "policyEngineConfiguration": p.get("policyEngineConfiguration"), "targets": {}, "_readyAt": time.time() + 1.0}
     st["gateways"][gid] = gw
     r = {k: v for k, v in gw.items() if not k.startswith("_") and k not in ("targets", "lastUpdatedAt")}
     return _j(202, r)
@@ -792,7 +2248,7 @@ def _tool_schema(cfg):
     return ts
 
 
-def _create_target(st, gw, p):
+def _create_target(st, gw, p, s3=None):
     name = p.get("name")
     if not name or not _AC_NAME.match(name):
         raise _bad("1 validation error detected: Value at 'name' failed to satisfy constraint: Member must satisfy regular expression pattern: ([0-9a-zA-Z][-]?){1,100}")
@@ -808,6 +2264,17 @@ def _create_target(st, gw, p):
     else:
         if not p.get("credentialProviderConfigurations"):
             raise _bad(f"credentialProviderConfigurations is required for {kinds[0]} targets")
+    gt = _gt()
+    gt.check_target_providers(st, p)
+    extra = {}
+    if kinds[0] == "openApiSchema":
+        spec = gt.validate_openapi(mcp, s3)
+        extra = {"_base": spec["servers"][0]["url"], "_ops": gt.openapi_operations(spec)}
+    elif kinds[0] == "smithyModel":
+        extra = {"_smithy": gt.validate_smithy(cfg, s3)}
+    elif kinds[0] == "mcpServer":
+        if not str((mcp["mcpServer"] or {}).get("endpoint", "")).startswith(("http://", "https://")):
+            raise _bad("targetConfiguration.mcp.mcpServer.endpoint must be an http(s) URL")
     if any(t["name"] == name for t in gw["targets"].values()):
         raise _conflict(f"A target named {name} already exists in this gateway")
     tid = _rid(10)
@@ -815,31 +2282,79 @@ def _create_target(st, gw, p):
     t = {"gatewayArn": gw["gatewayArn"], "targetId": tid, "createdAt": now, "updatedAt": now, "status": "CREATING", "name": name,
          "description": p.get("description", ""), "targetConfiguration": cfg,
          "credentialProviderConfigurations": p.get("credentialProviderConfigurations") or [{"credentialProviderType": "GATEWAY_IAM_ROLE"}],
-         "_readyAt": time.time() + 1.0, "_kind": kinds[0]}
+         "_readyAt": time.time() + 1.0, "_kind": kinds[0], **extra}
     gw["targets"][tid] = t
     gw["updatedAt"] = now
     return _j(202, {k: v for k, v in t.items() if not k.startswith("_")})
 
 
-def _mcp_tools(gw):
+def _gt():
+    try:
+        from core import agentcore_gateway_targets as m
+    except ImportError:
+        import agentcore_gateway_targets as m  # type: ignore
+    return m
+
+
+def _mcp_tools(gw, st=None, headers=None):
     out = []
     for t in gw["targets"].values():
-        if t["_kind"] != "lambda":
-            continue
-        for tool in _tool_schema(t["targetConfiguration"]):
-            out.append((f"{t['name']}___{tool['name']}", t, tool))
+        if t["_kind"] == "lambda":
+            for tool in _tool_schema(t["targetConfiguration"]):
+                out.append((f"{t['name']}___{tool['name']}", t, tool))
+        elif t["_kind"] == "openApiSchema":
+            for o in t.get("_ops") or []:
+                out.append((f"{t['name']}___{o['tool']}", t, {"name": o["tool"], "description": o["description"], "inputSchema": o["inputSchema"]}))
+        elif t["_kind"] == "smithyModel":
+            for o in (t.get("_smithy") or {}).get("ops") or []:
+                out.append((f"{t['name']}___{o['tool']}", t, {"name": o["tool"], "description": o["description"], "inputSchema": o["inputSchema"]}))
+        elif t["_kind"] == "mcpServer" and st is not None:
+            c = t.get("_up")
+            if not c or c[0] < time.time():   # upstream catalog cached 30 s
+                try:
+                    c = (time.time() + 30, _gt().mcp_upstream(st, t, "tools/list", {}, headers).get("tools") or [])
+                    t["_upErr"] = None
+                except Exception as e:  # noqa: BLE001 - a dead upstream hides its tools, never fails the whole catalog
+                    c = (time.time() + 5, [])
+                    t["_upErr"] = f"{type(e).__name__}: {e}"
+                t["_up"] = c
+            for tool in c[1]:
+                out.append((f"{t['name']}___{tool['name']}", t, {"name": tool["name"], "description": tool.get("description", ""), "inputSchema": tool.get("inputSchema") or {"type": "object"}}))
     return out
 
 
-def _mcp(st, lam, gid, p, headers):
+def _ext():
+    try:
+        from core import agentcore_ext_core as m
+    except ImportError:
+        import agentcore_ext_core as m  # type: ignore
+    return m
+
+
+def _mcp(st, lam, gid, p, headers, req=None, internal=False):
     gw = _find_gw(st, gid)
     _ac_ready(gw)
     if gw["status"] != "READY":
         return _j(503, {"message": "Gateway is not READY"})
-    if gw["authorizerType"] != "NONE":
+    if internal == "admin":   # a console/control-plane adapter (core/gcp_agentgov_core) already authorized its operator
+        pass
+    elif gw["authorizerType"] == "CUSTOM_JWT":
+        _claims, deny = _gt().validate_inbound(gw, headers)
+        if deny:
+            return deny
+    elif gw["authorizerType"] == "AWS_IAM" and internal:   # a runtime's own gateway tool: the runtime invocation already authenticated its caller
+        pass
+    elif gw["authorizerType"] == "AWS_IAM":   # SigV4 verified against the simulator's IAM access keys (core/agentcore_gateway_targets.verify_sigv4)
+        rq = req or ("POST", f"/gateways/{gid}/mcp", {}, b"")
+        _ident, deny = _gt().verify_sigv4(rq[0], rq[1], rq[2], headers, rq[3], HOOKS.get("iam_key"))
+        if deny:
+            return deny
+        if _ident.get("verified"):
+            headers = dict(headers or {}, **{"x-vyomi-iam-principal": _ident["principal"]})
+    elif gw["authorizerType"] != "NONE":
         h = {str(k).lower(): v for k, v in (headers or {}).items()}
         if not (h.get("authorization") or "").strip():
-            return _j(401, {"message": "Missing Authentication Token" if gw["authorizerType"] == "AWS_IAM" else "Unauthorized"})
+            return _j(401, {"message": "Missing Authentication Token"})
     rid, method = p.get("id"), p.get("method")
 
     def ok(result):
@@ -851,15 +2366,37 @@ def _mcp(st, lam, gid, p, headers):
         return ok({"protocolVersion": "2025-03-26", "capabilities": {"tools": {"listChanged": False}}, "serverInfo": {"name": gw["name"], "version": "1.0.0"}})
     if method in ("notifications/initialized", "ping"):
         return ok({}) if method == "ping" else _j(202, None)
+    ext = _ext()
+    claims = ext.jwt_claims(headers)
+    visible = [(n, t, tool) for n, t, tool in _mcp_tools(gw, st, headers) if ext.authorize(st, gw, claims, n, {}, probe=True)[0]]   # list is filtered by policy
+    searchable = ((gw.get("protocolConfiguration") or {}).get("mcp") or {}).get("searchType") == "SEMANTIC"
     if method == "tools/list":
-        return ok({"tools": [{"name": n, "description": tool["description"], "inputSchema": tool["inputSchema"]} for n, _t, tool in _mcp_tools(gw)]})
+        tl = [{"name": n, "description": tool["description"], "inputSchema": tool["inputSchema"]} for n, _t, tool in visible]
+        return ok({"tools": ([ext.search_tool_def()] if searchable else []) + tl})
     if method == "tools/call":
         prm = p.get("params") or {}
-        hit = next(((t, tool) for n, t, tool in _mcp_tools(gw) if n == prm.get("name")), None)
+        if searchable and prm.get("name") == ext.SEARCH_TOOL:
+            q = str((prm.get("arguments") or {}).get("query") or "")
+            hits = ext.search_tools([(n, tool["description"], tool["inputSchema"]) for n, _t, tool in visible], q)
+            return ok({"isError": False, "content": [{"type": "text", "text": json.dumps({"tools": hits})}], "structuredContent": {"tools": hits}})
+        allowed, why = ext.authorize(st, gw, claims, prm.get("name") or "", prm.get("arguments") or {})
+        if not allowed:
+            return fail(-32002, f"Tool call not allowed due to policy enforcement [{why}]")
+        hit = next(((t, tool) for n, t, tool in _mcp_tools(gw, st, headers) if n == prm.get("name")), None)
         if not hit:
             return fail(-32602, f"Unknown tool: {prm.get('name')}")
         t, tool = hit
         _ac_ready(t)
+        if t["_kind"] in ("openApiSchema", "mcpServer", "smithyModel"):
+            gt = _gt()
+            try:
+                if t["_kind"] == "smithyModel":
+                    return ok(gt.call_smithy(t["_smithy"], tool["name"], prm.get("arguments") or {}))
+                if t["_kind"] == "openApiSchema":
+                    return ok(gt.call_openapi(st, t, t["_ops"], t["_base"], tool["name"], prm.get("arguments") or {}, headers))
+                return ok(gt.mcp_upstream(st, t, "tools/call", {"name": tool["name"], "arguments": prm.get("arguments") or {}}, headers))
+            except Exception as e:  # noqa: BLE001 - upstream / credential failure surfaces as a tool error
+                return ok({"isError": True, "content": [{"type": "text", "text": f"Target call failed: {e}"}]})
         arn = t["targetConfiguration"]["mcp"]["lambda"]["lambdaArn"]
         fname = arn.split(":function:")[1].split(":")[0]
         if lam is None:
@@ -910,7 +2447,7 @@ def _page_q(pq, method, body):
     return pq
 
 
-def _runtimes(st, method, path, query, headers, body):
+def _runtimes(st, method, path, query, headers, body, lam=None, s3=None):
     rest = path[len("/runtimes"):].strip("/")
     pq = dict(query or {})
     if not rest:                                   # collection: create (PUT, or legacy POST with a name) / list (POST body or GET)
@@ -921,6 +2458,7 @@ def _runtimes(st, method, path, query, headers, body):
             rt["_versions"] = {"1": _rt_summary(rt)}
             rt["_endpoints"] = {"DEFAULT": _mk_endpoint(rt, "DEFAULT", "1", "Default endpoint for the agent runtime")}
             rt["_sessions"] = {}
+            _snap(rt)
             return r
         if method in ("GET", "POST"):
             pq.update({k: str(v) for k, v in p.items() if k in ("maxResults", "nextToken")})
@@ -939,16 +2477,24 @@ def _runtimes(st, method, path, query, headers, body):
     rt.setdefault("_endpoints", {})
     rt.setdefault("_sessions", {})
     _ac_ready(rt)
+    if (tail == "invocations" and method == "POST") or (tail == "invocations/.well-known/agent-card.json" and method == "GET"):
+        if (rt.get("authorizerConfiguration") or {}).get("customJWTAuthorizer"):   # inbound JWT: signature, expiry, issuer, audience / client / scope really verified
+            _claims, deny = _gt().validate_inbound(rt, headers)
+            if deny:
+                return deny
+    if tail == "invocations/.well-known/agent-card.json" and method == "GET":
+        return _agent_card(rt, headers or {})
     if tail == "invocations" and method == "POST":
-        return _invoke_runtime(rt, query or {}, headers or {}, body)
+        return _invoke_runtime(rt, query or {}, headers or {}, body, st, lam, s3)
     if tail == "stopruntimesession" and method == "POST":
         sid = _body(body).get("runtimeSessionId") or (headers or {}).get(_SESS_HDR)
-        if not sid or sid not in rt["_sessions"]:
+        killed = _host().stop_session(rt["agentRuntimeId"], sid)
+        if not sid or (sid not in rt["_sessions"] and not killed):
             raise _nf(f"Runtime session {sid} not found")
-        del rt["_sessions"][sid]
+        rt["_sessions"].pop(sid, None)
         return _j(200, {"runtimeSessionId": sid, "statusCode": 200}, {_SESS_HDR: sid})
-    if tail == "commands":
-        raise _Err("ValidationException", "InvokeAgentRuntimeCommand needs a container; the Vyomi agent-spec runtime has none", 400)
+    if tail == "commands" and method == "POST":
+        return _invoke_command(rt, query or {}, headers or {}, body)
     if tail == "":
         if method == "GET":
             v = pq.get("agentRuntimeVersion")
@@ -958,8 +2504,7 @@ def _runtimes(st, method, path, query, headers, body):
         if method == "PUT":
             p = _body(body)
             art = p.get("agentRuntimeArtifact") or rt["agentRuntimeArtifact"]
-            if not (art.get("containerConfiguration") or {}).get("containerUri"):
-                raise _bad("agentRuntimeArtifact.containerConfiguration.containerUri is required")
+            _check_artifact(art)
             rt["agentRuntimeArtifact"] = art
             rt["agentRuntimeVersion"] = str(int(rt["agentRuntimeVersion"]) + 1)
             for f in ("roleArn", "networkConfiguration", "description", "environmentVariables", "protocolConfiguration", "authorizerConfiguration"):
@@ -967,8 +2512,12 @@ def _runtimes(st, method, path, query, headers, body):
                     rt[f] = p[f]
             rt["status"], rt["_readyAt"], rt["lastUpdatedAt"] = "UPDATING", time.time() + 1.0, _iso()
             rt["_versions"][rt["agentRuntimeVersion"]] = _rt_summary(rt)
+            _snap(rt)
+            if "DEFAULT" in rt["_endpoints"]:        # the DEFAULT endpoint always follows the latest version
+                rt["_endpoints"]["DEFAULT"].update(liveVersion=rt["agentRuntimeVersion"], targetVersion=rt["agentRuntimeVersion"], lastUpdatedAt=_iso())
             return _j(202, {k: rt[k] for k in ("agentRuntimeArn", "agentRuntimeId", "agentRuntimeVersion", "createdAt", "lastUpdatedAt", "status", "workloadIdentityDetails")})
         if method == "DELETE":
+            _host().stop_session(rid)
             del st["runtimes"][rid]
             return _j(202, {"status": "DELETING", "agentRuntimeId": rid, "agentRuntimeVersion": rt["agentRuntimeVersion"]})
     if tail == "versions" and method in ("POST", "GET"):
@@ -1035,7 +2584,42 @@ def _rt_client_err(msg):
     return {"status": 424, "headers": {"content-type": "application/json", "x-amzn-errortype": "RuntimeClientError"}, "body": json.dumps({"message": msg}).encode()}
 
 
-def _invoke_runtime(rt, query, headers, body):
+def _invoke_hosted(rt, qual, h, body, s3):
+    """Real hosting (core/agentcore_runtime_host): run the runtime's code/container through the AgentCore contract, one process per session."""
+    host = _host()
+    ver = rt["agentRuntimeVersion"]
+    if qual and qual != "DEFAULT":
+        ver = rt["_endpoints"][qual]["liveVersion"]
+    elif qual == "DEFAULT" and "DEFAULT" in rt["_endpoints"]:
+        ver = rt["_endpoints"]["DEFAULT"]["liveVersion"]
+    snap = rt.get("_snap", {}).get(ver)
+    if not snap:
+        _snap(rt)
+        snap = rt["_snap"][ver]
+    sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
+    if len(sid) < 33:
+        raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
+    endpoint = os.environ.get("VYOMI_SELF_ENDPOINT") or ("http://" + h["host"] if h.get("host") else "http://127.0.0.1:8099")
+    try:
+        status, rh, out = host.invoke(rt, snap, s3, endpoint, sid, body or b"", h)
+    except host.HostError as e:
+        return _rt_client_err(str(e))
+    rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
+    ct = {k.lower(): v for k, v in rh.items()}.get("content-type", "application/json")
+    hdrs = {_SESS_HDR: sid, "x-vyomi-runtime-backend": host.backend_for(snap["agentRuntimeArtifact"])}
+    if status >= 400:
+        raw = out if isinstance(out, bytes) else out.read()
+        return _rt_client_err(f"Agent returned {status}: " + raw.decode("utf-8", "replace")[:500])
+    if isinstance(out, bytes):
+        return {"status": 200, "headers": {"content-type": ct, **hdrs}, "body": out}
+    try:
+        from core import ai_models_core as am
+    except ImportError:
+        import ai_models_core as am  # type: ignore
+    return am._stream_out(200, hdrs, iter(lambda: out.read1(65536) if hasattr(out, "read1") else out.read(65536), b""), "text/event-stream")
+
+
+def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
     """InvokeAgentRuntime: run the runtime's Vyomi agent spec (env VYOMI_AGENT_SPEC) in-process over llm_core."""
     q = {k.lower(): v for k, v in (query or {}).items()}
     h = {k.lower(): v for k, v in (headers or {}).items()}
@@ -1045,6 +2629,8 @@ def _invoke_runtime(rt, query, headers, body):
     if rt["status"] != "READY":
         return _rt_client_err(f"Runtime is {rt['status']}, not READY")
     raw_spec = (rt.get("environmentVariables") or {}).get(_SPEC_ENV)
+    if not raw_spec and _host().hostable(rt["agentRuntimeArtifact"]):
+        return _invoke_hosted(rt, qual, h, body, s3)
     if not raw_spec:
         return _rt_client_err("The simulator does not run AgentCore runtime containers. Give the runtime a Vyomi agent spec "
                               f"(environmentVariables[{_SPEC_ENV}] = JSON of instructions + tools) to make it invocable (Dev Simplified).")
@@ -1053,23 +2639,39 @@ def _invoke_runtime(rt, query, headers, body):
         spec = ag.parse_spec(raw_spec)
     except ag.SpecError as e:
         return _rt_client_err(f"Invalid Vyomi agent spec: {e}")
+    proto = (rt.get("protocolConfiguration") or {}).get("serverProtocol")
+    if proto in ("MCP", "A2A"):
+        return _invoke_protocol(rt, proto, spec, ag, h, body, st, lam)
     sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
     if len(sid) < 33:
         raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
     text, want_stream = _payload_text(body)
+    ext = _ext()
+    raw_h = dict(h)
+    claims = ext.jwt_claims(raw_h)
+    jwt = ""
+    for k in ("authorization", "x-amzn-bedrock-agentcore-runtime-custom-authorization"):
+        if (raw_h.get(k) or "").lower().startswith("bearer "):
+            jwt = raw_h[k][7:].strip()
+            break
+    actor = str(claims.get("sub") or h.get("x-amzn-bedrock-agentcore-runtime-user-id") or "anonymous")
+    text, mem_after = ext.memory_hooks(ext._x(st), spec, actor, sid, text)
     sess = rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
     accept = h.get("accept", "")
     hdrs = {_SESS_HDR: sid, "x-vyomi-local-model": llm.model_name()}
     try:
         if want_stream or "text/event-stream" in accept:
-            gen = ag.run_events(spec, text, sess["history"])
-            first = next(gen)
+            gen = ext.run_context_iter(st, lam, jwt, actor, lambda: ag.run_events(spec, text, sess["history"], stream_tokens=True))
+            first = next(gen)   # a dead model fails the request with a proper status before any byte is sent
 
             def sse():
                 import itertools
                 for ev in itertools.chain([first], gen):
-                    if ev["type"] == "final":
+                    if ev["type"] == "token":   # as the model produces it
+                        yield "data: " + json.dumps({"event": "token", "text": ev["text"]}) + "\n\n"
+                    elif ev["type"] == "final":
                         sess["history"].extend(ev["messages"])
+                        mem_after(ev["text"])
                         yield "data: " + json.dumps({"event": "final", "response": ev["text"], "usage": ev["usage"]}) + "\n\n"
                     elif ev["type"] == "model" and not ev["tool_calls"]:
                         yield "data: " + json.dumps({"event": "message", "text": ev["text"]}) + "\n\n"
@@ -1082,7 +2684,8 @@ def _invoke_runtime(rt, query, headers, body):
             except ImportError:
                 import ai_models_core as am  # type: ignore
             return am._stream_out(200, hdrs, sse(), "text/event-stream")
-        r = ag.run(spec, text, sess["history"])
+        r = ext.run_context(st, lam, jwt, actor, lambda: ag.run(spec, text, sess["history"]))
+        mem_after(r["text"])
     except llm.LlmUnavailable as e:
         return {"status": 503, "headers": {"content-type": "application/json", "x-amzn-errortype": "ServiceUnavailableException"},
                 "body": json.dumps({"message": f"{e}"}).encode()}
@@ -1094,14 +2697,124 @@ def _invoke_runtime(rt, query, headers, body):
                     "usage": r["usage"], "model": r["model"], "truncated": r["truncated"]}, hdrs)
 
 
+def _invoke_command(rt, query, headers, body):
+    """InvokeAgentRuntimeCommand: a command in the session workspace (core/agentcore_command_core on core/code_sandbox_core), streamed as an event stream."""
+    q = {k.lower(): v for k, v in (query or {}).items()}
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    if q.get("qualifier") and q["qualifier"] != "DEFAULT" and q["qualifier"] not in rt["_endpoints"]:
+        raise _nf(f"Endpoint {q['qualifier']} not found")
+    if rt["status"] != "READY":
+        return _rt_client_err(f"Runtime is {rt['status']}, not READY")
+    p = _body(body)
+    cmd, tmo = p.get("command"), p.get("timeout", 300)
+    if not isinstance(cmd, str) or not 1 <= len(cmd) <= 65536:
+        raise _bad("1 validation error detected: Value at 'body.command' failed to satisfy constraint: Member must have length between 1 and 65536")
+    if isinstance(tmo, bool) or not isinstance(tmo, int) or not 1 <= tmo <= 3600:
+        raise _bad("1 validation error detected: Value at 'body.timeout' failed to satisfy constraint: Member must have value between 1 and 3600")
+    sid = h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))
+    if len(sid) < 33:
+        raise _bad("1 validation error detected: Value at 'runtimeSessionId' failed to satisfy constraint: Member must have length greater than or equal to 33")
+    sess = rt["_sessions"].setdefault(sid, {"history": [], "created": _iso()})
+    files = sess.setdefault("files", {})
+    try:
+        from core import agentcore_command_core as cc
+    except ImportError:
+        import agentcore_command_core as cc  # type: ignore
+    gen = (_evt("chunk", ev) for ev in cc.events(cmd, files, rt.get("environmentVariables") or {}, tmo))
+    try:
+        from core import ai_models_core as am
+    except ImportError:
+        import ai_models_core as am  # type: ignore
+    return am._stream_out(200, {_SESS_HDR: sid}, gen, "application/vnd.amazon.eventstream")
+
+
+def _agent_card(rt, headers):
+    """GET /runtimes/{arn}/invocations/.well-known/agent-card.json: the A2A agent card of an A2A runtime (same auth as invoke)."""
+    if (rt.get("protocolConfiguration") or {}).get("serverProtocol") != "A2A":
+        return _j(404, {"message": "Only runtimes with serverProtocol A2A publish an agent card"})
+    raw_spec = (rt.get("environmentVariables") or {}).get(_SPEC_ENV)
+    ag = _agent_core()
+    try:
+        spec = ag.parse_spec(raw_spec) if raw_spec else {"instructions": "", "tools": []}
+    except ag.SpecError as e:
+        return _rt_client_err(f"Invalid Vyomi agent spec: {e}")
+    h = {k.lower(): v for k, v in headers.items()}
+    base = f"{'https' if h.get('x-forwarded-proto') == 'https' else 'http'}://{h.get('host', 'localhost')}"
+    return _j(200, _gt().a2a_card(rt, spec, f"{base}/runtimes/{urllib.parse.quote(rt['agentRuntimeArn'], safe='')}/invocations/"))
+
+
+def _invoke_protocol(rt, proto, spec, ag, h, body, st, lam):
+    """serverProtocol MCP / A2A runtimes: the payload is a JSON-RPC 2.0 request (as the real service forwards it to the container)."""
+    gt = _gt()
+    try:
+        req = json.loads((body or b"").decode("utf-8", "replace"))
+        if not isinstance(req, dict) or req.get("jsonrpc") != "2.0":
+            raise ValueError("not a JSON-RPC 2.0 request")
+    except ValueError as e:
+        return _j(200, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"Invalid request: {e}"}})
+    hdrs = {_SESS_HDR: h.get(_SESS_HDR) or ("sess-" + _rid(32, string.ascii_lowercase + string.digits))}
+    if proto == "MCP":
+        r = gt.runtime_mcp(spec, req, ag, rt["agentRuntimeName"])
+        return _j(202, None, hdrs) if r is None else _j(200, r, hdrs)
+    ext = _ext()
+    claims = ext.jwt_claims(h)
+    jwt = next((h[k][7:].strip() for k in ("authorization", "x-amzn-bedrock-agentcore-runtime-custom-authorization") if (h.get(k) or "").lower().startswith("bearer ")), "")
+    actor = str(claims.get("sub") or h.get("x-amzn-bedrock-agentcore-runtime-user-id") or "anonymous")
+
+    def run_agent(text, ctx):
+        text2, mem_after = ext.memory_hooks(ext._x(st), spec, actor, ctx, text)
+        sess = rt["_sessions"].setdefault(ctx, {"history": [], "created": _iso()})
+        r = ext.run_context(st, lam, jwt, actor, lambda: ag.run(spec, text2, sess["history"]))
+        mem_after(r["text"])
+        sess["history"].extend(r["messages"])
+        return r["text"]
+    def run_stream(text, ctx):
+        """Generator of ("token", piece) as the model produces it, ("tools", [names]) after a tool-calling step, then ("final", text)."""
+        text2, mem_after = ext.memory_hooks(ext._x(st), spec, actor, ctx, text)
+        sess = rt["_sessions"].setdefault(ctx, {"history": [], "created": _iso()})
+        for ev in ext.run_context_iter(st, lam, jwt, actor, lambda: ag.run_events(spec, text2, sess["history"], stream_tokens=True)):
+            if ev["type"] == "token":
+                yield "token", ev["text"]
+            elif ev["type"] == "model" and ev["tool_calls"]:
+                yield "tools", [c["name"] for c in ev["tool_calls"]]
+            elif ev["type"] == "final":
+                sess["history"].extend(ev["messages"])
+                mem_after(ev["text"])
+                yield "final", ev["text"]
+    try:
+        out = gt.runtime_a2a(rt, spec, req, run_agent, rt.setdefault("_a2a_tasks", {}), run_stream)
+        if isinstance(out, dict) and "_sse" in out:   # message/stream: Server-Sent Events, one JSON-RPC response per task event, sent as produced
+            try:
+                from core import ai_models_core as am
+            except ImportError:
+                import ai_models_core as am  # type: ignore
+            return am._stream_out(200, hdrs, ("data: " + json.dumps(ev) + "\n\n" for ev in out["_sse"]), "text/event-stream")
+    except llm.LlmUnavailable as e:
+        return {"status": 503, "headers": {"content-type": "application/json", "x-amzn-errortype": "ServiceUnavailableException"}, "body": json.dumps({"message": f"{e}"}).encode()}
+    return _j(200, out, hdrs)
+
+
 def agentcore_dispatch(s3, lam, method, path, query, headers, body):
     method = method.upper()
+    _orig_path = path
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
     try:
         st = _state(s3)
         if segs[0] == "runtimes":
-            return _runtimes(st, method, path, query, headers, body)
+            return _runtimes(st, method, path, query, headers, body, lam, s3)
+        if segs[0] == "identities":
+            r = _gt().dispatch(st, method, segs, body, headers, query)
+            if r is not None:
+                return r
+        if segs[0] in ("memories", "policy-engines"):
+            try:
+                from core import agentcore_ext_core as ext
+            except ImportError:
+                import agentcore_ext_core as ext  # type: ignore
+            r = ext.dispatch(st, lam, method, segs, query, headers, body)
+            if r is not None:
+                return r
         p = _body(body) if method in ("PUT", "POST", "PATCH") else {}
         if segs[0] == "gateways":
             if len(segs) == 1:
@@ -1113,7 +2826,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
             else:
                 gw = _find_gw(st, segs[1])
                 if len(segs) == 3 and segs[2] == "mcp" and method == "POST":
-                    return _mcp(st, lam, segs[1], p, headers)
+                    return _mcp(st, lam, segs[1], p, headers, (method, _orig_path, query, body))
                 if len(segs) == 2:
                     if method == "GET":
                         return _j(200, _pub(gw))
@@ -1121,7 +2834,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                         if not p.get("name") or not p.get("roleArn") or p.get("authorizerType") not in _GATEWAY_AUTH:
                             raise _bad("name, roleArn and authorizerType are required")
                         gw.update(name=p["name"], roleArn=p["roleArn"], authorizerType=p["authorizerType"], updatedAt=_iso())
-                        for f in ("description", "authorizerConfiguration", "exceptionLevel"):
+                        for f in ("description", "authorizerConfiguration", "exceptionLevel", "policyEngineConfiguration", "protocolConfiguration"):
                             if f in p:
                                 gw[f] = p[f]
                         return _j(202, _pub(gw))
@@ -1133,7 +2846,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                 elif segs[2] == "targets":
                     if len(segs) == 3:
                         if method == "POST":
-                            return _create_target(st, gw, p)
+                            return _create_target(st, gw, p, s3)
                         if method == "GET":
                             for t in gw["targets"].values():
                                 _ac_ready(t)
@@ -1151,6 +2864,11 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                                     cfg = p["targetConfiguration"]
                                     if "lambda" in (cfg.get("mcp") or {}):
                                         _tool_schema(cfg)
+                                    if "smithyModel" in (cfg.get("mcp") or {}):
+                                        t["_smithy"] = _gt().validate_smithy(cfg, s3)
+                                    if "openApiSchema" in (cfg.get("mcp") or {}):
+                                        _sp = _gt().validate_openapi(cfg["mcp"], s3)
+                                        t["_base"], t["_ops"] = _sp["servers"][0]["url"], _gt().openapi_operations(_sp)
                                     t["targetConfiguration"] = cfg
                                 for f in ("name", "description", "credentialProviderConfigurations"):
                                     if f in p:
