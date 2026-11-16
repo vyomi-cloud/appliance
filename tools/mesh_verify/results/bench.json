@@ -1,0 +1,191 @@
+{
+ "chat_alone": {
+  "short_gen": [
+   {
+    "wall_s": 7.8,
+    "completion_tokens": 94,
+    "prompt_tokens": 49,
+    "decode_tok_s": 12.89,
+    "prefill_tok_s": 41.42,
+    "text": "A chiller in a data center is a critical component that helps maintain optimal temperatures for the servers and other IT equipment. It functions by removing hea",
+    "reasoning": ""
+   },
+   {
+    "wall_s": 17.8,
+    "completion_tokens": 137,
+    "prompt_tokens": 49,
+    "decode_tok_s": 7.67,
+    "prefill_tok_s": 13.94,
+    "text": "A chiller in a data center is a critical component that helps maintain optimal operating temperatures for the servers and other IT equipment. It functions by re",
+    "reasoning": ""
+   },
+   {
+    "wall_s": 12.5,
+    "completion_tokens": 117,
+    "prompt_tokens": 49,
+    "decode_tok_s": 9.38,
+    "prefill_tok_s": 12.11,
+    "text": "A chiller in a data center is a critical component that helps maintain optimal operating temperatures for the servers and other IT equipment. It functions by re",
+    "reasoning": ""
+   }
+  ],
+  "long_prefill": {
+   "wall_s": 22.9,
+   "completion_tokens": 25,
+   "prompt_tokens": 667,
+   "decode_tok_s": 6.71,
+   "prefill_tok_s": 33.25,
+   "text": "The facilities team reviewed HVAC maintenance logs, chiller inspection results, and work-order backlog for building 7 multiple times.",
+   "reasoning": ""
+  },
+  "rss_mb": 3214
+ },
+ "plan": {
+  "budget_2800_default_8GB_codespace": {
+   "vision_with_chat": {
+    "stop": [
+     "chat"
+    ],
+    "fits": true,
+    "total_mb": 900
+   },
+   "reasoning_with_chat": {
+    "stop": [
+     "chat"
+    ],
+    "fits": true,
+    "total_mb": 1500
+   },
+   "reasoning_with_chat_vision": {
+    "stop": [
+     "vision",
+     "chat"
+    ],
+    "fits": true,
+    "total_mb": 1500
+   }
+  },
+  "budget_9000_16GB_mesh_assumed": {
+   "vision_with_chat": {
+    "stop": [],
+    "fits": true,
+    "total_mb": 3400
+   },
+   "reasoning_with_chat": {
+    "stop": [],
+    "fits": true,
+    "total_mb": 4000
+   },
+   "reasoning_with_chat_vision": {
+    "stop": [],
+    "fits": true,
+    "total_mb": 4900
+   }
+  }
+ },
+ "three_up_16GB_budget": {
+  "vision_start": {
+   "plan": {
+    "stop": [],
+    "fits": true,
+    "total_mb": 3400
+   },
+   "ready_s": 3.5
+  },
+  "vision_gen": {
+   "wall_s": 4.4,
+   "completion_tokens": 3,
+   "prompt_tokens": 156,
+   "decode_tok_s": 35.06,
+   "prefill_tok_s": 36.42,
+   "text": " Red.",
+   "reasoning": ""
+  },
+  "chat_during_vision": {
+   "wall_s": 4.5,
+   "completion_tokens": 8,
+   "prompt_tokens": 35,
+   "decode_tok_s": 2.64,
+   "prefill_tok_s": 5.9,
+   "text": "Hi, how can I help?",
+   "reasoning": ""
+  },
+  "rss_mb_chat_plus_vision": {
+   "chat": 2490,
+   "vision": 461
+  },
+  "reasoning_start_budget9000": {
+   "plan": {
+    "stop": [],
+    "fits": true,
+    "total_mb": 4900
+   },
+   "ready_s": 11.7
+  },
+  "reasoning_gen": {
+   "wall_s": 28.8,
+   "completion_tokens": 295,
+   "prompt_tokens": 32,
+   "decode_tok_s": 10.44,
+   "prefill_tok_s": 53.63,
+   "text": "\n\n**Solution:**\n\nThe shop sells pens at a rate of **3 pens for $2**. To find the cost for **12 pens**, follow these steps:\n\n1. **Determine the cost per pen:**\n ",
+   "reasoning": "\nFirst, determine the cost per pen by dividing the total cost by the number of pens. The shop sells 3 pens for $2, so th"
+  },
+  "rss_mb_all_three": {
+   "chat": 25,
+   "vision": 25,
+   "reasoning": 1721
+  }
+ },
+ "swap_2800_default_budget": {
+  "start_vision_on_2800_with_chat": {
+   "plan": {
+    "stop": [
+     "chat"
+    ],
+    "fits": true,
+    "total_mb": 900
+   },
+   "ready_s": 2.0
+  },
+  "chat_state_after": "exited",
+  "vision_state_after": "running",
+  "vision_gen_after_swap": {
+   "wall_s": 3.2,
+   "completion_tokens": 3,
+   "prompt_tokens": 156,
+   "decode_tok_s": 85.65,
+   "prefill_tok_s": 49.47,
+   "text": " Red.",
+   "reasoning": ""
+  }
+ },
+ "docker_commands_issued": [
+  [
+   "run",
+   "-d"
+  ],
+  [
+   "run",
+   "-d"
+  ],
+  [
+   "stop",
+   "vyomi-llm-reasoning"
+  ],
+  [
+   "stop",
+   "vyomi-llm-vision"
+  ],
+  [
+   "stop",
+   "vyomi-llm"
+  ],
+  [
+   "start",
+   "vyomi-llm-vision"
+  ]
+ ],
+ "where": "Mac Apple M1 16GB arm64, CPU-only (-ngl 0, -t 4), llama.cpp b12441; NOT a Codespace (creation blocked HTTP 402)",
+ "when": "2026-11-16T21:01:47"
+}
