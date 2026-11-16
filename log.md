@@ -1,3 +1,18 @@
+### Upstream watch — 2026-11-16T23:12:11+00:00
+
+Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `announcement` AWS KMS now supports key sharing with AWS Resource Access Manager ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/kms-key-sharing-resource-access-manager/))
+- · `announcement` AWS Secrets Manager adds managed external secrets support for Auth0, Okta, and Palo Alto Networks ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/secrets-manager-managed-external-secrets-auth0-okta-palo-alto/))
+- · `announcement` AWS announces Networking Flexible Cost Allocation for Amazon VPC ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/networking-flexible-cost-allocation/))
+- · `announcement` Amazon S3 Vectors now supports hybrid search combining vector and full text for more relevant search results ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/s3-vectors-hybrid-search/))
+- · `announcement` IAM Identity Center now supports VPC endpoints and network access controls ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/iam-identity-center-vpc-endpoints/))
+
+Sources that failed this run (1): pypi/azure-mgmt-cognitiveservices: <urlopen error _ssl.c:994: The handshake operation timed out>
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-16T22:12:10+00:00
 
 Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3013,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-11-03T18:32:54+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure web: [Microsoft.Web] Introduce new api version "2026-08-01" and new resource type "Microsoft.Web/sites/silos", "Microsoft.Web/serverfarms/silos", "Microsoft.Web/sites/managedTrafficConfig/default", ""Micro ([link](https://github.com/Azure/azure-rest-api-specs/commit/2d07da92bcad212fdd5e2bffebf96563081ec250))
-- · `announcement` Amazon EKS Capabilities now supports Argo CD Notifications ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eks-argo-cd-notifications))
-
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-03T17:31:07+00:00
