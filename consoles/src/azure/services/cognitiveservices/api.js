@@ -5,7 +5,7 @@
  * Served by core/azure_cognitiveservices_core.py through core/azure_arm_core.py — the same
  * azure-mgmt-cognitiveservices / armcognitiveservices SDK shapes work unchanged. */
 import { restJson } from "../../../common/wire.js";
-import { AI_MODELS } from "../../../common/aiModels.js";
+import { AI_MODELS, markServed } from "../../../common/aiModels.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.CognitiveServices", "accounts", "2024-10-01");
@@ -60,7 +60,7 @@ export const DEPLOY_SKUS = ["Standard", "GlobalStandard", "ProvisionedManaged", 
 export const MODELS = AI_MODELS.map((m) => [m.vendor, m.id, "1", 1000]);
 /** Live availability per model name (account models list); without the Mesh only the local small model is available. */
 export const modelAvailability = async (rg, name) => {
-  try { return Object.fromEntries(((await restJson("GET", `${ARM.path(rg, name)}/models`, { query: { "api-version": API_VERSION } })).value || []).map((x) => [x.model?.name, x.vyomiAvailability])); }
+  try { const a = Object.fromEntries(((await restJson("GET", `${ARM.path(rg, name)}/models`, { query: { "api-version": API_VERSION } })).value || []).map((x) => [x.model?.name, x.vyomiAvailability])); markServed(a); return a; }
   catch { return {}; }
 };
 
@@ -92,6 +92,26 @@ const lockPath = (rg, name, lockName) => `${ARM.path(rg, name)}/providers/Micros
 export const listLocks = async (rg, name) => (await restJson("GET", lockPath(rg, name), { query: { "api-version": LOCK_API_VERSION } })).value || [];
 export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
+
+// Locks at the resource group and subscription scope: the Locks blade lists every lock that applies to the account, with its scope.
+const scopePath = (scope, rg) => (scope === "Subscription" ? `/subscriptions/${getSubscription()}` : `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}`);
+const scopeLockPath = (scope, rg, lockName) => `${scopePath(scope, rg)}/providers/Microsoft.Authorization/locks${lockName ? `/${encodeURIComponent(lockName)}` : ""}`;
+export const listAllLocks = async (rg, name) => {
+  const own = await listLocks(rg, name);
+  const more = await Promise.all(["Resource group", "Subscription"].map(async (sc) => {
+    try { return (await restJson("GET", scopeLockPath(sc, rg), { query: { "api-version": LOCK_API_VERSION } })).value || []; } catch { return []; }
+  }));
+  const acctId = ARM.path(rg, name).toLowerCase(), rgId = scopePath("Resource group", rg).toLowerCase();
+  const seen = new Set(), out = [];
+  for (const l of [...own, ...more.flat()]) {   // a list at a scope also returns the locks beneath it, so classify by the lock's own id
+    const id = String(l.id || "").toLowerCase().replace(/\/providers\/microsoft\.authorization\/locks\/[^/]+$/, "");
+    const scope = id === acctId ? "Resource" : id === rgId ? "Resource group" : /^\/subscriptions\/[^/]+$/.test(id) ? "Subscription" : null;
+    if (scope && !seen.has(l.id)) { seen.add(l.id); out.push({ ...l, _scope: scope }); }
+  }
+  return out;
+};
+export const putScopeLock = (scope, rg, lockName, body) => restJson("PUT", scopeLockPath(scope, rg, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
+export const deleteScopeLock = (scope, rg, lockName) => restJson("DELETE", scopeLockPath(scope, rg, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to this account) ──
 export const listActivityLog = async (rg, name, sinceIso) => {

@@ -87,7 +87,7 @@ const MODULES = [
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
   "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "imagebuilder_core.py", "reservations_core.py", "networkmanager_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
-  "llm_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
+  "llm_core.py", "gcp_agentgov_core.py", "bedrock_bda_core.py", "cloudtrail_events_core.py", "agent_spec_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "cedar_wasm_shim.py", "agentcore_command_core.py", "agentcore_gateway_targets.py", "agentcore_runtime_host.py", "gcp_agentengine_core.py", "gcp_agentplatform_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py", "ai_model_catalog.py", "ai_models_core.py", "bedrock_guardrails_core.py", "bedrock_ctl_core.py", "bedrock_build_core.py", "training_core.py", "import_core.py", "azure_openai_agents_core.py", "bedrock_agents_core.py", "code_sandbox_core.py", "knowledge_core.py", "opensearch_core.py", "redshift_core.py", "zeroetl_core.py", "dms_core.py",
   "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py", "k8s_tier_gate.py",
   "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py", "iam_store.py", "iam_core.py",
@@ -125,7 +125,7 @@ const CORES = [
   "azure_backup_core.py",
   "azure_sqlbackup_core.py",
   "azure_dpbackup_core.py",
-  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
+  "azure_files_core.py", "azure_search_sources_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "gcp_eventarc_core.py", "gcp_apigateway_core.py", "gcp_apigateway_gateway.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py", "gcp_binauthz_core.py", "gcp_bigquery_core.py", "gcp_osconfig_core.py", "gcp_capacity_core.py", "gcp_commit_core.py", "gcp_servicehealth_core.py", "gcp_computesim_core.py", "gcp_enrich_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py", "gcp_scc_core.py", "gcp_scc_v1_core.py", "gcp_dns_core.py", "gcp_functions_core.py", "gcp_wire_ext.py", "gcp_ext_specs.py", "gcp_compute_fill_core.py",
@@ -202,6 +202,12 @@ async function bootBackend() {
   // sqlite3 is a separate Pyodide package (vendored by wasm/fetch_pyodide.py): the SQL data
   // planes (Azure SQL query editor, RDS Data API) need it — the relay worker loads it too.
   try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("[nano] sqlite3 load skipped:", e); }
+  // Knowledge Bases parse PDFs with pure-Python pypdf (BSD-3), which is NOT in the Pyodide 0.26 package set: unpack the vendored wheel
+  // (wasm/pylib/, ~0.4 MB, same-origin, no PyPI call). Without it a .pdf fails ingestion with an explicit reason (DOCX/XLSX/PPTX need nothing).
+  try { py.unpackArchive(await (await fetch(BASE + "/pylib/pypdf-7.1.0-py3-none-any.whl")).arrayBuffer(), "wheel"); } catch (e) { console.warn("[nano] pypdf unavailable (PDF knowledge-base documents will fail):", e); }
+  // Cedar policy engine (AgentCore gateway ENFORCE policies): the OSS Cedar core as WebAssembly, vendored in wasm/cedar/ (4.4 MB).
+  try { const { installCedar } = await import(BASE + "/cedar/cedar-eval.mjs"); await installCedar(new URL(BASE + "/cedar/", location.origin).href); }
+  catch (e) { console.warn("[nano] Cedar evaluator unavailable (ENFORCE gateways fail closed):", e); }
   // Kubernetes posture for Defender for Cloud: the regolibrary (Kubescape) Rego controls compiled to
   // WebAssembly with OPA (wasm/kubescape/). kubescape_core calls globalThis.__vyomi_kubescape_eval
   // synchronously; if this fails to load, Defender reports the scanner as unavailable (never fakes).
@@ -348,6 +354,34 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
     globalThis.__vyomiLlm = engine || null;
     py.runPython(`_llm_bridge_set(${JSON.stringify(engine ? String(engine.model || "webllm") : "")})`);
   };
+  // ── In-browser embeddings (transformers.js + ONNX all-MiniLM-L6-v2, ~23 MB q8, 384-d, WASM: no WebGPU needed) ──────────
+  // Backs Bedrock Knowledge Bases (Titan/Cohere/nomic embed ids resolve to it). Loaded lazily on the first embed call; if the
+  // model cannot be fetched (offline/blocked) llm_core falls back to its labelled deterministic "vyomi-hash-embed".
+  py.runPython(`
+import json, builtins
+async def _embed_bridge(texts):
+    import js
+    r = await js.globalThis.vyomiEmbed(json.dumps(texts))
+    return json.loads(str(r))
+def _embed_bridge_set(model):
+    from core import llm_core
+    llm_core.set_async_embed(_embed_bridge if model else None, model=model or None)
+builtins._embed_bridge_set = _embed_bridge_set
+`);
+  let __embPipe = null;
+  globalThis.vyomiEmbed = async (textsJson) => {
+    if (!__embPipe) {
+      __embPipe = (async () => {
+        const tf = globalThis.transformers || await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");
+        return tf.pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true });
+      })();
+      __embPipe.catch(() => { __embPipe = null; });
+    }
+    const pipe = await __embPipe;
+    const out = await pipe(JSON.parse(textsJson), { pooling: "mean", normalize: true });
+    return JSON.stringify(out.tolist());
+  };
+  py.runPython(`_embed_bridge_set("all-minilm-l6-v2")`);
   globalThis.vyomiLlmStatus = () => JSON.parse(py.runPython("_llm_bridge_status()"));
   // The four web LLMs the Nano catalogue lists (core/ai_model_catalog.py, web mode). id = catalogue id, mlc = WebLLM model_id.
   globalThis.vyomiWebLLMModels = [
@@ -546,6 +580,8 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
     if (ev.data && ev.data.type === "vyomi-ready-ping") { ev.source && ev.source.postMessage({ type: "pyodide-ready" }); return; }
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
+    // wllama (imported chat models) may download/load a base GGUF or generate for longer than the SW's 15 s window: tell the SW we are alive.
+    const ka = setInterval(() => { try { const w = globalThis.vyomiWllama && globalThis.vyomiWllama.status(); if (w && (w.busy || w.phase === "downloading" || w.phase === "loading")) port.postMessage({ keepalive: true }); } catch (_) {} }, 4000);
     try {
       // Rehydrate from the SHARED snapshot before serving, so this op sees resources
       // created in the OTHER context (the SDK/relay worker) even if a boot-time
@@ -588,7 +624,7 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
           status: 500, message: String(e && e.message || e), stack: String(e && e.stack || e) });
       } catch (_) {}
       port.postMessage({ ok: false, error: String(e) });
-    }
+    } finally { clearInterval(ka); }
   });
 
   // In-browser VM compute: the host is ~15 KB and inert unless the nano_vm_compute
@@ -626,9 +662,13 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
   // Host access to in-browser databases: psql / mysql / ORMs reach RDS + Cloud SQL instances through `vyomi-tunnel` (db-bridge.js).
   // API Gateway data plane: backend calls leave the tab through the local tunnel / hosted relay (core/gcp_apigateway_gateway.ahandle).
   try { import("./gw-bridge.js").then((m) => m.installGatewayBridge()).catch((e) => console.warn("[nano] gateway bridge skipped:", e)); } catch (_) {}
+  // Real head training behind Bedrock/Vertex/Azure model customization (core/training_core.py): in-tab MiniLM embeddings + a typed-array Web Worker.
+  try { import("./train-bridge.js").then((m) => m.installTrainBridge(py)).catch((e) => console.warn("[nano] training bridge skipped:", e)); } catch (_) {}
+  // Imported chat models (LoRA adapter GGUF): wllama (llama.cpp WASM) serves base + adapter in this tab (core/import_core.py, wllama-bridge.js).
+  try { import("./wllama-bridge.js").then((m) => m.installWllamaBridge(py)).catch((e) => console.warn("[nano] wllama bridge skipped:", e)); } catch (_) {}
   try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
   window.__vyomiNanoReady = true;
-  try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
+  window.__vyNanoReady = true; try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 

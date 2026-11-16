@@ -21,6 +21,14 @@ def _check(name, cond):
     print(f"  ok  {name}")
 
 
+def _first_event_payload(body):
+    """Decode the first application/vnd.amazon.eventstream frame (prelude: total len, headers len, crc; then headers, payload, crc).
+    Frame-aware, so a CRC byte that happens to be 0x7b/0x7d cannot confuse the JSON extraction."""
+    import struct
+    total, hlen = struct.unpack(">II", body[:8])
+    return json.loads(body[12 + hlen:total - 4])
+
+
 def call(r, auth, method, path, payload=None, query=None):
     out = r.handle(method, path, query or {}, {"authorization": auth, "content-type": "application/json"}, json.dumps(payload).encode() if payload is not None else b"")
     b = out["body"]
@@ -92,7 +100,7 @@ def main():
     _check("create alias -> version 1", s == 202 and o["agentAlias"]["routingConfiguration"][0]["agentVersion"] == "1")
     s, o, raw = call(r, BR, "POST", f"/agents/{aid}/agentAliases/{alias}/sessions/sess-1/text", {"inputText": "How long do refunds take?"})
     body = raw["body"]
-    payload = json.loads(body[body.index(b"{"):body.rindex(b"}") + 1])
+    payload = _first_event_payload(body)
     _check("InvokeAgent returns eventstream chunk with answer", s == 200 and base64.b64decode(payload["bytes"]).startswith(b"ANSWER") and payload.get("attribution"))
     _check("TSTALIASID invokes draft", call(r, BR, "POST", f"/agents/{aid}/agentAliases/TSTALIASID/sessions/s2/text", {"inputText": "hi"})[0] == 200)
     _check("unknown alias 404", call(r, BR, "POST", f"/agents/{aid}/agentAliases/ZZZZZZZZZZ/sessions/s/text", {"inputText": "hi"})[0] == 404)

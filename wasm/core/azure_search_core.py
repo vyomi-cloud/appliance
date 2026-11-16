@@ -42,8 +42,12 @@ import uuid
 
 try:
     from core import azure_search_vector_core as vec
+    from core import azure_search_sources_core as srcs
+    from core import knowledge_core as kc
 except ImportError:  # Pyodide flat layout
     import azure_search_vector_core as vec  # type: ignore
+    import azure_search_sources_core as srcs  # type: ignore
+    import knowledge_core as kc  # type: ignore
 
 NAMESPACE = "Microsoft.Search"
 API_VERSION = "2023-11-01"
@@ -211,7 +215,7 @@ def validate_index(body):
             return "A key field cannot be facetable."
     if keys != 1:
         return f"The index must have exactly one key field (found {keys})."
-    return None
+    return vec.validate_semantic(body)
 
 
 def _norm_index(body, name):
@@ -230,6 +234,8 @@ def _norm_index(body, name):
                               "retrievable": bool(f.get("retrievable", True))})
     if body.get("vectorSearch"):
         out["vectorSearch"] = body["vectorSearch"]
+    if body.get("semantic"):
+        out["semantic"] = body["semantic"]
     return out
 
 
@@ -367,12 +373,15 @@ def search(index_rec, params):
             if not toks:
                 continue
             (mustnot if neg else (must if phrase else terms)).append(toks)
-    n = max(len(docs), 1)
-    df = {}
     corpus = {k: tokenize(_searchable_text(d, idx)) for k, d in docs.items()}
-    for toks in corpus.values():
-        for t in set(toks):
-            df[t] = df.get(t, 0) + 1
+    # keyword half = Okapi BM25 over the whole index (SQLite FTS5 bm25(), core/knowledge_core), as Azure AI Search scores text
+    q_terms = [t for ph in must + terms for t in ph]
+    if q_terms:
+        order_keys = list(docs)
+        bm = kc.bm25([" ".join(corpus[k]) for k in order_keys], " ".join(q_terms))
+        bm_by_key = {order_keys[i]: sc for i, sc in bm.items()}
+    else:
+        bm_by_key = {}
     scored = []
     keyf = next(f["name"] for f in idx["fields"] if f["key"])
     for d in cand:
@@ -383,12 +392,7 @@ def search(index_rec, params):
             continue
         score = 1.0
         if text != "*":
-            score = 0.0
-            for ph in must + terms:
-                for t in ph:
-                    tf = toks.count(t)
-                    if tf:
-                        score += (1 + math.log(tf)) * (math.log(1 + n / df.get(t, 1)))
+            score = bm_by_key.get(d[keyf], 0.0)
             if (terms or must) and score == 0.0:
                 continue
         scored.append((score, d))
@@ -397,15 +401,30 @@ def search(index_rec, params):
             scored = vranked
         else:
             scored.sort(key=lambda sd: -sd[0])
-            scored = vec.fuse(scored, vranked, keyf)
+            scored = vec.fuse(scored, vranked, keyf, vec.query_weight(vq))
+    sem = None
+    qtype = str(params.get("queryType") or "simple").lower()
+    if qtype == "semantic":
+        if text == "*":
+            return _err(400, "InvalidRequest", "queryType 'semantic' requires a text query in 'search'.")
+        sem_err = vec.semantic_check(idx, params)
+        if sem_err:
+            return _err(400, "InvalidRequest", sem_err)
+        scored.sort(key=lambda sd: -sd[0])
+        try:
+            scored, sem = vec.semantic_rerank(index_rec, idx, text, scored, params)
+        except vec.llm.LlmUnavailable as e:
+            return _err(400, "InvalidRequest", f"The semantic ranker's embedding model is not available: {e}")
+    elif qtype not in ("simple", "full"):
+        return _err(400, "InvalidRequest", f"Unsupported queryType '{qtype}'.")
     order = params.get("$orderby") or params.get("orderby")
-    if order:
+    if order and not sem:
         for clause in reversed([c.strip() for c in order.split(",") if c.strip()]):
             fld, _, direction = clause.partition(" ")
             if fld not in fm or not fm[fld]["sortable"]:
                 return _err(400, "InvalidRequest", f"Invalid expression: field '{fld}' is not sortable.")
             scored.sort(key=lambda sd: (sd[1].get(fld) is None, sd[1].get(fld)), reverse=direction.strip().lower() == "desc")
-    else:
+    elif not sem:
         scored.sort(key=lambda sd: -sd[0])
     total = len(scored)
     top = int(params.get("$top") or params.get("top") or 50)
@@ -419,6 +438,15 @@ def search(index_rec, params):
         return _err(400, "InvalidRequest", f"Invalid expression: Unknown field '{bad[0]}' in $select.")
     value = [dict({"@search.score": round(s, 6)}, **{c: d.get(c) for c in cols if fm[c]["retrievable"]}) for s, d in scored[skip:skip + top]]
     body = {"value": value}
+    if sem:
+        for row, (_s, d) in zip(value, scored[skip:skip + top]):
+            info = sem["docs"].get(d[keyf])
+            if info:
+                row["@search.rerankerScore"] = info["score"]
+                if info.get("caption"):
+                    row["@search.captions"] = [info["caption"]]
+        if sem["answers"] is not None:
+            body["@search.answers"] = sem["answers"]
     if str(params.get("$count") or params.get("count")).lower() == "true":
         body["@odata.count"] = total
     facets = params.get("facet") or params.get("facets")
@@ -498,7 +526,106 @@ def _parse_blob(name, data, mode):
     return [{"content": text}]
 
 
-def run_indexer(svc, ix_name, blob_store, account_lookup=None):
+def _mapping_fn(name, v):
+    import urllib.parse as up
+    if v is None:
+        return None
+    if name == "base64Encode":
+        return base64.urlsafe_b64encode(str(v).encode()).decode()
+    if name == "base64Decode":
+        s = str(v)
+        return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4)).decode("utf-8", "replace")
+    if name == "urlEncode":
+        return up.quote(str(v), safe="")
+    if name == "urlDecode":
+        return up.unquote(str(v))
+    if name == "jsonArrayToStringCollection":
+        arr = json.loads(v) if isinstance(v, str) else v
+        return [str(x) for x in arr] if isinstance(arr, list) else None
+    raise ValueError(f"Unsupported mapping function '{name}'.")
+
+
+def apply_field_mappings(ix, row):
+    """Indexer ``fieldMappings`` (sourceFieldName -> targetFieldName, optional mappingFunction); same-name fields map implicitly."""
+    out = dict(row)
+    for m in ix.get("fieldMappings") or []:
+        src = m.get("sourceFieldName")
+        if src not in row:
+            continue
+        fn = (m.get("mappingFunction") or {}).get("name")
+        out[m.get("targetFieldName") or src] = _mapping_fn(fn, row[src]) if fn else row[src]
+    return out
+
+
+def _index_rows(svc, ix, idx_rec, ds, res, bname, rows, meta, path, seen):
+    """Push the rows of ONE source item (a blob, or a Cosmos/SQL row) through mappings, the skillset and into the index."""
+    keyf = next(f["name"] for f in idx_rec["_def"]["fields"] if f["key"])
+    fm = _fmap(idx_rec["_def"])
+    sk = svc.get("_skillsets", {}).get(ix.get("skillsetName") or "")
+    for n, row in enumerate(rows):
+        try:
+            mapped = apply_field_mappings(ix, row)
+        except (ValueError, json.JSONDecodeError) as e:
+            res["itemsFailed"] += 1
+            res["errors"].append({"key": bname, "errorMessage": f"Field mapping failed: {e}"})
+            continue
+        doc = {k: v for k, v in mapped.items() if k in fm}
+        for k, v in meta.items():
+            if k in fm and k not in doc:
+                doc[k] = v
+        if keyf not in doc:
+            if path is None:
+                res["itemsFailed"] += 1
+                res["errors"].append({"key": bname, "errorMessage": f"The document is missing the index key field '{keyf}'; map a source column to it with fieldMappings."})
+                continue
+            doc[keyf] = path if len(rows) == 1 else f"{path}_{n}"
+        doc = {k: _soft(fm[k]["type"], v) for k, v in doc.items()}
+        if sk:
+            tree, serr = vec.run_skillset(sk, {**mapped, **meta})
+            if serr:
+                res["itemsFailed"] += 1
+                res["errors"].append({"key": bname, "errorMessage": serr})
+                continue
+            for om in ix.get("outputFieldMappings") or []:
+                tgt = om.get("targetFieldName")
+                val = vec._get(tree, om.get("sourceFieldName") or "")
+                if tgt in fm and val is not None:
+                    doc[tgt] = _soft(fm[tgt]["type"], val) if fm[tgt]["type"] != "Collection(Edm.Single)" else val
+            mode_p = ((sk.get("indexProjections") or {}).get("parameters") or {}).get("projectionMode", "includeIndexingParentDocuments")
+            for tname, children in vec.project(sk, tree, doc[keyf]).items():
+                trec = svc["_indexes"].get(tname)
+                if trec is None:
+                    res["itemsFailed"] += 1
+                    res["errors"].append({"key": bname, "errorMessage": f"Projection target index '{tname}' does not exist."})
+                    continue
+                tkey = next(f["name"] for f in trec["_def"]["fields"] if f["key"])
+                tfm = _fmap(trec["_def"])
+                pk = [s2["parentKeyFieldName"] for s2 in sk["indexProjections"]["selectors"] if s2["targetIndexName"] == tname][0]
+                for stale in [k for k, d in trec["_docs"].items() if d.get(pk) == doc[keyf]]:
+                    trec["_docs"].pop(stale)   # re-index of a parent replaces its chunks
+                for ch in children:
+                    n_ord = ch.pop("__ordinal")
+                    cdoc = {k: v for k, v in ch.items() if k in tfm}
+                    cdoc[tkey] = vec.child_key(doc[keyf], n_ord)
+                    cr = _docs_index(trec, {"value": [dict(cdoc, **{"@search.action": "mergeOrUpload"})]})["body"]["value"][0]
+                    if cr["status"]:
+                        res["itemsProcessed"] += 1
+                    else:
+                        res["itemsFailed"] += 1
+                        res["errors"].append({"key": bname, "errorMessage": cr["errorMessage"]})
+            if mode_p == "skipIndexingParentDocuments":
+                seen.add(doc[keyf])
+                continue
+        r = _docs_index(idx_rec, {"value": [dict(doc, **{"@search.action": "mergeOrUpload"})]})["body"]["value"][0]
+        seen.add(doc[keyf])
+        if r["status"]:
+            res["itemsProcessed"] += 1
+        else:
+            res["itemsFailed"] += 1
+            res["errors"].append({"key": bname, "errorMessage": r["errorMessage"]})
+
+
+def run_indexer(svc, ix_name, blob_store, account_lookup=None, cosmos_store=None, sql_store=None):
     ix = svc["_indexers"].get(ix_name)
     started = _now()
     status = svc["_ix_status"].setdefault(ix_name, {"status": "running", "lastResult": None, "executionHistory": []})
@@ -508,8 +635,33 @@ def run_indexer(svc, ix_name, blob_store, account_lookup=None):
     idx_rec = svc["_indexes"].get(ix["targetIndexName"])
     if ds is None or idx_rec is None:
         res.update(status="transientFailure", errorMessage="The data source or target index no longer exists.")
+    elif ds["type"] in ("cosmosdb", "azuresql"):
+        wm = status.get("_hwm")
+        res["initialTrackingState"] = None if wm is None else str(wm)
+        rows, new_wm, err = srcs.read(ds, cosmos_store, sql_store, wm)
+        if err:
+            res.update(status="transientFailure", errorMessage=err)
+        else:
+            keyf = next(f["name"] for f in idx_rec["_def"]["fields"] if f["key"])
+            seen = set()
+            for n, row in enumerate(rows):
+                if srcs.is_deleted(ds, row):
+                    try:
+                        k = apply_field_mappings(ix, row).get(keyf)
+                    except (ValueError, json.JSONDecodeError):
+                        k = None
+                    if k is not None:
+                        idx_rec["_docs"].pop(str(k), None)
+                        res["itemsProcessed"] += 1
+                    continue
+                _index_rows(svc, ix, idx_rec, ds, res, str(row.get("id", row.get(keyf, n))), [row], {}, None, seen)
+            status["_hwm"] = new_wm
+            res["finalTrackingState"] = None if new_wm is None else str(new_wm)
+            max_fail = (ix.get("parameters") or {}).get("maxFailedItems", 0)
+            if res["itemsFailed"] > max_fail >= 0:
+                res.update(status="transientFailure", errorMessage="Indexer failed: items failed exceeded maxFailedItems.")
     elif ds["type"] != "azureblob":
-        res.update(status="transientFailure", errorMessage=f"Data source type '{ds['type']}' is not readable by Vyomi indexers (only azureblob).")
+        res.update(status="transientFailure", errorMessage=f"Data source type '{ds['type']}' is not readable by Vyomi indexers (azureblob, cosmosdb and azuresql are).")
     elif blob_store is None:
         res.update(status="transientFailure", errorMessage="No Blob store is attached to this search service.")
     else:
@@ -521,8 +673,6 @@ def run_indexer(svc, ix_name, blob_store, account_lookup=None):
             res.update(status="transientFailure", errorMessage=f"The container '{cont}' does not exist in storage account '{acct}'.")
         else:
             mode = ((ix.get("parameters") or {}).get("configuration") or {}).get("parsingMode", "default")
-            keyf = next(f["name"] for f in idx_rec["_def"]["fields"] if f["key"])
-            fm = _fmap(idx_rec["_def"])
             blobs = blob_store.container_blobs(key)
             seen = set()
             for bname, entry in sorted(blobs.items()):
@@ -541,58 +691,9 @@ def run_indexer(svc, ix_name, blob_store, account_lookup=None):
                     res["itemsFailed"] += 1
                     res["errors"].append({"key": bname, "errorMessage": f"Parsing failed: {e}"})
                     continue
-                for n, row in enumerate(rows):
-                    doc = {k: v for k, v in row.items() if k in fm}
-                    meta = {"metadata_storage_name": bname.rsplit("/", 1)[-1], "metadata_storage_path": path,
-                            "metadata_storage_size": len(data), "metadata_content_type": entry.get("content_type") or entry.get("content-type")}
-                    for k, v in meta.items():
-                        if k in fm and k not in doc:
-                            doc[k] = v
-                    if keyf not in doc:
-                        doc[keyf] = path if len(rows) == 1 else f"{path}_{n}"
-                    doc = {k: _soft(fm[k]["type"], v) for k, v in doc.items()}
-                    sk = svc.get("_skillsets", {}).get(ix.get("skillsetName") or "")
-                    if sk:
-                        tree, serr = vec.run_skillset(sk, {**row, **meta})
-                        if serr:
-                            res["itemsFailed"] += 1
-                            res["errors"].append({"key": bname, "errorMessage": serr})
-                            continue
-                        mode_p = ((sk.get("indexProjections") or {}).get("parameters") or {}).get("projectionMode", "includeIndexingParentDocuments")
-                        for tname, children in vec.project(sk, tree, doc[keyf]).items():
-                            trec = svc["_indexes"].get(tname)
-                            if trec is None:
-                                res["itemsFailed"] += 1
-                                res["errors"].append({"key": bname, "errorMessage": f"Projection target index '{tname}' does not exist."})
-                                continue
-                            tkey = next(f["name"] for f in trec["_def"]["fields"] if f["key"])
-                            tfm = _fmap(trec["_def"])
-                            pk = [s2["parentKeyFieldName"] for s2 in sk["indexProjections"]["selectors"] if s2["targetIndexName"] == tname][0]
-                            for stale in [k for k, d in trec["_docs"].items() if d.get(pk) == doc[keyf]]:
-                                trec["_docs"].pop(stale)   # re-index of a parent replaces its chunks
-                            for ch in children:
-                                n_ord = ch.pop("__ordinal")
-                                cdoc = {k: v for k, v in ch.items() if k in tfm}
-                                cdoc[tkey] = vec.child_key(doc[keyf], n_ord)
-                                cr = _docs_index(trec, {"value": [dict(cdoc, **{"@search.action": "mergeOrUpload"})]})["body"]["value"][0]
-                                if cr["status"]:
-                                    res["itemsProcessed"] += 1
-                                else:
-                                    res["itemsFailed"] += 1
-                                    res["errors"].append({"key": bname, "errorMessage": cr["errorMessage"]})
-                        if mode_p == "skipIndexingParentDocuments":
-                            seen.add(doc[keyf])
-                            continue
-                    r = _docs_index(idx_rec, {"value": [dict(doc, **{"@search.action": "mergeOrUpload"})]})["body"]["value"][0]
-                    seen.add(doc[keyf])
-                    if r["status"]:
-                        res["itemsProcessed"] += 1
-                    else:
-                        res["itemsFailed"] += 1
-                        res["errors"].append({"key": bname, "errorMessage": r["errorMessage"]})
-            pol = ds.get("dataDeletionDetectionPolicy") or {}
-            if pol.get("@odata.type", "").endswith("NativeBlobSoftDeleteDeletionDetectionPolicy"):
-                pass
+                meta = {"metadata_storage_name": bname.rsplit("/", 1)[-1], "metadata_storage_path": path,
+                        "metadata_storage_size": len(data), "metadata_content_type": entry.get("content_type") or entry.get("content-type")}
+                _index_rows(svc, ix, idx_rec, ds, res, bname, rows, meta, path, seen)
             max_fail = (ix.get("parameters") or {}).get("maxFailedItems", 0)
             if res["itemsFailed"] > max_fail >= 0:
                 res.update(status="transientFailure", errorMessage="Indexer failed: items failed exceeded maxFailedItems.")
@@ -642,7 +743,7 @@ def _name_check(state, name):
     return {"nameAvailable": True}
 
 
-def dispatch(state, method, sub, rg, chain, payload, query, blob_store=None, base=""):
+def dispatch(state, method, sub, rg, chain, payload, query, blob_store=None, base="", cosmos_store=None, sql_store=None):
     """chain = everything after 'providers/Microsoft.Search' (e.g. ['searchServices', n, 'indexes', ...])."""
     if chain and chain[0].lower() == "checknameavailability":
         if method != "POST":
@@ -720,7 +821,7 @@ def dispatch(state, method, sub, rg, chain, payload, query, blob_store=None, bas
         return _indexes(rec, method, chain[3:], payload, query)
     if op in ("datasources", "indexers", "skillsets"):
         rec.setdefault("_skillsets", {})
-        return _ds_ix(rec, op, method, chain[3:], payload, blob_store)
+        return _ds_ix(rec, op, method, chain[3:], payload, blob_store, cosmos_store, sql_store)
     if op == "stats" and method == "GET":
         return _ok({"counters": {"documentCount": {"usage": sum(len(i["_docs"]) for i in rec["_indexes"].values()), "quota": None},
                                  "indexesCount": {"usage": len(rec["_indexes"]), "quota": SKUS[rec["sku"]["name"]][2]},
@@ -805,7 +906,7 @@ def _create_index(svc, name, body, status):
     return _ok(d, status)
 
 
-def _ds_ix(svc, kind, method, rest, payload, blob_store):
+def _ds_ix(svc, kind, method, rest, payload, blob_store, cosmos_store=None, sql_store=None):
     store = svc["_" + kind]
     if not rest:
         if method == "GET":
@@ -834,10 +935,11 @@ def _ds_ix(svc, kind, method, rest, payload, blob_store):
         if rest[1].lower() == "run" and method == "POST":
             if (svc["_ix_status"].get(name) or {}).get("status") == "running" and (store[name].get("disabled")):
                 return _err(409, "IndexerDisabled", "The indexer is disabled.")
-            run_indexer(svc, name, blob_store)
+            run_indexer(svc, name, blob_store, cosmos_store=cosmos_store, sql_store=sql_store)
             return {"status": 202, "body": None}
         if rest[1].lower() == "status" and method == "GET":
-            return _ok(svc["_ix_status"].get(name) or {"status": "running", "lastResult": None, "executionHistory": []})
+            st_ = svc["_ix_status"].get(name) or {"status": "running", "lastResult": None, "executionHistory": []}
+            return _ok({k: v for k, v in st_.items() if not k.startswith("_")})
         if rest[1].lower() == "reset" and method == "POST":
             svc["_ix_status"].pop(name, None)
             return {"status": 204, "body": None}
@@ -856,6 +958,15 @@ def _put_ds_ix(svc, kind, name, body, status):
             return _err(400, "InvalidRequest", "credentials.connectionString is required.")
         if not (body.get("container") or {}).get("name"):
             return _err(400, "InvalidRequest", "container.name is required.")
+        pol = body.get("dataChangeDetectionPolicy")
+        if pol:
+            if not str(pol.get("@odata.type", "")).endswith(("HighWaterMarkChangeDetectionPolicy", "SqlIntegratedChangeTrackingPolicy")):
+                return _err(400, "InvalidRequest", "dataChangeDetectionPolicy must be a HighWaterMarkChangeDetectionPolicy or SqlIntegratedChangeTrackingPolicy.")
+            if str(pol["@odata.type"]).endswith("HighWaterMarkChangeDetectionPolicy") and not pol.get("highWaterMarkColumnName"):
+                return _err(400, "InvalidRequest", "highWaterMarkColumnName is required.")
+        dpol = body.get("dataDeletionDetectionPolicy")
+        if dpol and str(dpol.get("@odata.type", "")).endswith("SoftDeleteColumnDeletionDetectionPolicy") and not dpol.get("softDeleteColumnName"):
+            return _err(400, "InvalidRequest", "softDeleteColumnName is required.")
     elif kind == "skillsets":
         e = vec.validate_skillset(body)
         if e:
@@ -870,6 +981,12 @@ def _put_ds_ix(svc, kind, name, body, status):
             return _err(400, "InvalidRequest", f"Data source '{body['dataSourceName']}' does not exist.")
         if body["targetIndexName"] not in svc["_indexes"]:
             return _err(400, "InvalidRequest", f"Index '{body['targetIndexName']}' does not exist.")
+        for m in (body.get("fieldMappings") or []) + (body.get("outputFieldMappings") or []):
+            if not m.get("sourceFieldName"):
+                return _err(400, "InvalidRequest", "Every field mapping needs a sourceFieldName.")
+            fn = (m.get("mappingFunction") or {}).get("name")
+            if fn and fn not in ("base64Encode", "base64Decode", "urlEncode", "urlDecode", "jsonArrayToStringCollection"):
+                return _err(400, "InvalidRequest", f"Mapping function '{fn}' is not supported (base64Encode, base64Decode, urlEncode, urlDecode, jsonArrayToStringCollection).")
         mode = ((body.get("parameters") or {}).get("configuration") or {}).get("parsingMode", "default")
         if mode not in ("default", "text", "json", "jsonArray", "delimitedText"):
             return _err(400, "InvalidRequest", "parsingMode must be default, text, json, jsonArray or delimitedText.")

@@ -1,0 +1,10 @@
+# Pinned to the versions the measured numbers in docs/architecture/v4.0/branches/ai-meshlora.md came from (macOS arm64, py3.13).
+# In the container the Dockerfile installs torch from the CPU-only index first (no CUDA wheels, ~200 MB instead of ~2 GB).
+torch==2.15.0
+transformers==5.23.0
+peft==0.21.3
+gguf==0.19.0
+safetensors==0.8.0
+sentencepiece==0.2.3
+numpy==2.5.4
+huggingface_hub==2.4.0

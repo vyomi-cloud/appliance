@@ -317,16 +317,117 @@ def _require_encrypt_usage(store: KeyStore, key_id: str) -> None:
                        f"{_key_arn(store, key_id)} key usage is {usage}, not ENCRYPT_DECRYPT.", 400)
 
 
+_CTX_MAGIC = b"\x00VCTX1\x00"
+
+
+def _ctx_digest(body: dict) -> bytes:
+    """Canonical digest of the EncryptionContext (sorted keys, string values), the AAD of real KMS."""
+    ctx = body.get("EncryptionContext") or {}
+    if not isinstance(ctx, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in ctx.items()):
+        raise KmsError("ValidationException", "EncryptionContext must be a map of strings.", 400)
+    return hashlib.sha256(json.dumps(ctx, sort_keys=True, separators=(",", ":")).encode()).digest()
+
+
+def _seal(store: KeyStore, key_id: str, plaintext: bytes, body: dict) -> bytes:
+    """Bind the encryption context into the authenticated plaintext (works with any engine, incl. Vault Transit):
+    wrong or missing context at Decrypt then yields InvalidCiphertextException, like AWS KMS."""
+    return store.engine.encrypt(_material(store, key_id), key_id, _CTX_MAGIC + _ctx_digest(body) + plaintext)
+
+
+def _unseal(body: dict, plain: bytes) -> bytes:
+    if plain.startswith(_CTX_MAGIC):
+        n = len(_CTX_MAGIC)
+        if not hmac.compare_digest(plain[n:n + 32], _ctx_digest(body)):
+            raise KmsError("InvalidCiphertextException",
+                           "The encryption context provided does not match the context used to encrypt the data.", 400)
+        return plain[n + 32:]
+    return plain   # pre-context ciphertext (older releases): no AAD was bound
+
+
 def _encrypt(store: KeyStore, body: dict) -> dict:
     key_id = _require_active_key(store, body.get("KeyId", ""), auto_provision=True)
     _require_encrypt_usage(store, key_id)
     plaintext = _b64d(body.get("Plaintext", ""))
     if not plaintext:
         raise KmsError("ValidationException", "Plaintext must not be empty.", 400)
-    blob = store.engine.encrypt(_material(store, key_id), key_id, plaintext)
+    blob = _seal(store, key_id, plaintext, body)
     _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "CiphertextBlob": _b64e(blob),
             "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
+
+
+def _re_encrypt(store: KeyStore, body: dict) -> dict:
+    src = _decrypt(store, {"CiphertextBlob": body.get("CiphertextBlob", ""), "KeyId": body.get("SourceKeyId", ""),
+                           "EncryptionContext": body.get("SourceEncryptionContext") or {}})
+    dst = _require_active_key(store, body.get("DestinationKeyId", ""), auto_provision=True)
+    _require_encrypt_usage(store, dst)
+    blob = _seal(store, dst, _b64d(src["Plaintext"]), {"EncryptionContext": body.get("DestinationEncryptionContext") or {}})
+    _touch_last_used(store, dst)
+    return {"CiphertextBlob": _b64e(blob), "SourceKeyId": src["KeyId"], "KeyId": _key_arn(store, dst),
+            "SourceEncryptionAlgorithm": "SYMMETRIC_DEFAULT", "DestinationEncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
+
+
+_GRANT_OPS = {"Decrypt", "Encrypt", "GenerateDataKey", "GenerateDataKeyWithoutPlaintext", "ReEncryptFrom", "ReEncryptTo",
+              "Sign", "Verify", "GetPublicKey", "CreateGrant", "RetireGrant", "DescribeKey", "GenerateDataKeyPair",
+              "GenerateDataKeyPairWithoutPlaintext", "GenerateMac", "VerifyMac", "DeriveSharedSecret"}
+
+
+def _grants(store: KeyStore, key_id: str) -> list:
+    return store.get_key(key_id).setdefault("Grants", [])
+
+
+def _create_grant(store: KeyStore, body: dict) -> dict:
+    key_id = _require_active_key(store, body.get("KeyId", ""))
+    if not body.get("GranteePrincipal"):
+        raise KmsError("ValidationException", "GranteePrincipal is required.", 400)
+    ops = body.get("Operations") or []
+    bad = [o for o in ops if o not in _GRANT_OPS]
+    if not ops or bad:
+        raise KmsError("ValidationException", f"Invalid grant operations: {bad or 'none given'}.", 400)
+    gid = uuid.uuid4().hex + uuid.uuid4().hex
+    g = {"KeyId": _key_arn(store, key_id), "GrantId": gid, "Name": body.get("Name", ""), "CreationDate": time.time(),
+         "GranteePrincipal": body["GranteePrincipal"], "RetiringPrincipal": body.get("RetiringPrincipal", ""),
+         "IssuingAccount": f"arn:aws:iam::{store.account_id}:root", "Operations": list(ops),
+         "Constraints": body.get("Constraints") or {}}
+    _grants(store, key_id).append(g)
+    store.persist()
+    return {"GrantToken": "grant-token-" + gid, "GrantId": gid}
+
+
+def _list_grants(store: KeyStore, body: dict) -> dict:
+    key_id = _require_active_key(store, body.get("KeyId", ""))
+    gs = [g for g in _grants(store, key_id) if not body.get("GrantId") or g["GrantId"] == body["GrantId"]]
+    return {"Grants": gs, "Truncated": False}
+
+
+def _revoke_grant(store: KeyStore, body: dict) -> dict:
+    key_id = _require_active_key(store, body.get("KeyId", ""))
+    gs = _grants(store, key_id)
+    left = [g for g in gs if g["GrantId"] != body.get("GrantId")]
+    if len(left) == len(gs):
+        raise KmsError("NotFoundException", f"Grant ID {body.get('GrantId')} not found.", 400)
+    gs[:] = left
+    store.persist()
+    return {}
+
+
+def _retire_grant(store: KeyStore, body: dict) -> dict:
+    gid = body.get("GrantId") or str(body.get("GrantToken", "")).replace("grant-token-", "")
+    ref = body.get("KeyId")
+    for kid in ([_resolve_key_id(store, ref)] if ref else list(store.keys)):
+        if kid and store.key_exists(kid):
+            gs = _grants(store, kid)
+            if any(g["GrantId"] == gid for g in gs):
+                gs[:] = [g for g in gs if g["GrantId"] != gid]
+                store.persist()
+                return {}
+    raise KmsError("NotFoundException", f"Grant {gid} not found.", 400)
+
+
+def _list_retirable_grants(store: KeyStore, body: dict) -> dict:
+    who = body.get("RetiringPrincipal", "")
+    out = [g for kid in list(store.keys) for g in _grants(store, kid) if g.get("RetiringPrincipal") == who]
+    return {"Grants": out, "Truncated": False}
 
 
 def _decrypt_with_history(store: KeyStore, key_id: str, blob: bytes) -> bytes:
@@ -396,7 +497,7 @@ def _decrypt(store: KeyStore, body: dict) -> dict:
                            "The key supplied does not match the ciphertext's key.", 400)
     _require_enabled_state(store, key_id)
     try:
-        plaintext = _decrypt_with_history(store, key_id, blob)
+        plaintext = _unseal(body, _decrypt_with_history(store, key_id, blob))
     except KmsError:
         raise
     except Exception as e:
@@ -533,7 +634,7 @@ def _generate_data_key(store: KeyStore, body: dict, with_plaintext: bool = True)
         raise KmsError("ValidationException", "NumberOfBytes must be 1..1024.", 400)
     import os
     data_key = os.urandom(n)
-    blob = store.engine.encrypt(_material(store, key_id), key_id, data_key)
+    blob = _seal(store, key_id, data_key, body)
     _touch_last_used(store, key_id)
     out = {"KeyId": _key_arn(store, key_id), "CiphertextBlob": _b64e(blob)}
     if with_plaintext:
@@ -998,6 +1099,18 @@ def dispatch(store: KeyStore, target: str, payload: dict | None = None) -> KmsRe
             return _ok(_encrypt(store, body))
         if action == "Decrypt":
             return _ok(_decrypt(store, body))
+        if action == "ReEncrypt":
+            return _ok(_re_encrypt(store, body))
+        if action == "CreateGrant":
+            return _ok(_create_grant(store, body))
+        if action == "ListGrants":
+            return _ok(_list_grants(store, body))
+        if action == "RevokeGrant":
+            return _ok(_revoke_grant(store, body))
+        if action == "RetireGrant":
+            return _ok(_retire_grant(store, body))
+        if action == "ListRetirableGrants":
+            return _ok(_list_retirable_grants(store, body))
         if action == "Encapsulate":
             return _ok(_encapsulate(store, body))
         if action == "Decapsulate":

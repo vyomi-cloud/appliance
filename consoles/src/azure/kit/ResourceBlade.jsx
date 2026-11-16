@@ -21,9 +21,9 @@ export function TitleRow({ title, subtitle, glyph, closeHref, actions }) {
 }
 
 /** menu: [{id, label} | {group, items: [{id, label}]}] */
-export default function ResourceBlade({ title, subtitle, glyph, closeHref, menu, active, hrefFor, children }) {
+export default function ResourceBlade({ title, subtitle, glyph, closeHref, menu, active, hrefFor, children, groupsClosed }) {
   const [q, setQ] = useState("");
-  const [closed, setClosed] = useState({});
+  const [closed, setClosed] = useState(() => (groupsClosed ? Object.fromEntries(menu.filter((m) => m.group && !m.items.some((i) => i.id === active)).map((m) => [m.group, true])) : {}));
   const f = q.trim().toLowerCase();
   const hit = (it) => !f || it.label.toLowerCase().includes(f);
   const link = (it) => (

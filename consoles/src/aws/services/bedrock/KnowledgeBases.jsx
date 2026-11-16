@@ -74,7 +74,7 @@ export function KnowledgeBases() {
           { id: "status", header: "Status", cell: (k) => stat(k.status) },
           { id: "upd", header: "Last updated", cell: (k) => k.updatedAt },
         ]}
-        actions={<SpaceBetween direction="horizontal" size="xs"><Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button><Button variant="primary" onClick={() => setCreate(true)}>Create knowledge base</Button></SpaceBetween>} />
+        actions={<SpaceBetween direction="horizontal" size="xs"><Button onClick={() => navigate("bedrock", "knowledge-bases", "studio")} data-testid="open-studio">Open RAG Studio</Button><Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button><Button variant="primary" onClick={() => setCreate(true)}>Create knowledge base</Button></SpaceBetween>} />
       <CreateKb visible={create} onDismiss={() => { setCreate(false); t.reload(); }} />
       <DeleteModal visible={del} onDismiss={() => setDel(false)} resourceType="knowledge base" names={sel.map((k) => k.name)}
         onConfirm={async () => { await api.deleteKnowledgeBase(sel[0].knowledgeBaseId); notify.success("Knowledge base deleted."); setSel([]); t.reload(); }} />

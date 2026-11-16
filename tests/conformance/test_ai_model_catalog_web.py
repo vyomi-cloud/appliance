@@ -7,7 +7,9 @@ from core import ai_model_catalog as C, ai_models_core as A
 
 def run():
     assert C.WEB and len(C.IDS) >= 3, C.IDS
-    assert all(m["tag"].endswith("-MLC") for m in C.MODELS)
+    assert all(m["tag"].endswith("-MLC") for m in C.MODELS if m["kind"] == "chat")
+    assert C.DEFAULT_EMBED == "all-minilm-l6-v2" and C.BY_ID[C.DEFAULT_EMBED]["kind"] == "embed"
+    assert C.resolve("aws", "amazon.titan-embed-text-v2:0") == C.DEFAULT_EMBED and C.resolve("aws", "cohere.embed-english-v3") == C.DEFAULT_EMBED
     assert [m[0] for m in A.BEDROCK_MODELS] == ["vyomi." + i for i in C.IDS]
     assert not set(C.IDS) & {"qwen2.5-7b", "llama3.1-8b", "qwen3-30b"}
     assert all(C.availability(i)["available"] for i in C.IDS)

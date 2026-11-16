@@ -113,6 +113,12 @@ def _gcp_service(path):
         return "gcp-computesim"   # rolloutPlans/rollouts over the real MIG engine + previewFeatures (core/gcp_computesim_core)
     if gcp_svchealth.PATH_RE.match(path.split("?", 1)[0]):
         return "gcp-servicehealth"   # Personalized Service Health: SIMULATED per-service status + injectable test incidents (core/gcp_servicehealth_core)
+    from core import gcp_agentplatform_core as _gap
+    if _gap.handles(path):
+        return "gcp-agentplatform"   # RAG Engine / Vertex AI Search / evaluation runs (core/gcp_agentplatform_core)
+    from core import gcp_agentgov_core as _gov
+    if _gov.handles(path):
+        return "gcp-agentgov"   # Agent Platform governance: Model Armor, gateways, MCP servers, policies, provisioned throughput (core/gcp_agentgov_core over the AgentCore + guardrail engines)
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
             or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
         return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
@@ -319,6 +325,7 @@ from core import apigatewayv2_core as apigw2
 from core import apigatewayv2_gateway as apigw2_gw
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
+from core import cloudtrail_events_core as cte
 from core import vpc_core as vpc
 from core import autoscaling_core as asg
 from core import ram_core as ram
@@ -365,9 +372,9 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
-    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads)(/|$)", p0):
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|evals|vyomi/promptflow|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
-    if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0):
+    if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0) and not p0.startswith("/identities/") and not re.match(r"^/[a-z0-9-]+_[A-Za-z0-9]+/", p0):   # /identities/oauth2/token is AgentCore GetResourceOauth2Token; /{poolId}/oauth2/* is the Cognito hosted UI (core/identity_core)
         return "az-graph"
     p = path
     if p.startswith("/devstoreaccount1/"):     # Azurite account prefix
@@ -487,6 +494,7 @@ _SIGNING = {
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "vyomi-ultraservers": "vyomi-ultraservers",   # Dev Simplified EC2 Capacity Blocks + UltraServers (rest-json POST /<Operation>) -> core/ec2_ultraservers_core over the EC2 model
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
+    "es": "opensearch", "aoss": "opensearch",   # OpenSearch Service/Serverless control plane + data plane -> core/opensearch_core (S3 account bag)
     "bedrock-agentcore": "agentcore",   # Bedrock AgentCore control plane + gateway MCP endpoint -> core/bedrock_agents_core (S3 + Lambda stores)
     "glue": "glue", "redshift-data": "redshift-data",
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
@@ -516,6 +524,7 @@ _TARGET_PREFIX = {
     "AWSGlue": "glue", "RedshiftData": "redshift-data",   # Glue zero-ETL integrations + Redshift Data API over the Redshift-lite warehouse -> core/zeroetl_core
     "AmazonDMSv20160101": "dms",   # Database Migration Service between simulator RDS instances -> core/dms_core
     "AWSStepFunctions": "stepfunctions",
+    "OpenSearchServerless": "opensearch",
     "AWSRAMFrontendService": "ram",
     "NetworkFirewall_20201112": "netfw",
     "Route53Resolver": "dnsfw",
@@ -754,6 +763,8 @@ class AwsWireRouter:
             stores.setdefault("resources", ResourceCollections())
         self._stores = s
         self.s3 = s.get("s3") or InMemoryObjectStore()
+        from core import training_core as _tc     # training engine reads datasets / writes heads in this shared object store
+        _tc.bind_s3(self.s3)
         self.ddb = s.get("ddb") or InMemoryNoSqlStore()
         self.dax = s.get("dax") or dax.DaxStore()
         self.dax.ddb_store = self.ddb   # real read-through/write-through into the fronted table
@@ -764,6 +775,7 @@ class AwsWireRouter:
         self.msg = s.get("msg") or InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
         # GCP services — each its own store instance (namespaced from AWS).
         self.gcs = s.get("gcs") or InMemoryObjectStore()
+        _tc.bind_gcs(self.gcs)     # gs:// model data (training, chat-model import) reads the simulated GCS store first
         self.gcp_fs = s.get("gcp_fs") or FirestoreStore()
         self.gcp_kms = s.get("gcp_kms") or InMemoryKeyStore()
         self.gcp_sec = s.get("gcp_sec") or InMemoryKvStore()
@@ -833,6 +845,11 @@ class AwsWireRouter:
             self.az_arm.blob_store = self.az_blob
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         self.az_arm = s.get("az_arm") or AzureArm()   # Azure Resource Manager — the console's ARM store
+        # AI Search indexers (blob / Cosmos DB / Azure SQL) read these data planes; re-attached here because the line above can
+        # build a fresh ARM when the shared state carries none, which would otherwise drop the wiring made earlier.
+        for _attr, _store in (("cosmos_store", self.az_cosmos), ("sql_store", self.rds), ("blob_store", self.az_blob)):
+            if getattr(self.az_arm, _attr, None) is None:
+                setattr(self.az_arm, _attr, _store)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
@@ -916,9 +933,39 @@ class AwsWireRouter:
         self.vpc.elbv2_store = self.elbv2  # VPC encryption-control audit reads the load balancers
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
         self.elbv2.s3_store = self.s3      # trust-store CA bundles are read from Vyomi's own S3
+        self.trail_events = []   # CloudTrail LookupEvents ring (never persisted)
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
         self.sfn.logs_store = self.logs           # Step Functions loggingConfiguration -> CloudWatch Logs
+        self.sfn.service_invoker = self._sfn_service_call   # optimised integrations (sns:publish, dynamodb:putItem ...) -> the sibling engines
         self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)
+
+    def _sfn_service_call(self, service, action, params):
+        """Step Functions optimised service integration -> the same wire path a real SDK call takes (ai-approvals lane)."""
+        from urllib.parse import urlencode
+        cred = "AWS4-HMAC-SHA256 Credential=vyomi-sfn/20260101/us-east-1/%s/aws4_request, SignedHeaders=host, Signature=0"
+        if service == "dynamodb":
+            tgt = "DynamoDB_20120810." + action[0].upper() + action[1:]
+            r = self.handle("POST", "/", {}, {"x-amz-target": tgt, "content-type": "application/x-amz-json-1.0",
+                                              "authorization": cred % "dynamodb"}, json.dumps(params).encode())
+            doc = json.loads(r["body"] or b"{}")
+            if r["status"] >= 400:
+                raise sfn.ServiceCallError(str(doc.get("__type", "Unknown")).split("#")[-1], doc.get("message") or doc.get("Message") or "")
+            return doc
+        if service == "sns":
+            msg = params.get("Message")
+            form = {"Action": "Publish", "Version": "2010-03-31", "TopicArn": params.get("TopicArn", ""),
+                    "Message": msg if isinstance(msg, str) else json.dumps(msg)}
+            if params.get("Subject"):
+                form["Subject"] = params["Subject"]
+            r = self.handle("POST", "/", {}, {"content-type": "application/x-www-form-urlencoded", "authorization": cred % "sns"},
+                            urlencode(form).encode())
+            txt = (r["body"] or b"").decode("utf-8", "replace")
+            if r["status"] >= 400:
+                m = re.search(r"<Code>([^<]+)</Code>.*?<Message>([^<]*)</Message>", txt, re.S)
+                raise sfn.ServiceCallError(m.group(1) if m else "Unknown", m.group(2) if m else txt[:200])
+            m = re.search(r"<MessageId>([^<]+)</MessageId>", txt)
+            return {"MessageId": m.group(1) if m else "", "SdkHttpMetadata": {"HttpStatusCode": 200}}
+        raise sfn.ServiceCallError("UnsupportedIntegration", f"{service}:{action}")
 
     def _iamc_resolve(self, ident):
         """IAM Credentials: service-account email / uniqueId -> email, or None if unknown
@@ -1267,8 +1314,16 @@ class AwsWireRouter:
             return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
+        if "aws4" not in (lheaders.get("authorization", "") or "").lower() and re.match(r"^/(runtimes/.+?/(invocations|commands)(/|$)|gateways/[^/?]+/mcp/?$|identities/oauth2/callback/[^/?]+$)", path.split("?", 1)[0]):
+            return "agentcore"   # AgentCore data plane called without SigV4 (Bearer-JWT MCP / A2A clients, agent-card GET): core/bedrock_agents_core authenticates it
+        if path.startswith("/_vyomi/kb/"):   # Vyomi extension: RAG Studio inspect API (core/bedrock_agents_core.inspect_dispatch)
+            return "bedrock"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
             return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
+        from core import identity_core as _idc   # Cognito user pools / Cognito Identity / WAFv2 (moto engines) + the pool JWKS GET
+        _isvc = _idc.service_for(path, lheaders)
+        if _isvc:
+            return _isvc
         target = lheaders.get("x-amz-target", "") or ""
         if target.startswith(cw.TARGET_PREFIX + "."):
             return "cloudwatch"            # CloudWatch JSON 1.0
@@ -1293,6 +1348,9 @@ class AwsWireRouter:
                 return "cloudwatch"
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
+        from core import opensearch_core as _osc
+        if _osc.looks_like_data_plane(path):   # unsigned/basic-auth opensearch-py calls (/idx/_search, /_bulk, ...)
+            return "opensearch"
         return "s3"  # default: bucket/key path-style
 
     def _azure_sql_conn(self, base):
@@ -1498,8 +1556,16 @@ class AwsWireRouter:
             return self._query_params(query, body).get("Action") or None
         return None
 
-    def _track_activity(self, svc, lheaders, query, body):
+    def _track_activity(self, svc, lheaders, query, body, method_='', path_=''):
         akid_m = _AKID_RE.search(lheaders.get("authorization", "") or "")
+        try:   # CloudTrail LookupEvents audit ring (core/cloudtrail_events_core)
+            if svc != "cloudtrail":
+                _k = self.iam.access_keys.get(akid_m.group(1)) if akid_m else None
+                cte.record(self.trail_events, svc, method_, path_, self._action_name(svc, lheaders, query, body), body,
+                           akid_m.group(1) if akid_m else "", (_k or {}).get("user_name", ""),
+                           self._query_params(query, body) if svc in ("sns", "sqs") else None)
+        except Exception:
+            pass
         if not akid_m:
             return
         key = self.iam.access_keys.get(akid_m.group(1))
@@ -1527,7 +1593,7 @@ class AwsWireRouter:
             r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
             return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
-        if svc in ("bedrock", "gcp-aiplatform", "gcp-agentengine", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
+        if svc in ("bedrock", "gcp-aiplatform", "gcp-vertex", "gcp-agentengine", "gcp-agentplatform", "gcp-agentgov", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
                 r"/providers/microsoft\.cognitiveservices/accounts/[^/]+/openai/", path.lower())):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
             from core import llm_core
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
@@ -1869,7 +1935,12 @@ class AwsWireRouter:
         self._sched_pulse()
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
-            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
+            from core import otel_bridge as _otb   # AgentOps: OTLP protobuf decode + span fan-out to X-Ray / CloudWatch Logs / metrics
+            _bb = body if isinstance(body, (bytes, bytearray)) else (body or "").encode()
+            _hh, _bb, _pl = _otb.preprocess(method, p0, headers or {}, bytes(_bb))
+            r = _obsc.dispatch(self.obs, method, p0, query or {}, _hh, _bb, cw_store=self.cw, mon_store=self.gcp_mon)
+            if _pl is not None and r.status == 200:
+                _otb.after_ingest(self, p0, _pl)
             return {"status": r.status, "headers": dict(r.headers), "body": r.body}
         if p0 == "/_vyomi/db-connect" and method.upper() == "GET":      # one paste-and-run connection string per database (console reads this)
             import json as _json
@@ -1944,7 +2015,7 @@ class AwsWireRouter:
         svc = self.service_of(method, path, lheaders, body, query)
         if queue_alias and svc == "az-blob":
             svc = "az-queue"
-        self._track_activity(svc, lheaders, query, body)
+        self._track_activity(svc, lheaders, query, body, method, path)
 
         if svc == "rds-data":  # async-only — guard the sync path
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
@@ -1956,6 +2027,9 @@ class AwsWireRouter:
                     "body": r.body or b""}
 
         if svc == "cloudtrail":
+            if (lheaders.get("x-amz-target", "") or "").endswith(".LookupEvents"):
+                _st, _doc = cte.dispatch_lookup(self.trail_events, bytes(body))
+                return {"status": _st, "headers": {"content-type": "application/x-amz-json-1.1"}, "body": json.dumps(_doc).encode()}
             r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
 
@@ -2013,20 +2087,60 @@ class AwsWireRouter:
             r = s3files_core.fsx_dispatch(self.s3, self.vpc, lheaders.get("x-amz-target", ""), bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
+        if svc in ("cognito-idp", "cognito-identity", "wafv2"):   # moto cognitoidp/cognitoidentity/wafv2 engines (core/identity_core)
+            from core import identity_core
+            return identity_core.dispatch(svc, method, path, query or {}, lheaders, bytes(body))
+
         if svc == "bedrock":
             from core import ai_models_core
-            from core import bedrock_agents_core
+            from core import bedrock_agents_core, bedrock_ctl_core
+            from core import bedrock_guardrails_core
+            bedrock_guardrails_core.bind(self.s3)   # guardrail state lives in the persisted account bag
+            from core import bedrock_bda_core   # Bedrock Data Automation (blueprints, projects, runtime): lane limmodels
+            if bedrock_bda_core.handles(path.split("?", 1)[0], bytes(body), lheaders):
+                return bedrock_bda_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            from core import bedrock_build_core
+            bedrock_build_core.bind(self.s3, self.logs, self.lam)
+            if bedrock_build_core.handles(path.split("?", 1)[0]):   # Build/Assess/Configure: prompts, flows, evaluations, invocation logging (lane uiaws)
+                return bedrock_build_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
+            if bedrock_ctl_core.handles(path.split("?", 1)[0]):   # Infer + Tune control plane (profiles, batch, provisioned, customization, routers, marketplace)
+                return bedrock_ctl_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
             if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
-                return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
-            return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+                return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), self.lam)
+            _r = ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+            _mi = re.match(r"^/model/(.+?)/(invoke|converse)$", path.split("?", 1)[0])
+            if _mi and _r.get("status") == 200:   # model-invocation logging delivery (S3 / CloudWatch Logs) when configured
+                bedrock_build_core.log_invocation(_mi.group(2), __import__("urllib.parse", fromlist=["unquote"]).unquote(_mi.group(1)), bytes(body), _r.get("body") or b"")
+            return _r
+
+        if svc == "opensearch":
+            from core import opensearch_core as _osc
+            tgt = lheaders.get("x-amz-target", "")
+            if tgt.startswith("OpenSearchServerless"):
+                return _osc.serverless_dispatch(self.s3, tgt, bytes(body))
+            if _osc.is_control_path(path.split("?", 1)[0]):
+                return _osc.control_dispatch(self.s3, method, path, query or {}, lheaders, bytes(body))
+            return _osc.data_dispatch(self.s3, method, path, query or {}, lheaders, bytes(body))
 
         if svc == "agentcore":
+            from core import agentcore_eval_core    # AgentCore Evaluations (evaluators + Evaluate)
+            if agentcore_eval_core.handles(path.split("?", 1)[0]):
+                return agentcore_eval_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             from core import bedrock_agents_core
+            bedrock_agents_core.HOOKS.update(iam_key=self.iam.access_keys.get, wire=self.handle)   # SigV4 identity lookup + in-process AWS API calls (smithyModel targets)
             return bedrock_agents_core.agentcore_dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
         if svc == "gcp-aiplatform":
             from core import ai_models_core
             return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "gcp-agentplatform":
+            from core import gcp_agentplatform_core
+            return gcp_agentplatform_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), gcs=self.gcs)
+
+        if svc == "gcp-agentgov":
+            from core import gcp_agentgov_core
+            return gcp_agentgov_core.dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), lheaders.get("host", ""))
 
         if svc == "gcp-agentengine":
             from core import gcp_agentengine_core
@@ -2138,6 +2252,11 @@ class AwsWireRouter:
                 # a REST (v1) API's invoke URL ({id}.execute-api.* or /apigw/{id}/{stage}/…) → v1 data plane
                 # (stage throttle, authorizers, API key + usage plan, integrations; core/apigateway_gateway)
                 from core import gateway_common as _gc
+                from core import identity_core as _idc
+                _w = _idc.waf_check(api_id, rest.strip("/").split("/", 1)[0], method, "/" + (rest.strip("/").split("/", 1)[1] if "/" in rest.strip("/") else ""),
+                                    query, lheaders, bytes(body), lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+                if _w:
+                    return _w
                 r = apigw.invoke(self.apigw, api_id, rest.strip("/").split("/", 1)[0], method,
                                  "/" + rest.strip("/").split("/", 1)[1] if "/" in rest.strip("/") else "/", lheaders,
                                  {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
@@ -2152,6 +2271,10 @@ class AwsWireRouter:
             stage = first if first and first != "$default" and first in (api.get("stages") or {}) else "$default"
             if stage != "$default":
                 rest = rest.strip("/")[len(stage):]
+            from core import identity_core as _idc
+            _w = _idc.waf_check(api_id, stage, method, rest or "/", query, lheaders, bytes(body), lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+            if _w:
+                return _w
             fstore = self.lam
 
             def invoker(fn, event):   # the Lambda store this router serves (shared with the console)
@@ -2198,6 +2321,11 @@ class AwsWireRouter:
             _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
             if _m:
                 from core import gateway_common as _gwc   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
+                from core import identity_core as _idc
+                _w = _idc.waf_check(_m.group(1), _m.group(2), method, _m.group(3) or "/", query, lheaders, bytes(body),
+                                    lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+                if _w:
+                    return _w
                 r = apigw.invoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders,
                                  {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
                                  bytes(body), lambda_store=self.lam, http_fetch=_gwc.default_http_fetch(),

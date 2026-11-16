@@ -1,15 +1,17 @@
 /* Vertex AI Studio: freeform prompt (generateContent + countTokens) and text embeddings, on the local model. */
 import { useState } from "react";
-import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Button, ListSubheader, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import LocalModelBar from "../../../common/LocalModelBar.jsx";
+import { ServingBar } from "./ImportChatModel.jsx";
 import * as api from "./api.js";
 import { AI_CHAT, AI_EMBED, DEFAULT_CHAT, DEFAULT_EMBED, availText } from "../../../common/aiModels.js";
 import { useAsync } from "../../../common/useAsync.js";
 
 function ChatPanel() {
   const av = useAsync(() => api.modelAvailability().catch(() => ({})), []);
+  const mine = useAsync(() => api.importedEndpoints().catch(() => []), []);
   const [model, setModel] = useState(DEFAULT_CHAT);
   const [system, setSystem] = useState("");
   const [msg, setMsg] = useState("");
@@ -21,15 +23,17 @@ function ChatPanel() {
     const next = [...hist, { role: "user", text: msg }];
     setHist(next); setMsg(""); setBusy(true); setError(null);
     try {
-      const r = await api.chat(model, next, system);
+      const r = model.startsWith("imported:") ? await api.chatEndpoint(model.slice(9), next) : await api.chat(model, next, system);
       setHist([...next, { role: "model", text: (r.candidates?.[0]?.content?.parts || []).map((p) => p.text).join("") }]);
       setUsage(r.usageMetadata);
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
   return (
     <Stack spacing={2} sx={{ maxWidth: 760 }}>
-      <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{AI_CHAT.map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.id}) - {availText(av.data?.[m.id], m.id)}</MenuItem>)}</TextField>
+      <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{[...AI_CHAT.map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.id}) - {availText(av.data?.[m.id], m.id)}</MenuItem>),
+              ...(mine.data?.length ? [<ListSubheader key="imp">Your imported models (LoRA adapters)</ListSubheader>, ...mine.data.map((x) => <MenuItem key={x.endpoint} value={`imported:${x.endpoint}`}>{x.model.displayName} (imported, endpoint {api.shortId(x.endpoint)})</MenuItem>)] : [])]}</TextField>
       <TextField size="small" label="System instructions" value={system} onChange={(e) => setSystem(e.target.value)} multiline minRows={2} />
+      {model.startsWith("imported:") && <ServingBar />}
       <Stack spacing={1} data-testid="chat-history">
         {hist.map((m, i) => (
           <Alert key={i} severity={m.role === "user" ? "info" : "success"} icon={false}>

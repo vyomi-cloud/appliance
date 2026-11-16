@@ -1,0 +1,25 @@
+<!doctype html><meta charset=utf-8><body><script type=module>
+import { Wllama } from './node_modules/@wllama/wllama/esm/index.js';
+const q = new URLSearchParams(location.search); const useLora = q.get('lora') === '1';
+const out = { crossOriginIsolated, hasWebGPU: !!navigator.gpu, cores: navigator.hardwareConcurrency };
+window.RESULT = (async () => {
+  const w = new Wllama({ default: './node_modules/@wllama/wllama/esm/wasm/wllama.wasm' });
+  const fetchBlob = async u => new Blob([await (await fetch(u)).arrayBuffer()]);
+  const blobs = [await fetchBlob('./models/base-f16.gguf')];
+  const params = { n_gpu_layers: 0, n_ctx: 512, n_threads: +(q.get('threads') || 4) };
+  if (useLora) { blobs.push(await fetchBlob('./models/adapter.gguf')); params.lora_adapters = [{ path: 'models/model-00002-of-00002.gguf', scale: 1.0 }]; }
+  let t = performance.now();
+  try { await w.loadModel(blobs, params); } catch (e) { out.loadError = String(e); return out; }
+  out.load_ms = Math.round(performance.now() - t);
+  const rows = await (await fetch('./heldout.json')).json(); let ok = 0, tokens = 0, ms = 0; const ex = [];
+  for (const r of rows) {
+    t = performance.now();
+    const res = await w.createChatCompletion({ messages: [{ role: 'user', content: r.prompt }], max_tokens: 20, temperature: 0 });
+    ms += performance.now() - t; const txt = res.choices[0].message.content.trim();
+    tokens += res.usage?.completion_tokens ?? 0; ok += txt === r.completion; if (ex.length < 3) ex.push([r.completion, txt]);
+  }
+  Object.assign(out, { exact: ok, n: rows.length, completion_tokens: tokens, gen_ms: Math.round(ms), tok_s_incl_prefill: +(tokens / (ms / 1000)).toFixed(1), ex,
+    mem_mb: performance.memory ? Math.round(performance.memory.usedJSHeapSize/1e6) : null });
+  return out;
+})();
+</script>

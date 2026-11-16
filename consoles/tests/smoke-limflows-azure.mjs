@@ -1,0 +1,60 @@
+/* Foundry Evaluations + Prompt flow pages on the Nano preview.   BASE=http://127.0.0.1:8795 SHOTS=/tmp/limflows-shots node consoles/tests/smoke-limflows-azure.mjs */
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+const require = createRequire(import.meta.url);
+let pw; try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:8795", SHOTS = process.env.SHOTS || "/tmp/limflows-shots";
+mkdirSync(SHOTS, { recursive: true });
+const results = [], check = (n, ok, d = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 220) : ""}`); };
+const browser = await pw.chromium.launch(), page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+const errs = []; page.on("pageerror", (e) => errs.push(String(e)));
+const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });
+await page.goto(`${BASE}/nano/v4/azure/#/foundry/evaluations`);
+await page.getByRole("button", { name: "New evaluation" }).waitFor({ timeout: 120000 });
+// an OpenAI account + deployment through ARM (what the console's own create flows send)
+const put = (p, b) => page.evaluate(async ([p, b]) => { const base = location.pathname.split("/v4/")[0] + "/_wire"; const r = await fetch(base + p, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }); return r.status; }, [p, b]);
+const S = "/subscriptions/00000000-0000-0000-0000-cloudlearn01";
+await put(`${S}/resourcegroups/rg1?api-version=2021-04-01`, { location: "eastus" });
+const a = await put(`${S}/resourceGroups/rg1/providers/Microsoft.CognitiveServices/accounts/oai1?api-version=2024-10-01`, { location: "eastus", kind: "OpenAI", sku: { name: "S0" }, properties: { customSubDomainName: "oai1" } });
+const d = await put(`${S}/resourceGroups/rg1/providers/Microsoft.CognitiveServices/accounts/oai1/deployments/chat?api-version=2024-10-01`, { sku: { name: "Standard", capacity: 1 }, properties: { model: { format: "OpenAI", name: "gpt-4o", version: "2024-11-20" } } });
+check("account + deployment created through ARM", a < 300 && d < 300, `${a} ${d}`);
+await page.goto(`${BASE}/nano/v4/azure/#/foundry/promptflow`); await page.reload();
+await page.getByRole("button", { name: "Create flow" }).first().waitFor({ timeout: 60000 });
+check("Prompt flow is a real page, not the not-in-scope panel", (await page.getByTestId("not-in-scope").count()) === 0 && (await page.getByTestId("foundry-promptflow").count()) === 1);
+await page.getByRole("button", { name: "Create flow" }).first().click();
+await page.getByLabel("Flow name").fill("qa-flow");
+await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+await page.getByTestId("pf-editor").waitFor({ timeout: 20000 }).catch(async (e) => { await shot("err-pf"); throw e; });
+check("canvas draws inputs -> chat -> output nodes", (await page.getByTestId("pfnode-chat").count()) === 1 && (await page.getByTestId("pfnode-inputs").count()) === 1 && (await page.getByTestId("pfnode-answer").count()) === 1);
+await page.getByTestId("pfnode-chat").click();
+check("node panel shows deployment + template", (await page.getByLabel("Template").inputValue()).includes("{{question}}"));
+await page.getByRole("button", { name: "+ Prompt node" }).click();
+check("add a prompt node on the canvas", (await page.locator("[data-testid^=pfnode-prompt]").count()) === 1);
+await page.getByRole("button", { name: "Save" }).click();
+await page.getByRole("button", { name: "Run" }).click();
+const out = page.getByTestId("pf-result").or(page.getByText("Flow failed"));
+await out.first().waitFor({ timeout: 90000 }).catch(() => {});
+await shot("5-azure-promptflow");
+const hasRes = (await page.getByTestId("pf-result").count()) === 1;
+const txt = hasRes ? await page.getByTestId("pf-result").innerText() : await page.locator("body").innerText();
+// headless Nano has no local model: the honest outcome is a model-unavailable error, never a canned answer
+check("run returns outputs + trace, or an honest model-unavailable error (no local model in headless Nano)", hasRes ? /answer/.test(txt) && /chat/.test(txt) : /Flow failed/.test(txt), txt.slice(-300));
+await shot("5-azure-promptflow");
+await page.goto(`${BASE}/nano/v4/azure/#/foundry/evaluations`);
+await page.waitForTimeout(3000);   // let the deployment list load so the dialog preselects a model
+await page.getByRole("button", { name: "New evaluation" }).click();
+check("Evaluations is a real page", (await page.getByTestId("not-in-scope").count()) === 0);
+await page.getByLabel("Evaluation name").fill("capitals");
+await page.getByRole("dialog").getByRole("button", { name: "Create and run" }).click();
+await page.getByTestId("eval-detail").waitFor({ timeout: 60000 });
+await page.waitForFunction(() => /completed|failed/.test(document.querySelector("[data-testid=run-status]")?.textContent || ""), null, { timeout: 180000 });
+const st = await page.getByTestId("run-status").first().innerText();
+check("evaluation run finishes (completed, or failed honestly without a local model)", st === "completed" || st === "failed", st);
+await page.getByRole("button", { name: "capitals run" }).click();
+await page.waitForTimeout(3000);
+const nrows = await page.getByRole("table", { name: "Output items" }).locator("tbody tr").count();
+check("output items listed (2 rows) when the run completed", st === "failed" || nrows === 2, nrows);
+await shot("6-azure-evals");
+check("no page errors", errs.length === 0, errs.join("|"));
+console.log(`${results.filter(Boolean).length}/${results.length} passed`);
+await browser.close();

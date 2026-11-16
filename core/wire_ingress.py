@@ -249,7 +249,7 @@ async def track_activity(request) -> None:
         body = await request.body()
         lh = _lower_headers(dict(request.headers))
         q = dict(request.query_params)
-        r._track_activity(r.service_of(request.method, request.url.path, lh, body, q), lh, q, body)
+        r._track_activity(r.service_of(request.method, request.url.path, lh, body, q), lh, q, body, request.method, request.url.path)
     except Exception:
         pass
 

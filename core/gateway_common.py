@@ -111,6 +111,15 @@ def jwt_validate(token, cfg, verify_sig=None, now=None):
 _JWKS: dict = {}
 
 
+def _local_jwks(issuer):
+    """Public keys of an issuer this simulator hosts itself (a Cognito user pool), else None. `local_jwks("x")` is a capability probe."""
+    try:
+        from core import identity_core
+        return identity_core.local_jwks(issuer) if issuer != "x" else (True if identity_core.available() else None)
+    except Exception:
+        return None
+
+
 def reset_jwks_cache():
     _JWKS.clear()
 
@@ -121,7 +130,7 @@ def make_rs256_verifier(ttl: float = 300.0, timeout: float = 5.0, fetch_json=Non
     Keys come from `cfg["jwks_uri"]` when set, else OIDC discovery of `cfg["issuer"]`; cached `ttl` seconds. Anything else — another
     alg, an unknown kid, an unreachable issuer, a bad signature — returns False: a token we could not verify is never admitted.
     `fetch_json(url) -> dict` is injectable for tests."""
-    if sys.platform == "emscripten":
+    if sys.platform == "emscripten" and not _local_jwks("x"):   # Nano verifies only issuers it hosts itself (Cognito pools in core/identity_core)
         return None
     try:
         from cryptography.hazmat.primitives import hashes
@@ -141,6 +150,9 @@ def make_rs256_verifier(ttl: float = 300.0, timeout: float = 5.0, fetch_json=Non
             return json.load(r)
 
     def keys(cfg):
+        lk = _local_jwks(cfg.get("issuer"))
+        if lk is not None:
+            return lk
         ck = cfg.get("jwks_uri") or cfg["issuer"]
         hit = _JWKS.get(ck)
         if hit and hit[0] > time.time():

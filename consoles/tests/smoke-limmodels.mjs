@@ -1,0 +1,55 @@
+/* Bedrock Data Automation page on Nano (lane limmodels): blueprint + project CRUD through the real wire, and a Run that reaches the runtime target.
+ *   node consoles/nano_preview.mjs --port 8751 --tier pro &   BASE=http://127.0.0.1:8751 SHOTS=/tmp/limmodels node consoles/tests/smoke-limmodels.mjs
+ * Image extraction needs the Mesh vision model, so on Nano the Run tab is expected to report an honest ClientError for a missing/unsupported object. */
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+const require = createRequire(import.meta.url);
+let pw; try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:8751", SHOTS = process.env.SHOTS || "/tmp/limmodels";
+mkdirSync(SHOTS, { recursive: true });
+const results = [], check = (n, ok, d = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 200) : ""}`); };
+const browser = await pw.chromium.launch(), page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const errs = []; page.on("pageerror", (e) => errs.push(String(e)));
+const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });
+const txt = () => page.locator("body").innerText();
+await page.goto(`${BASE}/nano/v4/aws/#/bedrock/data-automation`);
+await page.getByRole("heading", { name: "Data Automation" }).first().waitFor({ timeout: 90000 });
+let t = await txt();
+check("page is real (no Coming soon / Not in scope panel) and says small open models", !/Coming soon|not in scope/i.test(t) && /Small open models/.test(t));
+await shot("da-1-landing");
+await page.getByRole("tab", { name: "Blueprints" }).click();
+await page.getByRole("button", { name: "Create blueprint" }).first().click();
+await page.getByLabel("Blueprint name").fill("invoice-bp");
+await page.getByRole("button", { name: "Create blueprint" }).last().click();
+await page.getByText("invoice-bp").first().waitFor({ timeout: 30000 });
+check("blueprint created through CreateBlueprint and listed", /invoice-bp/.test(await txt()));
+await shot("da-2-blueprints");
+await page.getByRole("tab", { name: "Projects" }).click();
+await page.getByRole("button", { name: "Create project" }).first().click();
+await page.getByLabel("Project name").fill("docs-proj");
+await page.getByRole("button", { name: "Create project" }).last().click();
+await page.getByText("docs-proj").first().waitFor({ timeout: 30000 });
+await page.getByText("COMPLETED").first().waitFor({ timeout: 30000 });
+t = await txt();
+check("project created and listed with COMPLETED status", /docs-proj/.test(t) && /COMPLETED/.test(t));
+await shot("da-3-projects");
+await page.getByRole("tab", { name: "Run" }).click();
+await page.getByText("Run a project on an S3 object").waitFor();
+await page.getByText("Choose a project").first().click();
+await page.getByRole("option", { name: /docs-proj/ }).click();
+await page.getByLabel("Input S3 URI").fill("s3://nope-bucket/x.mp4");
+await page.getByRole("button", { name: "Run", exact: true }).click();
+await page.getByTestId("bda-status").waitFor({ timeout: 60000 }).catch(() => {});
+t = await txt();
+check("Run reaches InvokeDataAutomationAsync + GetDataAutomationStatus and reports an honest error", /ClientError|ServiceError|Request failed|ValidationException/.test(t), t.slice(t.indexOf("Run a project"), t.indexOf("Run a project") + 300));
+await shot("da-4-run");
+await page.getByRole("tab", { name: "Projects" }).click();
+await page.locator('input[type="radio"]').first().check({ force: true });
+await page.getByRole("button", { name: "Delete" }).first().click();
+await page.getByRole("dialog").locator("input").fill("docs-proj");
+await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+await page.waitForTimeout(1500);
+check("project deleted", !/docs-proj/.test(await txt()));
+check("no page errors", errs.length === 0, errs[0]);
+await browser.close();
+process.exit(results.every(Boolean) ? 0 : 1);

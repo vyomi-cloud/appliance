@@ -2550,6 +2550,8 @@ def _svc_cred_xml(c: dict, with_password: bool) -> str:
     inner = (_el("CreateDate", c["created"]) + _el("ServiceName", c["service"]) + _el("ServiceUserName", c["service_user"]))
     if with_password:
         inner += _el("ServicePassword", c["password"])
+    if c.get("expires"):
+        inner += _el("ExpirationDate", c["expires"])
     return inner + _el("ServiceSpecificCredentialId", c["id"]) + _el("UserName", c["user_name"]) + _el("Status", c["status"])
 
 
@@ -2559,6 +2561,17 @@ def _require_svc_cred(store, params):
     if not c or (uname and c["user_name"] != uname):
         raise IamError("NoSuchEntity", "The service-specific credential does not exist.", 404)
     return c
+
+
+def _svc_cred_expiry(params):
+    """CredentialAgeDays (1-36600, optional) -> ISO expiry; absent = never expires."""
+    days = str(params.get("CredentialAgeDays", "")).strip()
+    if not days:
+        return ""
+    if not days.isdigit() or not 1 <= int(days) <= 36600:
+        raise IamError("ValidationError", "CredentialAgeDays must be between 1 and 36600.", 400)
+    import datetime as _dt
+    return (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=int(days))).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _create_service_specific_credential(store, params):
@@ -2571,7 +2584,7 @@ def _create_service_specific_credential(store, params):
         raise IamError("LimitExceeded", "Cannot exceed quota for ServiceSpecificCredentialsPerUser: 2", 409)
     cid = "ACCA" + uuid.uuid4().hex[:17].upper()
     creds[cid] = {"id": cid, "user_name": u["user_name"], "service": svc, "status": "Active", "created": _now(),
-                  "service_user": f"{u['user_name']}-at-{store.account_id}", "password": base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes[:8]).decode()}
+                  "service_user": f"{u['user_name']}-at-{store.account_id}", "expires": _svc_cred_expiry(params), "password": base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes[:8]).decode()}
     store.persist()
     return _envelope("CreateServiceSpecificCredential", f"<ServiceSpecificCredential>{_svc_cred_xml(creds[cid], True)}</ServiceSpecificCredential>")
 

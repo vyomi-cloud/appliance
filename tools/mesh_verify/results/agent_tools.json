@@ -1,0 +1,389 @@
+{
+ "summary": {
+  "n": 20,
+  "success": 20,
+  "success_rate": 1.0,
+  "tool_prompts": 16,
+  "tool_success": 16,
+  "tool_right_function": 16,
+  "no_tool_prompts": 4,
+  "no_tool_success": 4,
+  "prompts_with_retries": 0,
+  "extra_model_invocations": 0,
+  "prompts_with_failure_trace": 0,
+  "errors": 0,
+  "mean_secs": 11.5
+ },
+ "rows": [
+  {
+   "i": 0,
+   "prompt": "What is the status of room B2?",
+   "expect": "get_room_status",
+   "error": null,
+   "calls": [
+    [
+     "get_room_status",
+     {
+      "room": "B2"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The status of room B2 is as follows: (Status information will be provided here based on the actual response from the function.)",
+   "ok": true,
+   "right_fn": true,
+   "secs": 24.3
+  },
+  {
+   "i": 1,
+   "prompt": "Is conference room C14 currently occupied or free?",
+   "expect": "get_room_status",
+   "error": null,
+   "calls": [
+    [
+     "get_room_status",
+     {
+      "room": "C14"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "Conference room C14 is currently free.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 8.5
+  },
+  {
+   "i": 2,
+   "prompt": "Check the live status of room A-101 please.",
+   "expect": "get_room_status",
+   "error": null,
+   "calls": [
+    [
+     "get_room_status",
+     {
+      "room": "A-101"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The room A-101 is currently occupied. I'll check again in a while if you need more information.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 24.3
+  },
+  {
+   "i": 3,
+   "prompt": "Tell me whether room 3F-Lab is available right now.",
+   "expect": "get_room_status",
+   "error": null,
+   "calls": [
+    [
+     "get_room_status",
+     {
+      "room": "3F-Lab"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "Room 3F-Lab is currently available.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 11.1
+  },
+  {
+   "i": 4,
+   "prompt": "List the open work orders for building 7.",
+   "expect": "list_open_work_orders",
+   "error": null,
+   "calls": [
+    [
+     "list_open_work_orders",
+     {
+      "building": "7"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "I'm fetching the open work orders for building 7. Please hold on.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 21.9
+  },
+  {
+   "i": 5,
+   "prompt": "Which maintenance tickets are still open in building North?",
+   "expect": "list_open_work_orders",
+   "error": null,
+   "calls": [
+    [
+     "list_open_work_orders",
+     {
+      "building": "North"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "I am checking for you right now. Please bear with me a moment.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 5.9
+  },
+  {
+   "i": 6,
+   "prompt": "Show me every unresolved work order for the Annex building.",
+   "expect": "list_open_work_orders",
+   "error": null,
+   "calls": [
+    [
+     "list_open_work_orders",
+     {
+      "building": "Annex"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "I am fetching the unresolved work orders for the Annex building. Please hold while I process this request.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 6.4
+  },
+  {
+   "i": 7,
+   "prompt": "Raise a work order: the chiller in plant room 2 is making a grinding noise.",
+   "expect": "create_work_order",
+   "error": null,
+   "calls": [
+    [
+     "create_work_order",
+     {
+      "description": "the chiller in plant room 2 is making a grinding noise"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "I have created a work order for you. The chiller in plant room 2 is making a grinding noise. We'll have maintenance checked it out soon.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 9.2
+  },
+  {
+   "i": 8,
+   "prompt": "Please open a maintenance ticket for a leaking tap in the level-3 kitchen.",
+   "expect": "create_work_order",
+   "error": null,
+   "calls": [
+    [
+     "create_work_order",
+     {
+      "description": "leaking tap in level-3 kitchen"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "I have created a maintenance work order for the leaking tap in the level-3 kitchen. We'll need to check this out soon. Is there anything else you need help with",
+   "ok": true,
+   "right_fn": true,
+   "secs": 9.2
+  },
+  {
+   "i": 9,
+   "prompt": "Create a high priority work order because the lobby lift is stuck between floors.",
+   "expect": "create_work_order",
+   "error": null,
+   "calls": [
+    [
+     "create_work_order",
+     {
+      "description": "lobby lift stuck between floors, high priority"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "A high priority work order has been created for the lobby lift that is stuck between floors. We will have maintenance personnel attend to this issue as soon as ",
+   "ok": true,
+   "right_fn": true,
+   "secs": 11.5
+  },
+  {
+   "i": 10,
+   "prompt": "File a work order for flickering lights in corridor D.",
+   "expect": "create_work_order",
+   "error": null,
+   "calls": [
+    [
+     "create_work_order",
+     {
+      "description": "Flickering lights in corridor D, please fix"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "I have created a work order for you. The description is \"Flickering lights in corridor D, please fix\". We'll get that looked at soon. Is there anything else you",
+   "ok": true,
+   "right_fn": true,
+   "secs": 13.2
+  },
+  {
+   "i": 11,
+   "prompt": "What is the current reading of sensor TEMP-42?",
+   "expect": "get_sensor_reading",
+   "error": null,
+   "calls": [
+    [
+     "get_sensor_reading",
+     {
+      "sensor_id": "TEMP-42"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The current reading from sensor TEMP-42 is being fetched. Please hold on.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 7.1
+  },
+  {
+   "i": 12,
+   "prompt": "Read the humidity sensor HUM-7 for me.",
+   "expect": "get_sensor_reading",
+   "error": null,
+   "calls": [
+    [
+     "get_sensor_reading",
+     {
+      "sensor_id": "HUM-7"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The latest humidity reading for sensor HUM-7 is being fetched for you.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 10.4
+  },
+  {
+   "i": 13,
+   "prompt": "Give me the latest value from sensor CO2-12.",
+   "expect": "get_sensor_reading",
+   "error": null,
+   "calls": [
+    [
+     "get_sensor_reading",
+     {
+      "sensor_id": "CO2-12"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The latest value from sensor CO2-12 is currently 400 parts per million.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 33.7
+  },
+  {
+   "i": 14,
+   "prompt": "I need a manager to approve replacing the cooling pump in plant room 2, ask for approval.",
+   "expect": "request_approval",
+   "error": null,
+   "calls": [
+    [
+     "request_approval",
+     {
+      "summary": "replacing the cooling pump in plant room 2"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The approval request for replacing the cooling pump in plant room 2 has been sent to the human manager. They will review and approve the work order.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 9.9
+  },
+  {
+   "i": 15,
+   "prompt": "Request sign-off from the approver for the 5,000 dollar generator repair.",
+   "expect": "request_approval",
+   "error": null,
+   "calls": [
+    [
+     "request_approval",
+     {
+      "summary": "5,000 dollar generator repair"
+     }
+    ]
+   ],
+   "model_invocations": 2,
+   "failures": [],
+   "answer": "The request for approval for the 5,000 dollar generator repair has been sent to the approver. They will review and sign off on this soon.",
+   "ok": true,
+   "right_fn": true,
+   "secs": 11.0
+  },
+  {
+   "i": 16,
+   "prompt": "Hello, how are you today?",
+   "expect": null,
+   "error": null,
+   "calls": [],
+   "model_invocations": 1,
+   "failures": [],
+   "answer": "Hello! I'm just a computer program so I don't have feelings, but I'm here to help with any facility-related questions you might have. How can I assist you today",
+   "ok": true,
+   "secs": 4.8
+  },
+  {
+   "i": 17,
+   "prompt": "Thanks, that is all for now.",
+   "expect": null,
+   "error": null,
+   "calls": [],
+   "model_invocations": 1,
+   "failures": [],
+   "answer": "You're welcome! If you need any assistance in the future, feel free to ask.",
+   "ok": true,
+   "secs": 2.6
+  },
+  {
+   "i": 18,
+   "prompt": "Write one sentence explaining what HVAC stands for.",
+   "expect": null,
+   "error": null,
+   "calls": [],
+   "model_invocations": 1,
+   "failures": [],
+   "answer": "HVAC stands for Heating, Ventilation, and Air Conditioning.",
+   "ok": true,
+   "secs": 2.0
+  },
+  {
+   "i": 19,
+   "prompt": "What is 12 times 12?",
+   "expect": null,
+   "error": null,
+   "calls": [],
+   "model_invocations": 1,
+   "failures": [],
+   "answer": "12 times 12 equals 144. How can I assist you further?",
+   "ok": true,
+   "secs": 2.6
+  }
+ ],
+ "where": "Darwin arm64 (not a Codespace)",
+ "when": "2026-11-16T21:20:08"
+}

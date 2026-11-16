@@ -43,7 +43,7 @@ class LlmUnavailable(Exception):
 
 
 _state = {"fn": None, "embed_fn": None, "endpoint": None, "model": None, "afn": None, "acache": {}, "in_arun": False,
-          "stream_fn": None, "no_rf": False, "no_native": False}
+          "stream_fn": None, "no_rf": False, "no_native": False, "aembed": None, "aembed_model": None, "custom_is": None, "custom_afn": None, "ahttp": None}
 
 
 class NeedAsync(BaseException):
@@ -51,9 +51,9 @@ class NeedAsync(BaseException):
     (``arun``) awaits the engine, caches the answer and replays the request. BaseException so no ``except Exception``
     in a core can swallow it."""
 
-    def __init__(self, key, args):
+    def __init__(self, key, args, kind="chat"):
         super().__init__(key)
-        self.key, self.args_ = key, args
+        self.key, self.args_, self.kind = key, args, kind
 
 
 def set_async_backend(afn=None, model: str | None = None) -> None:
@@ -64,11 +64,79 @@ def set_async_backend(afn=None, model: str | None = None) -> None:
         _state["model"] = model
 
 
-async def arun(handler, max_rounds: int = 16):
+def set_async_embed(afn=None, model: str | None = None) -> None:
+    """Register an awaitable embedding backend ``afn(texts) -> list[list[float]]`` (Nano: transformers.js MiniLM ONNX in the page).
+    Used through ``arun``; with none (or a failure) embed() falls back to the labelled deterministic ``vyomi-hash-embed``."""
+    _state["aembed"], _state["aembed_model"] = afn, model
+    _state["acache"] = {}
+
+
+def set_custom_backend(is_fn=None, afn=None) -> None:
+    """Imported custom chat models (core/import_core: base GGUF + LoRA adapter). ``is_fn(model) -> bool`` says whether a requested model id is one;
+    ``afn(model, messages, system, max_tokens, temperature, stop) -> dict|str`` serves it (Nano: wllama in the page, awaited through ``arun``).
+    A custom model is NEVER answered by the default backend: with no ``afn`` (or outside ``arun``) the call fails as unavailable."""
+    _state["custom_is"], _state["custom_afn"], _state["acache"] = is_fn, afn, {}
+
+
+def set_async_http(afn=None) -> None:
+    """Register an awaitable outbound-HTTP bridge ``afn(req: dict) -> dict`` (req = method/url/headers/body(b64)/timeout; reply =
+    {status, headers, body(b64)} or {error}). Nano: the allow-listed egress relay (wasm/gw-bridge.js, `globalThis.vyomiBackendFetch`).
+    Used through ``arun`` so a synchronous core (AgentCore gateway targets, OAuth token exchange) can reach the network from the browser."""
+    _state["ahttp"], _state["acache"] = afn, {}
+
+
+def _ahttp_bridge():
+    """The registered bridge, else (Nano only) the page's `vyomiBackendFetch` wrapped as an async callable, else None."""
+    if _state["ahttp"]:
+        return _state["ahttp"]
+    import sys
+    if sys.platform != "emscripten":
+        return None
+    try:
+        import js
+        fn = getattr(js.globalThis, "vyomiBackendFetch", None)
+    except Exception:  # noqa: BLE001
+        return None
+    if fn is None:
+        return None
+
+    async def call(req):
+        return json.loads(str(await fn(json.dumps(req))))
+    return call
+
+
+def http_request(method, url, headers, body, timeout):
+    """Outbound HTTP for synchronous cores on a runtime with no socket (Nano). -> (status, headers, bytes). Raises NeedAsync
+    (replayed by ``arun`` after the bridge answers) and RuntimeError when no bridge exists or the relay refused."""
+    import base64
+    req = {"method": method, "url": url, "headers": dict(headers or {}), "body": base64.b64encode(body or b"").decode(), "timeout": timeout}
+    key = "h" + _akey(req)
+    hit = _state["acache"].get(key)
+    if hit is None:
+        if not (_state["in_arun"] and _ahttp_bridge()):
+            raise RuntimeError("outbound HTTP needs the allow-listed egress relay, which is not reachable from this request "
+                               "(open the Nano tab with a Vyomi session, or run `vyomi-tunnel gateway-backend <origin>=<local origin>`)")
+        raise NeedAsync(key, req, "http")
+    if isinstance(hit, Exception):
+        raise RuntimeError(str(hit))
+    if hit.get("error"):
+        raise RuntimeError(str(hit["error"]))
+    return int(hit["status"]), hit.get("headers") or {}, base64.b64decode(hit.get("body") or "")
+
+
+def _is_custom(model) -> bool:
+    f = _state["custom_is"]
+    try:
+        return bool(model and f and f(model))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def arun(handler, max_rounds: int = 40):
     """Run the synchronous ``handler()`` (a whole wire request); every chat() it makes is answered by the async backend
     (awaited here, cached, request replayed) so cores stay synchronous. A request that makes several model calls (tool
     retries) replays once per call. Without an async backend this is just handler()."""
-    if not _state["afn"]:
+    if not _state["afn"] and not _state["aembed"] and not _state["custom_afn"] and not _ahttp_bridge():
         return handler()
     _state["acache"] = {}
     try:
@@ -77,6 +145,26 @@ async def arun(handler, max_rounds: int = 16):
                 _state["in_arun"] = True
                 return handler()
             except NeedAsync as n:
+                if n.kind == "embed":
+                    try:
+                        _state["acache"][n.key] = {"vectors": await _state["aembed"](list(n.args_))}
+                    except Exception as e:
+                        _state["acache"][n.key] = e
+                    continue
+                if n.kind == "http":
+                    try:
+                        _state["acache"][n.key] = await _ahttp_bridge()(n.args_)
+                    except Exception as e:  # noqa: BLE001
+                        _state["acache"][n.key] = e
+                    continue
+                if n.kind == "custom":
+                    try:
+                        r = await _state["custom_afn"](*n.args_)
+                    except Exception as e:
+                        _state["acache"][n.key] = e
+                    else:
+                        _state["acache"][n.key] = r if isinstance(r, dict) else {"text": str(r)}
+                    continue
                 msgs, system, max_tokens, temperature, stop = n.args_
                 try:
                     r = await _state["afn"](msgs, system, max_tokens, temperature, stop)
@@ -119,14 +207,57 @@ def _endpoint() -> str | None:
         return DEFAULT_ENDPOINT
 
 
+# ── role endpoints: a SECOND/THIRD llama-server for the vision and reasoning models (Mesh only; one small model per role so an 8 GB
+# Codespace never holds more than the default chat model plus one role model). Configured by env or ``set_role_endpoint``.
+ROLE_ENV = {"vision": "VYOMI_LLM_VISION_ENDPOINT", "reasoning": "VYOMI_LLM_REASONING_ENDPOINT"}
+_ROLE_PROBE: dict = {}
+
+
+def set_role_endpoint(role: str, url: str | None) -> None:
+    _state.setdefault("roles", {})[role] = url.rstrip("/") if url else None
+    _ROLE_PROBE.pop(role, None)
+
+
+def role_endpoint(role: str | None) -> str | None:
+    if not role:
+        return None
+    if (_state.get("roles") or {}).get(role):
+        return _state["roles"][role]
+    ep = os.environ.get(ROLE_ENV.get(role, "")) if hasattr(os, "environ") else None
+    return ep.rstrip("/") if ep else None
+
+
+def role_available(role: str, probe: bool = True) -> bool:
+    """True when a llama-server for ``role`` is configured and (with ``probe``) answers /health. The probe is cached 15 s."""
+    ep = role_endpoint(role)
+    if not ep:
+        return False
+    if not probe:
+        return True
+    import time as _t
+    hit = _ROLE_PROBE.get(role)
+    if hit and hit[0] == ep and _t.time() - hit[1] < 15:
+        return hit[2]
+    try:
+        import urllib.request
+        with urllib.request.urlopen(ep + "/health", timeout=1.5) as r:
+            ok = r.status == 200
+    except Exception:  # noqa: BLE001
+        ok = False
+    _ROLE_PROBE[role] = (ep, _t.time(), ok)
+    return ok
+
+
 def model_name() -> str:
     return _state["model"] or os.environ.get("VYOMI_LLM_MODEL") or DEFAULT_MODEL
 
 
-def _http(path: str, payload: dict | None, timeout: float = 120.0):
+def _http(path: str, payload: dict | None, timeout: float = 120.0, role: str | None = None):
     import urllib.error
     import urllib.request
-    ep = _endpoint()
+    ep = role_endpoint(role) or _endpoint()
+    if role and role_endpoint(role):
+        timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))   # a CPU vision/reasoning call on 2 vCPUs can take minutes
     if not ep:
         raise LlmUnavailable("No local LLM backend is available on this substrate.")
     req = urllib.request.Request(ep + path, data=None if payload is None else json.dumps(payload).encode(),
@@ -145,11 +276,13 @@ def _http(path: str, payload: dict | None, timeout: float = 120.0):
                              f"(core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.") from e
 
 
-def _http_open(path: str, payload: dict, timeout: float = 120.0):
+def _http_open(path: str, payload: dict, timeout: float = 120.0, role: str | None = None):
     """POST and return the open response (iterate it for SSE lines); the caller closes it."""
     import urllib.error
     import urllib.request
-    ep = _endpoint()
+    ep = role_endpoint(role) or _endpoint()
+    if role and role_endpoint(role):
+        timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))
     if not ep:
         raise LlmUnavailable("No local LLM backend is available on this substrate.")
     req = urllib.request.Request(ep + path, data=json.dumps(payload).encode(), headers={"content-type": "application/json"}, method="POST")
@@ -172,7 +305,8 @@ def estimate_tokens(text: str) -> int:
 
 
 def status(probe: bool = True) -> dict:
-    st = {"available": False, "backend": None, "model": model_name(), "endpoint": None, "honest_limit": HONEST_LIMIT}
+    st = {"available": False, "backend": None, "model": model_name(), "endpoint": None, "honest_limit": HONEST_LIMIT,
+          "roles": {r: {"endpoint": role_endpoint(r), "available": role_available(r, probe)} for r in ROLE_ENV if role_endpoint(r)}}
     if _state["fn"]:
         st.update(available=True, backend="registered", endpoint="in-process")
         return st
@@ -261,6 +395,9 @@ def _norm_messages(messages, system):
     for m in messages or []:
         role = m.get("role", "user")
         content = m.get("content", "")
+        if isinstance(content, list) and role == "user" and vision_available() and any(isinstance(x, dict) and x.get("type") == "image_url" for x in content):
+            out.append({"role": "user", "content": content})          # multimodal turn: OpenAI-style parts go to a vision backend untouched
+            continue
         if isinstance(content, list):
             content = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
         nm = {"role": "assistant" if role in ("assistant", "model") else ("system" if role == "system" else ("tool" if role == "tool" else "user")),
@@ -440,6 +577,14 @@ def _tool_prompt(tools, choice):
     return "\n".join(lines)
 
 
+def _join_content(a, b):
+    if isinstance(a, str) and isinstance(b, str):
+        return a + "\n" + b
+    pa = [{"type": "text", "text": a}] if isinstance(a, str) else list(a)
+    pb = [{"type": "text", "text": b}] if isinstance(b, str) else list(b)
+    return pa + pb
+
+
 def _flatten_for_prompt(msgs, tools, choice):
     """Neutral messages -> plain system/user/assistant turns (roles alternate; tool turns become JSON/user text)."""
     out, sysparts = [], []
@@ -453,7 +598,7 @@ def _flatten_for_prompt(msgs, tools, choice):
         elif m["role"] == "tool":
             m = {"role": "user", "content": f"Tool result for {m.get('name') or m.get('tool_call_id') or 'tool'}: {m['content']}"}
         if out and out[-1]["role"] == m["role"]:
-            out[-1] = {"role": m["role"], "content": out[-1]["content"] + "\n" + m["content"]}
+            out[-1] = {"role": m["role"], "content": _join_content(out[-1]["content"], m["content"])}
         else:
             out.append({"role": m["role"], "content": m["content"]})
     if tools:
@@ -504,7 +649,7 @@ def _fn_extras(fn, o):
         return {}
     allp = any(p.kind == p.VAR_KEYWORD for p in params.values())
     cand = {"model": o.get("model"), "top_p": o.get("top_p"), "seed": o.get("seed"), "response_format": o.get("response_format"),
-            "tools": o.get("tools"), "tool_choice": o.get("tool_choice")}
+            "tools": o.get("tools"), "tool_choice": o.get("tool_choice"), "lora": o.get("lora")}
     return {k: v for k, v in cand.items() if v is not None and (allp or k in params)}
 
 
@@ -515,6 +660,11 @@ def _fn_native_tools(fn) -> bool:
     except (TypeError, ValueError):
         return False
     return "tools" in params
+
+
+def _ctext(c) -> str:
+    """Message content (str, or a list of OpenAI-style parts when an image is attached) -> its text."""
+    return c if isinstance(c, str) else "".join(x.get("text", "") for x in (c or []) if isinstance(x, dict))
 
 
 def _oa_messages(msgs):
@@ -536,9 +686,54 @@ def _oa_rf(rf):
     return {"type": "json_object"}
 
 
+# ── LoRA adapters (chat-model fine-tunes trained by core/training_core, served by llama-server) ──
+# llama-server loads adapters at START (``--lora-scaled x.gguf:0``) and then takes a per-request
+# ``"lora": [{"id": <index>, "scale": s}]``; GET /lora-adapters lists {id, path, scale}. ``lora`` here is
+# {"name": adapter id, "path": host file, "scale": 1.0}; the id is resolved by file basename against /lora-adapters.
+def lora_dir() -> str:
+    return os.environ.get("VYOMI_LLM_ADAPTER_DIR") or os.path.join(os.environ.get("CLOUDLEARN_DATA_DIR", "/data"), "llm-adapters")
+
+
+def lora_prepare(name: str, blob: bytes) -> str:
+    """Write the adapter GGUF where the llama-server container mounts it (idempotent); returns the host path."""
+    d = lora_dir()
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f"{name}.gguf")
+    if not os.path.exists(path) or os.path.getsize(path) != len(blob):
+        with open(path + ".tmp", "wb") as f:
+            f.write(blob)
+        os.replace(path + ".tmp", path)
+    return path
+
+
+def _lora_request(lora) -> list:
+    base = os.path.basename(str(lora.get("path") or lora.get("name") or ""))
+    base = base if base.endswith(".gguf") else base + ".gguf"
+    try:
+        loaded = _http("/lora-adapters", None) or []
+    except LlmUnavailable:
+        raise
+    for a in loaded if isinstance(loaded, list) else []:
+        if os.path.basename(str(a.get("path", ""))) == base:
+            return [{"id": a["id"], "scale": float(lora.get("scale", 1.0))}]
+    raise LlmUnavailable(f"The LoRA adapter {base} is not loaded in the llama-server (it loads adapters at start). Restart the local LLM with "
+                         f"`--lora-scaled <dir>/{base}:0` (core/llm_runtime.lora_args); loaded now: {[os.path.basename(str(a.get('path', ''))) for a in loaded] if isinstance(loaded, list) else 'unknown'}.")
+
+
+def vision_available() -> bool:
+    """True only when the local backend can read images: a multimodal llama-server (``--mmproj``) flagged with VYOMI_LLM_VISION=1, or a
+    backend registered with ``set_vision(True)``. No vision model -> Bedrock/Vertex/Azure image parts are rejected, never ignored."""
+    return bool(_state.get("vision")) or os.environ.get("VYOMI_LLM_VISION", "") in ("1", "true", "yes") or role_available("vision")
+
+
+def set_vision(on: bool = True) -> None:
+    _state["vision"] = bool(on)
+
+
 def _http_body(msgs, o, stream, native_tools):
-    body = {"model": resolve_model(o.get("model")), "messages": _oa_messages(msgs), "max_tokens": o["max_tokens"],
-            "temperature": float(o["temperature"]), "stream": stream}
+    mdl = ("vyomi-" + o["role"]) if role_endpoint(o.get("role")) else resolve_model(o.get("model"))
+    body = {"model": mdl, "messages": _oa_messages(msgs), "max_tokens": o["max_tokens"],
+            "temperature": float(o["temperature"]), "stream": stream, "cache_prompt": True}   # llama.cpp reuses the KV of a shared prompt prefix
     if o.get("stop"):
         body["stop"] = list(o["stop"])[:4]
     if o.get("top_p") is not None:
@@ -552,6 +747,8 @@ def _http_body(msgs, o, stream, native_tools):
                          for t in o["tools"]]
         ch = o.get("tool_choice") or "auto"
         body["tool_choice"] = ch if isinstance(ch, str) else {"type": "function", "function": {"name": ch["name"]}}
+    if o.get("lora"):
+        body["lora"] = _lora_request(o["lora"])
     if stream:
         body["stream_options"] = {"include_usage": True}
     return body
@@ -564,9 +761,26 @@ def _oa_calls(msg):
 
 def _generate(msgs, o, native_tools=False) -> dict:
     """One model call. ``msgs``: neutral messages (native_tools) or plain turns. Returns the chat() dict (tool_calls only when native)."""
-    prompt_text = "\n".join(m["content"] for m in msgs)
+    prompt_text = "\n".join(_ctext(m["content"]) for m in msgs)
     fin = lambda f: "length" if f == "length" else ("tool_calls" if f in ("tool_calls", "tool_use", "function_call") else "stop")
-    if _state["fn"]:
+    if _is_custom(o.get("model")):      # imported LoRA chat model: only its own engine may answer (never the default model)
+        if not _state["custom_afn"]:
+            raise LlmUnavailable("Imported chat models are served in the browser (Nano, wllama); this runtime has no engine for them.")
+        args = (o["model"], msgs, None, o["max_tokens"], o["temperature"], list(o["stop"]) if o.get("stop") else None)
+        key = "c" + _akey(args)
+        hit = _state["acache"].get(key)
+        if hit is None:
+            if not _state["in_arun"]:
+                raise LlmUnavailable("The imported chat model is only reachable through the async request path.")
+            raise NeedAsync(key, args, "custom")
+        if isinstance(hit, Exception):
+            raise LlmUnavailable(f"Imported chat model failed ({type(hit).__name__}: {hit}).") from hit
+        text = hit.get("text", "")
+        return {"text": text, "tool_calls": [], "input_tokens": hit.get("input_tokens") or estimate_tokens(prompt_text),
+                "output_tokens": hit.get("output_tokens") or estimate_tokens(text), "finish_reason": fin(hit.get("finish_reason")),
+                "backend": hit.get("backend") or "wllama", "model": o["model"]}
+    role = o.get("role") if role_endpoint(o.get("role")) else None
+    if _state["fn"] and not role:
         fn = _state["fn"]
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
         ex = _fn_extras(fn, dict(o, tools=o.get("tools") if native_tools else None))
@@ -577,7 +791,7 @@ def _generate(msgs, o, native_tools=False) -> dict:
         return {"text": text, "tool_calls": calls, "input_tokens": info.get("input_tokens") or estimate_tokens(prompt_text),
                 "output_tokens": info.get("output_tokens") or estimate_tokens(text + json.dumps(calls) if calls else text),
                 "finish_reason": "tool_calls" if calls else fin(info.get("finish_reason")), "backend": "registered", "model": info.get("model") or model_name()}
-    if _state["afn"]:
+    if _state["afn"] and not role:
         args = (msgs, None, o["max_tokens"], o["temperature"], list(o["stop"]) if o.get("stop") else None)
         key = _akey(args)
         hit = _state["acache"].get(key)
@@ -593,12 +807,12 @@ def _generate(msgs, o, native_tools=False) -> dict:
                 "finish_reason": fin(hit.get("finish_reason")), "backend": "webllm", "model": model_name()}
     body = _http_body(msgs, o, False, native_tools)
     try:
-        r = _http("/v1/chat/completions", body)
+        r = _http("/v1/chat/completions", body, role=role)
     except LlmHttpError as e:
         if "response_format" in body and e.status in (400, 422, 500, 501):   # server can't constrain: remember, validate instead
             _state["no_rf"] = True
             body.pop("response_format")
-            r = _http("/v1/chat/completions", body)
+            r = _http("/v1/chat/completions", body, role=role)
         else:
             raise
     try:
@@ -609,9 +823,14 @@ def _generate(msgs, o, native_tools=False) -> dict:
         raise LlmUnavailable("Local LLM endpoint returned an unexpected response.") from e
     calls = _oa_calls(message)
     u = r.get("usage") or {}
-    return {"text": text, "tool_calls": calls, "input_tokens": u.get("prompt_tokens") or estimate_tokens(prompt_text),
-            "output_tokens": u.get("completion_tokens") or estimate_tokens(text),
-            "finish_reason": "tool_calls" if calls else fin(ch.get("finish_reason")), "backend": "llama.cpp", "model": r.get("model") or model_name()}
+    out = {"text": text, "tool_calls": calls, "input_tokens": u.get("prompt_tokens") or estimate_tokens(prompt_text),
+           "output_tokens": u.get("completion_tokens") or estimate_tokens(text),
+           "finish_reason": "tool_calls" if calls else fin(ch.get("finish_reason")), "backend": "llama.cpp", "model": r.get("model") or model_name()}
+    if role:
+        out["role"] = role
+    if message.get("reasoning_content"):     # llama-server --reasoning-format deepseek: the <think> block, split from the answer
+        out["reasoning"] = message["reasoning_content"]
+    return out
 
 
 def _add(a, b):
@@ -711,8 +930,19 @@ def _tools_native(msgs, o) -> dict:
     return r
 
 
+def _has_image(msgs) -> bool:
+    return any(isinstance(m.get("content"), list) and any(isinstance(x, dict) and x.get("type") == "image_url" for x in m["content"]) for m in msgs)
+
+
+def _pick_role(msgs, role=None, reasoning=None):
+    """Which llama-server answers: images -> the vision model; ``reasoning`` (or role='reasoning') -> the reasoning model; else the default
+    chat model. A role is only returned when its endpoint is configured (otherwise the default model answers, as before)."""
+    want = role or ("vision" if _has_image(msgs) else ("reasoning" if reasoning else None))
+    return want if want and role_endpoint(want) else None
+
+
 def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, model=None, tools=None, tool_choice=None,
-         response_format=None, top_p=None, seed=None) -> dict:
+         response_format=None, top_p=None, seed=None, lora=None, role=None, reasoning=None) -> dict:
     msgs = _norm_messages(messages, system)
     if not any(m["role"] == "user" for m in msgs):
         raise ValueError("at least one user message is required")
@@ -722,9 +952,9 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
         tools = []
     o = {"max_tokens": max(1, int(max_tokens or 256)), "temperature": temperature, "stop": list(stop) if stop else None, "model": model,
          "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None,
-         "response_format": response_format or None}
+         "response_format": response_format or None, "lora": lora or None, "role": _pick_role(msgs, role, reasoning)}
     if tools:
-        r = _tools_native(msgs, o) if _backend_native_tools() else _tools_prompted(msgs, o)
+        r = _tools_native(msgs, o) if (_backend_native_tools() and not _is_custom(model)) else _tools_prompted(msgs, o)
         if response_format and not r["tool_calls"]:
             r = _add(r, _structured(msgs, dict(o, tools=None, tool_choice=None)))
         return r
@@ -737,9 +967,9 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
 def _http_stream(msgs, o, native_tools):
     """Yield events straight off the backend's SSE stream (llama.cpp / Ollama ``stream: true``)."""
     body = _http_body(msgs, o, True, native_tools)
-    resp = _http_open("/v1/chat/completions", body)
-    prompt_text = "\n".join(m["content"] for m in msgs)
-    text, calls, usage, finish, mdl = [], {}, {}, None, None
+    resp = _http_open("/v1/chat/completions", body, role=o.get("role"))
+    prompt_text = "\n".join(_ctext(m["content"]) for m in msgs)
+    text, think, calls, usage, finish, mdl = [], [], {}, {}, None, None
     try:
         for raw in resp:
             line = raw.decode("utf-8", "replace").strip()
@@ -757,6 +987,10 @@ def _http_stream(msgs, o, native_tools):
                 usage = ev["usage"]
             for ch in ev.get("choices") or []:
                 d = ch.get("delta") or {}
+                if d.get("reasoning_content"):
+                    think.append(d["reasoning_content"])
+                    if o.get("emit_reasoning"):
+                        yield {"type": "reasoning", "text": d["reasoning_content"]}
                 if d.get("content"):
                     text.append(d["content"])
                     yield {"type": "text", "text": d["content"]}
@@ -786,11 +1020,15 @@ def _http_stream(msgs, o, native_tools):
     yield {"type": "done", "text": full, "tool_calls": final_calls,
            "finish_reason": "tool_calls" if final_calls else ("length" if finish == "length" else "stop"),
            "input_tokens": usage.get("prompt_tokens") or estimate_tokens(prompt_text),
-           "output_tokens": usage.get("completion_tokens") or estimate_tokens(full), "backend": "llama.cpp", "model": mdl or model_name()}
+           "output_tokens": usage.get("completion_tokens") or estimate_tokens(full), "backend": "llama.cpp", "model": mdl or model_name(),
+           **({"reasoning": "".join(think)} if think else {}), **({"role": o["role"]} if o.get("role") else {})}
 
 
-def _replay(r):
+def _replay(r, emit_reasoning=False):
     """Events for an already-complete result (buffered paths: prompt-translated tools, structured output, non-streaming backends)."""
+    if r.get("reasoning") and emit_reasoning:
+        for i in range(0, len(r["reasoning"]), 24):
+            yield {"type": "reasoning", "text": r["reasoning"][i:i + 24]}
     if r["text"]:
         for i in range(0, len(r["text"]), 12):
             yield {"type": "text", "text": r["text"][i:i + 12]}
@@ -803,8 +1041,8 @@ def _replay(r):
 
 
 def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=None, model=None, tools=None, tool_choice=None,
-                response_format=None, top_p=None, seed=None):
-    """Generator of events {type: text|tool_start|tool_args|done}. Plain chat (and native tool calls on a server that has them)
+                response_format=None, top_p=None, seed=None, role=None, reasoning=None):
+    """Generator of events {type: reasoning|text|tool_start|tool_args|done}. Plain chat (and native tool calls on a server that has them)
     stream token-by-token from the backend as it generates; backends/paths that cannot (prompt-translated tools and
     structured output - both must be validated whole - or a non-streaming registered/WebLLM backend) emit the finished answer
     as events. Errors surface on the first ``next()``."""
@@ -816,12 +1054,13 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
     if choice == "none":
         tools = []
     o = {"max_tokens": max(1, int(max_tokens or 256)), "temperature": temperature, "stop": list(stop) if stop else None, "model": model,
-         "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None, "response_format": response_format or None}
+         "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None, "response_format": response_format or None,
+         "role": _pick_role(msgs, role, reasoning), "emit_reasoning": bool(reasoning)}
     kw = dict(system=None, max_tokens=o["max_tokens"], temperature=temperature, stop=stop, model=model, tools=tools or None,
-              tool_choice=choice if tools else None, response_format=response_format, top_p=top_p, seed=seed)
-    if _state["fn"] and _state["stream_fn"] and not tools and not response_format:
+              tool_choice=choice if tools else None, response_format=response_format, top_p=top_p, seed=seed, role=o["role"], reasoning=reasoning)
+    if _state["fn"] and _state["stream_fn"] and not tools and not response_format and not _is_custom(model) and not o["role"]:
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
-        parts, ptxt = [], "\n".join(m["content"] for m in msgs)
+        parts, ptxt = [], "\n".join(_ctext(m["content"]) for m in msgs)
         for piece in _state["stream_fn"](_flatten_for_prompt(msgs, None, "none"), sysm, o["max_tokens"], temperature, o["stop"]):
             if isinstance(piece, dict):
                 piece = piece.get("text", "")
@@ -831,7 +1070,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
         yield {"type": "done", "text": full, "tool_calls": [], "finish_reason": "stop", "input_tokens": estimate_tokens(ptxt),
                "output_tokens": estimate_tokens(full), "backend": "registered", "model": model_name()}
         return
-    http = not _state["fn"] and not _state["afn"] and _endpoint()
+    http = (o["role"] or (not _state["fn"] and not _state["afn"])) and not _is_custom(model) and (role_endpoint(o["role"]) or _endpoint())
     if http and not response_format and (not tools or (_backend_native_tools() and choice == "auto")):
         try:
             yield from _http_stream(msgs if tools else _flatten_for_prompt(msgs, None, "none"), o, bool(tools))
@@ -840,7 +1079,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
             if not tools or e.status not in (400, 404, 422, 500, 501) or "tool" not in (e.body or str(e)).lower():
                 raise
             _state["no_native"] = True
-    yield from _replay(chat(msgs, **kw))
+    yield from _replay(chat(msgs, **kw), o["emit_reasoning"])
 
 
 def hash_embed(text: str, dim: int = HASH_DIM) -> list[float]:
@@ -861,6 +1100,14 @@ def embed(texts, dimensions: int | None = None) -> dict:
     try:
         if _state["embed_fn"]:
             vecs, backend = _state["embed_fn"](texts), "registered"
+        elif _state["aembed"]:
+            key = _akey(["embed"] + texts)
+            hit = _state["acache"].get(key)
+            if hit is None and _state["in_arun"]:
+                raise NeedAsync(key, texts, "embed")
+            if isinstance(hit, dict):
+                vecs, backend = hit["vectors"], "transformers.js"
+            # no hit (sync path) or engine failed -> labelled hash fallback below
         elif not _state["fn"] and not _state["afn"] and _endpoint():
             r = _http("/v1/embeddings", {"model": model_name(), "input": texts}, timeout=30.0)
             vecs, backend = [d["embedding"] for d in r["data"]], "llama.cpp"
@@ -871,7 +1118,7 @@ def embed(texts, dimensions: int | None = None) -> dict:
     if dimensions and vecs and dimensions < len(vecs[0]):
         vecs = [_renorm(v[:dimensions]) for v in vecs]
     return {"vectors": vecs, "dimensions": len(vecs[0]) if vecs else 0, "input_tokens": toks, "backend": backend,
-            "model": model_name() if backend != "vyomi-hash-embed" else "vyomi-hash-embed"}
+            "model": "vyomi-hash-embed" if backend == "vyomi-hash-embed" else (_state["aembed_model"] if backend == "transformers.js" else model_name())}
 
 
 def _renorm(v):

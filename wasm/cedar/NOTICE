@@ -1,0 +1,2 @@
+cedar_wasm.js / cedar_wasm_bg.wasm: @cedar-policy/cedar-wasm 4.14.0 (web build), Apache-2.0, https://github.com/cedar-policy/cedar. Unmodified.
+cedar-eval.mjs: Vyomi glue (installs globalThis.__vyomi_cedar_eval).

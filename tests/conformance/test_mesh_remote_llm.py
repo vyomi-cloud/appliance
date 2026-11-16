@@ -21,7 +21,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 os.environ.setdefault("CLOUDLEARN_STATE_DIR", tempfile.mkdtemp(prefix="mesh-remote-llm-"))
-os.environ["VYOMI_HOST_MEM_MB"] = "8000"            # 2-core/8 GB Codespace: cap 5600 -> local AI share 2800
+os.environ["VYOMI_HOST_MEM_MB"] = "16000"           # 4 vCPU/16 GB Mesh: cap 11200 -> local AI share 5600 (Qwen3-4B + embedder do not fit the 8 GB host share of 2800)
 os.environ.pop("VYOMI_MESH_CAP_MB", None)
 os.environ.pop("VYOMI_LLM_ENDPOINT", None)
 os.environ.pop("VYOMI_MESH_REMOTE_LLM", None)
@@ -198,7 +198,7 @@ os.environ["VYOMI_MESH_REMOTE_LLM"] = "1"
 AI.admit_configured(enforce=True)
 used_before = B.usage()["ai"]
 bud_before = B.resource_budget()["memory_split_mb"]
-check("baseline: local pack reserves the AI bucket (3B + bge)", used_before >= 2500 and bud_before["ai"] == 2800, (used_before, bud_before))
+check("baseline: local pack reserves the AI bucket (Qwen3-4B + bge)", used_before >= 2500 and bud_before["ai"] == 5600, (used_before, bud_before))
 
 # 1. attach: pack released, bucket not reserved, whole cap to compute
 info = R.attach(HUB, MESH_TOKEN)
@@ -207,10 +207,10 @@ check("attach: reports mode remote / label 'llm: remote (runner)'", info["attach
 check("attach: local AI reservations released", B.usage()["ai"] == 0, B.usage())
 check("attach: AI bucket is 0 and compute gets the whole cap (RAM saved)", bud["ai"] == 0 and bud["compute"] == bud_before["compute"] + bud_before["ai"], bud)
 try:
-    AI.admit("qwen2.5-3b", "chat", enforce=True); ok = False
+    AI.admit("qwen3-4b", "chat", enforce=True); ok = False
 except AI.ModelAdmissionError as e:
     ok = e.code == "remote_llm_attached"
-check("attach: admitting the local 3B model is refused (pack does not load)", ok and B.usage()["ai"] == 0)
+check("attach: admitting the local Qwen3-4B model is refused (pack does not load)", ok and B.usage()["ai"] == 0)
 pl = AI.admit_configured(enforce=True)
 check("attach: admit_configured reserves nothing; plan tells the boot script to start no model servers",
       B.usage()["ai"] == 0 and pl["ok"] is False and pl["chat"] is None and pl.get("remote") is True, pl)
@@ -218,7 +218,7 @@ check("attach: llm_core points at the loopback gateway, not the in-pack gateway"
 
 # 2. no runner yet -> honest 503, nothing local started
 def chat_req(stream=False):
-    return http("POST", llm_core._endpoint() + "/v1/chat/completions", body={"model": "qwen2.5-3b", "messages": [{"role": "user", "content": "hi"}], "stream": stream})
+    return http("POST", llm_core._endpoint() + "/v1/chat/completions", body={"model": "qwen3-4b", "messages": [{"role": "user", "content": "hi"}], "stream": stream})
 
 code, body, _ = chat_req()
 check("runner absent: 503 RunnerNotLinked (not a hang, not a local answer)", code == 503 and b"RunnerNotLinked" in body, (code, body[:120]))
@@ -255,7 +255,7 @@ res = llm_core.chat([{"role": "user", "content": "hi"}], None, 16, 0.0, None)
 check("llm_core.chat (the seam the cloud wires use) works against the remote LLM", res is not None and "hello from the runner" in json.dumps(res, default=str), res)
 code, body, h = chat_req(stream=True)
 check("SSE streaming passes through chunk by chunk", code == 200 and b"he" in body and b"[DONE]" in body, body[:120])
-code, body, _ = http("POST", llm_core._endpoint() + "/v1/embeddings", body={"model": "qwen2.5-3b", "input": "x"})
+code, body, _ = http("POST", llm_core._endpoint() + "/v1/embeddings", body={"model": "qwen3-4b", "input": "x"})
 check("embeddings routed to the runner's embed server with model rewritten", code == 200 and any(k == "embed" and b.get("model") == "embed" for k, _, b in Fake.seen), Fake.seen[-1:])
 check("status: ready, 'llm: remote (runner)', AI bucket still 0", AI.status()["state"] == "ready" and B.status()["llm"] == "llm: remote (runner)" and B.usage()["ai"] == 0, B.status()["llm"])
 
@@ -300,7 +300,7 @@ os.environ["VYOMI_MESH_SESSION_TOKEN"] = MESH_TOKEN
 R.attach(HUB, MESH_TOKEN)
 ep = llm_core._endpoint()
 d = R.detach()
-check("detach: mode back to local, bucket restored", d["mode"] == "local" and B.resource_budget()["memory_split_mb"]["ai"] == 2800, d)
+check("detach: mode back to local, bucket restored", d["mode"] == "local" and B.resource_budget()["memory_split_mb"]["ai"] == 5600, d)
 try:
     urllib.request.urlopen(ep + "/health", timeout=2); ok = False
 except Exception:

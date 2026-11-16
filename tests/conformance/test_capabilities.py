@@ -32,6 +32,8 @@ from urllib.parse import parse_qsl, urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 REG = ROOT / "core" / "capabilities"
 BASE = os.environ.get("CAP_BASE", "").rstrip("/")
+# CAP_ONLY=<substring[,substring]>: check only the claims whose id contains one of these (run one entry in isolation instead of the whole sweep)
+ONLY = [x for x in os.environ.get("CAP_ONLY", "").split(",") if x]
 SUBSTRATE = "offline" if BASE else "nano"
 AUTH = "AWS4-HMAC-SHA256 Credential=CAP/20261030/us-east-1/{svc}/aws4_request, SignedHeaders=host, Signature=0"
 
@@ -141,9 +143,9 @@ def probe(fid: str, p: dict, level: str, ctx: dict) -> tuple[bool, str]:
         kind = p["gcp_vertex"]
         if kind == "gemini":
             # countTokens is model-free; generateContent must answer, or say UNAVAILABLE (503) when no local model runs, never fake an answer
-            c, cb = call("POST", f"{pub}/qwen2.5-3b:countTokens", svc="aiplatform",
+            c, cb = call("POST", f"{pub}/qwen3-4b:countTokens", svc="aiplatform",
                          body=json.dumps({"contents": [{"role": "user", "parts": [{"text": "12345678"}]}]}).encode())
-            g, gb = call("POST", f"{pub}/qwen2.5-3b:generateContent", svc="aiplatform",
+            g, gb = call("POST", f"{pub}/qwen3-4b:generateContent", svc="aiplatform",
                          body=json.dumps({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).encode())
             gj = json.loads(gb or b"{}")
             honest = g == 200 and gj.get("candidates") or g == 503 and gj.get("error", {}).get("status") == "UNAVAILABLE"
@@ -257,7 +259,7 @@ def main() -> int:
             continue   # backends/<cloud>.json is the per-service "how it runs" registry (own schema, own test_backends_registry.py), not a feature-claim registry
         reg = json.loads(f.read_text())
         for fid, ent in reg.items():
-            if fid.startswith("$"):
+            if fid.startswith("$") or (ONLY and not any(o in fid for o in ONLY)):
                 continue
             # Optional v4 gating fields (tier: free|pro|max, mesh: bool) are validated
             # here but never change which claims pass.

@@ -58,7 +58,7 @@ def gem(name, method, path, d, body, out, py, llm=False):
             "s": [["Python (google-genai)", GEM_PY + py], ["JavaScript (@google/genai)", js], ["curl (REST)", curl]]}
 
 
-M = "qwen2.5-3b"
+M = "qwen3-4b"
 GEMINI_OPS = [
     gem("models.list", "GET", "/v1beta/models", "List the ten pool models served by the local-model seam.", None,
         {"models": [{"name": "models/" + M}]}, "for m in client.models.list():\n    print(m.name)"),

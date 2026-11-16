@@ -605,7 +605,7 @@ def _s3_build_notification_event(bucket: str, key: str, version: dict | None, ev
                     "object": {
                         "key": key,
                         "size": int((version or {}).get("size", 0) or 0),
-                        "eTag": (version or {}).get("etag", ""),
+                        "eTag": str((version or {}).get("etag", "")).strip('"'),   # real S3 event: unquoted
                         "versionId": version_id,
                         "sequencer": uuid.uuid4().hex[:16],
                     },
@@ -665,6 +665,11 @@ def _s3_notification_record_delivery(
     records = []
     deliveries = _s3_notification_delivery_targets(bucket, event_name, key)
     for target in deliveries:
+        # each configuration sees its own Id as s3.configurationId (real S3 behaviour)
+        payload = copy.deepcopy(payload or {})
+        for _rec in payload.get("Records") or []:
+            if target.get("id") and not test_event and isinstance(_rec.get("s3"), dict):
+                _rec["s3"]["configurationId"] = target["id"]
         record = {
             "id": _id("s3evt"),
             "at": _now(),

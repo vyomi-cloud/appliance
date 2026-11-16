@@ -1,0 +1,731 @@
+{
+  "llm_stub": false,
+  "endpoint": "http://127.0.0.1:52785",
+  "when": "2026-11-17T00:15:13",
+  "totals": {
+    "PASS": 13,
+    "BLOCKED": 0,
+    "FAIL": 0
+  },
+  "components": [
+    {
+      "id": 1,
+      "name": "Access and perimeter security (Cognito, API Gateway, WAF)",
+      "status": "PASS",
+      "passed": 9,
+      "total": 9,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 1,
+          "name": "cognito: CreateUserPool facilities-users",
+          "status": "PASS",
+          "detail": "us-east-1_7f318a0f926a434a93ce873b782c2aae",
+          "secs": 0.52
+        },
+        {
+          "component": 1,
+          "name": "cognito: CreateUserPoolClient",
+          "status": "PASS",
+          "detail": "c6edd1108bb9458db18bbb38bf",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "cognito: AdminCreateUser + InitiateAuth -> JWT",
+          "status": "PASS",
+          "detail": "signed in as maria.ops@example.com, JWT 919 chars",
+          "secs": 0.01
+        },
+        {
+          "component": 1,
+          "name": "cognito: GetUser with access token",
+          "status": "PASS",
+          "detail": "maria.ops@example.com",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "wafv2: CreateWebACL (rate-based rule)",
+          "status": "PASS",
+          "detail": "arn:aws:wafv2:us-east-1:123456789012:regional/webacl/facilities-acl/b4b8220c-06ba-4daa-b150-c8d712967dc8",
+          "secs": 0.01
+        },
+        {
+          "component": 1,
+          "name": "apigateway: REST API + /search proxy to Lambda + Cognito authorizer",
+          "status": "PASS",
+          "detail": "a869c167b8",
+          "secs": 0.03
+        },
+        {
+          "component": 1,
+          "name": "wafv2: AssociateWebACL to the API stage",
+          "status": "PASS",
+          "detail": "associated",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "apigateway: invoke /search with JWT",
+          "status": "PASS",
+          "detail": "HTTP 200 via API Gateway (1341 bytes)",
+          "secs": 0.22
+        },
+        {
+          "component": 1,
+          "name": "apigateway: request without token is rejected",
+          "status": "PASS",
+          "detail": "unauthenticated call rejected with HTTP 401",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Channels and input guardrails, approver inbox",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 2,
+          "name": "bedrock: CreateGuardrail facilities-guardrail",
+          "status": "PASS",
+          "detail": "guardrail aefa741acdd7",
+          "secs": 0.01
+        },
+        {
+          "component": 2,
+          "name": "bedrock: CreateGuardrailVersion",
+          "status": "PASS",
+          "detail": "version 1",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "guardrail input: benign question allowed",
+          "status": "PASS",
+          "detail": "benign question passes",
+          "secs": 0.03
+        },
+        {
+          "component": 2,
+          "name": "guardrail input: prompt injection blocked",
+          "status": "PASS",
+          "detail": "prompt attack blocked",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "guardrail input: denied word blocked",
+          "status": "PASS",
+          "detail": "denied word blocked",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "sns+sqs: approver-inbox topic with an inbox queue subscription",
+          "status": "PASS",
+          "detail": "arn:aws:sns:us-east-1:123456789012:approver-inbox",
+          "secs": 0.06
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "AgentCore Runtime: supervisor + 3 sub-agents",
+      "status": "PASS",
+      "passed": 5,
+      "total": 5,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 3,
+          "name": "agentcore-control: CreateAgentRuntime facilities-supervisor (code deploy: zip in S3 + entryPoint)",
+          "status": "PASS",
+          "detail": "facilities_supervisor-011Q6gVuHN",
+          "secs": 0.04
+        },
+        {
+          "component": 3,
+          "name": "agentcore-control: GetAgentRuntime",
+          "status": "PASS",
+          "detail": "runtime status READY",
+          "secs": 1.02
+        },
+        {
+          "component": 3,
+          "name": "bedrock-agentcore: InvokeAgentRuntime runs the supervisor + Facilities/Maintenance/Analytics sub-agents in the hosted runtime",
+          "status": "PASS",
+          "detail": "hosted in pid 16049 route=['facilities', 'maintenance', 'analytics'] tools=['kb_search', 'asset_status', 'create_work_order', 'work_order_stats'] via=['agentcore-gateway', 'dynamodb', 'step-functions-approval']",
+          "secs": 31.46
+        },
+        {
+          "component": 3,
+          "name": "bedrock-agentcore: runtimeSessionId isolation (one agent process per session, reused within a session)",
+          "status": "PASS",
+          "detail": "session a pid 16049, session b pid 16152",
+          "secs": 42.36
+        },
+        {
+          "component": 3,
+          "name": "bedrock-agentcore: StopRuntimeSession",
+          "status": "PASS",
+          "detail": "StopRuntimeSession ok",
+          "secs": 0.03
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "AgentCore Gateway (tool catalog)",
+      "status": "PASS",
+      "passed": 7,
+      "total": 7,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 4,
+          "name": "agentcore-control: CreateGateway facilities-gateway",
+          "status": "PASS",
+          "detail": "gateway facilities-gateway-ohl5src3lf https://facilities-gateway-ohl5src3lf.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+          "secs": 0.01
+        },
+        {
+          "component": 4,
+          "name": "agentcore-control: GetGateway until READY",
+          "status": "PASS",
+          "detail": "gateway READY",
+          "secs": 1.02
+        },
+        {
+          "component": 4,
+          "name": "agentcore-control: CreateGatewayTarget (Lambda tools)",
+          "status": "PASS",
+          "detail": "2 Lambda targets registered",
+          "secs": 0.01
+        },
+        {
+          "component": 4,
+          "name": "agentcore-control: ListGatewayTargets until READY",
+          "status": "PASS",
+          "detail": "2 targets READY",
+          "secs": 1.02
+        },
+        {
+          "component": 4,
+          "name": "gateway data plane: MCP tools/list",
+          "status": "PASS",
+          "detail": "MCP tools/list: ['asset-status___asset_status', 'kb-search___kb_search']",
+          "secs": 0.02
+        },
+        {
+          "component": 4,
+          "name": "gateway data plane: MCP tools/call",
+          "status": "PASS",
+          "detail": "MCP tools/call asset_status -> ok",
+          "secs": 0.42
+        },
+        {
+          "component": 4,
+          "name": "agentcore-control: CreatePolicyEngine + Cedar policy (read-only tools)",
+          "status": "PASS",
+          "detail": "policy engine facilities_policies-epk7s3bf3y with a Cedar permit policy",
+          "secs": 0.02
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Actions and approval (Step Functions)",
+      "status": "PASS",
+      "passed": 7,
+      "total": 7,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 5,
+          "name": "stepfunctions: CreateStateMachine work-order-approval (waitForTaskToken)",
+          "status": "PASS",
+          "detail": "arn:aws:states:us-east-1:000000000000:stateMachine:work-order-approval",
+          "secs": 0.0
+        },
+        {
+          "component": 5,
+          "name": "agent write is parked: execution RUNNING + ledger PENDING (no work order yet)",
+          "status": "PASS",
+          "detail": "execution RUNNING, ledger PENDING",
+          "secs": 0.11
+        },
+        {
+          "component": 5,
+          "name": "no write happens before approval",
+          "status": "PASS",
+          "detail": "no work order exists before approval",
+          "secs": 0.09
+        },
+        {
+          "component": 5,
+          "name": "sns -> sqs: approver inbox receives the approval request",
+          "status": "PASS",
+          "detail": "approval message delivered to the approver inbox (SNS -> SQS)",
+          "secs": 0.08
+        },
+        {
+          "component": 5,
+          "name": "approver approves: SendTaskSuccess -> work order created",
+          "status": "PASS",
+          "detail": "SendTaskSuccess -> execution SUCCEEDED -> WO-6C9D63 created, ledger EXECUTED",
+          "secs": 0.8
+        },
+        {
+          "component": 5,
+          "name": "approver rejects: SendTaskFailure -> nothing is written",
+          "status": "PASS",
+          "detail": "SendTaskFailure -> execution FAILED, no work order written",
+          "secs": 0.7
+        },
+        {
+          "component": 5,
+          "name": "stepfunctions: GetExecutionHistory shows the callback task",
+          "status": "PASS",
+          "detail": "events: ExecutionStarted,TaskStateEntered,TaskScheduled,TaskStarted,TaskSucceeded,TaskStateExited,TaskStateEntered,TaskScheduled",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Knowledge search (Bedrock KB RAG)",
+      "status": "PASS",
+      "passed": 4,
+      "total": 4,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 6,
+          "name": "bedrock-agent-runtime: Retrieve ranks the boiler SOP first",
+          "status": "PASS",
+          "detail": "top hit s3://facilities-docs/docs/boiler-sop.md score=1.0",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "bedrock-agent-runtime: Retrieve ranks the HVAC manual first for an AHU question",
+          "status": "PASS",
+          "detail": "top hit s3://facilities-docs/docs/hvac-maintenance-manual.md",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "retrieve results carry source locations (needed for citations)",
+          "status": "PASS",
+          "detail": "3 results each with text + S3 source",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "bedrock-agent-runtime: Rerank",
+          "status": "PASS",
+          "detail": "rerank returned 2 results",
+          "secs": 0.01
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Tools (Lambda)",
+      "status": "PASS",
+      "passed": 5,
+      "total": 5,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 7,
+          "name": "dynamodb: create tables (assets, work orders, approval ledger)",
+          "status": "PASS",
+          "detail": "3 tables",
+          "secs": 0.02
+        },
+        {
+          "component": 7,
+          "name": "dynamodb: seed fixture assets + work orders",
+          "status": "PASS",
+          "detail": "3 assets, 3 work orders",
+          "secs": 0.36
+        },
+        {
+          "component": 7,
+          "name": "lambda: CreateFunction x4 (kb-search, asset-status, request-approval, create-work-order)",
+          "status": "PASS",
+          "detail": "4 functions deployed",
+          "secs": 0.01
+        },
+        {
+          "component": 7,
+          "name": "lambda: kb-search tool (Bedrock KB Retrieve from inside Lambda)",
+          "status": "PASS",
+          "detail": "read-only knowledge tool returned 3 cited results",
+          "secs": 0.23
+        },
+        {
+          "component": 7,
+          "name": "lambda: asset-status tool (DynamoDB read from inside Lambda)",
+          "status": "PASS",
+          "detail": "B-12 status=RUNNING, open work orders=1",
+          "secs": 0.37
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "AgentOps and observability",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 8,
+          "name": "xray: PutTraceSegments (one segment per agent / tool span)",
+          "status": "PASS",
+          "detail": "8 segments sent",
+          "secs": 0.03
+        },
+        {
+          "component": 8,
+          "name": "xray: BatchGetTraces reads the agent trace back",
+          "status": "PASS",
+          "detail": "trace 1-6afb4ebb-6b3c2493624f43c2bf4cdbf8 read back with 8 segments",
+          "secs": 0.0
+        },
+        {
+          "component": 8,
+          "name": "xray: GetTraceSummaries lists it",
+          "status": "PASS",
+          "detail": "trace listed in GetTraceSummaries",
+          "secs": 0.0
+        },
+        {
+          "component": 8,
+          "name": "cloudwatch: PutMetricData + ListMetrics (agent KPIs)",
+          "status": "PASS",
+          "detail": "custom metrics published and listed",
+          "secs": 0.53
+        },
+        {
+          "component": 8,
+          "name": "cloudwatch logs: PutLogEvents + GetLogEvents (structured, trace-correlated)",
+          "status": "PASS",
+          "detail": "structured agent log written and read back, carries the trace id",
+          "secs": 0.03
+        },
+        {
+          "component": 8,
+          "name": "agentcore-control: ListEvaluators (AgentCore evaluations)",
+          "status": "PASS",
+          "detail": "13 evaluators",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "AgentCore Memory",
+      "status": "PASS",
+      "passed": 4,
+      "total": 4,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 9,
+          "name": "agentcore-control: CreateMemory facilities-memory",
+          "status": "PASS",
+          "detail": "facilities_memory-qpvqtypti1",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "bedrock-agentcore: CreateEvent (user + assistant turn)",
+          "status": "PASS",
+          "detail": "2 conversational events written",
+          "secs": 23.12
+        },
+        {
+          "component": 9,
+          "name": "bedrock-agentcore: ListEvents (session replay)",
+          "status": "PASS",
+          "detail": "2 events read back for the session",
+          "secs": 0.02
+        },
+        {
+          "component": 9,
+          "name": "bedrock-agentcore: RetrieveMemoryRecords (long-term)",
+          "status": "PASS",
+          "detail": "0 long-term records",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Foundation models (Bedrock)",
+      "status": "PASS",
+      "passed": 5,
+      "total": 5,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 10,
+          "name": "bedrock: ListFoundationModels lists only the served local models",
+          "status": "PASS",
+          "detail": "11 models",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "bedrock: standard Bedrock id still resolves (SDK compatibility alias, unlisted)",
+          "status": "PASS",
+          "detail": "anthropic.claude-3-haiku-20240307-v1:0",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "bedrock-runtime: Converse (chat model)",
+          "status": "PASS",
+          "detail": "model replied: 'OK', usage={'inputTokens': 15, 'outputTokens': 2, 'totalTokens': 17}",
+          "secs": 0.39
+        },
+        {
+          "component": 10,
+          "name": "bedrock-runtime: Converse + guardrailConfig intervenes on prompt attack",
+          "status": "PASS",
+          "detail": "Converse with guardrailConfig blocked the injected prompt before the model ran",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "bedrock-runtime: Converse with toolConfig",
+          "status": "PASS",
+          "detail": "stopReason=tool_use",
+          "secs": 6.36
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Response generation (grounded, cited, guarded)",
+      "status": "PASS",
+      "passed": 4,
+      "total": 4,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 11,
+          "name": "answer is grounded in retrieved documents and cites them",
+          "status": "PASS",
+          "detail": "answer grounded in 3 cited sources; first: s3://facilities-docs/docs/boiler-sop.md",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "guardrail output: PII is anonymised before the user sees the answer",
+          "status": "PASS",
+          "detail": "output guardrail anonymised an email address in the answer",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "guardrail output: the agent answer itself passes the output filter",
+          "status": "PASS",
+          "detail": "",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "bedrock-agent-runtime: RetrieveAndGenerate (model answer + citations + guardrail)",
+          "status": "PASS",
+          "detail": "generated answer with 1 citation block(s)",
+          "secs": 14.32
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Knowledge processing pipeline",
+      "status": "PASS",
+      "passed": 7,
+      "total": 7,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 12,
+          "name": "s3: upload SOP and manual documents",
+          "status": "PASS",
+          "detail": "4 documents uploaded to s3://facilities-docs/docs/",
+          "secs": 7.74
+        },
+        {
+          "component": 12,
+          "name": "bedrock-runtime: InvokeModel titan-embed-text-v2",
+          "status": "PASS",
+          "detail": "embedding dim 1024",
+          "secs": 0.01
+        },
+        {
+          "component": 12,
+          "name": "opensearchserverless: CreateCollection (vector store)",
+          "status": "PASS",
+          "detail": "arn:aws:aoss:us-east-1:123456789012:collection/19eedfw6x3",
+          "secs": 0.02
+        },
+        {
+          "component": 12,
+          "name": "bedrock-agent: CreateKnowledgeBase facilities-kb",
+          "status": "PASS",
+          "detail": "KB M4P5VP7BTM",
+          "secs": 0.0
+        },
+        {
+          "component": 12,
+          "name": "bedrock-agent: CreateDataSource (S3, fixed-size chunking)",
+          "status": "PASS",
+          "detail": "MW5G7ZXZQI",
+          "secs": 0.0
+        },
+        {
+          "component": 12,
+          "name": "bedrock-agent: StartIngestionJob + poll to COMPLETE",
+          "status": "PASS",
+          "detail": "ingestion COMPLETE, scanned=4 indexed=4",
+          "secs": 0.01
+        },
+        {
+          "component": 12,
+          "name": "s3 event -> Lambda -> StartIngestionJob (event-driven re-index)",
+          "status": "PASS",
+          "detail": "new upload triggered ingestion job #2 via S3 event -> Lambda",
+          "secs": 0.57
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Governance and security (KMS, CloudTrail)",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 13,
+          "name": "kms: CreateKey + alias + rotation",
+          "status": "PASS",
+          "detail": "key af65b0b785e64d92878e8d5bf7b68487 with alias and rotation",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "kms: Encrypt/Decrypt the approval record with an encryption context",
+          "status": "PASS",
+          "detail": "ledger record encrypted; wrong context is refused",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "s3: SSE-KMS object written with the key",
+          "status": "PASS",
+          "detail": "SSE-KMS write ok",
+          "secs": 6.14
+        },
+        {
+          "component": 13,
+          "name": "cloudtrail: CreateTrail + StartLogging",
+          "status": "PASS",
+          "detail": "trail facilities-trail logging",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "cloudtrail: LookupEvents shows StartExecution / SendTaskSuccess for the approval",
+          "status": "PASS",
+          "detail": "audit trail records ['CreateStateMachine', 'DescribeExecution', 'GetExecutionHistory', 'ListStateMachines', 'SendTaskFailure', 'SendTaskSuccess', 'StartExecution']",
+          "secs": 0.0
+        },
+        {
+          "component": 13,
+          "name": "dynamodb: approval-ledger is the application-level audit record",
+          "status": "PASS",
+          "detail": "ledger rows: 4 (['EXECUTED', 'PENDING'])",
+          "secs": 0.08
+        }
+      ]
+    }
+  ],
+  "transcript": "Facilities agent e2e   endpoint=http://127.0.0.1:52785   2026-11-17 00:12:52\n====================================================================================================\n\n[01] Access and perimeter security (Cognito, API Gateway, WAF)\n    [PASS   ] cognito: CreateUserPool facilities-users  - us-east-1_7f318a0f926a434a93ce873b782c2aae\n    [PASS   ] cognito: CreateUserPoolClient  - c6edd1108bb9458db18bbb38bf\n    [PASS   ] cognito: AdminCreateUser + InitiateAuth -> JWT  - signed in as maria.ops@example.com, JWT 919 chars\n    [PASS   ] cognito: GetUser with access token  - maria.ops@example.com\n    [PASS   ] wafv2: CreateWebACL (rate-based rule)  - arn:aws:wafv2:us-east-1:123456789012:regional/webacl/facilities-acl/b4b8220c-06ba-4daa-b150-c8d712967dc8\n\n[02] Channels and input guardrails, approver inbox\n    [PASS   ] bedrock: CreateGuardrail facilities-guardrail  - guardrail aefa741acdd7\n    [PASS   ] bedrock: CreateGuardrailVersion  - version 1\n    [PASS   ] guardrail input: benign question allowed  - benign question passes\n    [PASS   ] guardrail input: prompt injection blocked  - prompt attack blocked\n    [PASS   ] guardrail input: denied word blocked  - denied word blocked\n    [PASS   ] sns+sqs: approver-inbox topic with an inbox queue subscription  - arn:aws:sns:us-east-1:123456789012:approver-inbox\n\n[12] Knowledge processing pipeline\n    [PASS   ] s3: upload SOP and manual documents  - 4 documents uploaded to s3://facilities-docs/docs/\n    [PASS   ] bedrock-runtime: InvokeModel titan-embed-text-v2  - embedding dim 1024\n    [PASS   ] opensearchserverless: CreateCollection (vector store)  - arn:aws:aoss:us-east-1:123456789012:collection/19eedfw6x3\n    [PASS   ] bedrock-agent: CreateKnowledgeBase facilities-kb  - KB M4P5VP7BTM\n    [PASS   ] bedrock-agent: CreateDataSource (S3, fixed-size chunking)  - MW5G7ZXZQI\n    [PASS   ] bedrock-agent: StartIngestionJob + poll to COMPLETE  - ingestion COMPLETE, scanned=4 indexed=4\n    [PASS   ] s3 event -> Lambda -> StartIngestionJob (event-driven re-index)  - new upload triggered ingestion job #2 via S3 event -> Lambda\n\n[06] Knowledge search (Bedrock KB RAG)\n    [PASS   ] bedrock-agent-runtime: Retrieve ranks the boiler SOP first  - top hit s3://facilities-docs/docs/boiler-sop.md score=1.0\n    [PASS   ] bedrock-agent-runtime: Retrieve ranks the HVAC manual first for an AHU question  - top hit s3://facilities-docs/docs/hvac-maintenance-manual.md\n    [PASS   ] retrieve results carry source locations (needed for citations)  - 3 results each with text + S3 source\n    [PASS   ] bedrock-agent-runtime: Rerank  - rerank returned 2 results\n\n[07] Tools (Lambda)\n    [PASS   ] dynamodb: create tables (assets, work orders, approval ledger)  - 3 tables\n    [PASS   ] dynamodb: seed fixture assets + work orders  - 3 assets, 3 work orders\n    [PASS   ] lambda: CreateFunction x4 (kb-search, asset-status, request-approval, create-work-order)  - 4 functions deployed\n    [PASS   ] lambda: kb-search tool (Bedrock KB Retrieve from inside Lambda)  - read-only knowledge tool returned 3 cited results\n    [PASS   ] lambda: asset-status tool (DynamoDB read from inside Lambda)  - B-12 status=RUNNING, open work orders=1\n    [PASS   ] apigateway: REST API + /search proxy to Lambda + Cognito authorizer  - a869c167b8\n    [PASS   ] wafv2: AssociateWebACL to the API stage  - associated\n    [PASS   ] apigateway: invoke /search with JWT  - HTTP 200 via API Gateway (1341 bytes)\n    [PASS   ] apigateway: request without token is rejected  - unauthenticated call rejected with HTTP 401\n\n[04] AgentCore Gateway (tool catalog)\n    [PASS   ] agentcore-control: CreateGateway facilities-gateway  - gateway facilities-gateway-ohl5src3lf https://facilities-gateway-ohl5src3lf.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp\n    [PASS   ] agentcore-control: GetGateway until READY  - gateway READY\n    [PASS   ] agentcore-control: CreateGatewayTarget (Lambda tools)  - 2 Lambda targets registered\n    [PASS   ] agentcore-control: ListGatewayTargets until READY  - 2 targets READY\n    [PASS   ] gateway data plane: MCP tools/list  - MCP tools/list: ['asset-status___asset_status', 'kb-search___kb_search']\n    [PASS   ] gateway data plane: MCP tools/call  - MCP tools/call asset_status -> ok\n    [PASS   ] agentcore-control: CreatePolicyEngine + Cedar policy (read-only tools)  - policy engine facilities_policies-epk7s3bf3y with a Cedar permit policy\n\n[05] Actions and approval (Step Functions)\n    [PASS   ] stepfunctions: CreateStateMachine work-order-approval (waitForTaskToken)  - arn:aws:states:us-east-1:000000000000:stateMachine:work-order-approval\n\n[03] AgentCore Runtime: supervisor + 3 sub-agents\n    [PASS   ] agentcore-control: CreateAgentRuntime facilities-supervisor (code deploy: zip in S3 + entryPoint)  - facilities_supervisor-011Q6gVuHN\n    [PASS   ] agentcore-control: GetAgentRuntime  - runtime status READY\n    [PASS   ] bedrock-agentcore: InvokeAgentRuntime runs the supervisor + Facilities/Maintenance/Analytics sub-agents in the hosted runtime  - hosted in pid 16049 route=['facilities', 'maintenance', 'analytics'] tools=['kb_search', 'asset_status', 'create_work_order', 'work_order_stats'] via=['agentcore-gateway', 'dynamodb', 'step-functions-approval']\n    [PASS   ] bedrock-agentcore: runtimeSessionId isolation (one agent process per session, reused within a session)  - session a pid 16049, session b pid 16152\n    [PASS   ] bedrock-agentcore: StopRuntimeSession  - StopRuntimeSession ok\n\n[09] AgentCore Memory\n    [PASS   ] agentcore-control: CreateMemory facilities-memory  - facilities_memory-qpvqtypti1\n    [PASS   ] bedrock-agentcore: CreateEvent (user + assistant turn)  - 2 conversational events written\n    [PASS   ] bedrock-agentcore: ListEvents (session replay)  - 2 events read back for the session\n    [PASS   ] bedrock-agentcore: RetrieveMemoryRecords (long-term)  - 0 long-term records\n    [PASS   ] agent write is parked: execution RUNNING + ledger PENDING (no work order yet)  - execution RUNNING, ledger PENDING\n    [PASS   ] no write happens before approval  - no work order exists before approval\n    [PASS   ] sns -> sqs: approver inbox receives the approval request  - approval message delivered to the approver inbox (SNS -> SQS)\n    [PASS   ] approver approves: SendTaskSuccess -> work order created  - SendTaskSuccess -> execution SUCCEEDED -> WO-6C9D63 created, ledger EXECUTED\n    [PASS   ] approver rejects: SendTaskFailure -> nothing is written  - SendTaskFailure -> execution FAILED, no work order written\n    [PASS   ] stepfunctions: GetExecutionHistory shows the callback task  - events: ExecutionStarted,TaskStateEntered,TaskScheduled,TaskStarted,TaskSucceeded,TaskStateExited,TaskStateEntered,TaskScheduled\n\n[10] Foundation models (Bedrock)\n    [PASS   ] bedrock: ListFoundationModels lists only the served local models  - 11 models\n    [PASS   ] bedrock: standard Bedrock id still resolves (SDK compatibility alias, unlisted)  - anthropic.claude-3-haiku-20240307-v1:0\n    [PASS   ] bedrock-runtime: Converse (chat model)  - model replied: 'OK', usage={'inputTokens': 15, 'outputTokens': 2, 'totalTokens': 17}\n    [PASS   ] bedrock-runtime: Converse + guardrailConfig intervenes on prompt attack  - Converse with guardrailConfig blocked the injected prompt before the model ran\n    [PASS   ] bedrock-runtime: Converse with toolConfig  - stopReason=tool_use\n\n[11] Response generation (grounded, cited, guarded)\n    [PASS   ] answer is grounded in retrieved documents and cites them  - answer grounded in 3 cited sources; first: s3://facilities-docs/docs/boiler-sop.md\n    [PASS   ] guardrail output: PII is anonymised before the user sees the answer  - output guardrail anonymised an email address in the answer\n    [PASS   ] guardrail output: the agent answer itself passes the output filter\n    [PASS   ] bedrock-agent-runtime: RetrieveAndGenerate (model answer + citations + guardrail)  - generated answer with 1 citation block(s)\n\n[08] AgentOps and observability\n    [PASS   ] xray: PutTraceSegments (one segment per agent / tool span)  - 8 segments sent\n    [PASS   ] xray: BatchGetTraces reads the agent trace back  - trace 1-6afb4ebb-6b3c2493624f43c2bf4cdbf8 read back with 8 segments\n    [PASS   ] xray: GetTraceSummaries lists it  - trace listed in GetTraceSummaries\n    [PASS   ] cloudwatch: PutMetricData + ListMetrics (agent KPIs)  - custom metrics published and listed\n    [PASS   ] cloudwatch logs: PutLogEvents + GetLogEvents (structured, trace-correlated)  - structured agent log written and read back, carries the trace id\n    [PASS   ] agentcore-control: ListEvaluators (AgentCore evaluations)  - 13 evaluators\n\n[13] Governance and security (KMS, CloudTrail)\n    [PASS   ] kms: CreateKey + alias + rotation  - key af65b0b785e64d92878e8d5bf7b68487 with alias and rotation\n    [PASS   ] kms: Encrypt/Decrypt the approval record with an encryption context  - ledger record encrypted; wrong context is refused\n    [PASS   ] s3: SSE-KMS object written with the key  - SSE-KMS write ok\n    [PASS   ] cloudtrail: CreateTrail + StartLogging  - trail facilities-trail logging\n    [PASS   ] cloudtrail: LookupEvents shows StartExecution / SendTaskSuccess for the approval  - audit trail records ['CreateStateMachine', 'DescribeExecution', 'GetExecutionHistory', 'ListStateMachines', 'SendTaskFailure', 'SendTaskSuccess', 'StartExecution']\n    [PASS   ] dynamodb: approval-ledger is the application-level audit record  - ledger rows: 4 (['EXECUTED', 'PENDING'])\n\n----------------------------------------------------------------------------------------------------\nAgent transcript\n  user      : None\n  question  : None\n  route     : ['facilities', 'maintenance', 'analytics']  (routed by model)\n  tool      : kb_search          via agentcore-gateway\n  tool      : asset_status       via agentcore-gateway\n  tool      : create_work_order  via step-functions-approval\n  tool      : work_order_stats   via dynamodb\n  answer    : The SOP for boiler plant operation (SOP-101) states that if boiler pressure exceeds 30 psi, the main steam valve should be closed, the duty engineer should be notified, and a P1 incident report must be raised [1]. Since Boiler B-12 is at 34 psi, which exceeds the 30 psi threshold, the SOP requires taking these actions.\n\nA work order should be raised for this incident. Based on the context, the appropriate action is to raise a work order with priority P1, as specified in SOP-101 for exceeding pressure limits.\n\nCurrently, there are 3 total work orders. Of these, 2 are open (both with priority P2), and 1 is closed (priority P3). Therefore, the number of open work orders is **2**.\n\nAnswer:  \nThe SOP requires closing the main steam valve, notifying the duty engineer, and raising a P1 work order when boiler pressure exceeds 30 psi. A work order should be raised for Boiler B-12 due to the pressure exceeding 30 psi. There are currently **2 open work orders** [1].\n  citation  : [1] s3://facilities-docs/docs/boiler-sop.md\n  citation  : [2] s3://facilities-docs/docs/fire-safety-sop.md\n  citation  : [3] s3://facilities-docs/docs/hvac-maintenance-manual.md\n  approval  : req-3c1e6c9d63 -> work order WO-6C9D63\n\n====================================================================================================\nSUMMARY\n #  component                                                      status   steps\n 1  Access and perimeter security (Cognito, API Gateway, WAF)      PASS     9/9\n 2  Channels and input guardrails, approver inbox                  PASS     6/6\n 3  AgentCore Runtime: supervisor + 3 sub-agents                   PASS     5/5\n 4  AgentCore Gateway (tool catalog)                               PASS     7/7\n 5  Actions and approval (Step Functions)                          PASS     7/7\n 6  Knowledge search (Bedrock KB RAG)                              PASS     4/4\n 7  Tools (Lambda)                                                 PASS     5/5\n 8  AgentOps and observability                                     PASS     6/6\n 9  AgentCore Memory                                               PASS     4/4\n10  Foundation models (Bedrock)                                    PASS     5/5\n11  Response generation (grounded, cited, guarded)                 PASS     4/4\n12  Knowledge processing pipeline                                  PASS     7/7\n13  Governance and security (KMS, CloudTrail)                      PASS     6/6\n\n13 PASS, 0 BLOCKED, 0 FAIL of 13 components   (141.3s)",
+  "agent": {
+    "question": null,
+    "user": null,
+    "route": [
+      "facilities",
+      "maintenance",
+      "analytics"
+    ],
+    "llm_used": true,
+    "tools": [
+      {
+        "tool": "kb_search",
+        "via": "agentcore-gateway",
+        "args": {
+          "query": "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?",
+          "top_k": 3
+        }
+      },
+      {
+        "tool": "asset_status",
+        "via": "agentcore-gateway",
+        "args": {
+          "asset_id": "B-12"
+        }
+      },
+      {
+        "tool": "create_work_order",
+        "via": "step-functions-approval",
+        "args": {
+          "request_id": "req-3c1e6c9d63"
+        }
+      },
+      {
+        "tool": "work_order_stats",
+        "via": "dynamodb",
+        "args": {}
+      }
+    ],
+    "answer": "The SOP for boiler plant operation (SOP-101) states that if boiler pressure exceeds 30 psi, the main steam valve should be closed, the duty engineer should be notified, and a P1 incident report must be raised [1]. Since Boiler B-12 is at 34 psi, which exceeds the 30 psi threshold, the SOP requires taking these actions.\n\nA work order should be raised for this incident. Based on the context, the appropriate action is to raise a work order with priority P1, as specified in SOP-101 for exceeding pressure limits.\n\nCurrently, there are 3 total work orders. Of these, 2 are open (both with priority P2), and 1 is closed (priority P3). Therefore, the number of open work orders is **2**.\n\nAnswer:  \nThe SOP requires closing the main steam valve, notifying the duty engineer, and raising a P1 work order when boiler pressure exceeds 30 psi. A work order should be raised for Boiler B-12 due to the pressure exceeding 30 psi. There are currently **2 open work orders** [1].",
+    "citations": [
+      {
+        "n": 1,
+        "source": "s3://facilities-docs/docs/boiler-sop.md",
+        "text": "# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 "
+      },
+      {
+        "n": 2,
+        "source": "s3://facilities-docs/docs/fire-safety-sop.md",
+        "text": "# SOP-310 Fire safety and evacuation Fire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of t"
+      },
+      {
+        "n": 3,
+        "source": "s3://facilities-docs/docs/hvac-maintenance-manual.md",
+        "text": "# MM-220 HVAC air handling unit maintenance manual (AHU-7) Replace the AHU-7 filter every 60 days or when differential pressure exceeds 250 Pa. Inspect belts an"
+      }
+    ],
+    "approval": {
+      "request_id": "req-3c1e6c9d63",
+      "execution_arn": "arn:aws:states:us-east-1:000000000000:execution:work-order-approval:req-3c1e6c9d63",
+      "status": "PENDING_APPROVAL"
+    }
+  },
+  "work_order": "WO-6C9D63"
+}

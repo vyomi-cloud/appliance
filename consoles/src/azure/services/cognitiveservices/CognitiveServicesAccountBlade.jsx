@@ -32,6 +32,7 @@ import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { restJson } from "../../../common/wire.js";
 import { availText } from "../../../common/aiModels.js";
+import LicenceChip from "../../../common/LicenceChip.jsx";
 import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 
 export const MENU = [
@@ -380,6 +381,7 @@ function CreateDeploymentDialog({ open, onClose, onCreate, av = {} }) {
                   {MODEL_NAMES.map((n) => <option key={n} value={n}>{n} - {availText(av[n], n)}</option>)}
                 </Select>
               </Field>
+              <LicenceChip id={modelName} />
               <Field label="Model version" required>
                 <Select value={modelVersion} onChange={(_, d) => setModelVersion(d.value)} aria-label="Model version">
                   {versionsFor(modelName).map((v) => <option key={v} value={v}>{v}</option>)}
@@ -523,9 +525,9 @@ function Properties({ a }) {
 // ── Locks (Microsoft.Authorization/locks, scoped to this account) ─────────────────────
 function Locks({ a }) {
   const notify = useNotify();
-  const { data, loading, error, reload } = useAsync(() => api.listLocks(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
-  const [add, setAdd] = useState(false);
-  const [gap, setGap] = useState(null);
+  const { data, loading, error, reload } = useAsync(() => api.listAllLocks(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const [add, setAdd] = useState(null);
+  const [feedback, setFeedback] = useState(false);
   const rows = data || [];
   return (
     <>
@@ -534,28 +536,28 @@ function Locks({ a }) {
         resourceName="lock" rowKey={(r) => r.name} filterPlaceholder="Search to filter items..."
         items={rows} loading={loading} error={error} onRefresh={reload}
         extraCommands={<>
-          <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
+          <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd("Resource")}>Add</ToolbarButton>
+          <ToolbarButton onClick={() => setAdd("Subscription")}>Subscription</ToolbarButton>
+          <ToolbarButton onClick={() => setAdd("Resource group")}>Resource group</ToolbarButton>
+          <ToolbarButton onClick={() => setFeedback(true)}>Feedback</ToolbarButton>
         </>}
-        onDelete={async (sel) => { for (const r of sel) await api.deleteLock(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} lock${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        onDelete={async (sel) => { for (const r of sel) await (r._scope === "Resource" ? api.deleteLock(a.resourceGroup, a.name, r.name) : api.deleteScopeLock(r._scope, a.resourceGroup, r.name)); notify.success(`Deleted ${sel.length} lock${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
         csvName="locks.csv"
         columns={[
           { key: "name", label: "Lock name" },
           { key: "type", label: "Lock type", value: (r) => (r.properties?.level === "ReadOnly" ? "Read-only" : "Delete") },
-          { key: "scope", label: "Scope", value: () => a.name },
+          { key: "scope", label: "Scope", value: (r) => (r._scope === "Resource" ? a.name : r._scope === "Resource group" ? a.resourceGroup : "Vyomi simulator") },
           { key: "notes", label: "Notes", value: (r) => r.properties?.notes || "--" },
         ]}
       />
-      <AddLockDialog open={add} onClose={() => setAdd(false)}
-        onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Coming soon"}>
+      <AddLockDialog open={!!add} onClose={() => setAdd(null)}
+        onCreate={async (name, level, notes) => { await (add === "Resource" ? api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }) : api.putScopeLock(add, a.resourceGroup, name, { properties: { level, notes } })); reload(); }} />
+      <Dialog open={feedback} onOpenChange={(_, d) => !d.open && setFeedback(false)}>
+        <DialogSurface aria-label="Feedback">
           <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
+            <DialogTitle>Feedback</DialogTitle>
+            <DialogContent>The Azure portal sends this feedback to Microsoft. Vyomi has no Microsoft feedback inbox; use the Vyomi feedback widget (bottom right) to report a problem with this page.</DialogContent>
+            <DialogActions><Button onClick={() => setFeedback(false)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>

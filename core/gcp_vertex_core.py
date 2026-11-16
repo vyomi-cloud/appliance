@@ -23,10 +23,20 @@ embedding publisher models are served, by core/ai_models_core).
 from __future__ import annotations
 
 import json
+import uuid
 import math
 import re
 import time
 from dataclasses import dataclass, field
+
+try:
+    from core import training_core as tc
+except ImportError:  # Pyodide flat layout
+    import training_core as tc  # type: ignore
+try:
+    from core import import_core as ic
+except ImportError:  # Pyodide flat layout
+    import import_core as ic  # type: ignore
 from datetime import datetime, timezone
 
 LOCATIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west4", "europe-west1", "europe-west2", "europe-west4",
@@ -43,6 +53,7 @@ SPEC = {
     "batchPredictionJobs": {"id": "batchPredictionJobId", "create": "direct", "job": "JOB_STATE_", "type": "BatchPredictionJob"},
     "pipelineJobs": {"id": "pipelineJobId", "create": "direct", "job": "PIPELINE_STATE_", "type": "PipelineJob"},
     "tuningJobs": {"id": "tuningJobId", "create": "direct", "job": "JOB_STATE_", "type": "TuningJob"},
+    "modelDeploymentMonitoringJobs": {"id": "modelDeploymentMonitoringJobId", "create": "direct", "job": "JOB_STATE_", "type": "ModelDeploymentMonitoringJob"},
     "notebookRuntimeTemplates": {"id": "notebookRuntimeTemplateId", "create": "op", "name_required": True, "type": "NotebookRuntimeTemplate"},
     "notebookRuntimes": {"id": "notebookRuntimeId", "create": "op", "name_required": True, "type": "NotebookRuntime"},
     "indexes": {"id": "indexId", "create": "op", "name_required": True, "type": "Index"},
@@ -64,9 +75,9 @@ SPEC = {
 COLL_VERBS = {"models": {"upload", "copy"}, "datasets": set()}
 # resource-level custom verbs
 ITEM_VERBS = {
-    "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "mutateDeployedModel"},
+    "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "mutateDeployedModel", "generateContent", "streamGenerateContent"},
     "trainingPipelines": {"cancel"}, "customJobs": {"cancel"}, "hyperparameterTuningJobs": {"cancel"},
-    "batchPredictionJobs": {"cancel"}, "pipelineJobs": {"cancel"}, "tuningJobs": {"cancel"},
+    "batchPredictionJobs": {"cancel"}, "pipelineJobs": {"cancel"}, "tuningJobs": {"cancel"}, "modelDeploymentMonitoringJobs": {"pause", "resume"},
     "notebookRuntimes": {"start", "stop", "upgrade"}, "instances": {"start", "stop", "reset"},
     "indexes": {"upsertDatapoints", "removeDatapoints"},
     "indexEndpoints": {"deployIndex", "undeployIndex", "findNeighbors", "readIndexDatapoints"},
@@ -204,11 +215,72 @@ def _op(store, project, loc, coll, resp, verb="Create", empty=False, rname=None)
 
 
 # ── job lifecycle (lazy, clock based) ──────────────────────────────────────
+def _tuning_begin(project, loc, rid, body):
+    """tuningJobs on a trainable base (core/training_core): validate + launch the REAL job. -> (error response | None, trainable)."""
+    base = str(body.get("baseModel") or (body.get("supervisedTuningSpec") or {}).get("baseModel") or "")
+    if not tc.is_trainable(base):
+        return None, False
+    spec = body.get("supervisedTuningSpec") or {}
+    uri = spec.get("trainingDatasetUri") or spec.get("training_dataset_uri")
+    if not uri:
+        return _err(400, "INVALID_ARGUMENT", "supervisedTuningSpec.trainingDatasetUri: must not be empty."), True
+    try:
+        tc.start(f"vtx-{rid}", f"vtx-{rid}", tc.read_uri(uri), spec.get("hyperParameters") or {}, None, base, body.get("tunedModelDisplayName") or "")
+    except tc.TrainError as e:
+        return _err(404 if e.kind == "notfound" else 400, "NOT_FOUND" if e.kind == "notfound" else "INVALID_ARGUMENT", str(e)), True
+    return None, True
+
+
+def _tuning_sync(store, rec):
+    """Mirror the real training job into the TuningJob; on success create the tuned Model + Endpoint (predict-able)."""
+    try:
+        v = tc.view(rec["_vyomi"])
+    except tc.TrainError:
+        return
+    rec["vyomiTraining"] = v
+    st, t = v["status"], _now()
+    if st in tc.ACTIVE:
+        new = "JOB_STATE_PENDING" if st == "Queued" else "JOB_STATE_RUNNING"
+        if new.endswith("RUNNING") and not rec.get("startTime"):
+            rec["startTime"] = t
+        rec["state"] = new
+        return
+    if rec["state"].endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
+        return
+    rec.setdefault("startTime", t)
+    rec["endTime"] = rec["updateTime"] = t
+    if st == "Completed":
+        rec["state"] = "JOB_STATE_SUCCEEDED"
+        project, loc = rec["name"].split("/")[1], rec["name"].split("/")[3]
+        mid, eid = _numeric_id(store), _numeric_id(store)
+        mname, ename = f"projects/{project}/locations/{loc}/models/{mid}", f"projects/{project}/locations/{loc}/endpoints/{eid}"
+        store.res[mname] = {"name": mname, "displayName": rec.get("tunedModelDisplayName") or "tuned-head", "createTime": t, "updateTime": t, "versionId": "1",
+                            "deployedModels": [{"endpoint": ename, "deployedModelId": mid}], "labels": {"vyomi-trained": "true"}, "_vyomiHead": rec["_vyomi"],
+                            "artifactUri": v.get("artifact")}
+        store.res[ename] = {"name": ename, "displayName": (rec.get("tunedModelDisplayName") or "tuned-head") + "-endpoint", "createTime": t, "updateTime": t,
+                            "deployedModels": [{"id": mid, "model": mname, "displayName": rec.get("tunedModelDisplayName") or "tuned-head", "createTime": t}],
+                            "trafficSplit": {mid: 100}, "etag": "AMEu" + eid[-8:]}
+        rec["tunedModel"] = {"model": mname, "endpoint": ename}
+        rec["tuningDataStats"] = {"supervisedTuningDataStats": {"tuningDatasetExampleCount": str(v.get("rows", 0))}}
+    elif st == "Failed":
+        rec["state"], rec["error"] = "JOB_STATE_FAILED", {"code": 13, "message": v.get("note", "Training failed.")}
+    else:
+        rec["state"] = "JOB_STATE_CANCELLED"
+
+
 def _advance(store, rec, coll):
     pre = SPEC[coll].get("job")
     if not pre:
         return
+    if rec.get("_vyomi"):
+        return _tuning_sync(store, rec)
     st = rec.get("state", "")
+    if coll == "modelDeploymentMonitoringJobs":      # a monitoring job is continuous: PENDING -> RUNNING, then only pause/resume/delete move it
+        if st in ("JOB_STATE_PAUSED", "JOB_STATE_RUNNING"):
+            return
+        if time.time() - rec.get("_t0", time.time()) >= 2:
+            rec["state"], rec["startTime"], rec["updateTime"] = "JOB_STATE_RUNNING", _now(), _now()
+        return
     if st.endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
         return
     age = time.time() - rec.get("_t0", time.time())
@@ -345,6 +417,11 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
                 return _err(404, "NOT_FOUND", f"Method {verb} is not supported on {coll}.")
             if coll == "models" and verb == "upload":
                 model = payload.get("model") or {}
+                imp = _maybe_import(project, loc, model)
+                if imp is not None and not isinstance(imp, str):
+                    return imp
+                if isinstance(imp, str):
+                    model = dict(model, _vyomiImport=imp, labels={**(model.get("labels") or {}), "vyomi-imported": "true", "vyomi-trained": "true"})
                 return _create(store, project, loc, chain, model, {"modelId": payload.get("modelId") or ""}, verb="Upload")
             return _err(501, "UNIMPLEMENTED", f"{coll}:{verb} is not simulated.")
         if method == "GET":
@@ -372,6 +449,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
     if method == "DELETE":
         if rec is None:
             return _err(404, "NOT_FOUND", f"The {spec['type']} {full} is not found.")
+        if rec.get("_vyomiImport"):
+            ic.delete_model(rec["_vyomiImport"])
         for k in [k for k in store.res if k.startswith(full + "/")]:   # cascade children
             store.res.pop(k, None)
         store.res.pop(full, None)
@@ -402,6 +481,25 @@ def _ensure_default_store(store, project, loc):
     return store.res[name]
 
 
+
+def _maybe_import(project, loc, model):
+    """models:upload whose artifactUri holds adapter.gguf (+ adapter_meta.json) is a chat-LoRA import (core/import_core). -> response | model id | None."""
+    uri = str(model.get("artifactUri") or "")
+    if not uri.startswith("gs://"):
+        return None
+    flagged = (model.get("labels") or {}).get("vyomi-import") in ("chat-lora", "true")
+    mid = ic.ID_PREFIX + uuid.uuid4().hex[:8]
+    try:
+        ic.import_from_uri(mid, model.get("displayName") or mid, uri, source=uri, extra={"cloud": "gcp", "project": project, "location": loc})
+    except ic.ImportErr as e:
+        if e.kind == "notfound":
+            if not flagged:
+                return None      # a plain artifact upload (no adapter there): the usual metadata-only Model Registry upload
+            return _err(404, "NOT_FOUND", str(e))
+        return _err(400, "INVALID_ARGUMENT", f"model.artifactUri: {e}")
+    return mid
+
+
 def _validate(coll, body, rid):
     spec = SPEC[coll]
     if spec.get("name_required") and not body.get("displayName"):
@@ -414,6 +512,8 @@ def _validate(coll, body, rid):
             return "metadata.config.dimensions: must be a positive integer."
     if coll == "customJobs" and not (body.get("jobSpec") or {}).get("workerPoolSpecs"):
         return "jobSpec.workerPoolSpecs: at least one worker pool spec is required."
+    if coll == "modelDeploymentMonitoringJobs" and not re.match(r"^projects/[^/]+/locations/[^/]+/endpoints/[^/]+$", str(body.get("endpoint") or "")):
+        return "model_deployment_monitoring_job.endpoint: a full endpoint resource name is required."
     if rid and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_\-.]{0,127}$", rid):
         return f"{SPEC[coll]['id']}: invalid id '{rid}'."
     return None
@@ -433,8 +533,17 @@ def _create(store, project, loc, chain, body, query, verb="Create"):
         _ensure_default_store(store, project, loc)
     if full in store.res:
         return _err(409, "ALREADY_EXISTS", f"{spec['type']} {full} already exists.")
+    trained = False
+    if coll == "tuningJobs":
+        bad, trained = _tuning_begin(project, loc, rid, body)
+        if bad:
+            return bad
     t = _now()
     rec = dict(body)
+    if trained:
+        rec["_vyomi"] = f"vtx-{rid}"
+    elif coll == "tuningJobs":
+        rec["vyomiNote"] = "Metadata only: this base model is not trainable by Vyomi; the job completes without training."
     rec.update(name=full, createTime=t, updateTime=t)
     if spec.get("job"):
         rec["state"] = spec["job"] + "PENDING"
@@ -526,12 +635,87 @@ def _list(store, project, loc, coll, parent_prefix, query):
     return _j(200, out)
 
 
+def _chat_llm():
+    try:
+        from core import ai_models_core as am, llm_core as llm
+    except ImportError:  # Pyodide flat layout
+        import ai_models_core as am  # type: ignore
+        import llm_core as llm  # type: ignore
+    return am, llm
+
+
+def _chat_answer(mid, msgs, system, mx, temp, stop):
+    """-> (result dict, None) | (None, error response). One chat-LoRA generation on the tuned model."""
+    am, llm = _chat_llm()
+    try:
+        return tc.invoke_chat(mid, msgs, system, mx, temp, stop), None
+    except tc.TrainError as e:
+        return None, _err(404 if e.kind == "notfound" else 400, "NOT_FOUND" if e.kind == "notfound" else "INVALID_ARGUMENT", str(e))
+    except llm.LlmUnavailable as e:
+        return None, _err(503, "UNAVAILABLE", str(e))
+
+
+def _generate_trained(mrec, p):
+    """endpoints:generateContent on a tuned chat model (Gemini-style body) -> candidates + usageMetadata, vyomiTrained."""
+    am, _ = _chat_llm()
+    if not isinstance(p.get("contents"), list) or not p["contents"]:
+        return _err(400, "INVALID_ARGUMENT", "Unable to submit request because at least one contents field is required.")
+    req = am._gem_request(p)
+    if isinstance(req, str):
+        return _err(400, "INVALID_ARGUMENT", req)
+    r, e = _chat_answer(mrec["_vyomiHead"], req[0], req[1], req[2], req[3], req[4])
+    if e:
+        return e
+    return _j(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": r["text"]}]}, "index": 0, "finishReason": "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"}],
+                    "usageMetadata": {"promptTokenCount": r["input_tokens"], "candidatesTokenCount": r["output_tokens"], "totalTokenCount": r["input_tokens"] + r["output_tokens"]},
+                    "modelVersion": mrec.get("displayName") or mrec["name"], "vyomiTrained": True, "vyomiAdapter": mrec["_vyomiHead"], "vyomiBaseModel": r["baseModel"]})
+
+
+def _predict_trained(mrec, dm, p):
+    """endpoints:predict on a tuned head: instances [{"text"}] -> classifier labels; [{"query","document"}] -> reranker score.
+    On a tuned CHAT model: instances [{"prompt"} | {"messages":[{role,content}]}] -> predictions [{"content"}]."""
+    inst = p.get("instances")
+    if not isinstance(inst, list) or not inst or not all(isinstance(i, dict) for i in inst):
+        return _err(400, "INVALID_ARGUMENT", "instances: a non-empty list of objects is required.")
+    if tc.is_chat_model(mrec["_vyomiHead"]):
+        pr, out = p.get("parameters") or {}, []
+        for i in inst:
+            msgs = i.get("messages") if isinstance(i.get("messages"), list) else ([{"role": "user", "content": i["prompt"]}] if isinstance(i.get("prompt"), str) and i["prompt"].strip() else None)
+            if not msgs:
+                return _err(400, "INVALID_ARGUMENT", "Each instance needs a prompt string or a messages list.")
+            r, e = _chat_answer(mrec["_vyomiHead"], msgs, None, int(pr.get("maxOutputTokens") or pr.get("max_tokens") or 256), float(pr.get("temperature", 0.7)), None)
+            if e:
+                return e
+            out.append({"content": r["text"], "vyomiAdapter": r["adapterId"], "vyomiBaseModel": r["baseModel"]})
+        return _j(200, {"predictions": out, "deployedModelId": dm.get("id"), "model": mrec["name"], "modelDisplayName": mrec.get("displayName"), "vyomiTrained": True})
+    out = []
+    try:
+        for i in inst:
+            r = tc.invoke(mrec["_vyomiHead"], {"task": "score" if "query" in i else "classify", **i})
+            out.append({k: v for k, v in r.items() if k != "embedder"})
+    except tc.TrainError as e:
+        return _err(404 if e.kind == "notfound" else 400, "NOT_FOUND" if e.kind == "notfound" else "INVALID_ARGUMENT", str(e))
+    return _j(200, {"predictions": out, "deployedModelId": dm.get("id"), "model": mrec["name"], "modelDisplayName": mrec.get("displayName"), "vyomiTrained": True})
+
+
 def _verb(store, project, loc, coll, full, rec, verb, p):
     t = _now()
+    if verb in ("pause", "resume") and coll == "modelDeploymentMonitoringJobs":
+        _advance(store, rec, coll)
+        want = "JOB_STATE_PAUSED" if verb == "pause" else "JOB_STATE_RUNNING"
+        if verb == "pause" and rec["state"] != "JOB_STATE_RUNNING" or verb == "resume" and rec["state"] != "JOB_STATE_PAUSED":
+            return _err(400, "FAILED_PRECONDITION", f"Cannot {verb} a monitoring job in state {rec['state']}.")
+        rec["state"], rec["updateTime"] = want, t
+        return _j(200, {})
     if verb == "cancel":
         _advance(store, rec, coll)
         if rec["state"].endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
             return _err(400, "FAILED_PRECONDITION", f"{coll[:-1]} is already in a terminal state ({rec['state']}).")
+        if rec.get("_vyomi"):
+            try:
+                tc.stop(rec["_vyomi"])
+            except tc.TrainError:
+                pass
         rec["state"] = SPEC[coll]["job"] + "CANCELLED"
         rec["endTime"] = rec["updateTime"] = t
         return _j(200, {})
@@ -573,10 +757,34 @@ def _verb(store, project, loc, coll, full, rec, verb, p):
                 mrec["deployedModels"] = [d for d in mrec.get("deployedModels", []) if d.get("deployedModelId") != did]
             rec["updateTime"] = t
             return _j(200, _op(store, project, loc, coll, {}, verb="UndeployModel", rname=full))
+        if verb == "generateContent" and rec.get("deployedModels"):
+            dm = next((d for d in rec["deployedModels"] if (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiHead")), None)
+            if dm and tc.is_chat_model(store.res[dm["model"].split("@")[0]]["_vyomiHead"]):
+                return _generate_trained(store.res[dm["model"].split("@")[0]], p)
+        if verb in ("generateContent", "streamGenerateContent") or (verb in ("predict", "rawPredict") and any(
+                (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiImport") for d in rec.get("deployedModels") or [])):
+            if not rec.get("deployedModels"):
+                return _err(400, "FAILED_PRECONDITION", "Endpoint has no deployed model.")
+            dm = next((d for d in rec["deployedModels"] if (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiImport")), None)
+            if dm is None:
+                return _err(400, "FAILED_PRECONDITION", f"endpoints:{verb} is served only for models Vyomi tuned from a chat base or imported chat models (and Gemini publisher models via the publisher path).")
+            try:
+                from core import ai_models_core as _am
+            except ImportError:  # Pyodide flat layout
+                import ai_models_core as _am  # type: ignore
+            d = _am.vertex_imported_call(store.res[dm["model"].split("@")[0]]["_vyomiImport"], "predict" if verb in ("predict", "rawPredict") else verb, p)
+            r = _R(d["status"], d["body"] if isinstance(d["body"], (bytes, bytearray)) else b"")
+            r.headers, r.media_type = {k: v for k, v in d["headers"].items() if k.lower() != "content-type"}, d["headers"].get("content-type", "application/json")
+            if "stream" in d:       # streamGenerateContent: drain the single buffered chunk
+                r.body = b"".join(x if isinstance(x, bytes) else x.encode() for x in d["stream"])
+            return r
         if verb in ("predict", "rawPredict"):
             if not rec.get("deployedModels"):
                 return _err(400, "FAILED_PRECONDITION", "Endpoint has no deployed model.")
-            return _err(501, "UNIMPLEMENTED", "Custom-model serving is not simulated: Vyomi serves Gemini and embedding publisher models only.")
+            dm = next((d for d in rec["deployedModels"] if (store.res.get(str(d.get("model", "")).split("@")[0]) or {}).get("_vyomiHead")), None)
+            if dm:
+                return _predict_trained(store.res[dm["model"].split("@")[0]], dm, p)
+            return _err(501, "UNIMPLEMENTED", "Custom-model serving is not simulated: Vyomi serves Gemini and embedding publisher models only (and heads it trained itself).")
         return _err(501, "UNIMPLEMENTED", f"endpoints:{verb} is not simulated.")
     if coll == "indexes":
         pts = store.vectors.setdefault(full, {})
@@ -641,13 +849,13 @@ def _pm(pub, mid, oss, stage, title, desc, acts):
             "launchStage": stage, "versionState": "VERSION_STATE_STABLE", "supportedActions": actions,
             "publisherModelTemplate": f"projects/{{project}}/locations/{{location}}/publishers/{pub}/models/{mid}@default",
             "displayName": title, "description": desc, "servedByVyomi": bool({"generate", "embed"} & set(acts)),
-            "vyomiAvailability": CAT.availability(mid)}
+            "vyomiAvailability": CAT.availability(mid), "vyomiLicense": CAT.license_of(mid)}
 
 
 def _model_garden(method, pub, mid, query):
     if method != "GET":
         return _err(405, "INVALID_ARGUMENT", "Unsupported method.")
-    items = [_pm(*m) for m in PUBLISHER_MODELS]
+    items = [_pm(*m) for m in PUBLISHER_MODELS + [(m["publisher"], m["id"], "GOOGLE_OWNED_OSS" if m["vendor"] == "Google" else "THIRD_PARTY_OWNED_OSS", "GA", m["name"], m["blurb"], ["generate"]) for m in CAT.served_special()]]
     if mid:
         for it in items:
             if it["name"] == f"publishers/{pub}/models/{mid}":
