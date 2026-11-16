@@ -1,6 +1,9 @@
 {
- "at": "2026-11-16T17:11:57+00:00",
+ "at": "2026-11-16T18:12:03+00:00",
  "baseline": false,
  "changes": [],
- "errors": []
+ "errors": [
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
+ ]
 }
