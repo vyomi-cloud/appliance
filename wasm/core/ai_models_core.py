@@ -1081,7 +1081,7 @@ def bedrock_dispatch(method, path, query, headers, body):
             return _j(200, _profile(_ALIAS_BY_ID[base], pre))
         return _b_err("ResourceNotFoundException", "Could not find the inference profile from the provided identifier.", 404)
     _gr = _guardrails()
-    if _gr.handles(path):
+    if _gr.handles(path, body):
         return _gr.dispatch(method, path, query, body)
     mt = re.match(r"^/foundation-models/(.+)$", path)
     if mt and method == "GET":

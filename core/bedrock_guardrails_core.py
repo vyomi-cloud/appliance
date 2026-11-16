@@ -45,7 +45,7 @@ def _persist():
             st.persist()
     except Exception:  # noqa: BLE001 - write-through is best effort; the account bag is the source of truth
         pass
-_ACCT, _REG = "000000000000", "us-east-1"
+_ACCT, _REG = "123456789012", "us-east-1"   # same account as every other core (the 0-account ARN broke Terraform tag reads: F38)
 
 _PROFANITY = ("damn", "hell", "crap", "shit", "fuck", "bastard", "asshole")
 _PII = {
@@ -269,10 +269,18 @@ def _sem_conf(score, backend=None):
     return "HIGH" if score >= hi else "MEDIUM" if score >= mid else "LOW" if score >= lo else None
 
 
+def _iso(t):
+    """Bedrock guardrail timestamps are ISO-8601 date-time strings on the wire (the Go SDK rejects a JSON number: F37)."""
+    if isinstance(t, (int, float)):
+        import datetime as _d
+        return _d.datetime.fromtimestamp(t, _d.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return t
+
+
 def _view(g, version):
     p = g["draft"] if version == "DRAFT" else g["versions"][version]
     out = {"name": p["name"], "description": p.get("description", ""), "guardrailId": g["id"], "guardrailArn": g["arn"], "version": version,
-           "status": "READY", "createdAt": g["created"], "updatedAt": g["updated"],
+           "status": "READY", "createdAt": _iso(g["created"]), "updatedAt": _iso(g["updated"]),
            "blockedInputMessaging": p["blockedInputMessaging"], "blockedOutputsMessaging": p["blockedOutputsMessaging"]}
     if p.get("topicPolicyConfig"):
         out["topicPolicy"] = {"topics": p["topicPolicyConfig"].get("topicsConfig", [])}
@@ -537,8 +545,42 @@ def _done(ev, intervened, assessments, ident, trace, blocked=False, chars=0):
     return d
 
 
-def handles(path: str) -> bool:
-    return bool(re.match(r"^/guardrails?(/|$)", path))
+_TAG_PATHS = ("/tagResource", "/untagResource", "/listTagsForResource")
+
+
+def handles(path: str, body: bytes = b"") -> bool:
+    if re.match(r"^/guardrails?(/|$)", path):
+        return True
+    if re.sub(r"/{2,}", "/", "/" + path.strip("/")) in _TAG_PATHS:   # tag calls are shared with the other Bedrock resources: claim only guardrail ARNs
+        try:
+            return ":guardrail/" in str(json.loads(body or b"{}").get("resourceARN", ""))
+        except ValueError:
+            return False
+    return False
+
+
+def _guardrail_by_arn(arn):
+    g = next((x for x in _gd().values() if x["arn"] == str(arn).split(":guardrail/")[0] + ":guardrail/" + str(arn).split(":guardrail/")[-1].split("/")[0]), None)
+    if g is None:
+        raise GErr("ResourceNotFoundException", f"Guardrail {arn} not found", 404)
+    return g
+
+
+def _tags(path, p):
+    """TagResource / UntagResource / ListTagsForResource on a guardrail (F39: Terraform lists tags after every create)."""
+    g = _guardrail_by_arn(p.get("resourceARN", ""))
+    tags = g.setdefault("tags", {})
+    if path == "/tagResource":
+        for t in p.get("tags") or []:
+            tags[str(t.get("key", ""))] = str(t.get("value", ""))
+        _persist()
+        return _j(200, {})
+    if path == "/untagResource":
+        for k in p.get("tagKeys") or []:
+            tags.pop(str(k), None)
+        _persist()
+        return _j(200, {})
+    return _j(200, {"tags": [{"key": k, "value": v} for k, v in tags.items()]})
 
 
 def dispatch(method, path, query, body):
@@ -550,6 +592,8 @@ def dispatch(method, path, query, body):
         return _err(GErr("ValidationException", "Malformed JSON", 400))
     query = query or {}
     try:
+        if path in _TAG_PATHS:
+            return _tags(path, p)
         m = re.match(r"^/guardrail/([^/]+)/version/([^/]+)/apply$", path)
         if m:
             if method != "POST":
@@ -560,10 +604,11 @@ def dispatch(method, path, query, body):
                 _validate(p)
                 gid = uuid.uuid4().hex[:12]
                 now = time.time()
-                g = {"id": gid, "arn": f"arn:aws:bedrock:{_REG}:{_ACCT}:guardrail/{gid}", "draft": p, "versions": {}, "created": now, "updated": now}
+                g = {"id": gid, "arn": f"arn:aws:bedrock:{_REG}:{_ACCT}:guardrail/{gid}", "draft": p, "versions": {}, "created": now, "updated": now,
+                     "tags": {str(t.get("key", "")): str(t.get("value", "")) for t in (p.get("tags") or [])}}
                 _gd()[gid] = g
                 _persist()
-                return _j(202, {"guardrailId": gid, "guardrailArn": g["arn"], "version": "DRAFT", "createdAt": now})
+                return _j(202, {"guardrailId": gid, "guardrailArn": g["arn"], "version": "DRAFT", "createdAt": _iso(now)})
             if method == "GET":
                 ident = (query.get("guardrailIdentifier") or "").split("/")[-1]
                 items = []
@@ -575,7 +620,7 @@ def dispatch(method, path, query, body):
                         items += [_view(g, v) for v in g["versions"]]
                 keep = ("status", "name", "description", "version", "createdAt", "updatedAt")
                 return _j(200, {"guardrails": [{"id": i["guardrailId"], "arn": i["guardrailArn"], **{k: i[k] for k in keep}} for i in items]})
-        m = re.match(r"^/guardrails/([^/]+)$", path)
+        m = re.match(r"^/guardrails/((?:arn:[^/]+:guardrail/)?[^/]+)$", path)   # the identifier may be the full ARN (Terraform sends it: F41)
         if m:
             g = _find(m.group(1))
             if method == "GET":
@@ -587,10 +632,12 @@ def dispatch(method, path, query, body):
                 _validate(p)
                 g["draft"], g["updated"] = p, time.time()
                 _persist()
-                return _j(202, {"guardrailId": g["id"], "guardrailArn": g["arn"], "version": "DRAFT", "updatedAt": g["updated"]})
+                return _j(202, {"guardrailId": g["id"], "guardrailArn": g["arn"], "version": "DRAFT", "updatedAt": _iso(g["updated"])})
             if method == "POST":       # CreateGuardrailVersion (snapshot of DRAFT)
                 v = str(len(g["versions"]) + 1)
                 g["versions"][v] = json.loads(json.dumps(g["draft"]))
+                if "description" in p:
+                    g["versions"][v]["description"] = p.get("description") or ""   # a version carries its OWN description (F43)
                 _persist()
                 return _j(202, {"guardrailId": g["id"], "version": v})
             if method == "DELETE":

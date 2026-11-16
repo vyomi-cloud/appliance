@@ -745,8 +745,26 @@ def _resolve_fm(arn_or_id):
     return am._resolve_model(arn_or_id or "")
 
 
+_DEFAULT_PROMPT_TYPES = (("PRE_PROCESSING", "ENABLED"), ("ORCHESTRATION", "ENABLED"), ("POST_PROCESSING", "DISABLED"),
+                         ("KNOWLEDGE_BASE_RESPONSE_GENERATION", "ENABLED"))
+
+
+def _default_prompt_configs():
+    """Real Bedrock always returns the DEFAULT prompt configuration of an agent; the Terraform aws provider dereferences it on create
+    (removeDefaultPrompts: nil pointer panic when absent: F40)."""
+    return {"promptConfigurations": [{
+        "promptType": t, "promptState": st, "promptCreationMode": "DEFAULT", "parserMode": "DEFAULT",
+        "basePromptTemplate": "", "inferenceConfiguration": {"maximumLength": 2048, "stopSequences": [], "temperature": 0.0, "topK": 250, "topP": 1.0}}
+        for t, st in _DEFAULT_PROMPT_TYPES]}
+
+
 def _agent_view(a):
-    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups", "sessions", "memories", "snapshots", "collaborators")}
+    v = {k: x for k, x in a.items() if k not in ("aliases", "kbs", "actionGroups", "sessions", "memories", "snapshots", "collaborators")}
+    if not v.get("promptOverrideConfiguration"):
+        v["promptOverrideConfiguration"] = _default_prompt_configs()
+    if v.get("description") == "":
+        v.pop("description")   # real Bedrock omits an unset description; "" made Terraform report an inconsistent result (F42)
+    return v
 
 
 def _find_agent(st, aid):
@@ -1942,10 +1960,54 @@ def _inline_agent(st, s3, sid, p, lam):
 # ═══════════════════════════ dispatch: bedrock-agent / agent-runtime ═══════════════════════════
 def handles(path: str) -> bool:
     p = path.lower()
-    return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate|rerank|_vyomi/kb)(/|$)", p))
+    return bool(re.match(r"^/(agents|knowledgebases|retrieveandgenerate|rerank|_vyomi/kb|tags)(/|$)", p))
+
+
+_TAGGABLE = re.compile(r":(agent|agent-alias|knowledge-base)/")
+
+
+def _tag_ops(s3, method, path, p, body):
+    """Bedrock Agents tagging: GET/POST/DELETE /tags/{resourceArn} (agents, agent aliases, knowledge bases). F44: the Terraform provider
+    lists tags after every create/read."""
+    arn = urllib.parse.unquote(path[len("/tags/"):])
+    if not _TAGGABLE.search(arn):
+        raise _nf(f"Could not find resource: {arn}")
+    st = _state(s3)
+    tm = st.setdefault("tag_map", {})
+    if method == "GET":
+        return _j(200, {"tags": dict(tm.get(arn, {}))})
+    if method == "POST":
+        tm.setdefault(arn, {}).update({str(k): str(v) for k, v in (p.get("tags") or {}).items()})
+        return _j(204, None)
+    if method == "DELETE":
+        return _j(204, None)
+    raise _bad("Unsupported tag operation")
 
 
 def dispatch(s3, method, path, query, headers, body, lam=None):
+    method = method.upper()
+    npath = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
+    if npath.lower().startswith("/tags/"):
+        try:
+            return _tag_ops(s3, method, npath, _body(body) if method in ("PUT", "POST", "PATCH") else {}, body)
+        except _Err as e:
+            return _err_resp(e)
+    r = _dispatch_inner(s3, method, path, query, headers, body, lam)
+    # create-time tags: PUT /agents/ | /agents/{id}/agentaliases/ | /knowledgebases/ carry `tags` (map) -> the new resource's ARN
+    if method == "PUT" and 200 <= r.get("status", 500) < 300 and re.match(r"^/(agents|agents/[^/]+/agentaliases|knowledgebases)$", npath.lower()):
+        try:
+            req = _body(body)
+            doc = json.loads(r.get("body") or b"{}")
+            res = doc.get("agent") or doc.get("agentAlias") or doc.get("knowledgeBase") or {}
+            arn = res.get("agentArn") or res.get("agentAliasArn") or res.get("knowledgeBaseArn")
+            if arn and req.get("tags"):
+                _state(s3).setdefault("tag_map", {}).setdefault(arn, {}).update({str(k): str(v) for k, v in req["tags"].items()})
+        except Exception:
+            pass
+    return r
+
+
+def _dispatch_inner(s3, method, path, query, headers, body, lam=None):
     method = method.upper()
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
