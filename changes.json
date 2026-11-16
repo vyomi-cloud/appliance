@@ -1,19 +1,34 @@
 {
- "at": "2026-11-16T19:12:10+00:00",
+ "at": "2026-11-16T20:46:10+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "azure",
+   "service": "apimanagement",
+   "kind": "spec-commit",
+   "key": "azure:apimanagement:2068e1895b",
+   "title": "Azure apimanagement: update Go naming customization (#48246)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/2068e1895b29476cfaa26ccbe3c0bcefd51a3f95",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.40.4",
+   "title": "cli:aws: 2.40.3 \u2192 2.40.4",
+   "actionable": false
+  },
+  {
    "cloud": "aws",
-   "service": "Amazon EC2",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:bfe7c2f2ac18",
-   "title": "AgentCore runtime instances are now available in six more AWS Regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-aws-regions/",
-   "detail": "Amazon Bedrock AgentCore runtime instances are now available in six additional AWS Regions: US West (N. California), Canada (Central), Europe (London), Europe (Paris), Europe (Stockholm), and Asia Pacific (Seoul). Runtime instances run your agents on Amazon EC2 instances while AgentCore handles provisioning, patching, scaling, and lifecycle management. By expanding to these AWS Regions, more teams can use runtime instance capabilities such as GPU-accelerated, memory-optimized, or compute-optimized instance types, and long-running agent sessions of up to 14 days. You can run your agents closer ",
+   "key": "feed:aws:0518b2efdfb1",
+   "title": "AWS Backup adds logically air-gapped vault support for Amazon RDS",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-backup-air-gapped-vault-rds/",
+   "detail": "AWS Backup logically air-gapped vault now supports Amazon Relational Database Service (Amazon RDS) DB instances. Logically air-gapped vaults are a type of AWS Backup vault that stores immutable, isolated backups, which are locked by default with AWS Backup Vault Lock in compliance mode. Secure sharing across accounts and AWS Organizations enables direct restore, reducing recovery time from a data loss event. You can now protect your Amazon RDS DB instances in logically air-gapped vaults. A logically air-gapped vault stores immutable backups that are locked by default, and isolated with encrypt",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out"
- ]
+ "errors": []
 }
