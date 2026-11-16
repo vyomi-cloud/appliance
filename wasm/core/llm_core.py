@@ -689,7 +689,7 @@ def _oa_rf(rf):
 
 
 # ── LoRA adapters (chat-model fine-tunes trained by core/training_core, served by llama-server) ──
-# llama-server loads adapters at START (``--lora x.gguf --lora-init-without-apply``) and then takes a per-request
+# llama-server loads adapters at START (``--lora-scaled x.gguf:0``) and then takes a per-request
 # ``"lora": [{"id": <index>, "scale": s}]``; GET /lora-adapters lists {id, path, scale}. ``lora`` here is
 # {"name": adapter id, "path": host file, "scale": 1.0}; the id is resolved by file basename against /lora-adapters.
 def lora_dir() -> str:
@@ -719,7 +719,7 @@ def _lora_request(lora) -> list:
         if os.path.basename(str(a.get("path", ""))) == base:
             return [{"id": a["id"], "scale": float(lora.get("scale", 1.0))}]
     raise LlmUnavailable(f"The LoRA adapter {base} is not loaded in the llama-server (it loads adapters at start). Restart the local LLM with "
-                         f"`--lora-init-without-apply --lora <dir>/{base}` (core/llm_runtime.lora_args); loaded now: {[os.path.basename(str(a.get('path', ''))) for a in loaded] if isinstance(loaded, list) else 'unknown'}.")
+                         f"`--lora-scaled <dir>/{base}:0` (core/llm_runtime.lora_args); loaded now: {[os.path.basename(str(a.get('path', ''))) for a in loaded] if isinstance(loaded, list) else 'unknown'}.")
 
 
 def vision_available() -> bool:

@@ -220,7 +220,7 @@ check("bedrock: through a (fake) llama-server: request carries lora [{id,scale}]
       and cv2["output"]["message"]["content"][0]["text"] == "category=HVAC; priority=P1", SEEN[-1])
 FakeLlama.loaded = []
 check("bedrock: adapter not loaded in the server -> modeled error, not a 500", code(lambda: br.converse(modelId=cm, messages=[{"role": "user", "content": [{"text": "t"}]}])) not in (None, "InternalServerException"))
-check("llm_runtime.lora_args picks up the written adapter (mounted unapplied)", llm_runtime.lora_args(ADIR) == ["--lora-init-without-apply", "--lora", f"/adapters/{mid}.gguf"])
+check("llm_runtime.lora_args picks up the written adapter (mounted at scale 0)", llm_runtime.lora_args(ADIR) == ["--lora-scaled", f"/adapters/{mid}.gguf:0"])
 llm.set_backend(stub, None, "stub-model")
 # reload persistence
 tc._CHAT.clear(); tc._JOBS.clear(); ctl._JOBS.clear(); ctl._CUSTOM.clear(); ctl._REH["done"] = False

@@ -289,9 +289,11 @@ def main():
     check("role servers removed -> models unlisted again", "vyomi.smolvlm-500m" not in ids and "vyomi.deepseek-r1-1.5b" not in ids)
     # ───────── runtime plan (8 GB Codespace budget) ─────────
     from core import llm_runtime as R
-    check("role plan: with the default 2800 MB AI budget a role model stops the chat model", R.plan_role_start("vision", ["chat"])["stop"] == ["chat"])
+    check("role plan: with a 2800 MB AI budget a role model stops the chat model", R.plan_role_start("vision", ["chat"], 2800)["stop"] == ["chat"])
+    check("role budget: floor 2800 MB, 35 % of RAM above it, env override wins", R.default_budget_mb() == max(2800, int(R.total_ram_mb() * 0.35)) or os.environ.get("VYOMI_LLM_AI_BUDGET_MB"))
+    check("role plan: a 16 GB machine default budget keeps chat + vision + reasoning", R.plan_role_start("reasoning", ["chat", "vision"], int(16384 * 0.35))["stop"] == [])
     check("role plan: a bigger budget keeps chat + one role", R.plan_role_start("vision", ["chat"], 4000)["stop"] == [])
-    check("role plan: the other role goes before chat", R.plan_role_start("reasoning", ["chat", "vision"], 4100)["stop"] == ["vision"])
+    check("role plan: the other role goes before chat", R.plan_role_start("reasoning", ["chat", "vision"], 4400)["stop"] == ["vision"])
     calls = []
 
     def fake_docker(args):

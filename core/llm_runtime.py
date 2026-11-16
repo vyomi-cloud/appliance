@@ -33,15 +33,15 @@ def _run(args, run=None):
 
 
 def lora_args(adapter_dir: str | None = None, mount: str = "/adapters") -> list[str]:
-    """llama-server flags that load every ``*.gguf`` LoRA adapter in ``adapter_dir`` (default core.llm_core.lora_dir()) at start, UNAPPLIED
+    """llama-server flags that load every ``*.gguf`` LoRA adapter in ``adapter_dir`` (default core.llm_core.lora_dir()) at start, at scale 0
     (requests opt in per call with ``lora: [{id, scale}]``). The directory must be mounted at ``mount``. Empty when there are none."""
     d = adapter_dir or os.environ.get("VYOMI_LLM_ADAPTER_DIR") or os.path.join(os.environ.get("CLOUDLEARN_DATA_DIR", "/data"), "llm-adapters")
     files = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else []) if f.endswith(".gguf"))
     if not files:
         return []
-    out = ["--lora-init-without-apply"]
-    for f in files:
-        out += ["--lora", f"{mount}/{f}"]
+    out = []
+    for f in files:       # ``--lora-scaled <file>:0``: loaded at scale 0, so a request WITHOUT ``lora`` is the base model (measured: ``--lora-init-without-apply`` applies the adapter at scale 1.0 on b12441)
+        out += ["--lora-scaled", f"{mount}/{f}:0"]
     return out
 
 
@@ -99,14 +99,30 @@ ROLES = {
     "vision": {"name": "vyomi-llm-vision", "hf": os.environ.get("VYOMI_LLM_VISION_HF", "ggml-org/SmolVLM-500M-Instruct-GGUF:Q8_0"), "port": 18081,
                "files_mb": 545, "est_mb": 900, "args": ["--jinja"], "env": "VYOMI_LLM_VISION_ENDPOINT", "licence": "Apache-2.0"},
     "reasoning": {"name": "vyomi-llm-reasoning", "hf": os.environ.get("VYOMI_LLM_REASONING_HF", "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M"), "port": 18082,
-                  "files_mb": 1117, "est_mb": 1500, "args": ["--jinja", "--reasoning-format", "deepseek"], "env": "VYOMI_LLM_REASONING_ENDPOINT", "licence": "MIT"},
+                  "files_mb": 1117, "est_mb": 1800, "args": ["--jinja", "--reasoning-format", "deepseek"], "env": "VYOMI_LLM_REASONING_ENDPOINT", "licence": "MIT"},
 }
 CHAT_EST_MB = 2500          # Qwen2.5-3B Q4 + KV (estimate)
-AI_BUDGET_MB = int(os.environ.get("VYOMI_LLM_AI_BUDGET_MB", "2800"))
 
 
-def plan_role_start(role: str, running: list[str], budget_mb: int = AI_BUDGET_MB) -> dict:
+def total_ram_mb() -> int:
+    try:
+        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1048576)
+    except (ValueError, OSError, AttributeError):
+        return 8192
+
+
+def default_budget_mb() -> int:
+    """AI-bucket RAM budget: VYOMI_LLM_AI_BUDGET_MB, else 35 % of physical RAM with a 2800 MB floor (2800 MB was exactly 35 % of the old 8 GB Codespace; the
+    4 vCPU / 16 GB Mesh default gets 5600 MB, so the chat model is no longer stopped to start a 0.5-1.7 GB role model: measured RSS in ai-meshverify.md)."""
+    return int(os.environ.get("VYOMI_LLM_AI_BUDGET_MB") or max(2800, int(total_ram_mb() * 0.35)))
+
+
+AI_BUDGET_MB = default_budget_mb()
+
+
+def plan_role_start(role: str, running: list[str], budget_mb: int | None = None) -> dict:
     """Which running AI containers must stop for ``role`` to fit: other roles first, then the default chat model. -> {"stop": [...], "fits": bool, "total_mb": n}."""
+    budget_mb = AI_BUDGET_MB if budget_mb is None else budget_mb
     est = {"chat": CHAT_EST_MB, **{r: v["est_mb"] for r, v in ROLES.items()}}
     keep = [r for r in running if r != role]
     stop = []
