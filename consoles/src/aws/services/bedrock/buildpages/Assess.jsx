@@ -1,6 +1,6 @@
 /* Bedrock Assess + Configure: model evaluation jobs, model access, settings (invocation logging), prompt optimization.
  * Evaluations score the local model with simple metrics (core/bedrock_build_core); settings/access/optimize are the real control-plane ops. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -26,42 +26,73 @@ import { CreateModal, Field, ModelSelect, Page, jobStatus, providerOf, useModelO
 import * as base from "../api.js";
 import * as api from "./api.js";
 
-const METRICS = [{ label: "Accuracy (token F1 vs reference)", value: "Builtin.Accuracy" }, { label: "Robustness (answer stability under prompt perturbation)", value: "Builtin.Robustness" }, { label: "Toxicity (share of answers hitting the guardrail lexicon)", value: "Builtin.Toxicity" }];
+const L = (value, label) => ({ value, label: label || value.replace(/^(Builtin|Vyomi)\./, "") });
+const CLASSIC = [L("Builtin.Accuracy", "Accuracy (token F1 vs reference)"), L("Builtin.Robustness", "Robustness (stability under prompt perturbation)"), L("Builtin.Toxicity", "Toxicity (guardrail lexicon hit rate)"),
+  L("Vyomi.RougeL", "ROUGE-L vs reference"), L("Vyomi.ExactMatch", "Exact match vs reference"), L("Vyomi.SemanticSimilarity", "Semantic similarity (embedding cosine) vs reference")];
+const JUDGE_M = ["Correctness", "Completeness", "Helpfulness", "Coherence", "Relevance", "FollowingInstructions", "ProfessionalStyleAndTone", "Harmfulness", "Stereotyping", "Refusal"].map((x) => L(`Builtin.${x}`, `${x} (LLM-as-a-judge)`));
+const JUDGE_RAG = ["Correctness", "Completeness", "Helpfulness", "LogicalCoherence", "Faithfulness", "CitationPrecision", "CitationCoverage", "Harmfulness", "Stereotyping", "Refusal"].map((x) => L(`Builtin.${x}`, `${x} (LLM-as-a-judge)`));
+const RAG_RET = [L("Builtin.ContextRelevance", "Context relevance (judge)"), L("Builtin.ContextCoverage", "Context coverage (judge, needs a reference answer)")];
+const KINDS = [
+  { value: "model", label: "Automatic: model evaluation", description: "Score a model's answers with open scorers and/or an LLM judge", metrics: [...CLASSIC, ...JUDGE_M] },
+  { value: "rag-ret", label: "Automatic: RAG retrieve only", description: "Judge the passages a knowledge base retrieves", metrics: RAG_RET },
+  { value: "rag-gen", label: "Automatic: RAG retrieve and generate", description: "Judge the grounded answers of a knowledge base", metrics: JUDGE_RAG },
+  { value: "human", label: "Human: reviewer workflow", description: "Generates the responses for human reviewers (reviewer UI not simulated)", metrics: [] },
+];
 const TASKS = ["QuestionAndAnswer", "Summarization", "Classification", "Generation", "Custom"].map((v) => ({ label: v, value: v }));
+const isJudged = (m) => /^Builtin\.(Correctness|Completeness|Helpfulness|Coherence|Relevance|FollowingInstructions|ProfessionalStyleAndTone|Harmfulness|Stereotyping|Refusal|LogicalCoherence|Faithfulness|CitationPrecision|CitationCoverage|ContextRelevance|ContextCoverage)$/.test(m);
+const LOWER_BETTER = ["Builtin.Harmfulness", "Builtin.Stereotyping", "Builtin.Refusal", "Builtin.Toxicity"];
 
 export function Evaluations() {
   const t = useAsync(() => api.listEvaluations(), []);
   const models = useModelOptions();
+  const kbs = useAsync(() => base.listKnowledgeBases().catch(() => []), []);
   const notify = useNotify();
   const [sel, setSel] = useState([]);
   const [open, setOpen] = useState(false);
   const [del, setDel] = useState(false);
-  const [name, setName] = useState(""), [model, setModel] = useState(null), [task, setTask] = useState(TASKS[0]), [ds, setDs] = useState("s3://"), [out, setOut] = useState("s3://"), [mets, setMets] = useState([METRICS[0]]);
+  const [kind, setKind] = useState(KINDS[0]);
+  const [name, setName] = useState(""), [model, setModel] = useState(null), [judge, setJudge] = useState(null), [kb, setKb] = useState(null), [task, setTask] = useState(TASKS[0]), [ds, setDs] = useState("s3://"), [out, setOut] = useState("s3://"), [mets, setMets] = useState([CLASSIC[0]]);
+  const needJudge = mets.some((m) => isJudged(m.value));
+  const pickKind = (k) => { setKind(k); setMets(k.metrics.slice(0, 1)); };
+  const modelSet = (kind.value === "model" ? model : kind.value === "rag-gen" ? model && kb : kind.value === "rag-ret" ? kb : model);
   const New = <Button variant="primary" onClick={() => setOpen(true)}>Create</Button>;
+  const submit = async () => {
+    const dsCfg = { dataset: { name: "custom-dataset", datasetLocation: { s3Uri: ds } }, taskType: kind.value === "model" || kind.value === "human" ? task.value : "General" };
+    const modelCfg = { models: [{ bedrockModel: { modelIdentifier: model, inferenceParams: JSON.stringify({ temperature: 0 }) } }] };
+    const ev = needJudge ? { evaluatorModelConfig: { bedrockEvaluatorModels: [{ modelIdentifier: judge }] } } : {};
+    let body;
+    if (kind.value === "human") body = { evaluationConfig: { human: { humanWorkflowConfig: { flowDefinitionArn: `arn:aws:sagemaker:us-east-1:${api.ACCOUNT}:flow-definition/vyomi-reviewers`, instructions: "Rate each answer" }, datasetMetricConfigs: [{ ...dsCfg, metricNames: ["Helpfulness"] }] } }, inferenceConfig: modelCfg };
+    else if (kind.value === "model") body = { evaluationConfig: { automated: { datasetMetricConfigs: [{ ...dsCfg, metricNames: mets.map((m) => m.value) }], ...ev } }, inferenceConfig: modelCfg };
+    else body = { applicationType: "RagEvaluation", evaluationConfig: { automated: { datasetMetricConfigs: [{ ...dsCfg, metricNames: mets.map((m) => m.value) }], ...ev } },
+      inferenceConfig: { ragConfigs: [{ knowledgeBaseConfig: kind.value === "rag-ret" ? { retrieveConfig: { knowledgeBaseId: kb, knowledgeBaseRetrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 5 } } } }
+        : { retrieveAndGenerateConfig: { type: "KNOWLEDGE_BASE", knowledgeBaseConfiguration: { knowledgeBaseId: kb, modelArn: `arn:aws:bedrock:us-east-1::foundation-model/${model}` } } } }] } };
+    const r = await api.createEvaluation({ jobName: name, outputDataConfig: { s3Uri: out }, ...body });
+    notify.success(`Evaluation job "${name}" submitted.`); t.reload(); navigate("bedrock", "evaluations", api.tail(r.jobArn));
+  };
   return (
-    <Page title="Model evaluations" description="Evaluate foundation models with a custom prompt dataset and automatic metrics. Jobs run on the local model and write per-record scores to S3.">
-      <Alert type="info">Automated model evaluation only. The scorers are simple open metrics (token F1, perturbation consistency, a guardrail lexicon), not the managed BERTScore or real-world-knowledge scorers. Human, RAG and LLM-as-a-judge evaluations are not simulated.</Alert>
+    <Page title="Evaluations" description="Evaluate models and RAG knowledge bases with a custom prompt dataset. Jobs run on the local model, in batches, and write per-record scores to S3.">
+      <Alert type="info">Scorers are open metrics (token F1, ROUGE-L, embedding similarity, perturbation robustness, guardrail lexicon) and LLM-as-a-judge metrics where the judge is the small local model, so judged scores are indicative, not the managed judge's. Human jobs generate the responses for reviewers; the reviewer UI is not simulated.</Alert>
       <ResourceTable variant="container" resourceName="Evaluation jobs" items={t.data || []} loading={t.loading} error={t.error} onRefresh={t.reload} trackBy="jobArn" selectionType="single" selectedItems={sel} onSelectionChange={setSel}
         filterPlaceholder="Find evaluation jobs" empty={{ title: "No evaluation jobs", action: New }}
         actions={<SpaceBetween direction="horizontal" size="xs"><Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>{New}</SpaceBetween>}
         columns={[
           { id: "name", header: "Name", isRowHeader: true, sortingField: "jobName", cell: (j) => <Link href={href("bedrock", "evaluations", api.tail(j.jobArn))} onFollow={follow}>{j.jobName}</Link> },
           { id: "status", header: "Status", sortingField: "status", cell: (j) => jobStatus(j.status) },
-          { id: "model", header: "Model", cell: (j) => j.modelIdentifiers?.join(", ") },
+          { id: "type", header: "Type", cell: (j) => (j.jobType === "Human" ? "Human" : j.applicationType === "RagEvaluation" ? "RAG" : "Model") + (j.evaluatorModelIdentifiers?.length ? " (judge)" : "") },
+          { id: "model", header: "Model / knowledge base", cell: (j) => (j.modelIdentifiers || j.ragIdentifiers || []).join(", ") },
           { id: "task", header: "Task type", cell: (j) => j.evaluationTaskTypes?.join(", ") },
           { id: "created", header: "Creation time", sortingField: "creationTime", cell: (j) => when(j.creationTime) },
         ]} />
-      <CreateModal visible={open} onDismiss={() => setOpen(false)} header="Create automatic evaluation" size="large" disabled={!name || !model || ds.length < 6 || out.length < 6 || !mets.length}
-        onSubmit={async () => {
-          const r = await api.createEvaluation({ jobName: name, evaluationConfig: { automated: { datasetMetricConfigs: [{ taskType: task.value, dataset: { name: "custom-dataset", datasetLocation: { s3Uri: ds } }, metricNames: mets.map((m) => m.value) }] } },
-            inferenceConfig: { models: [{ bedrockModel: { modelIdentifier: model, inferenceParams: JSON.stringify({ temperature: 0 }) } }] }, outputDataConfig: { s3Uri: out } });
-          notify.success(`Evaluation job "${name}" submitted.`); t.reload(); navigate("bedrock", "evaluations", api.tail(r.jobArn));
-        }}>
+      <CreateModal visible={open} onDismiss={() => setOpen(false)} header="Create evaluation" size="large" disabled={!name || !modelSet || ds.length < 6 || out.length < 6 || (kind.value !== "human" && !mets.length) || (needJudge && !judge)} onSubmit={submit}>
+        <FormField label="Evaluation type"><Select selectedOption={kind} options={KINDS} onChange={({ detail }) => pickKind(detail.selectedOption)} ariaLabel="Evaluation type" /></FormField>
         <Field label="Evaluation name" value={name} onChange={setName} />
-        <FormField label="Model"><ModelSelect value={model} onChange={setModel} {...models} /></FormField>
-        <FormField label="Task type"><Select selectedOption={task} options={TASKS} onChange={({ detail }) => setTask(detail.selectedOption)} ariaLabel="Task type" /></FormField>
-        <FormField label="Metrics"><Multiselect selectedOptions={mets} options={METRICS} onChange={({ detail }) => setMets(detail.selectedOptions)} ariaLabel="Metrics" /></FormField>
-        <Field label="Prompt dataset (S3 JSONL)" description='One JSON per line: {"prompt": "...", "referenceResponse": "...", "category": "..."}; at most 25 records are scored.' placeholder="s3://my-bucket/dataset.jsonl" value={ds} onChange={setDs} />
+        {kind.value !== "rag-ret" && <FormField label={kind.value === "rag-gen" ? "Response generator model" : "Model"}><ModelSelect value={model} onChange={setModel} {...models} /></FormField>}
+        {kind.value.startsWith("rag") && <FormField label="Knowledge base"><Select selectedOption={kb ? { label: (kbs.data || []).find((k) => k.knowledgeBaseId === kb)?.name || kb, value: kb } : null} options={(kbs.data || []).map((k) => ({ label: k.name, value: k.knowledgeBaseId }))}
+          onChange={({ detail }) => setKb(detail.selectedOption.value)} placeholder="Choose a knowledge base" ariaLabel="Knowledge base" /></FormField>}
+        {(kind.value === "model" || kind.value === "human") && <FormField label="Task type"><Select selectedOption={task} options={TASKS} onChange={({ detail }) => setTask(detail.selectedOption)} ariaLabel="Task type" /></FormField>}
+        {kind.value !== "human" && <FormField label="Metrics"><Multiselect selectedOptions={mets} options={kind.metrics} onChange={({ detail }) => setMets(detail.selectedOptions)} ariaLabel="Metrics" /></FormField>}
+        {needJudge && <FormField label="Evaluator (judge) model" description="The judge is the local model; a small model is a weak judge."><ModelSelect value={judge} onChange={setJudge} ariaLabel="Evaluator model" {...models} /></FormField>}
+        <Field label="Prompt dataset (S3 JSONL)" description='One JSON per line: {"prompt": "...", "referenceResponse": "...", "category": "..."} (or Bedrock conversationTurns lines); up to 1000 records, scored in batches.' placeholder="s3://my-bucket/dataset.jsonl" value={ds} onChange={setDs} />
         <Field label="Evaluation results (S3 location)" placeholder="s3://my-bucket/results/" value={out} onChange={setOut} />
       </CreateModal>
       <DeleteModal visible={del} onDismiss={() => setDel(false)} resourceType="evaluation job" names={sel.map((j) => j.jobName)}
@@ -72,20 +103,27 @@ export function Evaluations() {
 
 export function EvaluationDetail({ params }) {
   const id = params.id;
+  const notify = useNotify();
   const j = useAsync(() => api.getEvaluation(id), [id]);
   const d = j.data;
   const rep = d?.vyomiReport;
+  const prog = d?.vyomiProgress;
+  useEffect(() => { if (d?.status !== "InProgress" || d?.vyomiReport?.humanWorkflow) return undefined; const h = setInterval(j.reload, 2500); return () => clearInterval(h); }, [d?.status, d?.vyomiReport?.humanWorkflow]);   // eslint-disable-line react-hooks/exhaustive-deps
   const names = rep ? [...new Set(rep.datasets.flatMap((x) => Object.keys(x.metrics)))] : [];
+  const judged = d?.evaluationConfig?.automated?.evaluatorModelConfig?.bedrockEvaluatorModels?.[0]?.modelIdentifier || d?.evaluationConfig?.automated?.customMetricConfig?.evaluatorModelConfig?.bedrockEvaluatorModels?.[0]?.modelIdentifier;
   return (
-    <ContentLayout header={<Header variant="h1" actions={<Button onClick={j.reload}>Refresh</Button>}>{d?.jobName || id}</Header>}>
+    <ContentLayout header={<Header variant="h1" actions={<SpaceBetween direction="horizontal" size="xs"><Button onClick={j.reload}>Refresh</Button>{d?.status === "InProgress" && <Button onClick={async () => { try { await api.stopEvaluation(id); notify.success("Job stopped."); j.reload(); } catch (e) { notify.error(e); } }}>Stop</Button>}</SpaceBetween>}>{d?.jobName || id}</Header>}>
       <SpaceBetween size="l">
         {j.error && <ErrorAlert error={j.error} />}
-        {d && <KeyValue title="Evaluation summary" items={[["Status", jobStatus(d.status)], ["Job type", `${d.jobType} model evaluation`], ["Model", d.inferenceConfig.models.map((m) => m.bedrockModel.modelIdentifier).join(", ")], ["Output", d.outputDataConfig.s3Uri],
-          ["Created", when(d.creationTime)], ["Last modified", when(d.lastModifiedTime)]]} />}
+        {d && <KeyValue title="Evaluation summary" items={[["Status", jobStatus(d.status)], ["Type", `${d.jobType} ${d.applicationType === "RagEvaluation" ? "RAG" : "model"} evaluation`],
+          [d.applicationType === "RagEvaluation" ? "Knowledge base" : "Model", (d.inferenceConfig.models || []).map((m) => m.bedrockModel.modelIdentifier).concat((d.inferenceConfig.ragConfigs || []).map((r) => r.knowledgeBaseConfig?.retrieveConfig?.knowledgeBaseId || r.knowledgeBaseConfig?.retrieveAndGenerateConfig?.knowledgeBaseConfiguration?.knowledgeBaseId)).join(", ")],
+          ...(judged ? [["Evaluator (judge) model", judged]] : []), ["Records", prog ? `${prog.processedRecords} / ${prog.totalRecords}` : "-"], ["Output", d.outputDataConfig.s3Uri], ["Created", when(d.creationTime)], ["Last modified", when(d.lastModifiedTime)]]} />}
+        {d?.status === "InProgress" && prog && !rep?.humanWorkflow && <Box data-testid="eval-progress"><StatusIndicator type="in-progress">Scoring in batches: {prog.processedRecords} of {prog.totalRecords} records</StatusIndicator></Box>}
+        {rep?.humanWorkflow && <Alert type="warning" header="Awaiting human reviewers" data-testid="human-note">{rep.humanWorkflow.note}</Alert>}
         {d?.failureMessages?.length ? <Alert type="error" header="Job failed">{d.failureMessages.join("; ")}</Alert> : null}
-        {rep && <Table variant="container" header={<Header variant="h2" description={`Scorer: ${rep.scorer}`}>Metric summary</Header>} items={rep.datasets} trackBy="name"
+        {rep && names.length > 0 && <Table variant="container" header={<Header variant="h2" description={`Scorer: ${rep.scorer}`}>Metric summary</Header>} items={rep.datasets} trackBy="name"
           columnDefinitions={[{ id: "d", header: "Dataset", isRowHeader: true, cell: (x) => x.name }, { id: "n", header: "Records", cell: (x) => x.records },
-            ...names.map((m) => ({ id: m, header: m.replace("Builtin.", ""), cell: (x) => (x.metrics[m] ?? "-") })), { id: "o", header: "Per-record results", cell: (x) => x.output }]} />}
+            ...names.map((m) => ({ id: m, header: m.replace(/^(Builtin|Vyomi)\./, "") + (LOWER_BETTER.includes(m) ? " (lower is better)" : ""), cell: (x) => (x.metrics[m] == null ? "-" : `${x.metrics[m]}${x.unscoredRecords?.[m] ? ` (${x.unscoredRecords[m]} unscored)` : ""}`) })), { id: "o", header: "Per-record results", cell: (x) => x.output }]} />}
       </SpaceBetween>
     </ContentLayout>
   );

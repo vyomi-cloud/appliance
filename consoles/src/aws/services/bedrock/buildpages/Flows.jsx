@@ -1,6 +1,7 @@
-/* Bedrock Flows: list/create, a node editor (inline prompt per node, JSON definition), Prepare, versions, aliases and Test (InvokeFlow
- * on TSTALIASID). Runner: core/bedrock_build_core.run_flow (Input, Prompt, Condition, Collector, Output). */
-import { useState } from "react";
+/* Bedrock Flows: list/create, a visual drag-and-drop canvas (FlowCanvas, xyflow) with Prompt / Condition / Agent / KnowledgeBase / Lambda /
+ * Iterator / Collector / Loop / Retrieval / Storage nodes, a JSON tab, Prepare, versions, aliases and Test (InvokeFlow on TSTALIASID with
+ * execution tracing). Runner: core/bedrock_build_core._Run. */
+import { useMemo, useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
@@ -14,6 +15,8 @@ import Table from "@cloudscape-design/components/table";
 import Textarea from "@cloudscape-design/components/textarea";
 import Tabs from "@cloudscape-design/components/tabs";
 import ResourceTable from "../../../kit/ResourceTable.jsx";
+import { CapabilityContainer } from "../../../kit/Capability.jsx";
+import FlowCanvas from "./FlowCanvas.jsx";
 import DeleteModal from "../../../kit/DeleteModal.jsx";
 import { ErrorAlert, KeyValue, fmtDate } from "../../../kit/common.jsx";
 import { useAsync } from "../../../../common/useAsync.js";
@@ -22,6 +25,7 @@ import { follow, href, navigate } from "../../../../common/router.js";
 import { CreateModal, Field, ModelSelect, Page, useModelOptions } from "../inferTune/Shared.jsx";
 import { NOVA } from "../Common.jsx";
 import * as api from "./api.js";
+import * as base from "../api.js";
 
 const data = (name, source, target, so, ti) => ({ name, type: "Data", source, target, configuration: { data: { sourceOutput: so, targetInput: ti } } });
 /** The console's starter: Input -> Prompt -> Output. */
@@ -82,37 +86,61 @@ export function FlowDetail({ params }) {
   const [busy, setBusy] = useState("");
   const [del, setDel] = useState(false);
   const [aliasName, setAliasName] = useState("");
+  const [draft, setDraft] = useState(null);       // definition from the canvas (null until the user touches it)
+  const [runStates, setRunStates] = useState({});
+  const models = useModelOptions();
+  const refs = useAsync(async () => {
+    const safe = (p) => p.catch(() => []);
+    const [kbs, lambdas, buckets, agents] = await Promise.all([safe(base.listKnowledgeBases()), safe(base.listLambdas()), safe(base.listBuckets()), safe(base.listAgents())]);
+    const aliases = (await Promise.all(agents.map((a) => safe(base.listAliases(a.agentId)).then((as) => as.map((x) => ({ value: `arn:aws:bedrock:us-east-1:${base.ACCOUNT}:agent-alias/${a.agentId}/${x.agentAliasId}`, label: `${a.agentName} / ${x.agentAliasName}` })))))).flat();
+    return { kbs: kbs.map((k) => ({ value: k.knowledgeBaseId, label: k.name })), lambdas: lambdas.map((l) => ({ value: l.arn, label: l.name })), buckets: buckets.map((b) => ({ value: b, label: b })), aliases };
+  }, []);
+  const opts = { models: models.options.map((m) => ({ value: m.value, label: m.label })), ...(refs.data || { kbs: [], lambdas: [], buckets: [], aliases: [] }) };
   const d = f.data;
   const cur = json ?? (d ? JSON.stringify(d.definition, null, 2) : "");
+  const canvasDef = draft || d?.definition;
+  const dirty = draft && JSON.stringify(draft) !== JSON.stringify(d?.definition);
   const run = async (key, fn, ok) => { setBusy(key); try { await fn(); if (ok) notify.success(ok); f.reload(); vs.reload(); as.reload(); } catch (e) { notify.error(e); } finally { setBusy(""); } };
-  const save = () => run("save", async () => { await api.updateFlow(id, { name: d.name, executionRoleArn: d.executionRoleArn, definition: JSON.parse(cur) }); setJson(null); }, "Flow saved (prepare it before testing).");
+  const save = () => run("save", async () => { await api.updateFlow(id, { name: d.name, executionRoleArn: d.executionRoleArn, definition: json !== null ? JSON.parse(cur) : draft }); setJson(null); setDraft(null); }, "Flow saved (prepare it before testing).");
   const test = async () => {
-    setBusy("test"); setErr(null); setRes(null);
-    try { setRes(await api.invokeFlow(id, input)); } catch (e) { setErr(e); } finally { setBusy(""); }
+    setBusy("test"); setErr(null); setRes(null); setRunStates({});
+    try {
+      const r = await api.invokeFlow(id, input, "TSTALIASID", true);
+      setRes(r);
+      const ok = {};
+      r.trace.forEach((t) => { const n = t.nodeOutputTrace?.nodeName || t.nodeInputTrace?.nodeName || t.conditionNodeResultTrace?.nodeName; if (n) ok[n] = "ok"; });
+      r.outputs.forEach((o) => { ok[o.nodeName] = "ok"; });
+      setRunStates(ok);
+    } catch (e) { setErr(e); } finally { setBusy(""); }
   };
-  const nodes = d?.definition?.nodes || [];
+  const traceRows = (res?.trace || []).map((t, i) => {
+    const k = Object.keys(t)[0], v = t[k];
+    const fields = v.fields ? v.fields.map((x) => `${x.nodeInputName || x.nodeOutputName}=${typeof x.content?.document === "string" ? x.content.document : JSON.stringify(x.content?.document)}`).join("; ") : (v.satisfiedConditions || []).map((c) => c.conditionName).join(", ") || "none";
+    return { i: i + 1, node: v.nodeName, kind: k === "nodeInputTrace" ? "Input" : k === "nodeOutputTrace" ? "Output" : "Condition result", fields, at: v.timestamp };
+  });
+  
   return (
     <ContentLayout header={<Header variant="h1" actions={<SpaceBetween direction="horizontal" size="xs"><Button loading={busy === "prep"} onClick={() => run("prep", () => api.prepareFlow(id), "Flow prepared.")}>Prepare</Button><Button onClick={() => setDel(true)}>Delete</Button></SpaceBetween>}>{d?.name || id}</Header>}>
       <SpaceBetween size="l">
         {f.error && <ErrorAlert error={f.error} />}
         {d && <KeyValue title="Flow overview" items={[["Name", d.name], ["Flow ID", d.id], ["Status", flowStatus(d.status)], ["ARN", d.arn], ["Execution role", d.executionRoleArn], ["Last updated", fmtDate(d.updatedAt)]]} />}
-        <Container header={<Header variant="h2">Flow builder</Header>}>
-          <Tabs tabs={[
-            { id: "nodes", label: "Nodes", content: <Table variant="embedded" items={nodes} trackBy="name" empty={<Box textAlign="center">No nodes</Box>}
-              columnDefinitions={[{ id: "n", header: "Node", isRowHeader: true, cell: (n) => n.name }, { id: "t", header: "Type", cell: (n) => n.type }, { id: "i", header: "Inputs", cell: (n) => (n.inputs || []).map((x) => x.name).join(", ") || "-" }, { id: "o", header: "Outputs", cell: (n) => (n.outputs || []).map((x) => x.name).join(", ") || "-" },
-                { id: "m", header: "Model", cell: (n) => n.configuration?.prompt?.sourceConfiguration?.inline?.modelId || "-" }]} /> },
+        <CapabilityContainer id="bedrock.flows" title="Flow builder" description="Drag nodes from the palette, connect output ports to input ports, then save and prepare."
+          actions={<SpaceBetween direction="horizontal" size="xs"><Button loading={busy === "save"} disabled={!dirty && json === null} onClick={save}>Save</Button></SpaceBetween>}>
+          {d && <Tabs tabs={[
+            { id: "canvas", label: "Canvas", content: <FlowCanvas key={`${id}:${d.updatedAt}`} initial={d.definition} onChange={setDraft} layoutKey={`vyomi.flowlayout.${id}`} opts={opts} runStates={runStates} /> },
             { id: "def", label: "Definition (JSON)", content: <SpaceBetween size="s"><Textarea value={cur} rows={16} onChange={({ detail }) => setJson(detail.value)} ariaLabel="Flow definition" />
-              <Box><Button loading={busy === "save"} disabled={json === null} onClick={save}>Save</Button></Box>
-              <Box color="text-body-secondary" variant="small">Supported node types: Input, Output, Prompt (inline or a Prompt Management ARN), Condition (name == "x", !=, contains), Collector. Other node types are rejected.</Box></SpaceBetween> },
-          ]} />
-        </Container>
+              <Box color="text-body-secondary" variant="small">Raw CreateFlow/UpdateFlow definition. Node types: Input, Output, Prompt, Condition, Collector, Iterator, Agent, KnowledgeBase, LambdaFunction, Retrieval, Storage, Loop. Lex and InlineCode are not supported. Save from the button above.</Box></SpaceBetween> },
+          ]} />}
+        </CapabilityContainer>
         <Container header={<Header variant="h2" description="Runs the prepared working draft (test alias TSTALIASID) through InvokeFlow.">Test flow</Header>}>
           <SpaceBetween size="s">
             {d && d.status !== "Prepared" && <Box color="text-status-warning">Prepare the flow before testing it.</Box>}
-            <FormField label="Input"><Textarea value={input} rows={3} onChange={({ detail }) => setInput(detail.value)} ariaLabel="Flow input" placeholder="Text sent to the input node" /></FormField>
+            <FormField label="Input" description="Text, or a JSON array such as [1,2,3] for flows that start with an Iterator."><Textarea value={input} rows={3} onChange={({ detail }) => setInput(detail.value)} ariaLabel="Flow input" placeholder="Text sent to the input node" /></FormField>
             <Box><Button variant="primary" loading={busy === "test"} disabled={!input || d?.status !== "Prepared"} onClick={test}>Run</Button></Box>
             {err && <ErrorAlert error={err} header="Flow failed" />}
             {res && <div data-testid="flow-result"><SpaceBetween size="xs">{res.outputs.map((o, i) => <Box key={i}><b>{o.nodeName}</b>: {typeof o.content?.document === "string" ? o.content.document : JSON.stringify(o.content?.document)}</Box>)}<Box color="text-body-secondary">Completion: {res.reason}</Box></SpaceBetween></div>}
+            {res && <Table variant="embedded" header={<Header variant="h3" counter={`(${traceRows.length})`}>Execution trace</Header>} items={traceRows} trackBy="i" empty={<Box textAlign="center">No trace events</Box>}
+              columnDefinitions={[{ id: "i", header: "#", cell: (r) => r.i }, { id: "n", header: "Node", cell: (r) => r.node }, { id: "k", header: "Event", cell: (r) => r.kind }, { id: "f", header: "Values", cell: (r) => <span data-testid="trace-values">{r.fields}</span> }]} />}
           </SpaceBetween>
         </Container>
         <Table variant="container" header={<Header variant="h2" actions={<Button loading={busy === "ver"} disabled={d?.status !== "Prepared"} onClick={() => run("ver", () => api.createFlowVersion(id), "Version created.")}>Publish version</Button>}>Versions</Header>}
