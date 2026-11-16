@@ -149,7 +149,7 @@ def("gcp.vertex.overview", ["/vertex-ai"], {
   title: "Agent Platform: scope and limits",
   intro: "The Vertex AI product, renamed Agent Platform. Resource counts and the legacy pages read the real aiplatform REST wire.",
   real: ["Prompts go through generateContent on the local model seam. Publisher models come from /v1/publishers/-/models. Deployments are Agent Engine reasoningEngines."],
-  limits: ["Lower Overview cards are approximate. There is no 'Enable billing' banner: account state is not simulated.", "Not simulated (open the 'not simulated' page): Evaluation, Provisioned Throughput, Claude models, Ray, Metadata, Monitoring, ADK, MCP Servers, RAG Engine, Search, Agent Retrieval, Memory Bank, Sessions, Agent Registry, Policies, Gateways, Security, Topology, App builder, Training Clusters."],
+  limits: ["Lower Overview cards are approximate. There is no 'Enable billing' banner: account state is not simulated.", "Declared not in scope (each page says why and what to use instead): Provisioned Throughput, Claude models, Ray, MCP Servers, Policies, Gateways, Security, Training clusters."],
   nano: ["Chat is answered by WebLLM (WebGPU)."],
   mesh: ["Chat is answered by llama.cpp (Qwen2.5-3B Q4)."],
 });
@@ -188,6 +188,60 @@ def("gcp.vertex.deployments", ["/vertex-ai/deployments"], {
   title: "Deployments: scope and limits",
   intro: "Agent Engine reasoningEngines listed over the real aiplatform REST wire.",
   limits: ["A thin list over gcp_agentengine_core; no capture exists to compare deeper behaviour."],
+});
+def("gcp.vertex.sessions", ["/vertex-ai/sessions"], {
+  title: "Sessions: scope and limits",
+  intro: "Sessions of an Agent Engine deployment: list, create, delete and read events over reasoningEngines/ID/sessions.",
+  real: ["The same sessions the agent's :query / create_session calls keep, so a conversation held through the SDK shows here."],
+  limits: ["Events carry the text and tool-call parts the Vyomi agent runtime produces; there is no ADK state delta editor."],
+});
+def("gcp.vertex.memory-bank", ["/vertex-ai/memory-bank"], {
+  title: "Memory Bank: scope and limits",
+  intro: "Long-term facts per scope for an Agent Engine deployment: create, list, delete, retrieve by similarity, generate from a conversation.",
+  real: ["Retrieval ranks by cosine over the local embedding seam; generation asks the local chat model for facts."],
+  limits: ["With no embedding model the labelled vyomi-hash-embed fallback is used (stable, not semantic). Generation answers 503 when no chat model runs. Quality is the small model's."],
+});
+def("gcp.vertex.rag-engine", ["/vertex-ai/rag-engine"], {
+  title: "RAG Engine: scope and limits",
+  intro: "RAG corpora and files with chunking, and retrieveContexts.",
+  real: ["Chunking and SQLite FTS5 BM25 from the shared knowledge core; the REST shapes follow ragCorpora, ragFiles and retrieveContexts."],
+  limits: ["Files arrive as text through ragFiles:upload; Cloud Storage import and multipart upload are not simulated. Retrieval is lexical, not a vector database."],
+});
+def("gcp.vertex.search", ["/vertex-ai/search", "/vertex-ai/app-builder"], {
+  title: "Search and App Builder: scope and limits",
+  intro: "Vertex AI Search data stores, documents and apps over the discoveryengine REST shapes.",
+  real: ["Inline documents are indexed with SQLite FTS5 BM25 and returned ranked with snippets."],
+  limits: ["No generative summary, semantic reranking, connectors or website crawling. Import is inline documents only."],
+});
+def("gcp.vertex.agent-retrieval", ["/vertex-ai/agent-retrieval"], {
+  title: "Agent Retrieval: scope and limits",
+  intro: "One query across every RAG corpus and Search data store in the project.",
+  limits: ["Results are listed per source, not fused or reranked across sources."],
+});
+def("gcp.vertex.evaluation", ["/vertex-ai/evaluation"], {
+  title: "Evaluation: scope and limits",
+  intro: "Evaluation runs and evaluateInstances for exact match, BLEU and ROUGE.",
+  real: ["A run generates with the local model (or uses responses you supply) and scores each row; the scores are computed, not simulated."],
+  limits: ["No Gemini autorater or pointwise/pairwise model-based metrics. Up to 100 rows per run."],
+});
+def("gcp.vertex.metadata", ["/vertex-ai/metadata"], {
+  title: "Metadata: scope and limits",
+  intro: "ML Metadata artifacts, executions and contexts in the default metadata store.",
+  limits: ["Records are stored and listed; lineage graph queries and schema validation are not implemented."],
+});
+def("gcp.vertex.monitoring", ["/vertex-ai/monitoring"], {
+  title: "Monitoring: scope and limits",
+  intro: "Model deployment monitoring jobs on an endpoint, with pause and resume.",
+  limits: ["The job record and lifecycle are real. No drift or skew statistics are computed, so there are no anomaly results."],
+});
+def("gcp.vertex.registry", ["/vertex-ai/agent-registry", "/vertex-ai/adk", "/vertex-ai/topology"], {
+  title: "Agent Registry, ADK and Topology: scope and limits",
+  intro: "Views over the Agent Engine deployments: a catalogue, a deploy form and a graph of agent, model and tools.",
+  limits: ["Agents are declarative Vyomi agent specs run by the local model; Google ADK Python code and pickled classes are not executed."],
+});
+def("gcp.vertex.out-of-scope", ["/vertex-ai/training-clusters", "/vertex-ai/provisioned-throughput", "/vertex-ai/ray", "/vertex-ai/mcp-servers", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security"], {
+  title: "Not in scope for Vyomi",
+  intro: "These pages need vendor-hosted capacity or a control plane the simulator does not host. Each page names the reason and what to use instead.",
 });
 def("gcp.vertex.endpoints", ["/vertex-ai/endpoints", "/vertex-ai/endpoints/:location/:id"], {
   title: "Endpoints: scope and limits",

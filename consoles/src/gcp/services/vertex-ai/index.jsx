@@ -28,11 +28,12 @@ import ExtensionIcon from "@mui/icons-material/esm/ExtensionOutlined.js";
 import DescriptionIcon from "@mui/icons-material/esm/DescriptionOutlined.js";
 import CodeIcon from "@mui/icons-material/esm/Code.js";
 import { TuningJobs, TuningDetail } from "./Tuning.jsx";
+import { Sessions, MemoryBank, RagEngine, SearchApps, AgentRetrieval, Evaluation, Metadata, Monitoring, AgentRegistry, Adk, Topology, NotInScope } from "./PlatformPages.jsx";
 import { Endpoints, EndpointDetail, Models, Datasets, Training, Pipelines, Batch, Workbench, VectorSearch, FeatureStore, Experiments } from "./Pages.jsx";
 
 const B = "#/vertex-ai";
-const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/tuning", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray"];
-const AGENT_PATHS = ["/vertex-ai/agent-garden", "/vertex-ai/adk", "/vertex-ai/mcp-servers", "/vertex-ai/rag-engine", "/vertex-ai/vector-search", "/vertex-ai/search", "/vertex-ai/agent-retrieval", "/vertex-ai/deployments", "/vertex-ai/memory-bank", "/vertex-ai/sessions", "/vertex-ai/agent-registry", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security", "/vertex-ai/topology"];
+const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/tuning", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray", "/vertex-ai/training-clusters"];
+const AGENT_PATHS = ["/vertex-ai/agent-garden", "/vertex-ai/adk", "/vertex-ai/mcp-servers", "/vertex-ai/rag-engine", "/vertex-ai/vector-search", "/vertex-ai/search", "/vertex-ai/agent-retrieval", "/vertex-ai/app-builder", "/vertex-ai/deployments", "/vertex-ai/memory-bank", "/vertex-ai/sessions", "/vertex-ai/agent-registry", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security", "/vertex-ai/topology"];
 const under = (path, list) => list.some((p) => path === p || path.startsWith(p + "/"));
 const TUTORIALS = { text: "Tutorials", href: `${B}/tutorials`, icon: SchoolIcon, pinned: true };
 
@@ -55,7 +56,7 @@ const MODELS = [
   { text: "Provisioned Throughput", href: `${B}/provisioned-throughput`, icon: MemoryIcon },
   { section: "More services", collapsible: true, items: [
     { text: "Datasets", href: `${B}/datasets`, icon: StorageIcon }, { text: "Feature Store", href: `${B}/feature-store`, icon: StorageIcon },
-    { text: "Experiments", href: `${B}/experiments`, icon: ScienceIcon }, { text: "Training", href: `${B}/training`, icon: ModelTrainingIcon },
+    { text: "Experiments", href: `${B}/experiments`, icon: ScienceIcon }, { text: "Training", href: `${B}/training`, icon: ModelTrainingIcon }, { text: "Training clusters", href: `${B}/training-clusters`, icon: HubIcon },
     { text: "Ray on Agent Platform", href: `${B}/ray`, icon: SpokeIcon }, { text: "Pipelines", href: `${B}/pipelines`, icon: AccountTreeIcon },
     { text: "Metadata", href: `${B}/metadata`, icon: DescriptionIcon }, { text: "Monitoring", href: `${B}/monitoring`, icon: BarChartIcon }] },
   TUTORIALS,
@@ -66,7 +67,7 @@ const AGENTS = [
   { section: "Build", collapsible: true, items: [
     { text: "Agent Garden", href: `${B}/agent-garden`, icon: AgentIcon }, { text: "ADK", href: `${B}/adk`, icon: CodeIcon },
     { text: "MCP Servers", href: `${B}/mcp-servers`, icon: ExtensionIcon }, { text: "RAG Engine", href: `${B}/rag-engine`, icon: SearchIcon },
-    { text: "Vector Search", href: `${B}/vector-search`, icon: SpokeIcon }, { text: "Search", href: `${B}/search`, icon: SearchIcon },
+    { text: "Vector Search", href: `${B}/vector-search`, icon: SpokeIcon }, { text: "Search", href: `${B}/search`, icon: SearchIcon }, { text: "App Builder", href: `${B}/app-builder`, icon: WidgetsIcon },
     { text: "Agent Retrieval", href: `${B}/agent-retrieval`, icon: AgentIcon }] },
   { section: "Scale", collapsible: true, items: [
     { text: "Deployments", href: `${B}/deployments`, icon: HubIcon }, { text: "Memory Bank", href: `${B}/memory-bank`, icon: StorageIcon }, { text: "Sessions", href: `${B}/sessions`, icon: ChatIcon }] },
@@ -80,7 +81,7 @@ const NOTEBOOKS = [{ back: { text: "Notebooks", href: B } }, { text: "Workbench"
 
 /** Product nav depends on the route, like the native console: top level, then Models / Agents / Notebooks drill-ins. */
 function nav(path) {
-  if (path === "/vertex-ai/studio" || path.startsWith("/vertex-ai/app-builder")) return null;   // Studio has its own rail
+  if (path === "/vertex-ai/studio") return null;   // Studio has its own rail
   if (under(path, AGENT_PATHS)) return AGENTS;
   if (under(path, MODEL_PATHS)) return MODELS;
   if (path.startsWith("/vertex-ai/workbench")) return NOTEBOOKS;
@@ -111,5 +112,18 @@ export default {
     { pattern: "/vertex-ai/vector-search", component: VectorSearch },
     { pattern: "/vertex-ai/feature-store", component: FeatureStore },
     { pattern: "/vertex-ai/experiments", component: Experiments },
+    { pattern: "/vertex-ai/sessions", component: Sessions },
+    { pattern: "/vertex-ai/memory-bank", component: MemoryBank },
+    { pattern: "/vertex-ai/rag-engine", component: RagEngine },
+    { pattern: "/vertex-ai/search", component: () => <SearchApps initial="stores" /> },
+    { pattern: "/vertex-ai/app-builder", component: () => <SearchApps initial="apps" /> },
+    { pattern: "/vertex-ai/agent-retrieval", component: AgentRetrieval },
+    { pattern: "/vertex-ai/evaluation", component: Evaluation },
+    { pattern: "/vertex-ai/metadata", component: Metadata },
+    { pattern: "/vertex-ai/monitoring", component: Monitoring },
+    { pattern: "/vertex-ai/agent-registry", component: AgentRegistry },
+    { pattern: "/vertex-ai/adk", component: Adk },
+    { pattern: "/vertex-ai/topology", component: Topology },
+    ...["training-clusters", "provisioned-throughput", "ray", "mcp-servers", "policies", "gateways", "security"].map((id) => ({ pattern: `/vertex-ai/${id}`, component: () => <NotInScope id={id} /> })),
   ],
 };

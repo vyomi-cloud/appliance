@@ -55,6 +55,7 @@ SPEC = {
     "batchPredictionJobs": {"id": "batchPredictionJobId", "create": "direct", "job": "JOB_STATE_", "type": "BatchPredictionJob"},
     "pipelineJobs": {"id": "pipelineJobId", "create": "direct", "job": "PIPELINE_STATE_", "type": "PipelineJob"},
     "tuningJobs": {"id": "tuningJobId", "create": "direct", "job": "JOB_STATE_", "type": "TuningJob"},
+    "modelDeploymentMonitoringJobs": {"id": "modelDeploymentMonitoringJobId", "create": "direct", "job": "JOB_STATE_", "type": "ModelDeploymentMonitoringJob"},
     "notebookRuntimeTemplates": {"id": "notebookRuntimeTemplateId", "create": "op", "name_required": True, "type": "NotebookRuntimeTemplate"},
     "notebookRuntimes": {"id": "notebookRuntimeId", "create": "op", "name_required": True, "type": "NotebookRuntime"},
     "indexes": {"id": "indexId", "create": "op", "name_required": True, "type": "Index"},
@@ -78,7 +79,7 @@ COLL_VERBS = {"models": {"upload", "copy"}, "datasets": set()}
 ITEM_VERBS = {
     "endpoints": {"deployModel", "undeployModel", "predict", "rawPredict", "mutateDeployedModel", "generateContent", "streamGenerateContent"},
     "trainingPipelines": {"cancel"}, "customJobs": {"cancel"}, "hyperparameterTuningJobs": {"cancel"},
-    "batchPredictionJobs": {"cancel"}, "pipelineJobs": {"cancel"}, "tuningJobs": {"cancel"},
+    "batchPredictionJobs": {"cancel"}, "pipelineJobs": {"cancel"}, "tuningJobs": {"cancel"}, "modelDeploymentMonitoringJobs": {"pause", "resume"},
     "notebookRuntimes": {"start", "stop", "upgrade"}, "instances": {"start", "stop", "reset"},
     "indexes": {"upsertDatapoints", "removeDatapoints"},
     "indexEndpoints": {"deployIndex", "undeployIndex", "findNeighbors", "readIndexDatapoints"},
@@ -276,6 +277,12 @@ def _advance(store, rec, coll):
     if rec.get("_vyomi"):
         return _tuning_sync(store, rec)
     st = rec.get("state", "")
+    if coll == "modelDeploymentMonitoringJobs":      # a monitoring job is continuous: PENDING -> RUNNING, then only pause/resume/delete move it
+        if st in ("JOB_STATE_PAUSED", "JOB_STATE_RUNNING"):
+            return
+        if time.time() - rec.get("_t0", time.time()) >= 2:
+            rec["state"], rec["startTime"], rec["updateTime"] = "JOB_STATE_RUNNING", _now(), _now()
+        return
     if st.endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
         return
     age = time.time() - rec.get("_t0", time.time())
@@ -507,6 +514,8 @@ def _validate(coll, body, rid):
             return "metadata.config.dimensions: must be a positive integer."
     if coll == "customJobs" and not (body.get("jobSpec") or {}).get("workerPoolSpecs"):
         return "jobSpec.workerPoolSpecs: at least one worker pool spec is required."
+    if coll == "modelDeploymentMonitoringJobs" and not re.match(r"^projects/[^/]+/locations/[^/]+/endpoints/[^/]+$", str(body.get("endpoint") or "")):
+        return "model_deployment_monitoring_job.endpoint: a full endpoint resource name is required."
     if rid and not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_\-.]{0,127}$", rid):
         return f"{SPEC[coll]['id']}: invalid id '{rid}'."
     return None
@@ -693,6 +702,13 @@ def _predict_trained(mrec, dm, p):
 
 def _verb(store, project, loc, coll, full, rec, verb, p):
     t = _now()
+    if verb in ("pause", "resume") and coll == "modelDeploymentMonitoringJobs":
+        _advance(store, rec, coll)
+        want = "JOB_STATE_PAUSED" if verb == "pause" else "JOB_STATE_RUNNING"
+        if verb == "pause" and rec["state"] != "JOB_STATE_RUNNING" or verb == "resume" and rec["state"] != "JOB_STATE_PAUSED":
+            return _err(400, "FAILED_PRECONDITION", f"Cannot {verb} a monitoring job in state {rec['state']}.")
+        rec["state"], rec["updateTime"] = want, t
+        return _j(200, {})
     if verb == "cancel":
         _advance(store, rec, coll)
         if rec["state"].endswith(("SUCCEEDED", "CANCELLED", "FAILED")):
