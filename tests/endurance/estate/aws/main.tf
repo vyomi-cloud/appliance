@@ -23,6 +23,10 @@ provider "aws" {
     rds            = var.endpoint
     dynamodb       = var.endpoint
     ecr            = var.endpoint
+    sqs            = var.endpoint
+    sns            = var.endpoint
+    cloudwatchevents = var.endpoint
+    eventbridge    = var.endpoint
   }
 }
 
@@ -39,4 +43,9 @@ module "compute_data" {
   db_sg_id              = module.network_identity.db_sg_id
   kms_key_arn           = module.network_identity.kms_key_arn
   instance_profile_name = module.network_identity.instance_profile_name
+}
+
+module "messaging" {
+  source      = "./modules/stage3-messaging"
+  kms_key_arn = module.network_identity.kms_key_arn
 }
