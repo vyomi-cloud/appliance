@@ -1,1 +1,513 @@
-{}
+{
+ "aws.vpc.dhcp-option-sets": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_vpc_dhcp_options.main",
+   "aws_vpc_dhcp_options_association.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.elastic-ips": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_eip.nat"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.internet-gateways": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_internet_gateway.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.managed-prefix-lists": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_ec2_managed_prefix_list.office"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.nat-gateways": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_nat_gateway.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.network-acls": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_network_acl.private",
+   "aws_network_acl_rule.private_in"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.route-tables": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_route_table.public",
+   "aws_route_table.private",
+   "aws_route.public_default",
+   "aws_route.private_default",
+   "aws_route_table_association.public",
+   "aws_route_table_association.private"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.security-groups": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_security_group.web",
+   "aws_security_group.db",
+   "aws_vpc_security_group_ingress_rule.web_https",
+   "aws_vpc_security_group_egress_rule.web_all",
+   "aws_vpc_security_group_ingress_rule.db_from_web"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.subnets": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_subnet.public",
+   "aws_subnet.private"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.vpc.vpcs": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_vpc.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.elastic-ips": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_eip.nat"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.iam-instance-profiles": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_instance_profile.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.security-groups": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_security_group.web",
+   "aws_security_group.db"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.policy.crud": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_policy.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.role.crud": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_role.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.role.permissions": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_role_policy_attachment.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.role.tags": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_role.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.role.trust-policy": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_role.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.user.access-keys": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_access_key.ops"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.user.crud": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_user.ops"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.user.groups": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_group.ops",
+   "aws_iam_group_membership.ops"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "iam.user.tags": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_iam_user.ops"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "kms.key.aliases": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_kms_alias.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "kms.key.crud": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_kms_key.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "kms.key.rotation": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_kms_key.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "kms.key.tags": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_kms_key.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "secretsmanager.secret.crud": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_secretsmanager_secret.db"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "secretsmanager.secret.deletion": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_secretsmanager_secret.db"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "secretsmanager.secret.encryption": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_secretsmanager_secret.db",
+   "aws_kms_key.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "secretsmanager.secret.tags": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_secretsmanager_secret.db"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "secretsmanager.secret.versions": {
+  "module": "aws/stage1-network-identity",
+  "proof": {
+   "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "aws_secretsmanager_secret_version.db"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ }
+}

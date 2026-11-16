@@ -5,7 +5,9 @@ Joins manifest.json (every capability) with estate/coverage-map.json (what the e
 reports, per cloud and service, which capabilities are covered, excused, or UNCOVERED.
 
 coverage-map.json: {"<capability-id>": {"stage": "...", "tf": ["aws_sqs_queue.orders"],
-    "verify": ["sdk","cli","ui"], "substrate": ["mesh","nano"]}  |  {"excuse": "reason"}}
+    "verify": ["tf","sdk","cli","ui"],            # proofs REQUIRED before this capability counts as verified
+    "proof": {"tf": "<module report>", ...}}      # proofs obtained so far (a green run), by kind
+    |  {"excuse": "reason"}}
 An entry may only be an excuse when the reason is written down; stale ids (not in the manifest) fail.
 
     python3 tests/endurance/coverage.py                # report
@@ -13,13 +15,13 @@ An entry may only be an excuse when the reason is written down; stale ids (not i
     python3 tests/endurance/coverage.py --gate --ratchet N   # allow at most N uncovered (CI ratchet)
     python3 tests/endurance/coverage.py --require-verified   # RELEASE gate: every non-excused row must be status=verified
 
-Each entry has a `status`: "planned" (mapped to a stage + checks, not yet proven by a green run) or "verified" (a green
-estate run proved it). A mapping is never proof; only the release gate (--require-verified) treats it as done.
+A capability is "planned" until every kind listed in `verify` has a matching entry in `proof`; then it is "verified". A mapping is
+never proof; only the release gate (--require-verified) treats verified as done.
 """
 import collections, json, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERIFY = {"sdk", "cli", "ui"}
+VERIFY = {"tf", "sdk", "cli", "ui"}
 
 
 def token(cap_id):
@@ -39,6 +41,7 @@ def main():
         if token(r["id"]) not in stage_of:
             problems.append(f"no estate stage for service token '{token(r['id'])}' ({r['id']})")
     by_stage = collections.defaultdict(collections.Counter)
+    tot_proof = collections.Counter()
     stat = collections.defaultdict(lambda: collections.Counter())
     unc = []
     for r in manifest["rows"]:
@@ -53,13 +56,18 @@ def main():
                 problems.append(f"empty excuse: {r['id']}")
             stat[key]["excused"] += 1; continue
         miss = VERIFY - set(e.get("verify", []))
-        if not e.get("stage") or not e.get("tf") and not e.get("verify"):
-            problems.append(f"incomplete entry: {r['id']}")
+        if not e.get("stage"):
+            problems.append(f"incomplete entry (no stage): {r['id']}")
         stat[key]["covered"] += 1
-        if e.get("status") not in ("planned", "verified"):
-            problems.append(f"entry needs status planned|verified: {r['id']}")
-        elif e["status"] == "verified":
-            stat[key]["verified"] += 1
+        need = set(e.get("verify", []))
+        if not need or not need <= VERIFY:
+            problems.append(f"entry needs verify kinds from {sorted(VERIFY)}: {r['id']}")
+        else:
+            have = {k for k, v in (e.get("proof") or {}).items() if v}
+            for k in have:
+                tot_proof[k] += 1
+            if need <= have:
+                stat[key]["verified"] += 1
     tot = collections.Counter()
     for cloud in ("aws", "gcp", "azure"):
         c = collections.Counter()
@@ -72,7 +80,8 @@ def main():
         tot.update(c)
     n = sum(tot.values())
     pct = 100.0 * (tot["covered"] + tot["excused"]) / n if n else 0
-    print(f"VERIFIED (green estate run): {tot['verified']} of {n}")
+    print(f"PROOFS so far: " + ", ".join(f"{k}={tot_proof[k]}" for k in sorted(VERIFY)))
+    print(f"VERIFIED (every required proof present): {tot['verified']} of {n}")
     print(f"\nENDURANCE COVERAGE: {tot['covered']} covered + {tot['excused']} excused of {n} = {pct:.1f}%  (uncovered {tot['uncovered']})")
     print("\nBY STAGE (capabilities to wrap: aws / gcp / azure)")
     for st in sorted(by_stage):
