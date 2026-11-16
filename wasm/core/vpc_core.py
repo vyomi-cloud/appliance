@@ -402,8 +402,7 @@ def _authorize(store, params, direction):
         p.setdefault("rule_id", _rid("sgr", 8))
         p.setdefault("description", "")
     key = "ingress" if direction == "ingress" else "egress"
-    dup = [p for p in perms for r in sg[key] if r["protocol"] == p["protocol"] and r.get("from_port") == p.get("from_port")
-           and r.get("to_port") == p.get("to_port") and (set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", [])))]
+    dup = [p for p in perms for r in sg[key] if _perm_match(r, p)]
     if dup:
         raise VpcError("InvalidPermission.Duplicate", "The specified rule already exists.")
     for p in perms:   # per-rule tags from TagSpecifications (security-group-rule)
@@ -418,6 +417,16 @@ def _authorize(store, params, direction):
 # The model stores one permission per rule_id with a list of cidrs/sgs. The modern EC2 API (and the Terraform aws provider's
 # aws_vpc_security_group_*_rule) addresses ONE target per rule, so the first target keeps the permission's rule_id and any
 # further target gets a stable derived id. (endurance F8)
+def _perm_match(r: dict, p: dict) -> bool:
+    """Same protocol/ports and an overlapping target. Protocol -1 (all traffic) has no ports, so ports are ignored there,
+    as in EC2 (the Terraform provider sends FromPort=0 ToPort=0 for it). (endurance F11)"""
+    if r["protocol"] != p["protocol"]:
+        return False
+    if r["protocol"] != "-1" and (r.get("from_port") != p.get("from_port") or r.get("to_port") != p.get("to_port")):
+        return False
+    return bool(set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", [])))
+
+
 def _sg_target_rule_id(rule_id: str, idx: int) -> str:
     if idx == 0:
         return rule_id
@@ -512,8 +521,7 @@ def _update_sg_rule_descriptions(store, params, direction):
     sg = _find_sg(m, params.get("GroupId"))
     for p in _parse_ip_permissions(params):
         for r in sg[direction]:
-            if r["protocol"] == p["protocol"] and r.get("from_port") == p.get("from_port") and r.get("to_port") == p.get("to_port") \
-                    and (set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", []))):
+            if _perm_match(r, p):
                 r["description"] = p.get("description", "")
     return _envelope("UpdateSecurityGroupRuleDescriptions" + ("Ingress" if direction == "ingress" else "Egress"), "<return>true</return>")
 
@@ -606,10 +614,11 @@ def _rt_xml(rt: dict) -> str:
     assocs = ""
     if rt.get("main"):
         assocs += (f"<item><routeTableAssociationId>rtbassoc-main-{_xml_escape(rt['vpc_id'])}</routeTableAssociationId>"
-                   f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><main>true</main></item>")
+                   f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><main>true</main>"
+                   "<associationState><state>associated</state></associationState></item>")
     assocs += "".join(f"<item><routeTableAssociationId>rtbassoc-{_xml_escape(sid)}</routeTableAssociationId>"
                        f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><subnetId>{_xml_escape(sid)}</subnetId>"
-                       f"<main>false</main></item>" for sid in rt["subnets"])
+                       f"<main>false</main><associationState><state>associated</state></associationState></item>" for sid in rt["subnets"])
     assocs += _extras_core.edge_assoc_xml(rt)
     return ("<item>"
             f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><vpcId>{_xml_escape(rt['vpc_id'])}</vpcId>"
@@ -3657,9 +3666,7 @@ def _revoke(store, params, direction):
                      "cidrs": [params["CidrIp"]] if params.get("CidrIp") else [],
                      "sgs": [params["SourceSecurityGroupId"]] if params.get("SourceSecurityGroupId") else []}]
 
-        def _hit(r, p):
-            return (r["protocol"] == p["protocol"] and r.get("from_port") == p.get("from_port") and r.get("to_port") == p.get("to_port")
-                    and (set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", []))))
+        _hit = _perm_match
         sg[key] = [r for r in sg[key] if not any(_hit(r, p) for p in perms)]
     action = "RevokeSecurityGroupIngress" if direction == "ingress" else "RevokeSecurityGroupEgress"
     return _envelope(action, "<return>true</return>")
@@ -4866,6 +4873,97 @@ from core import vpc_encryption_core as _vpcenc   # noqa: E402  (VPC Encryption 
 _vpcenc.install(_OPS)
 
 
+# ── generic EC2 Describe* filtering (endurance F9/F10/F12) ──────────────────────────────────────────────────────────
+# Real EC2 filter names are paths into the response: `association.subnet-id` is associationSet/item/subnetId, `vpc-id` is vpcId,
+# `tag:Name` is the tagSet entry with key Name. Almost no Describe* handler here honoured Filter.N or <Thing>Id.N, so the Terraform
+# provider (which reads everything back through filters) got every resource: "too many results: wanted 1, got 2". One post-filter
+# over the response XML fixes the whole family; handlers that already filter (their own semantics) are skipped.
+_EXPLICIT_FILTER_ACTIONS = {"DescribeSecurityGroups", "DescribeSecurityGroupRules", "DescribeNetworkAcls", "DescribeManagedPrefixLists",
+                            "DescribeTransitGateways", "DescribeTransitGatewayVpcAttachments", "DescribeTransitGatewayAttachments",
+                            "DescribeTransitGatewayRouteTables", "DescribeInstances", "DescribeImages", "DescribeSnapshots", "DescribeVolumes",
+                            "DescribeInstanceStatus", "DescribeTags", "DescribeInstanceTypes", "DescribeAvailabilityZones"}
+
+
+def _camel(seg: str) -> str:
+    parts = seg.split("-")
+    return parts[0] + "".join(w[:1].upper() + w[1:] for w in parts[1:])
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _path_values(el, segs):
+    """Every text value reachable from `el` along the filter path (descending through *Set/item wrappers)."""
+    if not segs:
+        yield (el.text or "")
+        return
+    want = {segs[0], segs[0] + "Set"}
+    for ch in el:
+        if _local(ch.tag) in want:
+            if _local(ch.tag).endswith("Set") and _local(ch.tag) != segs[0]:
+                for it in ch:
+                    yield from _path_values(it, segs[1:])
+            else:
+                yield from _path_values(ch, segs[1:])
+
+
+def _item_matches(item, name: str, vals) -> bool:
+    import fnmatch
+    if name.startswith("tag:") or name in ("tag-key", "tag-value"):
+        tags = {}
+        for ts in item:
+            if _local(ts.tag) == "tagSet":
+                for t in ts:
+                    k = next((c.text or "" for c in t if _local(c.tag) == "key"), "")
+                    v = next((c.text or "" for c in t if _local(c.tag) == "value"), "")
+                    tags[k] = v
+        r = _tag_filter_ok(tags, name, vals)
+        return bool(r)
+    segs = [_camel(x) for x in name.split(".")]
+    return any(fnmatch.fnmatchcase(v, pat) for v in _path_values(item, segs) for pat in vals)
+
+
+def _generic_describe_filter(action: str, params: dict, resp):
+    import xml.etree.ElementTree as ET
+    flt = _filters(params)
+    ids = {}
+    for k, v in params.items():
+        mm = re.match(r"^([A-Za-z]+)Id\.\d+$", k)
+        if mm:
+            ids.setdefault(mm.group(1), []).append(str(v))
+    if not (flt or ids) or resp.status != 200 or not action.startswith("Describe") or action in _EXPLICIT_FILTER_ACTIONS:
+        return resp
+    try:
+        ET.register_namespace("", EC2_NS)
+        root = ET.fromstring(resp.body.encode())
+    except ET.ParseError:
+        return resp
+    sets = [c for c in root if _local(c.tag).endswith("Set")]
+    if not sets:
+        return resp
+    box = sets[0]
+    items = list(box)
+    for base, wanted in ids.items():
+        tag = base[:1].lower() + base[1:] + "Id"
+        have = {(c.text or "") for it in items for c in it if _local(c.tag) == tag}
+        if not have:
+            continue            # this resource does not expose that id element: leave it alone
+        missing = [w for w in wanted if w not in have]
+        if missing:
+            raise VpcError(f"Invalid{base}ID.NotFound", f"The {base[:1].lower() + base[1:]} ID '{missing[0]}' does not exist")
+        items = [it for it in items if any(_local(c.tag) == tag and (c.text or "") in wanted for c in it)]
+    for name, vals in flt.items():
+        items = [it for it in items if _item_matches(it, name, vals)]
+    for it in list(box):
+        box.remove(it)
+    for it in items:
+        box.append(it)
+    resp.body = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root, encoding="unicode")
+    return resp
+
+
+
 def dispatch(store, params: dict | None = None) -> VpcResponse:
     """Native EC2 Query-protocol router. `params` is the parsed form body
     ({"Action": "CreateVpc", "CidrBlock": "10.0.0.0/16", ...})."""
@@ -4875,6 +4973,6 @@ def dispatch(store, params: dict | None = None) -> VpcResponse:
     if op is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     try:
-        return op(store, params)
+        return _generic_describe_filter(action, params, op(store, params))
     except VpcError as e:
         return _error(e.code, e.message, e.status)

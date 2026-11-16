@@ -99,6 +99,47 @@ def _f8():
     _check("F8 revoke by rule id", ids[0] not in body(call(Action="DescribeSecurityGroupRules", **{"Filter.1.Name": "group-id", "Filter.1.Value.1": sg})))
 
 
+def _f11():
+    s = types.SimpleNamespace()
+    call = lambda **p: v.dispatch(s, p)  # noqa: E731
+    body = lambda r: r.body.decode() if isinstance(r.body, bytes) else r.body  # noqa: E731
+    vpc = re.search(r"<vpcId>(vpc-\w+)</vpcId>", body(call(Action="CreateVpc", CidrBlock="10.6.0.0/16"))).group(1)
+    sg = re.search(r"<groupId>(sg-\w+)</groupId>", body(call(Action="CreateSecurityGroup", VpcId=vpc, GroupName="g", GroupDescription="d"))).group(1)
+    # the Terraform aws provider revokes the default egress rule with FromPort=0 ToPort=0 IpProtocol=-1
+    call(Action="RevokeSecurityGroupEgress", GroupId=sg, **{"IpPermissions.1.FromPort": "0", "IpPermissions.1.ToPort": "0",
+         "IpPermissions.1.IpProtocol": "-1", "IpPermissions.1.IpRanges.1.CidrIp": "0.0.0.0/0"})
+    d = body(call(Action="DescribeSecurityGroupRules", **{"Filter.1.Name": "group-id", "Filter.1.Value.1": sg}))
+    _check("F11 revoke of all-traffic rule ignores ports (FromPort=0/ToPort=0)", "<securityGroupRuleId>" not in d)
+    r = call(Action="AuthorizeSecurityGroupEgress", GroupId=sg, **{"IpPermissions.1.IpProtocol": "-1", "IpPermissions.1.IpRanges.1.CidrIp": "0.0.0.0/0"})
+    _check("F11 all-traffic egress can be re-created after the revoke", r.status == 200)
+
+
+def _f9_f10_f12():
+    s = types.SimpleNamespace()
+    call = lambda **p: v.dispatch(s, p)  # noqa: E731
+    body = lambda r: r.body.decode() if isinstance(r.body, bytes) else r.body  # noqa: E731
+    vpc = re.search(r"<vpcId>(vpc-\w+)</vpcId>", body(call(Action="CreateVpc", CidrBlock="10.5.0.0/16"))).group(1)
+    sub = re.search(r"<subnetId>(subnet-\w+)</subnetId>", body(call(Action="CreateSubnet", VpcId=vpc, CidrBlock="10.5.1.0/24"))).group(1)
+    rt = re.search(r"<routeTableId>(rtb-\w+)</routeTableId>", body(call(Action="CreateRouteTable", VpcId=vpc))).group(1)
+    aid = re.search(r"<associationId>([^<]+)</associationId>", body(call(Action="AssociateRouteTable", RouteTableId=rt, SubnetId=sub))).group(1)
+    out = body(call(Action="DescribeRouteTables", **{"Filter.1.Name": "association.route-table-association-id", "Filter.1.Value.1": aid}))
+    _check("F10 route table association is findable by association id and reports state associated",
+           set(re.findall(r"<routeTableId>(rtb-\w+)</routeTableId>", out)) == {rt} and "<state>associated</state>" in out)
+    out = body(call(Action="DescribeRouteTables", **{"Filter.1.Name": "vpc-id", "Filter.1.Value.1": vpc}))
+    _check("F12 vpc-id filter on route tables (main + custom)", len(set(re.findall(r"<routeTableId>(rtb-\w+)</routeTableId>", out))) == 2)
+    d1 = re.search(r"<dhcpOptionsId>(dopt-\w+)</dhcpOptionsId>", body(call(Action="CreateDhcpOptions", **{
+        "DhcpConfiguration.1.Key": "domain-name", "DhcpConfiguration.1.Value.1": "a.internal"}))).group(1)
+    call(Action="CreateDhcpOptions", **{"DhcpConfiguration.1.Key": "domain-name", "DhcpConfiguration.1.Value.1": "b.internal"})
+    out = body(call(Action="DescribeDhcpOptions", **{"DhcpOptionsId.1": d1}))
+    _check("F9 DescribeDhcpOptions honours DhcpOptionsId.N (exactly one)", len(set(re.findall(r"<dhcpOptionsId>(dopt-\w+)</dhcpOptionsId>", out))) == 1 and d1 in out)
+    r = call(Action="DescribeDhcpOptions", **{"DhcpOptionsId.1": "dopt-doesnotexist"})
+    _check("F9 unknown DhcpOptionsId is InvalidDhcpOptionsID.NotFound", r.status == 400 and "InvalidDhcpOptionsID.NotFound" in body(r))
+    out = body(call(Action="DescribeSubnets", **{"Filter.1.Name": "vpc-id", "Filter.1.Value.1": vpc}))
+    _check("F12 DescribeSubnets vpc-id filter", sub in out)
+    out = body(call(Action="DescribeSubnets", **{"Filter.1.Name": "vpc-id", "Filter.1.Value.1": "vpc-0000000000000"}))
+    _check("F12 DescribeSubnets filter with no match is empty, not everything", sub not in out)
+
+
 if __name__ == "__main__":
-    _f1(); _f4(); _f6_f7(); _f8()
-    print("Endurance F1/F4/F6/F7/F8 regressions: ALL GREEN")
+    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12()
+    print("Endurance F1/F4/F6-F12 regressions: ALL GREEN")
